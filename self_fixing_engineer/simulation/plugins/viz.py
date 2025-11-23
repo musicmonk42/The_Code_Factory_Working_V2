@@ -111,6 +111,7 @@ except ImportError:
     def _get_or_create_metric(*args, **kwargs):
         return DummyMetric()
 
+
 try:
     from detect_secrets.core import SecretsCollection
     from detect_secrets.settings import transient_settings
@@ -130,9 +131,7 @@ except ImportError:
 logger = logging.getLogger("simulation.viz")
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -142,9 +141,7 @@ if PYDANTIC_AVAILABLE:
 
     class VizConfig(BaseModel):
         results_dir: str = Field(default="./simulation_results")
-        default_plot_format: str = Field(
-            default="png", pattern="^(png|svg|html|jpeg|webp)$"
-        )
+        default_plot_format: str = Field(default="png", pattern="^(png|svg|html|jpeg|webp)$")
         redis_cache_url: Optional[str] = None
         redis_cache_ttl: int = Field(default=3600, ge=1)
 
@@ -241,9 +238,7 @@ else:
     PLOT_GENERATIONS = _get_or_create_metric(
         None, "viz_plot_generations_total", "Total plots generated"
     )
-    PLOT_EXPORTS = _get_or_create_metric(
-        None, "viz_plot_exports_total", "Total plot exports"
-    )
+    PLOT_EXPORTS = _get_or_create_metric(None, "viz_plot_exports_total", "Total plot exports")
     PLOT_CACHE_HITS = _get_or_create_metric(
         None, "viz_plot_cache_hits_total", "Total plot cache hits"
     )
@@ -256,9 +251,7 @@ else:
 _registered_viz_panels: Dict[str, Dict[str, Any]] = {}
 
 _pre_plot_hooks: List[Callable[[str, Dict[str, Any]], Dict[str, Any]]] = []
-_post_plot_hooks: List[
-    Callable[[str, Any, Dict[str, Any]], Tuple[Any, Dict[str, Any]]]
-] = []
+_post_plot_hooks: List[Callable[[str, Any, Dict[str, Any]], Tuple[Any, Dict[str, Any]]]] = []
 
 
 def register_pre_plot_hook(fn: Callable[[str, Dict[str, Any]], Dict[str, Any]]) -> None:
@@ -278,9 +271,7 @@ def register_post_plot_hook(
 def validate_panel_id(panel_id: str) -> str:
     """Validates a panel ID to prevent injection attacks."""
     if not re.match(r"^[a-zA-Z0-9_-]+$", panel_id):
-        raise ValueError(
-            f"Invalid panel ID: '{panel_id}'. Contains disallowed characters."
-        )
+        raise ValueError(f"Invalid panel ID: '{panel_id}'. Contains disallowed characters.")
     return panel_id
 
 
@@ -395,9 +386,7 @@ def _scrub_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
     """Recursively scrubs sensitive data from plot metadata."""
     if not DETECT_SECRETS_AVAILABLE:
         return metadata
-    return _scrub_secrets(
-        metadata
-    )  # Assuming _scrub_secrets is defined in utils.py or similar
+    return _scrub_secrets(metadata)  # Assuming _scrub_secrets is defined in utils.py or similar
 
 
 def _scrub_secrets(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
@@ -427,21 +416,15 @@ def _scrub_secrets(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
     export_supported=True,
     export_args=([], "default_test.py"),
 )
-def plot_flakiness_trend(
-    runs: List[Dict[str, Any]], test_file_name: str
-) -> Optional[Any]:
+def plot_flakiness_trend(runs: List[Dict[str, Any]], test_file_name: str) -> Optional[Any]:
     """
     Generates and saves a plot showing the pass/fail trend of test runs.
     Returns the figure object, or None if matplotlib is not available.
     """
     if not MATPLOTLIB_AVAILABLE:
-        logger.warning(
-            "Matplotlib is not available. Flakiness plot will not be generated."
-        )
+        logger.warning("Matplotlib is not available. Flakiness plot will not be generated.")
         if PROMETHEUS_AVAILABLE:
-            PLOT_GENERATIONS.labels(
-                plot_type="flakiness", status="skipped_no_lib"
-            ).inc()
+            PLOT_GENERATIONS.labels(plot_type="flakiness", status="skipped_no_lib").inc()
         return None
 
     try:
@@ -480,17 +463,13 @@ def plot_flakiness_trend(
     export_supported=True,
     export_args=([], "Coverage"),
 )
-def plot_coverage_history(
-    coverage_data: List[float], label: str = "Coverage"
-) -> Optional[Any]:
+def plot_coverage_history(coverage_data: List[float], label: str = "Coverage") -> Optional[Any]:
     """
     Plots the history of code coverage values.
     `coverage_data` should be a list of coverage percentages (e.g., 0.85 for 85%).
     """
     if not MATPLOTLIB_AVAILABLE:
-        logger.warning(
-            "Matplotlib is not available. Coverage history plot will not be generated."
-        )
+        logger.warning("Matplotlib is not available. Coverage history plot will not be generated.")
         if PROMETHEUS_AVAILABLE:
             PLOT_GENERATIONS.labels(plot_type="coverage", status="skipped_no_lib").inc()
         return None
@@ -542,13 +521,9 @@ def plot_metric_trend(
     Plots a generic metric trend over simulation runs.
     """
     if not MATPLOTLIB_AVAILABLE:
-        logger.warning(
-            "Matplotlib is not available. Metric trend plot will not be generated."
-        )
+        logger.warning("Matplotlib is not available. Metric trend plot will not be generated.")
         if PROMETHEUS_AVAILABLE:
-            PLOT_GENERATIONS.labels(
-                plot_type="metric_trend", status="skipped_no_lib"
-            ).inc()
+            PLOT_GENERATIONS.labels(plot_type="metric_trend", status="skipped_no_lib").inc()
         return None
 
     if not metrics:
@@ -575,9 +550,7 @@ def plot_metric_trend(
             PLOT_GENERATIONS.labels(plot_type="metric_trend", status="success").inc()
         return fig
     except Exception as e:
-        logger.error(
-            f"Matplotlib error generating metric trend plot: {e}", exc_info=True
-        )
+        logger.error(f"Matplotlib error generating metric trend plot: {e}", exc_info=True)
         if PROMETHEUS_AVAILABLE:
             PLOT_GENERATIONS.labels(plot_type="metric_trend", status="error").inc()
         return None
@@ -601,13 +574,9 @@ def render_example_plugin_custom_metric_trend(
     """
     data = pre_plot_hook("plotly", current_result)
     if not PLOTLY_AVAILABLE:
-        st_dash_obj.warning(
-            "Plotly is not available. This plugin panel requires Plotly."
-        )
+        st_dash_obj.warning("Plotly is not available. This plugin panel requires Plotly.")
         if PROMETHEUS_AVAILABLE:
-            PLOT_GENERATIONS.labels(
-                plot_type="plugin_custom", status="skipped_no_lib"
-            ).inc()
+            PLOT_GENERATIONS.labels(plot_type="plugin_custom", status="skipped_no_lib").inc()
         return None
 
     st_dash_obj.markdown("This is a custom metric panel from a plugin!")
@@ -752,9 +721,7 @@ async def batch_export_panels(
                 "kwargs": kwargs,
                 # Add type information for better uniqueness
                 "arg_types": [type(arg).__name__ for arg in args] if args else [],
-                "kwarg_types": (
-                    {k: type(v).__name__ for k, v in kwargs.items()} if kwargs else {}
-                ),
+                "kwarg_types": ({k: type(v).__name__ for k, v in kwargs.items()} if kwargs else {}),
             }
             try:
                 # Use repr() for better object representation than default=str
@@ -785,9 +752,7 @@ async def batch_export_panels(
                     )
                     fig = panel["render_function"](*args, **kwargs)
                 else:
-                    fig = panel["render_function"](
-                        *args, **kwargs
-                    )  # Fallback to re-render
+                    fig = panel["render_function"](*args, **kwargs)  # Fallback to re-render
             else:
                 # Render the figure if not in cache
                 fig = panel["render_function"](*args, **kwargs)
@@ -798,9 +763,7 @@ async def batch_export_panels(
             if fig is None:
                 exports[pid] = None
                 if PROMETHEUS_AVAILABLE:
-                    PLOT_EXPORTS.labels(
-                        format=export_format, status="render_failed"
-                    ).inc()
+                    PLOT_EXPORTS.labels(format=export_format, status="render_failed").inc()
                 continue
 
             unique_id = str(uuid.uuid4())[:8]
@@ -812,9 +775,7 @@ async def batch_export_panels(
                 plt.close(fig)  # Close figure to free memory
             elif panel["plot_type"] == "plotly":
                 if not PLOTLY_EXPORT_AVAILABLE:
-                    logger.error(
-                        "Plotly image export not available (missing kaleido or orca)."
-                    )
+                    logger.error("Plotly image export not available (missing kaleido or orca).")
                     exports[pid] = None
                     if PROMETHEUS_AVAILABLE:
                         PLOT_EXPORTS.labels(
@@ -833,9 +794,7 @@ async def batch_export_panels(
                     elif hasattr(fig, "save"):
                         fig.save(export_path)
                     else:
-                        raise AttributeError(
-                            "Plot object has no recognized save/export method."
-                        )
+                        raise AttributeError("Plot object has no recognized save/export method.")
                 except AttributeError:
                     logger.warning(
                         f"Export not supported for {panel['plot_type']} to format {export_format}."
@@ -850,9 +809,7 @@ async def batch_export_panels(
             if PROMETHEUS_AVAILABLE:
                 PLOT_EXPORTS.labels(format=export_format, status="success").inc()
         except Exception as e:
-            logger.error(
-                f"Failed to export {pid} to {export_format}: {e}", exc_info=True
-            )
+            logger.error(f"Failed to export {pid} to {export_format}: {e}", exc_info=True)
             exports[pid] = None
             if PROMETHEUS_AVAILABLE:
                 PLOT_EXPORTS.labels(format=export_format, status="error").inc()
@@ -908,9 +865,7 @@ if __name__ == "__main__":
     # Example: Plot Coverage History
     print("\nGenerating Coverage History Plot...")
     sample_coverage_data = [0.75, 0.78, 0.80, 0.82, 0.85]
-    coverage_fig = plot_coverage_history(
-        sample_coverage_data, "Backend Service Coverage"
-    )
+    coverage_fig = plot_coverage_history(sample_coverage_data, "Backend Service Coverage")
     if coverage_fig:
         coverage_output_path = RESULTS_DIR / "coverage_history_demo.png"
         coverage_fig.savefig(coverage_output_path)

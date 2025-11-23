@@ -38,9 +38,7 @@ try:
     AZURE_EVENTGRID_AVAILABLE = True
 except ImportError as e:
     # Let factory catch ImportError
-    raise ImportError(
-        "azure-eventgrid not found. Azure Event Grid client is unavailable."
-    ) from e
+    raise ImportError("azure-eventgrid not found. Azure Event Grid client is unavailable.") from e
 
 AZURE_SERVICEBUS_AVAILABLE = False
 try:
@@ -100,9 +98,7 @@ async def _alert_operator_http(message: str, level: str = "CRITICAL"):
                 }
                 payload = {
                     "event_action": "trigger",
-                    "routing_key": await SECRETS_MANAGER.get_secret(
-                        "PAGERDUTY_ROUTING_KEY"
-                    ),
+                    "routing_key": await SECRETS_MANAGER.get_secret("PAGERDUTY_ROUTING_KEY"),
                     "payload": {
                         "summary": f"[SIEM ALERT - {level}] {message}",
                         "source": "siem-azure-client",
@@ -150,17 +146,11 @@ class AzureKeyVaultBackend(SecretsBackend):
 
     def __init__(self, vault_url: str):
         if not AZURE_KEYVAULT_AVAILABLE:
-            raise SIEMClientConfigurationError(
-                "Azure Key Vault SDK not available.", "AzureClient"
-            )
+            raise SIEMClientConfigurationError("Azure Key Vault SDK not available.", "AzureClient")
         if not vault_url:
-            raise SIEMClientConfigurationError(
-                "Azure Key Vault URL is required.", "AzureClient"
-            )
+            raise SIEMClientConfigurationError("Azure Key Vault URL is required.", "AzureClient")
         self._credential = KeyVaultCredential()
-        self.client = AsyncSecretClient(
-            vault_url=vault_url, credential=self._credential
-        )
+        self.client = AsyncSecretClient(vault_url=vault_url, credential=self._credential)
 
     async def get_secret(self, secret_id: str) -> str:
         try:
@@ -189,15 +179,11 @@ class AzureKeyVaultBackend(SecretsBackend):
 class AzureSentinelConfig(BaseModel):
     """Configuration schema for Azure Sentinel client."""
 
-    workspace_id: str = Field(
-        ..., min_length=1, description="Azure Log Analytics Workspace ID."
-    )
+    workspace_id: str = Field(..., min_length=1, description="Azure Log Analytics Workspace ID.")
     shared_key: Optional[str] = None  # Should come from secrets manager in prod
     shared_key_secret_id: Optional[str] = None  # Secret ID for Shared Key
     log_type: str = Field("SFE_Audit_CL", description="Custom Log Table Name.")
-    api_version: str = Field(
-        "2016-04-01", description="API version for Data Collector API."
-    )
+    api_version: str = Field("2016-04-01", description="API version for Data Collector API.")
     monitor_query_endpoint: Optional[HttpUrl] = Field(
         None, description="Endpoint for Azure Monitor Query API."
     )
@@ -205,9 +191,7 @@ class AzureSentinelConfig(BaseModel):
         True,
         description="Use Azure AD (Managed Identity/Service Principal) for KQL querying.",
     )
-    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(
-        default_factory=list
-    )
+    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(default_factory=list)
     secrets_provider_config: Optional[Dict[str, Any]] = None
 
     @validator("workspace_id")
@@ -215,9 +199,7 @@ class AzureSentinelConfig(BaseModel):
         if PRODUCTION_MODE and not re.match(
             r"^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$", v
         ):
-            raise ValueError(
-                f"Invalid Workspace ID format: {v}. Not allowed in production."
-            )
+            raise ValueError(f"Invalid Workspace ID format: {v}. Not allowed in production.")
         return v
 
     @validator("log_type")
@@ -271,9 +253,7 @@ class AzureEventGridConfig(BaseModel):
     key: Optional[str] = None
     key_secret_id: Optional[str] = None
     topic_name: str = Field("sfe-events", description="Name of the topic.")
-    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(
-        default_factory=list
-    )
+    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(default_factory=list)
     secrets_provider_config: Optional[Dict[str, Any]] = None
 
     @validator("endpoint")
@@ -284,9 +264,7 @@ class AzureEventGridConfig(BaseModel):
             or "mock" in str(v).lower()
             or "example.com" in str(v).lower()
         ):
-            raise ValueError(
-                f"Dummy/test Endpoint detected: {v}. Not allowed in production."
-            )
+            raise ValueError(f"Dummy/test Endpoint detected: {v}. Not allowed in production.")
         return v
 
     @validator("key", always=True)
@@ -336,23 +314,17 @@ class AzureServiceBusConfig(BaseModel):
     queue_name: Optional[str] = None
     topic_name: Optional[str] = None
     namespace_fqdn: Optional[str] = None
-    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(
-        default_factory=list
-    )
+    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(default_factory=list)
     secrets_provider_config: Optional[Dict[str, Any]] = None
 
     @validator("connection_string", always=True)
     def validate_connection_string_source(cls, v, values):
         if PRODUCTION_MODE:
-            if not values.get("connection_string_secret_id") and not values.get(
-                "namespace_fqdn"
-            ):
+            if not values.get("connection_string_secret_id") and not values.get("namespace_fqdn"):
                 raise ValueError(
                     "In PRODUCTION_MODE, either 'connection_string_secret_id' or 'namespace_fqdn' must be provided. Direct string/ENV are forbidden."
                 )
-            if v and (
-                "dummy" in v.lower() or "test" in v.lower() or "mock" in v.lower()
-            ):
+            if v and ("dummy" in v.lower() or "test" in v.lower() or "mock" in v.lower()):
                 raise ValueError(
                     "Dummy/test Connection String detected. Not allowed in production."
                 )
@@ -363,9 +335,7 @@ class AzureServiceBusConfig(BaseModel):
         if not values.get("queue_name") and not values.get("topic_name"):
             raise ValueError("Either 'queue_name' or 'topic_name' must be configured.")
         if values.get("queue_name") and values.get("topic_name"):
-            raise ValueError(
-                "Only one of 'queue_name' or 'topic_name' can be configured."
-            )
+            raise ValueError("Only one of 'queue_name' or 'topic_name' can be configured.")
         return v
 
     @validator("namespace_fqdn")
@@ -380,9 +350,7 @@ class AzureServiceBusConfig(BaseModel):
                 or "example.com" in v.lower()
             )
         ):
-            raise ValueError(
-                f"Dummy/test Namespace FQDN detected: {v}. Not allowed in production."
-            )
+            raise ValueError(f"Dummy/test Namespace FQDN detected: {v}. Not allowed in production.")
         return v
 
     @validator("queue_name", "topic_name")
@@ -415,9 +383,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
                 exclude_unset=True
             )
         except ValidationError as e:
-            _base_logger.critical(
-                f"CRITICAL: Invalid Azure Sentinel client configuration: {e}."
-            )
+            _base_logger.critical(f"CRITICAL: Invalid Azure Sentinel client configuration: {e}.")
             _notify_ops(
                 f"CRITICAL: Invalid Azure Sentinel client configuration: {e}.",
                 level="CRITICAL",
@@ -432,9 +398,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
         self.shared_key = validated_config.get("shared_key")
         self.shared_key_secret_id = validated_config.get("shared_key_secret_id")
         self.secrets_providers = validated_config.get("secrets_providers", [])
-        self.secrets_provider_config = (
-            validated_config.get("secrets_provider_config", {}) or {}
-        )
+        self.secrets_provider_config = validated_config.get("secrets_provider_config", {}) or {}
         self.log_type = validated_config["log_type"]
         self.api_version = validated_config["api_version"]
         self.monitor_query_endpoint = validated_config.get("monitor_query_endpoint")
@@ -443,9 +407,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
         self._logs_query_client: Optional[LogsQueryClient] = None
         self._azure_monitor_credential: Optional[AzureMonitorCredential] = None
 
-        self.logger.extra.update(
-            {"workspace_id": self.workspace_id, "log_type": self.log_type}
-        )
+        self.logger.extra.update({"workspace_id": self.workspace_id, "log_type": self.log_type})
         self.logger.info("AzureSentinelClient initialized.")
 
     async def _ensure_shared_key_loaded(self):
@@ -460,18 +422,14 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
         for provider in self.secrets_providers:
             try:
                 if provider == "azure":
-                    vault_url = (self.secrets_provider_config.get("azure") or {}).get(
-                        "vault_url"
-                    )
+                    vault_url = (self.secrets_provider_config.get("azure") or {}).get("vault_url")
                     if not vault_url:
                         raise ValueError(
                             "Azure secrets provider configured but vault_url is missing."
                         )
                     backend = AzureKeyVaultBackend(vault_url=vault_url)
                     try:
-                        self.shared_key = await backend.get_secret(
-                            self.shared_key_secret_id
-                        )
+                        self.shared_key = await backend.get_secret(self.shared_key_secret_id)
                         return
                     finally:
                         await backend.close()
@@ -525,13 +483,13 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
 
         try:
             # Test Data Collector API connectivity (ingestion path)
-            rfc1123date = datetime.datetime.utcnow().strftime(
-                "%a, %d %b %Y %H:%M:%S GMT"
-            )
+            rfc1123date = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
             content_type = "application/json"
             dummy_body = json.dumps([{"test_event": "health_check"}]).encode("utf-8")
             content_length = len(dummy_body)
-            string_to_sign = f"POST\n{content_length}\n{content_type}\nx-ms-date:{rfc1123date}\n/api/logs"
+            string_to_sign = (
+                f"POST\n{content_length}\n{content_type}\nx-ms-date:{rfc1123date}\n/api/logs"
+            )
             decoded_shared_key = base64.b64decode(self.shared_key)
             hashed_string = hmac.new(
                 decoded_shared_key, string_to_sign.encode("utf-8"), hashlib.sha256
@@ -546,9 +504,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
             api_url = f"https://{self.workspace_id}.ods.opinsights.azure.com/api/logs?api-version={self.api_version}"
             session = await self._get_session()
             async with asyncio.shield(
-                session.post(
-                    api_url, headers=headers, data=dummy_body, timeout=self.timeout
-                )
+                session.post(api_url, headers=headers, data=dummy_body, timeout=self.timeout)
             ) as response:
                 if response.status not in [200, 202]:
                     response_text = await response.text()
@@ -581,14 +537,10 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
                     options=QueryWorkspaceOptions(wait=True),
                 )
             )
-            self.logger.info(
-                "Azure Sentinel KQL client is functional.", extra=self.logger.extra
-            )
+            self.logger.info("Azure Sentinel KQL client is functional.", extra=self.logger.extra)
             return True, "Azure Sentinel Data Collector API and KQL client are healthy."
         except Exception as e:
-            _notify_ops(
-                f"CRITICAL: Azure Sentinel health check failed: {e}", level="CRITICAL"
-            )
+            _notify_ops(f"CRITICAL: Azure Sentinel health check failed: {e}", level="CRITICAL")
             raise SIEMClientConnectivityError(
                 f"Azure Sentinel health check failed: {e}",
                 self.client_type,
@@ -596,13 +548,9 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
 
-    async def _perform_send_log_logic(
-        self, log_entry: Dict[str, Any]
-    ) -> Tuple[bool, str]:
+    async def _perform_send_log_logic(self, log_entry: Dict[str, Any]) -> Tuple[bool, str]:
         """Send a log to Azure Log Analytics via Data Collector API."""
-        success, msg, failed_logs = await self._perform_send_logs_batch_logic(
-            [log_entry]
-        )
+        success, msg, failed_logs = await self._perform_send_logs_batch_logic([log_entry])
         if success:
             return True, "Log sent to Azure Sentinel/Log Analytics."
         raise SIEMClientPublishError(
@@ -652,7 +600,9 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
         for batch_events in batches:
             body = f"[{','.join(batch_events)}]"
             content_length = len(body.encode("utf-8"))
-            string_to_sign = f"POST\n{content_length}\n{content_type}\nx-ms-date:{rfc1123date}\n/api/logs"
+            string_to_sign = (
+                f"POST\n{content_length}\n{content_type}\nx-ms-date:{rfc1123date}\n/api/logs"
+            )
             try:
                 decoded_shared_key = base64.b64decode(self.shared_key)
             except Exception as e:
@@ -682,9 +632,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
 
             try:
                 async with asyncio.shield(
-                    session.post(
-                        api_url, headers=headers, data=body, timeout=self.timeout
-                    )
+                    session.post(api_url, headers=headers, data=body, timeout=self.timeout)
                 ) as response:
                     status_code = response.status
                     response_text = await response.text()
@@ -694,10 +642,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
                             level="CRITICAL",
                         )
                         failed_logs.extend(
-                            [
-                                {"log": log, "error": response_text}
-                                for log in batch_events
-                            ]
+                            [{"log": log, "error": response_text} for log in batch_events]
                         )
                     else:
                         total_sent += len(batch_events)
@@ -706,9 +651,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
                     f"CRITICAL: Azure Sentinel batch log send failed: {e}",
                     level="CRITICAL",
                 )
-                failed_logs.extend(
-                    [{"log": log, "error": str(e)} for log in batch_events]
-                )
+                failed_logs.extend([{"log": log, "error": str(e)} for log in batch_events])
 
         if failed_logs:
             return (
@@ -754,9 +697,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
 
         try:
             full_kql_query = f"{self.log_type} | {query_string} | take {limit}"
-            self.logger.debug(
-                f"Executing KQL: {full_kql_query}", extra=self.logger.extra
-            )
+            self.logger.debug(f"Executing KQL: {full_kql_query}", extra=self.logger.extra)
             response = await asyncio.shield(
                 client.query_workspace(
                     workspace_id=self.workspace_id,
@@ -772,9 +713,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
                     parsed_results.append(dict(zip(col_names, row)))
             return parsed_results
         except Exception as e:
-            if any(
-                x in str(e) for x in ("AuthenticationFailed", "Unauthorized", "AADSTS")
-            ):
+            if any(x in str(e) for x in ("AuthenticationFailed", "Unauthorized", "AADSTS")):
                 _notify_ops(
                     f"CRITICAL: Azure Monitor Query authentication failed: {e}",
                     level="CRITICAL",
@@ -786,8 +725,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
                     correlation_id=self.logger.extra.get("correlation_id"),
                 )
             elif any(
-                x in str(e)
-                for x in ("Connection refused", "Failed to establish a new connection")
+                x in str(e) for x in ("Connection refused", "Failed to establish a new connection")
             ):
                 _notify_ops(
                     f"CRITICAL: Azure Monitor Query connection error: {e}",
@@ -800,9 +738,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
                     correlation_id=self.logger.extra.get("correlation_id"),
                 )
             else:
-                _notify_ops(
-                    f"CRITICAL: Failed to query Azure Sentinel: {e}", level="CRITICAL"
-                )
+                _notify_ops(f"CRITICAL: Failed to query Azure Sentinel: {e}", level="CRITICAL")
                 raise SIEMClientQueryError(
                     f"Failed to query Azure Sentinel: {e}",
                     self.client_type,
@@ -818,9 +754,7 @@ class AzureSentinelClient(AiohttpClientMixin, BaseSIEMClient):
                 await self._logs_query_client.close()  # Newer SDKs may support close; ignore if absent
             except Exception:
                 pass
-        if self._azure_monitor_credential and hasattr(
-            self._azure_monitor_credential, "close"
-        ):
+        if self._azure_monitor_credential and hasattr(self._azure_monitor_credential, "close"):
             try:
                 await self._azure_monitor_credential.close()
             except Exception:
@@ -854,9 +788,7 @@ class AzureEventGridClient(BaseSIEMClient):
                 exclude_unset=True
             )
         except ValidationError as e:
-            _base_logger.critical(
-                f"CRITICAL: Invalid Azure Event Grid client configuration: {e}."
-            )
+            _base_logger.critical(f"CRITICAL: Invalid Azure Event Grid client configuration: {e}.")
             _notify_ops(
                 f"CRITICAL: Invalid Azure Event Grid client configuration: {e}.",
                 level="CRITICAL",
@@ -871,9 +803,7 @@ class AzureEventGridClient(BaseSIEMClient):
         self.key = validated_config.get("key")
         self.key_secret_id = validated_config.get("key_secret_id")
         self.secrets_providers = validated_config.get("secrets_providers", [])
-        self.secrets_provider_config = (
-            validated_config.get("secrets_provider_config", {}) or {}
-        )
+        self.secrets_provider_config = validated_config.get("secrets_provider_config", {}) or {}
 
         self._event_grid_publisher_client = EventGridPublisherClient(
             endpoint=str(self.endpoint),
@@ -898,9 +828,7 @@ class AzureEventGridClient(BaseSIEMClient):
         for provider in self.secrets_providers:
             try:
                 if provider == "azure":
-                    vault_url = (self.secrets_provider_config.get("azure") or {}).get(
-                        "vault_url"
-                    )
+                    vault_url = (self.secrets_provider_config.get("azure") or {}).get("vault_url")
                     if not vault_url:
                         raise ValueError(
                             "Azure secrets provider configured but vault_url is missing."
@@ -928,9 +856,7 @@ class AzureEventGridClient(BaseSIEMClient):
                     exc_info=True,
                     extra={"client_type": self.client_type},
                 )
-        _notify_ops(
-            "CRITICAL: Failed to load Event Grid key from secrets.", level="CRITICAL"
-        )
+        _notify_ops("CRITICAL: Failed to load Event Grid key from secrets.", level="CRITICAL")
         raise SIEMClientConfigurationError(
             "Failed to load Event Grid key from any configured secrets backend.",
             self.client_type,
@@ -962,9 +888,7 @@ class AzureEventGridClient(BaseSIEMClient):
                 "Azure Event Grid client initialized and connectivity tested via dummy send.",
             )
         except Exception as e:
-            _notify_ops(
-                f"CRITICAL: Azure Event Grid health check failed: {e}", level="CRITICAL"
-            )
+            _notify_ops(f"CRITICAL: Azure Event Grid health check failed: {e}", level="CRITICAL")
             raise SIEMClientConnectivityError(
                 f"Azure Event Grid health check failed: {e}",
                 self.client_type,
@@ -972,9 +896,7 @@ class AzureEventGridClient(BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
 
-    async def _perform_send_log_logic(
-        self, log_entry: Dict[str, Any]
-    ) -> Tuple[bool, str]:
+    async def _perform_send_log_logic(self, log_entry: Dict[str, Any]) -> Tuple[bool, str]:
         """Publish a single event to Azure Event Grid."""
         await self._ensure_key_loaded()
         event_id = log_entry.get("event_id", str(uuid.uuid4()))
@@ -999,9 +921,7 @@ class AzureEventGridClient(BaseSIEMClient):
             )
             return True, "Log published to Azure Event Grid."
         except Exception as e:
-            _notify_ops(
-                f"CRITICAL: Azure Event Grid log send failed: {e}", level="CRITICAL"
-            )
+            _notify_ops(f"CRITICAL: Azure Event Grid log send failed: {e}", level="CRITICAL")
             if "AuthenticationFailed" in str(e) or "Unauthorized" in str(e):
                 raise SIEMClientAuthError(
                     f"Azure Event Grid authentication failed: {e}",
@@ -1009,9 +929,7 @@ class AzureEventGridClient(BaseSIEMClient):
                     original_exception=e,
                     correlation_id=self.logger.extra.get("correlation_id"),
                 )
-            elif "Connection refused" in str(
-                e
-            ) or "Failed to establish a new connection" in str(e):
+            elif "Connection refused" in str(e) or "Failed to establish a new connection" in str(e):
                 raise SIEMClientConnectivityError(
                     f"Azure Event Grid connection error: {e}",
                     self.client_type,
@@ -1106,9 +1024,7 @@ class AzureServiceBusClient(BaseSIEMClient):
                 exclude_unset=True
             )
         except ValidationError as e:
-            _base_logger.critical(
-                f"CRITICAL: Invalid Azure Service Bus client configuration: {e}."
-            )
+            _base_logger.critical(f"CRITICAL: Invalid Azure Service Bus client configuration: {e}.")
             _notify_ops(
                 f"CRITICAL: Invalid Azure Service Bus client configuration: {e}.",
                 level="CRITICAL",
@@ -1120,21 +1036,15 @@ class AzureServiceBusClient(BaseSIEMClient):
             )
 
         self.connection_string = validated_config.get("connection_string")
-        self.connection_string_secret_id = validated_config.get(
-            "connection_string_secret_id"
-        )
+        self.connection_string_secret_id = validated_config.get("connection_string_secret_id")
         self.queue_name = validated_config.get("queue_name")
         self.topic_name = validated_config.get("topic_name")
         self.namespace_fqdn = validated_config.get("namespace_fqdn")
         self.secrets_providers = validated_config.get("secrets_providers", [])
-        self.secrets_provider_config = (
-            validated_config.get("secrets_provider_config", {}) or {}
-        )
+        self.secrets_provider_config = validated_config.get("secrets_provider_config", {}) or {}
 
         self._service_bus_client: Optional[ServiceBusClient] = None
-        self.logger.extra.update(
-            {"queue_name": self.queue_name, "topic_name": self.topic_name}
-        )
+        self.logger.extra.update({"queue_name": self.queue_name, "topic_name": self.topic_name})
         self.logger.info("AzureServiceBusClient initialized.")
 
     async def _ensure_connection_string_loaded(self):
@@ -1149,9 +1059,7 @@ class AzureServiceBusClient(BaseSIEMClient):
         for provider in self.secrets_providers:
             try:
                 if provider == "azure":
-                    vault_url = (self.secrets_provider_config.get("azure") or {}).get(
-                        "vault_url"
-                    )
+                    vault_url = (self.secrets_provider_config.get("azure") or {}).get("vault_url")
                     if not vault_url:
                         raise ValueError(
                             "Azure secrets provider configured but vault_url is missing."
@@ -1260,9 +1168,7 @@ class AzureServiceBusClient(BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
 
-    async def _perform_send_log_logic(
-        self, log_entry: Dict[str, Any]
-    ) -> Tuple[bool, str]:
+    async def _perform_send_log_logic(self, log_entry: Dict[str, Any]) -> Tuple[bool, str]:
         """Send a log to Azure Service Bus."""
         client = await self._get_servicebus_client()
         body = json.dumps(log_entry).encode("utf-8")
@@ -1289,9 +1195,7 @@ class AzureServiceBusClient(BaseSIEMClient):
                     correlation_id=self.logger.extra.get("correlation_id"),
                 )
         except Exception as e:
-            _notify_ops(
-                f"CRITICAL: Azure Service Bus log send failed: {e}", level="CRITICAL"
-            )
+            _notify_ops(f"CRITICAL: Azure Service Bus log send failed: {e}", level="CRITICAL")
             if any(x in str(e) for x in ("Authentication", "Unauthorized", "AADSTS")):
                 raise SIEMClientAuthError(
                     f"Azure Service Bus authentication failed: {e}",
@@ -1337,8 +1241,7 @@ class AzureServiceBusClient(BaseSIEMClient):
 
             async with sender:
                 messages = [
-                    ServiceBusMessage(json.dumps(log).encode("utf-8"))
-                    for log in log_entries
+                    ServiceBusMessage(json.dumps(log).encode("utf-8")) for log in log_entries
                 ]
                 await sender.send_messages(messages)
             return (

@@ -75,12 +75,8 @@ class ProcessingResult(BaseModel, Generic[T]):
     Standardized result object for all multimodal processing operations.
     """
 
-    success: bool = Field(
-        ..., description="True if the operation was successful, False otherwise."
-    )
-    error: Optional[str] = Field(
-        None, description="Error message if the operation failed."
-    )
+    success: bool = Field(..., description="True if the operation was successful, False otherwise.")
+    error: Optional[str] = Field(None, description="Error message if the operation failed.")
     data: Optional[T] = Field(
         None, description="The processed data or results, type-hinted by Generic[T]."
     )
@@ -179,9 +175,7 @@ class MultiModalAnalysisResult(BaseModel, Generic[T], ABC):
         le=1.0,
         description="Overall confidence score of the analysis result, if applicable.",
     )
-    model_id: Optional[str] = Field(
-        None, description="Identifier of the model used for analysis."
-    )
+    model_id: Optional[str] = Field(None, description="Identifier of the model used for analysis.")
     timestamp_utc: datetime.datetime = Field(
         default_factory=datetime.datetime.utcnow,
         description="UTC timestamp of when the analysis was performed.",
@@ -199,11 +193,11 @@ class MultiModalAnalysisResult(BaseModel, Generic[T], ABC):
     class Config:
         """Pydantic configuration for the base model."""
 
-        arbitrary_types_allowed = (
-            True  # Allow 'raw_data' to be flexible (e.g., numpy arrays)
-        )
+        arbitrary_types_allowed = True  # Allow 'raw_data' to be flexible (e.g., numpy arrays)
         populate_by_name = True  # Allow field aliasing if needed
-        extra = "forbid"  # For strict data validation - disallow extra fields not defined in the schema
+        extra = (
+            "forbid"  # For strict data validation - disallow extra fields not defined in the schema
+        )
 
     @abstractmethod
     def summary(self) -> str:
@@ -245,9 +239,7 @@ class MultiModalAnalysisResult(BaseModel, Generic[T], ABC):
 
 
 # Concrete Analysis Result Implementations
-class ImageAnalysisResult(
-    MultiModalAnalysisResult[Union[Dict[str, Any], List[Dict[str, Any]]]]
-):
+class ImageAnalysisResult(MultiModalAnalysisResult[Union[Dict[str, Any], List[Dict[str, Any]]]]):
     """
     Standardized result for image analysis, including common features like
     classification, object detection, segmentation masks, OCR text, and embeddings.
@@ -262,9 +254,7 @@ class ImageAnalysisResult(
         description="List of detected objects with bounding boxes, labels, and confidence.",
     )
     ocr_text: Optional[str] = Field(None, description="Extracted text from OCR.")
-    embedding: Optional[List[float]] = Field(
-        None, description="Vector embedding of the image."
-    )
+    embedding: Optional[List[float]] = Field(None, description="Vector embedding of the image.")
     segmentation_masks: Optional[Any] = Field(
         None, description="Raw segmentation mask data (e.g., binary masks or RLE)."
     )
@@ -272,9 +262,7 @@ class ImageAnalysisResult(
     def summary(self) -> str:
         description_parts = []
         if self.classifications:
-            top_class = sorted(
-                self.classifications, key=lambda x: x.get("score", 0), reverse=True
-            )
+            top_class = sorted(self.classifications, key=lambda x: x.get("score", 0), reverse=True)
             if top_class:
                 description_parts.append(
                     f"Class: {top_class[0].get('label')} ({top_class[0].get('score', 0):.2f})"
@@ -291,9 +279,7 @@ class ImageAnalysisResult(
             description_parts.append("No specific analysis results.")
 
         # Consolidate description and add confidence if present
-        final_summary = (
-            f"Image analysis: {base_summary}. " if base_summary else "Image analysis: "
-        )
+        final_summary = f"Image analysis: {base_summary}. " if base_summary else "Image analysis: "
         final_summary += " ".join(description_parts)
         if self.confidence is not None:
             final_summary += f". Confidence: {self.confidence:.2f}"
@@ -339,18 +325,14 @@ class AudioAnalysisResult(MultiModalAnalysisResult[Union[str, Dict[str, Any]]]):
         if not description_parts:
             description_parts.append("No specific analysis results.")
 
-        final_summary = (
-            f"Audio analysis: {base_summary}. " if base_summary else "Audio analysis: "
-        )
+        final_summary = f"Audio analysis: {base_summary}. " if base_summary else "Audio analysis: "
         final_summary += " ".join(description_parts)
         if self.confidence is not None:
             final_summary += f". Confidence: {self.confidence:.2f}"
         return final_summary.strip()
 
 
-class VideoAnalysisResult(
-    MultiModalAnalysisResult[Union[Dict[str, Any], List[Dict[str, Any]]]]
-):
+class VideoAnalysisResult(MultiModalAnalysisResult[Union[Dict[str, Any], List[Dict[str, Any]]]]):
     """
     Standardized result for video analysis, combining insights from frames and temporal modeling.
     Includes scene detection, object tracking, action recognition, and summarization.
@@ -381,9 +363,7 @@ class VideoAnalysisResult(
     def summary(self) -> str:
         description_parts = []
         if self.summary_transcript:
-            description_parts.append(
-                f"Summarized Audio: {self.summary_transcript[:50]}..."
-            )
+            description_parts.append(f"Summarized Audio: {self.summary_transcript[:50]}...")
         if self.scene_changes:
             description_parts.append(f"Scenes: {len(self.scene_changes)}")
         if self.tracked_objects:
@@ -395,9 +375,7 @@ class VideoAnalysisResult(
         if not description_parts:
             description_parts.append("No specific analysis results.")
 
-        final_summary = (
-            f"Video analysis: {base_summary}. " if base_summary else "Video analysis: "
-        )
+        final_summary = f"Video analysis: {base_summary}. " if base_summary else "Video analysis: "
         final_summary += " ".join(description_parts)
         if self.confidence is not None:
             final_summary += f". Confidence: {self.confidence:.2f}"
@@ -421,9 +399,7 @@ class TextAnalysisResult(MultiModalAnalysisResult[str]):
         None,
         description="Extracted named entities (e.g., people, organizations, locations).",
     )
-    summary_text: Optional[str] = Field(
-        None, description="A summarized version of the input text."
-    )
+    summary_text: Optional[str] = Field(None, description="A summarized version of the input text.")
     translation: Optional[str] = Field(
         None, description="Translated text, if translation was performed."
     )
@@ -432,9 +408,7 @@ class TextAnalysisResult(MultiModalAnalysisResult[str]):
     def summary(self) -> str:
         description_parts = []
         if self.classification:
-            top_class = sorted(
-                self.classification, key=lambda x: x.get("score", 0), reverse=True
-            )
+            top_class = sorted(self.classification, key=lambda x: x.get("score", 0), reverse=True)
             if top_class:
                 description_parts.append(f"Class: {top_class[0].get('label')}")
         if self.sentiment:
@@ -453,9 +427,7 @@ class TextAnalysisResult(MultiModalAnalysisResult[str]):
         if not description_parts:
             description_parts.append("No specific analysis results.")
 
-        final_summary = (
-            f"Text analysis: {base_summary}. " if base_summary else "Text analysis: "
-        )
+        final_summary = f"Text analysis: {base_summary}. " if base_summary else "Text analysis: "
         final_summary += " ".join(description_parts)
         if self.confidence is not None:
             final_summary += f". Confidence: {self.confidence:.2f}"
@@ -491,9 +463,7 @@ class MultiModalPluginInterface(ABC):
         # Plugins should validate their configuration here (e.g., using Pydantic models)
 
     @abstractmethod
-    def analyze_image(
-        self, image_data: Union[bytes, str, Any], **kwargs
-    ) -> ImageAnalysisResult:
+    def analyze_image(self, image_data: Union[bytes, str, Any], **kwargs) -> ImageAnalysisResult:
         """
         Analyzes an image synchronously, performing tasks like classification,
         object detection, OCR, or embedding generation.
@@ -517,9 +487,7 @@ class MultiModalPluginInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def analyze_audio(
-        self, audio_data: Union[bytes, str, Any], **kwargs
-    ) -> AudioAnalysisResult:
+    def analyze_audio(self, audio_data: Union[bytes, str, Any], **kwargs) -> AudioAnalysisResult:
         """
         Analyzes audio synchronously, performing tasks like speech-to-text,
         speaker diarization, sentiment analysis, or audio event detection.
@@ -543,9 +511,7 @@ class MultiModalPluginInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def analyze_video(
-        self, video_data: Union[bytes, str, Any], **kwargs
-    ) -> VideoAnalysisResult:
+    def analyze_video(self, video_data: Union[bytes, str, Any], **kwargs) -> VideoAnalysisResult:
         """
         Analyzes video synchronously, performing tasks like scene detection,
         object tracking, action recognition, or video summarization.
@@ -611,9 +577,7 @@ class MultiModalPluginInterface(ABC):
         Asynchronous counterpart to analyze_image.
         Implement if non-blocking I/O or long-running inference is needed for image processing.
         """
-        raise NotImplementedError(
-            "Asynchronous image analysis not implemented by this plugin."
-        )
+        raise NotImplementedError("Asynchronous image analysis not implemented by this plugin.")
 
     async def analyze_audio_async(
         self, audio_data: Union[bytes, str, Any], **kwargs
@@ -622,9 +586,7 @@ class MultiModalPluginInterface(ABC):
         Asynchronous counterpart to analyze_audio.
         Implement if non-blocking I/O or long-running inference is needed for audio processing.
         """
-        raise NotImplementedError(
-            "Asynchronous audio analysis not implemented by this plugin."
-        )
+        raise NotImplementedError("Asynchronous audio analysis not implemented by this plugin.")
 
     async def analyze_video_async(
         self, video_data: Union[bytes, str, Any], **kwargs
@@ -633,18 +595,14 @@ class MultiModalPluginInterface(ABC):
         Asynchronous counterpart to analyze_video.
         Implement if non-blocking I/O or long-running inference is needed for video processing.
         """
-        raise NotImplementedError(
-            "Asynchronous video analysis not implemented by this plugin."
-        )
+        raise NotImplementedError("Asynchronous video analysis not implemented by this plugin.")
 
     async def analyze_text_async(self, text_data: str, **kwargs) -> TextAnalysisResult:
         """
         Asynchronous counterpart to analyze_text.
         Implement if non-blocking I/O or long-running inference is needed for text processing.
         """
-        raise NotImplementedError(
-            "Asynchronous text analysis not implemented by this plugin."
-        )
+        raise NotImplementedError("Asynchronous text analysis not implemented by this plugin.")
 
     def model_info(self) -> Dict[str, Any]:
         """
@@ -711,9 +669,7 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
-        self.dummy_model_id = (
-            config.get("model_id", "dummy-v1.0") if config else "dummy-v1.0"
-        )
+        self.dummy_model_id = config.get("model_id", "dummy-v1.0") if config else "dummy-v1.0"
         self.call_count = 0  # For demonstrating resource management/tracking
         self.requests_total = get_or_create(
             Counter(
@@ -730,17 +686,13 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
             )
         )
 
-    def analyze_image(
-        self, image_data: Union[bytes, str, Any], **kwargs
-    ) -> ImageAnalysisResult:
+    def analyze_image(self, image_data: Union[bytes, str, Any], **kwargs) -> ImageAnalysisResult:
         start_time = time.monotonic()
         try:
             if image_data is None or (
                 isinstance(image_data, str) and not os.path.exists(image_data)
             ):
-                raise ValueError(
-                    "Invalid image_data: must be non-empty bytes or valid file path"
-                )
+                raise ValueError("Invalid image_data: must be non-empty bytes or valid file path")
 
             # Simulate some processing time
             time.sleep(0.01)
@@ -749,9 +701,7 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
             # description is now passed via meta for the summary method to pick up.
             result = ImageAnalysisResult(
                 raw_data={
-                    "processed_bytes": (
-                        len(image_data) if isinstance(image_data, bytes) else "N/A"
-                    )
+                    "processed_bytes": (len(image_data) if isinstance(image_data, bytes) else "N/A")
                 },
                 meta={
                     "custom_meta": kwargs.get("context", "no_context"),
@@ -787,17 +737,13 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
             )
             raise
 
-    def analyze_audio(
-        self, audio_data: Union[bytes, str, Any], **kwargs
-    ) -> AudioAnalysisResult:
+    def analyze_audio(self, audio_data: Union[bytes, str, Any], **kwargs) -> AudioAnalysisResult:
         start_time = time.monotonic()
         try:
             if audio_data is None or (
                 isinstance(audio_data, str) and not os.path.exists(audio_data)
             ):
-                raise ValueError(
-                    "Invalid audio_data: must be non-empty bytes or valid file path"
-                )
+                raise ValueError("Invalid audio_data: must be non-empty bytes or valid file path")
 
             time.sleep(0.01)
             self.call_count += 1
@@ -838,17 +784,13 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
             )
             raise
 
-    def analyze_video(
-        self, video_data: Union[bytes, str, Any], **kwargs
-    ) -> VideoAnalysisResult:
+    def analyze_video(self, video_data: Union[bytes, str, Any], **kwargs) -> VideoAnalysisResult:
         start_time = time.monotonic()
         try:
             if video_data is None or (
                 isinstance(video_data, str) and not os.path.exists(video_data)
             ):
-                raise ValueError(
-                    "Invalid video_data: must be non-empty bytes or valid file path"
-                )
+                raise ValueError("Invalid video_data: must be non-empty bytes or valid file path")
 
             time.sleep(0.01)
             self.call_count += 1
@@ -866,12 +808,8 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
                 model_id=self.dummy_model_id,
                 summary_transcript="Summarized dummy video content.",
                 scene_changes=[1.5, 5.2, 10.1],
-                tracked_objects=[
-                    {"id": 1, "label": "person", "trajectory": [[0, 0], [1, 1]]}
-                ],
-                actions=[
-                    {"action": "running", "confidence": 0.9, "timestamp": (1.0, 2.0)}
-                ],
+                tracked_objects=[{"id": 1, "label": "person", "trajectory": [[0, 0], [1, 1]]}],
+                actions=[{"action": "running", "confidence": 0.9, "timestamp": (1.0, 2.0)}],
                 key_frames_analysis=[],
                 overall_sentiment={"positive": 0.7, "negative": 0.1},
                 data_provenance={
@@ -984,24 +922,18 @@ if __name__ == "__main__":
         print(f"Image Summary: {img_result.summary()}")
         print(f"Image Valid: {img_result.is_valid()}")
         print(f"Image as JSON: {img_result.model_dump_json(indent=2)}")
-        print(
-            f"Image Provenance: {json.dumps(img_result.get_provenance_info(), indent=2)}"
-        )
+        print(f"Image Provenance: {json.dumps(img_result.get_provenance_info(), indent=2)}")
         print(f"Image repr: {repr(img_result)}")  # Test __repr__
 
         # Test Audio
-        audio_result = plugin.analyze_audio(
-            b"fake_audio_bytes", description="meeting recording"
-        )
+        audio_result = plugin.analyze_audio(b"fake_audio_bytes", description="meeting recording")
         print(f"\nAudio Summary: {audio_result.summary()}")
         print(f"Audio Valid: {audio_result.is_valid()}")
         print(f"Audio as JSON: {audio_result.model_dump_json(indent=2)}")
         print(f"Audio repr: {repr(audio_result)}")  # Test __repr__
 
         # Test Video
-        video_result = plugin.analyze_video(
-            b"fake_video_bytes", description="security footage"
-        )
+        video_result = plugin.analyze_video(b"fake_video_bytes", description="security footage")
         print(f"\nVideo Summary: {video_result.summary()}")
         print(f"Video Valid: {video_result.is_valid()}")
         print(f"Video as JSON: {video_result.model_dump_json(indent=2)}")
@@ -1029,9 +961,7 @@ if __name__ == "__main__":
 
         # This would raise ValidationError if passed to a plugin constructor expecting TestConfig
         # TestConfig(threshold=1.5)
-        print(
-            "Configuration validation test conceptual. See `TestConfig(threshold=1.5)` example."
-        )
+        print("Configuration validation test conceptual. See `TestConfig(threshold=1.5)` example.")
 
     except ValidationError as e:
         print(f"Caught expected Pydantic validation error for config: {e.errors()}")

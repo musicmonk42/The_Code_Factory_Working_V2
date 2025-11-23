@@ -150,9 +150,7 @@ def scrub_text(text: str) -> str:
         return scrubbed_content
 
     except Exception as e:
-        logger.error(
-            f"Presidio PII/secret scrubbing failed critically: {e}", exc_info=True
-        )
+        logger.error(f"Presidio PII/secret scrubbing failed critically: {e}", exc_info=True)
         # In a strict-fail model, re-raise the exception if scrubbing cannot be performed
         raise RuntimeError(
             f"Critical error during sensitive data scrubbing with Presidio: {e}"
@@ -210,19 +208,17 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
                     model="gpt-3.5-turbo",
                     task="summarize_context",
                 ).observe(time.time() - start_time)
-                add_provenance(
-                    {"action": "summarize_prompt_context", "model": "gpt-3.5-turbo"}
-                )
+                add_provenance({"action": "summarize_prompt_context", "model": "gpt-3.5-turbo"})
             except Exception as llm_e:
-                logger.error(
-                    f"LLM summarization failed for {filename}: {llm_e}", exc_info=True
-                )
+                logger.error(f"LLM summarization failed for {filename}: {llm_e}", exc_info=True)
                 LLM_ERRORS_TOTAL.labels(
                     provider="docgen_prompt",
                     model="gpt-3.5-turbo",
                     error_type=type(llm_e).__name__,
                 ).inc()
-                summary_of_content = f"Error summarizing content: {llm_e}"  # Continue with an error message
+                summary_of_content = (
+                    f"Error summarizing content: {llm_e}"  # Continue with an error message
+                )
 
             # Replace the original content with the summary
             replacement = f"File: {filename}\n```\n{summary_of_content}\n```"
@@ -231,9 +227,7 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
             # Check token count again
             current_tokens = len(tokenizer.encode(optimized_text))
             if current_tokens <= max_tokens:
-                logger.info(
-                    "Prompt optimized by summarization alone. Core context preserved."
-                )
+                logger.info("Prompt optimized by summarization alone. Core context preserved.")
                 return optimized_text
 
         # 4. If summarization of sections is not enough, fall back to a final,
@@ -260,9 +254,7 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
                 model="gpt-3.5-turbo",
                 task="summarize_context_global",
             ).observe(time.time() - start_time_global)
-            add_provenance(
-                {"action": "summarize_prompt_context_global", "model": "gpt-3.5-turbo"}
-            )
+            add_provenance({"action": "summarize_prompt_context_global", "model": "gpt-3.5-turbo"})
         except Exception as llm_e:
             logger.error(
                 f"Global prompt summarization failed: {llm_e}. Proceeding with truncated text.",
@@ -283,9 +275,7 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
             f"Prompt content optimization failed: {e}. Cannot proceed without optimized prompt.",
             exc_info=True,
         )
-        raise RuntimeError(
-            f"Critical error during prompt content optimization: {e}"
-        ) from e
+        raise RuntimeError(f"Critical error during prompt content optimization: {e}") from e
 
 
 # --- Custom Jinja2 Filters (Asynchronous) ---
@@ -297,10 +287,7 @@ async def get_language(content: str) -> str:
     if "import " in content or "def " in content or "class " in content:
         return "python"
     elif (
-        "function " in content
-        or "const " in content
-        or "let " in content
-        or "var " in content
+        "function " in content or "const " in content or "let " in content or "var " in content
     ) and (";" in content or "}" in content):
         return "javascript"
     elif "package " in content and "func " in content:
@@ -351,9 +338,7 @@ async def get_dependencies(files_to_check: List[str], repo_path: str) -> str:
                 )
                 deps_info["go"] = {mod: ver for mod, ver in modules}
             elif file_name == "Cargo.toml":
-                deps_match = re.search(
-                    r"\[dependencies\]\n([\s\S]*?)(?:\n\[|\Z)", content
-                )
+                deps_match = re.search(r"\[dependencies\]\n([\s\S]*?)(?:\n\[|\Z)", content)
                 if deps_match:
                     deps_str = deps_match.group(1)
                     cargo_deps = {}
@@ -363,9 +348,7 @@ async def get_dependencies(files_to_check: List[str], repo_path: str) -> str:
                             match = re.match(r"(\w+)\s*=\s*(.*)", line)
                             if match:
                                 pkg, ver = match.groups()
-                                cargo_deps[pkg] = (
-                                    ver.strip().strip(",").strip('"').strip("'")
-                                )
+                                cargo_deps[pkg] = ver.strip().strip(",").strip('"').strip("'")
                     deps_info["rust"] = cargo_deps
             elif file_name == "pom.xml":
                 deps_list = []
@@ -390,11 +373,7 @@ async def get_dependencies(files_to_check: List[str], repo_path: str) -> str:
                 exc_info=True,
             )
 
-    return (
-        scrub_text(json.dumps(deps_info, indent=2))
-        if deps_info
-        else "No dependencies found."
-    )
+    return scrub_text(json.dumps(deps_info, indent=2)) if deps_info else "No dependencies found."
 
 
 async def get_imports(file_path_str: str) -> str:
@@ -427,14 +406,10 @@ async def get_imports(file_path_str: str) -> str:
                     imports.add(node.module)
         return scrub_text(", ".join(sorted(list(imports))))
     except SyntaxError as e:
-        logger.warning(
-            f"Syntax error in Python file {file_path_str}. Cannot parse imports: {e}"
-        )
+        logger.warning(f"Syntax error in Python file {file_path_str}. Cannot parse imports: {e}")
         return ""
     except Exception as e:
-        logger.warning(
-            f"Failed to get imports from {file_path_str}: {e}", exc_info=True
-        )
+        logger.warning(f"Failed to get imports from {file_path_str}: {e}", exc_info=True)
         return ""
 
 
@@ -454,9 +429,7 @@ async def get_file_content(file_path_str: str) -> str:
             content = await f.read()
         return scrub_text(content)
     except Exception as e:
-        logger.warning(
-            f"Failed to read file content from {file_path_str}: {e}", exc_info=True
-        )
+        logger.warning(f"Failed to read file content from {file_path_str}: {e}", exc_info=True)
         return ""
 
 
@@ -468,9 +441,7 @@ class PromptTemplateRegistry:
 
     def __init__(self, plugin_dir: str = "prompt_templates"):
         self.plugin_dir = plugin_dir
-        self.env: Environment = (
-            self._create_environment()
-        )  # Initialize Jinja2 environment
+        self.env: Environment = self._create_environment()  # Initialize Jinja2 environment
         self._setup_hot_reload()  # Setup file system watcher
 
     def _create_environment(self) -> Environment:
@@ -550,9 +521,7 @@ class DocGenPromptAgent:
     ):
         # Integration test compatibility
         self.template_dir = template_dir
-        self.few_shot_dir = (
-            few_shot_dir if few_shot_dir is not None else "few_shot_examples"
-        )
+        self.few_shot_dir = few_shot_dir if few_shot_dir is not None else "few_shot_examples"
         self.languages = languages
         self.embedding_model: Optional[SentenceTransformer] = None
         try:
@@ -573,9 +542,7 @@ class DocGenPromptAgent:
         self.few_shot_examples = self._load_few_shot(str(few_shot_path))
 
         if not self.repo_path.exists() or not self.repo_path.is_dir():
-            raise ValueError(
-                f"Repository path does not exist or is not a directory: {repo_path}"
-            )
+            raise ValueError(f"Repository path does not exist or is not a directory: {repo_path}")
 
         self.previous_feedback: Dict[str, float] = {}
         # REFACTORED: Removed self.llm_orchestrator instance
@@ -594,20 +561,14 @@ class DocGenPromptAgent:
             try:
                 with open(file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                if (
-                    not isinstance(data, dict)
-                    or "query" not in data
-                    or "prompt" not in data
-                ):
+                if not isinstance(data, dict) or "query" not in data or "prompt" not in data:
                     logger.warning(
                         f"Invalid few-shot example format in {file}. Must contain 'query' and 'prompt' keys. Skipping."
                     )
                     continue
                 examples.append(data)
             except Exception as e:
-                logger.error(
-                    f"Failed to load few-shot example from {file}: {e}", exc_info=True
-                )
+                logger.error(f"Failed to load few-shot example from {file}: {e}", exc_info=True)
         logger.info(f"Loaded {len(examples)} few-shot examples from {few_shot_dir}.")
         return examples
 
@@ -627,9 +588,7 @@ class DocGenPromptAgent:
         for file_name in target_files:
             file_path = Path(repo_path) / file_name  # Use passed repo_path
             if file_path.is_file():
-                read_tasks.append(
-                    self._read_single_file_for_context(file_path, file_name)
-                )
+                read_tasks.append(self._read_single_file_for_context(file_path, file_name))
             else:
                 logger.warning(
                     f"Target file not found for context gathering: {file_name} at {file_path}. Skipping."
@@ -650,9 +609,7 @@ class DocGenPromptAgent:
                 content = await f.read()
                 return file_name, scrub_text(content)
         except Exception as e:
-            logger.error(
-                f"Failed to read file {file_path} for context: {e}", exc_info=True
-            )
+            logger.error(f"Failed to read file {file_path} for context: {e}", exc_info=True)
             return file_name, None
 
     async def retrieve_few_shot(self, query: str, top_k: int = 3) -> List[str]:
@@ -672,14 +629,10 @@ class DocGenPromptAgent:
             if not example_queries:
                 return []
 
-            example_embs = self.embedding_model.encode(
-                example_queries, convert_to_tensor=True
-            )
+            example_embs = self.embedding_model.encode(example_queries, convert_to_tensor=True)
             hits = util.semantic_search(query_emb, example_embs, top_k=top_k)[0]
 
-            retrieved_prompts = [
-                self.few_shot_examples[hit["corpus_id"]]["prompt"] for hit in hits
-            ]
+            retrieved_prompts = [self.few_shot_examples[hit["corpus_id"]]["prompt"] for hit in hits]
 
             logger.info(
                 f"Retrieved {len(retrieved_prompts)} few-shot examples for query: '{query[:50]}...'"
@@ -751,9 +704,7 @@ class DocGenPromptAgent:
                     model=llm_model,
                     error_type="EmptyLLMResponse",
                 ).inc()
-                raise ValueError(
-                    "Meta-LLM returned empty content when enforcing sections."
-                )
+                raise ValueError("Meta-LLM returned empty content when enforcing sections.")
 
             logger.info("Prompt sections enforced successfully by meta-LLM.")
             return enforced_prompt_content
@@ -769,9 +720,7 @@ class DocGenPromptAgent:
                 f"Failed to enforce required sections using meta-LLM: {e}",
                 exc_info=True,
             )
-            raise RuntimeError(
-                f"Critical error during prompt section enforcement: {e}"
-            ) from e
+            raise RuntimeError(f"Critical error during prompt section enforcement: {e}") from e
 
     # REFACTORED: Uses call_ensemble_api
     async def optimize_prompt_with_feedback(
@@ -788,9 +737,7 @@ class DocGenPromptAgent:
         score = self.previous_feedback.get(feedback_key)
 
         if score is not None:
-            logger.info(
-                f"Optimizing prompt with feedback (score: {score}) for {feedback_key}."
-            )
+            logger.info(f"Optimizing prompt with feedback (score: {score}) for {feedback_key}.")
 
             last_run_context = self.previous_feedback.get("last_run", {})
             last_run_str = (
@@ -848,9 +795,7 @@ class DocGenPromptAgent:
                 )
 
                 if optimized_content:
-                    logger.info(
-                        f"Prompt '{feedback_key}' optimized successfully by meta-LLM."
-                    )
+                    logger.info(f"Prompt '{feedback_key}' optimized successfully by meta-LLM.")
                     return optimized_content
                 else:
                     LLM_ERRORS_TOTAL.labels(
@@ -876,9 +821,7 @@ class DocGenPromptAgent:
                 )
                 return initial_prompt_content
 
-        logger.debug(
-            f"No feedback available for '{feedback_key}'. Using original prompt content."
-        )
+        logger.debug(f"No feedback available for '{feedback_key}'. Using original prompt content.")
         return initial_prompt_content
 
     async def get_doc_prompt(
@@ -895,9 +838,7 @@ class DocGenPromptAgent:
         """
         with tracer.start_as_current_span("get_doc_prompt_pipeline") as span:
             # REFACTORED: Replaced local metric with logger call
-            logger.info(
-                f"Prompt generation call for doc_type={doc_type}, template={template_name}"
-            )
+            logger.info(f"Prompt generation call for doc_type={doc_type}, template={template_name}")
             start_time = time.time()
 
             # Gather comprehensive context data
@@ -917,16 +858,11 @@ class DocGenPromptAgent:
                     few_shot_examples_str = (
                         "\n\n--- Few-shot Examples ---\n"
                         + "\n---\n".join(
-                            [
-                                f"Example {i+1}:\n{ex}"
-                                for i, ex in enumerate(retrieved_few_shots)
-                            ]
+                            [f"Example {i+1}:\n{ex}" for i, ex in enumerate(retrieved_few_shots)]
                         )
                         + "\n-------------------------"
                     )
-                    span.set_attribute(
-                        "few_shot_examples_count", len(retrieved_few_shots)
-                    )
+                    span.set_attribute("few_shot_examples_count", len(retrieved_few_shots))
                     # REFACTORED: Replaced local metric with logger call
                     logger.debug(
                         f"Used {len(retrieved_few_shots)} few-shot examples for {doc_type}/{template_name}"
@@ -997,9 +933,7 @@ class DocGenPromptAgent:
                     f"Prompt generation error for {doc_type}: stage=prompt_generation, error={error_type}",
                     exc_info=True,
                 )
-                span.set_status(
-                    Status(StatusCode.ERROR, f"Prompt generation failed: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, f"Prompt generation failed: {e}"))
                 span.record_exception(e)
 
                 scrub_text(
@@ -1020,9 +954,7 @@ class DocGenPromptAgent:
             # source_code="",  # Will be read internally  <--- REMOVED
             # file_path=file_path,                          <--- REMOVED
             doc_type=target,
-            target_files=[
-                file_path
-            ],  # <--- FIX: Pass file_path as a list to target_files
+            target_files=[file_path],  # <--- FIX: Pass file_path as a list to target_files
             # language=target,                              <--- REMOVED
             instructions=instructions,
             **kwargs,
@@ -1054,12 +986,8 @@ class DocGenPromptAgent:
         processed_results = []
         for res in results:
             if isinstance(res, Exception):
-                logger.error(
-                    f"Batch prompt generation item failed: {res}", exc_info=True
-                )
-                processed_results.append(
-                    f"ERROR: Failed to generate prompt: {str(res)}"
-                )
+                logger.error(f"Batch prompt generation item failed: {res}", exc_info=True)
+                processed_results.append(f"ERROR: Failed to generate prompt: {str(res)}")
             else:
                 processed_results.append(res)
         return processed_results
@@ -1099,9 +1027,9 @@ class DocGenPromptAgent:
         for i, template_name in enumerate(template_names):
             current_prompt_string = prompt_strings[i]
 
-            if isinstance(
-                current_prompt_string, str
-            ) and current_prompt_string.startswith("ERROR:"):
+            if isinstance(current_prompt_string, str) and current_prompt_string.startswith(
+                "ERROR:"
+            ):
                 logger.error(
                     f"Skipping scoring for template '{template_name}' due to prior prompt generation failure."
                 )
@@ -1150,9 +1078,7 @@ class DocGenPromptAgent:
                     )
                 )
 
-            scoring_responses = await asyncio.gather(
-                *scoring_tasks, return_exceptions=True
-            )
+            scoring_responses = await asyncio.gather(*scoring_tasks, return_exceptions=True)
 
             for i, (template_name_scored, _) in enumerate(prompts_for_scoring):
                 score_response = scoring_responses[i]
@@ -1335,9 +1261,7 @@ Context: {{ context.files_content | tojson }}
 Output should be well-structured Markdown.
 """
             )
-        print(
-            "Created 'prompt_templates' directory and a sample 'README_default.jinja' template."
-        )
+        print("Created 'prompt_templates' directory and a sample 'README_default.jinja' template.")
 
     if not os.path.exists("few_shot_examples"):
         os.makedirs("few_shot_examples")
@@ -1350,9 +1274,7 @@ Output should be well-structured Markdown.
 }
 """
             )
-        print(
-            "Created 'few_shot_examples' directory and a sample 'README_python_example.json'."
-        )
+        print("Created 'few_shot_examples' directory and a sample 'README_python_example.json'.")
 
     test_repo_path = "temp_docgen_repo_prompt"
     if not os.path.exists(test_repo_path):
@@ -1372,9 +1294,7 @@ def my_function(param1: str) -> str:
         print(f"Created dummy repository at {test_repo_path} with sample files.")
 
         try:
-            subprocess.run(
-                ["git", "init"], cwd=test_repo_path, check=True, capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=test_repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@example.com"],
                 cwd=test_repo_path,
@@ -1387,9 +1307,7 @@ def my_function(param1: str) -> str:
                 check=True,
                 capture_output=True,
             )
-            subprocess.run(
-                ["git", "add", "."], cwd=test_repo_path, check=True, capture_output=True
-            )
+            subprocess.run(["git", "add", "."], cwd=test_repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "commit", "-m", "Initial commit for test app"],
                 cwd=test_repo_path,
@@ -1442,12 +1360,8 @@ def my_function(param1: str) -> str:
         action="store_true",
         help="Start the aiohttp web server for API endpoints.",
     )
-    parser.add_argument(
-        "--host", default="0.0.0.0", help="Host for the aiohttp server."
-    )
-    parser.add_argument(
-        "--port", type=int, default=8080, help="Port for the aiohttp server."
-    )
+    parser.add_argument("--host", default="0.0.0.0", help="Host for the aiohttp server.")
+    parser.add_argument("--port", type=int, default=8080, help="Port for the aiohttp server.")
     parser.add_argument("--batch", action="store_true", help="Run in batch mode.")
     parser.add_argument(
         "--ab_test",
@@ -1473,9 +1387,7 @@ def my_function(param1: str) -> str:
 
     async def run_cli_mode():
         if args.server:
-            print(
-                f"Starting aiohttp server on {args.host}:{args.port} for API endpoints..."
-            )
+            print(f"Starting aiohttp server on {args.host}:{args.port} for API endpoints...")
             web.run_app(app, host=args.host, port=args.port)
             return
 
@@ -1492,9 +1404,7 @@ def my_function(param1: str) -> str:
                     "instructions": "Detailed API docs.",
                 },
             ]
-            print(
-                f"Running batch prompt generation for {len(batch_requests)} requests..."
-            )
+            print(f"Running batch prompt generation for {len(batch_requests)} requests...")
             results = await agent_instance.batch_get_doc_prompt(batch_requests)
             print("\n--- Batch Prompt Results ---")
             for i, prompt_result in enumerate(results):

@@ -40,9 +40,7 @@ try:
 
     S3_AVAILABLE = True
 except ImportError:
-    _base_logger.warning(
-        "boto3/aioboto3 not found. AWS S3 off-chain storage will be disabled."
-    )
+    _base_logger.warning("boto3/aioboto3 not found. AWS S3 off-chain storage will be disabled.")
 
     class BotoClientError(Exception):
         pass
@@ -56,9 +54,7 @@ try:
 
     GCS_AVAILABLE = True
 except ImportError:
-    _base_logger.warning(
-        "google-cloud-storage not found. GCS off-chain storage will be disabled."
-    )
+    _base_logger.warning("google-cloud-storage not found. GCS off-chain storage will be disabled.")
 
 AZURE_BLOB_AVAILABLE = False
 try:
@@ -109,9 +105,7 @@ try:
         ),
     }
 except ImportError:
-    _base_logger.warning(
-        "Prometheus client not available for Off-Chain specific metrics."
-    )
+    _base_logger.warning("Prometheus client not available for Off-Chain specific metrics.")
     OFFCHAIN_METRICS = {}
 
 # Temporary file cleanup
@@ -141,9 +135,7 @@ def create_temp_file(content: str, ttl: float = 3600.0) -> str:
     The file is created with restrictive permissions (0o600).
     """
     global _temp_files
-    fd, path = tempfile.mkstemp(
-        mode="w", delete=False, suffix=".json", prefix="offchain_"
-    )
+    fd, path = tempfile.mkstemp(mode="w", delete=False, suffix=".json", prefix="offchain_")
     try:
         with os.fdopen(fd, "w") as tmp:
             tmp.write(content)
@@ -194,9 +186,7 @@ class AWSSecretsBackend(SecretsBackend):
 
     async def get_secret(self, secret_id: str) -> str:
         try:
-            response = await asyncio.to_thread(
-                self.client.get_secret_value, SecretId=secret_id
-            )
+            response = await asyncio.to_thread(self.client.get_secret_value, SecretId=secret_id)
             return response["SecretString"]
         except BotoClientError as e:
             raise DLTClientConfigurationError(
@@ -218,9 +208,7 @@ class AzureKeyVaultBackend(SecretsBackend):
                 "OffChain",
             )
         if not vault_url:
-            raise DLTClientConfigurationError(
-                "Azure Key Vault URL is required.", "OffChain"
-            )
+            raise DLTClientConfigurationError("Azure Key Vault URL is required.", "OffChain")
         self.credential = DefaultAzureCredential()
         self.client = AsyncSecretClient(vault_url=vault_url, credential=self.credential)
 
@@ -279,9 +267,7 @@ class S3Config(BaseModel):
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
     aws_credentials_secret_id: Optional[str] = None
-    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(
-        default_factory=list
-    )
+    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(default_factory=list)
     secrets_provider_config: Optional[Dict[str, Any]] = None
     log_format: str = "json"
     temp_file_ttl: float = Field(3600.0, ge=60.0)
@@ -304,15 +290,15 @@ class S3Config(BaseModel):
             for provider in v:
                 if provider not in ("aws", "azure", "gcp"):
                     raise ValueError(f"Invalid secrets_provider: {provider}.")
-                if provider == "azure" and not values.get(
-                    "secrets_provider_config", {}
-                ).get("vault_url"):
+                if provider == "azure" and not values.get("secrets_provider_config", {}).get(
+                    "vault_url"
+                ):
                     raise ValueError(
                         "secrets_provider_config.vault_url required for Azure Key Vault."
                     )
-                if provider == "gcp" and not values.get(
-                    "secrets_provider_config", {}
-                ).get("project_id"):
+                if provider == "gcp" and not values.get("secrets_provider_config", {}).get(
+                    "project_id"
+                ):
                     raise ValueError(
                         "secrets_provider_config.project_id required for GCP Secret Manager."
                     )
@@ -324,9 +310,7 @@ class GCSConfig(BaseModel):
     project_id: Optional[str] = None
     credentials_path: Optional[str] = None
     credentials_secret_id: Optional[str] = None
-    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(
-        default_factory=list
-    )
+    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(default_factory=list)
     secrets_provider_config: Optional[Dict[str, Any]] = None
     log_format: str = "json"
     temp_file_ttl: float = Field(3600.0, ge=60.0)
@@ -349,15 +333,15 @@ class GCSConfig(BaseModel):
             for provider in v:
                 if provider not in ("aws", "azure", "gcp"):
                     raise ValueError(f"Invalid secrets_provider: {provider}.")
-                if provider == "azure" and not values.get(
-                    "secrets_provider_config", {}
-                ).get("vault_url"):
+                if provider == "azure" and not values.get("secrets_provider_config", {}).get(
+                    "vault_url"
+                ):
                     raise ValueError(
                         "secrets_provider_config.vault_url required for Azure Key Vault."
                     )
-                if provider == "gcp" and not values.get(
-                    "secrets_provider_config", {}
-                ).get("project_id"):
+                if provider == "gcp" and not values.get("secrets_provider_config", {}).get(
+                    "project_id"
+                ):
                     raise ValueError(
                         "secrets_provider_config.project_id required for GCP Secret Manager."
                     )
@@ -368,9 +352,7 @@ class AzureBlobConfig(BaseModel):
     connection_string: Optional[str] = None
     container_name: str = Field(..., min_length=1)
     connection_string_secret_id: Optional[str] = None
-    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(
-        default_factory=list
-    )
+    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(default_factory=list)
     secrets_provider_config: Optional[Dict[str, Any]] = None
     log_format: str = "json"
     temp_file_ttl: float = Field(3600.0, ge=60.0)
@@ -393,15 +375,15 @@ class AzureBlobConfig(BaseModel):
             for provider in v:
                 if provider not in ("aws", "azure", "gcp"):
                     raise ValueError(f"Invalid secrets_provider: {provider}.")
-                if provider == "azure" and not values.get(
-                    "secrets_provider_config", {}
-                ).get("vault_url"):
+                if provider == "azure" and not values.get("secrets_provider_config", {}).get(
+                    "vault_url"
+                ):
                     raise ValueError(
                         "secrets_provider_config.vault_url required for Azure Key Vault."
                     )
-                if provider == "gcp" and not values.get(
-                    "secrets_provider_config", {}
-                ).get("project_id"):
+                if provider == "gcp" and not values.get("secrets_provider_config", {}).get(
+                    "project_id"
+                ):
                     raise ValueError(
                         "secrets_provider_config.project_id required for GCP Secret Manager."
                     )
@@ -457,12 +439,8 @@ class S3OffChainClient(BaseOffChainClient):
         super().__init__(config)
         self.bucket_name: str = self.client_config.bucket_name
         self.aws_access_key_id: Optional[str] = self.client_config.aws_access_key_id
-        self.aws_secret_access_key: Optional[str] = (
-            self.client_config.aws_secret_access_key
-        )
-        self.aws_credentials_secret_id: Optional[str] = (
-            self.client_config.aws_credentials_secret_id
-        )
+        self.aws_secret_access_key: Optional[str] = self.client_config.aws_secret_access_key
+        self.aws_credentials_secret_id: Optional[str] = self.client_config.aws_credentials_secret_id
         self.secrets_providers: List[str] = self.client_config.secrets_providers
         self.secrets_provider_config: Dict[str, Any] = (
             self.client_config.secrets_provider_config or {}
@@ -480,9 +458,7 @@ class S3OffChainClient(BaseOffChainClient):
                         )
                         credentials = json.loads(credentials_json)
                         self.aws_access_key_id = credentials.get("aws_access_key_id")
-                        self.aws_secret_access_key = credentials.get(
-                            "aws_secret_access_key"
-                        )
+                        self.aws_secret_access_key = credentials.get("aws_secret_access_key")
                         break
                     except Exception as e:
                         self._format_log(
@@ -546,9 +522,7 @@ class S3OffChainClient(BaseOffChainClient):
                 f"Unsupported secrets backend: {provider}", self.client_type
             )
 
-    def _format_log(
-        self, level: str, message: str, extra: Dict[str, Any] = None
-    ) -> None:
+    def _format_log(self, level: str, message: str, extra: Dict[str, Any] = None) -> None:
         if level.lower() == "audit":
             level = "info"
         extra = extra or {}
@@ -590,9 +564,7 @@ class S3OffChainClient(BaseOffChainClient):
                     pass
 
     @async_retry(catch_exceptions=(Exception, DLTClientCircuitBreakerError))
-    async def health_check(
-        self, correlation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         with TRACER.start_as_current_span(
             f"{self.client_type}.health_check",
             attributes={"correlation_id": str(correlation_id)},
@@ -604,9 +576,7 @@ class S3OffChainClient(BaseOffChainClient):
                 )
             try:
                 async with self._session.client("s3") as client:
-                    await client.list_objects_v2(
-                        Bucket=self.bucket_name, MaxKeys=1
-                    )
+                    await client.list_objects_v2(Bucket=self.bucket_name, MaxKeys=1)
                     span.set_status(Status(StatusCode.OK))
                     self._format_log(
                         "info",
@@ -723,9 +693,7 @@ class S3OffChainClient(BaseOffChainClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"S3 save error: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"S3 save error: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -752,9 +720,7 @@ class S3OffChainClient(BaseOffChainClient):
                 )
 
     @async_retry(catch_exceptions=(Exception, DLTClientCircuitBreakerError))
-    async def get_blob(
-        self, off_chain_id: str, correlation_id: Optional[str] = None
-    ) -> bytes:
+    async def get_blob(self, off_chain_id: str, correlation_id: Optional[str] = None) -> bytes:
         with TRACER.start_as_current_span(
             "s3.get_blob",
             attributes={"key": off_chain_id, "correlation_id": str(correlation_id)},
@@ -783,9 +749,7 @@ class S3OffChainClient(BaseOffChainClient):
             try:
                 async with self._session.client("s3") as client:
                     response = await self._circuit_breaker.execute(
-                        lambda: client.get_object(
-                            Bucket=self.bucket_name, Key=off_chain_id
-                        )
+                        lambda: client.get_object(Bucket=self.bucket_name, Key=off_chain_id)
                     )
                     payload_blob = await response["Body"].read()
                 span.set_status(Status(StatusCode.OK))
@@ -809,9 +773,7 @@ class S3OffChainClient(BaseOffChainClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"S3 get error: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"S3 get error: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -831,9 +793,7 @@ class S3OffChainClient(BaseOffChainClient):
                 except RuntimeError:
                     pass
                 if "NoSuchKey" in str(e):
-                    raise FileNotFoundError(
-                        f"Blob with key {off_chain_id} not found in S3."
-                    ) from e
+                    raise FileNotFoundError(f"Blob with key {off_chain_id} not found in S3.") from e
                 raise DLTClientQueryError(
                     f"Failed to get blob from S3: {e}",
                     self.client_type,
@@ -901,9 +861,7 @@ class GcsOffChainClient(BaseOffChainClient):
         self.bucket_name: str = self.client_config.bucket_name
         self.project_id: Optional[str] = self.client_config.project_id
         self.credentials_path: Optional[str] = None
-        self.credentials_secret_id: Optional[str] = (
-            self.client_config.credentials_secret_id
-        )
+        self.credentials_secret_id: Optional[str] = self.client_config.credentials_secret_id
         self.secrets_providers: List[str] = self.client_config.secrets_providers
         self.secrets_provider_config: Dict[str, Any] = (
             self.client_config.secrets_provider_config or {}
@@ -949,12 +907,8 @@ class GcsOffChainClient(BaseOffChainClient):
             credentials = service_account.Credentials.from_service_account_file(
                 self.credentials_path
             )
-            self._gcs_client = gcs_sdk.Client(
-                project=self.project_id, credentials=credentials
-            )
-            self._format_log(
-                "info", f"GCS client initialized for bucket {self.bucket_name}."
-            )
+            self._gcs_client = gcs_sdk.Client(project=self.project_id, credentials=credentials)
+            self._format_log("info", f"GCS client initialized for bucket {self.bucket_name}.")
         except Exception as e:
             _base_logger.critical(
                 f"CRITICAL: Failed to initialize GCS client: {e}. Aborting startup."
@@ -1002,9 +956,7 @@ class GcsOffChainClient(BaseOffChainClient):
                 f"Unsupported secrets backend: {provider}", self.client_type
             )
 
-    def _format_log(
-        self, level: str, message: str, extra: Dict[str, Any] = None
-    ) -> None:
+    def _format_log(self, level: str, message: str, extra: Dict[str, Any] = None) -> None:
         if level.lower() == "audit":
             level = "info"
         extra = extra or {}
@@ -1045,9 +997,7 @@ class GcsOffChainClient(BaseOffChainClient):
                     pass
 
     @async_retry(catch_exceptions=(Exception, DLTClientCircuitBreakerError))
-    async def health_check(
-        self, correlation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         with TRACER.start_as_current_span(
             f"{self.client_type}.health_check",
             attributes={"correlation_id": str(correlation_id)},
@@ -1069,9 +1019,7 @@ class GcsOffChainClient(BaseOffChainClient):
                 }
             except Exception as e:
                 span.set_status(
-                    Status(
-                        StatusCode.ERROR, description=f"GCS health check failed: {e}"
-                    )
+                    Status(StatusCode.ERROR, description=f"GCS health check failed: {e}")
                 )
                 span.record_exception(e)
                 self._format_log(
@@ -1143,9 +1091,7 @@ class GcsOffChainClient(BaseOffChainClient):
             try:
                 bucket = self._gcs_client.bucket(self.bucket_name)
                 blob = bucket.blob(key)
-                await self._circuit_breaker.execute(
-                    lambda: blob.upload_from_string(payload_blob)
-                )
+                await self._circuit_breaker.execute(lambda: blob.upload_from_string(payload_blob))
                 span.set_attribute("gcs.key", key)
                 span.set_status(Status(StatusCode.OK))
                 self._format_log(
@@ -1166,9 +1112,7 @@ class GcsOffChainClient(BaseOffChainClient):
                     pass
                 return key
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"GCS save error: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"GCS save error: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1195,9 +1139,7 @@ class GcsOffChainClient(BaseOffChainClient):
                 )
 
     @async_retry(catch_exceptions=(Exception, DLTClientCircuitBreakerError))
-    async def get_blob(
-        self, off_chain_id: str, correlation_id: Optional[str] = None
-    ) -> bytes:
+    async def get_blob(self, off_chain_id: str, correlation_id: Optional[str] = None) -> bytes:
         with TRACER.start_as_current_span(
             "gcs.get_blob",
             attributes={"key": off_chain_id, "correlation_id": str(correlation_id)},
@@ -1222,12 +1164,8 @@ class GcsOffChainClient(BaseOffChainClient):
                 bucket = self._gcs_client.bucket(self.bucket_name)
                 blob = bucket.blob(off_chain_id)
                 if not await asyncio.to_thread(blob.exists):
-                    raise FileNotFoundError(
-                        f"Blob with key {off_chain_id} not found in GCS."
-                    )
-                payload_blob = await self._circuit_breaker.execute(
-                    lambda: blob.download_as_bytes()
-                )
+                    raise FileNotFoundError(f"Blob with key {off_chain_id} not found in GCS.")
+                payload_blob = await self._circuit_breaker.execute(lambda: blob.download_as_bytes())
                 span.set_status(Status(StatusCode.OK))
                 self._format_log(
                     "info",
@@ -1249,9 +1187,7 @@ class GcsOffChainClient(BaseOffChainClient):
             except FileNotFoundError:
                 raise
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"GCS get error: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"GCS get error: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1431,9 +1367,7 @@ class AzureBlobOffChainClient(BaseOffChainClient):
                 f"Unsupported secrets backend: {provider}", self.client_type
             )
 
-    def _format_log(
-        self, level: str, message: str, extra: Dict[str, Any] = None
-    ) -> None:
+    def _format_log(self, level: str, message: str, extra: Dict[str, Any] = None) -> None:
         if level.lower() == "audit":
             level = "info"
         extra = extra or {}
@@ -1474,9 +1408,7 @@ class AzureBlobOffChainClient(BaseOffChainClient):
                     pass
 
     @async_retry(catch_exceptions=(Exception, DLTClientCircuitBreakerError))
-    async def health_check(
-        self, correlation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         with TRACER.start_as_current_span(
             f"{self.client_type}.health_check",
             attributes={"correlation_id": str(correlation_id)},
@@ -1500,9 +1432,7 @@ class AzureBlobOffChainClient(BaseOffChainClient):
                 }
             except AzureResourceNotFoundError:
                 span.set_status(
-                    Status(
-                        StatusCode.ERROR, description="Azure Blob container not found"
-                    )
+                    Status(StatusCode.ERROR, description="Azure Blob container not found")
                 )
                 self._format_log(
                     "error",
@@ -1629,9 +1559,7 @@ class AzureBlobOffChainClient(BaseOffChainClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"Azure Blob save error: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"Azure Blob save error: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1658,9 +1586,7 @@ class AzureBlobOffChainClient(BaseOffChainClient):
                 )
 
     @async_retry(catch_exceptions=(Exception, DLTClientCircuitBreakerError))
-    async def get_blob(
-        self, off_chain_id: str, correlation_id: Optional[str] = None
-    ) -> bytes:
+    async def get_blob(self, off_chain_id: str, correlation_id: Optional[str] = None) -> bytes:
         with TRACER.start_as_current_span(
             "azure_blob.get_blob",
             attributes={"key": off_chain_id, "correlation_id": str(correlation_id)},
@@ -1712,9 +1638,7 @@ class AzureBlobOffChainClient(BaseOffChainClient):
                 raise
             except AzureResourceNotFoundError:
                 span.set_status(
-                    Status(
-                        StatusCode.ERROR, description=f"Blob {off_chain_id} not found"
-                    )
+                    Status(StatusCode.ERROR, description=f"Blob {off_chain_id} not found")
                 )
                 self._format_log(
                     "error",
@@ -1735,9 +1659,7 @@ class AzureBlobOffChainClient(BaseOffChainClient):
                     pass
                 raise FileNotFoundError(f"Blob {off_chain_id} not found in Azure Blob.")
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"Azure Blob get error: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"Azure Blob get error: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1830,9 +1752,7 @@ class IPFSClient(BaseOffChainClient):
     async def initialize(self):
         try:
             self.ipfs_client = ipfshttpclient.connect(self.api_url)
-            self._format_log(
-                "info", f"IPFS client initialized with API {self.api_url}."
-            )
+            self._format_log("info", f"IPFS client initialized with API {self.api_url}.")
         except Exception as e:
             _base_logger.critical(
                 f"CRITICAL: Failed to initialize IPFS client: {e}. Aborting startup."
@@ -1852,9 +1772,7 @@ class IPFSClient(BaseOffChainClient):
                 original_exception=e,
             ) from e
 
-    def _format_log(
-        self, level: str, message: str, extra: Dict[str, Any] = None
-    ) -> None:
+    def _format_log(self, level: str, message: str, extra: Dict[str, Any] = None) -> None:
         if level.lower() == "audit":
             level = "info"
         extra = extra or {}
@@ -1895,9 +1813,7 @@ class IPFSClient(BaseOffChainClient):
                     pass
 
     @async_retry(catch_exceptions=(Exception, DLTClientCircuitBreakerError))
-    async def health_check(
-        self, correlation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         with TRACER.start_as_current_span(
             f"{self.client_type}.health_check",
             attributes={"correlation_id": str(correlation_id)},
@@ -1925,9 +1841,7 @@ class IPFSClient(BaseOffChainClient):
                 raise
             except Exception as e:
                 span.set_status(
-                    Status(
-                        StatusCode.ERROR, description=f"IPFS health check failed: {e}"
-                    )
+                    Status(StatusCode.ERROR, description=f"IPFS health check failed: {e}")
                 )
                 span.record_exception(e)
                 self._format_log(
@@ -2001,9 +1915,7 @@ class IPFSClient(BaseOffChainClient):
                         "IPFS client not initialized.", self.client_type
                     )
                 ipfs_hash = await self._circuit_breaker.execute(
-                    lambda: self._run_blocking_in_executor(
-                        self.ipfs_client.add_bytes, payload_blob
-                    )
+                    lambda: self._run_blocking_in_executor(self.ipfs_client.add_bytes, payload_blob)
                 )
                 span.set_attribute("ipfs.hash", ipfs_hash)
                 span.set_status(Status(StatusCode.OK))
@@ -2027,9 +1939,7 @@ class IPFSClient(BaseOffChainClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"IPFS save error: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"IPFS save error: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -2056,9 +1966,7 @@ class IPFSClient(BaseOffChainClient):
                 )
 
     @async_retry(catch_exceptions=(Exception, DLTClientCircuitBreakerError))
-    async def get_blob(
-        self, off_chain_id: str, correlation_id: Optional[str] = None
-    ) -> bytes:
+    async def get_blob(self, off_chain_id: str, correlation_id: Optional[str] = None) -> bytes:
         with TRACER.start_as_current_span(
             "ipfs.get_blob",
             attributes={"key": off_chain_id, "correlation_id": str(correlation_id)},
@@ -2085,9 +1993,7 @@ class IPFSClient(BaseOffChainClient):
                         "IPFS client not initialized.", self.client_type
                     )
                 payload_blob = await self._circuit_breaker.execute(
-                    lambda: self._run_blocking_in_executor(
-                        self.ipfs_client.cat, off_chain_id
-                    )
+                    lambda: self._run_blocking_in_executor(self.ipfs_client.cat, off_chain_id)
                 )
                 span.set_status(Status(StatusCode.OK))
                 self._format_log(
@@ -2110,9 +2016,7 @@ class IPFSClient(BaseOffChainClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"IPFS get error: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"IPFS get error: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -2131,10 +2035,7 @@ class IPFSClient(BaseOffChainClient):
                     )
                 except RuntimeError:
                     pass
-                if (
-                    "no link named" in str(e).lower()
-                    or "ipfs resolve" in str(e).lower()
-                ):
+                if "no link named" in str(e).lower() or "ipfs resolve" in str(e).lower():
                     raise FileNotFoundError(
                         f"Blob with hash {off_chain_id} not found on IPFS."
                     ) from e
@@ -2218,13 +2119,9 @@ class InMemoryOffChainClient(BaseOffChainClient):
                 self.client_type,
             )
 
-        self._format_log(
-            "info", "InMemory Off-Chain Client initialized (NOT FOR PRODUCTION)", {}
-        )
+        self._format_log("info", "InMemory Off-Chain Client initialized (NOT FOR PRODUCTION)", {})
 
-    def _format_log(
-        self, level: str, message: str, extra: Dict[str, Any] = None
-    ) -> None:
+    def _format_log(self, level: str, message: str, extra: Dict[str, Any] = None) -> None:
         if level.lower() == "audit":
             level = "info"
         extra = extra or {}
@@ -2265,9 +2162,7 @@ class InMemoryOffChainClient(BaseOffChainClient):
                     pass
 
     @async_retry(catch_exceptions=(Exception, DLTClientCircuitBreakerError))
-    async def health_check(
-        self, correlation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         with TRACER.start_as_current_span(
             f"{self.client_type}.health_check",
             attributes={"correlation_id": str(correlation_id)},
@@ -2349,9 +2244,7 @@ class InMemoryOffChainClient(BaseOffChainClient):
             return key
 
     @async_retry(catch_exceptions=(Exception, DLTClientCircuitBreakerError))
-    async def get_blob(
-        self, off_chain_id: str, correlation_id: Optional[str] = None
-    ) -> bytes:
+    async def get_blob(self, off_chain_id: str, correlation_id: Optional[str] = None) -> bytes:
         with TRACER.start_as_current_span(
             "in_memory.get_blob",
             attributes={"key": off_chain_id, "correlation_id": str(correlation_id)},

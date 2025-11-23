@@ -173,19 +173,13 @@ logging.basicConfig(
 logger = logging.getLogger("arbiter.codebase_analyzer")
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
 # Prometheus Metrics
-analyzer_ops_total = Counter(
-    "analyzer_ops_total", "Total analyzer operations", ["operation"]
-)
-analyzer_errors_total = Counter(
-    "analyzer_errors_total", "Total analyzer errors", ["error_type"]
-)
+analyzer_ops_total = Counter("analyzer_ops_total", "Total analyzer operations", ["operation"])
+analyzer_errors_total = Counter("analyzer_errors_total", "Total analyzer errors", ["error_type"])
 
 
 class AnalyzerError(Exception):
@@ -302,9 +296,7 @@ class CodebaseAnalyzer:
         self.ignore_patterns = ignore_patterns or self.config.get(
             "ignore_patterns", self.DEFAULT_IGNORE_PATTERNS
         )
-        self.max_workers = min(
-            max_workers, int(os.getenv("ANALYZER_MAX_WORKERS", "10"))
-        )
+        self.max_workers = min(max_workers, int(os.getenv("ANALYZER_MAX_WORKERS", "10")))
 
         # These will be initialized in __aenter__
         self.semaphore = None
@@ -417,14 +409,10 @@ class CodebaseAnalyzer:
             try:
                 mod = importlib.import_module(module)
                 plugin_class = getattr(mod, plugin_config.get("class", "CustomPlugin"))
-                self.plugins.append(
-                    plugin_class(name, plugin_config.get("type", "custom"))
-                )
+                self.plugins.append(plugin_class(name, plugin_config.get("type", "custom")))
                 logger.debug(f"Loaded plugin from config: {name}")
             except Exception as e:
-                logger.warning(
-                    f"Failed to load plugin '{name}' from config: {e}", exc_info=True
-                )
+                logger.warning(f"Failed to load plugin '{name}' from config: {e}", exc_info=True)
                 try:
                     analyzer_errors_total.labels(error_type="plugin_load_fail").inc()
                 except AttributeError:
@@ -447,9 +435,7 @@ class CodebaseAnalyzer:
                         exc_info=True,
                     )
                     try:
-                        analyzer_errors_total.labels(
-                            error_type="ep_plugin_load_fail"
-                        ).inc()
+                        analyzer_errors_total.labels(error_type="ep_plugin_load_fail").inc()
                     except AttributeError:
                         pass
         except ImportError:
@@ -457,9 +443,7 @@ class CodebaseAnalyzer:
 
     def _should_ignore(self, path: Path) -> bool:
         """Checks if a path should be ignored."""
-        return any(
-            fnmatch.fnmatch(path.name, pattern) for pattern in self.ignore_patterns
-        )
+        return any(fnmatch.fnmatch(path.name, pattern) for pattern in self.ignore_patterns)
 
     async def _collect_py_files(self, path: Path) -> List[Path]:
         """Collects all Python files to be analyzed, respecting ignore patterns."""
@@ -533,9 +517,7 @@ class CodebaseAnalyzer:
         except Exception as e:
             logger.error(f"Unexpected error analyzing {file_path}: {e}")
             try:
-                analyzer_errors_total.labels(
-                    error_type="unexpected_analysis_error"
-                ).inc()
+                analyzer_errors_total.labels(error_type="unexpected_analysis_error").inc()
             except AttributeError:
                 pass
 
@@ -546,9 +528,7 @@ class CodebaseAnalyzer:
 
         return [d for d in defects if d not in baseline_defects], complexity_info
 
-    def _run_linters_sync(
-        self, file_path: Path, source: str, tree: ast.AST
-    ) -> List[Defect]:
+    def _run_linters_sync(self, file_path: Path, source: str, tree: ast.AST) -> List[Defect]:
         """Runs synchronous linters on a file."""
         defects: List[Defect] = []
         with self._lock:
@@ -587,9 +567,7 @@ class CodebaseAnalyzer:
                         ]
                     )
                 elif tool["name"] == "Bandit" and BANDIT_AVAILABLE:
-                    b_mgr = bandit_manager.BanditManager(
-                        bandit_config_mod.BanditConfig(), "file"
-                    )
+                    b_mgr = bandit_manager.BanditManager(bandit_config_mod.BanditConfig(), "file")
                     b_mgr.discover_files([str(file_path)])
                     b_mgr.run_tests()
                     defects.extend(
@@ -614,21 +592,15 @@ class CodebaseAnalyzer:
                                     {
                                         "file": parts[0],
                                         "line": int(parts[1]),
-                                        "column": (
-                                            int(parts[2]) if parts[2].isdigit() else 0
-                                        ),
+                                        "column": (int(parts[2]) if parts[2].isdigit() else 0),
                                         "message": parts[3].strip(),
                                         "source": "mypy",
                                     }
                                 )
             except Exception as e:
-                logger.warning(
-                    f"Linter '{tool['name']}' failed on {file_path}: {e}", exc_info=True
-                )
+                logger.warning(f"Linter '{tool['name']}' failed on {file_path}: {e}", exc_info=True)
                 try:
-                    analyzer_errors_total.labels(
-                        error_type=f"linter_{tool['name']}_fail"
-                    ).inc()
+                    analyzer_errors_total.labels(error_type=f"linter_{tool['name']}_fail").inc()
                 except AttributeError:
                     pass
         return defects
@@ -647,9 +619,7 @@ class CodebaseAnalyzer:
                 logger.warning(f"Plugin '{plugin.name}' failed on {file_path}: {e}")
         return defects
 
-    def _analyze_complexity_sync(
-        self, file_path: Path, source: str
-    ) -> List[ComplexityInfo]:
+    def _analyze_complexity_sync(self, file_path: Path, source: str) -> List[ComplexityInfo]:
         """Performs synchronous complexity analysis."""
         try:
             cc_results = cc_visit(source)
@@ -665,9 +635,7 @@ class CodebaseAnalyzer:
                 for block in cc_results
             ]
         except Exception as e:
-            logger.warning(
-                f"Complexity analysis failed on {file_path}: {e}", exc_info=True
-            )
+            logger.warning(f"Complexity analysis failed on {file_path}: {e}", exc_info=True)
             try:
                 analyzer_errors_total.labels(error_type="complexity_fail").inc()
             except AttributeError:
@@ -720,18 +688,14 @@ class CodebaseAnalyzer:
         # Auditing tools is a blocking operation, so run once in a thread
         with self._lock:
             if self._tool_cache is None:
-                self._tool_cache = await asyncio.to_thread(
-                    self._audit_repair_tools_sync
-                )
+                self._tool_cache = await asyncio.to_thread(self._audit_repair_tools_sync)
 
         defects_and_complexity_tasks = [
             asyncio.to_thread(self._analyze_file_defects_and_complexity_blocking, f)
             for f in py_files
         ]
 
-        all_results = await asyncio.gather(
-            *defects_and_complexity_tasks, return_exceptions=True
-        )
+        all_results = await asyncio.gather(*defects_and_complexity_tasks, return_exceptions=True)
 
         defects = []
         complexity_info = []
@@ -753,9 +717,7 @@ class CodebaseAnalyzer:
 
         coverage_summary = None
         if any(t["name"] == "Coverage" and t["available"] for t in self._tool_cache):
-            coverage_summary = await asyncio.to_thread(
-                self._analyze_coverage_sync, path
-            )
+            coverage_summary = await asyncio.to_thread(self._analyze_coverage_sync, path)
 
         deps = await self.map_dependencies(path)
 
@@ -827,18 +789,14 @@ class CodebaseAnalyzer:
 
             # Add security issues from bandit
             if BANDIT_AVAILABLE:
-                b_mgr = bandit_manager.BanditManager(
-                    bandit_config_mod.BanditConfig(), "file"
-                )
+                b_mgr = bandit_manager.BanditManager(bandit_config_mod.BanditConfig(), "file")
                 b_mgr.discover_files([path], False)
                 b_mgr.run_tests()
                 for issue in b_mgr.get_issue_list():
                     issues.append(
                         {
                             "type": issue.test_id,
-                            "risk_level": (
-                                "high" if issue.severity == "HIGH" else "medium"
-                            ),
+                            "risk_level": ("high" if issue.severity == "HIGH" else "medium"),
                             "details": {"message": issue.text, "line": issue.lineno},
                             "suggested_fixer": "manual_review",
                             "confidence": issue.confidence,
@@ -960,9 +918,7 @@ class CodebaseAnalyzer:
 
         return dependencies
 
-    async def _extract_dependencies_from_file(
-        self, file_path: Path
-    ) -> List[Dependency]:
+    async def _extract_dependencies_from_file(self, file_path: Path) -> List[Dependency]:
         """Extracts import dependencies from a single file."""
         if self.semaphore is None:
             self.semaphore = asyncio.Semaphore(self.max_workers)
@@ -978,9 +934,9 @@ class CodebaseAnalyzer:
                     if isinstance(node, ast.Import):
                         for alias in node.names:
                             spec = importlib.util.find_spec(alias.name)
-                            is_external = spec is None or not str(
-                                spec.origin
-                            ).startswith(str(self.root_dir))
+                            is_external = spec is None or not str(spec.origin).startswith(
+                                str(self.root_dir)
+                            )
                             deps.append(
                                 {
                                     "file": str(file_path),
@@ -1013,13 +969,9 @@ class CodebaseAnalyzer:
                                 }
                             )
             except Exception as e:
-                logger.error(
-                    f"Error parsing dependencies in {file_path}: {e}", exc_info=True
-                )
+                logger.error(f"Error parsing dependencies in {file_path}: {e}", exc_info=True)
                 try:
-                    analyzer_errors_total.labels(
-                        error_type="dependency_extract_fail"
-                    ).inc()
+                    analyzer_errors_total.labels(error_type="dependency_extract_fail").inc()
                 except AttributeError:
                     pass
             return deps
@@ -1059,9 +1011,7 @@ class CodebaseAnalyzer:
 
     def _generate_markdown_report(self, summary: FileSummary) -> str:
         """Helper to generate a markdown-formatted report."""
-        report = (
-            f"# Codebase Analysis Report\n\nGenerated: {datetime.now().isoformat()}\n\n"
-        )
+        report = f"# Codebase Analysis Report\n\nGenerated: {datetime.now().isoformat()}\n\n"
         report += f"**Root Directory**: {self.root_dir}\n"
         report += f"**Files Analyzed**: {summary['files']}\n\n"
         report += "## Defects\n"
@@ -1073,9 +1023,9 @@ class CodebaseAnalyzer:
         for source, count in defect_counts.items():
             report += f"- {source}: {count}\n"
         report += "\n## Complexity\n"
-        top_complex = sorted(
-            summary["complexity"], key=lambda x: x["complexity"], reverse=True
-        )[:10]
+        top_complex = sorted(summary["complexity"], key=lambda x: x["complexity"], reverse=True)[
+            :10
+        ]
         for comp in top_complex:
             report += f"- {comp['file']}:{comp['name']} ({comp['type']}): Complexity {comp['complexity']}, MI {comp['maintainability_index']:.2f}\n"
         if summary["coverage"]:
@@ -1093,15 +1043,13 @@ class CodebaseAnalyzer:
     def _generate_junit_xml_report(self, summary: FileSummary) -> str:
         """Helper to generate a JUnit XML report for CI/CD integration."""
         report = '<?xml version="1.0" encoding="UTF-8"?>\n'
-        report += (
-            f'<testsuites name="CodebaseAnalyzer" tests="{len(summary["defects"])}">\n'
-        )
-        report += (
-            f'  <testsuite name="analysis_results" tests="{len(summary["defects"])}">\n'
-        )
+        report += f'<testsuites name="CodebaseAnalyzer" tests="{len(summary["defects"])}">\n'
+        report += f'  <testsuite name="analysis_results" tests="{len(summary["defects"])}">\n'
         for defect in summary["defects"]:
             report += f'    <testcase classname="{escape(defect["file"])}" name="{escape(defect["source"])}">\n'
-            report += f'      <failure message="{escape(defect["message"])}" type="{defect["source"]}">'
+            report += (
+                f'      <failure message="{escape(defect["message"])}" type="{defect["source"]}">'
+            )
             report += f'Line {defect["line"]}:{defect["column"]}</failure>\n'
             report += "    </testcase>\n"
         report += "  </testsuite>\n</testsuites>"
@@ -1116,9 +1064,7 @@ class CodebaseAnalyzer:
         return {
             "defects": defects,
             "complexity": complexity[0].complexity if complexity else 0,
-            "maintainability_index": (
-                complexity[0].maintainability_index if complexity else 0
-            ),
+            "maintainability_index": (complexity[0].maintainability_index if complexity else 0),
             "loc": 100,  # Mock value for tests
         }
 
@@ -1175,20 +1121,14 @@ app = typer.Typer(
 def scan(
     root_dir: str = typer.Option(".", help="Root directory to analyze"),
     config_file: Optional[str] = typer.Option(None, help="Path to config file"),
-    output_format: str = typer.Option(
-        "markdown", help="Output format: markdown, json, junit"
-    ),
+    output_format: str = typer.Option("markdown", help="Output format: markdown, json, junit"),
     output_path: Optional[str] = typer.Option(None, help="Output file path"),
-    use_baseline: bool = typer.Option(
-        False, help="Use baseline to ignore known defects"
-    ),
+    use_baseline: bool = typer.Option(False, help="Use baseline to ignore known defects"),
 ):
     """Scan a codebase and generate a report."""
 
     async def _scan():
-        async with CodebaseAnalyzer(
-            root_dir=root_dir, config_file=config_file
-        ) as analyzer:
+        async with CodebaseAnalyzer(root_dir=root_dir, config_file=config_file) as analyzer:
             await analyzer.generate_report(
                 output_format=output_format,
                 output_path=output_path,

@@ -48,9 +48,7 @@ from prometheus_client import CollectorRegistry
 # Fix the import path - the file is at plugins/pagerduty_plugin/pagerduty_plugin.py
 test_dir = os.path.dirname(os.path.abspath(__file__))
 plugins_dir = os.path.dirname(test_dir)
-pagerduty_file_path = os.path.join(
-    plugins_dir, "pagerduty_plugin", "pagerduty_plugin.py"
-)
+pagerduty_file_path = os.path.join(plugins_dir, "pagerduty_plugin", "pagerduty_plugin.py")
 
 # Import the plugin module directly from the file
 import importlib.util
@@ -71,13 +69,9 @@ def setup_logging():
     if hasattr(pagerduty_plugin, "logger"):
         pagerduty_plugin.logger.handlers = []
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
         pagerduty_plugin.logger.addHandler(handler)
-        pagerduty_plugin.logger.setLevel(
-            logging.DEBUG
-        )  # Increased verbosity for debugging
+        pagerduty_plugin.logger.setLevel(logging.DEBUG)  # Increased verbosity for debugging
     yield
     if hasattr(pagerduty_plugin, "logger"):
         pagerduty_plugin.logger.handlers = []
@@ -195,35 +189,25 @@ def test_pagerduty_settings_success(sample_settings_dict, monkeypatch):
 def test_pagerduty_settings_non_https_prod(set_env, sample_settings_dict, monkeypatch):
     """Test non-HTTPS URL fails in production."""
     monkeypatch.setattr(pagerduty_plugin, "PRODUCTION_MODE", True)
-    mock_secrets_manager.get_secret.return_value = (
-        "https://events.pagerduty.com/v2/enqueue"
-    )
+    mock_secrets_manager.get_secret.return_value = "https://events.pagerduty.com/v2/enqueue"
     sample_settings_dict["pagerduty_api_url"] = "http://events.pagerduty.com"
     with pytest.raises(ValueError, match="Non-HTTPS endpoint"):
         pagerduty_plugin.PagerDutySettings(**sample_settings_dict)
 
 
-def test_pagerduty_settings_not_in_allowlist_prod(
-    set_env, sample_settings_dict, monkeypatch
-):
+def test_pagerduty_settings_not_in_allowlist_prod(set_env, sample_settings_dict, monkeypatch):
     """Test URL not in allowlist fails in production."""
     monkeypatch.setattr(pagerduty_plugin, "PRODUCTION_MODE", True)
-    mock_secrets_manager.get_secret.return_value = (
-        "https://events.pagerduty.com/v2/enqueue"
-    )
+    mock_secrets_manager.get_secret.return_value = "https://events.pagerduty.com/v2/enqueue"
     sample_settings_dict["pagerduty_api_url"] = "https://forbidden.com"
-    with pytest.raises(
-        ValueError, match="not in the 'allowed_pagerduty_api_urls' list"
-    ):
+    with pytest.raises(ValueError, match="not in the 'allowed_pagerduty_api_urls' list"):
         pagerduty_plugin.PagerDutySettings(**sample_settings_dict)
 
 
 def test_pagerduty_settings_dry_run_prod(set_env, sample_settings_dict, monkeypatch):
     """Test dry_run=True fails in production."""
     monkeypatch.setattr(pagerduty_plugin, "PRODUCTION_MODE", True)
-    mock_secrets_manager.get_secret.return_value = (
-        "https://events.pagerduty.com/v2/enqueue"
-    )
+    mock_secrets_manager.get_secret.return_value = "https://events.pagerduty.com/v2/enqueue"
     sample_settings_dict["dry_run"] = True
     with pytest.raises(ValueError, match="'dry_run' must be False"):
         pagerduty_plugin.PagerDutySettings(**sample_settings_dict)
@@ -246,9 +230,7 @@ def test_metrics_init_failure():
     """Test metrics initialization failure handling."""
     # This test needs to be restructured since we can't easily patch the already-imported Counter
     # Instead, we'll test that the exception is properly raised when metrics fail
-    with patch.object(
-        pagerduty_plugin, "PagerDutyMetrics", side_effect=Exception("Metrics error")
-    ):
+    with patch.object(pagerduty_plugin, "PagerDutyMetrics", side_effect=Exception("Metrics error")):
         with pytest.raises(Exception, match="Metrics error"):
             pagerduty_plugin.PagerDutyMetrics(CollectorRegistry())
 
@@ -269,9 +251,7 @@ def test_pagerduty_event_payload_success():
 
 def test_pagerduty_event_payload_invalid_timestamp():
     """Test invalid timestamp format."""
-    with pytest.raises(
-        ValidationError, match="Timestamp must be in ISO 8601 UTC format"
-    ):
+    with pytest.raises(ValidationError, match="Timestamp must be in ISO 8601 UTC format"):
         pagerduty_plugin.PagerDutyEventPayload(
             summary="Test event",
             source="test-source",
@@ -549,9 +529,7 @@ async def test_enqueue_request_queue_full(gateway, sample_settings_dict):
     async def patched_enqueue(req):
         try:
             if req.payload:
-                test_gateway.metrics.EVENTS_QUEUED.labels(
-                    severity=req.payload.severity
-                ).inc()
+                test_gateway.metrics.EVENTS_QUEUED.labels(severity=req.payload.severity).inc()
             # Use put_nowait to trigger QueueFull immediately
             test_gateway._event_queue.put_nowait(req)
             test_gateway.metrics.QUEUE_SIZE.set(test_gateway._event_queue.qsize())

@@ -46,9 +46,7 @@ logger = logging.getLogger("simulation_module")
 logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
 if not logger.handlers:
     _h = logging.StreamHandler(sys.stdout)
-    _h.setFormatter(
-        logging.Formatter("%(asctime)s - [%(levelname)s] - %(name)s - %(message)s")
-    )
+    _h.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(name)s - %(message)s"))
     logger.addHandler(_h)
 
 # -----------------------------------------------------------------------------
@@ -155,9 +153,7 @@ class Database:
     async def health_check(self) -> Dict[str, Any]:  # pragma: no cover
         return {"status": "ok", "latency_ms": 1}
 
-    async def save_audit_record(
-        self, _record: Dict[str, Any]
-    ) -> None:  # pragma: no cover
+    async def save_audit_record(self, _record: Dict[str, Any]) -> None:  # pragma: no cover
         return None
 
     async def close(self) -> None:  # pragma: no cover
@@ -312,23 +308,17 @@ def async_retry(max_retries: int = 3, backoff_factor: float = 2.0):
 class UnifiedSimulationModule:
     """Unified, async-first simulation orchestrator."""
 
-    def __init__(
-        self, config: Dict[str, Any], db: Database, message_bus: ShardedMessageBus
-    ):
+    def __init__(self, config: Dict[str, Any], db: Database, message_bus: ShardedMessageBus):
         self.config = dict(config or {})
         self.db = db
         self.message_bus = message_bus
         self.reasoner_plugin: Optional[ExplainableReasonerPlugin] = None
         self.quantum_api: Optional[QuantumPluginAPI] = None
         self._is_initialized = False
-        self._executor = ThreadPoolExecutor(
-            max_workers=self.config.get("SIM_MAX_WORKERS", 4)
-        )
+        self._executor = ThreadPoolExecutor(max_workers=self.config.get("SIM_MAX_WORKERS", 4))
         # Track audited failures per operation+id to avoid duplicate audits across retries
         self._fail_audit_once: set[tuple[str, str]] = set()
-        logger.info(
-            "Unified Simulation Module constructed; call initialize() before use."
-        )
+        logger.info("Unified Simulation Module constructed; call initialize() before use.")
 
     async def initialize(self) -> None:
         if self._is_initialized:
@@ -424,9 +414,7 @@ class UnifiedSimulationModule:
                 async def _runner(cfg: Dict[str, Any]) -> Any:
                     return await run_agent(cfg)
 
-                result = await run_parallel_simulations(
-                    _runner, sim_config.get("tasks", [])
-                )
+                result = await run_parallel_simulations(_runner, sim_config.get("tasks", []))
             elif sim_type == "agent":
                 AgentConfig(**sim_config)
                 result = await run_agent(sim_config)
@@ -434,13 +422,11 @@ class UnifiedSimulationModule:
                 raise ValueError(f"Unknown simulation type: {sim_type}")
 
             duration = time.time() - start
-            SIM_MODULE_METRICS["simulation_run_total"].labels(
-                type=sim_type, status="success"
-            ).inc()
+            SIM_MODULE_METRICS["simulation_run_total"].labels(type=sim_type, status="success").inc()
             # FIX: histogram has label 'type'; supply it before observe
-            SIM_MODULE_METRICS["simulation_duration_seconds"].labels(
-                type=sim_type
-            ).observe(duration)
+            SIM_MODULE_METRICS["simulation_duration_seconds"].labels(type=sim_type).observe(
+                duration
+            )
             await self.db.save_audit_record(
                 {
                     "event_type": "simulation_completed",
@@ -452,13 +438,11 @@ class UnifiedSimulationModule:
             return result
         except Exception as e:  # noqa: BLE001
             duration = time.time() - start
-            SIM_MODULE_METRICS["simulation_run_total"].labels(
-                type=sim_type, status="failed"
-            ).inc()
+            SIM_MODULE_METRICS["simulation_run_total"].labels(type=sim_type, status="failed").inc()
             # FIX: histogram label requirement
-            SIM_MODULE_METRICS["simulation_duration_seconds"].labels(
-                type=sim_type
-            ).observe(duration)
+            SIM_MODULE_METRICS["simulation_duration_seconds"].labels(type=sim_type).observe(
+                duration
+            )
             # FIX: audit failure only once across retries for the same simulation id
             # Use hash of sim_config if no id is present to distinguish different simulations
             sim_id = sim_config.get("id")
@@ -486,9 +470,7 @@ class UnifiedSimulationModule:
         max_retries=settings.SIM_RETRY_ATTEMPTS,
         backoff_factor=settings.SIM_BACKOFF_FACTOR,
     )
-    async def perform_quantum_op(
-        self, op_type: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def perform_quantum_op(self, op_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
         start = time.time()
         try:
             if not self.quantum_api:
@@ -508,9 +490,7 @@ class UnifiedSimulationModule:
             if result.get("status") == "ERROR":
                 raise RuntimeError(f"Quantum operation failed: {result.get('reason')}")
 
-            SIM_MODULE_METRICS["quantum_op_total"].labels(
-                op_type=op_type, status="success"
-            ).inc()
+            SIM_MODULE_METRICS["quantum_op_total"].labels(op_type=op_type, status="success").inc()
             await self.db.save_audit_record(
                 {
                     "event_type": "quantum_op_completed",
@@ -521,9 +501,7 @@ class UnifiedSimulationModule:
             )
             return result
         except Exception as e:  # noqa: BLE001
-            SIM_MODULE_METRICS["quantum_op_total"].labels(
-                op_type=op_type, status="failed"
-            ).inc()
+            SIM_MODULE_METRICS["quantum_op_total"].labels(op_type=op_type, status="failed").inc()
             await self.db.save_audit_record(
                 {
                     "event_type": "quantum_op_failed",
@@ -592,14 +570,10 @@ class UnifiedSimulationModule:
                 explanation = await self.explain_result(result)
                 await self.message_bus.publish(
                     topic=f"{response_topic}.explanation",
-                    payload=safe_serialize(
-                        {"request_id": message_id, "explanation": explanation}
-                    ),
+                    payload=safe_serialize({"request_id": message_id, "explanation": explanation}),
                 )
         except Exception as e:  # noqa: BLE001
-            logger.error(
-                f"Error processing simulation request {message_id}: {e}", exc_info=True
-            )
+            logger.error(f"Error processing simulation request {message_id}: {e}", exc_info=True)
             await self.message_bus.publish(
                 topic="errors.simulation",
                 payload=safe_serialize(

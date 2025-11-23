@@ -110,9 +110,7 @@ try:
         decode_responses=True,
     )
 except Exception as e:
-    logger.warning(
-        f"Failed to connect to Redis for caching: {e}. Caching will be disabled."
-    )
+    logger.warning(f"Failed to connect to Redis for caching: {e}. Caching will be disabled.")
     REDIS_CLIENT = None
 
 
@@ -256,9 +254,7 @@ def _maybe_sign_checkpoint(checkpoint_data: Dict[str, Any]) -> Optional[str]:
     key = SECRETS_MANAGER.get_secret("DLT_HMAC_KEY", required=PRODUCTION_MODE)
     if not key:
         return None
-    payload = json.dumps(checkpoint_data, sort_keys=True, ensure_ascii=False).encode(
-        "utf-8"
-    )
+    payload = json.dumps(checkpoint_data, sort_keys=True, ensure_ascii=False).encode("utf-8")
     return hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest()
 
 
@@ -284,9 +280,7 @@ def encrypt(plaintext: bytes, key: bytes) -> bytes:
             "Encryption requested but 'cryptography' (AESGCM) is not installed."
         )
     if PRODUCTION_MODE and (not isinstance(key, bytes) or len(key) != 32):
-        raise AnalyzerCriticalError(
-            "Invalid encryption key. Must be 32 bytes for AES-256-GCM."
-        )
+        raise AnalyzerCriticalError("Invalid encryption key. Must be 32 bytes for AES-256-GCM.")
     aes = AESGCM(key)
     nonce = os.urandom(12)
     return nonce + aes.encrypt(nonce, plaintext, associated_data=None)
@@ -299,9 +293,7 @@ def decrypt(ciphertext: bytes, key: bytes) -> bytes:
             "Decryption requested but 'cryptography' (AESGCM) is not installed."
         )
     if PRODUCTION_MODE and (not isinstance(key, bytes) or len(key) != 32):
-        raise AnalyzerCriticalError(
-            "Invalid decryption key. Must be 32 bytes for AES-256-GCM."
-        )
+        raise AnalyzerCriticalError("Invalid decryption key. Must be 32 bytes for AES-256-GCM.")
     nonce, ct = ciphertext[:12], ciphertext[12:]
     aes = AESGCM(key)
     return aes.decrypt(nonce, ct, associated_data=None)
@@ -386,9 +378,7 @@ except ImportError as e:
             ):
                 version = len(self.chain.get(checkpoint_name, [])) + 1
                 tx_id = f"{checkpoint_name}-tx{version}-{int(time.time())}"
-                off_chain_id = await self.off_chain_client.save_blob(
-                    checkpoint_name, payload_blob
-                )
+                off_chain_id = await self.off_chain_client.save_blob(checkpoint_name, payload_blob)
                 entry = {
                     "hash": hash,
                     "prev_hash": prev_hash,
@@ -408,12 +398,8 @@ except ImportError as e:
                     else next((e for e in chain if e["version"] == version), None)
                 )
                 if not entry:
-                    raise FileNotFoundError(
-                        f"Dummy checkpoint {name} v{version} not found."
-                    )
-                payload_blob = await self.off_chain_client.get_blob(
-                    entry["off_chain_ref"]
-                )
+                    raise FileNotFoundError(f"Dummy checkpoint {name} v{version} not found.")
+                payload_blob = await self.off_chain_client.get_blob(entry["off_chain_ref"])
                 return {
                     "metadata": entry,
                     "payload_blob": payload_blob,
@@ -423,9 +409,7 @@ except ImportError as e:
             async def get_version_tx(self, name, version, correlation_id=None):
                 return await self.read_checkpoint(name, version)
 
-            async def rollback_checkpoint(
-                self, name, rollback_hash, correlation_id=None
-            ):
+            async def rollback_checkpoint(self, name, rollback_hash, correlation_id=None):
                 chain = self.chain.get(name, [])
                 entry = next((e for e in chain if e["hash"] == rollback_hash), None)
                 if not entry:
@@ -476,9 +460,7 @@ async def initialize_dlt_backend(config: Dict[str, Any]) -> None:
                 "'in_memory' off-chain storage is forbidden in PRODUCTION_MODE."
             )
         if dlt_type == "simple":
-            raise AnalyzerCriticalError(
-                "'simple' DLT client is forbidden in PRODUCTION_MODE."
-            )
+            raise AnalyzerCriticalError("'simple' DLT client is forbidden in PRODUCTION_MODE.")
 
     try:
         if off_chain_type == "s3":
@@ -546,9 +528,7 @@ async def initialize_dlt_backend(config: Dict[str, Any]) -> None:
             f"CRITICAL: Failed to initialize DLT client '{dlt_type}': {e}. Aborting.",
             level="CRITICAL",
         )
-        raise AnalyzerCriticalError(
-            f"Failed to initialize DLT client '{dlt_type}': {e}."
-        )
+        raise AnalyzerCriticalError(f"Failed to initialize DLT client '{dlt_type}': {e}.")
 
     logger.info("DLT Backend initialized successfully.")
     audit_logger.log_event(
@@ -589,9 +569,7 @@ async def _maybe_dist_lock(name: str):
                 await asyncio.sleep(0.1)
                 yield
         except Exception as e:
-            logger.warning(
-                f"Distributed lock failed due to Redis error: {e}", exc_info=True
-            )
+            logger.warning(f"Distributed lock failed due to Redis error: {e}", exc_info=True)
             yield
         finally:
             if lock_acquired:
@@ -625,9 +603,7 @@ async def dlt_backend(self: "CheckpointManager", op: str, name: str, *args, **kw
         return await _dlt_backend_impl(self, op, name, *args, **kwargs)
 
 
-async def _dlt_backend_impl(
-    self: "CheckpointManager", op: str, name: str, *args, **kwargs
-):
+async def _dlt_backend_impl(self: "CheckpointManager", op: str, name: str, *args, **kwargs):
 
     def get_blob(state: Any) -> bytes:
         if self.state_schema:
@@ -677,10 +653,7 @@ async def _dlt_backend_impl(
 
                 state_hash = _calculate_hash({"state": state})
 
-                if (
-                    latest_tx
-                    and latest_tx["metadata"].get("payload_hash") == state_hash
-                ):
+                if latest_tx and latest_tx["metadata"].get("payload_hash") == state_hash:
                     logger.info(
                         f"DLT checkpoint save skipped: {name} is identical to latest version."
                     )
@@ -698,9 +671,7 @@ async def _dlt_backend_impl(
                                 ),
                             )
                         except Exception as e:
-                            logger.warning(
-                                f"Failed to prime cache after save skip: {e}"
-                            )
+                            logger.warning(f"Failed to prime cache after save skip: {e}")
                     return latest_tx["tx_id"]
 
                 prev_hash = latest_tx["metadata"]["hash"] if latest_tx else None
@@ -722,9 +693,7 @@ async def _dlt_backend_impl(
                     {
                         "compression_algo": "gzip",
                         "encryption_algo": (
-                            "AES-256-GCM"
-                            if getattr(self, "encrypt_key", None)
-                            else "none"
+                            "AES-256-GCM" if getattr(self, "encrypt_key", None) else "none"
                         ),
                         "prev_hash": prev_hash,
                         "payload_hash": state_hash,
@@ -742,9 +711,7 @@ async def _dlt_backend_impl(
                     except Exception:
                         pass
 
-                tx_id, off_chain_id, version = await async_retry()(
-                    fabric_client.write_checkpoint
-                )(
+                tx_id, off_chain_id, version = await async_retry()(fabric_client.write_checkpoint)(
                     checkpoint_name=name,
                     hash=version_hash,
                     prev_hash=prev_hash,
@@ -763,11 +730,7 @@ async def _dlt_backend_impl(
                     ts=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     metadata=scrub_sensitive_data(metadata),
                     off_chain_id=off_chain_id,
-                    user=(
-                        getpass.getuser()
-                        if "getpass" in sys.modules
-                        else "unknown_user"
-                    ),
+                    user=(getpass.getuser() if "getpass" in sys.modules else "unknown_user"),
                     correlation_id=kwargs.get("correlation_id"),
                 )
 
@@ -781,9 +744,7 @@ async def _dlt_backend_impl(
                     except Exception as e:
                         logger.warning(f"Failed to prime cache after save: {e}")
 
-                logger.info(
-                    f"DLT checkpoint saved: {name} [hash={version_hash} tx_id={tx_id}]"
-                )
+                logger.info(f"DLT checkpoint saved: {name} [hash={version_hash} tx_id={tx_id}]")
                 return tx_id
 
     elif op == "load":
@@ -796,9 +757,9 @@ async def _dlt_backend_impl(
                 cached_data = await REDIS_CLIENT.get(cache_key)
                 if cached_data:
                     cached_obj = json.loads(cached_data)
-                    latest_tx_on_chain = await async_retry()(
-                        fabric_client.read_checkpoint
-                    )(name, version="latest")
+                    latest_tx_on_chain = await async_retry()(fabric_client.read_checkpoint)(
+                        name, version="latest"
+                    )
                     if latest_tx_on_chain["metadata"]["hash"] == cached_obj.get("hash"):
                         logger.info(
                             f"DLT checkpoint loaded from cache and verified: {name} v{version}"
@@ -829,9 +790,7 @@ async def _dlt_backend_impl(
                 _verify_hash_chain(expected_prev, actual_prev_hash, name, version_num)
             except HashChainError as e:
                 hash_chain_ok = False
-                logger.critical(
-                    f"CRITICAL: DLT checkpoint load failed due to broken chain: {e}"
-                )
+                logger.critical(f"CRITICAL: DLT checkpoint load failed due to broken chain: {e}")
                 if await _should_alert(f"load:{name}:hash_chain_broken"):
                     alert_operator(
                         f"CRITICAL: DLT checkpoint load failed for '{name}' v{version}. Hash chain broken.",
@@ -867,9 +826,7 @@ async def _dlt_backend_impl(
             # Optional: verify HMAC signature
             sig = tx["metadata"].get("signature")
             if sig:
-                key = SECRETS_MANAGER.get_secret(
-                    "DLT_HMAC_KEY", required=PRODUCTION_MODE
-                )
+                key = SECRETS_MANAGER.get_secret("DLT_HMAC_KEY", required=PRODUCTION_MODE)
                 if key:
                     base = {
                         "name": name,
@@ -878,19 +835,13 @@ async def _dlt_backend_impl(
                     }
                     computed_sig = hmac.new(
                         key.encode("utf-8"),
-                        json.dumps(base, sort_keys=True, ensure_ascii=False).encode(
-                            "utf-8"
-                        ),
+                        json.dumps(base, sort_keys=True, ensure_ascii=False).encode("utf-8"),
                         hashlib.sha256,
                     ).hexdigest()
                     if computed_sig != sig:
-                        raise HashChainError(
-                            "HMAC signature mismatch for checkpoint metadata."
-                        )
+                        raise HashChainError("HMAC signature mismatch for checkpoint metadata.")
                 elif PRODUCTION_MODE:
-                    raise AnalyzerCriticalError(
-                        "DLT_HMAC_KEY missing in PRODUCTION_MODE."
-                    )
+                    raise AnalyzerCriticalError("DLT_HMAC_KEY missing in PRODUCTION_MODE.")
 
         if REDIS_CLIENT and is_latest:
             try:
@@ -914,9 +865,7 @@ async def _dlt_backend_impl(
             user=getpass.getuser() if "getpass" in sys.modules else "unknown_user",
             correlation_id=kwargs.get("correlation_id"),
         )
-        logger.info(
-            f"DLT checkpoint loaded: {name} v{version} [tx_id={tx.get('tx_id')}]"
-        )
+        logger.info(f"DLT checkpoint loaded: {name} v{version} [tx_id={tx.get('tx_id')}]")
         return state
 
     elif op == "rollback":
@@ -946,16 +895,12 @@ async def _dlt_backend_impl(
 
         if REDIS_CLIENT:
             try:
-                latest = await async_retry()(fabric_client.read_checkpoint)(
-                    name, version="latest"
-                )
+                latest = await async_retry()(fabric_client.read_checkpoint)(name, version="latest")
                 state_latest = await from_blob(latest["payload_blob"])
                 await REDIS_CLIENT.setex(
                     f"dlt_checkpoint:{name}:latest",
                     CACHE_TTL,
-                    json.dumps(
-                        {"state": state_latest, "hash": latest["metadata"]["hash"]}
-                    ),
+                    json.dumps({"state": state_latest, "hash": latest["metadata"]["hash"]}),
                 )
             except Exception as e:
                 logger.warning(f"Failed to refresh cache after rollback: {e}")
@@ -987,19 +932,13 @@ async def _dlt_backend_impl(
             user=getpass.getuser() if "getpass" in sys.modules else "unknown_user",
             correlation_id=kwargs.get("correlation_id"),
         )
-        logger.info(
-            f"DLT checkpoint diff: {name} v{v1} vs v{v2} ({len(diff)} keys changed)"
-        )
+        logger.info(f"DLT checkpoint diff: {name} v{v1} vs v{v2} ({len(diff)} keys changed)")
         return diff
 
     else:
-        logger.critical(
-            f"CRITICAL: Unsupported DLT backend operation: '{op}'. Aborting."
-        )
+        logger.critical(f"CRITICAL: Unsupported DLT backend operation: '{op}'. Aborting.")
         audit_logger.log_event("dlt_operation_unsupported", operation=op)
-        alert_operator(
-            f"CRITICAL: Unsupported DLT operation '{op}'. Aborting.", level="CRITICAL"
-        )
+        alert_operator(f"CRITICAL: Unsupported DLT operation '{op}'. Aborting.", level="CRITICAL")
         raise NotImplementedError(f"DLT backend op '{op}'")
 
 
@@ -1016,9 +955,7 @@ class CheckpointManager:
 
         return decorator
 
-    def __init__(
-        self, backend="dlt", enable_hash_chain=True, state_schema=None, encrypt_key=None
-    ):
+    def __init__(self, backend="dlt", enable_hash_chain=True, state_schema=None, encrypt_key=None):
         self.backend = backend
         self.enable_hash_chain = enable_hash_chain
         self.state_schema = state_schema
@@ -1072,18 +1009,14 @@ async def _run_initialization_and_test() -> None:
             "bucket_name": os.getenv("S3_BUCKET_NAME", "your-s3-bucket"),
             "region_name": os.getenv("S3_REGION", "us-east-1"),
             "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID", "dummy_access_key"),
-            "aws_secret_access_key": os.getenv(
-                "AWS_SECRET_ACCESS_KEY", "dummy_secret_key"
-            ),
+            "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY", "dummy_secret_key"),
         },
         "fabric": {
             "channel_name": os.getenv("FABRIC_CHANNEL", "mychannel"),
             "chaincode_name": os.getenv("FABRIC_CHAINCODE", "mychaincode"),
             "org_name": os.getenv("FABRIC_ORG", "Org1"),
             "user_name": os.getenv("FABRIC_USER", "User1"),
-            "network_profile": os.getenv(
-                "FABRIC_NETWORK_PROFILE", "path/to/connection.json"
-            ),
+            "network_profile": os.getenv("FABRIC_NETWORK_PROFILE", "path/to/connection.json"),
         },
     }
 
@@ -1104,9 +1037,7 @@ async def _run_initialization_and_test() -> None:
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "metadata": {"source": "test"},
         }
-        tx_id1 = await chk_manager.save(
-            "my_checkpoint", state1, metadata={"user": "test_user"}
-        )
+        tx_id1 = await chk_manager.save("my_checkpoint", state1, metadata={"user": "test_user"})
         logger.info(f"Saved checkpoint 1: {tx_id1}")
 
         loaded_state1 = await chk_manager.load("my_checkpoint")
@@ -1117,9 +1048,7 @@ async def _run_initialization_and_test() -> None:
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "metadata": {"source": "test"},
         }
-        tx_id2 = await chk_manager.save(
-            "my_checkpoint", state2, metadata={"user": "test_user_2"}
-        )
+        tx_id2 = await chk_manager.save("my_checkpoint", state2, metadata={"user": "test_user_2"})
         logger.info(f"Saved checkpoint 2: {tx_id2}")
 
         loaded_state2 = await chk_manager.load("my_checkpoint")
@@ -1137,13 +1066,9 @@ async def _run_initialization_and_test() -> None:
         logger.info(f"State after rollback: {rolled_back_state}")
 
     except SystemExit:
-        logger.error(
-            "Initialization or test run aborted due to critical error (SystemExit)."
-        )
+        logger.error("Initialization or test run aborted due to critical error (SystemExit).")
     except Exception as e:
-        logger.critical(
-            f"An unexpected error occurred during DLT backend test: {e}", exc_info=True
-        )
+        logger.critical(f"An unexpected error occurred during DLT backend test: {e}", exc_info=True)
         alert_operator(f"CRITICAL: DLT Backend test failed: {e}.", level="CRITICAL")
     finally:
         if os.getenv("FABRIC_NETWORK_PROFILE") and os.path.exists(

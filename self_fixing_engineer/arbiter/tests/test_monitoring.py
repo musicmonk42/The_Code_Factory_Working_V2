@@ -128,18 +128,14 @@ def test_log_action_observers(monitor):
 def test_thread_safety(monitor, num_threads):
     def log_thread():
         for i in range(100):
-            monitor.log_action(
-                {"type": f"thread_{threading.current_thread().ident}_{i}"}
-            )
+            monitor.log_action({"type": f"thread_{threading.current_thread().ident}_{i}"})
 
     threads = [threading.Thread(target=log_thread) for _ in range(num_threads)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
-    assert len(monitor.action_logs) == min(
-        num_threads * 100, monitor.max_actions_in_memory
-    )
+    assert len(monitor.action_logs) == min(num_threads * 100, monitor.max_actions_in_memory)
 
 
 def test_prune_old_logs(monitor):
@@ -282,9 +278,7 @@ def test_get_recent_events(monitor):
 
 
 def test_explain_decision(monitor):
-    monitor.log_action(
-        {"decision_id": "dec1", "description": "Test decision", "why": "Testing"}
-    )
+    monitor.log_action({"decision_id": "dec1", "description": "Test decision", "why": "Testing"})
     explanation = monitor.explain_decision("dec1")
     assert explanation["decision_id"] == "dec1"
     assert explanation["description"] == "Test decision"

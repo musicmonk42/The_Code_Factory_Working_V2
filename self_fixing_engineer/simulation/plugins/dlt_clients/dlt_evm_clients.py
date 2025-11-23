@@ -95,9 +95,7 @@ except ImportError:
             pass
 
         ContractCustomError = ContractLogicError
-        _base_logger.warning(
-            "Could not import web3 exceptions; using generic fallbacks."
-        )
+        _base_logger.warning("Could not import web3 exceptions; using generic fallbacks.")
 
 from eth_account import Account
 
@@ -166,9 +164,7 @@ try:
 
         async def get_secret(self, secret_id: str) -> str:
             try:
-                response = await asyncio.to_thread(
-                    self.client.get_secret_value, SecretId=secret_id
-                )
+                response = await asyncio.to_thread(self.client.get_secret_value, SecretId=secret_id)
                 return response["SecretString"]
             except BotoClientError as e:
                 raise DLTClientConfigurationError(
@@ -181,9 +177,7 @@ except Exception:
 
     class AWSSecretsBackend(SecretsBackend):  # type: ignore
         def __init__(self):
-            raise DLTClientConfigurationError(
-                "AWS Secrets Manager backend unavailable.", "EVM"
-            )
+            raise DLTClientConfigurationError("AWS Secrets Manager backend unavailable.", "EVM")
 
 
 AZURE_KEYVAULT_AVAILABLE = False
@@ -201,9 +195,7 @@ try:
                     "EVM",
                 )
             if not vault_url:
-                raise DLTClientConfigurationError(
-                    "Azure Key Vault URL is required.", "EVM"
-                )
+                raise DLTClientConfigurationError("Azure Key Vault URL is required.", "EVM")
             self.client = AsyncSecretClient(
                 vault_url=vault_url, credential=DefaultAzureCredential()
             )
@@ -228,9 +220,7 @@ except Exception:
 
     class AzureKeyVaultBackend(SecretsBackend):  # type: ignore
         def __init__(self, *_args, **_kwargs):
-            raise DLTClientConfigurationError(
-                "Azure Key Vault backend unavailable.", "EVM"
-            )
+            raise DLTClientConfigurationError("Azure Key Vault backend unavailable.", "EVM")
 
 
 GCP_SECRET_MANAGER_AVAILABLE = False
@@ -256,9 +246,7 @@ try:
         async def get_secret(self, secret_id: str) -> str:
             try:
                 name = f"projects/{self.project_id}/secrets/{secret_id}/versions/latest"
-                response = await asyncio.to_thread(
-                    self.client.access_secret_version, name=name
-                )
+                response = await asyncio.to_thread(self.client.access_secret_version, name=name)
                 return response.payload.data.decode("UTF-8")
             except Exception as e:
                 raise DLTClientConfigurationError(
@@ -271,9 +259,7 @@ except Exception:
 
     class GCPSecretManagerBackend(SecretsBackend):  # type: ignore
         def __init__(self, *_args, **_kwargs):
-            raise DLTClientConfigurationError(
-                "GCP Secret Manager backend unavailable.", "EVM"
-            )
+            raise DLTClientConfigurationError("GCP Secret Manager backend unavailable.", "EVM")
 
 
 # ---------------------------
@@ -333,9 +319,7 @@ class EVMConfig(BaseModel):
     def validate_private_key_presence(cls, v, values):
         # In production, require secrets provider; no inline private key allowed
         if PRODUCTION_MODE:
-            if not values.get("secrets_provider") or not values.get(
-                "private_key_secret_id"
-            ):
+            if not values.get("secrets_provider") or not values.get("private_key_secret_id"):
                 raise ValueError(
                     "In PRODUCTION_MODE, private_key must be loaded via 'secrets_provider' and 'private_key_secret_id'."
                 )
@@ -364,18 +348,10 @@ class EVMConfig(BaseModel):
     def validate_secrets_provider_type(cls, v, values):
         if v and v not in ("aws", "azure", "gcp"):
             raise ValueError("secrets_provider must be one of 'aws', 'azure', 'gcp'.")
-        if v == "azure" and not values.get("secrets_provider_config", {}).get(
-            "vault_url"
-        ):
-            raise ValueError(
-                "secrets_provider_config.vault_url required for Azure Key Vault."
-            )
-        if v == "gcp" and not values.get("secrets_provider_config", {}).get(
-            "project_id"
-        ):
-            raise ValueError(
-                "secrets_provider_config.project_id required for GCP Secret Manager."
-            )
+        if v == "azure" and not values.get("secrets_provider_config", {}).get("vault_url"):
+            raise ValueError("secrets_provider_config.vault_url required for Azure Key Vault.")
+        if v == "gcp" and not values.get("secrets_provider_config", {}).get("project_id"):
+            raise ValueError("secrets_provider_config.project_id required for GCP Secret Manager.")
         return v
 
     @validator("rpc_url")
@@ -384,9 +360,7 @@ class EVMConfig(BaseModel):
         if PRODUCTION_MODE and any(
             tok in s for tok in ("mock", "test", "example.com", "localhost")
         ):
-            raise ValueError(
-                f"Mock/test RPC URL detected: {v}. Not allowed in production."
-            )
+            raise ValueError(f"Mock/test RPC URL detected: {v}. Not allowed in production.")
         return v
 
 
@@ -406,9 +380,7 @@ class EthereumClientWrapper(BaseDLTClient):
             evm_cfg: Dict[str, Any] = dict(config.get("evm", {}))
             validated_evm = EVMConfig(**evm_cfg).dict(exclude_unset=False)
         except ValidationError as e:
-            raise DLTClientValidationError(
-                f"Invalid EVM client configuration: {e}", "EVM"
-            )
+            raise DLTClientValidationError(f"Invalid EVM client configuration: {e}", "EVM")
         except Exception as e:
             raise DLTClientValidationError(
                 f"Failed to load EVM client configuration: {e}",
@@ -450,13 +422,9 @@ class EthereumClientWrapper(BaseDLTClient):
         self.base_fee_multiplier: float = float(
             self.client_config.get("eip1559_base_fee_multiplier", 2.0)
         )
-        self.fallback_gas_price_gwei: int = int(
-            self.client_config["fallback_gas_price_gwei"]
-        )
+        self.fallback_gas_price_gwei: int = int(self.client_config["fallback_gas_price_gwei"])
         self.tx_confirm_timeout: int = int(self.client_config["tx_confirm_timeout"])
-        self.min_eth_balance_for_tx: float = float(
-            self.client_config["min_eth_balance_for_tx"]
-        )
+        self.min_eth_balance_for_tx: float = float(self.client_config["min_eth_balance_for_tx"])
 
         # Rate limiter
         self._rate_limit_delay: float = 1.0 / float(
@@ -484,13 +452,9 @@ class EthereumClientWrapper(BaseDLTClient):
             if POA_MIDDLEWARE:
                 self.w3.middleware_onion.inject(POA_MIDDLEWARE, layer=0)
             else:
-                self._format_log(
-                    "warning", "POA middleware requested but not available"
-                )
+                self._format_log("warning", "POA middleware requested but not available")
 
-        self.contract = self.w3.eth.contract(
-            address=self.contract_address, abi=self.contract_abi
-        )
+        self.contract = self.w3.eth.contract(address=self.contract_address, abi=self.contract_abi)
 
         # Signer (lazy-load on first use/health_check)
         self.private_key: Optional[str] = None
@@ -512,9 +476,7 @@ class EthereumClientWrapper(BaseDLTClient):
 
     # ------------- internal helpers -------------
 
-    def _format_log(
-        self, level: str, message: str, extra: Optional[Dict[str, Any]] = None
-    ) -> None:
+    def _format_log(self, level: str, message: str, extra: Optional[Dict[str, Any]] = None) -> None:
         """
         Structured logging, with optional JSON and audit on critical paths.
         """
@@ -672,9 +634,7 @@ class EthereumClientWrapper(BaseDLTClient):
                         self.client_type,
                     )
                 self.private_key = await backend.get_secret(secret_id)
-                self._format_log(
-                    "info", f"Private key loaded from secrets backend: {provider}."
-                )
+                self._format_log("info", f"Private key loaded from secrets backend: {provider}.")
             elif direct_key:
                 # Non-prod only (validated by schema)
                 self.private_key = direct_key
@@ -715,9 +675,7 @@ class EthereumClientWrapper(BaseDLTClient):
 
     # ----------------- public API -----------------
 
-    async def health_check(
-        self, correlation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Checks EVM client connectivity and basic contract interaction.
         Returns a dict with status, message, and details (does not raise on expected failures).
@@ -763,9 +721,7 @@ class EthereumClientWrapper(BaseDLTClient):
                     )
                 span.set_attribute("evm.contract_deployed", True)
 
-                balance_wei = await self._exec_w3(
-                    self.w3.eth.get_balance, self.account.address
-                )
+                balance_wei = await self._exec_w3(self.w3.eth.get_balance, self.account.address)
                 balance_eth = float(self.w3.from_wei(balance_wei, "ether"))
                 if balance_wei < self.w3.to_wei(self.min_eth_balance_for_tx, "ether"):
                     self._format_log(
@@ -804,9 +760,7 @@ class EthereumClientWrapper(BaseDLTClient):
                 }
             except DLTClientCircuitBreakerError:
                 # Already tracked by CB; return structured failure
-                span.set_status(
-                    Status(StatusCode.ERROR, description="Circuit breaker open")
-                )
+                span.set_status(Status(StatusCode.ERROR, description="Circuit breaker open"))
                 return {
                     "status": False,
                     "message": "Circuit breaker open",
@@ -826,9 +780,7 @@ class EthereumClientWrapper(BaseDLTClient):
                     "details": {"error": str(e)},
                 }
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"Unexpected error: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"Unexpected error: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -862,9 +814,7 @@ class EthereumClientWrapper(BaseDLTClient):
         ) as span:
             try:
                 await self._rate_limit()
-                nonce = await self._exec_w3(
-                    self.w3.eth.get_transaction_count, self.account.address
-                )
+                nonce = await self._exec_w3(self.w3.eth.get_transaction_count, self.account.address)
 
                 tx_params: Dict[str, Any] = {
                     "chainId": self.chain_id,
@@ -875,16 +825,12 @@ class EthereumClientWrapper(BaseDLTClient):
                 }
 
                 # EIP-1559 vs Legacy Gas handling
-                priority_gwei = (
-                    max_priority_fee_per_gas_gwei or self.max_priority_fee_per_gas_gwei
-                )
+                priority_gwei = max_priority_fee_per_gas_gwei or self.max_priority_fee_per_gas_gwei
                 max_fee_gwei = max_fee_per_gas_gwei or self.max_fee_per_gas_gwei
 
                 if priority_gwei is not None and max_fee_gwei is not None:
                     # Explicit EIP-1559 settings
-                    tx_params["maxPriorityFeePerGas"] = self.w3.to_wei(
-                        priority_gwei, "gwei"
-                    )
+                    tx_params["maxPriorityFeePerGas"] = self.w3.to_wei(priority_gwei, "gwei")
                     tx_params["maxFeePerGas"] = self.w3.to_wei(max_fee_gwei, "gwei")
                     self._format_log(
                         "debug",
@@ -894,19 +840,13 @@ class EthereumClientWrapper(BaseDLTClient):
                 else:
                     # Try to infer EIP-1559; otherwise fallback to legacy gasPrice
                     try:
-                        latest_block = await self._exec_w3(
-                            self.w3.eth.get_block, "latest", False
-                        )
+                        latest_block = await self._exec_w3(self.w3.eth.get_block, "latest", False)
                         base_fee = getattr(latest_block, "baseFeePerGas", None)
                         if base_fee is not None:
                             # Compute fee with multiplier and priority
-                            use_priority_gwei = (
-                                priority_gwei if priority_gwei is not None else 2
-                            )
+                            use_priority_gwei = priority_gwei if priority_gwei is not None else 2
                             priority_wei = self.w3.to_wei(use_priority_gwei, "gwei")
-                            max_fee = int(base_fee * self.base_fee_multiplier) + int(
-                                priority_wei
-                            )
+                            max_fee = int(base_fee * self.base_fee_multiplier) + int(priority_wei)
                             tx_params["maxPriorityFeePerGas"] = priority_wei
                             tx_params["maxFeePerGas"] = max_fee
                             self._format_log(
@@ -918,9 +858,7 @@ class EthereumClientWrapper(BaseDLTClient):
                             # Legacy fallback
                             gas_price = None
                             try:
-                                gas_price = await self._exec_w3_prop(
-                                    lambda: self.w3.eth.gas_price
-                                )
+                                gas_price = await self._exec_w3_prop(lambda: self.w3.eth.gas_price)
                             except Exception:
                                 pass
                             if gas_price is None:
@@ -928,9 +866,7 @@ class EthereumClientWrapper(BaseDLTClient):
                                     EVM_METRICS["gas_fallback_total"].labels(
                                         client_type=self.client_type
                                     ).inc()
-                                gas_price = self.w3.to_wei(
-                                    self.fallback_gas_price_gwei, "gwei"
-                                )
+                                gas_price = self.w3.to_wei(self.fallback_gas_price_gwei, "gwei")
                             tx_params["gasPrice"] = gas_price
                             self._format_log(
                                 "debug",
@@ -943,9 +879,7 @@ class EthereumClientWrapper(BaseDLTClient):
                             EVM_METRICS["gas_fallback_total"].labels(
                                 client_type=self.client_type
                             ).inc()
-                        tx_params["gasPrice"] = self.w3.to_wei(
-                            self.fallback_gas_price_gwei, "gwei"
-                        )
+                        tx_params["gasPrice"] = self.w3.to_wei(self.fallback_gas_price_gwei, "gwei")
                         self._format_log(
                             "warning",
                             f"Failed to estimate EIP-1559 fees; using fallback gasPrice. Reason: {fee_e}",
@@ -953,9 +887,7 @@ class EthereumClientWrapper(BaseDLTClient):
                         )
 
                 # Build transaction (sync)
-                transaction = await self._exec_w3(
-                    tx_builder_method.build_transaction, tx_params
-                )
+                transaction = await self._exec_w3(tx_builder_method.build_transaction, tx_params)
 
                 # Sign transaction (sync)
                 signed_tx = await self._circuit_breaker.execute(
@@ -1019,9 +951,7 @@ class EthereumClientWrapper(BaseDLTClient):
                     )
                 except asyncio.TimeoutError as e:
                     if EVM_METRICS:
-                        EVM_METRICS["tx_pending_timeout"].labels(
-                            client_type=self.client_type
-                        ).inc()
+                        EVM_METRICS["tx_pending_timeout"].labels(client_type=self.client_type).inc()
                     self._format_log(
                         "error",
                         f"Transaction confirmation timed out: {e}",
@@ -1058,9 +988,7 @@ class EthereumClientWrapper(BaseDLTClient):
                             AUDIT.log_event(
                                 "evm_tx.failed_on_chain",
                                 tx_hash=tx_hash_hex,
-                                receipt_block_number=int(
-                                    getattr(receipt, "blockNumber", 0) or 0
-                                ),
+                                receipt_block_number=int(getattr(receipt, "blockNumber", 0) or 0),
                                 correlation_id=correlation_id,
                             )
                         )
@@ -1085,9 +1013,7 @@ class EthereumClientWrapper(BaseDLTClient):
                         AUDIT.log_event(
                             "evm_tx.confirmed",
                             tx_hash=tx_hash_hex,
-                            receipt_block_number=int(
-                                getattr(receipt, "blockNumber", 0) or 0
-                            ),
+                            receipt_block_number=int(getattr(receipt, "blockNumber", 0) or 0),
                             correlation_id=correlation_id,
                         )
                     )
@@ -1097,9 +1023,7 @@ class EthereumClientWrapper(BaseDLTClient):
                 return tx_hash_hex
 
             except (TransactionNotFound, ContractCustomError, ContractLogicError) as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"Transaction error: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"Transaction error: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1125,9 +1049,7 @@ class EthereumClientWrapper(BaseDLTClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"Transaction failed: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"Transaction failed: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1191,9 +1113,7 @@ class EthereumClientWrapper(BaseDLTClient):
                 span.set_attribute("off_chain.id", off_chain_id)
 
                 hash_bytes = self.w3.to_bytes(hexstr=hash) if hash else b"\x00" * 32
-                prev_hash_bytes = (
-                    self.w3.to_bytes(hexstr=prev_hash) if prev_hash else b"\x00" * 32
-                )
+                prev_hash_bytes = self.w3.to_bytes(hexstr=prev_hash) if prev_hash else b"\x00" * 32
 
                 tx_builder = self.contract.functions.writeCheckpoint(
                     checkpoint_name,
@@ -1203,14 +1123,10 @@ class EthereumClientWrapper(BaseDLTClient):
                     off_chain_id,
                 )
 
-                tx_hash = await self._build_and_send_tx(
-                    tx_builder, correlation_id=correlation_id
-                )
+                tx_hash = await self._build_and_send_tx(tx_builder, correlation_id=correlation_id)
 
                 # Derive version from block number of receipt (read receipt again; or use best-effort get_transaction_receipt)
-                receipt = await self._exec_w3(
-                    self.w3.eth.get_transaction_receipt, tx_hash
-                )
+                receipt = await self._exec_w3(self.w3.eth.get_transaction_receipt, tx_hash)
                 version = int(getattr(receipt, "blockNumber", 0) or 0)
 
                 span.set_attribute("tx_hash", tx_hash)
@@ -1244,9 +1160,7 @@ class EthereumClientWrapper(BaseDLTClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"EVM write failed: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"EVM write failed: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1368,9 +1282,7 @@ class EthereumClientWrapper(BaseDLTClient):
                     "tx_id": entry.get("tx_id"),
                 }
             except FileNotFoundError:
-                span.set_status(
-                    Status(StatusCode.ERROR, description="Off-chain blob not found")
-                )
+                span.set_status(Status(StatusCode.ERROR, description="Off-chain blob not found"))
                 self._format_log(
                     "error",
                     f"Off-chain blob not found: {name} v{version}",
@@ -1392,9 +1304,7 @@ class EthereumClientWrapper(BaseDLTClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"EVM read failed: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"EVM read failed: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1546,13 +1456,9 @@ class EthereumClientWrapper(BaseDLTClient):
                 tx_builder = self.contract.functions.rollbackCheckpoint(
                     name, self.w3.to_bytes(hexstr=rollback_hash)
                 )
-                tx_hash = await self._build_and_send_tx(
-                    tx_builder, correlation_id=correlation_id
-                )
+                tx_hash = await self._build_and_send_tx(tx_builder, correlation_id=correlation_id)
 
-                receipt = await self._exec_w3(
-                    self.w3.eth.get_transaction_receipt, tx_hash
-                )
+                receipt = await self._exec_w3(self.w3.eth.get_transaction_receipt, tx_hash)
                 new_version = int(getattr(receipt, "blockNumber", 0) or 0)
 
                 span.set_attribute("tx_hash", tx_hash)
@@ -1588,9 +1494,7 @@ class EthereumClientWrapper(BaseDLTClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(
-                    Status(StatusCode.ERROR, description=f"EVM rollback failed: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, description=f"EVM rollback failed: {e}"))
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1632,9 +1536,7 @@ class EthereumClientWrapper(BaseDLTClient):
             try:
                 if ASYNC_TIMEOUT_AVAILABLE:
                     try:
-                        async with async_timeout.timeout(
-                            self.client_config["close_timeout"]
-                        ):
+                        async with async_timeout.timeout(self.client_config["close_timeout"]):
                             res = provider.close()
                             if inspect.isawaitable(res):
                                 await res

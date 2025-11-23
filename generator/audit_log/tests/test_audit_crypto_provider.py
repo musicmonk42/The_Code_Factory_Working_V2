@@ -37,9 +37,7 @@ mock_pkcs11_session = MagicMock(name="pkcs11.Session")
 mock_pkcs11.lib.return_value = mock_pkcs11_lib
 mock_pkcs11_lib.get_token.return_value = mock_pkcs11_token
 mock_pkcs11_token.open.return_value = mock_pkcs11_session
-mock_pkcs11.exceptions = SimpleNamespace(
-    PKCS11Error=type("PKCS11Error", (Exception,), {})
-)
+mock_pkcs11.exceptions = SimpleNamespace(PKCS11Error=type("PKCS11Error", (Exception,), {}))
 mock_pkcs11.constants = SimpleNamespace(
     CKM_EC_EDWARDS_KEY_PAIR_GEN=1,
     CKM_RSA_PKCS_KEY_PAIR_GEN=2,
@@ -247,9 +245,7 @@ def mock_keystore(monkeypatch):
     mock_keystore_instance.store_key = AsyncMock()
     mock_keystore_instance.delete_key_file = AsyncMock(return_value=True)
 
-    mock_keystore_class = MagicMock(
-        name="KeyStoreClass", return_value=mock_keystore_instance
-    )
+    mock_keystore_class = MagicMock(name="KeyStoreClass", return_value=mock_keystore_instance)
     monkeypatch.setattr(
         "generator.audit_log.audit_crypto.audit_crypto_provider.KeyStore",
         mock_keystore_class,
@@ -284,9 +280,7 @@ def mock_crypto_libs(monkeypatch):
         "hmac": patch("os.urandom", return_value=b"mock-hmac-key-32-bytes-12345678"),
         "uuid": patch(
             "uuid.uuid4",
-            return_value=MagicMock(
-                hex="mock-uuid-hex", __str__=lambda s: "mock-uuid-str"
-            ),
+            return_value=MagicMock(hex="mock-uuid-hex", __str__=lambda s: "mock-uuid-str"),
         ),
         "time": patch("time.time", return_value=1234567890.0),
     }
@@ -310,9 +304,7 @@ def mock_hsm_full(monkeypatch):
     mock_pkcs11_token.reset_mock()
     mock_pkcs11_session.reset_mock()
 
-    monkeypatch.setattr(
-        "generator.audit_log.audit_crypto.audit_crypto_provider.HAS_PKCS11", True
-    )
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_provider.HAS_PKCS11", True)
     monkeypatch.setattr(
         "generator.audit_log.audit_crypto.audit_crypto_provider.pkcs11", mock_pkcs11
     )
@@ -393,9 +385,7 @@ def software_provider(
 
 
 @pytest_asyncio.fixture
-async def hsm_provider(
-    mock_settings, mock_factory_imports, mock_hsm_full, mock_accessors
-):
+async def hsm_provider(mock_settings, mock_factory_imports, mock_hsm_full, mock_accessors):
     """Provides an initialized HSMCryptoProvider instance."""
     from generator.audit_log.audit_crypto.audit_crypto_provider import HSMCryptoProvider
 
@@ -459,9 +449,7 @@ class TestCryptoProviderABC:
 
         mock_task.cancel.assert_called_once()
         # FIX: Assert task is *removed* from the set
-        assert (
-            mock_task not in provider._background_tasks
-        )  # add_done_callback not called on mock
+        assert mock_task not in provider._background_tasks  # add_done_callback not called on mock
         provider._background_tasks.clear()  # Manual clear for test
 
 
@@ -515,9 +503,7 @@ class TestSoftwareCryptoProvider:
 
         # FIX: Removed asyncio.run patch
         with pytest.raises(Exception, match="Master encryption key is missing"):
-            SoftwareCryptoProvider(
-                mock_accessors[0], mock_accessors[1], mock_settings[0]
-            )
+            SoftwareCryptoProvider(mock_accessors[0], mock_accessors[1], mock_settings[0])
 
     # FIX: This test must be SYNC
     def test_init_keystore_fail(self, mock_accessors, mock_keystore, mock_settings):
@@ -529,9 +515,7 @@ class TestSoftwareCryptoProvider:
 
         # FIX: Removed asyncio.run patch
         with pytest.raises(Exception, match="Failed to initialize KeyStore"):
-            SoftwareCryptoProvider(
-                mock_accessors[0], mock_accessors[1], mock_settings[0]
-            )
+            SoftwareCryptoProvider(mock_accessors[0], mock_accessors[1], mock_settings[0])
 
     @pytest.mark.asyncio
     async def test_sign_success(self, software_provider):
@@ -618,9 +602,7 @@ class TestSoftwareCryptoProvider:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_generate_key_success(
-        self, software_provider, mock_keystore, mock_crypto_libs
-    ):
+    async def test_generate_key_success(self, software_provider, mock_keystore, mock_crypto_libs):
         new_key_id = await software_provider.generate_key("ed25519")
 
         assert new_key_id == "mock-uuid-str"
@@ -640,9 +622,7 @@ class TestSoftwareCryptoProvider:
             UnsupportedAlgorithmError,
         )
 
-        with pytest.raises(
-            UnsupportedAlgorithmError, match="Unsupported algorithm: md5"
-        ):
+        with pytest.raises(UnsupportedAlgorithmError, match="Unsupported algorithm: md5"):
             await software_provider.generate_key("md5")
 
     @pytest.mark.asyncio
@@ -744,9 +724,7 @@ class TestSoftwareCryptoProvider:
                     SoftwareCryptoProvider,
                 )
 
-                original_rotate_periodic = (
-                    SoftwareCryptoProvider._rotate_keys_periodically
-                )
+                original_rotate_periodic = SoftwareCryptoProvider._rotate_keys_periodically
 
                 await original_rotate_periodic(software_provider)
 
@@ -755,12 +733,8 @@ class TestSoftwareCryptoProvider:
                 mock_rotate_call.assert_called_once_with(old_active_key, "ed25519")
 
                 # Should try to delete the old retired key
-                mock_keystore[0].delete_key_file.assert_called_once_with(
-                    old_retired_key
-                )
-                assert (
-                    old_retired_key not in software_provider.keys
-                )  # Removed from memory
+                mock_keystore[0].delete_key_file.assert_called_once_with(old_retired_key)
+                assert old_retired_key not in software_provider.keys  # Removed from memory
 
                 # Should log success
                 mock_factory_imports["KEY_CLEANUP_COUNT"].labels.assert_called_with(
@@ -789,9 +763,7 @@ class TestHSMCryptoProvider:
         mock_settings[1]["HSM_ENABLED"] = True
 
         with patch.object(HSMCryptoProvider, "_monitor_hsm_health", AsyncMock()):
-            provider = HSMCryptoProvider(
-                mock_accessors[0], mock_accessors[1], mock_settings[0]
-            )
+            provider = HSMCryptoProvider(mock_accessors[0], mock_accessors[1], mock_settings[0])
 
             # Wait for the _hsm_init_task to complete
             await provider._hsm_init_task
@@ -843,9 +815,7 @@ class TestHSMCryptoProvider:
     async def test_sign_success(self, hsm_provider):
         # FIX: Assign mock key first, *then* set its attributes
         mock_priv_key = MagicMock(name="MockPrivKey")
-        mock_pkcs11_session.find_objects.return_value.single.return_value = (
-            mock_priv_key
-        )
+        mock_pkcs11_session.find_objects.return_value.single.return_value = mock_priv_key
         mock_priv_key.get_attribute.return_value = mock_pkcs11.KeyType.EC_EDWARDS
 
         # Setup mock return for the signer context
@@ -874,9 +844,7 @@ class TestHSMCryptoProvider:
 
         mock_pkcs11_session.find_objects.return_value.single.return_value = None
 
-        with pytest.raises(
-            HSMKeyError, match="Private key with label 'key-label-1' not found"
-        ):
+        with pytest.raises(HSMKeyError, match="Private key with label 'key-label-1' not found"):
             await hsm_provider.sign(b"data", "key-label-1")
 
     @pytest.mark.asyncio
@@ -918,10 +886,7 @@ class TestHSMCryptoProvider:
         mock_pub_key_obj = MagicMock(name="MockPubKey")
 
         def find_objects_side_effect(attrs):
-            if (
-                attrs[mock_pkcs11.Attribute.CLASS]
-                == mock_pkcs11.ObjectClass.PRIVATE_KEY
-            ):
+            if attrs[mock_pkcs11.Attribute.CLASS] == mock_pkcs11.ObjectClass.PRIVATE_KEY:
                 return MagicMock(single=MagicMock(return_value=mock_priv_key_obj))
             if attrs[mock_pkcs11.Attribute.CLASS] == mock_pkcs11.ObjectClass.PUBLIC_KEY:
                 return MagicMock(single=MagicMock(return_value=mock_pub_key_obj))

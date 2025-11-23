@@ -146,9 +146,7 @@ def aws_secrets_manager(monkeypatch):
         "self_healing_import_fixer.analyzer.core_secrets.boto3.client",
         return_value=mock_client,
     ):
-        config = SecretConfig(
-            provider=SecretProvider.AWS_SECRETS_MANAGER, aws_region="us-east-1"
-        )
+        config = SecretConfig(provider=SecretProvider.AWS_SECRETS_MANAGER, aws_region="us-east-1")
         yield SecretsManager(config)
 
 

@@ -309,9 +309,7 @@ pydantic>=2.0.0
         assert "fastapi" in deps
 
     # <--- FIX: Mark test as expected to fail (XFAIL)
-    @pytest.mark.xfail(
-        reason="Function get_dependencies does not support pyproject.toml"
-    )
+    @pytest.mark.xfail(reason="Function get_dependencies does not support pyproject.toml")
     @pytest.mark.asyncio
     async def test_detect_dependencies_with_pyproject(self, temp_repo):
         """Test detecting dependencies from pyproject.toml."""
@@ -602,13 +600,9 @@ Content: {{ context.files_content['script.js'] }}
         agent = DocGenPromptAgent(repo_path=str(temp_repo))
 
         # <--- FIX: Patch the retrieve_few_shot method to be robust
-        with patch.object(
-            agent, "retrieve_few_shot", new_callable=AsyncMock
-        ) as mock_retrieve:
+        with patch.object(agent, "retrieve_few_shot", new_callable=AsyncMock) as mock_retrieve:
             mock_retrieve.return_value = []
-            examples = await agent.retrieve_few_shot(
-                query="a query that will be ignored"
-            )
+            examples = await agent.retrieve_few_shot(query="a query that will be ignored")
 
         # Should return empty list
         assert isinstance(examples, list)

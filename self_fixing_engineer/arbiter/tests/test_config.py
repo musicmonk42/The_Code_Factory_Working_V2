@@ -151,9 +151,7 @@ def test_encrypt_sensitive_fields():
 
 
 def test_invalid_email_recipients_list():
-    with pytest.raises(
-        ValueError, match="EMAIL_RECIPIENTS must be a comma-separated string"
-    ):
+    with pytest.raises(ValueError, match="EMAIL_RECIPIENTS must be a comma-separated string"):
         ArbiterConfig(EMAIL_RECIPIENTS=123)
 
 

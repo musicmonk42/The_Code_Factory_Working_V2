@@ -82,9 +82,7 @@ class TestCircuitBreaker:
     @pytest.mark.asyncio
     async def test_state_transitions(self):
         """Tests the full state lifecycle of the circuit breaker."""
-        cb = CircuitBreaker(
-            failure_threshold=2, recovery_timeout=0.2, half_open_attempts=1
-        )
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0.2, half_open_attempts=1)
         call_count = 0
 
         @cb(channel="test")
@@ -143,27 +141,21 @@ class TestNotificationService:
 
     @pytest.mark.skip(reason="Property-based methods cannot be easily mocked")
     @pytest.mark.asyncio
-    async def test_notify_slack_success(
-        self, notification_service, mock_aiohttp_session
-    ):
+    async def test_notify_slack_success(self, notification_service, mock_aiohttp_session):
         # Assign the mocked session directly to the service instance for this test
         notification_service._session = mock_aiohttp_session
 
         with patch.object(
             notification_service, "_record_notification_success", new_callable=AsyncMock
         ) as mock_record:
-            result = await notification_service._notify_slack_with_decorators(
-                "test message", 5.0
-            )
+            result = await notification_service._notify_slack_with_decorators("test message", 5.0)
             assert result is True
             mock_aiohttp_session.post.assert_awaited_once()
             mock_record.assert_awaited_once_with("slack")
 
     @pytest.mark.skip(reason="Property-based methods cannot be easily mocked")
     @pytest.mark.asyncio
-    async def test_notify_slack_api_error(
-        self, notification_service, mock_aiohttp_session
-    ):
+    async def test_notify_slack_api_error(self, notification_service, mock_aiohttp_session):
         notification_service._session = mock_aiohttp_session
         mock_aiohttp_session.post.side_effect = ClientError("Server Error")
         notify_slack = notification_service._notify_slack_with_decorators
@@ -174,9 +166,7 @@ class TestNotificationService:
     @pytest.mark.skip(reason="Property-based methods cannot be easily mocked")
     @pytest.mark.asyncio
     async def test_notify_email_with_tenacity_retry(self, notification_service):
-        with patch(
-            "arbiter.bug_manager.notifications.aiosmtplib.SMTP"
-        ) as mock_smtp_class:
+        with patch("arbiter.bug_manager.notifications.aiosmtplib.SMTP") as mock_smtp_class:
             mock_smtp_instance = AsyncMock()
             mock_smtp_instance.send_message.side_effect = [
                 notifications.aiosmtplib.SMTPException("Connection failed"),
@@ -190,9 +180,7 @@ class TestNotificationService:
             assert mock_smtp_instance.send_message.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_escalation_after_threshold(
-        self, notification_service, mock_settings
-    ):
+    async def test_escalation_after_threshold(self, notification_service, mock_settings):
         mock_settings.NOTIFICATION_FAILURE_THRESHOLD = 3
         mock_handler = AsyncMock()
         NotificationService.register_critical_notification_handler(mock_handler)

@@ -106,9 +106,7 @@ async def manager_with_schema():
     """Create CheckpointManager with schema validation."""
     from mesh.checkpoint.checkpoint_manager import CheckpointManager
 
-    mgr = CheckpointManager(
-        backend_type="local", state_schema=TestStateSchema, keep_versions=3
-    )
+    mgr = CheckpointManager(backend_type="local", state_schema=TestStateSchema, keep_versions=3)
     await mgr.initialize()
 
     yield mgr
@@ -588,9 +586,7 @@ class TestErrorHandling:
             dlq_path.unlink()
 
         # Force a failure
-        with patch.object(
-            manager, "_local_save", side_effect=Exception("Test failure")
-        ):
+        with patch.object(manager, "_local_save", side_effect=Exception("Test failure")):
             try:
                 await manager.save("dlq_test", {"data": "test"})
             except:

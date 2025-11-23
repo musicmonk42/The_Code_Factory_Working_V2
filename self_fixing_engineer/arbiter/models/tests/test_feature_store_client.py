@@ -123,14 +123,10 @@ async def feature_client(mocker: MockerFixture):
         mock_fs.get_online_features.return_value = mock_online_response
 
         # Patch FeatureStore at the correct location
-        mocker.patch(
-            "arbiter.models.feature_store_client.FeatureStore", return_value=mock_fs
-        )
+        mocker.patch("arbiter.models.feature_store_client.FeatureStore", return_value=mock_fs)
 
         # Mock audit and postgres clients
-        mocker.patch(
-            "arbiter.models.feature_store_client.AUDIT_LEDGER_AVAILABLE", False
-        )
+        mocker.patch("arbiter.models.feature_store_client.AUDIT_LEDGER_AVAILABLE", False)
         mocker.patch("arbiter.models.feature_store_client.POSTGRES_AVAILABLE", False)
 
         client = FeatureStoreClient()
@@ -216,10 +212,7 @@ async def test_connect_failure(mocker: MockerFixture):
     with pytest.raises(ConnectionError, match="Failed to connect to Feast"):
         await client.connect()
     assert (
-        get_metric_value(
-            FS_CALLS_ERRORS, operation="connect", error_type="FeastProviderError"
-        )
-        >= 1
+        get_metric_value(FS_CALLS_ERRORS, operation="connect", error_type="FeastProviderError") >= 1
     )
     spans = in_memory_exporter.get_finished_spans()
     assert any(span.name == "feast_connect" and not span.status.is_ok for span in spans)
@@ -260,17 +253,10 @@ async def test_apply_feature_definitions_success(feature_client):
 
     await feature_client.apply_feature_definitions(mock_definitions)
     assert feature_client._fs.apply.call_count == 1
-    assert (
-        get_metric_value(
-            FS_CALLS_TOTAL, operation="apply_definitions", status="success"
-        )
-        == 1
-    )
+    assert get_metric_value(FS_CALLS_TOTAL, operation="apply_definitions", status="success") == 1
 
     spans = in_memory_exporter.get_finished_spans()
-    apply_span = next(
-        (span for span in spans if span.name == "feast_apply_definitions"), None
-    )
+    apply_span = next((span for span in spans if span.name == "feast_apply_definitions"), None)
     assert apply_span is not None
     assert apply_span.attributes["feast.num_definitions"] == 1
     assert apply_span.status.is_ok
@@ -289,9 +275,7 @@ async def test_apply_feature_definitions_failure(feature_client, mocker: MockerF
     await feature_client.connect()
     from feast.errors import FeastProviderError
 
-    mocker.patch.object(
-        feature_client._fs, "apply", side_effect=FeastProviderError("Apply failed")
-    )
+    mocker.patch.object(feature_client._fs, "apply", side_effect=FeastProviderError("Apply failed"))
 
     from feast import Entity, ValueType
 
@@ -323,15 +307,10 @@ async def test_ingest_features_success(feature_client):
 
     await feature_client.ingest_features("mock_fv", mock_df)
     assert feature_client._fs.ingest.call_count >= 1  # May be batched
-    assert (
-        get_metric_value(FS_CALLS_TOTAL, operation="ingest_features", status="success")
-        == 1
-    )
+    assert get_metric_value(FS_CALLS_TOTAL, operation="ingest_features", status="success") == 1
 
     spans = in_memory_exporter.get_finished_spans()
-    ingest_span = next(
-        (span for span in spans if span.name == "feast_ingest_features"), None
-    )
+    ingest_span = next((span for span in spans if span.name == "feast_ingest_features"), None)
     assert ingest_span is not None
     assert ingest_span.attributes["feast.feature_view"] == "mock_fv"
     assert ingest_span.attributes["feast.data_rows"] == 1
@@ -374,23 +353,16 @@ async def test_get_historical_features_success(feature_client):
     """Test successful historical feature retrieval."""
     await feature_client.connect()
     mock_entity_df = pd.DataFrame({"entity": [1]})
-    historical_df = await feature_client.get_historical_features(
-        mock_entity_df, ["mock:feature"]
-    )
+    historical_df = await feature_client.get_historical_features(mock_entity_df, ["mock:feature"])
 
     assert isinstance(historical_df, pd.DataFrame)
     assert not historical_df.empty
     assert (
-        get_metric_value(
-            FS_CALLS_TOTAL, operation="get_historical_features", status="success"
-        )
-        == 1
+        get_metric_value(FS_CALLS_TOTAL, operation="get_historical_features", status="success") == 1
     )
 
     spans = in_memory_exporter.get_finished_spans()
-    hist_span = next(
-        (span for span in spans if span.name == "feast_get_historical_features"), None
-    )
+    hist_span = next((span for span in spans if span.name == "feast_get_historical_features"), None)
     assert hist_span is not None
     assert hist_span.attributes["feast.num_entities"] == 1
     assert hist_span.attributes["feast.feature_refs"] == "['mock:feature']"
@@ -428,22 +400,13 @@ async def test_get_online_features_success(feature_client):
     await feature_client.connect()
     entity_rows = [{"user_id": i} for i in range(5)]
 
-    online_results = await feature_client.get_online_features(
-        ["mock:feature"], entity_rows
-    )
+    online_results = await feature_client.get_online_features(["mock:feature"], entity_rows)
     assert len(online_results) == 5
     assert isinstance(online_results[0], Dict)
-    assert (
-        get_metric_value(
-            FS_CALLS_TOTAL, operation="get_online_features", status="success"
-        )
-        == 1
-    )
+    assert get_metric_value(FS_CALLS_TOTAL, operation="get_online_features", status="success") == 1
 
     spans = in_memory_exporter.get_finished_spans()
-    online_span = next(
-        (span for span in spans if span.name == "feast_get_online_features"), None
-    )
+    online_span = next((span for span in spans if span.name == "feast_get_online_features"), None)
     assert online_span is not None
     assert online_span.attributes["feast.num_entity_rows"] == 5
     assert online_span.attributes["feast.feature_refs"] == "['mock:feature']"
@@ -511,10 +474,7 @@ async def test_retry_on_connect_failure(mocker: MockerFixture):
     await client.connect()
     assert client._fs is not None
     assert (
-        get_metric_value(
-            FS_CALLS_ERRORS, operation="connect", error_type="FeastProviderError"
-        )
-        == 2
+        get_metric_value(FS_CALLS_ERRORS, operation="connect", error_type="FeastProviderError") == 2
     )
     assert get_metric_value(FS_CALLS_TOTAL, operation="connect", status="success") == 1
 
@@ -552,10 +512,7 @@ async def test_retry_on_ingest_failure(feature_client, mocker: MockerFixture):
         )
         == 2
     )
-    assert (
-        get_metric_value(FS_CALLS_TOTAL, operation="ingest_features", status="success")
-        == 1
-    )
+    assert get_metric_value(FS_CALLS_TOTAL, operation="ingest_features", status="success") == 1
 
 
 @pytest.mark.asyncio
@@ -575,10 +532,7 @@ async def test_concurrent_ingest(feature_client):
     mock_df = pd.DataFrame({"col": [1]})
     tasks = [ingest_task(f"mock_fv_{i}", mock_df) for i in range(5)]
     await asyncio.gather(*tasks)
-    assert (
-        get_metric_value(FS_CALLS_TOTAL, operation="ingest_features", status="success")
-        == 5
-    )
+    assert get_metric_value(FS_CALLS_TOTAL, operation="ingest_features", status="success") == 5
 
 
 @pytest.mark.asyncio
@@ -587,10 +541,7 @@ async def test_health_check_success(feature_client):
     await feature_client.connect()
     result = await feature_client.health_check()
     assert result is True
-    assert (
-        get_metric_value(FS_CALLS_TOTAL, operation="health_check", status="success")
-        == 1
-    )
+    assert get_metric_value(FS_CALLS_TOTAL, operation="health_check", status="success") == 1
 
 
 @pytest.mark.asyncio
@@ -626,12 +577,7 @@ async def test_validate_features_basic(feature_client):
     result = await feature_client.validate_features("user_daily_logins")
     assert "freshness_ok" in result
     assert "drift_detected" in result
-    assert (
-        get_metric_value(
-            FS_CALLS_TOTAL, operation="validate_features", status="success"
-        )
-        == 1
-    )
+    assert get_metric_value(FS_CALLS_TOTAL, operation="validate_features", status="success") == 1
 
 
 @pytest.mark.asyncio
@@ -640,13 +586,6 @@ async def test_flag_for_redaction(feature_client):
     await feature_client.connect()
 
     # This should work even without Postgres (falls back to audit logging)
-    await feature_client.flag_for_redaction(
-        "user_daily_logins", "GDPR Right to be Forgotten"
-    )
+    await feature_client.flag_for_redaction("user_daily_logins", "GDPR Right to be Forgotten")
     assert get_metric_value(FS_REDACTIONS_TOTAL, feature_view="user_daily_logins") == 1
-    assert (
-        get_metric_value(
-            FS_CALLS_TOTAL, operation="flag_for_redaction", status="success"
-        )
-        == 1
-    )
+    assert get_metric_value(FS_CALLS_TOTAL, operation="flag_for_redaction", status="success") == 1

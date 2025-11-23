@@ -78,9 +78,7 @@ try:
     _tracer = trace.get_tracer(__name__)
 except ImportError:
     _tracer = None
-    logger.warning(
-        "OpenTelemetry not installed. Tracing will be disabled in runner_backends."
-    )
+    logger.warning("OpenTelemetry not installed. Tracing will be disabled in runner_backends.")
 
 
 # --- External Library Imports (with graceful degradation) ---
@@ -110,9 +108,7 @@ except ImportError:
     k8s_client = None
     k8s_config = None
     K8sApiException = None
-    logger.warning(
-        "kubernetes library not found. KubernetesBackend will be unavailable."
-    )
+    logger.warning("kubernetes library not found. KubernetesBackend will be unavailable.")
 
 try:
     import boto3
@@ -162,9 +158,7 @@ class Backend(ABC):
         self.instance_id = config.instance_id
 
     @abstractmethod
-    async def setup(
-        self, work_dir: Path, custom_setup_script: Optional[str] = None
-    ) -> None:
+    async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         """
         Prepare the backend environment.
         This might involve pulling images, creating containers, or setting up SSH connections.
@@ -172,9 +166,7 @@ class Backend(ABC):
         pass
 
     @abstractmethod
-    async def execute(
-        self, payload: TaskPayload, work_dir: Path, timeout: int
-    ) -> TaskResult:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         """
         Execute the test command in the prepared environment.
         Returns a TaskResult object.
@@ -370,9 +362,7 @@ class LocalBackend(Backend):
         self.instance_id = config.instance_id
         self.start_time = time.time()
 
-    async def setup(
-        self, work_dir: Path, custom_setup_script: Optional[str] = None
-    ) -> None:
+    async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if custom_setup_script:
             setup_script_path = work_dir / "custom_setup.sh"
             try:
@@ -417,9 +407,7 @@ class LocalBackend(Backend):
                     cause=e,
                 )
 
-    async def execute(
-        self, payload: TaskPayload, work_dir: Path, timeout: int
-    ) -> TaskResult:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         # --- REFACTOR FIX: Use subprocess_wrapper ---
         command = payload.command  # Get command from payload
         task_id = payload.task_id  # Get task_id from payload
@@ -481,9 +469,7 @@ class LocalBackend(Backend):
 
     async def recover(self) -> None:
         logger.info("LocalBackend requires no recovery. Resetting health status.")
-        HEALTH_STATUS.labels(
-            component_name="backend_local", instance_id=self.instance_id
-        ).set(1.0)
+        HEALTH_STATUS.labels(component_name="backend_local", instance_id=self.instance_id).set(1.0)
 
     async def close(self) -> None:
         pass  # No resources to close
@@ -505,21 +491,19 @@ class NodeJSBackend(Backend):
                 "status": "unhealthy",
                 "details": "NodeJS executable not found in PATH.",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_nodejs", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_nodejs", instance_id=self.instance_id).set(
+                0
+            )
         else:
             self.health_status = {
                 "status": "healthy",
                 "details": f"NodeJS found at {self.node_path}",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_nodejs", instance_id=self.instance_id
-            ).set(1)
+            HEALTH_STATUS.labels(component_name="backend_nodejs", instance_id=self.instance_id).set(
+                1
+            )
 
-    async def setup(
-        self, work_dir: Path, custom_setup_script: Optional[str] = None
-    ) -> None:
+    async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.node_path:
             # *** FIX: Use string key, not registry value ***
             raise SetupError(
@@ -556,9 +540,7 @@ class NodeJSBackend(Backend):
                     stderr=result["stderr"],
                 )
 
-    async def execute(
-        self, payload: TaskPayload, work_dir: Path, timeout: int
-    ) -> TaskResult:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         """
         Executes the NodeJS command.
 
@@ -603,9 +585,7 @@ class NodeJSBackend(Backend):
         # --- REFACTOR MERGE: Use subprocess_wrapper ---
         try:
             start_time = time.time()
-            run_result = await subprocess_wrapper(
-                run_cmd, timeout=timeout, cwd=work_dir
-            )
+            run_result = await subprocess_wrapper(run_cmd, timeout=timeout, cwd=work_dir)
 
             # Simplified provenance logging for the execution
             add_provenance(
@@ -661,17 +641,17 @@ class NodeJSBackend(Backend):
                 "status": "unhealthy",
                 "details": "NodeJS executable not found in PATH.",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_nodejs", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_nodejs", instance_id=self.instance_id).set(
+                0
+            )
         else:
             self.health_status = {
                 "status": "healthy",
                 "details": f"NodeJS found at {self.node_path}",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_nodejs", instance_id=self.instance_id
-            ).set(1)
+            HEALTH_STATUS.labels(component_name="backend_nodejs", instance_id=self.instance_id).set(
+                1
+            )
 
     async def close(self) -> None:
         pass
@@ -693,21 +673,15 @@ class GoBackend(Backend):
                 "status": "unhealthy",
                 "details": "Go executable not found in PATH.",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_go", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_go", instance_id=self.instance_id).set(0)
         else:
             self.health_status = {
                 "status": "healthy",
                 "details": f"Go found at {self.go_path}",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_go", instance_id=self.instance_id
-            ).set(1)
+            HEALTH_STATUS.labels(component_name="backend_go", instance_id=self.instance_id).set(1)
 
-    async def setup(
-        self, work_dir: Path, custom_setup_script: Optional[str] = None
-    ) -> None:
+    async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.go_path:
             # *** FIX: Use string key, not registry value ***
             raise SetupError(
@@ -746,9 +720,7 @@ class GoBackend(Backend):
                     stderr=result["stderr"],
                 )
 
-    async def execute(
-        self, payload: TaskPayload, work_dir: Path, timeout: int
-    ) -> TaskResult:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         """
         Executes the Go command, compiling it first.
         """
@@ -766,9 +738,7 @@ class GoBackend(Backend):
 
         # Determine if the command is a raw file path (e.g., go test ./...) or a code content
         if not command or len(command) == 1 and Path(command[0]).suffix == ".go":
-            code = command[
-                0
-            ]  # Assume raw code content if only one argument ending in .go
+            code = command[0]  # Assume raw code content if only one argument ending in .go
             code_hash = hashlib.sha256(code.encode()).hexdigest()
             go_file = work_dir / f"main_{code_hash[:10]}.go"
             output_bin = work_dir / f"main_{code_hash[:10]}"
@@ -828,16 +798,12 @@ class GoBackend(Backend):
                     task_id=task_id,
                 )
         else:
-            run_cmd = (
-                command  # Assume standard command list (e.g., ['go', 'test', './...'])
-            )
+            run_cmd = command  # Assume standard command list (e.g., ['go', 'test', './...'])
 
         # --- REFACTOR MERGE: Use subprocess_wrapper ---
         try:
             start_time = time.time()
-            run_result = await subprocess_wrapper(
-                run_cmd, timeout=timeout, cwd=work_dir
-            )
+            run_result = await subprocess_wrapper(run_cmd, timeout=timeout, cwd=work_dir)
             add_provenance(
                 {
                     "action": "go_execute",
@@ -890,17 +856,13 @@ class GoBackend(Backend):
                 "status": "unhealthy",
                 "details": "Go executable not found in PATH.",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_go", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_go", instance_id=self.instance_id).set(0)
         else:
             self.health_status = {
                 "status": "healthy",
                 "details": f"Go found at {self.go_path}",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_go", instance_id=self.instance_id
-            ).set(1)
+            HEALTH_STATUS.labels(component_name="backend_go", instance_id=self.instance_id).set(1)
 
     async def close(self) -> None:
         pass
@@ -923,18 +885,12 @@ class JavaBackend(Backend):
                 "status": "unhealthy",
                 "details": "Java/Javac executable not found in PATH.",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_java", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_java", instance_id=self.instance_id).set(0)
         else:
             self.health_status = {"status": "healthy", "details": "Java/Javac found."}
-            HEALTH_STATUS.labels(
-                component_name="backend_java", instance_id=self.instance_id
-            ).set(1)
+            HEALTH_STATUS.labels(component_name="backend_java", instance_id=self.instance_id).set(1)
 
-    async def setup(
-        self, work_dir: Path, custom_setup_script: Optional[str] = None
-    ) -> None:
+    async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.java_path or not self.javac_path:
             # *** FIX: Use string key, not registry value ***
             raise SetupError(
@@ -985,9 +941,7 @@ class JavaBackend(Backend):
                 cmd="mvn install / gradle build",
             )
 
-    async def execute(
-        self, payload: TaskPayload, work_dir: Path, timeout: int
-    ) -> TaskResult:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         """
         Executes the Java command, compiling it first.
         Note: Assumes `command` is a list of commands, or raw code content for a single file.
@@ -1058,9 +1012,7 @@ class JavaBackend(Backend):
                     cmd=" ".join(compile_cmd),
                 )
             except Exception as e:
-                logger.error(
-                    f"Failed to write or compile Java script: {e}", exc_info=True
-                )
+                logger.error(f"Failed to write or compile Java script: {e}", exc_info=True)
                 # *** FIX: Use string key, not registry value ***
                 raise ExecutionError(
                     "TEST_EXECUTION_FAILED",
@@ -1083,9 +1035,7 @@ class JavaBackend(Backend):
         # --- REFACTOR MERGE: Use subprocess_wrapper ---
         try:
             start_time = time.time()
-            run_result = await subprocess_wrapper(
-                run_cmd, timeout=timeout, cwd=work_dir
-            )
+            run_result = await subprocess_wrapper(run_cmd, timeout=timeout, cwd=work_dir)
             add_provenance(
                 {
                     "action": "java_execute",
@@ -1139,14 +1089,10 @@ class JavaBackend(Backend):
                 "status": "unhealthy",
                 "details": "Java/Javac executable not found in PATH.",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_java", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_java", instance_id=self.instance_id).set(0)
         else:
             self.health_status = {"status": "healthy", "details": "Java/Javac found."}
-            HEALTH_STATUS.labels(
-                component_name="backend_java", instance_id=self.instance_id
-            ).set(1)
+            HEALTH_STATUS.labels(component_name="backend_java", instance_id=self.instance_id).set(1)
 
     async def close(self) -> None:
         pass
@@ -1165,9 +1111,9 @@ class DockerBackend(Backend):
                 "status": "unhealthy",
                 "details": "docker library not installed.",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_docker", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_docker", instance_id=self.instance_id).set(
+                0
+            )
             return
         try:
             self.client = DockerClient.from_env()
@@ -1176,31 +1122,29 @@ class DockerBackend(Backend):
                 "status": "healthy",
                 "details": "Docker daemon is responsive.",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_docker", instance_id=self.instance_id
-            ).set(1)
+            HEALTH_STATUS.labels(component_name="backend_docker", instance_id=self.instance_id).set(
+                1
+            )
         except DockerException as e:
             self.client = None
             self.health_status = {
                 "status": "unhealthy",
                 "details": f"Docker daemon connection failed: {e}",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_docker", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_docker", instance_id=self.instance_id).set(
+                0
+            )
         except Exception as e:
             self.client = None
             self.health_status = {
                 "status": "unhealthy",
                 "details": f"Docker client init failed: {e}",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_docker", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_docker", instance_id=self.instance_id).set(
+                0
+            )
 
-    async def setup(
-        self, work_dir: Path, custom_setup_script: Optional[str] = None
-    ) -> None:
+    async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.client:
             # *** FIX: Use string key, not registry value ***
             raise SetupError(
@@ -1214,9 +1158,7 @@ class DockerBackend(Backend):
             f"DockerBackend setup complete for {work_dir}. Image will be pulled/run in execute."
         )
 
-    async def execute(
-        self, payload: TaskPayload, work_dir: Path, timeout: int
-    ) -> TaskResult:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         command = payload.command  # Get command from payload
         task_id = payload.task_id  # Get task_id from payload
         start_time = time.time()  # Record start time
@@ -1231,9 +1173,7 @@ class DockerBackend(Backend):
             )
 
         # Use a specific, language-appropriate image from config
-        image_name = self.config.framework_images.get(
-            self.config.framework, "python:3.10-slim"
-        )
+        image_name = self.config.framework_images.get(self.config.framework, "python:3.10-slim")
 
         # Resource limits
         resource_limits = {
@@ -1261,12 +1201,8 @@ class DockerBackend(Backend):
 
             result = await asyncio.to_thread(container.wait, timeout=timeout)
 
-            stdout_bytes = await asyncio.to_thread(
-                container.logs, stdout=True, stderr=False
-            )
-            stderr_bytes = await asyncio.to_thread(
-                container.logs, stdout=False, stderr=True
-            )
+            stdout_bytes = await asyncio.to_thread(container.logs, stdout=True, stderr=False)
+            stderr_bytes = await asyncio.to_thread(container.logs, stdout=False, stderr=True)
 
             stdout = stdout_bytes.decode("utf-8", errors="ignore")
             stderr = stderr_bytes.decode("utf-8", errors="ignore")
@@ -1349,9 +1285,9 @@ class DockerBackend(Backend):
                     "status": "unhealthy",
                     "details": f"Docker daemon connection failed: {e}",
                 }
-        HEALTH_STATUS.labels(
-            component_name="backend_docker", instance_id=self.instance_id
-        ).set(1 if self.health_status["status"] == "healthy" else 0)
+        HEALTH_STATUS.labels(component_name="backend_docker", instance_id=self.instance_id).set(
+            1 if self.health_status["status"] == "healthy" else 0
+        )
         return self.health_status
 
     async def recover(self) -> None:
@@ -1435,9 +1371,7 @@ class KubernetesBackend(Backend):
                 component_name="backend_kubernetes", instance_id=self.instance_id
             ).set(0)
 
-    async def setup(
-        self, work_dir: Path, custom_setup_script: Optional[str] = None
-    ) -> None:
+    async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.core_v1 or not self.batch_v1:
             # *** FIX: Use string key, not registry value ***
             raise SetupError(
@@ -1457,13 +1391,9 @@ class KubernetesBackend(Backend):
         for file_path in work_dir.rglob("*"):
             if file_path.is_file():
                 try:
-                    config_map_data[file_path.name] = file_path.read_text(
-                        encoding="utf-8"
-                    )
+                    config_map_data[file_path.name] = file_path.read_text(encoding="utf-8")
                 except Exception as e:
-                    logger.warning(
-                        f"Could not read file {file_path} for ConfigMap: {e}"
-                    )
+                    logger.warning(f"Could not read file {file_path} for ConfigMap: {e}")
 
         config_map = k8s_client.V1ConfigMap(
             api_version="v1",
@@ -1491,18 +1421,12 @@ class KubernetesBackend(Backend):
         # 2. (Optional) Create PVC for outputs if needed
         # self.pvc_name = ...
 
-    async def execute(
-        self, payload: TaskPayload, work_dir: Path, timeout: int
-    ) -> TaskResult:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         command = payload.command
         task_id = payload.task_id
         start_time = time.time()
 
-        if (
-            not self.core_v1
-            or not self.batch_v1
-            or not hasattr(self, "config_map_name")
-        ):
+        if not self.core_v1 or not self.batch_v1 or not hasattr(self, "config_map_name"):
             # *** FIX: Use string key, not registry value ***
             raise ExecutionError(
                 "TEST_EXECUTION_FAILED",
@@ -1512,9 +1436,7 @@ class KubernetesBackend(Backend):
             )
 
         job_name = f"runner-job-{uuid.uuid4().hex[:8]}"
-        image_name = self.config.framework_images.get(
-            self.config.framework, "python:3.10-slim"
-        )
+        image_name = self.config.framework_images.get(self.config.framework, "python:3.10-slim")
 
         # Define container resource limits
         resources = k8s_client.V1ResourceRequirements(
@@ -1530,9 +1452,7 @@ class KubernetesBackend(Backend):
             image=image_name,
             command=command,
             working_dir="/app",
-            volume_mounts=[
-                k8s_client.V1VolumeMount(name="workdir-volume", mount_path="/app")
-            ],
+            volume_mounts=[k8s_client.V1VolumeMount(name="workdir-volume", mount_path="/app")],
             resources=resources,
         )
 
@@ -1680,9 +1600,7 @@ class KubernetesBackend(Backend):
                     namespace=self.namespace,
                 )
             except K8sApiException as e:
-                logger.warning(
-                    f"Failed to delete K8s ConfigMap {self.config_map_name}: {e.reason}"
-                )
+                logger.warning(f"Failed to delete K8s ConfigMap {self.config_map_name}: {e.reason}")
 
     def health(self) -> Dict[str, Any]:
         if not HAS_KUBERNETES:
@@ -1702,15 +1620,13 @@ class KubernetesBackend(Backend):
                     "status": "unhealthy",
                     "details": f"Kubernetes API error: {e.reason}",
                 }
-        HEALTH_STATUS.labels(
-            component_name="backend_kubernetes", instance_id=self.instance_id
-        ).set(1 if self.health_status["status"] == "healthy" else 0)
+        HEALTH_STATUS.labels(component_name="backend_kubernetes", instance_id=self.instance_id).set(
+            1 if self.health_status["status"] == "healthy" else 0
+        )
         return self.health_status
 
     async def recover(self) -> None:
-        logger.info(
-            "Attempting to recover KubernetesBackend by reloading kubeconfig..."
-        )
+        logger.info("Attempting to recover KubernetesBackend by reloading kubeconfig...")
         if HAS_KUBERNETES:
             try:
                 k8s_config.load_kube_config()
@@ -1756,9 +1672,9 @@ class LambdaBackend(Backend):
                 "status": "unhealthy",
                 "details": "boto3 library not installed.",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_lambda", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_lambda", instance_id=self.instance_id).set(
+                0
+            )
             return
         try:
             self.client = boto3.client("lambda", region_name=config.aws_region)
@@ -1767,22 +1683,20 @@ class LambdaBackend(Backend):
                 "status": "healthy",
                 "details": f"AWS Lambda function {self.function_name} is accessible.",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_lambda", instance_id=self.instance_id
-            ).set(1)
+            HEALTH_STATUS.labels(component_name="backend_lambda", instance_id=self.instance_id).set(
+                1
+            )
         except (BotoClientError, Exception) as e:
             self.client = None
             self.health_status = {
                 "status": "unhealthy",
                 "details": f"AWS Lambda client init failed: {e}",
             }
-            HEALTH_STATUS.labels(
-                component_name="backend_lambda", instance_id=self.instance_id
-            ).set(0)
+            HEALTH_STATUS.labels(component_name="backend_lambda", instance_id=self.instance_id).set(
+                0
+            )
 
-    async def setup(
-        self, work_dir: Path, custom_setup_script: Optional[str] = None
-    ) -> None:
+    async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.client:
             # *** FIX: Use string key, not registry value ***
             raise SetupError(
@@ -1795,9 +1709,7 @@ class LambdaBackend(Backend):
             "LambdaBackend setup is handled by the Lambda function's environment. No local setup required."
         )
 
-    async def execute(
-        self, payload: TaskPayload, work_dir: Path, timeout: int
-    ) -> TaskResult:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         command = payload.command
         task_id = payload.task_id
         start_time = time.time()
@@ -1912,9 +1824,9 @@ class LambdaBackend(Backend):
                     "status": "unhealthy",
                     "details": f"AWS Lambda client error: {e}",
                 }
-        HEALTH_STATUS.labels(
-            component_name="backend_lambda", instance_id=self.instance_id
-        ).set(1 if self.health_status["status"] == "healthy" else 0)
+        HEALTH_STATUS.labels(component_name="backend_lambda", instance_id=self.instance_id).set(
+            1 if self.health_status["status"] == "healthy" else 0
+        )
         return self.health_status
 
     async def recover(self) -> None:

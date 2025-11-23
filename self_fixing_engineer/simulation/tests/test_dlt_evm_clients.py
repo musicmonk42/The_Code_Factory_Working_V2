@@ -23,9 +23,7 @@ def mock_off_chain():
     mock.client_type = "MockOffChain"
     mock.save_blob = AsyncMock(return_value="mock_off_chain_id")
     mock.get_blob = AsyncMock(return_value=b"mock_payload_data")
-    mock.health_check = AsyncMock(
-        return_value={"status": True, "message": "OK", "details": {}}
-    )
+    mock.health_check = AsyncMock(return_value={"status": True, "message": "OK", "details": {}})
     mock.close = AsyncMock()
     return mock
 
@@ -66,9 +64,7 @@ def mock_web3_provider(mocker):
         else int(value * (10**18)) if unit == "ether" else value
     )
     mock_w3.from_wei = lambda value, unit: (
-        value / (10**9)
-        if unit == "gwei"
-        else value / (10**18) if unit == "ether" else value
+        value / (10**9) if unit == "gwei" else value / (10**18) if unit == "ether" else value
     )
     mock_w3.to_hex = lambda x: "0x" + x.hex() if isinstance(x, bytes) else str(x)
     mock_w3.to_bytes = lambda hexstr: bytes.fromhex(
@@ -90,9 +86,7 @@ def mock_web3_provider(mocker):
     mock_contract.functions.getLatestCheckpoint = MagicMock(
         return_value=MagicMock(call=MagicMock())
     )
-    mock_contract.functions.readCheckpoint = MagicMock(
-        return_value=MagicMock(call=MagicMock())
-    )
+    mock_contract.functions.readCheckpoint = MagicMock(return_value=MagicMock(call=MagicMock()))
     mock_contract.functions.getCheckpointByHash = MagicMock(
         return_value=MagicMock(call=MagicMock())
     )
@@ -101,9 +95,7 @@ def mock_web3_provider(mocker):
     )
     mock_w3.eth.contract = MagicMock(return_value=mock_contract)
 
-    mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_evm_clients.Web3", return_value=mock_w3
-    )
+    mocker.patch("simulation.plugins.dlt_clients.dlt_evm_clients.Web3", return_value=mock_w3)
     mocker.patch(
         "simulation.plugins.dlt_clients.dlt_evm_clients.HTTPProvider",
         return_value=MagicMock(),
@@ -140,9 +132,7 @@ async def test_evm_init_success(mock_off_chain, mock_web3_provider, mocker):
 
 
 @pytest.mark.asyncio
-async def test_evm_init_with_secrets_provider(
-    mock_off_chain, mock_web3_provider, mocker
-):
+async def test_evm_init_with_secrets_provider(mock_off_chain, mock_web3_provider, mocker):
     """
     Test initialization with secrets provider configuration.
     """
@@ -209,24 +199,19 @@ async def test_evm_init_failure_private_key_source_in_prod(mock_off_chain, mocke
     with pytest.raises(DLTClientValidationError) as excinfo:
         EthereumClientWrapper(mock_config, mock_off_chain)
 
-    assert (
-        "In PRODUCTION_MODE, private_key must be loaded via 'secrets_provider'"
-        in str(excinfo.value)
+    assert "In PRODUCTION_MODE, private_key must be loaded via 'secrets_provider'" in str(
+        excinfo.value
     )
 
 
 @pytest.mark.asyncio
-async def test_evm_init_secrets_backend_unavailable(
-    mock_off_chain, mock_web3_provider, mocker
-):
+async def test_evm_init_secrets_backend_unavailable(mock_off_chain, mock_web3_provider, mocker):
     """
     Test that the client fails if a configured secrets backend is unavailable.
     """
     mocker.patch("os.path.exists", return_value=True)
     mocker.patch("builtins.open", mocker.mock_open(read_data="[]"))
-    mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_evm_clients.AWS_SECRETS_AVAILABLE", False
-    )
+    mocker.patch("simulation.plugins.dlt_clients.dlt_evm_clients.AWS_SECRETS_AVAILABLE", False)
 
     # Set environment to avoid validation error
     mocker.patch.dict(os.environ, {"ETHEREUM_PRIVATE_KEY": "0x" + "c" * 64})

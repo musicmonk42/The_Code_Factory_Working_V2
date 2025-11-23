@@ -14,9 +14,7 @@ sys.modules["envs.evolution"] = MagicMock()
 # Mock ArrayBackend
 mock_array_backend = MagicMock()
 mock_array_backend.array = lambda x: np.array(x)
-mock_array_backend.asnumpy = lambda x: (
-    np.array(x) if not isinstance(x, np.ndarray) else x
-)
+mock_array_backend.asnumpy = lambda x: (np.array(x) if not isinstance(x, np.ndarray) else x)
 sys.modules["arbiter.arbiter_array_backend"] = MagicMock()
 sys.modules["arbiter.arbiter_array_backend"].ConcreteArrayBackend = MagicMock(
     return_value=mock_array_backend
@@ -52,9 +50,7 @@ def optimizer(mock_dependencies):
     """Create optimizer without background tasks."""
     settings, plugin_registry, logger = mock_dependencies
 
-    opt = DecisionOptimizer(
-        plugin_registry=plugin_registry, settings=settings, logger=logger
-    )
+    opt = DecisionOptimizer(plugin_registry=plugin_registry, settings=settings, logger=logger)
 
     # Disable background tasks
     opt._refresh_task = None
@@ -146,9 +142,7 @@ async def test_allocate_resources_simple(optimizer):
     optimizer.human_in_loop = None
 
     agents = [Agent(id="a1", skills={"python"}, max_compute=10.0, current_load=0.0)]
-    tasks = [
-        Task(id="t1", priority=1.0, required_skills={"python"}, estimated_compute=2.0)
-    ]
+    tasks = [Task(id="t1", priority=1.0, required_skills={"python"}, estimated_compute=2.0)]
 
     with patch(
         "arbiter.decision_optimizer.get_system_metrics_async",

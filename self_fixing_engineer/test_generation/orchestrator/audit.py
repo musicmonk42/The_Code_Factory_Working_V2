@@ -123,9 +123,7 @@ async def audit_event(
 
     # Serialize; if this fails, the test expects an ERROR log and graceful return.
     try:
-        line = json.dumps(
-            log_entry, default=_json_serializable_default, ensure_ascii=False
-        )
+        line = json.dumps(log_entry, default=_json_serializable_default, ensure_ascii=False)
     except Exception as e:
         _logger.error("Failed to serialize audit log for event '%s': %s", event_type, e)
         return

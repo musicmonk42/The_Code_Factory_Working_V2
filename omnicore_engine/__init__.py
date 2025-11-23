@@ -16,9 +16,7 @@ logger = logging.getLogger("omnicore_engine_init")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logger.addHandler(handler)
 
 # Avoid importing submodules at package import time to prevent heavy initialization.

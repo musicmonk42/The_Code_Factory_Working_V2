@@ -276,9 +276,7 @@ class TestLLMClient:
     @pytest.mark.asyncio
     async def test_ollama_generate_success(self):
         """Test successful Ollama text generation."""
-        with patch(
-            "arbiter.plugins.llm_client.LLMClient._get_ollama_session"
-        ) as mock_session:
+        with patch("arbiter.plugins.llm_client.LLMClient._get_ollama_session") as mock_session:
             mock_session_obj = AsyncMock()
             mock_session.return_value = mock_session_obj
 
@@ -362,9 +360,7 @@ class TestLoadBalancedLLMClient:
 
     def test_init_no_providers(self):
         """Test initialization fails with empty provider config."""
-        with pytest.raises(
-            ValueError, match="No LLM providers successfully initialized"
-        ):
+        with pytest.raises(ValueError, match="No LLM providers successfully initialized"):
             LoadBalancedLLMClient([])
 
     def test_init_invalid_provider_config(self, mock_providers):
@@ -374,9 +370,7 @@ class TestLoadBalancedLLMClient:
             {"provider": "openai"},  # Missing model
         ]
 
-        with pytest.raises(
-            ValueError, match="No LLM providers successfully initialized"
-        ):
+        with pytest.raises(ValueError, match="No LLM providers successfully initialized"):
             LoadBalancedLLMClient(configs)
 
     def test_init_success(self, providers_config, mock_providers):
@@ -441,9 +435,7 @@ class TestLoadBalancedLLMClient:
 
         # Simulate multiple failures for openai
         for _ in range(3):
-            lb_client._update_provider_status(
-                "openai", success=False, is_retryable_error=False
-            )
+            lb_client._update_provider_status("openai", success=False, is_retryable_error=False)
 
         assert lb_client.provider_status["openai"]["status"] == "unavailable"
         assert lb_client.provider_status["openai"]["consecutive_failures"] == 3
@@ -469,20 +461,14 @@ class TestLoadBalancedLLMClient:
 
         # Mock all providers to fail
         for provider in lb_client.providers:
-            with patch.object(
-                provider, "_handle_llm_call", side_effect=APIError("Failed")
-            ):
+            with patch.object(provider, "_handle_llm_call", side_effect=APIError("Failed")):
                 pass
 
         with patch.object(
             lb_client.providers[0], "_handle_llm_call", side_effect=APIError("Failed")
-        ), patch.object(
-            lb_client.providers[1], "_handle_llm_call", side_effect=APIError("Failed")
-        ):
+        ), patch.object(lb_client.providers[1], "_handle_llm_call", side_effect=APIError("Failed")):
 
-            with pytest.raises(
-                LLMClientError, match="All configured LLM providers failed"
-            ):
+            with pytest.raises(LLMClientError, match="All configured LLM providers failed"):
                 await lb_client.generate_text("Test prompt")
 
     @pytest.mark.asyncio

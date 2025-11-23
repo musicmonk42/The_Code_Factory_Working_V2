@@ -41,9 +41,7 @@ class DummyKnowledgeGraphClient:
     """A stub for the Knowledge Graph client."""
 
     async def update_module_metrics(self, *args, **kwargs):
-        log(
-            f"Using DummyKnowledgeGraphClient. Metrics updated: {kwargs}", level="DEBUG"
-        )
+        log(f"Using DummyKnowledgeGraphClient. Metrics updated: {kwargs}", level="DEBUG")
         pass
 
 

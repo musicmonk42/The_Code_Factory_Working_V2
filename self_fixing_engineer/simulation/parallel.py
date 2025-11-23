@@ -127,9 +127,7 @@ else:
 _metrics_lock = threading.Lock()
 
 
-def get_or_create_metric(
-    metric_type, name, documentation, labelnames=None, buckets=None
-):
+def get_or_create_metric(metric_type, name, documentation, labelnames=None, buckets=None):
     """Get or create a metric, handling both real and mocked metric types"""
     labelnames = labelnames or []
 
@@ -140,9 +138,7 @@ def get_or_create_metric(
             return metric_type(name, documentation, labelnames)
         else:
             # If it's not callable and not a type, something is wrong
-            raise TypeError(
-                f"metric_type must be a type or callable, got {type(metric_type)}"
-            )
+            raise TypeError(f"metric_type must be a type or callable, got {type(metric_type)}")
 
     # Rest of original logic...
     if name in _metrics_registry._names_to_collectors:
@@ -194,9 +190,7 @@ if PROMETHEUS_AVAILABLE:
         ),
     }
 else:
-    parallel_logger.warning(
-        "Prometheus client not available. Metrics will not be collected."
-    )
+    parallel_logger.warning("Prometheus client not available. Metrics will not be collected.")
     PARALLEL_METRICS = {}
 
 # --- Pydantic Models for Configuration ---
@@ -228,20 +222,13 @@ if PYDANTIC_AVAILABLE:
         default_backend: str = "local_asyncio"
         max_local_workers: Optional[int] = None
         rl_tuner: RLTunerConfig = Field(default_factory=RLTunerConfig)
-        backend_configs: BackendSpecificConfig = Field(
-            default_factory=BackendSpecificConfig
-        )
+        backend_configs: BackendSpecificConfig = Field(default_factory=BackendSpecificConfig)
         secrets: SecretsConfig = Field(default_factory=SecretsConfig)
 
         @model_validator(mode="after")
         def validate_backend_configs(self):
-            if (
-                self.default_backend == "kubernetes"
-                and not self.backend_configs.kubernetes_image
-            ):
-                raise ValueError(
-                    "Kubernetes image must be specified if it's the default backend."
-                )
+            if self.default_backend == "kubernetes" and not self.backend_configs.kubernetes_image:
+                raise ValueError("Kubernetes image must be specified if it's the default backend.")
             if self.default_backend == "aws_batch" and (
                 not self.backend_configs.aws_batch_job_queue
                 or not self.backend_configs.aws_batch_job_definition
@@ -269,9 +256,7 @@ if PYDANTIC_AVAILABLE:
                 sys.exit(1)
 
 else:
-    parallel_logger.warning(
-        "Pydantic not available. Configuration validation will be skipped."
-    )
+    parallel_logger.warning("Pydantic not available. Configuration validation will be skipped.")
 
     class ParallelConfig:
         def __init__(self):
@@ -314,9 +299,7 @@ else:
 
         @classmethod
         def load_from_yaml(cls, file_path: str):
-            parallel_logger.warning(
-                "Pydantic not available. Skipping configuration validation."
-            )
+            parallel_logger.warning("Pydantic not available. Skipping configuration validation.")
             try:
                 with open(file_path, "r") as f:
                     config_data = yaml.safe_load(f)
@@ -353,9 +336,7 @@ PARALLEL_CONFIG_FILE = os.path.join(
 )
 os.makedirs(os.path.dirname(PARALLEL_CONFIG_FILE), exist_ok=True)
 if not os.path.exists(PARALLEL_CONFIG_FILE):
-    parallel_logger.info(
-        f"Creating a default parallel config file at {PARALLEL_CONFIG_FILE}"
-    )
+    parallel_logger.info(f"Creating a default parallel config file at {PARALLEL_CONFIG_FILE}")
     default_config_content = {
         "default_backend": "local_asyncio",
         "max_local_workers": None,
@@ -410,14 +391,10 @@ _backend_availability: Dict[str, bool] = {}
 def register_backend(name: str, is_available: bool = True):
     def decorator(func: Callable):
         if name in _parallel_backends:
-            parallel_logger.warning(
-                f"Parallel backend '{name}' already registered. Overwriting."
-            )
+            parallel_logger.warning(f"Parallel backend '{name}' already registered. Overwriting.")
         _parallel_backends[name] = func
         _backend_availability[name] = is_available
-        parallel_logger.info(
-            f"Registered parallel backend: {name} (Available: {is_available})"
-        )
+        parallel_logger.info(f"Registered parallel backend: {name} (Available: {is_available})")
         if PROMETHEUS_AVAILABLE:
             PARALLEL_METRICS["backend_availability"].labels(backend_name=name).set(
                 1 if is_available else 0
@@ -494,9 +471,7 @@ class RayRLlibConcurrencyTuner:
         try:
             if os.path.exists(os.path.join(self.checkpoint_dir, "policy_state.pkl")):
                 self.policy = Policy.from_checkpoint(self.checkpoint_dir)
-                parallel_logger.info(
-                    f"Loaded RL policy from checkpoint: {self.checkpoint_dir}"
-                )
+                parallel_logger.info(f"Loaded RL policy from checkpoint: {self.checkpoint_dir}")
             else:
                 raise FileNotFoundError("No valid checkpoint found.")
         except Exception as e:
@@ -513,9 +488,7 @@ class RayRLlibConcurrencyTuner:
                 try:
                     self.last_heartbeat_time = time.time()
                     if PROMETHEUS_AVAILABLE:
-                        PARALLEL_METRICS["rl_tuner_heartbeat"].set(
-                            self.last_heartbeat_time
-                        )
+                        PARALLEL_METRICS["rl_tuner_heartbeat"].set(self.last_heartbeat_time)
                         PARALLEL_METRICS["rl_tuner_status"].set(1)
 
                     self.stop_event.wait(self.config.training_interval_seconds)
@@ -533,14 +506,10 @@ class RayRLlibConcurrencyTuner:
                     self.policy.learn_on_batch(experiences)
 
                     self.policy.export_checkpoint(self.checkpoint_dir)
-                    parallel_logger.info(
-                        f"RL policy checkpoint saved to {self.checkpoint_dir}"
-                    )
+                    parallel_logger.info(f"RL policy checkpoint saved to {self.checkpoint_dir}")
 
                 except Exception as e:
-                    parallel_logger.error(
-                        f"Error in RL training loop: {e}", exc_info=True
-                    )
+                    parallel_logger.error(f"Error in RL training loop: {e}", exc_info=True)
                     alert_ops(f"RL Training Loop Error: {e}", level="ERROR")
                     if PROMETHEUS_AVAILABLE:
                         PARALLEL_METRICS["rl_tuner_status"].set(0)
@@ -578,9 +547,7 @@ class RayRLlibConcurrencyTuner:
                     )
                     experiences["terminateds"].append(True)
                 except (json.JSONDecodeError, KeyError, TypeError):
-                    parallel_logger.warning(
-                        f"Skipping malformed log line: {line.strip()}"
-                    )
+                    parallel_logger.warning(f"Skipping malformed log line: {line.strip()}")
                     continue
 
             if experiences["obs"]:
@@ -608,10 +575,7 @@ class RayRLlibConcurrencyTuner:
                 PARALLEL_METRICS["rl_tuner_status"].set(0)
             return False
 
-        if (
-            time.time() - self.last_heartbeat_time
-            > self.config.heartbeat_timeout_seconds
-        ):
+        if time.time() - self.last_heartbeat_time > self.config.heartbeat_timeout_seconds:
             parallel_logger.warning(
                 f"RL training thread heartbeat is stale (last update {time.time() - self.last_heartbeat_time:.2f}s ago)."
             )
@@ -645,20 +609,14 @@ class RayRLlibConcurrencyTuner:
         )
 
         action, _, _ = self.policy.compute_single_action(obs, explore=True)
-        concurrency = int(
-            np.clip(action + 1, 1, min(num_tasks, self.config.max_concurrency_limit))
-        )
+        concurrency = int(np.clip(action + 1, 1, min(num_tasks, self.config.max_concurrency_limit)))
 
         self.last_obs = obs
         self.last_action = concurrency
         return concurrency
 
     def record_feedback(self, throughput: float, failures: int):
-        if (
-            self.last_obs is not None
-            and self.last_action is not None
-            and self.policy is not None
-        ):
+        if self.last_obs is not None and self.last_action is not None and self.policy is not None:
             reward = throughput - (failures * 2.0)
 
             log_entry = {
@@ -688,9 +646,7 @@ class RayRLlibConcurrencyTuner:
         if self.training_thread and self.training_thread.is_alive():
             self.training_thread.join(timeout=5)
             if self.training_thread.is_alive():
-                parallel_logger.warning(
-                    "RL training thread did not shut down gracefully."
-                )
+                parallel_logger.warning("RL training thread did not shut down gracefully.")
         if PROMETHEUS_AVAILABLE:
             PARALLEL_METRICS["rl_tuner_status"].set(0)
 
@@ -746,20 +702,16 @@ class ProgressReporter:
             if success:
                 self.completed_tasks += 1
                 if PROMETHEUS_AVAILABLE:
-                    PARALLEL_METRICS["simulation_tasks_total"].labels(
-                        status="completed"
-                    ).inc()
+                    PARALLEL_METRICS["simulation_tasks_total"].labels(status="completed").inc()
             else:
                 self.failed_tasks += 1
                 if PROMETHEUS_AVAILABLE:
-                    PARALLEL_METRICS["simulation_tasks_total"].labels(
-                        status="failed"
-                    ).inc()
+                    PARALLEL_METRICS["simulation_tasks_total"].labels(status="failed").inc()
 
             if PROMETHEUS_AVAILABLE and job_latency is not None:
-                PARALLEL_METRICS["job_latency"].labels(
-                    backend_name="local_asyncio"
-                ).observe(job_latency)
+                PARALLEL_METRICS["job_latency"].labels(backend_name="local_asyncio").observe(
+                    job_latency
+                )
 
             done = self.completed_tasks + self.failed_tasks
             percentage = (done / self.total_tasks) * 100
@@ -767,14 +719,8 @@ class ProgressReporter:
             elapsed = time.time() - self.start_time
             throughput = self.completed_tasks / elapsed if elapsed > 0 else 0
 
-            eta_seconds = (
-                ((self.total_tasks - done) / throughput) if throughput > 0 else 0
-            )
-            eta = (
-                time.strftime("%H:%M:%S", time.gmtime(eta_seconds))
-                if throughput > 0
-                else "N/A"
-            )
+            eta_seconds = ((self.total_tasks - done) / throughput) if throughput > 0 else 0
+            eta = time.strftime("%H:%M:%S", time.gmtime(eta_seconds)) if throughput > 0 else "N/A"
 
             parallel_logger.info(
                 f"Progress({self.job_id}): {done}/{self.total_tasks} ({percentage:.1f}%) | "
@@ -822,18 +768,14 @@ async def execute_local_asyncio(
                 if mem_info_end.rss - mem_info_start.rss > 2 * 1024**3:
                     raise RuntimeError("Task exceeded memory limit.")
 
-                reporter.task_completed(
-                    success=True, job_latency=time.time() - start_task_time
-                )
+                reporter.task_completed(success=True, job_latency=time.time() - start_task_time)
                 return result
             except Exception as e:
                 parallel_logger.error(
                     f"Task failed for config {config.get('id', 'N/A')}: {e}",
                     exc_info=True,
                 )
-                reporter.task_completed(
-                    success=False, job_latency=time.time() - start_task_time
-                )
+                reporter.task_completed(success=False, job_latency=time.time() - start_task_time)
                 return {"status": "FAILED", "error": str(e), "config": config}
 
     tasks = [run_task(conf) for conf in configurations]
@@ -850,9 +792,7 @@ async def execute_kubernetes(
     **kwargs,
 ) -> List[Dict[str, Any]]:
     if not K8S_AVAILABLE:
-        raise RuntimeError(
-            "Kubernetes client not installed. Cannot use Kubernetes backend."
-        )
+        raise RuntimeError("Kubernetes client not installed. Cannot use Kubernetes backend.")
 
     try:
         try:
@@ -887,9 +827,7 @@ async def execute_kubernetes(
         job_name = f"sim-job-{job_id}"
 
         command = cfg.get("command", ["python", "/app/runner.py"])
-        env_vars = [
-            k8s_client.V1EnvVar(name="SIMULATION_CONFIG_JSON", value=json.dumps(cfg))
-        ]
+        env_vars = [k8s_client.V1EnvVar(name="SIMULATION_CONFIG_JSON", value=json.dumps(cfg))]
         resources = cfg.get(
             "resources",
             {
@@ -938,9 +876,7 @@ async def execute_kubernetes(
                         namespace, label_selector=f"job-name={job_name}", limit=1
                     )
                     if not pod_list.items:
-                        parallel_logger.error(
-                            f"Could not find pod for successful job {job_name}"
-                        )
+                        parallel_logger.error(f"Could not find pod for successful job {job_name}")
                         reporter.task_completed(success=False)
                         return {
                             "status": "RESULT_ERROR",
@@ -976,12 +912,8 @@ async def execute_kubernetes(
                         if job_status.status.conditions
                         else "Unknown failure"
                     )
-                    reporter.task_completed(
-                        success=False, job_latency=time.time() - start_job_time
-                    )
-                    parallel_logger.warning(
-                        f"Kubernetes Job '{job_name}' failed. Reason: {reason}"
-                    )
+                    reporter.task_completed(success=False, job_latency=time.time() - start_job_time)
+                    parallel_logger.warning(f"Kubernetes Job '{job_name}' failed. Reason: {reason}")
                     return {
                         "status": "FAILED",
                         "job_name": job_name,
@@ -989,24 +921,18 @@ async def execute_kubernetes(
                         "config": cfg,
                     }
 
-            reporter.task_completed(
-                success=False, job_latency=time.time() - start_job_time
-            )
+            reporter.task_completed(success=False, job_latency=time.time() - start_job_time)
             parallel_logger.warning(
                 f"Kubernetes Job '{job_name}' timed out after {job_timeout} seconds."
             )
             return {"status": "TIMEOUT", "job_name": job_name, "config": cfg}
 
         except K8sApiException as e:
-            reporter.task_completed(
-                success=False, job_latency=time.time() - start_job_time
-            )
+            reporter.task_completed(success=False, job_latency=time.time() - start_job_time)
             parallel_logger.error(
                 f"Kubernetes API error for job {job_name}: {e.reason}", exc_info=True
             )
-            alert_ops(
-                f"Kubernetes API error for job {job_name}: {e.reason}", level="ERROR"
-            )
+            alert_ops(f"Kubernetes API error for job {job_name}: {e.reason}", level="ERROR")
             if AUDIT_LOGGER_AVAILABLE:
                 dlt_logger = DLTLogger.from_environment()
                 await dlt_logger.add_entry(
@@ -1022,15 +948,11 @@ async def execute_kubernetes(
                 "config": cfg,
             }
         except Exception as e:
-            reporter.task_completed(
-                success=False, job_latency=time.time() - start_job_time
-            )
+            reporter.task_completed(success=False, job_latency=time.time() - start_job_time)
             parallel_logger.error(
                 f"Unexpected error running K8s job {job_name}: {e}", exc_info=True
             )
-            alert_ops(
-                f"Unexpected error running K8s job {job_name}: {e}", level="ERROR"
-            )
+            alert_ops(f"Unexpected error running K8s job {job_name}: {e}", level="ERROR")
             if AUDIT_LOGGER_AVAILABLE:
                 dlt_logger = DLTLogger.from_environment()
                 await dlt_logger.add_entry(
@@ -1063,9 +985,7 @@ async def execute_aws_batch(
         raise RuntimeError("Boto3 is not installed. Cannot use AWS Batch backend.")
 
     job_queue = kwargs.get("job_queue", config.backend_configs.aws_batch_job_queue)
-    job_definition = kwargs.get(
-        "job_definition", config.backend_configs.aws_batch_job_definition
-    )
+    job_definition = kwargs.get("job_definition", config.backend_configs.aws_batch_job_definition)
     s3_bucket = kwargs.get("s3_bucket", config.backend_configs.aws_batch_s3_bucket)
 
     if not all([job_queue, job_definition, s3_bucket]):
@@ -1123,9 +1043,7 @@ async def execute_aws_batch(
         except ClientError as e:
             reporter.task_completed(success=False)
             parallel_logger.error(f"Failed to submit AWS Batch job for config {i}: {e}")
-            alert_ops(
-                f"Failed to submit AWS Batch job for config {i}: {e}", level="ERROR"
-            )
+            alert_ops(f"Failed to submit AWS Batch job for config {i}: {e}", level="ERROR")
             if AUDIT_LOGGER_AVAILABLE:
                 dlt_logger = DLTLogger.from_environment()
                 await dlt_logger.add_entry(
@@ -1162,9 +1080,7 @@ async def execute_aws_batch(
                                 agent_id="parallel_aws",
                             )
                     except (ClientError, json.JSONDecodeError) as e:
-                        results.append(
-                            {"status": "RESULT_ERROR", "error": str(e), "jobId": job_id}
-                        )
+                        results.append({"status": "RESULT_ERROR", "error": str(e), "jobId": job_id})
                         reporter.task_completed(success=False)
                         parallel_logger.error(
                             f"Failed to retrieve/parse result from S3 for job {job_id}: {e}"
@@ -1184,13 +1100,9 @@ async def execute_aws_batch(
                 elif job["status"] == "FAILED":
                     _, cfg = submitted_jobs.pop(job_id)
                     reason = job.get("statusReason", "Unknown failure reason.")
-                    results.append(
-                        {"status": "FAILED", "reason": reason, "config": cfg}
-                    )
+                    results.append({"status": "FAILED", "reason": reason, "config": cfg})
                     reporter.task_completed(success=False)
-                    parallel_logger.warning(
-                        f"AWS Batch Job '{job_id}' failed. Reason: {reason}"
-                    )
+                    parallel_logger.warning(f"AWS Batch Job '{job_id}' failed. Reason: {reason}")
                     alert_ops(
                         f"AWS Batch Job '{job_id}' failed. Reason: {reason}",
                         level="WARNING",
@@ -1223,9 +1135,7 @@ async def execute_aws_batch(
             for job_id in job_ids_to_check:
                 if job_id in submitted_jobs:
                     _, cfg = submitted_jobs.pop(job_id)
-                    results.append(
-                        {"status": "MONITORING_ERROR", "jobId": job_id, "config": cfg}
-                    )
+                    results.append({"status": "MONITORING_ERROR", "jobId": job_id, "config": cfg})
                     reporter.task_completed(success=False)
 
     if submitted_jobs:
@@ -1258,9 +1168,7 @@ async def run_parallel_simulations(
     selected_backend = parallel_backend or GLOBAL_PARALLEL_CONFIG.default_backend
     executor = _parallel_backends.get(selected_backend)
 
-    available_backends = [
-        name for name, is_avail in _backend_availability.items() if is_avail
-    ]
+    available_backends = [name for name, is_avail in _backend_availability.items() if is_avail]
     if not available_backends:
         alert_ops(
             "No parallel execution backends are available. Aborting startup.",
@@ -1290,9 +1198,7 @@ async def run_parallel_simulations(
             )
 
     if PROMETHEUS_AVAILABLE:
-        PARALLEL_METRICS["backend_usage_total"].labels(
-            backend_name=selected_backend
-        ).inc()
+        PARALLEL_METRICS["backend_usage_total"].labels(backend_name=selected_backend).inc()
 
     parallel_logger.info(
         f"Executing {len(configurations)} tasks with backend: '{selected_backend}'."
@@ -1333,9 +1239,7 @@ if __name__ == "__main__":
             type=str,
             help="Backend to use (e.g., local_asyncio, kubernetes, aws_batch). Overrides default config.",
         )
-        parser.add_argument(
-            "--tasks", type=int, default=10, help="Number of tasks to run"
-        )
+        parser.add_argument("--tasks", type=int, default=10, help="Number of tasks to run")
         parser.add_argument(
             "--fail-rate",
             type=float,
@@ -1355,12 +1259,8 @@ if __name__ == "__main__":
                 }
             )
 
-        backend_to_use = (
-            args.backend if args.backend else GLOBAL_PARALLEL_CONFIG.default_backend
-        )
-        parallel_logger.info(
-            f"Starting {args.tasks} simulations with backend: {backend_to_use}"
-        )
+        backend_to_use = args.backend if args.backend else GLOBAL_PARALLEL_CONFIG.default_backend
+        parallel_logger.info(f"Starting {args.tasks} simulations with backend: {backend_to_use}")
 
         results = await run_parallel_simulations(
             simulation_function=example_simulation,

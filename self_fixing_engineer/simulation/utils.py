@@ -61,9 +61,7 @@ try:
     logger.info("Tenacity library is available, retries are enabled.")
 except ImportError:
     tenacity_available = False
-    logger.warning(
-        "Tenacity library not found. Retries are disabled for retryable functions."
-    )
+    logger.warning("Tenacity library not found. Retries are disabled for retryable functions.")
 
     def retry(*args, **kwargs):
         def wrap(f):
@@ -117,17 +115,11 @@ if config_file.exists():
     config.read(config_file)
 try:
     DEFAULT_CHUNK_SIZE = int(
-        os.getenv(
-            "UTILS_CHUNK_SIZE", config.getint("utils", "chunk_size", fallback=8192)
-        )
+        os.getenv("UTILS_CHUNK_SIZE", config.getint("utils", "chunk_size", fallback=8192))
     )
-    DEFAULT_WORKERS = int(
-        os.getenv("UTILS_WORKERS", config.getint("utils", "workers", fallback=4))
-    )
+    DEFAULT_WORKERS = int(os.getenv("UTILS_WORKERS", config.getint("utils", "workers", fallback=4)))
     DEFAULT_DIFF_CHUNK = int(
-        os.getenv(
-            "UTILS_DIFF_CHUNK", config.getint("utils", "diff_chunk_size", fallback=1000)
-        )
+        os.getenv("UTILS_DIFF_CHUNK", config.getint("utils", "diff_chunk_size", fallback=1000))
     )
     if DEFAULT_CHUNK_SIZE <= 0 or DEFAULT_WORKERS <= 0 or DEFAULT_DIFF_CHUNK <= 0:
         raise ValueError("Configuration values must be positive integers")
@@ -164,9 +156,7 @@ def _load_config() -> UtilsConfig:
             )
 
     defaults = UtilsConfig()
-    default_keys = list(
-        getattr(defaults, "model_dump", lambda: defaults.__dict__)().keys()
-    )
+    default_keys = list(getattr(defaults, "model_dump", lambda: defaults.__dict__)().keys())
 
     for key in default_keys:
         env_var = os.getenv(f"SFE_{key.upper()}")
@@ -241,9 +231,7 @@ def get_or_create_metric(
             return existing
         try:
             if metric_type is Counter:
-                return Counter(
-                    cname, documentation, labelnames=labelnames, registry=registry
-                )
+                return Counter(cname, documentation, labelnames=labelnames, registry=registry)
             elif metric_type is Histogram or metric_type.__name__ == "Histogram":
                 if not hasattr(metric_type, "DEFAULT_BUCKETS"):
                     buckets = buckets or (
@@ -273,9 +261,7 @@ def get_or_create_metric(
                     registry=registry,
                 )
             elif metric_type is Gauge:
-                return Gauge(
-                    cname, documentation, labelnames=labelnames, registry=registry
-                )
+                return Gauge(cname, documentation, labelnames=labelnames, registry=registry)
             else:
                 raise ValueError(f"Unsupported metric type: {metric_type}")
         except ValueError:
@@ -285,15 +271,9 @@ def get_or_create_metric(
             raise
 
 
-hash_counter = get_or_create_metric(
-    Counter, "utils_hash_file", "File hash computations"
-)
-diff_counter = get_or_create_metric(
-    Counter, "utils_file_diff", "File diff computations"
-)
-save_counter = get_or_create_metric(
-    Counter, "utils_save_result", "Simulation results saved"
-)
+hash_counter = get_or_create_metric(Counter, "utils_hash_file", "File hash computations")
+diff_counter = get_or_create_metric(Counter, "utils_file_diff", "File diff computations")
+save_counter = get_or_create_metric(Counter, "utils_save_result", "Simulation results saved")
 
 FILE_OPERATIONS = get_or_create_metric(
     Counter, "utils_file_operations", "Total file operations", ["operation", "status"]
@@ -304,9 +284,7 @@ PROVENANCE_LOGS = get_or_create_metric(
 
 
 # --- Security and Sanitization ---
-def sanitize_path(
-    path: Union[str, Path], base_dir: Optional[Union[str, Path]] = None
-) -> Path:
+def sanitize_path(path: Union[str, Path], base_dir: Optional[Union[str, Path]] = None) -> Path:
     raw = Path(path)
     if base_dir and not raw.is_absolute():
         p = (Path(base_dir) / raw).resolve()
@@ -361,9 +339,7 @@ def redact_sensitive(text: str) -> str:
     }
     redacted = text
     for key, pattern in patterns.items():
-        redacted = re.sub(
-            pattern, f"[{key.upper()}_SCRUBBED]", redacted, flags=re.IGNORECASE
-        )
+        redacted = re.sub(pattern, f"[{key.upper()}_SCRUBBED]", redacted, flags=re.IGNORECASE)
     return redacted
 
 
@@ -406,9 +382,7 @@ class ScalableProvenanceLogger:
     def __init__(self, storage_path: str = None):
         self.provenance_file = Path(
             storage_path
-            or os.environ.get(
-                "PROVENANCE_LOG_PATH", getattr(CONFIG, "provenance_log_path")
-            )
+            or os.environ.get("PROVENANCE_LOG_PATH", getattr(CONFIG, "provenance_log_path"))
         ).resolve()
         self._lock = threading.Lock()
         self._logger = logging.getLogger("simulation.provenance")
@@ -417,9 +391,7 @@ class ScalableProvenanceLogger:
         if AUDIT_LOGGER_AVAILABLE:
             try:
                 self.central_audit_logger = AuditLogger.from_environment()
-                self._logger.info(
-                    "Delegating provenance logging to central AuditLogger."
-                )
+                self._logger.info("Delegating provenance logging to central AuditLogger.")
             except Exception as e:
                 self._logger.warning(
                     f"Could not initialize central AuditLogger: {e}. Falling back to local file logging for provenance."
@@ -442,18 +414,12 @@ class ScalableProvenanceLogger:
         self._last_audit_entry_hash = current_event_hash
         if self.central_audit_logger:
             try:
-                parts = str(scrubbed_event.get("event_type", "unknown_event")).split(
-                    "."
-                )
+                parts = str(scrubbed_event.get("event_type", "unknown_event")).split(".")
                 audit_kind = parts[0]
                 audit_name = ".".join(parts[1:]) if len(parts) > 1 else ""
-                audit_details = scrubbed_event.get(
-                    "payload", scrubbed_event.get("details", {})
-                )
+                audit_details = scrubbed_event.get("payload", scrubbed_event.get("details", {}))
                 audit_agent_id = (
-                    audit_details.get("agent_id")
-                    if isinstance(audit_details, dict)
-                    else None
+                    audit_details.get("agent_id") if isinstance(audit_details, dict) else None
                 ) or "simulation_utils"
                 _fire_and_forget(
                     self.central_audit_logger.add_entry(
@@ -501,9 +467,7 @@ def _hash_key(path: str) -> Tuple[int, int]:
 
 
 @lru_cache(maxsize=128)
-def _compute_hash_cached(
-    path: str, algo: str, chunk_size: int, mtime_ns: int, size: int
-) -> str:
+def _compute_hash_cached(path: str, algo: str, chunk_size: int, mtime_ns: int, size: int) -> str:
     """
     Compute file hash with caching based on mtime and size.
 
@@ -582,9 +546,7 @@ def find_files_by_pattern(root: Union[str, Path], pattern: str) -> List[Path]:
     return unique
 
 
-def load_artifact(
-    path: Union[str, Path], max_bytes: int = 100 * 1024 * 1024
-) -> Optional[str]:
+def load_artifact(path: Union[str, Path], max_bytes: int = 100 * 1024 * 1024) -> Optional[str]:
     p = sanitize_path(path)
     if not p.exists():
         logger.error(f"File not found: {p}")
@@ -593,9 +555,7 @@ def load_artifact(
     try:
         size = p.stat().st_size
         if size > max_bytes:
-            logger.warning(
-                f"File {p} too large to load ({size} bytes > {max_bytes} bytes limit)."
-            )
+            logger.warning(f"File {p} too large to load ({size} bytes > {max_bytes} bytes limit).")
             FILE_OPERATIONS.labels(operation="load", status="too_large").inc()
             return None
         with p.open("r", encoding="utf-8", errors="replace") as f:
@@ -632,14 +592,10 @@ def print_file_diff(
     if custom_formatter:
         result = custom_formatter(a_lines, b_lines, str(a_p), str(b_p))
     elif diff_format == "unified":
-        diff_iter = difflib.unified_diff(
-            a_lines, b_lines, fromfile=str(a_p), tofile=str(b_p), n=3
-        )
+        diff_iter = difflib.unified_diff(a_lines, b_lines, fromfile=str(a_p), tofile=str(b_p), n=3)
         result = "".join(diff_iter)
     elif diff_format == "context":
-        diff_iter = difflib.context_diff(
-            a_lines, b_lines, fromfile=str(a_p), tofile=str(b_p), n=3
-        )
+        diff_iter = difflib.context_diff(a_lines, b_lines, fromfile=str(a_p), tofile=str(b_p), n=3)
         result = "".join(diff_iter)
     else:
         logger.error(f"Unsupported diff format: {diff_format}")
@@ -651,11 +607,7 @@ def print_file_diff(
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=5),
-    retry=(
-        retry_if_exception_type((IOError, PermissionError))
-        if tenacity_available
-        else None
-    ),
+    retry=(retry_if_exception_type((IOError, PermissionError)) if tenacity_available else None),
 )
 async def save_sim_result(data: Dict[str, Any], out_path: Union[str, Path]) -> Path:
     save_counter.inc()
@@ -675,9 +627,7 @@ async def save_sim_result(data: Dict[str, Any], out_path: Union[str, Path]) -> P
         p.parent.mkdir(parents=True, exist_ok=True)
         if aiofiles_available:
             async with aiofiles.open(p, "w", encoding="utf-8") as f:
-                await f.write(
-                    json.dumps(data, indent=2, ensure_ascii=False, default=str)
-                )
+                await f.write(json.dumps(data, indent=2, ensure_ascii=False, default=str))
         else:
             p.write_text(
                 json.dumps(data, indent=2, ensure_ascii=False, default=str),
@@ -709,13 +659,9 @@ async def save_sim_result(data: Dict[str, Any], out_path: Union[str, Path]) -> P
 
 
 # --- Comprehensive Summary Function ---
-def summarize_result(
-    result: Dict[str, Any], detail_level: str = "auto"
-) -> Dict[str, Any]:
+def summarize_result(result: Dict[str, Any], detail_level: str = "auto") -> Dict[str, Any]:
     if not isinstance(result, dict):
-        logger.warning(
-            "Input to summarize_result is not a dictionary. Returning invalid status."
-        )
+        logger.warning("Input to summarize_result is not a dictionary. Returning invalid status.")
         return {"status": "invalid", "ok": False, "detail": "result not dict"}
     status = result.get("status", "unknown")
     if "plugin_runs" in result and result["plugin_runs"]:
@@ -730,8 +676,7 @@ def summarize_result(
                 if p_run.get("result", {}).get("status") in ["ERROR", "FAILURE"]
             ),
             "plugin_findings": sum(
-                len(p_run.get("result", {}).get("findings", []))
-                for p_run in plugin_runs
+                len(p_run.get("result", {}).get("findings", [])) for p_run in plugin_runs
             ),
         }
     else:
@@ -776,9 +721,7 @@ class PluginAPI:
     def create_temp_dir(self, prefix: str = "plugin_temp_") -> Path:
         temp_dir = Path(tempfile.mkdtemp(prefix=prefix))
         self._temp_dirs.append(temp_dir)
-        self._logger.info(
-            f"Created temporary directory for {self._plugin_name}: {temp_dir}"
-        )
+        self._logger.info(f"Created temporary directory for {self._plugin_name}: {temp_dir}")
         return temp_dir
 
     def cleanup_temp_dirs(self):
@@ -788,9 +731,7 @@ class PluginAPI:
                     shutil.rmtree(temp_dir)
                     self._logger.info(f"Cleaned up temporary directory: {temp_dir}")
             except Exception as e:
-                self._logger.error(
-                    f"Error cleaning up temporary directory {temp_dir}: {e}"
-                )
+                self._logger.error(f"Error cleaning up temporary directory {temp_dir}: {e}")
         self._temp_dirs = []
 
     @contextmanager
@@ -804,9 +745,7 @@ class PluginAPI:
     def get_core_version(self) -> str:
         return CORE_SIM_RUNNER_VERSION
 
-    def check_core_compatibility(
-        self, min_version: str, max_version: Optional[str] = None
-    ) -> bool:
+    def check_core_compatibility(self, min_version: str, max_version: Optional[str] = None) -> bool:
         try:
             current_core_parsed = parse_version(CORE_SIM_RUNNER_VERSION)
             min_ver_parsed = parse_version(min_version)

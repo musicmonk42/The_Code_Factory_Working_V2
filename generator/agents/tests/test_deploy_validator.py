@@ -262,9 +262,7 @@ class TestScrubText:
 
         text = "Some text with data"
 
-        with pytest.raises(
-            RuntimeError, match="Critical error during sensitive data scrubbing"
-        ):
+        with pytest.raises(RuntimeError, match="Critical error during sensitive data scrubbing"):
             scrub_text(text)
 
     def test_scrub_empty_text(self):
@@ -307,9 +305,7 @@ spec:
     hostPath:
       path: /host/data
 """
-        findings = await scan_config_for_findings(
-            config, "yaml", DANGEROUS_CONFIG_PATTERNS
-        )
+        findings = await scan_config_for_findings(config, "yaml", DANGEROUS_CONFIG_PATTERNS)
 
         assert any("HostPath" in f["category"] for f in findings)
 
@@ -320,9 +316,7 @@ spec:
 USER root
 RUN apk add python3
 """
-        findings = await scan_config_for_findings(
-            config, "dockerfile", DANGEROUS_CONFIG_PATTERNS
-        )
+        findings = await scan_config_for_findings(config, "dockerfile", DANGEROUS_CONFIG_PATTERNS)
 
         assert any("Root" in f["category"] for f in findings)
 
@@ -335,9 +329,7 @@ data:
   password: mysupersecretpassword
   api_key: sk-1234567890abcdef
 """
-        findings = await scan_config_for_findings(
-            config, "yaml", DANGEROUS_CONFIG_PATTERNS
-        )
+        findings = await scan_config_for_findings(config, "yaml", DANGEROUS_CONFIG_PATTERNS)
 
         assert any("Credentials" in f["category"] for f in findings)
 
@@ -350,9 +342,7 @@ data:
         mock_subprocess.return_value = mock_process
 
         config = "FROM alpine:latest"
-        findings = await scan_config_for_findings(
-            config, "dockerfile", DANGEROUS_CONFIG_PATTERNS
-        )
+        findings = await scan_config_for_findings(config, "dockerfile", DANGEROUS_CONFIG_PATTERNS)
 
         # Should call trivy
         mock_subprocess.assert_called()
@@ -446,9 +436,7 @@ CMD ["python", "app.py"]
         """Test fixing a Dockerfile with issues."""
         mock_llm.return_value = {
             "content": json.dumps(
-                {
-                    "config": 'FROM python:3.9\nWORKDIR /app\nCOPY . .\nCMD ["python", "app.py"]'
-                }
+                {"config": 'FROM python:3.9\nWORKDIR /app\nCOPY . .\nCMD ["python", "app.py"]'}
             ),
             "model": "gpt-4",
             "provider": "openai",
@@ -496,9 +484,7 @@ class TestHelmValidator:
         """Test validating Helm chart with lint errors."""
         mock_process = MagicMock()
         mock_process.returncode = 1
-        mock_process.communicate = AsyncMock(
-            return_value=(b"", b"Error: Chart.yaml is invalid")
-        )
+        mock_process.communicate = AsyncMock(return_value=(b"", b"Error: Chart.yaml is invalid"))
         mock_subprocess.return_value = mock_process
 
         validator = HelmValidator()
@@ -522,9 +508,7 @@ class TestHelmValidator:
     async def test_fix_helm_chart(self, mock_llm):
         """Test fixing a Helm chart with issues."""
         mock_llm.return_value = {
-            "content": json.dumps(
-                {"config": "apiVersion: v2\nname: fixed-chart\nversion: 1.0.0"}
-            ),
+            "content": json.dumps({"config": "apiVersion: v2\nname: fixed-chart\nversion: 1.0.0"}),
             "model": "gpt-4",
             "provider": "openai",
         }
@@ -654,9 +638,7 @@ class TestSecurityToolIntegration:
             elif "trivy" in cmd_args:
                 return trivy_mock
             elif "hadolint" in cmd_args:  # Add hadolint mock
-                return MagicMock(
-                    returncode=0, communicate=AsyncMock(return_value=(b"", b""))
-                )
+                return MagicMock(returncode=0, communicate=AsyncMock(return_value=(b"", b"")))
             return docker_mock
 
         mock_subprocess.side_effect = side_effect

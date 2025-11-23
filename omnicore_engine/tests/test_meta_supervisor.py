@@ -167,17 +167,13 @@ class TestPluginInspection:
             supervisor = MetaSupervisor(interval=60, backend_mode="torch")
             supervisor.db = Mock()
             supervisor.explainer = Mock()
-            supervisor.explainer.explain = AsyncMock(
-                return_value={"explanation": "test"}
-            )
+            supervisor.explainer.explain = AsyncMock(return_value={"explanation": "test"})
             return supervisor
 
     @pytest.mark.asyncio
     @patch("omnicore_engine.meta_supervisor.get_plugin_metrics")
     @patch("omnicore_engine.meta_supervisor.record_meta_audit_event")
-    async def test_inspect_plugins_with_metrics(
-        self, mock_record, mock_get_metrics, supervisor
-    ):
+    async def test_inspect_plugins_with_metrics(self, mock_record, mock_get_metrics, supervisor):
         """Test plugin inspection with available metrics"""
         mock_get_metrics.return_value = {
             "execution:test_plugin": {
@@ -209,9 +205,7 @@ class TestPluginInspection:
     @pytest.mark.asyncio
     @patch("omnicore_engine.meta_supervisor.get_plugin_metrics")
     @patch("omnicore_engine.meta_supervisor.record_meta_audit_event")
-    async def test_inspect_plugins_high_error_rate(
-        self, mock_record, mock_get_metrics, supervisor
-    ):
+    async def test_inspect_plugins_high_error_rate(self, mock_record, mock_get_metrics, supervisor):
         """Test plugin inspection triggers hot-swap on high error rate"""
         mock_get_metrics.return_value = {
             "execution:failing_plugin": {
@@ -246,9 +240,7 @@ class TestTestInspection:
             supervisor = MetaSupervisor(interval=60)
             supervisor.db = Mock()
             supervisor.explainer = Mock()
-            supervisor.explainer.explain = AsyncMock(
-                return_value={"explanation": "test"}
-            )
+            supervisor.explainer.explain = AsyncMock(return_value={"explanation": "test"})
             return supervisor
 
     @pytest.mark.asyncio
@@ -260,9 +252,7 @@ class TestTestInspection:
     ):
         """Test test inspection with high failures triggers auto-repair"""
         mock_get_metrics.return_value = {"failures": 20, "total": 100}
-        mock_run_tests.return_value = {
-            "failures": 5
-        }  # Still some failures after repair
+        mock_run_tests.return_value = {"failures": 5}  # Still some failures after repair
         mock_record.return_value = None
 
         supervisor.spawn_supervisor = AsyncMock(return_value="sub_test_123")
@@ -302,17 +292,13 @@ class TestConfigInspection:
             supervisor.policy_engine = Mock()
             supervisor.knowledge_graph = Mock()
             supervisor.explainer = Mock()
-            supervisor.explainer.explain = AsyncMock(
-                return_value={"explanation": "test"}
-            )
+            supervisor.explainer.explain = AsyncMock(return_value={"explanation": "test"})
             return supervisor
 
     @pytest.mark.asyncio
     @patch("omnicore_engine.meta_supervisor.rollback_config")
     @patch("omnicore_engine.meta_supervisor.record_meta_audit_event")
-    async def test_inspect_config_ethical_drift(
-        self, mock_record, mock_rollback, supervisor
-    ):
+    async def test_inspect_config_ethical_drift(self, mock_record, mock_rollback, supervisor):
         """Test config inspection detects and rolls back ethical drift"""
         mock_record.return_value = None
 
@@ -333,9 +319,7 @@ class TestConfigInspection:
     @pytest.mark.asyncio
     async def test_detect_ethical_drift_policy_denied(self, supervisor):
         """Test ethical drift detection when policy denies"""
-        supervisor.policy_engine.should_auto_learn = AsyncMock(
-            return_value=(False, "Denied")
-        )
+        supervisor.policy_engine.should_auto_learn = AsyncMock(return_value=(False, "Denied"))
 
         change = {"user_id": "user1", "new_value": {"setting": "bad"}}
         result = await supervisor.detect_ethical_drift(change)
@@ -345,12 +329,8 @@ class TestConfigInspection:
     @pytest.mark.asyncio
     async def test_detect_ethical_drift_high_impact(self, supervisor):
         """Test ethical drift detection with high knowledge graph impact"""
-        supervisor.policy_engine.should_auto_learn = AsyncMock(
-            return_value=(True, "Allowed")
-        )
-        supervisor.knowledge_graph.add_fact = AsyncMock(
-            return_value={"ethical_impact": 0.8}
-        )
+        supervisor.policy_engine.should_auto_learn = AsyncMock(return_value=(True, "Allowed"))
+        supervisor.knowledge_graph.add_fact = AsyncMock(return_value={"ethical_impact": 0.8})
         supervisor.thresholds["ethics_drift"] = 0.05
 
         change = {"user_id": "user1", "new_value": {"setting": "questionable"}}
@@ -380,9 +360,7 @@ class TestThresholdOptimization:
     @pytest.mark.asyncio
     async def test_optimize_thresholds_with_rl_model(self, supervisor_torch):
         """Test threshold optimization with RL model"""
-        supervisor_torch._get_system_state = AsyncMock(
-            return_value=np.array([0.1] * 10)
-        )
+        supervisor_torch._get_system_state = AsyncMock(return_value=np.array([0.1] * 10))
         supervisor_torch._save_thresholds = AsyncMock()
 
         await supervisor_torch.optimize_thresholds()
@@ -486,9 +464,7 @@ class TestSupervisorLifecycle:
             supervisor = MetaSupervisor(interval=60)
             supervisor.save_models = AsyncMock()
             supervisor.explainer = Mock()
-            supervisor.explainer.explain = AsyncMock(
-                return_value={"explanation": "test"}
-            )
+            supervisor.explainer.explain = AsyncMock(return_value={"explanation": "test"})
 
             with patch("omnicore_engine.meta_supervisor.record_meta_audit_event"):
                 await supervisor.self_reload()
@@ -509,9 +485,7 @@ class TestSupervisorLifecycle:
             supervisor.db.create_tables = AsyncMock()
             supervisor.db.get_preferences = AsyncMock(return_value={})
 
-            with patch(
-                "omnicore_engine.meta_supervisor.MetaSupervisor"
-            ) as mock_meta_class:
+            with patch("omnicore_engine.meta_supervisor.MetaSupervisor") as mock_meta_class:
                 mock_sub = Mock()
                 mock_sub.initialize = AsyncMock()
                 mock_sub.load_models = AsyncMock()
@@ -591,9 +565,7 @@ class TestMainLoop:
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
 
-            supervisor = MetaSupervisor(
-                interval=0.01
-            )  # Very short interval for testing
+            supervisor = MetaSupervisor(interval=0.01)  # Very short interval for testing
             supervisor.initialize = AsyncMock()
             supervisor.inspect_plugins = AsyncMock()
             supervisor.inspect_tests = AsyncMock()
@@ -641,18 +613,12 @@ class TestMetaPolicies:
             supervisor.db = Mock()
             supervisor.db.save_preferences = AsyncMock()
             supervisor.policy_engine = Mock()
-            supervisor.policy_engine.should_auto_learn = AsyncMock(
-                return_value=(True, "Allowed")
-            )
+            supervisor.policy_engine.should_auto_learn = AsyncMock(return_value=(True, "Allowed"))
             supervisor.explainer = Mock()
-            supervisor.explainer.explain = AsyncMock(
-                return_value={"explanation": "test"}
-            )
+            supervisor.explainer.explain = AsyncMock(return_value={"explanation": "test"})
 
             with patch("omnicore_engine.meta_supervisor.record_meta_audit_event"):
-                result = await supervisor.set_meta_policy(
-                    {"plugin_error_weight": 0.8}, "user123"
-                )
+                result = await supervisor.set_meta_policy({"plugin_error_weight": 0.8}, "user123")
 
                 assert result == True
                 assert supervisor.meta_policies["plugin_error_weight"] == 0.8
@@ -665,13 +631,9 @@ class TestMetaPolicies:
 
             supervisor = MetaSupervisor(interval=60)
             supervisor.policy_engine = Mock()
-            supervisor.policy_engine.should_auto_learn = AsyncMock(
-                return_value=(False, "Denied")
-            )
+            supervisor.policy_engine.should_auto_learn = AsyncMock(return_value=(False, "Denied"))
 
-            result = await supervisor.set_meta_policy(
-                {"plugin_error_weight": 0.8}, "user123"
-            )
+            result = await supervisor.set_meta_policy({"plugin_error_weight": 0.8}, "user123")
 
             assert result == False
 

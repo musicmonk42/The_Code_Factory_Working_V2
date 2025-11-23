@@ -147,9 +147,7 @@ class SQLiteStorageBackend:
 
     def __init__(self, config: ConfigStore):
         self.config = config
-        db_url = self.config.get(
-            "sqlite.database_url", "sqlite+aiosqlite:///arbiter.db"
-        )
+        db_url = self.config.get("sqlite.database_url", "sqlite+aiosqlite:///arbiter.db")
         self.engine = create_async_engine(db_url)
         self.session_factory = sessionmaker(
             self.engine, class_=AsyncSession, expire_on_commit=False
@@ -216,9 +214,7 @@ class SQLiteStorageBackend:
                     "experience_points": record.experience_points,
                 }
             except InvalidToken as e:
-                logger.error(
-                    "Decryption failed for snapshot of arbiter '%s'.", arbiter_id
-                )
+                logger.error("Decryption failed for snapshot of arbiter '%s'.", arbiter_id)
                 raise AuditChainTamperedError(
                     "Snapshot decryption failed", details={"arbiter_id": arbiter_id}
                 ) from e
@@ -303,9 +299,7 @@ class SQLiteStorageBackend:
                             {
                                 "type": r.event_type,
                                 "timestamp": r.timestamp,
-                                "details": json.loads(
-                                    self.cipher.decrypt(r.details_encrypted)
-                                ),
+                                "details": json.loads(self.cipher.decrypt(r.details_encrypted)),
                                 "event_version": r.event_version,
                                 "canonical_offset": r.id,
                             }
@@ -359,9 +353,7 @@ class SQLiteStorageBackend:
             )
             return current_hash
 
-    @STORAGE_LATENCY_SECONDS.labels(
-        backend="sqlite", operation="get_last_audit_hash"
-    ).time()
+    @STORAGE_LATENCY_SECONDS.labels(backend="sqlite", operation="get_last_audit_hash").time()
     @_wrap_exception("SQLite")
     @SQL_BREAKER
     async def get_last_audit_hash(self, arbiter_id: str) -> str:
@@ -376,37 +368,25 @@ class SQLiteStorageBackend:
                 .order_by(AuditLog.id.desc())
                 .limit(1)
             )
-            last_hash = (
-                await session.execute(stmt)
-            ).scalar_one_or_none() or "genesis_hash"
+            last_hash = (await session.execute(stmt)).scalar_one_or_none() or "genesis_hash"
             self._hash_cache[arbiter_id] = (
                 last_hash,
                 asyncio.get_event_loop().time() + 60,
             )
             return last_hash
 
-    @STORAGE_LATENCY_SECONDS.labels(
-        backend="sqlite", operation="load_all_audit_logs"
-    ).time()
+    @STORAGE_LATENCY_SECONDS.labels(backend="sqlite", operation="load_all_audit_logs").time()
     @_wrap_exception("SQLite")
     @SQL_BREAKER
     async def load_all_audit_logs(self, arbiter_id: str) -> List[Dict[str, Any]]:
         async with self._get_session() as session:
-            stmt = (
-                select(AuditLog)
-                .filter_by(arbiter_id=arbiter_id)
-                .order_by(AuditLog.id.asc())
-            )
+            stmt = select(AuditLog).filter_by(arbiter_id=arbiter_id).order_by(AuditLog.id.asc())
             return [
                 {
                     "arbiter_id": r.arbiter_id,
                     "operation": r.operation,
                     "timestamp": r.timestamp,
-                    "details": (
-                        json.loads(r.details)
-                        if isinstance(r.details, str)
-                        else r.details
-                    ),
+                    "details": (json.loads(r.details) if isinstance(r.details, str) else r.details),
                     "previous_log_hash": r.previous_log_hash,
                     "log_hash": r.log_hash,
                 }
@@ -425,9 +405,7 @@ class RedisStreamsStorageBackend:
         self.redis_url = self.config.get("redis.url")
         if not self.redis_url:
             raise ArbiterGrowthError("Redis URL not configured.")
-        self.redis = redis.from_url(
-            self.redis_url, decode_responses=False, encoding="utf-8"
-        )
+        self.redis = redis.from_url(self.redis_url, decode_responses=False, encoding="utf-8")
         self.encryption_key = _get_encryption_key_from_env()
         self.cipher = Fernet(self.encryption_key)
         self._hash_cache = {}
@@ -480,9 +458,7 @@ class RedisStreamsStorageBackend:
                 "experience_points": float(data.get(b"experience_points", b"0")),
             }
         except (InvalidToken, KeyError) as e:
-            logger.error(
-                "Decryption or data error for Redis snapshot '%s'.", snapshot_key
-            )
+            logger.error("Decryption or data error for Redis snapshot '%s'.", snapshot_key)
             raise AuditChainTamperedError(
                 "Snapshot is corrupt", details={"key": snapshot_key}
             ) from e
@@ -524,9 +500,7 @@ class RedisStreamsStorageBackend:
         event_data = {
             b"type": event["type"].encode("utf-8"),
             b"timestamp": event["timestamp"].encode("utf-8"),
-            b"details_encrypted": self.cipher.encrypt(
-                json.dumps(event["details"]).encode("utf-8")
-            ),
+            b"details_encrypted": self.cipher.encrypt(json.dumps(event["details"]).encode("utf-8")),
             b"event_version": str(event.get("event_version", 1.0)).encode("utf-8"),
         }
         await self.redis.xadd(stream_key, event_data)
@@ -546,9 +520,7 @@ class RedisStreamsStorageBackend:
 
         while True:
             # Fixed: Reduced block time from 2000ms to 100ms to avoid hanging
-            response = await self.redis.xread(
-                {stream_key: last_id}, count=1000, block=100
-            )
+            response = await self.redis.xread({stream_key: last_id}, count=1000, block=100)
             # Fixed: Check if we got any messages properly
             if not response or not response[0][1]:
                 break
@@ -576,9 +548,7 @@ class RedisStreamsStorageBackend:
             last_id_raw = entries[-1][0]
             # Convert bytes to string if needed
             last_id_str = (
-                last_id_raw.decode("utf-8")
-                if isinstance(last_id_raw, bytes)
-                else last_id_raw
+                last_id_raw.decode("utf-8") if isinstance(last_id_raw, bytes) else last_id_raw
             )
             # Increment the sequence number part of the stream ID to avoid re-reading
             # Stream IDs are in format "timestamp-sequence", we need to move past the last one
@@ -627,9 +597,7 @@ class RedisStreamsStorageBackend:
         )
         return current_hash
 
-    @STORAGE_LATENCY_SECONDS.labels(
-        backend="redis", operation="get_last_audit_hash"
-    ).time()
+    @STORAGE_LATENCY_SECONDS.labels(backend="redis", operation="get_last_audit_hash").time()
     @_wrap_exception("Redis")
     @REDIS_BREAKER
     async def get_last_audit_hash(self, arbiter_id: str) -> str:
@@ -644,9 +612,7 @@ class RedisStreamsStorageBackend:
         self._hash_cache[arbiter_id] = (last_hash, asyncio.get_event_loop().time() + 60)
         return last_hash
 
-    @STORAGE_LATENCY_SECONDS.labels(
-        backend="redis", operation="load_all_audit_logs"
-    ).time()
+    @STORAGE_LATENCY_SECONDS.labels(backend="redis", operation="load_all_audit_logs").time()
     @_wrap_exception("Redis")
     @REDIS_BREAKER
     async def load_all_audit_logs(self, arbiter_id: str) -> List[Dict[str, Any]]:
@@ -756,12 +722,8 @@ class KafkaStorageBackend:
                 )
             return snapshot_data
         except (InvalidToken, KeyError) as e:
-            logger.error(
-                "Decryption or data error for Kafka snapshot in topic '%s'.", topic
-            )
-            raise AuditChainTamperedError(
-                "Snapshot is corrupt", details={"topic": topic}
-            ) from e
+            logger.error("Decryption or data error for Kafka snapshot in topic '%s'.", topic)
+            raise AuditChainTamperedError("Snapshot is corrupt", details={"topic": topic}) from e
         finally:
             await consumer.stop()
 
@@ -776,9 +738,7 @@ class KafkaStorageBackend:
         save_data = data.copy()
         save_data["event_offset"] = str(save_data.get("event_offset", "0"))
         payload = self.cipher.encrypt(json.dumps(save_data).encode("utf-8"))
-        await self.producer.send_and_wait(
-            topic, payload, key=arbiter_id.encode("utf-8")
-        )
+        await self.producer.send_and_wait(topic, payload, key=arbiter_id.encode("utf-8"))
 
     @STORAGE_LATENCY_SECONDS.labels(backend="kafka", operation="save_event").time()
     @_wrap_exception("Kafka")
@@ -788,9 +748,7 @@ class KafkaStorageBackend:
             raise ArbiterGrowthError("Kafka producer not started.")
         topic = self._topic(arbiter_id, "events")
         payload = self.cipher.encrypt(json.dumps(event).encode("utf-8"))
-        await self.producer.send_and_wait(
-            topic, payload, key=arbiter_id.encode("utf-8")
-        )
+        await self.producer.send_and_wait(topic, payload, key=arbiter_id.encode("utf-8"))
 
     @STORAGE_LATENCY_SECONDS.labels(backend="kafka", operation="load_events").time()
     @_wrap_exception("Kafka")
@@ -826,9 +784,7 @@ class KafkaStorageBackend:
                         try:
                             decrypted = self.cipher.decrypt(msg.value)
                             event_data = json.loads(decrypted)
-                            event_data["canonical_offset"] = (
-                                f"{msg.partition}:{msg.offset}"
-                            )
+                            event_data["canonical_offset"] = f"{msg.partition}:{msg.offset}"
                             events.append(event_data)
                         except InvalidToken:
                             logger.warning(
@@ -874,18 +830,14 @@ class KafkaStorageBackend:
             "log_hash": current_hash,
         }
         payload = json.dumps(log_entry).encode("utf-8")
-        await self.producer.send_and_wait(
-            topic, payload, key=arbiter_id.encode("utf-8")
-        )
+        await self.producer.send_and_wait(topic, payload, key=arbiter_id.encode("utf-8"))
         self._hash_cache[arbiter_id] = (
             current_hash,
             asyncio.get_event_loop().time() + 60,
         )
         return current_hash
 
-    @STORAGE_LATENCY_SECONDS.labels(
-        backend="kafka", operation="get_last_audit_hash"
-    ).time()
+    @STORAGE_LATENCY_SECONDS.labels(backend="kafka", operation="get_last_audit_hash").time()
     @_wrap_exception("Kafka")
     @KAFKA_BREAKER
     async def get_last_audit_hash(self, arbiter_id: str) -> str:
@@ -932,9 +884,7 @@ class KafkaStorageBackend:
         finally:
             await consumer.stop()
 
-    @STORAGE_LATENCY_SECONDS.labels(
-        backend="kafka", operation="load_all_audit_logs"
-    ).time()
+    @STORAGE_LATENCY_SECONDS.labels(backend="kafka", operation="load_all_audit_logs").time()
     @_wrap_exception("Kafka")
     @KAFKA_BREAKER
     async def load_all_audit_logs(self, arbiter_id: str) -> List[Dict[str, Any]]:

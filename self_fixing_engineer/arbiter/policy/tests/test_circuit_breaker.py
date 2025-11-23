@@ -112,9 +112,7 @@ class TestSanitizationFunctions:
         assert sanitize_log_message("normal message") == "normal message"
 
     def test_sanitize_log_message_control_characters(self):
-        assert (
-            sanitize_log_message("line\nbreak\ttab\rcarriage") == "linebreaktabcarriage"
-        )
+        assert sanitize_log_message("line\nbreak\ttab\rcarriage") == "linebreaktabcarriage"
 
     def test_sanitize_log_message_truncation(self):
         long_message = "x" * 300
@@ -209,9 +207,7 @@ class TestBreakerStateManagement:
         assert isinstance(state, InMemoryBreakerStateManager)
 
     @pytest.mark.asyncio
-    async def test_get_breaker_state_returns_existing(
-        self, mock_config, cleanup_states
-    ):
+    async def test_get_breaker_state_returns_existing(self, mock_config, cleanup_states):
         state1 = await get_breaker_state("test_provider", mock_config)
         state2 = await get_breaker_state("test_provider", mock_config)
         assert state1 is state2
@@ -249,19 +245,13 @@ class TestCircuitBreakerLogic:
 
     @pytest.mark.asyncio
     async def test_breaker_closed_initially(self, mock_config, cleanup_states):
-        with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
-        ):
-            is_open = await is_llm_policy_circuit_breaker_open(
-                "test_provider", mock_config
-            )
+        with patch("arbiter.policy.circuit_breaker.get_config", return_value=mock_config):
+            is_open = await is_llm_policy_circuit_breaker_open("test_provider", mock_config)
             assert not is_open
 
     @pytest.mark.asyncio
     async def test_breaker_opens_after_threshold(self, mock_config, cleanup_states):
-        with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
-        ):
+        with patch("arbiter.policy.circuit_breaker.get_config", return_value=mock_config):
             provider = "test_provider"
 
             # Record failures up to threshold
@@ -274,9 +264,7 @@ class TestCircuitBreakerLogic:
 
     @pytest.mark.asyncio
     async def test_breaker_half_open_after_timeout(self, mock_config, cleanup_states):
-        with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
-        ):
+        with patch("arbiter.policy.circuit_breaker.get_config", return_value=mock_config):
             provider = "test_provider"
             mock_config.LLM_API_BACKOFF_MAX_SECONDS = 0.01  # Very short for testing
 
@@ -293,9 +281,7 @@ class TestCircuitBreakerLogic:
 
     @pytest.mark.asyncio
     async def test_breaker_resets_on_success(self, mock_config, cleanup_states):
-        with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
-        ):
+        with patch("arbiter.policy.circuit_breaker.get_config", return_value=mock_config):
             provider = "test_provider"
 
             # Record some failures (but not enough to open)
@@ -313,18 +299,12 @@ class TestCircuitBreakerLogic:
             # Verify reset
             current_state = await state.get_state()
             assert current_state["failures"] == 0
-            assert current_state["last_failure_time"] == datetime.min.replace(
-                tzinfo=timezone.utc
-            )
-            assert current_state["next_try_after"] == datetime.min.replace(
-                tzinfo=timezone.utc
-            )
+            assert current_state["last_failure_time"] == datetime.min.replace(tzinfo=timezone.utc)
+            assert current_state["next_try_after"] == datetime.min.replace(tzinfo=timezone.utc)
 
     @pytest.mark.asyncio
     async def test_exponential_backoff(self, mock_config, cleanup_states):
-        with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
-        ):
+        with patch("arbiter.policy.circuit_breaker.get_config", return_value=mock_config):
             provider = "test_provider"
             mock_config.LLM_API_BACKOFF_MAX_SECONDS = 100
 
@@ -347,9 +327,7 @@ class TestCircuitBreakerLogic:
     @pytest.mark.slow  # Mark as slow test
     async def test_failure_count_cap(self, mock_config, cleanup_states):
         """Test that failure count is capped at 1000. This is a slow test."""
-        with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
-        ):
+        with patch("arbiter.policy.circuit_breaker.get_config", return_value=mock_config):
             provider = "test_provider"
 
             # Directly set state instead of recording 1500 failures

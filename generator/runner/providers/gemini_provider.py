@@ -208,16 +208,12 @@ class GeminiProvider(LLMProvider):
             else:
                 return await client.generate_content_async(scrubbed_prompt)
         except (InvalidArgument, ValueError) as e:
-            error_msg = (
-                f"Invalid request: {str(e)}. Check prompt format or model capabilities."
-            )
+            error_msg = f"Invalid request: {str(e)}. Check prompt format or model capabilities."
             raise LLMError(
                 detail=error_msg, provider=self.name, error_code="LLM_PROVIDER_ERROR"
             ) from e
         except PermissionDenied as e:
-            error_msg = (
-                f"API error: Invalid API Key or insufficient permissions. {str(e)}"
-            )
+            error_msg = f"API error: Invalid API Key or insufficient permissions. {str(e)}"
             raise LLMError(
                 detail=error_msg, provider=self.name, error_code="LLM_PROVIDER_ERROR"
             ) from e
@@ -280,9 +276,7 @@ class GeminiProvider(LLMProvider):
 
                             # Keep local, plugin-specific stream metrics
                             chunk_latency = time.time() - chunk_start
-                            stream_chunk_latency.labels(model=model).observe(
-                                chunk_latency
-                            )
+                            stream_chunk_latency.labels(model=model).observe(chunk_latency)
                             stream_chunks_total.labels(model=model).inc()
                             chunk_start = time.time()
                     except Exception as e:
@@ -312,9 +306,7 @@ class GeminiProvider(LLMProvider):
                 raise  # Re-raise errors we've already translated
             else:
                 # Wrap unexpected errors
-                raise LLMError(
-                    detail=f"Unexpected error in call: {e}", provider=self.name
-                ) from e
+                raise LLMError(detail=f"Unexpected error in call: {e}", provider=self.name) from e
 
     async def count_tokens(self, text: str, model: str) -> int:
         """

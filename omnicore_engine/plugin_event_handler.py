@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -61,13 +59,9 @@ class PluginEventHandler(FileSystemEventHandler):
                 )
                 self._loop.run_until_complete(coro)
         except Exception as e:
-            logger.error(
-                f"Failed to schedule async plugin event task: {e}", exc_info=True
-            )
+            logger.error(f"Failed to schedule async plugin event task: {e}", exc_info=True)
 
-    async def _handle_plugin_file_event_async(
-        self, event_src_path: str, event_type: str
-    ):
+    async def _handle_plugin_file_event_async(self, event_src_path: str, event_type: str):
         """
         Asynchronously handles plugin file modification or creation events.
         Centralizes the reload and database save logic.
@@ -84,18 +78,16 @@ class PluginEventHandler(FileSystemEventHandler):
                 event_type == "modified"
                 and self.last_modified_times.get(real_src_path) == current_mtime
             ):
-                logger.debug(
-                    f"Skipping redundant hot-reload for {real_src_path}: mtime unchanged."
-                )
+                logger.debug(f"Skipping redundant hot-reload for {real_src_path}: mtime unchanged.")
                 return
 
             self.last_modified_times[real_src_path] = current_mtime
 
             logger.info(f"Initiating {event_type} handling for plugin: {real_src_path}")
 
-            if hasattr(
-                self.registry, "load_from_directory"
-            ) and inspect.iscoroutinefunction(self.registry.load_from_directory):
+            if hasattr(self.registry, "load_from_directory") and inspect.iscoroutinefunction(
+                self.registry.load_from_directory
+            ):
                 await self.registry.load_from_directory(self.plugin_dir)
             else:
                 logger.warning(
@@ -109,9 +101,7 @@ class PluginEventHandler(FileSystemEventHandler):
             found_plugin = None
             for kind_str in self.registry.plugins:
                 if plugin_name_from_file in self.registry.plugins[kind_str]:
-                    found_plugin = self.registry.plugins[kind_str][
-                        plugin_name_from_file
-                    ]
+                    found_plugin = self.registry.plugins[kind_str][plugin_name_from_file]
                     break
 
             if found_plugin:
@@ -168,9 +158,7 @@ class PluginEventHandler(FileSystemEventHandler):
         if event.is_directory or not event.src_path.endswith(".py"):
             return
 
-        self._schedule_async_task(
-            self._handle_plugin_file_event_async(event.src_path, "modified")
-        )
+        self._schedule_async_task(self._handle_plugin_file_event_async(event.src_path, "modified"))
 
     def on_created(self, event):
         """
@@ -182,9 +170,7 @@ class PluginEventHandler(FileSystemEventHandler):
         if event.is_directory or not event.src_path.endswith(".py"):
             return
 
-        self._schedule_async_task(
-            self._handle_plugin_file_event_async(event.src_path, "created")
-        )
+        self._schedule_async_task(self._handle_plugin_file_event_async(event.src_path, "created"))
 
 
 def start_plugin_observer(registry: PluginRegistry, plugin_dir: str):

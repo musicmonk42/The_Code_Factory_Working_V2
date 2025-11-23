@@ -134,9 +134,7 @@ class SFEAgentState(AgentState):
     )
 
     fixed_code: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    analysis_report: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSON, nullable=True
-    )
+    analysis_report: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     trust_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     __mapper_args__ = {
@@ -144,9 +142,7 @@ class SFEAgentState(AgentState):
     }
 
     def __repr__(self) -> str:
-        return (
-            f"<SFEAgentState(id={self.id}, name={self.name}, trust={self.trust_score})>"
-        )
+        return f"<SFEAgentState(id={self.id}, name={self.name}, trust={self.trust_score})>"
 
 
 # ----------------------------------------------------------------------

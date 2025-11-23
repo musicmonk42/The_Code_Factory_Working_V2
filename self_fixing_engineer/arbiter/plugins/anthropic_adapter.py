@@ -25,9 +25,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
     logger.addHandler(handler)
 
 # 1. Add Prometheus Metrics
@@ -106,9 +104,7 @@ class AnthropicAdapter:
         self.circuit_breaker_failures = 0
         self.circuit_breaker_last_failure_time = 0.0
         self.circuit_breaker_threshold = settings.get("CIRCUIT_BREAKER_THRESHOLD", 5)
-        self.circuit_breaker_timeout = settings.get(
-            "CIRCUIT_BREAKER_TIMEOUT_SECONDS", 300
-        )
+        self.circuit_breaker_timeout = settings.get("CIRCUIT_BREAKER_TIMEOUT_SECONDS", 300)
 
         self.logger.info("AnthropicAdapter initialized.")
 
@@ -127,9 +123,7 @@ class AnthropicAdapter:
             try:
                 await self.client.aclose_session()
             except Exception as e:
-                self.logger.error(
-                    f"Failed to close Anthropic client session: {e}", exc_info=True
-                )
+                self.logger.error(f"Failed to close Anthropic client session: {e}", exc_info=True)
 
     def _update_circuit_breaker(self, success: bool):
         """
@@ -138,9 +132,7 @@ class AnthropicAdapter:
         if success:
             self.circuit_breaker_failures = 0
             if self.circuit_breaker_state != "closed":
-                self.logger.info(
-                    "Circuit breaker reset to 'closed' after successful call."
-                )
+                self.logger.info("Circuit breaker reset to 'closed' after successful call.")
                 self.circuit_breaker_state = "closed"
         else:
             self.circuit_breaker_failures += 1
@@ -214,24 +206,15 @@ class AnthropicAdapter:
         if len(prompt) > 100000:
             raise ValueError("Prompt exceeds the maximum length of 100,000 characters.")
         if not (1 <= max_tokens <= 4096):
-            raise ValueError(
-                f"max_tokens must be between 1 and 4096, but was {max_tokens}."
-            )
+            raise ValueError(f"max_tokens must be between 1 and 4096, but was {max_tokens}.")
         if not (0.0 <= temperature <= 1.0):
-            raise ValueError(
-                f"temperature must be between 0.0 and 1.0, but was {temperature}."
-            )
+            raise ValueError(f"temperature must be between 0.0 and 1.0, but was {temperature}.")
 
         # 8. Add Circuit Breaker
         # Check circuit breaker state before making the call
         if self.circuit_breaker_state == "open":
-            if (
-                time.time() - self.circuit_breaker_last_failure_time
-                > self.circuit_breaker_timeout
-            ):
-                self.logger.info(
-                    "Circuit breaker entering 'half-open' state to test for recovery."
-                )
+            if time.time() - self.circuit_breaker_last_failure_time > self.circuit_breaker_timeout:
+                self.logger.info("Circuit breaker entering 'half-open' state to test for recovery.")
                 self.circuit_breaker_state = "half-open"
             else:
                 self.logger.warning(
@@ -270,18 +253,14 @@ class AnthropicAdapter:
             )
             error_type = "retry_exhausted"
             self._update_circuit_breaker(success=False)
-            raise APIError(
-                f"Anthropic API call failed after multiple retries: {e}"
-            ) from e
+            raise APIError(f"Anthropic API call failed after multiple retries: {e}") from e
 
         except LLMClientError as e:
             # LLMClientError is a wrapper for underlying exceptions.
             # We need to unwrap it to re-raise as specific adapter exceptions.
             original_exception = e.__cause__ if e.__cause__ else e
 
-            if isinstance(
-                original_exception, (anthropic.APITimeoutError, asyncio.TimeoutError)
-            ):
+            if isinstance(original_exception, (anthropic.APITimeoutError, asyncio.TimeoutError)):
                 self.logger.error(
                     f"Anthropic generation timed out: {original_exception} [Correlation ID: {correlation_id}]"
                 )

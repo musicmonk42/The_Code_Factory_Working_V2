@@ -65,8 +65,7 @@ class TestAlertSystem:
             alert_operator("Test alert", AlertLevel.ERROR)
             # Check that the alert was attempted (even if it failed due to 'message' conflict)
             assert any(
-                "Test alert" in record.message
-                or "Failed to send alert" in record.message
+                "Test alert" in record.message or "Failed to send alert" in record.message
                 for record in caplog.records
             )
 
@@ -76,8 +75,7 @@ class TestAlertSystem:
         with caplog.at_level("WARNING"):
             alert_operator("Login failure", AlertLevel.WARNING, details=details)
             assert any(
-                "Login failure" in record.message
-                or "Failed to send alert" in record.message
+                "Login failure" in record.message or "Failed to send alert" in record.message
                 for record in caplog.records
             )
 
@@ -106,9 +104,7 @@ class TestAlertSystem:
         limiter = RateLimiter(max_calls=2, window_seconds=1)
         _rate_limiters["alerts"] = limiter
 
-        with patch(
-            "self_healing_import_fixer.analyzer.core_utils.logger"
-        ) as mock_logger:
+        with patch("self_healing_import_fixer.analyzer.core_utils.logger") as mock_logger:
             # First two should go through
             alert_operator("Alert 1", AlertLevel.INFO)
             alert_operator("Alert 2", AlertLevel.INFO)
@@ -123,18 +119,14 @@ class TestAlertSystem:
         limiter = RateLimiter(max_calls=1, window_seconds=60)
         _rate_limiters["alerts"] = limiter
 
-        with patch(
-            "self_healing_import_fixer.analyzer.core_utils.logger"
-        ) as mock_logger:
+        with patch("self_healing_import_fixer.analyzer.core_utils.logger") as mock_logger:
             alert_operator("Alert 1", AlertLevel.INFO)
             alert_operator("Critical Alert", AlertLevel.CRITICAL)
             alert_operator("Emergency Alert", AlertLevel.EMERGENCY)
 
             # Critical alerts should not be rate limited
             warning_calls = [
-                call
-                for call in mock_logger.warning.call_args_list
-                if "rate limited" in str(call)
+                call for call in mock_logger.warning.call_args_list if "rate limited" in str(call)
             ]
             assert len(warning_calls) == 0
 
@@ -388,9 +380,7 @@ class TestRetryMechanism:
         """Test retry only on specific exceptions."""
         attempt_count = 0
 
-        @retry_with_backoff(
-            max_retries=3, exceptions=(ValueError,), initial_backoff=0.01
-        )
+        @retry_with_backoff(max_retries=3, exceptions=(ValueError,), initial_backoff=0.01)
         def selective_retry():
             nonlocal attempt_count
             attempt_count += 1
@@ -609,9 +599,7 @@ class TestOperationalUtilities:
 
     def test_timing_context(self):
         """Test timing context manager."""
-        with patch(
-            "self_healing_import_fixer.analyzer.core_utils.logger"
-        ) as mock_logger:
+        with patch("self_healing_import_fixer.analyzer.core_utils.logger") as mock_logger:
             with timing_context("test_operation"):
                 time.sleep(0.1)
 

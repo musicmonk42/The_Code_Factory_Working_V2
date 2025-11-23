@@ -50,9 +50,7 @@ class ContextPropagationMiddleware:
             ExecutionContext.set(**message.context)
 
         try:
-            return await self.message_bus._safe_callback_internal(
-                callback, message, filter
-            )
+            return await self.message_bus._safe_callback_internal(callback, message, filter)
         finally:
             ExecutionContext.clear()
             ExecutionContext.set(**old_context)

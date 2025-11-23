@@ -122,14 +122,10 @@ def test_project_setup(tmp_path):
     )
 
     cycle_file_a = project_root / "module_a.py"
-    cycle_file_a.write_text(
-        "import module_b\n" "def func_a():\n" "    return module_b.func_b()\n"
-    )
+    cycle_file_a.write_text("import module_b\n" "def func_a():\n" "    return module_b.func_b()\n")
 
     cycle_file_b = project_root / "module_b.py"
-    cycle_file_b.write_text(
-        "import module_a\n" "def func_b():\n" "    return module_a.func_a()\n"
-    )
+    cycle_file_b.write_text("import module_a\n" "def func_b():\n" "    return module_a.func_a()\n")
 
     dynamic_file = project_root / "dynamic_importer.py"
     dynamic_file.write_text(
@@ -170,9 +166,7 @@ def test_import_resolver_init(test_project_setup, mock_core_dependencies):
     assert not resolver.modified
 
 
-def test_import_resolver_converts_relative_imports(
-    test_project_setup, mock_core_dependencies
-):
+def test_import_resolver_converts_relative_imports(test_project_setup, mock_core_dependencies):
     """Test that ImportResolver converts relative imports to absolute."""
     with open(test_project_setup["resolver_file"], "r") as f:
         code = f.read()
@@ -191,10 +185,7 @@ def test_import_resolver_converts_relative_imports(
 
     # Check that relative imports were converted
     new_code = ast.unparse(new_tree)
-    assert (
-        "from my_package import utils" in new_code
-        or "import my_package.utils" in new_code
-    )
+    assert "from my_package import utils" in new_code or "import my_package.utils" in new_code
 
 
 def test_import_resolver_validates_paths(test_project_setup, mock_core_dependencies):
@@ -232,9 +223,7 @@ def test_cycle_healer_init_validates_file(test_project_setup, mock_core_dependen
         )
 
 
-def test_cycle_healer_init_validates_whitelist(
-    test_project_setup, mock_core_dependencies
-):
+def test_cycle_healer_init_validates_whitelist(test_project_setup, mock_core_dependencies):
     """Test that CycleHealer validates whitelisted paths."""
     graph = nx.DiGraph()
 
@@ -271,9 +260,7 @@ def test_cycle_healer_handles_syntax_error(test_project_setup, mock_core_depende
 
 
 @pytest.mark.asyncio
-async def test_cycle_healer_finds_problematic_import(
-    test_project_setup, mock_core_dependencies
-):
+async def test_cycle_healer_finds_problematic_import(test_project_setup, mock_core_dependencies):
     """Test that CycleHealer can find problematic imports."""
     graph = nx.DiGraph()
     graph.add_edge("module_a", "module_b")
@@ -297,9 +284,7 @@ async def test_cycle_healer_finds_problematic_import(
 
 
 @pytest.mark.asyncio
-async def test_cycle_healer_moves_import_to_function(
-    test_project_setup, mock_core_dependencies
-):
+async def test_cycle_healer_moves_import_to_function(test_project_setup, mock_core_dependencies):
     """Test that CycleHealer moves imports into functions."""
     graph = nx.DiGraph()
     graph.add_edge("module_a", "module_b")
@@ -325,9 +310,7 @@ async def test_cycle_healer_moves_import_to_function(
 # --- DynamicImportHealer Tests ---
 
 
-def test_dynamic_import_healer_finds_dynamic_imports(
-    test_project_setup, mock_core_dependencies
-):
+def test_dynamic_import_healer_finds_dynamic_imports(test_project_setup, mock_core_dependencies):
     """Test that DynamicImportHealer finds dynamic import patterns."""
     healer = DynamicImportHealer(
         test_project_setup["dynamic_file"],
@@ -346,16 +329,12 @@ def test_dynamic_import_healer_finds_dynamic_imports(
 
         # Check for specific suggestions
         if node.func.id == "__import__":
-            assert (
-                "importlib.import_module" in suggestion or "static import" in suggestion
-            )
+            assert "importlib.import_module" in suggestion or "static import" in suggestion
         elif node.func.id in ["exec", "eval"]:
             assert "security risk" in suggestion
 
 
-def test_dynamic_import_healer_validates_paths(
-    test_project_setup, mock_core_dependencies
-):
+def test_dynamic_import_healer_validates_paths(test_project_setup, mock_core_dependencies):
     """Test that DynamicImportHealer validates paths."""
     with pytest.raises(AnalyzerCriticalError, match="File not found"):
         DynamicImportHealer(
@@ -437,9 +416,7 @@ async def test_cycle_healer_uses_cache(
     with open(test_project_setup["cycle_file_a"], "r") as f:
         content = f.read()
 
-    cache_key = (
-        f"ast:{hashlib.sha256(test_project_setup['cycle_file_a'].encode()).hexdigest()}"
-    )
+    cache_key = f"ast:{hashlib.sha256(test_project_setup['cycle_file_a'].encode()).hexdigest()}"
     await mock_redis_client.setex(cache_key, 86400, content)
 
     healer = CycleHealer(

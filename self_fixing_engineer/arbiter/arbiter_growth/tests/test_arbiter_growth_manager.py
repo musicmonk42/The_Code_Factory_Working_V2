@@ -279,9 +279,7 @@ async def test_circuit_breaker_opens_and_rejects(manager_factory):
 
 
 @pytest.mark.asyncio
-async def test_audit_chain_tampered_on_hash_mismatch(
-    manager_factory, mock_storage_backend
-):
+async def test_audit_chain_tampered_on_hash_mismatch(manager_factory, mock_storage_backend):
     """Test that audit chain tampering is detected."""
     manager = manager_factory()
     await manager.start()

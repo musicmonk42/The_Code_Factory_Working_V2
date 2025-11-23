@@ -70,9 +70,7 @@ class TestStartupShutdown:
     @patch("omnicore_engine.fastapi_app.chatbot_arbiter")
     @patch("omnicore_engine.fastapi_app.arena")
     @patch("omnicore_engine.fastapi_app.meta_supervisor_instance")
-    async def test_shutdown_event(
-        self, mock_meta, mock_arena, mock_arbiter, mock_sim, mock_engine
-    ):
+    async def test_shutdown_event(self, mock_meta, mock_arena, mock_arbiter, mock_sim, mock_engine):
         """Test shutdown event"""
         mock_engine.shutdown = AsyncMock()
         mock_sim.shutdown = AsyncMock()
@@ -216,9 +214,7 @@ class TestSimulationEndpoints:
         )
 
         client = TestClient(app)
-        response = client.post(
-            "/api/simulation/execute", json={"config": {"param": "value"}}
-        )
+        response = client.post("/api/simulation/execute", json={"config": {"param": "value"}})
 
         assert response.status_code == 200
         assert response.json()["status"] == "success"
@@ -239,9 +235,7 @@ class TestSimulationEndpoints:
         mock_sim.explain_result = AsyncMock(return_value="This simulation shows...")
 
         client = TestClient(app)
-        response = client.post(
-            "/api/simulation/explain", json={"result": {"data": "value"}}
-        )
+        response = client.post("/api/simulation/explain", json={"result": {"data": "value"}})
 
         assert response.status_code == 200
         assert response.json()["status"] == "success"
@@ -382,9 +376,7 @@ class TestAdminEndpoints:
     @patch("omnicore_engine.fastapi_app.meta_supervisor_instance")
     def test_generate_test_cases(self, mock_meta):
         """Test test case generation via meta supervisor"""
-        mock_meta.generate_test_cases = AsyncMock(
-            return_value={"test_cases": ["test1", "test2"]}
-        )
+        mock_meta.generate_test_cases = AsyncMock(return_value={"test_cases": ["test1", "test2"]})
 
         client = TestClient(app)
         token = self.create_auth_token()
@@ -475,9 +467,7 @@ class TestUtilityEndpoints:
         """Test notification endpoint"""
         client = TestClient(app)
 
-        response = client.post(
-            "/api/notify", json={"message": "Test notification", "type": "info"}
-        )
+        response = client.post("/api/notify", json={"message": "Test notification", "type": "info"})
 
         assert response.status_code == 200
         assert response.json()["status"] == "received"
@@ -503,9 +493,7 @@ class TestErrorHandling:
     @patch("omnicore_engine.fastapi_app.simulation_module")
     def test_simulation_error_handling(self, mock_sim):
         """Test error handling in simulation endpoint"""
-        mock_sim.execute_simulation = AsyncMock(
-            side_effect=Exception("Simulation failed")
-        )
+        mock_sim.execute_simulation = AsyncMock(side_effect=Exception("Simulation failed"))
 
         client = TestClient(app)
         response = client.post("/api/simulation/execute", json={"config": {}})

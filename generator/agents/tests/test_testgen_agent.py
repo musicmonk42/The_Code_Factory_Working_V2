@@ -99,9 +99,7 @@ def setup_comprehensive_mocking():
     aiofiles_mock = Mock()
     mock_file_context = Mock()
     mock_file_context.__aenter__ = AsyncMock(return_value=Mock())
-    mock_file_context.__aenter__.return_value.read = AsyncMock(
-        return_value="mocked file content"
-    )
+    mock_file_context.__aenter__.return_value.read = AsyncMock(return_value="mocked file content")
     mock_file_context.__aenter__.return_value.write = AsyncMock()
     mock_file_context.__aexit__ = AsyncMock(return_value=None)
     aiofiles_mock.open.return_value = mock_file_context
@@ -259,9 +257,7 @@ def setup_comprehensive_mocking():
 
     # Configure the mock *instance* that AdvancedTemplateTracker() will return
     mock_tracker_instance = Mock()
-    mock_tracker_instance.data = (
-        mock_tracker_data  # The .data attribute points to our dict
-    )
+    mock_tracker_instance.data = mock_tracker_data  # The .data attribute points to our dict
     mock_tracker_instance.versions = {}
     mock_tracker_instance.log_performance = Mock(side_effect=mock_log_perf_side_effect)
 
@@ -285,9 +281,7 @@ def setup_comprehensive_mocking():
     mock_coverage_validator = Mock()
     testgen_validator_mock.CoverageValidator = mock_coverage_validator
     testgen_validator_mock.VALIDATORS = {}
-    testgen_validator_mock.validate_test_quality = AsyncMock(
-        return_value={"status": "passed"}
-    )
+    testgen_validator_mock.validate_test_quality = AsyncMock(return_value={"status": "passed"})
 
     # Mock testgen_agent
     testgen_agent_mock = Mock()
@@ -473,14 +467,10 @@ class TestValidationSystem:
 
             # Mock file operations
             code_files = {"test.py": "def hello(): return 'world'"}
-            test_files = {
-                "test_hello.py": "def test_hello(): assert hello() == 'world'"
-            }
+            test_files = {"test_hello.py": "def test_hello(): assert hello() == 'world'"}
 
             # Test validation
-            result = await validate_test_quality(
-                code_files, test_files, "python", "coverage"
-            )
+            result = await validate_test_quality(code_files, test_files, "python", "coverage")
             assert result is not None
             print("✅ Validation system working")
 

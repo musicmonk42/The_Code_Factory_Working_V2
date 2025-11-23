@@ -141,8 +141,7 @@ def test_arbiter_state_level_min():
     with pytest.raises(ValidationError) as exc_info:
         ArbiterState(arbiter_id="test", level=0)
     assert any(
-        "Input should be greater than or equal to 1" in str(e)
-        for e in exc_info.value.errors()
+        "Input should be greater than or equal to 1" in str(e) for e in exc_info.value.errors()
     )
 
 
@@ -188,9 +187,7 @@ def test_arbiter_state_serialization():
 def test_growth_snapshot_columns(engine):
     """Test GrowthSnapshot table columns and constraints."""
     inspector = inspect(engine)
-    columns = {
-        col["name"]: col for col in inspector.get_columns("arbiter_growth_snapshots")
-    }
+    columns = {col["name"]: col for col in inspector.get_columns("arbiter_growth_snapshots")}
 
     assert "arbiter_id" in columns
     assert columns["arbiter_id"]["primary_key"]
@@ -211,9 +208,7 @@ def test_growth_snapshot_columns(engine):
 def test_growth_event_record_columns(engine):
     """Test GrowthEventRecord table columns and constraints."""
     inspector = inspect(engine)
-    columns = {
-        col["name"]: col for col in inspector.get_columns("arbiter_growth_events")
-    }
+    columns = {col["name"]: col for col in inspector.get_columns("arbiter_growth_events")}
 
     assert "id" in columns
     assert columns["id"]["primary_key"]
@@ -294,9 +289,7 @@ def test_create_growth_event_record(session):
     session.commit()
 
     # Query back
-    result = (
-        session.query(GrowthEventRecord).filter_by(arbiter_id="test_arbiter").first()
-    )
+    result = session.query(GrowthEventRecord).filter_by(arbiter_id="test_arbiter").first()
 
     assert result is not None
     assert result.event_type == "learning"
@@ -355,21 +348,15 @@ def test_schema_version_defaults(engine):
     inspector = inspect(engine)
 
     # Check GrowthSnapshot
-    snapshot_cols = {
-        col["name"]: col for col in inspector.get_columns("arbiter_growth_snapshots")
-    }
+    snapshot_cols = {col["name"]: col for col in inspector.get_columns("arbiter_growth_snapshots")}
     level_default = str(snapshot_cols["level"].get("default")).strip("'\"")
-    schema_version_default = str(snapshot_cols["schema_version"].get("default")).strip(
-        "'\""
-    )
+    schema_version_default = str(snapshot_cols["schema_version"].get("default")).strip("'\"")
 
     assert level_default == "1" or level_default == "1.0"
     assert schema_version_default == "1.0"
 
     # Check GrowthEventRecord
-    event_cols = {
-        col["name"]: col for col in inspector.get_columns("arbiter_growth_events")
-    }
+    event_cols = {col["name"]: col for col in inspector.get_columns("arbiter_growth_events")}
     event_version_default = str(event_cols["event_version"].get("default")).strip("'\"")
     assert event_version_default == "1.0"
 
@@ -438,13 +425,8 @@ def test_cascade_delete_behavior(session):
     session.commit()
 
     # Verify all exist
-    assert (
-        session.query(GrowthSnapshot).filter_by(arbiter_id="cascade_test").count() == 1
-    )
-    assert (
-        session.query(GrowthEventRecord).filter_by(arbiter_id="cascade_test").count()
-        == 1
-    )
+    assert session.query(GrowthSnapshot).filter_by(arbiter_id="cascade_test").count() == 1
+    assert session.query(GrowthEventRecord).filter_by(arbiter_id="cascade_test").count() == 1
     assert session.query(AuditLog).filter_by(arbiter_id="cascade_test").count() == 1
 
     # Delete snapshot (cascade behavior depends on foreign key setup)
@@ -452,14 +434,9 @@ def test_cascade_delete_behavior(session):
     session.commit()
 
     # Snapshot should be gone
-    assert (
-        session.query(GrowthSnapshot).filter_by(arbiter_id="cascade_test").count() == 0
-    )
+    assert session.query(GrowthSnapshot).filter_by(arbiter_id="cascade_test").count() == 0
     # Other records remain (unless cascade delete is configured)
-    assert (
-        session.query(GrowthEventRecord).filter_by(arbiter_id="cascade_test").count()
-        == 1
-    )
+    assert session.query(GrowthEventRecord).filter_by(arbiter_id="cascade_test").count() == 1
     assert session.query(AuditLog).filter_by(arbiter_id="cascade_test").count() == 1
 
 
@@ -494,9 +471,7 @@ def test_growth_event_record_encryption(session):
     session.add(record)
     session.commit()
 
-    result = (
-        session.query(GrowthEventRecord).filter_by(arbiter_id="test_encryption").first()
-    )
+    result = session.query(GrowthEventRecord).filter_by(arbiter_id="test_encryption").first()
 
     assert result is not None
     assert result.details_encrypted == b"encrypted_data"

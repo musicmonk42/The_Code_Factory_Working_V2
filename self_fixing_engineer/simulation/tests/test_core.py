@@ -48,9 +48,7 @@ def mock_rbac_yaml(temp_dir):
     """Fixture for a mock RBAC YAML file."""
     rbac_path = temp_dir / "rbac_policy.yaml"
     rbac_data = {
-        "roles": [
-            {"name": "admin", "permissions": [{"action": "run:*", "resource": "*"}]}
-        ],
+        "roles": [{"name": "admin", "permissions": [{"action": "run:*", "resource": "*"}]}],
         "user_roles": {"test_user": ["admin"]},
     }
     with open(rbac_path, "w") as f:
@@ -118,9 +116,7 @@ def test_load_rbac_policy_file_not_found(monkeypatch):
 
 def test_get_user_roles(monkeypatch):
     """Test getting user roles from RBAC policy."""
-    monkeypatch.setattr(
-        "simulation.core.RBAC_POLICY", {"user_roles": {"test_user": ["admin"]}}
-    )
+    monkeypatch.setattr("simulation.core.RBAC_POLICY", {"user_roles": {"test_user": ["admin"]}})
     roles = get_user_roles("test_user")
     assert roles == ["admin"]
 
@@ -148,9 +144,7 @@ def test_check_permission_granted(monkeypatch):
         "simulation.core.RBAC_POLICY",
         {
             "user_roles": {"test_user": ["admin"]},
-            "roles": [
-                {"name": "admin", "permissions": [{"action": "run:*", "resource": "*"}]}
-            ],
+            "roles": [{"name": "admin", "permissions": [{"action": "run:*", "resource": "*"}]}],
         },
     )
     assert check_permission("run:agent", "*")
@@ -159,9 +153,7 @@ def test_check_permission_granted(monkeypatch):
 def test_check_permission_denied(monkeypatch):
     """Test permission denied for user."""
     monkeypatch.setattr("simulation.core.CURRENT_USER", "test_user")
-    monkeypatch.setattr(
-        "simulation.core.RBAC_POLICY", {"user_roles": {"test_user": []}}
-    )
+    monkeypatch.setattr("simulation.core.RBAC_POLICY", {"user_roles": {"test_user": []}})
     assert not check_permission("run:agent", "*")
 
 
@@ -243,9 +235,7 @@ def test_execute_remotely_success():
     result = execute_remotely({"name": "test"}, "kubernetes")
     # If Kubernetes is not available in the test environment, skip the test.
     if not KUBERNETES_AVAILABLE and result["status"] == "ERROR":
-        pytest.skip(
-            "Kubernetes not available in this environment, skipping remote execution test."
-        )
+        pytest.skip("Kubernetes not available in this environment, skipping remote execution test.")
     assert result["status"] == "SUBMITTED"
 
 
@@ -261,12 +251,8 @@ def test_execute_remotely_failure(monkeypatch):
 
 def test_run_job_success(monkeypatch):
     """Test successful job run."""
-    monkeypatch.setattr(
-        "simulation.core.check_permission", MagicMock(return_value=True)
-    )
-    monkeypatch.setattr(
-        "simulation.core.run_agent", MagicMock(return_value={"status": "success"})
-    )
+    monkeypatch.setattr("simulation.core.check_permission", MagicMock(return_value=True))
+    monkeypatch.setattr("simulation.core.run_agent", MagicMock(return_value={"status": "success"}))
     result = run_job({"name": "test", "enabled": True, "agentic": False})
     assert result["status"] == "success"
 
@@ -302,15 +288,9 @@ def test_watch_mode_no_watchdog(monkeypatch):
 @pytest.mark.asyncio
 async def test_main_success(mock_args, monkeypatch):
     """Test main function with successful execution."""
-    monkeypatch.setattr(
-        "simulation.core.APP_CONFIG", {"jobs": [{"name": "test", "enabled": True}]}
-    )
-    monkeypatch.setattr(
-        "simulation.core.run_job", MagicMock(return_value={"status": "success"})
-    )
-    monkeypatch.setattr(
-        "simulation.core.check_permission", MagicMock(return_value=True)
-    )
+    monkeypatch.setattr("simulation.core.APP_CONFIG", {"jobs": [{"name": "test", "enabled": True}]})
+    monkeypatch.setattr("simulation.core.run_job", MagicMock(return_value={"status": "success"}))
+    monkeypatch.setattr("simulation.core.check_permission", MagicMock(return_value=True))
     await main(mock_args)
 
 

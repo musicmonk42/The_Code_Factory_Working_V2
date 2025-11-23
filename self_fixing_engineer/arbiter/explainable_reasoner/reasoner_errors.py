@@ -169,9 +169,7 @@ class ReasonerError(Exception):
             # First try to get the current exception traceback
             exc_type, exc_value, exc_traceback = sys.exc_info()
             if exc_traceback:
-                tb_str = "".join(
-                    traceback.format_exception(exc_type, exc_value, exc_traceback)
-                )
+                tb_str = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
 
             # If that didn't work and we have an original exception, try to format it
             if not tb_str and self.original_exception:
@@ -186,7 +184,9 @@ class ReasonerError(Exception):
                     )
                 else:
                     # Fallback to a simple format
-                    tb_str = f"{type(self.original_exception).__name__}: {str(self.original_exception)}"
+                    tb_str = (
+                        f"{type(self.original_exception).__name__}: {str(self.original_exception)}"
+                    )
 
             # Only add traceback if we actually got one
             if tb_str:
@@ -247,6 +247,4 @@ if __name__ == "__main__":
         print("\n--- API Response (Insecure - with Traceback) ---")
         print(json.dumps(re.to_api_response(include_traceback=True), indent=2))
     print("\n--- Test Complete ---")
-    print(
-        "Check the console output above for the automatically generated JSON log message."
-    )
+    print("Check the console output above for the automatically generated JSON log message.")

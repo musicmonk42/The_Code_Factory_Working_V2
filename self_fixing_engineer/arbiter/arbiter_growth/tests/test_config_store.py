@@ -156,9 +156,7 @@ async def test_get_config_uses_default_when_all_fails(config_store_defaults, cap
 
 
 @pytest.mark.asyncio
-async def test_get_config_from_etcd_successfully(
-    config_store_with_etcd, mock_etcd_client
-):
+async def test_get_config_from_etcd_successfully(config_store_with_etcd, mock_etcd_client):
     """Tests successful retrieval of a config value from etcd."""
     mock_etcd_client.get.return_value = (b"42.0", None)
 
@@ -170,9 +168,7 @@ async def test_get_config_from_etcd_successfully(
 
 
 @pytest.mark.asyncio
-async def test_get_config_etcd_fails_then_uses_fallback(
-    config_store_with_fallback, caplog
-):
+async def test_get_config_etcd_fails_then_uses_fallback(config_store_with_fallback, caplog):
     """Tests that the fallback file is used when etcd is unavailable."""
     with caplog.at_level(logging.WARNING):
         store = config_store_with_fallback
@@ -182,9 +178,7 @@ async def test_get_config_etcd_fails_then_uses_fallback(
 
 
 @pytest.mark.asyncio
-async def test_get_config_uses_cache_on_second_call(
-    config_store_with_etcd, mock_etcd_client
-):
+async def test_get_config_uses_cache_on_second_call(config_store_with_etcd, mock_etcd_client):
     """Tests that a cached value is returned without calling etcd again."""
     mock_etcd_client.get.return_value = (b"cached_value", None)
 
@@ -197,9 +191,7 @@ async def test_get_config_uses_cache_on_second_call(
 
 
 @pytest.mark.asyncio
-async def test_get_config_refetches_after_cache_expires(
-    config_store_with_etcd, mock_etcd_client
-):
+async def test_get_config_refetches_after_cache_expires(config_store_with_etcd, mock_etcd_client):
     """Tests that an expired cache entry triggers a new etcd fetch."""
     config_store_with_etcd.cache_ttl = -1
 
@@ -317,9 +309,7 @@ async def test_negative_cache_ttl(config_store_with_etcd):
 
 
 @pytest.mark.asyncio
-async def test_fallback_corrupted(
-    caplog, mocker
-):  # FIX: Removed fixture, set up manually
+async def test_fallback_corrupted(caplog, mocker):  # FIX: Removed fixture, set up manually
     """
     FIX: Tests that a corrupted fallback file is detected and ignored.
     This test is now isolated and uses a dedicated mock setup.
@@ -380,14 +370,7 @@ async def test_fallback_corrupted(config_store_with_fallback, caplog):
         assert "Fallback file integrity check failed" in caplog.text
         # The cache should remain empty after a failed integrity check
         assert (
-            len(
-                [
-                    k
-                    for k in config_store_with_fallback._cache.keys()
-                    if k == "fallback_key"
-                ]
-            )
-            == 0
+            len([k for k in config_store_with_fallback._cache.keys() if k == "fallback_key"]) == 0
         )
 
 

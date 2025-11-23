@@ -33,9 +33,7 @@ except ImportError:
         )
     except ImportError:
         # If the plugin is in the parent directory
-        sys.path.insert(
-            0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        )
+        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
         from aws_batch_runner_plugin import (
             plugin_health,
             run_batch_job,
@@ -188,9 +186,7 @@ async def test_plugin_health_no_credentials_error(mock_aws_clients):
 
 
 @pytest.mark.asyncio
-async def test_run_batch_job_full_workflow_success(
-    mock_aws_clients, mock_job_config_valid
-):
+async def test_run_batch_job_full_workflow_success(mock_aws_clients, mock_job_config_valid):
     mock_batch_client = mock_aws_clients["mock_batch_client"]
     mock_s3_client = mock_aws_clients["mock_s3_client"]
 
@@ -208,9 +204,7 @@ async def test_run_batch_job_full_workflow_success(
         "builtins.open", mock_open(read_data='{"result": "success"}')
     ):
         mock_make_archive.return_value = "/mock/archive.tar.gz"
-        result = await run_batch_job(
-            fast_poll_config, "/mock/project_root", "/mock/output_dir"
-        )
+        result = await run_batch_job(fast_poll_config, "/mock/project_root", "/mock/output_dir")
 
     assert result["success"] is True
     assert result["finalStatus"] == "SUCCEEDED"
@@ -238,17 +232,13 @@ async def test_run_batch_job_failure_workflow(mock_aws_clients, mock_job_config_
             ]
         },
     ]
-    mock_logs_client.get_log_events.return_value = {
-        "events": [{"message": "Error log"}]
-    }
+    mock_logs_client.get_log_events.return_value = {"events": [{"message": "Error log"}]}
 
     with patch("shutil.make_archive") as mock_make_archive, patch(
         "os.path.getsize", return_value=1024
     ), patch("builtins.open", mock_open()):
         mock_make_archive.return_value = "/mock/archive.tar.gz"
-        result = await run_batch_job(
-            fast_poll_config, "/mock/project_root", "/mock/output_dir"
-        )
+        result = await run_batch_job(fast_poll_config, "/mock/project_root", "/mock/output_dir")
 
     assert result["success"] is False
     assert result["finalStatus"] == "FAILED"
@@ -257,9 +247,7 @@ async def test_run_batch_job_failure_workflow(mock_aws_clients, mock_job_config_
 
 
 @pytest.mark.asyncio
-async def test_run_batch_job_s3_download_failure(
-    mock_aws_clients, mock_job_config_valid
-):
+async def test_run_batch_job_s3_download_failure(mock_aws_clients, mock_job_config_valid):
     mock_batch_client = mock_aws_clients["mock_batch_client"]
     mock_s3_client = mock_aws_clients["mock_s3_client"]
 
@@ -275,9 +263,7 @@ async def test_run_batch_job_s3_download_failure(
         "os.path.getsize", return_value=1024
     ), patch("os.makedirs"), patch("builtins.open", mock_open()):
         mock_make_archive.return_value = "/mock/archive.tar.gz"
-        result = await run_batch_job(
-            fast_poll_config, "/mock/project_root", "/mock/output_dir"
-        )
+        result = await run_batch_job(fast_poll_config, "/mock/project_root", "/mock/output_dir")
 
     assert result["success"] is False
     assert "Output file not found" in result["reason"]
@@ -289,12 +275,8 @@ async def test_run_batch_job_s3_download_failure(
 
 
 @pytest.mark.asyncio
-async def test_run_batch_job_invalid_path_traversal(
-    mock_aws_clients, mock_job_config_valid
-):
-    result = await run_batch_job(
-        mock_job_config_valid, "../../project_root", "/tmp/output"
-    )
+async def test_run_batch_job_invalid_path_traversal(mock_aws_clients, mock_job_config_valid):
+    result = await run_batch_job(mock_job_config_valid, "../../project_root", "/tmp/output")
     assert result["success"] is False
     assert "Path traversal" in result["reason"]
 

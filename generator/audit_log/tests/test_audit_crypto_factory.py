@@ -120,9 +120,7 @@ def mock_settings(monkeypatch):
 def mock_boto(monkeypatch):
     """Mocks the boto3 client and its responses."""
     mock_kms_client = MagicMock()
-    mock_decrypt = MagicMock(
-        return_value={"Plaintext": b"test-master-key-from-kms-0123456"}
-    )
+    mock_decrypt = MagicMock(return_value={"Plaintext": b"test-master-key-from-kms-0123456"})
     mock_kms_client.decrypt = mock_decrypt
 
     mock_boto_client = MagicMock(return_value=mock_kms_client)
@@ -130,9 +128,7 @@ def mock_boto(monkeypatch):
         "generator.audit_log.audit_crypto.audit_crypto_factory.boto3.client",
         mock_boto_client,
     )
-    monkeypatch.setattr(
-        "generator.audit_log.audit_crypto.audit_crypto_factory.HAS_BOTO3", True
-    )
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.HAS_BOTO3", True)
 
     return mock_boto_client, mock_decrypt
 
@@ -375,9 +371,7 @@ class TestConfiguration:
         # Re-set settings directly to override fixture mocks which run globally
         mock_dynaconf, config_dict = mock_settings
         setattr(mock_dynaconf, "PROVIDER_TYPE", "software")
-        setattr(
-            mock_dynaconf, "KMS_KEY_ID", "arn:aws:kms:us-east-1:12345:key/mock-key-id"
-        )
+        setattr(mock_dynaconf, "KMS_KEY_ID", "arn:aws:kms:us-east-1:12345:key/mock-key-id")
 
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
             validate_and_load_config as original_validate,
@@ -551,9 +545,7 @@ class TestGlobalSecrets:
         assert key is key2
         mock_secrets["aget_kms"].assert_called_once()  # Should not be called again
 
-    async def test_ensure_software_key_master_prod_no_secret(
-        self, monkeypatch, mock_secrets
-    ):
+    async def test_ensure_software_key_master_prod_no_secret(self, monkeypatch, mock_secrets):
         """Tests failure when the secret is not found in the secret manager."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
             _ensure_software_key_master,
@@ -566,14 +558,10 @@ class TestGlobalSecrets:
         )
         mock_secrets["aget_kms"].return_value = None
 
-        with pytest.raises(
-            CryptoInitializationError, match="No KMS master key ciphertext blob"
-        ):
+        with pytest.raises(CryptoInitializationError, match="No KMS master key ciphertext blob"):
             await _ensure_software_key_master()
 
-    async def test_ensure_software_key_master_prod_no_boto(
-        self, monkeypatch, mock_secrets
-    ):
+    async def test_ensure_software_key_master_prod_no_boto(self, monkeypatch, mock_secrets):
         """Tests failure when boto3 is not installed."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
             _ensure_software_key_master,
@@ -659,9 +647,7 @@ class TestGlobalSecrets:
         )
         mock_secrets["aget_hmac"].return_value = None
 
-        with pytest.raises(
-            CryptoInitializationError, match="Fallback HMAC secret not available"
-        ):
+        with pytest.raises(CryptoInitializationError, match="Fallback HMAC secret not available"):
             await _ensure_fallback_hmac_secret()
 
 
@@ -689,17 +675,13 @@ class TestAsyncUtils:
             mock_endpoint, json={"message": "Test Alert", "severity": "high"}
         )
 
-    async def test_send_alert_failure_with_retries(
-        self, monkeypatch, mock_aiohttp, mock_settings
-    ):
+    async def test_send_alert_failure_with_retries(self, monkeypatch, mock_aiohttp, mock_settings):
         """Tests that send_alert retries on failure."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import send_alert
 
         mock_session, mock_response = mock_aiohttp
         # Make raise_for_status raise an error
-        mock_response.raise_for_status.side_effect = aiohttp.ClientError(
-            "Connection failed"
-        )
+        mock_response.raise_for_status.side_effect = aiohttp.ClientError("Connection failed")
 
         # Mock asyncio.sleep to speed up the test
         mock_sleep = AsyncMock()
@@ -723,9 +705,7 @@ class TestAsyncUtils:
 
         mock_func = AsyncMock(return_value="success")
 
-        result = await retry_operation(
-            mock_func, backend_name="test_be", op_name="test_op"
-        )
+        result = await retry_operation(mock_func, backend_name="test_be", op_name="test_op")
 
         assert result == "success"
         mock_func.assert_called_once()
@@ -738,9 +718,7 @@ class TestAsyncUtils:
             attempts_taken=1,
         )
 
-    async def test_retry_operation_success_after_retries(
-        self, monkeypatch, mock_log_action
-    ):
+    async def test_retry_operation_success_after_retries(self, monkeypatch, mock_log_action):
         """Tests retry_operation succeeding after 2 failures."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
             retry_operation,
@@ -926,9 +904,7 @@ class TestCryptoProviderFactory:
         args, kwargs = mock_providers["software_calls"][0]
         # Check that the accessor functions were passed
         assert kwargs.get("software_key_master_accessor") == _ensure_software_key_master
-        assert (
-            kwargs.get("fallback_hmac_secret_accessor") == _ensure_fallback_hmac_secret
-        )
+        assert kwargs.get("fallback_hmac_secret_accessor") == _ensure_fallback_hmac_secret
         assert kwargs.get("settings") == mock_dynaconf
         assert provider is mock_providers["software_instance"]
 
@@ -938,9 +914,7 @@ class TestCryptoProviderFactory:
         assert len(mock_providers["software_calls"]) == 1  # Not called again
 
     @pytest.mark.asyncio
-    async def test_get_provider_prod_hsm_success(
-        self, monkeypatch, mock_providers, mock_settings
-    ):
+    async def test_get_provider_prod_hsm_success(self, monkeypatch, mock_providers, mock_settings):
         """Tests getting an 'hsm' provider in production mode."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
             _ensure_software_key_master,
@@ -960,9 +934,7 @@ class TestCryptoProviderFactory:
             crypto_provider_factory,
         )
 
-        factory = (
-            crypto_provider_factory.__class__()
-        )  # FIX 8: Re-initialize the factory
+        factory = crypto_provider_factory.__class__()  # FIX 8: Re-initialize the factory
 
         provider = factory.get_provider("hsm")
 
@@ -991,9 +963,7 @@ class TestCryptoProviderFactory:
             crypto_provider_factory,
         )
 
-        factory = (
-            crypto_provider_factory.__class__()
-        )  # FIX 9: Re-initialize the factory
+        factory = crypto_provider_factory.__class__()  # FIX 9: Re-initialize the factory
 
         # Make HSM init fail
         # This will fail on the *first* call, which is when the factory calls __init__

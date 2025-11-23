@@ -56,12 +56,8 @@ except ImportError as e:
             logging.warning("DummyWorkflowEngine: Health check not implemented.")
             return True
 
-        async def orchestrate(
-            self, input_file, max_iterations, output_path, dry_run, user_id
-        ):
-            logging.warning(
-                f"DummyWorkflowEngine: Orchestrating for {user_id}, dry_run={dry_run}"
-            )
+        async def orchestrate(self, input_file, max_iterations, output_path, dry_run, user_id):
+            logging.warning(f"DummyWorkflowEngine: Orchestrating for {user_id}, dry_run={dry_run}")
             await asyncio.sleep(0.5)
             return {"status": "dummy_completed"}
 
@@ -107,9 +103,7 @@ except ImportError as e:
     def logger_dummy_warning(*args, **kwargs):
         _cli_logger.warning(*args, **kwargs)
 
-    logger = logging.getLogger(
-        "cli_fallback"
-    )  # Use a distinct logger name for fallback
+    logger = logging.getLogger("cli_fallback")  # Use a distinct logger name for fallback
     logger.info = logger_dummy_info
     logger.error = logger_dummy_error
     logger.debug = logger_dummy_debug
@@ -134,9 +128,7 @@ except ImportError as e:
 
     # FIX: Added dummy log_action
     def log_action(action_type: str, category: str = "general", **kwargs):
-        logger.warning(
-            f"Dummy log_action: {action_type} (Category: {category}) | Data: {kwargs}"
-        )
+        logger.warning(f"Dummy log_action: {action_type} (Category: {category}) | Data: {kwargs}")
 
     WorkflowEngine = DummyWorkflowEngine
     ConfigWatcher = DummyConfigWatcher
@@ -268,15 +260,9 @@ def run(
 
     # Override config based on CLI flags
     if distributed:
-        config_data["backend"] = (
-            "kubernetes"  # Example override for distributed backend
-        )
-        logger.info(
-            "Distributed backend enabled via CLI flag. Disabling local parallel."
-        )
-        parallel = (
-            1  # Distributed implies external orchestration, not local multiprocessing
-        )
+        config_data["backend"] = "kubernetes"  # Example override for distributed backend
+        logger.info("Distributed backend enabled via CLI flag. Disabling local parallel.")
+        parallel = 1  # Distributed implies external orchestration, not local multiprocessing
 
     # FIX: Config watcher is now started inside the async task
 
@@ -289,15 +275,11 @@ def run(
             )
         )
         input_path = Prompt.ask("Enter README path", default=str(input_path), type=Path)
-        max_iterations = Prompt.ask(
-            "Max iterations", default=str(max_iterations), type=int
-        )
+        max_iterations = Prompt.ask("Max iterations", default=str(max_iterations), type=int)
         dry_run = Confirm.ask("Dry run?", default=dry_run)
         output_dir = Prompt.ask("Output directory", default=str(output_dir), type=Path)
         if not distributed:  # Only ask for parallel if not distributed
-            parallel = Prompt.ask(
-                "Parallel runs (local)", default=str(parallel), type=int
-            )
+            parallel = Prompt.ask("Parallel runs (local)", default=str(parallel), type=int)
         distributed = Confirm.ask("Enable distributed backend?", default=distributed)
 
         if not Confirm.ask("Proceed with these settings?", default=True):
@@ -318,9 +300,7 @@ def run(
 
         try:
             engine = WorkflowEngine(config_data)
-            with console.status(
-                f"[bold blue]Run {run_id}: Performing health check...[/bold blue]"
-            ):
+            with console.status(f"[bold blue]Run {run_id}: Performing health check...[/bold blue]"):
                 if not engine.health_check():
                     console.print(f"[red]Run {run_id}: Health check failed.[/red]")
                     suggest_recovery_cli()
@@ -329,9 +309,7 @@ def run(
                         "run_id": run_id,
                         "error": "Health check failed",
                     }
-                console.print(
-                    f"[bold green]Run {run_id}: Health check passed.[/bold green]"
-                )
+                console.print(f"[bold green]Run {run_id}: Health check passed.[/bold green]")
 
             current_output_path = create_timestamped_output_dir(output_dir)
             console.print(
@@ -389,9 +367,7 @@ def run(
                         run_id=run_id,
                         user_id=user_id,
                     )
-                    console.print(
-                        f"[red]Run {run_id}: Error during workflow execution: {e}[/red]"
-                    )
+                    console.print(f"[red]Run {run_id}: Error during workflow execution: {e}[/red]")
                     suggest_recovery_cli(e)
                     return {"status": "failed", "run_id": run_id, "error": str(e)}
         finally:
@@ -444,9 +420,7 @@ def run(
         logger.error(f"Top-level CLI run command failed: {e}", exc_info=True)
         console.print(f"[red]Critical error in CLI run command: {e}[/red]")
         suggest_recovery_cli(e)
-        asyncio.run(
-            send_alert(f"CLI Run command critical failure: {e}", severity="critical")
-        )
+        asyncio.run(send_alert(f"CLI Run command critical failure: {e}", severity="critical"))
         sys.exit(1)
 
 
@@ -463,9 +437,7 @@ def status():
 
 
 # FIX: Added missing 'metrics' command
-@cli.command(
-    name="metrics", help="Display detailed application metrics in JSON format."
-)
+@cli.command(name="metrics", help="Display detailed application metrics in JSON format.")
 def metrics():
     metrics_data = get_metrics_dict()
     console.print(json.dumps(metrics_data, indent=2))
@@ -477,9 +449,7 @@ def metrics():
     default="",
     help="Search query to filter logs. (e.g., 'error', 'workflow_id:xyz')",
 )
-@click.option(
-    "--limit", type=int, default=10, help="Maximum number of log entries to display."
-)
+@click.option("--limit", type=int, default=10, help="Maximum number of log entries to display.")
 @click.option(
     "--follow",
     is_flag=True,
@@ -502,18 +472,14 @@ def logs(query, limit, follow):
             # Sort logs by timestamp to process oldest new logs first
             new_logs_raw.sort(
                 key=lambda x: (
-                    datetime.datetime.fromisoformat(
-                        x.get("timestamp").replace("Z", "+00:00")
-                    )
+                    datetime.datetime.fromisoformat(x.get("timestamp").replace("Z", "+00:00"))
                     if x.get("timestamp")
                     else datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
                 )
             )
 
             for log_entry in new_logs_raw:
-                log_time_str = log_entry.get(
-                    "timestamp"
-                )  # Assuming timestamp key in ISO format
+                log_time_str = log_entry.get("timestamp")  # Assuming timestamp key in ISO format
                 if log_time_str:
                     log_time = datetime.datetime.fromisoformat(
                         log_time_str.replace("Z", "+00:00")
@@ -578,9 +544,7 @@ async def feedback(ctx, message, rating, run_id, user_id, api_endpoint):
     Submits feedback to a remote API endpoint, not just local logging.
     """
     feedback_data = {
-        "run_id": (
-            run_id if run_id else str(uuid.uuid4())
-        ),  # Generate ID if not provided
+        "run_id": (run_id if run_id else str(uuid.uuid4())),  # Generate ID if not provided
         "rating": rating,
         "comments": message,
         "user_id": user_id,  # Include user ID in feedback
@@ -623,35 +587,21 @@ async def feedback(ctx, message, rating, run_id, user_id, api_endpoint):
             )
 
     except aiohttp.ClientError as e:
-        console.print(
-            f"[red]Error sending feedback to API: Network or HTTP error: {e}[/red]"
-        )
-        logger.error(
-            f"Feedback API submission failed: {e}", exc_info=True, user_id=user_id
-        )
-        await send_alert(
-            f"CLI feedback submission failed to API: {e}", severity="medium"
-        )
+        console.print(f"[red]Error sending feedback to API: Network or HTTP error: {e}[/red]")
+        logger.error(f"Feedback API submission failed: {e}", exc_info=True, user_id=user_id)
+        await send_alert(f"CLI feedback submission failed to API: {e}", severity="medium")
     except json.JSONDecodeError:
         response_text = await response.text()  # Get raw text
-        console.print(
-            f"[red]Error: API returned invalid JSON. Response: {response_text}[/red]"
-        )
-        logger.error(
-            "Feedback API returned invalid JSON.", exc_info=True, user_id=user_id
-        )
+        console.print(f"[red]Error: API returned invalid JSON. Response: {response_text}[/red]")
+        logger.error("Feedback API returned invalid JSON.", exc_info=True, user_id=user_id)
     except Exception as e:
-        console.print(
-            f"[red]An unexpected error occurred during feedback submission: {e}[/red]"
-        )
+        console.print(f"[red]An unexpected error occurred during feedback submission: {e}[/red]")
         logger.critical(
             f"Unexpected error in CLI feedback command: {e}",
             exc_info=True,
             user_id=user_id,
         )
-        await send_alert(
-            f"CLI feedback command critical failure: {e}", severity="critical"
-        )
+        await send_alert(f"CLI feedback command critical failure: {e}", severity="critical")
 
 
 @cli.group()  # FIX: Replaced HelpColorsGroup with standard click.Group
@@ -661,9 +611,7 @@ def config():
 
 
 @config.command(name="show", help="Display the current active configuration.")
-@click.option(
-    "--raw", is_flag=True, help="Display raw YAML without syntax highlighting."
-)
+@click.option("--raw", is_flag=True, help="Display raw YAML without syntax highlighting.")
 @click.pass_context  # FIX: Added context pass
 def config_show(ctx, raw):
     # FIX: Get config_path from context
@@ -672,15 +620,11 @@ def config_show(ctx, raw):
     yaml_content = yaml.dump(config_data, indent=2, sort_keys=False)
     if raw:
         console.print(
-            Panel(
-                yaml_content, title="Current Configuration (Raw)", style="bold magenta"
-            )
+            Panel(yaml_content, title="Current Configuration (Raw)", style="bold magenta")
         )
     else:
         syntax = Syntax(yaml_content, "yaml", theme="monokai", line_numbers=True)
-        console.print(
-            Panel(syntax, title="Current Configuration", style="bold magenta")
-        )
+        console.print(Panel(syntax, title="Current Configuration", style="bold magenta"))
 
 
 @config.command(name="edit", help="Interactively edit a configuration key-value pair.")
@@ -723,9 +667,7 @@ def config_edit(ctx, key, value, user_id):
                     console.print(
                         f"[red]Error: Key '{key}' not found. Path segment '{k}' missing.[/red]"
                     )
-                    logger.error(
-                        f"Config edit failed: Key '{key}' not found by user '{user_id}'."
-                    )
+                    logger.error(f"Config edit failed: Key '{key}' not found by user '{user_id}'.")
                     return
                 if i < len(keys) - 1:
                     current_level = current_level[k]
@@ -800,31 +742,23 @@ def config_edit(ctx, key, value, user_id):
             exc_info=True,
         )
     except Exception as e:
-        console.print(
-            f"[red]An unexpected error occurred during config edit: {e}[/red]"
-        )
+        console.print(f"[red]An unexpected error occurred during config edit: {e}[/red]")
         logger.critical(
             f"Unexpected error in config edit command: {e}",
             exc_info=True,
             user_id=user_id,
         )
-        asyncio.run(
-            send_alert(f"CLI config edit critical failure: {e}", severity="critical")
-        )
+        asyncio.run(send_alert(f"CLI config edit critical failure: {e}", severity="critical"))
     finally:
         if lock_file.exists():
             try:
                 os.remove(lock_file)
                 logger.info(f"Released config lock: {lock_file}")
             except OSError as e:
-                logger.error(
-                    f"Failed to release config lock {lock_file}: {e}", exc_info=True
-                )
+                logger.error(f"Failed to release config lock {lock_file}: {e}", exc_info=True)
 
 
-@config.command(
-    name="reload", help="Trigger a dynamic reload of the application's configuration."
-)
+@config.command(name="reload", help="Trigger a dynamic reload of the application's configuration.")
 @click.option(
     "--api-endpoint",
     default="http://127.0.0.1:8000/api/v1/parse/reload_config",
@@ -838,9 +772,7 @@ async def config_reload(api_endpoint, user_id):
         async with aiohttp.ClientSession() as session:
             # In production, you'd add Authorization headers (JWT/API Key) here
             # headers = {'Authorization': f"Bearer {your_jwt_token}"}
-            response = await session.post(
-                api_endpoint, headers={}, timeout=5
-            )  # No headers for now
+            response = await session.post(api_endpoint, headers={}, timeout=5)  # No headers for now
             response.raise_for_status()
             response_json = await response.json()
             console.print(
@@ -868,32 +800,22 @@ async def config_reload(api_endpoint, user_id):
         console.print(
             f"[red]Error: API returned invalid JSON during config reload. Response: {response_text}[/red]"
         )
-        logger.error(
-            "Config reload API returned invalid JSON.", exc_info=True, user_id=user_id
-        )
+        logger.error("Config reload API returned invalid JSON.", exc_info=True, user_id=user_id)
     except Exception as e:
-        console.print(
-            f"[red]An unexpected error occurred during config reload: {e}[/red]"
-        )
+        console.print(f"[red]An unexpected error occurred during config reload: {e}[/red]")
         logger.critical(
             f"Unexpected error in config reload CLI command: {e}",
             exc_info=True,
             user_id=user_id,
         )
-        await send_alert(
-            f"CLI config reload command critical failure: {e}", severity="critical"
-        )
+        await send_alert(f"CLI config reload command critical failure: {e}", severity="critical")
 
 
 @config.command(name="audit", help="View audit trail of configuration changes.")
-@click.option(
-    "--limit", type=int, default=10, help="Number of recent audit entries to display."
-)
+@click.option("--limit", type=int, default=10, help="Number of recent audit entries to display.")
 @click.option("--user-id", default="cli_user", help="User ID for audit query.")
 def config_audit(limit, user_id):
-    console.print(
-        Panel("Configuration Audit Trail", title="Config Audit", style="bold blue")
-    )
+    console.print(Panel("Configuration Audit Trail", title="Config Audit", style="bold blue"))
     # Filter logs for "Config Edited" actions
     audit_logs = [log for log in search_logs(query="category:config", limit=limit)]
 
@@ -902,16 +824,16 @@ def config_audit(limit, user_id):
         return
     for log_entry in audit_logs:
         # Use rich to print structured audit log entries
-        panel_title = f"Change by {log_entry.get('user_id', 'N/A')} at {log_entry.get('timestamp', 'N/A')}"
+        panel_title = (
+            f"Change by {log_entry.get('user_id', 'N/A')} at {log_entry.get('timestamp', 'N/A')}"
+        )
         panel_content = (
             f"Action: {log_entry.get('action_type', 'N/A')}\n"
             f"Key: {log_entry.get('key', 'N/A')}\n"
             f"Old Value: {log_entry.get('old_value', 'N/A')}\n"
             f"New Value: {log_entry.get('new_value', 'N/A')}"
         )
-        console.print(
-            Panel(panel_content, style="magenta", title=panel_title, expand=False)
-        )
+        console.print(Panel(panel_content, style="magenta", title=panel_title, expand=False))
 
 
 @cli.command(help="Perform a health check of the workflow engine and its components.")
@@ -930,9 +852,7 @@ async def health(ctx):
                 response.raise_for_status()
                 api_health_status = await response.json()
                 api_ok = api_health_status.get("status") == "healthy"
-                console.print(
-                    f"[bold green]API Health: {api_health_status}[/bold green]"
-                )
+                console.print(f"[bold green]API Health: {api_health_status}[/bold green]")
         except Exception as e:
             api_ok = False
             console.print(f"[red]API Health check failed: {e}[/red]")
@@ -955,9 +875,7 @@ def plugin():
 
 @plugin.command(name="list", help="List all installed and available plugins.")
 def plugin_list():
-    console.print(
-        Panel("Registered Agents/Plugins:", title="Plugins List", style="bold green")
-    )
+    console.print(Panel("Registered Agents/Plugins:", title="Plugins List", style="bold green"))
     if AGENT_REGISTRY:
         for name in AGENT_REGISTRY:
             console.print(f"- [green]{name}[/green] (Active)")
@@ -972,18 +890,14 @@ def plugin_list():
 
 
 @plugin.command(name="install", help="Install a new plugin by name or path.")
-@click.argument(
-    "plugin_identifier", type=str
-)  # FIX: Removed conflicting 'help' keyword
+@click.argument("plugin_identifier", type=str)  # FIX: Removed conflicting 'help' keyword
 @click.option(
     "--verify-signature",
     is_flag=True,
     help="Verify digital signature of the plugin package (conceptual).",
 )
 async def plugin_install(plugin_identifier, verify_signature):
-    console.print(
-        f"[yellow]Attempting to install plugin: {plugin_identifier}...[/yellow]"
-    )
+    console.print(f"[yellow]Attempting to install plugin: {plugin_identifier}...[/yellow]")
 
     # In a real system, this would involve:
     # 1. Download/locate plugin package (e.g., from a trusted registry or local path).
@@ -1011,9 +925,7 @@ async def plugin_install(plugin_identifier, verify_signature):
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            logger.info(
-                f"Dynamically loaded plugin module from file: '{plugin_identifier}'"
-            )
+            logger.info(f"Dynamically loaded plugin module from file: '{plugin_identifier}'")
         else:
             module = importlib.import_module(plugin_identifier)
             logger.info(f"Dynamically loaded plugin module: '{plugin_identifier}'")
@@ -1021,12 +933,8 @@ async def plugin_install(plugin_identifier, verify_signature):
         # Plugins should expose a 'register' function to register their components (agents, runners, etc.)
         if hasattr(module, "register") and callable(module.register):
             await asyncio.to_thread(module.register)  # Assume register might be sync
-            console.print(
-                f"[green]Plugin '{plugin_identifier}' registered successfully.[/green]"
-            )
-            log_action(
-                "Plugin Installed", category="plugin", plugin_name=plugin_identifier
-            )
+            console.print(f"[green]Plugin '{plugin_identifier}' registered successfully.[/green]")
+            log_action("Plugin Installed", category="plugin", plugin_name=plugin_identifier)
         else:
             console.print(
                 f"[yellow]Module '{plugin_identifier}' loaded, but no 'register()' function found. Cannot install.[/yellow]"
@@ -1074,9 +982,7 @@ def plugin_uninstall(plugin_name):
     console.print(f"[yellow]Attempting to uninstall plugin: {plugin_name}...[/yellow]")
     if plugin_name in AGENT_REGISTRY:  # Simple deregistration from AGENT_REGISTRY
         del AGENT_REGISTRY[plugin_name]
-        console.print(
-            f"[green]Agent/Plugin '{plugin_name}' uninstalled (deregistered).[/green]"
-        )
+        console.print(f"[green]Agent/Plugin '{plugin_name}' uninstalled (deregistered).[/green]")
         log_action("Plugin Uninstalled", category="plugin", plugin_name=plugin_name)
     else:
         console.print(
@@ -1089,9 +995,7 @@ def plugin_uninstall(plugin_name):
             reason="Not found in registry",
         )
         asyncio.run(
-            send_alert(
-                f"Plugin uninstall failed: '{plugin_name}' not found", severity="medium"
-            )
+            send_alert(f"Plugin uninstall failed: '{plugin_name}' not found", severity="medium")
         )
 
 
@@ -1119,9 +1023,7 @@ def docs():
     pass
 
 
-@docs.command(
-    name="generate", help="Generate project documentation in various formats."
-)
+@docs.command(name="generate", help="Generate project documentation in various formats.")
 @click.option(
     "--output-format",
     type=click.Choice(["markdown", "html", "pdf"]),
@@ -1141,24 +1043,18 @@ def docs():
     help="Source directory for documentation content (e.g., code, Markdown files).",
 )
 @click.option("--user-id", default="cli_user", help="User ID for audit logging.")
-async def docs_generate(
-    output_format: str, output_dir: Path, source_dir: Path, user_id: str
-):
+async def docs_generate(output_format: str, output_dir: Path, source_dir: Path, user_id: str):
     output_path = output_dir
     try:
         output_path.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        console.print(
-            f"[red]Error creating output directory '{output_path}': {e}[/red]"
-        )
+        console.print(f"[red]Error creating output directory '{output_path}': {e}[/red]")
         logger.error(
             f"Doc gen failed: Output directory creation error: {e}",
             exc_info=True,
             user_id=user_id,
         )
-        await send_alert(
-            "CLI doc gen failed: Output directory not writable", severity="critical"
-        )
+        await send_alert("CLI doc gen failed: Output directory not writable", severity="critical")
         sys.exit(1)
 
     console.print(
@@ -1166,9 +1062,7 @@ async def docs_generate(
     )
 
     with Progress(console=console, transient=False) as progress:
-        task = progress.add_task(
-            "[cyan]Processing source files and generating docs...", total=100
-        )
+        task = progress.add_task("[cyan]Processing source files and generating docs...", total=100)
 
         try:
             # --- REAL DOCUMENTATION GENERATION INTEGRATION ---
@@ -1232,9 +1126,7 @@ async def docs_generate(
 )  # FIX: Removed conflicting 'help' keyword
 def docs_view(path: Path):
     doc_path = path
-    console.print(
-        f"[bold blue]Attempting to view documentation: {doc_path}[/bold blue]"
-    )
+    console.print(f"[bold blue]Attempting to view documentation: {doc_path}[/bold blue]")
 
     if doc_path.suffix.lower() in [".html", ".pdf"]:
         try:
@@ -1243,14 +1135,10 @@ def docs_view(path: Path):
             webbrowser.open_new_tab(f"file://{doc_path.resolve()}")
             console.print(f"[green]Opened '{doc_path}' in your web browser.[/green]")
         except Exception as e:
-            console.print(
-                f"[red]Failed to open in browser: {e}. Trying to display content.[/red]"
-            )
+            console.print(f"[red]Failed to open in browser: {e}. Trying to display content.[/red]")
             try:
                 content = doc_path.read_text(encoding="utf-8")
-                console.print(
-                    Panel(content, title=f"Content of {doc_path.name}", style="cyan")
-                )
+                console.print(Panel(content, title=f"Content of {doc_path.name}", style="cyan"))
             except Exception as read_e:
                 console.print(f"[red]Could not read file content: {read_e}[/red]")
     elif doc_path.suffix.lower() in [
@@ -1270,13 +1158,9 @@ def docs_view(path: Path):
                     theme="monokai",
                     line_numbers=True,
                 )
-                console.print(
-                    Panel(syntax, title=f"Content of {doc_path.name}", style="cyan")
-                )
+                console.print(Panel(syntax, title=f"Content of {doc_path.name}", style="cyan"))
             else:
-                console.print(
-                    Panel(content, title=f"Content of {doc_path.name}", style="cyan")
-                )
+                console.print(Panel(content, title=f"Content of {doc_path.name}", style="cyan"))
         except Exception as read_e:
             console.print(f"[red]Could not read file content: {read_e}[/red]")
     else:
@@ -1285,9 +1169,7 @@ def docs_view(path: Path):
         )
         try:
             content = doc_path.read_text(encoding="utf-8")
-            console.print(
-                Panel(content, title=f"Raw Content of {doc_path.name}", style="cyan")
-            )
+            console.print(Panel(content, title=f"Raw Content of {doc_path.name}", style="cyan"))
         except Exception as read_e:
             console.print(f"[red]Could not read file content: {read_e}[/red]")
 
@@ -1306,9 +1188,7 @@ def shell_mode():
     # This uses prompt_toolkit for a richer interactive experience
     while True:
         try:
-            command_line = pt_prompt(
-                "> "
-            ).strip()  # Use pt_prompt for interactive input
+            command_line = pt_prompt("> ").strip()  # Use pt_prompt for interactive input
             if command_line.lower() in ["exit", "quit"]:
                 console.print("[bold blue]Exiting shell mode.[/bold blue]")
                 break
@@ -1326,9 +1206,7 @@ def shell_mode():
                 )  # standalone_mode=False prevents sys.exit
             except click.exceptions.Exit as e:  # Catch Click's internal exit
                 if e.exit_code != 0:
-                    console.print(
-                        f"[red]Command exited with error code {e.exit_code}.[/red]"
-                    )
+                    console.print(f"[red]Command exited with error code {e.exit_code}.[/red]")
             except click.exceptions.MissingParameter as e:
                 console.print(f"[red]Missing parameter: {e.param.name}.[/red]")
             except click.exceptions.BadParameter as e:
@@ -1340,9 +1218,7 @@ def shell_mode():
             console.print("[bold blue]Exiting shell mode (EOF).[/bold blue]")
             break
         except KeyboardInterrupt:  # Ctrl+C
-            console.print(
-                "[bold blue]Interrupted. Type 'exit' to leave shell mode.[/bold blue]"
-            )
+            console.print("[bold blue]Interrupted. Type 'exit' to leave shell mode.[/bold blue]")
             continue
         except Exception as e:
             console.print(f"[red]An unexpected error occurred in shell: {e}[/red]")
@@ -1357,14 +1233,8 @@ def create_timestamped_output_dir(base_dir: Path) -> Path:
         output_path.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Created output directory: {output_path}")
     except OSError as e:
-        logger.error(
-            f"Failed to create output directory {output_path}: {e}", exc_info=True
-        )
-        asyncio.run(
-            send_alert(
-                f"CLI output directory creation failed: {e}", severity="critical"
-            )
-        )
+        logger.error(f"Failed to create output directory {output_path}: {e}", exc_info=True)
+        asyncio.run(send_alert(f"CLI output directory creation failed: {e}", severity="critical"))
         raise  # Re-raise to halt execution if critical
     return output_path
 
@@ -1400,20 +1270,14 @@ def suggest_recovery_cli(error: Optional[Exception] = None):
                 0,
                 "[bold red]Configuration error:[/bold red] Review 'config.yaml' for syntax mistakes (e.g., indentation, missing colons). Use an online YAML validator if unsure.",
             )
-        elif (
-            "HTTPException" in error_type or "ClientError" in error_type
-        ):  # For API related errors
+        elif "HTTPException" in error_type or "ClientError" in error_type:  # For API related errors
             suggestions.insert(
                 0,
                 "[bold red]API communication error:[/bold red] Verify the API service is running and accessible at the configured endpoint (e.g., 'http://127.0.0.1:8000').",
             )
-        suggestions.append(
-            f"Error-specific detail: [bold yellow]{str(error)}[/bold yellow]"
-        )
+        suggestions.append(f"Error-specific detail: [bold yellow]{str(error)}[/bold yellow]")
 
-    console.print(
-        Panel("\n".join(suggestions), title="Recovery Suggestions", style="bold red")
-    )
+    console.print(Panel("\n".join(suggestions), title="Recovery Suggestions", style="bold red"))
     console.print(
         "\n[dim]For further assistance, check the project's documentation or open an issue on GitHub.[/dim]"
     )

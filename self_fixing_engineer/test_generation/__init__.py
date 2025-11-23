@@ -148,9 +148,7 @@ try:
         )
 
 except ImportError as e:
-    logger.warning(
-        f"Warning: Failed to import a core component: {e}. Using stubs for testing."
-    )
+    logger.warning(f"Warning: Failed to import a core component: {e}. Using stubs for testing.")
 
 
 def validate_project_root(project_root_str: str):
@@ -199,9 +197,7 @@ def validate_project_root(project_root_str: str):
 
         # Iterate through path parts to check for symlinks and hidden components
         for part in project_root.parts:
-            path_so_far = Path(
-                *project_root.parts[: project_root.parts.index(part) + 1]
-            )
+            path_so_far = Path(*project_root.parts[: project_root.parts.index(part) + 1])
             if path_so_far.is_symlink():
                 error_msg = f"Project root path contains a symbolic link: {path_so_far}"
                 logger.critical(f"CRITICAL: {error_msg}")
@@ -215,7 +211,9 @@ def validate_project_root(project_root_str: str):
                 sys.exit(1)
 
             if part.startswith("."):
-                error_msg = f"Project root path contains hidden file/directory components: {project_root}"
+                error_msg = (
+                    f"Project root path contains hidden file/directory components: {project_root}"
+                )
                 logger.critical(f"CRITICAL: {error_msg}")
                 asyncio.run(
                     audit_logger.log_event(

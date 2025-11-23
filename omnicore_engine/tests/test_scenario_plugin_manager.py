@@ -234,9 +234,7 @@ class TestExplainableAI:
         """Test explain_event with reasoner available"""
         ai = ExplainableAI()
         ai.reasoner = Mock()
-        ai.reasoner.explain_event = AsyncMock(
-            return_value={"explanation": "Test explanation"}
-        )
+        ai.reasoner.explain_event = AsyncMock(return_value={"explanation": "Test explanation"})
 
         result = await ai.explain_event({"event": "test"})
 
@@ -259,9 +257,7 @@ class TestExplainableAI:
         """Test reason_event with reasoner available"""
         ai = ExplainableAI()
         ai.reasoner = Mock()
-        ai.reasoner.reason_event = AsyncMock(
-            return_value={"reasoning": "Test reasoning"}
-        )
+        ai.reasoner.reason_event = AsyncMock(return_value={"reasoning": "Test reasoning"})
 
         result = await ai.reason_event({"event": "test"})
 
@@ -421,24 +417,18 @@ class TestOmniCoreEngine:
         mock_plugin = Mock()
         mock_plugin.execute = AsyncMock(return_value="task_result")
 
-        with patch(
-            "omnicore_engine.scenario_plugin_manager.PLUGIN_REGISTRY"
-        ) as mock_registry:
+        with patch("omnicore_engine.scenario_plugin_manager.PLUGIN_REGISTRY") as mock_registry:
             mock_registry.get_plugin_for_task = Mock(return_value=mock_plugin)
 
             result = await engine.perform_task("test_task", param1="value1")
 
             assert result == "task_result"
-            mock_plugin.execute.assert_called_once_with(
-                action="test_task", param1="value1"
-            )
+            mock_plugin.execute.assert_called_once_with(action="test_task", param1="value1")
 
     @pytest.mark.asyncio
     async def test_perform_task_no_plugin(self, engine):
         """Test performing task without available plugin"""
-        with patch(
-            "omnicore_engine.scenario_plugin_manager.PLUGIN_REGISTRY"
-        ) as mock_registry:
+        with patch("omnicore_engine.scenario_plugin_manager.PLUGIN_REGISTRY") as mock_registry:
             mock_registry.get_plugin_for_task = Mock(return_value=None)
 
             result = await engine.perform_task("test_task")
@@ -451,9 +441,7 @@ class TestOmniCoreEngine:
         mock_plugin = Mock()
         mock_plugin.execute = AsyncMock(side_effect=Exception("Plugin error"))
 
-        with patch(
-            "omnicore_engine.scenario_plugin_manager.PLUGIN_REGISTRY"
-        ) as mock_registry:
+        with patch("omnicore_engine.scenario_plugin_manager.PLUGIN_REGISTRY") as mock_registry:
             mock_registry.get_plugin_for_task = Mock(return_value=mock_plugin)
 
             result = await engine.perform_task("test_task")
@@ -496,9 +484,7 @@ class TestComponentLifecycle:
 
         mock_component_class = Mock()
 
-        result = await engine._initialize_component_instance(
-            "test_component", mock_component_class
-        )
+        result = await engine._initialize_component_instance("test_component", mock_component_class)
 
         assert result == existing_component
         mock_component_class.assert_not_called()

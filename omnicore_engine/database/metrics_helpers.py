@@ -6,9 +6,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def get_or_create_counter_local(
-    name: str, documentation: str, labelnames: tuple = ()
-) -> Counter:
+def get_or_create_counter_local(name: str, documentation: str, labelnames: tuple = ()) -> Counter:
     """Idempotently creates or retrieves a Prometheus Counter."""
     try:
         collector = REGISTRY._names_to_collectors.get(name)
@@ -22,9 +20,7 @@ def get_or_create_counter_local(
         raise
 
 
-def get_or_create_gauge_local(
-    name: str, documentation: str, labelnames: tuple = ()
-) -> Gauge:
+def get_or_create_gauge_local(name: str, documentation: str, labelnames: tuple = ()) -> Gauge:
     """Idempotently creates or retrieves a Prometheus Gauge."""
     try:
         collector = REGISTRY._names_to_collectors.get(name)

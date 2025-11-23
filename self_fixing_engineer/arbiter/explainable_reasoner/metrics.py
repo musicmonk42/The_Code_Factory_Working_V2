@@ -125,9 +125,7 @@ def initialize_metrics():
             metrics_dir = Path(PROMETHEUS_MULTIPROC_DIR)
             metrics_dir.mkdir(parents=True, exist_ok=True)
             if not os.access(metrics_dir, os.W_OK):
-                raise PermissionError(
-                    f"Metrics directory {metrics_dir} is not writable."
-                )
+                raise PermissionError(f"Metrics directory {metrics_dir} is not writable.")
             multiprocess.MultiProcessCollector(METRICS_REGISTRY)
             _metrics_logger.info(
                 "prometheus_multiprocess_enabled",
@@ -147,9 +145,7 @@ def initialize_metrics():
                 "fallback_to_in_memory_registry", reason="Multiprocess setup failed."
             )
     else:
-        _metrics_logger.info(
-            "prometheus_single_process_mode", namespace=METRICS_NAMESPACE
-        )
+        _metrics_logger.info("prometheus_single_process_mode", namespace=METRICS_NAMESPACE)
         try:
             ProcessCollector(registry=METRICS_REGISTRY, namespace=METRICS_NAMESPACE)
         except ValueError:

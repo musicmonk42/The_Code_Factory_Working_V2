@@ -235,9 +235,7 @@ class TestCoverageValidator:
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
-    async def test_validate_success(
-        self, mock_run_tests, mock_save_files, coverage_validator
-    ):
+    async def test_validate_success(self, mock_run_tests, mock_save_files, coverage_validator):
         """Test successful coverage validation."""
         # Mock successful test run with correct structure matching sandbox function
         mock_run_tests.return_value = {
@@ -270,9 +268,7 @@ class TestCoverageValidator:
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
-    async def test_validate_low_coverage(
-        self, mock_run_tests, mock_save_files, coverage_validator
-    ):
+    async def test_validate_low_coverage(self, mock_run_tests, mock_save_files, coverage_validator):
         """Test validation with low coverage."""
         mock_run_tests.return_value = {
             "coverage_percentage": 45.0,
@@ -330,13 +326,9 @@ class TestMutationValidator:
         "agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
-    @patch(
-        "agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
-    )
+    @patch("agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock)
     @pytest.mark.asyncio
-    async def test_validate_success(
-        self, mock_mutation_test, mock_save_files, mutation_validator
-    ):
+    async def test_validate_success(self, mock_mutation_test, mock_save_files, mutation_validator):
         """Test successful mutation testing."""
         # Mock mutation_test to return good results
         mock_mutation_test.return_value = {
@@ -358,9 +350,7 @@ class TestMutationValidator:
         "agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
-    @patch(
-        "agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
-    )
+    @patch("agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock)
     @pytest.mark.asyncio
     async def test_validate_unsupported_language(
         self, mock_mutation_test, mock_save_files, mutation_validator
@@ -375,9 +365,7 @@ class TestMutationValidator:
         code_files = {"source.xyz": "some code"}
         test_files = {"test_source.xyz": "some test"}
 
-        result = await mutation_validator.validate(
-            code_files, test_files, "unsupported"
-        )
+        result = await mutation_validator.validate(code_files, test_files, "unsupported")
 
         # Should have low mutation score
         assert result["mutation_score"] == 0.0
@@ -386,35 +374,24 @@ class TestMutationValidator:
         "agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
-    @patch(
-        "agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
-    )
+    @patch("agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock)
     @pytest.mark.asyncio
-    async def test_validate_timeout(
-        self, mock_mutation_test, mock_save_files, mutation_validator
-    ):
+    async def test_validate_timeout(self, mock_mutation_test, mock_save_files, mutation_validator):
         """Test mutation validation timeout."""
-        mock_mutation_test.side_effect = asyncio.TimeoutError(
-            "Mutation testing timed out"
-        )
+        mock_mutation_test.side_effect = asyncio.TimeoutError("Mutation testing timed out")
 
         code_files = {"source.py": "def add(a, b): return a + b"}
         test_files = {"test_source.py": "def test_add(): assert add(1, 2) == 3"}
 
         result = await mutation_validator.validate(code_files, test_files, "python")
 
-        assert (
-            "exception" in result["issues"].lower()
-            or "timed out" in result["issues"].lower()
-        )
+        assert "exception" in result["issues"].lower() or "timed out" in result["issues"].lower()
 
     @patch(
         "agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
-    @patch(
-        "agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
-    )
+    @patch("agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock)
     @pytest.mark.asyncio
     async def test_validate_with_human_review(
         self, mock_mutation_test, mock_save_files, mutation_validator
@@ -461,9 +438,7 @@ class TestPropertyBasedValidator:
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
-    async def test_validate_success(
-        self, mock_property_test, mock_save_files, property_validator
-    ):
+    async def test_validate_success(self, mock_property_test, mock_save_files, property_validator):
         """Test successful property-based validation."""
         # Mock successful property-based testing
         mock_property_test.return_value = {
@@ -495,18 +470,14 @@ def test_reverse_property(s):
     )
     @patch("subprocess.run")
     @pytest.mark.asyncio
-    async def test_validate_failures(
-        self, mock_subprocess, mock_save_files, property_validator
-    ):
+    async def test_validate_failures(self, mock_subprocess, mock_save_files, property_validator):
         """Test property-based validation with failures."""
         mock_result = Mock()
         mock_result.returncode = 1
         mock_result.stderr = "Property test failed: Falsifying example"
         mock_subprocess.return_value = mock_result
 
-        code_files = {
-            "source.py": "def buggy_function(x): return x + 1 if x > 0 else 0"
-        }
+        code_files = {"source.py": "def buggy_function(x): return x + 1 if x > 0 else 0"}
         test_files = {
             "test_source.py": """
 import hypothesis.strategies as st
@@ -546,9 +517,7 @@ def test_buggy_property(x):
         code_files = {"source.xyz": "some code"}
         test_files = {"test_source.xyz": "some test"}
 
-        result = await property_validator.validate(
-            code_files, test_files, "unsupported"
-        )
+        result = await property_validator.validate(code_files, test_files, "unsupported")
 
         assert result["properties_passed"] is False
         assert "property-based tests failed" in result["issues"].lower()
@@ -597,9 +566,7 @@ class TestStressPerformanceValidator:
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
-    async def test_validate_success(
-        self, mock_run_stress, mock_save_files, stress_validator
-    ):
+    async def test_validate_success(self, mock_run_stress, mock_save_files, stress_validator):
         """Test successful stress/performance validation."""
         mock_run_stress.return_value = {
             "avg_response_time_ms": 250.0,
@@ -704,9 +671,7 @@ class TestStressPerformanceValidator:
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
-    async def test_validate_exception(
-        self, mock_run_stress, mock_save_files, stress_validator
-    ):
+    async def test_validate_exception(self, mock_run_stress, mock_save_files, stress_validator):
         """Test stress validation with exception handling."""
         mock_run_stress.side_effect = Exception("Stress test execution failed")
 
@@ -778,14 +743,10 @@ class TestPublicAPI:
         code_files = {"source.py": "def hello(): return 'world'"}
         test_files = {"test_source.py": "def test_hello(): assert hello() == 'world'"}
 
-        result = await validate_test_quality(
-            code_files, test_files, "python", "coverage"
-        )
+        result = await validate_test_quality(code_files, test_files, "python", "coverage")
 
         assert result == {"coverage_percentage": 85.0}
-        mock_validator.validate.assert_called_once_with(
-            code_files, test_files, "python"
-        )
+        mock_validator.validate.assert_called_once_with(code_files, test_files, "python")
 
     @patch("agents.testgen_agent.testgen_validator.VALIDATORS")
     @pytest.mark.asyncio
@@ -853,9 +814,7 @@ class TestEdgeCases:
                 result = await validator.validate({}, {}, "python")
 
                 assert result["coverage_percentage"] == 0.0
-                assert (
-                    "empty" in result["issues"].lower() or result["lines_covered"] == 0
-                )
+                assert "empty" in result["issues"].lower() or result["lines_covered"] == 0
 
     @pytest.mark.asyncio
     async def test_invalid_language(self):
@@ -883,9 +842,7 @@ class TestEdgeCases:
                     "status": "failed",
                 }
 
-                result = await validator.validate(
-                    code_files, test_files, "unsupported_language"
-                )
+                result = await validator.validate(code_files, test_files, "unsupported_language")
 
                 assert result["coverage_percentage"] == 0.0
 
@@ -927,9 +884,7 @@ class TestCompliance:
                 }
 
                 code_files = {"source.py": "def hello(): return 'world'"}
-                test_files = {
-                    "test_source.py": "def test_hello(): assert hello() == 'world'"
-                }
+                test_files = {"test_source.py": "def test_hello(): assert hello() == 'world'"}
 
                 result = await validator.validate(code_files, test_files, "python")
 
@@ -943,9 +898,7 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_full_validation_pipeline(self):
         """Test the complete validation pipeline with multiple strategies."""
-        with patch(
-            "agents.testgen_agent.testgen_validator.VALIDATORS"
-        ) as mock_validators:
+        with patch("agents.testgen_agent.testgen_validator.VALIDATORS") as mock_validators:
             # Mock all validators
             coverage_validator = Mock()
             coverage_validator.validate = AsyncMock(
@@ -990,28 +943,20 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_error_handling_throughout_pipeline(self):
         """Test error handling across the entire validation pipeline."""
-        with patch(
-            "agents.testgen_agent.testgen_validator.VALIDATORS"
-        ) as mock_validators:
+        with patch("agents.testgen_agent.testgen_validator.VALIDATORS") as mock_validators:
             # Mock validator that raises an exception
             failing_validator = Mock()
-            failing_validator.validate = AsyncMock(
-                side_effect=Exception("Validation failed")
-            )
+            failing_validator.validate = AsyncMock(side_effect=Exception("Validation failed"))
 
             mock_validators.__getitem__.return_value = failing_validator
             mock_validators.__contains__.return_value = True
 
             code_files = {"source.py": "def hello(): return 'world'"}
-            test_files = {
-                "test_source.py": "def test_hello(): assert hello() == 'world'"
-            }
+            test_files = {"test_source.py": "def test_hello(): assert hello() == 'world'"}
 
             # Should handle exception gracefully
             with pytest.raises(Exception, match="Validation failed"):
-                await validate_test_quality(
-                    code_files, test_files, "python", "coverage"
-                )
+                await validate_test_quality(code_files, test_files, "python", "coverage")
 
 
 if __name__ == "__main__":

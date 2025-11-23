@@ -106,9 +106,7 @@ class FixStrategy(ABC):
 
 class DiffPatchStrategy(FixStrategy):
     async def apply_fix(self, code: str, fix_data: str, lang: str) -> str:
-        with tracer.start_as_current_span(
-            "diff_patch_fix", attributes={"language": lang}
-        ):
+        with tracer.start_as_current_span("diff_patch_fix", attributes={"language": lang}):
             if not isinstance(fix_data, str) or not fix_data.strip().startswith("---"):
                 logger.warning("Fix data not in unified diff format.")
                 return code
@@ -136,9 +134,7 @@ class DiffPatchStrategy(FixStrategy):
                 )
                 stdout, stderr = await proc.communicate(input=fix_data.encode("utf-8"))
                 if proc.returncode != 0:
-                    logger.error(
-                        f"Patch failed (RC={proc.returncode}): {stderr.decode().strip()}"
-                    )
+                    logger.error(f"Patch failed (RC={proc.returncode}): {stderr.decode().strip()}")
                     FIX_FAILURE.labels("diff", "patch_error").inc()
                     return code
 
@@ -176,9 +172,7 @@ class RegexStrategy(FixStrategy):
 
 class LLMGenerateStrategy(FixStrategy):
     async def apply_fix(self, code: str, fix_details: Dict[str, Any], lang: str) -> str:
-        with tracer.start_as_current_span(
-            "llm_generate_fix", attributes={"language": lang}
-        ):
+        with tracer.start_as_current_span("llm_generate_fix", attributes={"language": lang}):
             start_time = time.monotonic()
             result = code
             try:
@@ -204,13 +198,9 @@ class LLMGenerateStrategy(FixStrategy):
                 FIX_FAILURE.labels("llm_generate", "unexpected_error").inc()
                 return code
             finally:
-                FIX_LATENCY.labels("llm_generate").observe(
-                    time.monotonic() - start_time
-                )
+                FIX_LATENCY.labels("llm_generate").observe(time.monotonic() - start_time)
 
-    async def _apply_fix_generic_llm(
-        self, code: str, fix_details: Dict, lang: str
-    ) -> str:
+    async def _apply_fix_generic_llm(self, code: str, fix_details: Dict, lang: str) -> str:
         """Generic LLM call for languages without dedicated AST manipulation or for complex issues."""
         prompt = f"You are a code fixer. Apply the required fix to the provided {lang} code. Output *only* the fixed code block, ensuring valid syntax.\n\nFix Type: {fix_details.get('type')}\nDetails: {json.dumps(fix_details)}\n\nOriginal {lang} Code:\n```{lang}\n{code}\n```\n\nFixed {lang} Code:"
 
@@ -236,9 +226,7 @@ class LLMGenerateStrategy(FixStrategy):
                     class VariableRenamer(ast.NodeTransformer):
                         def visit_Name(self, node):
                             if node.id == fix_details.get("old_name"):
-                                return ast.Name(
-                                    id=fix_details.get("new_name"), ctx=node.ctx
-                                )
+                                return ast.Name(id=fix_details.get("new_name"), ctx=node.ctx)
                             return node
 
                     tree = ast.parse(code)
@@ -248,9 +236,7 @@ class LLMGenerateStrategy(FixStrategy):
                     return fixed_code
 
                 # 2. Fallback to LLM
-                fixed_code = await self._apply_fix_generic_llm(
-                    code, fix_details, "python"
-                )
+                fixed_code = await self._apply_fix_generic_llm(code, fix_details, "python")
 
                 # 3. Final Validation
                 ast.parse(fixed_code)
@@ -271,23 +257,17 @@ class LLMGenerateStrategy(FixStrategy):
         with tracer.start_as_current_span("apply_fix_javascript"):
             # esprima is guaranteed to be available here due to the check in apply_fix caller
             try:
-                esprima.parseScript(
-                    code, {"loc": True}
-                )  # Ensure original code is parsable
+                esprima.parseScript(code, {"loc": True})  # Ensure original code is parsable
                 fix_type = fix_details.get("type")
 
                 if fix_type == "rename_variable":
                     # NOTE: String replace is simplified but needs context-awareness (e.g. within comments vs code)
-                    new_code = code.replace(
-                        fix_details["old_name"], fix_details["new_name"]
-                    )
+                    new_code = code.replace(fix_details["old_name"], fix_details["new_name"])
                     esprima.parseScript(new_code, {"loc": True})  # Validate fix
                     return new_code
 
                 # Fallback to LLM
-                fixed_code = await self._apply_fix_generic_llm(
-                    code, fix_details, "javascript"
-                )
+                fixed_code = await self._apply_fix_generic_llm(code, fix_details, "javascript")
 
                 # Final Validation
                 esprima.parseScript(fixed_code, {"loc": True})
@@ -381,9 +361,7 @@ async def safety_check_fix(
         pass_rate = result.get("pass_rate", 0.0)
 
         if pass_rate < 1.0:
-            logger.warning(
-                f"Safety check failed: Test pass rate {pass_rate * 100:.2f}%"
-            )
+            logger.warning(f"Safety check failed: Test pass rate {pass_rate * 100:.2f}%")
             return False
         return True
 
@@ -473,9 +451,7 @@ def commit_fixes_to_git(code_files: Dict[str, str], repo_path: str, message: str
                     existing_text = None
                     if dest_path.exists():
                         try:
-                            existing_text = dest_path.read_text(
-                                encoding="utf-8", errors="ignore"
-                            )
+                            existing_text = dest_path.read_text(encoding="utf-8", errors="ignore")
                         except Exception:
                             existing_text = None
 
@@ -484,9 +460,7 @@ def commit_fixes_to_git(code_files: Dict[str, str], repo_path: str, message: str
                         try:
                             dest_path.write_text(content, encoding="utf-8")
                         except Exception as e:
-                            logger.error(
-                                f"Failed writing {dest_path}: {e}", exc_info=True
-                            )
+                            logger.error(f"Failed writing {dest_path}: {e}", exc_info=True)
                             continue
                     files_to_add.append(str(dest_path))
 
@@ -498,9 +472,7 @@ def commit_fixes_to_git(code_files: Dict[str, str], repo_path: str, message: str
                 try:
                     repo.index.add(files_to_add)
                 except git.GitCommandError as e:
-                    logger.error(
-                        f"Git add failed: {getattr(e, 'stderr', e)}", exc_info=True
-                    )
+                    logger.error(f"Git add failed: {getattr(e, 'stderr', e)}", exc_info=True)
                     return
 
                 # Determine if there are any staged changes compared to HEAD
@@ -518,9 +490,7 @@ def commit_fixes_to_git(code_files: Dict[str, str], repo_path: str, message: str
                     else:
                         has_changes = bool(repo.index.diff("HEAD"))
                 except Exception as e:
-                    logger.warning(
-                        f"Could not diff against HEAD: {e}. Assuming changes exist."
-                    )
+                    logger.warning(f"Could not diff against HEAD: {e}. Assuming changes exist.")
                     has_changes = True
 
                 if not has_changes:
@@ -540,13 +510,9 @@ def commit_fixes_to_git(code_files: Dict[str, str], repo_path: str, message: str
                 try:
                     repo.index.commit(message, author=author, committer=committer)
                     logger.info(f"Git commit successful: '{message}'")
-                    log_action(
-                        "Git Commit", {"message": message, "files": files_to_add}
-                    )
+                    log_action("Git Commit", {"message": message, "files": files_to_add})
                 except git.GitCommandError as e:
-                    logger.error(
-                        f"Git commit failed: {getattr(e, 'stderr', e)}", exc_info=True
-                    )
+                    logger.error(f"Git commit failed: {getattr(e, 'stderr', e)}", exc_info=True)
                     return
 
                 # Optional push (safe/no-op if no 'origin' or credential issues)
@@ -576,18 +542,14 @@ async def apply_auto_fixes(
     vc_path: Optional[str] = None,
     undo_redo_action: Optional[Tuple[str, str]] = None,
 ) -> Dict[str, str]:
-    with tracer.start_as_current_span(
-        "apply_auto_fixes", attributes={"language": lang}
-    ):
+    with tracer.start_as_current_span("apply_auto_fixes", attributes={"language": lang}):
         start_time = time.monotonic()
 
         # Input Validation
         if (
             not isinstance(code_files, dict)
             or not code_files
-            or not all(
-                isinstance(k, str) and isinstance(v, str) for k, v in code_files.items()
-            )
+            or not all(isinstance(k, str) and isinstance(v, str) for k, v in code_files.items())
         ):
             FIX_FAILURE.labels("none", "invalid_input").inc()
             raise ValueError(
@@ -595,25 +557,16 @@ async def apply_auto_fixes(
             )
         if fixes_data and (
             not isinstance(fixes_data, dict)
-            or not all(
-                isinstance(k, str) and isinstance(v, list)
-                for k, v in fixes_data.items()
-            )
+            or not all(isinstance(k, str) and isinstance(v, list) for k, v in fixes_data.items())
         ):
             FIX_FAILURE.labels("none", "invalid_input").inc()
-            raise ValueError(
-                "fixes_data must be a dictionary with string keys and list values."
-            )
+            raise ValueError("fixes_data must be a dictionary with string keys and list values.")
         if test_files and (
             not isinstance(test_files, dict)
-            or not all(
-                isinstance(k, str) and isinstance(v, str) for k, v in test_files.items()
-            )
+            or not all(isinstance(k, str) and isinstance(v, str) for k, v in test_files.items())
         ):
             FIX_FAILURE.labels("none", "invalid_input").inc()
-            raise ValueError(
-                "test_files must be a dictionary with string keys and values."
-            )
+            raise ValueError("test_files must be a dictionary with string keys and values.")
 
         updated_code_files = code_files.copy()
 
@@ -641,9 +594,7 @@ async def apply_auto_fixes(
         # Apply Fixes
         fixes_to_apply = hitl_review_fixes(fixes_data) if hitl_enabled else fixes_data
 
-        async def apply_file_fixes(
-            file_path: str, fixes: List[Dict]
-        ) -> Tuple[str, str]:
+        async def apply_file_fixes(file_path: str, fixes: List[Dict]) -> Tuple[str, str]:
             original_code = updated_code_files[file_path]
             current_code = original_code
             file_id = get_file_id(file_path)
@@ -665,9 +616,7 @@ async def apply_auto_fixes(
 
                 if not fixer:
                     FIX_FAILURE.labels(strategy_name, "invalid_strategy").inc()
-                    FIX_LATENCY.labels(strategy_name).observe(
-                        time.monotonic() - start_fix
-                    )
+                    FIX_LATENCY.labels(strategy_name).observe(time.monotonic() - start_fix)
                     log_action(
                         "Fix Attempt",
                         {
@@ -687,9 +636,7 @@ async def apply_auto_fixes(
                 except Exception as e:
                     logger.error(f"Fixer '{strategy_name}' raised: {e}", exc_info=True)
                     FIX_FAILURE.labels(strategy_name, "exception").inc()
-                    FIX_LATENCY.labels(strategy_name).observe(
-                        time.monotonic() - start_fix
-                    )
+                    FIX_LATENCY.labels(strategy_name).observe(time.monotonic() - start_fix)
                     log_action(
                         "Fix Attempt",
                         {
@@ -702,9 +649,7 @@ async def apply_auto_fixes(
                     continue
 
                 if potential_new_code == current_code:
-                    FIX_LATENCY.labels(strategy_name).observe(
-                        time.monotonic() - start_fix
-                    )
+                    FIX_LATENCY.labels(strategy_name).observe(time.monotonic() - start_fix)
                     log_action(
                         "Fix Attempt",
                         {
@@ -722,9 +667,7 @@ async def apply_auto_fixes(
 
                 is_secure = await security_check_fix(temp_files, lang)
                 is_safe = (
-                    await safety_check_fix(temp_files, test_files, lang)
-                    if test_files
-                    else True
+                    await safety_check_fix(temp_files, test_files, lang) if test_files else True
                 )
 
                 if is_secure and is_safe:
@@ -778,18 +721,13 @@ async def apply_auto_fixes(
             vc_path
             and allow_git_commits
             and any(
-                updated_code_files.get(f) != code_files.get(f)
-                for f in updated_code_files.keys()
+                updated_code_files.get(f) != code_files.get(f) for f in updated_code_files.keys()
             )
         ):
-            commit_fixes_to_git(
-                updated_code_files, vc_path, f"Automated fixes for {lang}"
-            )
+            commit_fixes_to_git(updated_code_files, vc_path, f"Automated fixes for {lang}")
 
         log_action("Apply Fixes Finished", {"duration": time.monotonic() - start_time})
-        logger.info(
-            f"Fix application completed in {time.monotonic() - start_time:.2f}s"
-        )
+        logger.info(f"Fix application completed in {time.monotonic() - start_time:.2f}s")
         return updated_code_files
 
 
@@ -845,7 +783,5 @@ if __name__ == "__main__":
         )
         print(f"Details: {e}")
     except Exception as e:
-        logger.error(
-            f"An unexpected error occurred during execution: {e}", exc_info=True
-        )
+        logger.error(f"An unexpected error occurred during execution: {e}", exc_info=True)
         print(f"\n[EXECUTION ERROR] {e}")

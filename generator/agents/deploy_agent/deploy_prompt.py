@@ -233,9 +233,9 @@ async def optimize_deployment_prompt_text(prompt_text: str) -> str:
         optimized = summary_response.get("content", prompt_text)
 
         LLM_CALLS_TOTAL.labels(provider="deploy_prompt", model=SUMMARY_MODEL).inc()
-        LLM_LATENCY_SECONDS.labels(
-            provider="deploy_prompt", model=SUMMARY_MODEL
-        ).observe(time.time() - start_time_summary)
+        LLM_LATENCY_SECONDS.labels(provider="deploy_prompt", model=SUMMARY_MODEL).observe(
+            time.time() - start_time_summary
+        )
         add_provenance(
             {
                 "action": "summarize_context",
@@ -279,10 +279,7 @@ async def get_language(content: str) -> str:
     if "import " in content and ("def " in content or "class " in content):
         return "python"
     elif (
-        "function " in content
-        or "const " in content
-        or "let " in content
-        or "var " in content
+        "function " in content or "const " in content or "let " in content or "var " in content
     ) and (";" in content or "}" in content):
         return "javascript"
     elif "package " in content and "func " in content:
@@ -381,9 +378,7 @@ async def get_dependencies(files_to_check: List[str], repo_path: str) -> str:
                 )
                 deps_info["go"] = {mod: ver for mod, ver in modules}
             elif file_name == "Cargo.toml":
-                deps_match = re.search(
-                    r"\[dependencies\]\n([\s\S]*?)(?:\n\[|\Z)", content
-                )
+                deps_match = re.search(r"\[dependencies\]\n([\s\S]*?)(?:\n\[|\Z)", content)
                 if deps_match:
                     deps_str = deps_match.group(1)
                     cargo_deps = {}
@@ -393,9 +388,7 @@ async def get_dependencies(files_to_check: List[str], repo_path: str) -> str:
                             match = re.match(r"(\w+)\s*=\s*(.*)", line)
                             if match:
                                 pkg, ver = match.groups()
-                                cargo_deps[pkg] = (
-                                    ver.strip().strip(",").strip('"').strip("'")
-                                )
+                                cargo_deps[pkg] = ver.strip().strip(",").strip('"').strip("'")
                     deps_info["rust"] = cargo_deps
             elif file_name == "pom.xml":
                 deps_list = []
@@ -422,11 +415,7 @@ async def get_dependencies(files_to_check: List[str], repo_path: str) -> str:
                 exc_info=True,
             )
 
-    return (
-        scrub_text(json.dumps(deps_info, indent=2))
-        if deps_info
-        else "No dependencies found."
-    )
+    return scrub_text(json.dumps(deps_info, indent=2)) if deps_info else "No dependencies found."
 
 
 async def get_imports(file_path_str: str) -> str:
@@ -462,14 +451,10 @@ async def get_imports(file_path_str: str) -> str:
                     imports.add(node.module)
         return scrub_text(", ".join(sorted(list(imports))))
     except SyntaxError as e:
-        logger.warning(
-            "Syntax error in Python file %s. Cannot parse imports: %s", file_path_str, e
-        )
+        logger.warning("Syntax error in Python file %s. Cannot parse imports: %s", file_path_str, e)
         return ""
     except Exception as e:
-        logger.warning(
-            "Failed to get imports from %s: %s", file_path_str, e, exc_info=True
-        )
+        logger.warning("Failed to get imports from %s: %s", file_path_str, e, exc_info=True)
         return ""
 
 
@@ -491,9 +476,7 @@ async def get_file_content(file_path_str: str) -> str:
             content = await f.read()
         return scrub_text(content)
     except Exception as e:
-        logger.warning(
-            "Failed to read file content from %s: %s", file_path_str, e, exc_info=True
-        )
+        logger.warning("Failed to read file content from %s: %s", file_path_str, e, exc_info=True)
         return ""
 
 
@@ -506,9 +489,7 @@ class PromptTemplateRegistry:
 
     def __init__(self, template_dir: str = "deploy_templates"):
         self.template_dir = template_dir
-        self.env: Environment = (
-            self._create_environment()
-        )  # Initialize Jinja2 environment
+        self.env: Environment = self._create_environment()  # Initialize Jinja2 environment
         self._setup_hot_reload()  # Setup file system watcher
 
     def _create_environment(self) -> Environment:
@@ -561,9 +542,7 @@ class PromptTemplateRegistry:
             observer = Observer()
             observer.schedule(ReloadHandler(self), self.template_dir, recursive=True)
             observer.start()
-            logger.info(
-                "Started hot-reload observer for templates in: %s", self.template_dir
-            )
+            logger.info("Started hot-reload observer for templates in: %s", self.template_dir)
         except Exception as e:
             logger.warning(
                 "Could not start Watchdog observer (likely missing package or environment constraint): %s",
@@ -648,9 +627,7 @@ class DeployPromptAgent:
         self.template_registry = PromptTemplateRegistry(template_dir=template_dir)
         self.few_shot_examples = self._load_few_shot(few_shot_dir)
         # self.repo_path = repo_path # REMOVED: repo_path is now passed per-method
-        self.previous_feedback: Dict[str, float] = (
-            {}
-        )  # Store feedback scores for prompt variants
+        self.previous_feedback: Dict[str, float] = {}  # Store feedback scores for prompt variants
         # self.llm_orchestrator = DeployLLMOrchestrator() # Removed Orchestrator instance
         # Now uses call_llm_api directly
 
@@ -669,11 +646,7 @@ class DeployPromptAgent:
             try:
                 with open(file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                if (
-                    not isinstance(data, dict)
-                    or "query" not in data
-                    or "example" not in data
-                ):
+                if not isinstance(data, dict) or "query" not in data or "example" not in data:
                     logger.warning(
                         "Invalid few-shot example format in %s. Must contain 'query' and 'example' keys. Skipping.",
                         file,
@@ -692,9 +665,7 @@ class DeployPromptAgent:
 
     # @retry(retry=retry_if_exception_type(Exception), stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     # NOTE: Removed Tenacity retry decorator as it's not a built-in
-    async def gather_context_for_prompt(
-        self, files: List[str], repo_path: str
-    ) -> Dict[str, Any]:
+    async def gather_context_for_prompt(self, files: List[str], repo_path: str) -> Dict[str, Any]:
         """
         Gathers raw file contents from the repository for use in the prompt context.
         Retries on file reading failures for robustness.
@@ -708,9 +679,7 @@ class DeployPromptAgent:
                 for file_name in files:
                     file_path = Path(repo_path) / file_name  # Use passed repo_path
                     if file_path.is_file():
-                        read_tasks.append(
-                            self._read_single_file_for_context(file_path, file_name)
-                        )
+                        read_tasks.append(self._read_single_file_for_context(file_path, file_name))
                     else:
                         logger.warning(
                             "File not found for context gathering: %s at %s. Skipping.",
@@ -752,9 +721,7 @@ class DeployPromptAgent:
                 content = await f.read()
                 return file_name, scrub_text(content)
         except Exception as e:
-            logger.error(
-                "Failed to read file %s for context: %s", file_path, e, exc_info=True
-            )
+            logger.error("Failed to read file %s for context: %s", file_path, e, exc_info=True)
             return file_name, None
 
     async def retrieve_few_shot(self, query: str, top_k: int = 3) -> List[str]:
@@ -778,18 +745,14 @@ class DeployPromptAgent:
             if not example_queries:  # Handle case with no examples loaded
                 return []
 
-            example_embs = self.embedding_model.encode(
-                example_queries, convert_to_tensor=True
-            )
+            example_embs = self.embedding_model.encode(example_queries, convert_to_tensor=True)
 
             # Perform semantic search to find the most relevant examples
             hits = util.semantic_search(query_emb, example_embs, top_k=top_k)[0]
 
             retrieved_examples = []
             for hit in hits:
-                retrieved_examples.append(
-                    self.few_shot_examples[hit["corpus_id"]]["example"]
-                )
+                retrieved_examples.append(self.few_shot_examples[hit["corpus_id"]]["example"])
 
             logger.info(
                 "Retrieved %d few-shot examples for query: '%s...'",
@@ -875,9 +838,7 @@ class DeployPromptAgent:
                 optimized_content = response_from_meta_llm.get("content", "").strip()
 
                 if optimized_content:
-                    logger.info(
-                        "Prompt '%s' optimized successfully by meta-LLM.", feedback_key
-                    )
+                    logger.info("Prompt '%s' optimized successfully by meta-LLM.", feedback_key)
                     return optimized_content
                 else:
                     logger.warning(
@@ -920,9 +881,7 @@ class DeployPromptAgent:
             # Metric for the entire prompt generation process (not just the LLM calls within it)
             PROMPT_GEN_MODEL = "Prompt_Gen_Task"
 
-            LLM_CALLS_TOTAL.labels(
-                provider="deploy_prompt", model=PROMPT_GEN_MODEL
-            ).inc()
+            LLM_CALLS_TOTAL.labels(provider="deploy_prompt", model=PROMPT_GEN_MODEL).inc()
             start_time = time.time()
 
             # Ensure context is not None. If not provided, gather it from files.
@@ -941,33 +900,26 @@ class DeployPromptAgent:
             # Fetch few-shot examples if available and model_specific_info indicates support
             few_shot_examples_str = ""
             # Check if embedding model is loaded AND few-shot examples exist AND model supports few-shot
-            model_info = (
-                model_specific_info
-                if model_specific_info
-                else {"few_shot_support": False}
-            )
+            model_info = model_specific_info if model_specific_info else {"few_shot_support": False}
             if (
                 self.embedding_model
                 and self.few_shot_examples
                 and model_info.get("few_shot_support", False)
             ):
-                few_shot_query = f"Generate {target} config for {files}. Instructions: {instructions}"
+                few_shot_query = (
+                    f"Generate {target} config for {files}. Instructions: {instructions}"
+                )
                 retrieved_few_shots = await self.retrieve_few_shot(few_shot_query)
                 if retrieved_few_shots:
                     # Format few-shot examples nicely for embedding in the prompt
                     few_shot_examples_str = (
                         "\n\n--- Few-shot Examples ---\n"
                         + "\n---\n".join(
-                            [
-                                f"Example {i+1}:\n{ex}"
-                                for i, ex in enumerate(retrieved_few_shots)
-                            ]
+                            [f"Example {i+1}:\n{ex}" for i, ex in enumerate(retrieved_few_shots)]
                         )
                         + "\n-------------------------"
                     )
-                    span.set_attribute(
-                        "few_shot_examples_count", len(retrieved_few_shots)
-                    )
+                    span.set_attribute("few_shot_examples_count", len(retrieved_few_shots))
                     FEW_SHOT_USAGE.labels(target=target, variant=variant).inc(
                         len(retrieved_few_shots)
                     )  # Metric for few-shot usage
@@ -1045,9 +997,7 @@ class DeployPromptAgent:
                     model=PROMPT_GEN_MODEL,
                     error_type=error_type,
                 ).inc()
-                span.set_status(
-                    Status(StatusCode.ERROR, f"Prompt generation failed: {e}")
-                )
+                span.set_status(Status(StatusCode.ERROR, f"Prompt generation failed: {e}"))
                 span.record_exception(e)
                 logger.error(
                     "Failed to build prompt for %s (variant: %s): %s",
@@ -1075,9 +1025,7 @@ class DeployPromptAgent:
         Each variant's prompt is scored by a meta-LLM to provide objective feedback for prompt evolution.
         """
         # Gather context once for all variants to avoid redundant file reads
-        context_for_ab_test = await self.gather_context_for_prompt(
-            files, repo_path=repo_path
-        )
+        context_for_ab_test = await self.gather_context_for_prompt(files, repo_path=repo_path)
 
         # Define a model for scoring the prompts themselves (can be different from config generation model)
         SCORING_MODEL = "gpt-4o"
@@ -1110,9 +1058,7 @@ class DeployPromptAgent:
 
         ab_results_final: Dict[str, Dict[str, Any]] = {}
         scoring_tasks = []
-        prompts_to_score: List[Tuple[str, str]] = (
-            []
-        )  # Store (variant, prompt_string) for scoring
+        prompts_to_score: List[Tuple[str, str]] = []  # Store (variant, prompt_string) for scoring
 
         for variant, result in zip(variants, prompt_strings):
             if isinstance(result, Exception):
@@ -1174,9 +1120,7 @@ class DeployPromptAgent:
                 )
 
             # Await all scoring tasks
-            scoring_responses = await asyncio.gather(
-                *scoring_tasks, return_exceptions=True
-            )
+            scoring_responses = await asyncio.gather(*scoring_tasks, return_exceptions=True)
 
             # Process scoring results and update ab_results_final
             for i, (variant, _) in enumerate(
@@ -1189,18 +1133,14 @@ class DeployPromptAgent:
                         variant,
                         score_response,
                     )
-                    ab_results_final[variant][
-                        "score"
-                    ] = 0.0  # Assign lowest score on scoring error
+                    ab_results_final[variant]["score"] = 0.0  # Assign lowest score on scoring error
                     self.record_feedback(target, variant, 0.0)
                 else:
                     try:
                         # Access the 'content' field from the ensemble API response, then parse JSON
                         # Clean up potential markdown fences
                         score_content_cleaned = (
-                            re.sub(
-                                r"```(json)?", "", score_response.get("content", "{}")
-                            )
+                            re.sub(r"```(json)?", "", score_response.get("content", "{}"))
                             .strip("`")
                             .strip()
                         )
@@ -1341,9 +1281,7 @@ async def api_record_prompt_feedback(request: Request) -> Response:
     # repo_path = data.get('repo_path', '.') # No longer needed to instantiate agent
 
     if not all([target, variant is not None, isinstance(score, (int, float))]):
-        raise web.HTTPBadRequest(
-            reason="Missing or invalid 'target', 'variant', or 'score'."
-        )
+        raise web.HTTPBadRequest(reason="Missing or invalid 'target', 'variant', or 'score'.")
 
     # --- FIX: Get singleton agent from app context ---
     agent: DeployPromptAgent = request.app["deploy_prompt_agent"]
@@ -1389,9 +1327,7 @@ Instructions: {{ instructions | default('None') }}.
 Output must be in JSON format: {"config": "string content"}
 """
             )
-        print(
-            "Created 'deploy_templates' directory and a sample 'default_default.jinja' template."
-        )
+        print("Created 'deploy_templates' directory and a sample 'default_default.jinja' template.")
 
     if not os.path.exists("few_shot_examples"):
         os.makedirs("few_shot_examples")
@@ -1417,9 +1353,7 @@ Output must be in JSON format: {"config": "string content"}
     print("Please ensure a valid --repo-path is provided if running CLI mode.")
     # --- End Setup ---
 
-    parser = argparse.ArgumentParser(
-        description="Deployment Prompt Builder CLI and API Server"
-    )
+    parser = argparse.ArgumentParser(description="Deployment Prompt Builder CLI and API Server")
     parser.add_argument(
         "--target",
         default="docker",
@@ -1451,12 +1385,8 @@ Output must be in JSON format: {"config": "string content"}
         action="store_true",
         help="Start the aiohttp web server for API endpoints.",
     )
-    parser.add_argument(
-        "--host", default="0.0.0.0", help="Host for the aiohttp server."
-    )
-    parser.add_argument(
-        "--port", type=int, default=8081, help="Port for the aiohttp server."
-    )
+    parser.add_argument("--host", default="0.0.0.0", help="Host for the aiohttp server.")
+    parser.add_argument("--port", type=int, default=8081, help="Port for the aiohttp server.")
     parser.add_argument(
         "--ab-test",
         action="store_true",

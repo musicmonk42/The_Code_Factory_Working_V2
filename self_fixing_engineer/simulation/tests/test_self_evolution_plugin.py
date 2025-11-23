@@ -9,9 +9,7 @@ from typing import Tuple
 
 # Import the plugin from the correct directory
 plugin_paths = [
-    os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "plugins")
-    ),  # /plugins/
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "plugins")),  # /plugins/
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "plugins")
     ),  # /simulation/plugins/
@@ -95,9 +93,7 @@ def mock_audit_logger():
 
 
 @pytest.fixture(autouse=True)
-def dependency_patches(
-    mock_meta_learning, mock_policy_engine, mock_llm, mock_audit_logger
-):
+def dependency_patches(mock_meta_learning, mock_policy_engine, mock_llm, mock_audit_logger):
     with patch(
         "self_evolution_plugin._get_meta_learning",
         AsyncMock(return_value=mock_meta_learning),
@@ -168,9 +164,7 @@ async def test_plugin_health_success():
 
 
 @pytest.mark.asyncio
-async def test_initiate_evolution_cycle_success(
-    mock_meta_learning, mock_policy_engine, mock_llm
-):
+async def test_initiate_evolution_cycle_success(mock_meta_learning, mock_policy_engine, mock_llm):
     result = await initiate_evolution_cycle(
         target_agents=["agent_alpha"], evolution_strategy="prompt_optimization"
     )
@@ -277,9 +271,7 @@ async def test_audit_event_secret_scrubbing():
     # This test ensures the audit logger receives scrubbed (redacted) secrets
     from self_evolution_plugin import _audit_event
 
-    with patch(
-        "self_evolution_plugin._sfe_audit_logger.log", new=AsyncMock()
-    ) as mock_audit:
+    with patch("self_evolution_plugin._sfe_audit_logger.log", new=AsyncMock()) as mock_audit:
         details = {"api_key": "sk-test_secretkey1234567890", "comment": "This is fine"}
         await _audit_event("test_event", details)
         called_details = mock_audit.call_args[0][1]

@@ -23,9 +23,7 @@ async def test_e2e_pipeline_full_success():
 
     with tempfile.TemporaryDirectory() as temp_project_root:
         # ----- Test fixtures -----
-        uncovered_targets = [
-            {"identifier": "my_module", "language": "python", "priority": 10}
-        ]
+        uncovered_targets = [{"identifier": "my_module", "language": "python", "priority": 10}]
         test_code = "def test_foo(): assert True"
         config = {
             "quarantine_dir": "atco_artifacts/quarantined_tests",

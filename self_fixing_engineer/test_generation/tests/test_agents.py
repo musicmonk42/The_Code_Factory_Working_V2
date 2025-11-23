@@ -25,9 +25,7 @@ async def test_planner_agent_valid_plan():
     """Planner agent should parse valid JSON from LLM and set 'plan' in state."""
     mock_llm = AsyncMock()
     # The mock should return a MagicMock with a 'content' attribute, matching the agents.py implementation.
-    mock_llm.ainvoke = AsyncMock(
-        return_value=MagicMock(content=json.dumps({"steps": ["a", "b"]}))
-    )
+    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content=json.dumps({"steps": ["a", "b"]})))
     state = {"spec": "Do X", "spec_format": "gherkin"}
 
     # The tests now pass the mock LLM directly to the agent.
@@ -140,9 +138,7 @@ async def test_performance_agent_runs_locust():
 async def test_agents_increment_metrics():
     """All agents should increment Prometheus counters."""
     mock_llm = AsyncMock()
-    mock_llm.ainvoke = AsyncMock(
-        return_value=MagicMock(content=json.dumps({"steps": []}))
-    )
+    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content=json.dumps({"steps": []})))
 
     with patch.object(agents.agent_runs_total, "labels") as mock_counter_labels:
         # The tests now pass the mock LLM directly to the agent.

@@ -32,9 +32,7 @@ def mock_external_deps():
     """Mocks all external services and libraries to isolate the reasoner package logic."""
     with patch(
         "arbiter.explainable_reasoner.explainable_reasoner.TRANSFORMERS_AVAILABLE", True
-    ), patch(
-        "arbiter.explainable_reasoner.explainable_reasoner.pipeline"
-    ) as mock_pipeline, patch(
+    ), patch("arbiter.explainable_reasoner.explainable_reasoner.pipeline") as mock_pipeline, patch(
         "arbiter.explainable_reasoner.explainable_reasoner.AutoModelForCausalLM"
     ) as mock_model, patch(
         "arbiter.explainable_reasoner.explainable_reasoner.AutoTokenizer"
@@ -77,9 +75,7 @@ def mock_external_deps():
 
         # Configure tokenizer mock
         tokenizer_instance = MagicMock()
-        tokenizer_instance.encode.return_value = list(
-            range(100)
-        )  # Return list of token IDs
+        tokenizer_instance.encode.return_value = list(range(100))  # Return list of token IDs
         tokenizer_instance.decode.return_value = "decoded text"
         tokenizer_instance.pad_token_id = 0
         tokenizer_instance.eos_token_id = 0
@@ -108,9 +104,7 @@ def mock_external_deps():
 
         # Configure LLMAdapterFactory to return a mock cloud adapter
         mock_adapter_instance = AsyncMock()
-        mock_adapter_instance.generate = AsyncMock(
-            return_value="mock_cloud_adapter_response"
-        )
+        mock_adapter_instance.generate = AsyncMock(return_value="mock_cloud_adapter_response")
         mock_adapter_instance.stream_generate = AsyncMock()
         mock_adapter_instance.health_check = AsyncMock(return_value=True)
         mock_adapter_instance.aclose = AsyncMock()
@@ -174,9 +168,7 @@ def prod_config(tmp_path):
         history_retention_days=1,
         audit_log_enabled=True,
         jwt_secret_key=SensitiveValue("prod_secret_key_for_e2e_test"),
-        model_configs=[
-            {"model_name": "openai/gpt-4", "device": -2}
-        ],  # -2 for cloud model
+        model_configs=[{"model_name": "openai/gpt-4", "device": -2}],  # -2 for cloud model
         cloud_fallback_api_key=SensitiveValue("test_api_key"),
         cloud_fallback_model_enabled=True,  # Enable cloud fallback
         sanitization_options={
@@ -344,9 +336,7 @@ async def test_e2e_plugin_workflow(plugin):
     # Test history retrieval
     history = await plugin.execute(action="get_history", limit=1)
     # History might be empty if explain failed, or could be an error response
-    assert isinstance(history, list) or (
-        isinstance(history, dict) and "error" in history
-    )
+    assert isinstance(history, list) or (isinstance(history, dict) and "error" in history)
 
     # Test health check - should now return the expected format
     health = await plugin.execute(action="health_check")
@@ -360,9 +350,7 @@ async def test_e2e_plugin_workflow(plugin):
 async def test_e2e_plugin_rbac_and_admin_tasks(plugin):
     """Tests the plugin's Role-Based Access Control for sensitive operations."""
     # Mock the jwt module for this test
-    with patch(
-        "arbiter.explainable_reasoner.explainable_reasoner.jwt"
-    ) as mock_jwt_module:
+    with patch("arbiter.explainable_reasoner.explainable_reasoner.jwt") as mock_jwt_module:
         # Create a proper exception class for InvalidTokenError
         mock_jwt_module.InvalidTokenError = type("InvalidTokenError", (Exception,), {})
 
@@ -385,13 +373,9 @@ async def test_e2e_plugin_rbac_and_admin_tasks(plugin):
         )
 
         # Test 2: Invalid token
-        mock_jwt_module.decode.side_effect = mock_jwt_module.InvalidTokenError(
-            "Invalid Token"
-        )
+        mock_jwt_module.decode.side_effect = mock_jwt_module.InvalidTokenError("Invalid Token")
 
-        invalid_result = await plugin.execute(
-            action="purge_history", auth_token="invalid_token"
-        )
+        invalid_result = await plugin.execute(action="purge_history", auth_token="invalid_token")
 
         assert "error" in invalid_result
         assert invalid_result["error"]["code"] == ReasonerErrorCode.SECURITY_VIOLATION
@@ -462,9 +446,7 @@ async def test_e2e_performance_under_load(reasoner):
     duration = time.monotonic() - start_time
 
     # Check results - allow for some errors due to rate limiting or no models
-    successful_results = [
-        r for r in results if not isinstance(r, Exception) and "explain" in r
-    ]
+    successful_results = [r for r in results if not isinstance(r, Exception) and "explain" in r]
     # At least some should succeed (even if with fallback)
     assert len(successful_results) >= 0
 
@@ -485,9 +467,7 @@ def test_e2e_metrics_exposition():
             ),
         },
     ):
-        with patch(
-            "arbiter.explainable_reasoner.metrics.generate_latest"
-        ) as mock_generate:
+        with patch("arbiter.explainable_reasoner.metrics.generate_latest") as mock_generate:
             # Mock the metrics content
             mock_content = b"""# HELP reasoner_requests_total Total requests
 # TYPE reasoner_requests_total counter

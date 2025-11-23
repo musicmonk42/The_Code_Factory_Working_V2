@@ -228,9 +228,7 @@ class AsyncSafeLogger:
         if not self._logger.handlers:
             handler = logging.StreamHandler(sys.stderr)
             handler.setFormatter(
-                logging.Formatter(
-                    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-                )
+                logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
             )
             self._logger.addHandler(handler)
 
@@ -310,9 +308,7 @@ logger.start()
 def _enforce_prod_requirements():
     """Checks for and enforces production-critical dependencies and configs."""
     if not REDIS_AVAILABLE:
-        logger.critical(
-            "CRITICAL: redis-py is required for production but not installed."
-        )
+        logger.critical("CRITICAL: redis-py is required for production but not installed.")
         sys.exit(1)
     if not CRYPTOGRAPHY_AVAILABLE:
         logger.critical(
@@ -331,9 +327,7 @@ def _enforce_prod_requirements():
         logger.critical("CRITICAL: EVENT_BUS_HMAC_KEY required in production.")
         sys.exit(1)
     if not REDIS_USER or not REDIS_PASSWORD:
-        logger.critical(
-            "CRITICAL: REDIS_USER and REDIS_PASSWORD required in production."
-        )
+        logger.critical("CRITICAL: REDIS_USER and REDIS_PASSWORD required in production.")
         sys.exit(1)
     if not REDIS_URL:
         logger.critical("CRITICAL: REDIS_URL environment variable is not set.")
@@ -412,9 +406,7 @@ else:
 
     tracer = MockTracer()
     if not IS_TEST_ENV:
-        logger.warning(
-            "OpenTelemetry SDK not found. Distributed tracing will be disabled."
-        )
+        logger.warning("OpenTelemetry SDK not found. Distributed tracing will be disabled.")
 
 
 # Prometheus Metrics with tenant/environment labels
@@ -511,8 +503,7 @@ class CircuitBreaker:
             return True
         if (
             self.last_failure
-            and (datetime.now() - self.last_failure).total_seconds()
-            > self.reset_timeout
+            and (datetime.now() - self.last_failure).total_seconds() > self.reset_timeout
         ):
             self.is_open = False
             self.failures = 0
@@ -572,9 +563,7 @@ async def _write_to_dlq(
             "timestamp": time.time(),
             "original_id": original_id if original_id else "",
         }
-        await r.xadd(
-            DLQ_STREAM_NAME, dlq_entry, maxlen=MAX_STREAM_LENGTH, approximate=True
-        )
+        await r.xadd(DLQ_STREAM_NAME, dlq_entry, maxlen=MAX_STREAM_LENGTH, approximate=True)
         logger.warning(f"Event {event_type} written to DLQ stream {DLQ_STREAM_NAME}.")
         await _inc_counter(
             EVENTS_PUBLISHED,
@@ -585,9 +574,7 @@ async def _write_to_dlq(
             protocol="stream",
         )
     except Exception as e:
-        logger.error(
-            f"Failed to write to DLQ for event {event_type}: {e}", exc_info=True
-        )
+        logger.error(f"Failed to write to DLQ for event {event_type}: {e}", exc_info=True)
 
 
 async def replay_dlq():
@@ -604,15 +591,11 @@ async def replay_dlq():
         dlq_stream, dlq_entries = messages[0]
         for msg_id, fields in dlq_entries:
             try:
-                dlq_data = {
-                    k.decode("utf-8"): v.decode("utf-8") for k, v in fields.items()
-                }
+                dlq_data = {k.decode("utf-8"): v.decode("utf-8") for k, v in fields.items()}
                 event_type = dlq_data.get("event_type")
                 payload_str = dlq_data.get("payload")
 
-                logger.info(
-                    f"Replaying event ID {msg_id.decode()} for type {event_type}"
-                )
+                logger.info(f"Replaying event ID {msg_id.decode()} for type {event_type}")
 
                 await publish_event(event_type, json.loads(payload_str), is_replay=True)
 
@@ -658,9 +641,7 @@ async def _prepare_payload(
         try:
             schema(**data)
         except ValidationError as e:
-            logger.error(
-                f"Event validation failed for {event_type}: {e.errors()}", exc_info=True
-            )
+            logger.error(f"Event validation failed for {event_type}: {e.errors()}", exc_info=True)
             raise ValueError("Event data does not match schema.") from e
 
     payload_str = json.dumps(data)
@@ -688,9 +669,7 @@ async def _process_received_payload(message: Dict[str, bytes]) -> Dict[str, Any]
         raise ValueError("Malformed message: missing payload or signature.")
 
     if not _verify_signature(encrypted_payload_bytes, signature.decode()):
-        raise ValueError(
-            "HMAC signature verification failed. Message may be tampered with."
-        )
+        raise ValueError("HMAC signature verification failed. Message may be tampered with.")
 
     fernet_client = _get_fernet()
     if fernet_client:
@@ -763,18 +742,14 @@ async def publish_event(
                 tenant=TENANT,
                 protocol=protocol,
             )
-            span.set_status(
-                trace.status.Status(trace.status.StatusCode.ERROR, description=str(e))
-            )
+            span.set_status(trace.status.Status(trace.status.StatusCode.ERROR, description=str(e)))
             raise
 
         async with publish_limiter:
             for i in range(MAX_RETRIES):
                 try:
                     r = get_redis_client()
-                    logger.info(
-                        f"Attempting to publish event: {event_type} via {protocol}"
-                    )
+                    logger.info(f"Attempting to publish event: {event_type} via {protocol}")
 
                     if USE_REDIS_STREAMS:
                         await r.xadd(
@@ -788,9 +763,7 @@ async def publish_event(
                             "payload": encrypted_payload_bytes.decode("utf-8"),
                             "signature": signature,
                         }
-                        await r.publish(
-                            f"{TENANT}:{event_type}", json.dumps(pubsub_payload)
-                        )
+                        await r.publish(f"{TENANT}:{event_type}", json.dumps(pubsub_payload))
 
                     logger.info(f"Published event successfully: {event_type}")
                     await _inc_counter(
@@ -801,18 +774,14 @@ async def publish_event(
                         tenant=TENANT,
                         protocol=protocol,
                     )
-                    _observe_histogram(
-                        PUBLISH_LATENCY, time.perf_counter() - start_time
-                    )
+                    _observe_histogram(PUBLISH_LATENCY, time.perf_counter() - start_time)
                     await _set_gauge(BUS_LIVENESS, 1)
                     span.set_attribute("publish.attempt", i + 1)
                     span.set_status(trace.status.Status(trace.status.StatusCode.OK))
                     return
                 except (ConnectionError, TimeoutError, RedisError) as e:
                     circuit_breaker.record_failure()
-                    wait_time = RETRY_DELAY * (2**i) + random.uniform(
-                        0, 0.1
-                    )  # Add jitter
+                    wait_time = RETRY_DELAY * (2**i) + random.uniform(0, 0.1)  # Add jitter
                     logger.error(
                         f"Publish retry {i+1}/{MAX_RETRIES} failed for {event_type}: {e}. Retrying in {wait_time:.2f}s...",
                         exc_info=True,
@@ -835,22 +804,16 @@ async def publish_event(
                         protocol=protocol,
                     )
                     span.set_status(
-                        trace.status.Status(
-                            trace.status.StatusCode.ERROR, description=str(e)
-                        )
+                        trace.status.Status(trace.status.StatusCode.ERROR, description=str(e))
                     )
                     raise
 
-        await _write_to_dlq(
-            event_type, json.dumps(data), "Publish failed after multiple retries."
-        )
+        await _write_to_dlq(event_type, json.dumps(data), "Publish failed after multiple retries.")
         logger.critical(
             f"Publish failed for event '{event_type}' after {MAX_RETRIES} retries. Event written to DLQ."
         )
         span.set_status(
-            trace.status.Status(
-                trace.status.StatusCode.ERROR, description="All retries failed"
-            )
+            trace.status.Status(trace.status.StatusCode.ERROR, description="All retries failed")
         )
         raise RuntimeError(f"Event publish failed permanently for {event_type}.")
 
@@ -897,9 +860,7 @@ async def publish_events(events: List[Dict[str, Any]]):
                                 approximate=True,
                             )
                         else:
-                            pipe.publish(
-                                f"{TENANT}:{event_type}", json.dumps(payload_dict)
-                            )
+                            pipe.publish(f"{TENANT}:{event_type}", json.dumps(payload_dict))
 
                     await pipe.execute()
 
@@ -925,9 +886,7 @@ async def publish_events(events: List[Dict[str, Any]]):
                     protocol=protocol,
                 )
                 span.set_status(
-                    trace.status.Status(
-                        trace.status.StatusCode.ERROR, description=str(e)
-                    )
+                    trace.status.Status(trace.status.StatusCode.ERROR, description=str(e))
                 )
                 raise
 
@@ -957,9 +916,7 @@ async def subscribe_event(
                 )
             except ResponseError:
                 pass
-            logger.info(
-                f"Subscribed to stream {stream_name} with group {consumer_group}"
-            )
+            logger.info(f"Subscribed to stream {stream_name} with group {consumer_group}")
 
             while True:
                 pending_messages = await r.xautoclaim(
@@ -1039,14 +996,10 @@ async def subscribe_event(
                 await _set_gauge(BUS_LIVENESS, 1)
 
                 while True:
-                    message = await pubsub.get_message(
-                        ignore_subscribe_messages=True, timeout=1.0
-                    )
+                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                     if message:
                         start_time = time.perf_counter()
-                        with tracer.start_as_current_span(
-                            f"handle_event_{event_type}"
-                        ) as span:
+                        with tracer.start_as_current_span(f"handle_event_{event_type}") as span:
                             span.set_attribute("event.type", event_type)
                             span.set_attribute("env", ENV)
                             span.set_attribute("tenant", TENANT)
@@ -1057,9 +1010,7 @@ async def subscribe_event(
                                 received_payload = await _process_received_payload(
                                     {
                                         b"payload": payload_dict["payload"].encode(),
-                                        b"signature": payload_dict[
-                                            "signature"
-                                        ].encode(),
+                                        b"signature": payload_dict["signature"].encode(),
                                     }
                                 )
                                 logger.info(f"Received event: {event_type}")
@@ -1075,9 +1026,7 @@ async def subscribe_event(
                                 _observe_histogram(
                                     SUBSCRIBE_LATENCY, time.perf_counter() - start_time
                                 )
-                                span.set_status(
-                                    trace.status.Status(trace.status.StatusCode.OK)
-                                )
+                                span.set_status(trace.status.Status(trace.status.StatusCode.OK))
                             except (json.JSONDecodeError, ValueError) as e:
                                 logger.error(
                                     f"Failed to decode or verify event {event_type}: {e}",
@@ -1121,9 +1070,7 @@ async def subscribe_event(
                         await _set_gauge(BUS_LIVENESS, 1)
 
             except (ConnectionError, TimeoutError, RedisError) as e:
-                logger.critical(
-                    f"Event bus connection lost. Retrying in 5s... Error: {e}"
-                )
+                logger.critical(f"Event bus connection lost. Retrying in 5s... Error: {e}")
                 await _set_gauge(BUS_LIVENESS, 0)
                 if r:
                     await r.close()
@@ -1134,9 +1081,7 @@ async def subscribe_event(
                     await r.close()
                 break
             except Exception as e:
-                logger.critical(
-                    f"Critical failure in listener loop for {event_type}: {e}"
-                )
+                logger.critical(f"Critical failure in listener loop for {event_type}: {e}")
                 await _set_gauge(BUS_LIVENESS, 0)
                 if r:
                     await r.close()
@@ -1146,9 +1091,7 @@ async def subscribe_event(
                     await r.close()
                 logger.info(f"Listener for {event_type} shutting down.")
 
-    async def _handle_message(
-        r, stream_name, msg_id, fields, handler, consumer_group, event_type
-    ):
+    async def _handle_message(r, stream_name, msg_id, fields, handler, consumer_group, event_type):
         start_time = time.perf_counter()
         with tracer.start_as_current_span(f"handle_event_{event_type}") as span:
             span.set_attribute("event.type", event_type)
@@ -1165,14 +1108,10 @@ async def subscribe_event(
                     stream_name, consumer_group, min=msg_id, max=msg_id, count=1
                 )
                 delivered_times = (
-                    pending_info[0]["delivered"]
-                    if pending_info and len(pending_info) > 0
-                    else 0
+                    pending_info[0]["delivered"] if pending_info and len(pending_info) > 0 else 0
                 )
                 if delivered_times > 3:  # Example threshold
-                    logger.warning(
-                        f"Max redeliveries exceeded for {msg_id_str}. Moving to DLQ."
-                    )
+                    logger.warning(f"Max redeliveries exceeded for {msg_id_str}. Moving to DLQ.")
                     await _write_to_dlq(
                         event_type,
                         json.dumps({k.decode(): v.decode() for k, v in fields.items()}),
@@ -1222,9 +1161,7 @@ async def subscribe_event(
                     protocol="stream",
                 )
                 span.set_status(
-                    trace.status.Status(
-                        trace.status.StatusCode.ERROR, description=str(e)
-                    )
+                    trace.status.Status(trace.status.StatusCode.ERROR, description=str(e))
                 )
                 await r.xack(
                     stream_name, consumer_group, msg_id
@@ -1243,20 +1180,14 @@ async def subscribe_event(
                     protocol="stream",
                 )
                 span.set_status(
-                    trace.status.Status(
-                        trace.status.StatusCode.ERROR, description="Handler failed"
-                    )
+                    trace.status.Status(trace.status.StatusCode.ERROR, description="Handler failed")
                 )
                 # No XACK here, message remains in PEL for potential redelivery
 
     if USE_REDIS_STREAMS:
-        return asyncio.create_task(
-            listener_loop_streams(), name=f"listener_task_{event_type}"
-        )
+        return asyncio.create_task(listener_loop_streams(), name=f"listener_task_{event_type}")
     else:
-        return asyncio.create_task(
-            listener_loop_pubsub(), name=f"listener_task_{event_type}"
-        )
+        return asyncio.create_task(listener_loop_pubsub(), name=f"listener_task_{event_type}")
 
 
 # ---- Cleanup Functions ----
@@ -1273,9 +1204,7 @@ atexit.register(cleanup)
 # --- Test Harness ---
 if __name__ == "__main__":
     if PROD_MODE:
-        logger.critical(
-            "Test harness not allowed in production. Use separate test scripts."
-        )
+        logger.critical("Test harness not allowed in production. Use separate test scripts.")
         sys.exit(1)
 
     logger.warning("Running in DEVELOPMENT mode. Not all production checks are active.")
@@ -1284,9 +1213,7 @@ if __name__ == "__main__":
     os.environ["EVENT_BUS_ENCRYPTION_KEY"] = os.environ.get(
         "EVENT_BUS_ENCRYPTION_KEY", Fernet.generate_key().decode()
     )
-    os.environ["EVENT_BUS_HMAC_KEY"] = os.environ.get(
-        "EVENT_BUS_HMAC_KEY", os.urandom(32).hex()
-    )
+    os.environ["EVENT_BUS_HMAC_KEY"] = os.environ.get("EVENT_BUS_HMAC_KEY", os.urandom(32).hex())
     os.environ["REDIS_USER"] = os.environ.get("REDIS_USER", "default")
     os.environ["REDIS_PASSWORD"] = os.environ.get("REDIS_PASSWORD", "")
     os.environ["TENANT"] = os.environ.get("TENANT", "dev_tenant")

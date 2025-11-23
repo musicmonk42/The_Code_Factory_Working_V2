@@ -94,9 +94,7 @@ async def redis_store(mocker: MockerFixture):
     try:
         import redis.asyncio as redis
     except ImportError:
-        pytest.skip(
-            "Redis library not installed; skipping RedisMetaLearningDataStore tests."
-        )
+        pytest.skip("Redis library not installed; skipping RedisMetaLearningDataStore tests.")
 
     # Mock Redis client
     mock_redis = mocker.AsyncMock()
@@ -159,15 +157,11 @@ async def test_add_record_success(store_type, inmemory_store, redis_store):
 
     exp_id = await store.add_record(SAMPLE_RECORD)
     assert exp_id == "test_exp_001"
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="success") == 1
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="success") == 1
     assert get_metric_value(MLDS_DATA_SIZE, backend=store._backend_label) == 1
 
     spans = in_memory_exporter.get_finished_spans()
-    add_span = next(
-        (span for span in spans if span.name == "meta_learning_add_record"), None
-    )
+    add_span = next((span for span in spans if span.name == "meta_learning_add_record"), None)
     assert add_span is not None
     assert add_span.attributes["mlds.experiment_id"] == "test_exp_001"
 
@@ -191,9 +185,7 @@ async def test_add_record_duplicate(store_type, inmemory_store, redis_store):
     with pytest.raises(MetaLearningDataStoreError, match="already exists"):
         await store.add_record(SAMPLE_RECORD)
 
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="failure") >= 1
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="failure") >= 1
 
 
 @pytest.mark.asyncio
@@ -207,9 +199,7 @@ async def test_add_record_validation_failure(store_type, inmemory_store, redis_s
     with pytest.raises((MetaLearningRecordValidationError, MetaLearningDataStoreError)):
         await store.add_record(invalid_record)
 
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="failure") >= 1
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="failure") >= 1
 
 
 @pytest.mark.asyncio
@@ -231,9 +221,7 @@ async def test_get_record_success(store_type, inmemory_store, redis_store):
     assert record.experiment_id == "test_exp_001"
     assert record.task_type == "classification"
     assert record.model_artifact_uri == "s3://models/iris/v1"  # Should be decrypted
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="get_record", status="success") >= 1
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="get_record", status="success") >= 1
 
 
 @pytest.mark.asyncio
@@ -248,9 +236,7 @@ async def test_get_record_not_found(store_type, inmemory_store, redis_store):
     with pytest.raises(MetaLearningRecordNotFound, match="not found"):
         await store.get_record("non_existent")
 
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="get_record", status="failure") >= 1
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="get_record", status="failure") >= 1
 
 
 @pytest.mark.asyncio
@@ -273,18 +259,13 @@ async def test_list_records_success(store_type, inmemory_store, redis_store):
     assert records[0].experiment_id == "test_exp_001"
 
     # Test with filter
-    records_filtered = await store.list_records(
-        filter_by={"task_type": "classification"}
-    )
+    records_filtered = await store.list_records(filter_by={"task_type": "classification"})
     assert len(records_filtered) == 1
 
     records_filtered = await store.list_records(filter_by={"task_type": "regression"})
     assert len(records_filtered) == 0
 
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="list_records", status="success")
-        >= 2
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="list_records", status="success") >= 2
 
 
 @pytest.mark.asyncio
@@ -309,10 +290,7 @@ async def test_update_record_success(store_type, inmemory_store, redis_store):
 
     assert updated.metrics["accuracy"] == 0.96
     assert updated.model_artifact_uri == "s3://models/iris/v2"  # Should be decrypted
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="update_record", status="success")
-        >= 1
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="update_record", status="success") >= 1
 
 
 @pytest.mark.asyncio
@@ -327,10 +305,7 @@ async def test_update_record_not_found(store_type, inmemory_store, redis_store):
     with pytest.raises(MetaLearningRecordNotFound, match="not found"):
         await store.update_record("non_existent", {"metrics": {"accuracy": 0.96}})
 
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="update_record", status="failure")
-        >= 1
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="update_record", status="failure") >= 1
 
 
 @pytest.mark.asyncio
@@ -348,10 +323,7 @@ async def test_delete_record_success(store_type, inmemory_store, redis_store):
     await store.delete_record("test_exp_001")
 
     assert get_metric_value(MLDS_DATA_SIZE, backend=store._backend_label) == 0
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="delete_record", status="success")
-        >= 1
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="delete_record", status="success") >= 1
 
 
 @pytest.mark.asyncio
@@ -366,10 +338,7 @@ async def test_delete_record_not_found(store_type, inmemory_store, redis_store):
     with pytest.raises(MetaLearningRecordNotFound, match="not found"):
         await store.delete_record("non_existent")
 
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="delete_record", status="failure")
-        >= 1
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="delete_record", status="failure") >= 1
 
 
 @pytest.mark.asyncio
@@ -499,9 +468,7 @@ async def test_concurrent_add_records(store_type, inmemory_store, redis_store):
 
     assert len(exp_ids) == 4
     assert get_metric_value(MLDS_DATA_SIZE, backend=store._backend_label) == 4
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="success") == 4
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="success") == 4
 
 
 @pytest.mark.asyncio
@@ -563,9 +530,7 @@ async def test_invalid_tag_validation(store_type, inmemory_store, redis_store):
     with pytest.raises((MetaLearningRecordValidationError, MetaLearningDataStoreError)):
         await store.add_record(invalid_record)
 
-    assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="failure") >= 1
-    )
+    assert get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="failure") >= 1
 
 
 @pytest.mark.asyncio

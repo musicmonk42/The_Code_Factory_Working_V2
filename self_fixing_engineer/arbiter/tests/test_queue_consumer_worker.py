@@ -18,9 +18,7 @@ def setup_test_environment():
     # Mock Prometheus metrics
     class MockMetric:
         def __init__(self, *args, **kwargs):
-            self.labels_mock = Mock(
-                return_value=Mock(inc=Mock(), observe=Mock(), set=Mock())
-            )
+            self.labels_mock = Mock(return_value=Mock(inc=Mock(), observe=Mock(), set=Mock()))
 
         def labels(self, *args, **kwargs):
             return self.labels_mock(*args, **kwargs)
@@ -59,9 +57,7 @@ def setup_test_environment():
     opentelemetry = create_mock_module("opentelemetry")
     opentelemetry.exporter = create_mock_module("opentelemetry.exporter")
     opentelemetry.exporter.otlp = create_mock_module("opentelemetry.exporter.otlp")
-    opentelemetry.exporter.otlp.proto = create_mock_module(
-        "opentelemetry.exporter.otlp.proto"
-    )
+    opentelemetry.exporter.otlp.proto = create_mock_module("opentelemetry.exporter.otlp.proto")
     opentelemetry.exporter.otlp.proto.grpc = create_mock_module(
         "opentelemetry.exporter.otlp.proto.grpc"
     )
@@ -77,9 +73,7 @@ def setup_test_environment():
     sys.modules["opentelemetry.exporter"] = opentelemetry.exporter
     sys.modules["opentelemetry.exporter.otlp"] = opentelemetry.exporter.otlp
     sys.modules["opentelemetry.exporter.otlp.proto"] = opentelemetry.exporter.otlp.proto
-    sys.modules["opentelemetry.exporter.otlp.proto.grpc"] = (
-        opentelemetry.exporter.otlp.proto.grpc
-    )
+    sys.modules["opentelemetry.exporter.otlp.proto.grpc"] = opentelemetry.exporter.otlp.proto.grpc
     sys.modules["opentelemetry.exporter.otlp.proto.grpc.trace_exporter"] = (
         opentelemetry.exporter.otlp.proto.grpc.trace_exporter
     )
@@ -110,9 +104,7 @@ def setup_test_environment():
     opentelemetry.instrumentation.requests = MagicMock()
     opentelemetry.instrumentation.requests.RequestsInstrumentor = MagicMock
     sys.modules["opentelemetry.instrumentation"] = opentelemetry.instrumentation
-    sys.modules["opentelemetry.instrumentation.requests"] = (
-        opentelemetry.instrumentation.requests
-    )
+    sys.modules["opentelemetry.instrumentation.requests"] = opentelemetry.instrumentation.requests
 
     opentelemetry.propagate = MagicMock()
     opentelemetry.propagate.get_global_textmap = MagicMock(return_value=MagicMock())
@@ -329,9 +321,7 @@ class TestProcessEvent:
                 "event_type": "test_event",
                 "message_id": "poison",
                 "correlation_id": "xyz",
-                "data_summary": str(queue_consumer_worker.redact_sensitive(event_data))[
-                    :200
-                ],
+                "data_summary": str(queue_consumer_worker.redact_sensitive(event_data))[:200],
                 "reason": "exceeded_poison_threshold",
             },
         )
@@ -406,9 +396,7 @@ class TestHandleMessage:
     """Test message handling with concurrency control."""
 
     @pytest.mark.asyncio
-    async def test_handle_message_calls_process(
-        self, mock_mq_service, mock_audit_logger
-    ):
+    async def test_handle_message_calls_process(self, mock_mq_service, mock_audit_logger):
         """Test handle_message calls process_event with semaphore."""
         event_data = {"test": "data"}
 
@@ -451,14 +439,8 @@ class TestQueueConsumerWorker:
                     async with worker:
                         assert worker.mq_service is not None
                         assert worker.audit_logger is not None
-                        assert (
-                            queue_consumer_worker.mq_service_instance
-                            == worker.mq_service
-                        )
-                        assert (
-                            queue_consumer_worker.audit_logger_instance
-                            == worker.audit_logger
-                        )
+                        assert queue_consumer_worker.mq_service_instance == worker.mq_service
+                        assert queue_consumer_worker.audit_logger_instance == worker.audit_logger
 
                         # Verify services were initialized
                         worker.mq_service.connect.assert_called_once()

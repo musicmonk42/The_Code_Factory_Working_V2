@@ -93,9 +93,7 @@ os.environ["DYNACONF_KMS_KEY_ID"] = "mock-kms-key-id"
 os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(
     b"mock_key_32_bytes_1234567890abcd"
 ).decode("utf-8")
-os.environ["AUDIT_LOG_BACKEND_TYPE"] = (
-    "inmemory"  # Use 'inmemory' to match registered backends
-)
+os.environ["AUDIT_LOG_BACKEND_TYPE"] = "inmemory"  # Use 'inmemory' to match registered backends
 os.environ["AUDIT_LOG_BACKEND_PARAMS"] = json.dumps({})  # Clear file-specific params
 os.environ["AUDIT_LOG_GRPC_PORT"] = str(GRPC_PORT)
 
@@ -222,12 +220,8 @@ def mock_crypto_provider_factory(mock_software_key_master):
     # Mock the CryptoProvider instance returned by the factory
     mock_provider = MagicMock()
     mock_provider.supported_algos = ["ed25519"]
-    mock_provider.settings = SimpleNamespace(
-        SUPPORTED_ALGOS=["ed25519"]
-    )  # Added settings mock
-    mock_provider.generate_key = AsyncMock(
-        return_value=str(uuid.uuid4())
-    )  # Use UUID for key ID
+    mock_provider.settings = SimpleNamespace(SUPPORTED_ALGOS=["ed25519"])  # Added settings mock
+    mock_provider.generate_key = AsyncMock(return_value=str(uuid.uuid4()))  # Use UUID for key ID
     mock_provider.rotate_key = AsyncMock(return_value=str(uuid.uuid4()))
 
     # Mock the sign/verify methods that will be used by the AuditLog instance
@@ -283,9 +277,7 @@ async def mock_metrics():
             "audit_log_errors_total": MagicMock(),
             "audit_log_latency_seconds": MagicMock(),
         }
-        mock_counter.side_effect = lambda name, *args, **kwargs: mock_metrics.get(
-            name, MagicMock()
-        )
+        mock_counter.side_effect = lambda name, *args, **kwargs: mock_metrics.get(name, MagicMock())
         mock_histogram.side_effect = lambda name, *args, **kwargs: mock_metrics.get(
             name, MagicMock()
         )
@@ -298,9 +290,7 @@ async def mock_opentelemetry():
     with patch("generator.audit_log.audit_log.trace") as mock_trace:
         mock_tracer = MagicMock()
         mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
         mock_trace.get_tracer.return_value = mock_tracer
         yield mock_tracer, mock_span
 
@@ -322,9 +312,7 @@ async def audit_log_instance(mock_audit_log_backend, mock_crypto_provider_factor
 
 
 @pytest_asyncio.fixture
-async def grpc_server(
-    audit_log_instance, mock_audit_log_backend
-):  # Removed mock_audit_log_crypto
+async def grpc_server(audit_log_instance, mock_audit_log_backend):  # Removed mock_audit_log_crypto
     """Start a gRPC server for testing."""
     try:
         from generator.audit_log.audit_log import serve_grpc_server
@@ -571,9 +559,7 @@ class TestAuditLogProto:
             success_count = sum(
                 1
                 for r in responses
-                if not isinstance(r, Exception)
-                and hasattr(r, "status")
-                and r.status == "success"
+                if not isinstance(r, Exception) and hasattr(r, "status") and r.status == "success"
             )
             assert success_count >= 1  # Should be 5, but >= 1 is a safe check
         except Exception as e:

@@ -42,9 +42,7 @@ def test_arbiter_growth_error_init_with_details(caplog):
     error = ArbiterGrowthError("Error with context", details)
     assert error.message == "Error with context"
     assert error.details == details
-    assert (
-        str(error) == "Error with context (Details: {'context': 'test', 'value': 42})"
-    )
+    assert str(error) == "Error with context (Details: {'context': 'test', 'value': 42})"
     assert (
         "Exception raised: ArbiterGrowthError, Details: {'context': 'test', 'value': 42}"
         in caplog.text
@@ -64,10 +62,7 @@ def test_operation_queue_full_error_init(caplog):
     error = OperationQueueFullError("Queue at capacity", details)
     assert error.message == "Queue at capacity"
     assert error.details == details
-    assert (
-        str(error)
-        == "Queue at capacity (Details: {'queue_size': 100, 'max_size': 100})"
-    )
+    assert str(error) == "Queue at capacity (Details: {'queue_size': 100, 'max_size': 100})"
     assert "Exception raised: OperationQueueFullError" in caplog.text
 
 
@@ -77,9 +72,7 @@ def test_rate_limit_error_init(caplog):
     error = RateLimitError("Rate limit exceeded", details)
     assert error.message == "Rate limit exceeded"
     assert error.details == details
-    assert (
-        str(error) == "Rate limit exceeded (Details: {'limit': 10, 'current_rate': 12})"
-    )
+    assert str(error) == "Rate limit exceeded (Details: {'limit': 10, 'current_rate': 12})"
     assert "Exception raised: RateLimitError" in caplog.text
 
 

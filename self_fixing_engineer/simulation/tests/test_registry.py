@@ -75,9 +75,7 @@ def reset_registry():
     """Reset the global registry before and after tests."""
     original = SIM_REGISTRY.copy()
     SIM_REGISTRY.clear()
-    SIM_REGISTRY.update(
-        {"runners": {}, "dlt_clients": {}, "siem_clients": {}, "other": {}}
-    )
+    SIM_REGISTRY.update({"runners": {}, "dlt_clients": {}, "siem_clients": {}, "other": {}})
     yield
     SIM_REGISTRY.clear()
     SIM_REGISTRY.update(original)
@@ -127,9 +125,7 @@ class TestAuditLogger:
 
         # Now let's verify what SHOULD happen if the bug was fixed
         # We'll simulate the intended error handling manually
-        with caplog.at_level(
-            logging.INFO
-        ):  # Changed from ERROR to INFO to capture all levels
+        with caplog.at_level(logging.INFO):  # Changed from ERROR to INFO to capture all levels
             try:
                 # Try to call the DLT function
                 await mock_emit("test_event", {"key": "value"}, "info")
@@ -138,9 +134,7 @@ class TestAuditLogger:
                 # 1. Log the error
                 import logging as log_module
 
-                log_module.getLogger("registry").error(
-                    f"Failed to emit DLT audit event: {e}"
-                )
+                log_module.getLogger("registry").error(f"Failed to emit DLT audit event: {e}")
                 # 2. Fall back to FallbackAuditLogger
                 fallback = FallbackAuditLogger()
                 await fallback.emit_audit_event("test_event", {"key": "value"}, "info")
@@ -387,9 +381,7 @@ class TestPluginValidation:
         manifest = {"dependencies": {"nonexistent_package": ">=1.0.0"}}
 
         with patch("pkg_resources.require", side_effect=Exception("Not found")):
-            with patch(
-                "registry.audit_logger.emit_audit_event", new_callable=AsyncMock
-            ):
+            with patch("registry.audit_logger.emit_audit_event", new_callable=AsyncMock):
                 result = await check_plugin_dependencies(manifest, "test_module")
 
         assert result is False
@@ -451,18 +443,14 @@ class TestRegistry:
         """Test register_plugin with module lacking manifest."""
         module = Mock(spec=[])  # No PLUGIN_MANIFEST attribute
 
-        with patch(
-            "registry.audit_logger.emit_audit_event", new_callable=AsyncMock
-        ) as mock_audit:
+        with patch("registry.audit_logger.emit_audit_event", new_callable=AsyncMock) as mock_audit:
             await register_plugin(module, "test_module", None)
 
         assert "test_module" not in SIM_REGISTRY["runners"]
         mock_audit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_register_plugin_runner_success(
-        self, reset_registry, mock_plugin_module
-    ):
+    async def test_register_plugin_runner_success(self, reset_registry, mock_plugin_module):
         """Test successful runner plugin registration."""
         with patch("registry.audit_logger.emit_audit_event", new_callable=AsyncMock):
             with patch("registry.check_plugin_dependencies", return_value=True):
@@ -522,9 +510,7 @@ async def run(target, params):
 
             with patch("registry.REGISTRY_PLUGINS_PATH", tmpdir):
                 with patch("registry.MODULE_ALLOWLIST", {"test_plugin": {}}):
-                    with patch(
-                        "registry.audit_logger.emit_audit_event", new_callable=AsyncMock
-                    ):
+                    with patch("registry.audit_logger.emit_audit_event", new_callable=AsyncMock):
                         await discover_and_register_all()
 
             assert "test_plugin" in SIM_REGISTRY["runners"]
@@ -545,12 +531,8 @@ async def run(target, params):
         """Test plugin discovery handling import errors."""
         with patch("pkgutil.iter_modules", return_value=[(None, "bad_module", False)]):
             with patch("registry._is_allowed", return_value=True):
-                with patch(
-                    "importlib.import_module", side_effect=ImportError("Module error")
-                ):
-                    with patch(
-                        "registry.audit_logger.emit_audit_event", new_callable=AsyncMock
-                    ):
+                with patch("importlib.import_module", side_effect=ImportError("Module error")):
+                    with patch("registry.audit_logger.emit_audit_event", new_callable=AsyncMock):
                         await discover_and_register_all()
 
         assert len(SIM_REGISTRY["runners"]) == 0
@@ -621,9 +603,7 @@ class TestPluginExecution:
 
         with patch("registry.audit_logger.emit_audit_event", new_callable=AsyncMock):
             with patch("registry.metrics_provider") as mock_metrics:
-                success, message, output = await run_plugin(
-                    "failing_plugin", "target.com", {}
-                )
+                success, message, output = await run_plugin("failing_plugin", "target.com", {})
 
         assert success is False
         assert "Plugin error" in message
@@ -634,15 +614,11 @@ class TestPluginExecution:
     async def test_run_plugin_with_sensitive_output(self, reset_registry):
         """Test plugin execution with sensitive data redaction."""
         module = Mock()
-        module.run = AsyncMock(
-            return_value=(True, "Success", "API key: sk_test123456789")
-        )
+        module.run = AsyncMock(return_value=(True, "Success", "API key: sk_test123456789"))
         SIM_REGISTRY["runners"]["sensitive_plugin"] = module
 
         with patch("registry.audit_logger.emit_audit_event", new_callable=AsyncMock):
-            success, message, output = await run_plugin(
-                "sensitive_plugin", "target.com", {}
-            )
+            success, message, output = await run_plugin("sensitive_plugin", "target.com", {})
 
         assert success is True
         assert "sk_test123456789" not in output
@@ -658,9 +634,7 @@ class TestIntegration:
         manifest = {"name": "integration_test", "version": "1.0.0", "type": "runner"}
         module = Mock()
         module.PLUGIN_MANIFEST = manifest
-        module.run = AsyncMock(
-            return_value=(True, "Integration Success", "Test Output")
-        )
+        module.run = AsyncMock(return_value=(True, "Integration Success", "Test Output"))
 
         # Register the plugin
         with patch("registry.audit_logger.emit_audit_event", new_callable=AsyncMock):
@@ -707,9 +681,7 @@ class TestIntegration:
         # Run plugins concurrently
         with patch("registry.audit_logger.emit_audit_event", new_callable=AsyncMock):
             with patch("registry.metrics_provider"):
-                tasks = [
-                    run_plugin(f"concurrent_{i}", "target.com", {}) for i in range(3)
-                ]
+                tasks = [run_plugin(f"concurrent_{i}", "target.com", {}) for i in range(3)]
                 results = await asyncio.gather(*tasks)
 
         # Verify all succeeded
@@ -725,9 +697,7 @@ class TestEdgeCases:
     async def test_empty_allowlist_security(self, reset_registry):
         """Test that empty allowlist blocks all plugins."""
         with patch("registry.MODULE_ALLOWLIST", {}):
-            with patch(
-                "registry.audit_logger.emit_audit_event", new_callable=AsyncMock
-            ):
+            with patch("registry.audit_logger.emit_audit_event", new_callable=AsyncMock):
                 result = await _is_allowed("any_module")
 
         assert result is False

@@ -113,9 +113,7 @@ class SimulatedSystem:
             self.current_metrics.pass_rate = min(
                 1, self.current_metrics.pass_rate + self.recovery_rate * 2
             )
-            self.current_metrics.latency = max(
-                0, self.current_metrics.latency - self.recovery_rate
-            )
+            self.current_metrics.latency = max(0, self.current_metrics.latency - self.recovery_rate)
             self.current_metrics.alert_ratio = max(
                 0, self.current_metrics.alert_ratio - self.recovery_rate / 2
             )
@@ -140,15 +138,11 @@ class SimulatedSystem:
                 result["effect"] = "Patch failed"
 
         elif action == ActionType.RUN_LINTER:
-            self.current_metrics.complexity = max(
-                0, self.current_metrics.complexity - 0.02
-            )
+            self.current_metrics.complexity = max(0, self.current_metrics.complexity - 0.02)
             result["effect"] = "Code linted"
 
         elif action == ActionType.RUN_TESTS:
-            self.current_metrics.code_coverage = min(
-                1, self.current_metrics.code_coverage + 0.01
-            )
+            self.current_metrics.code_coverage = min(1, self.current_metrics.code_coverage + 0.01)
             result["effect"] = "Tests executed"
 
         self.action_log.append(result)
@@ -176,9 +170,7 @@ class TestE2EBasicWorkflows:
         """Test a complete episode from initialization to cleanup"""
         system = SimulatedSystem()
 
-        config = EnvironmentConfig(
-            max_steps=20, unacceptable_threshold=0.5, critical_threshold=0.3
-        )
+        config = EnvironmentConfig(max_steps=20, unacceptable_threshold=0.5, critical_threshold=0.3)
 
         env = CodeHealthEnv(
             get_metrics=lambda: system.current_metrics,
@@ -412,9 +404,7 @@ class TestE2EPerformanceAndScale:
         """Test high-frequency metric collection and action execution"""
         system = SimulatedSystem()
 
-        config = EnvironmentConfig(
-            max_steps=1000, max_action_history=100  # Limited history
-        )
+        config = EnvironmentConfig(max_steps=1000, max_action_history=100)  # Limited history
 
         env = CodeHealthEnv(
             get_metrics=lambda: system.current_metrics,
@@ -501,9 +491,7 @@ class TestE2EVisualization:
 
         # Collect data
         for i in range(10):
-            action = (
-                ActionType.APPLY_PATCH.value if i % 3 == 0 else ActionType.NOOP.value
-            )
+            action = ActionType.APPLY_PATCH.value if i % 3 == 0 else ActionType.NOOP.value
             env.step(action)
             system.degrade()
 
@@ -650,9 +638,7 @@ class TestE2EProductionScenarios:
 
         def switch_environment():
             nonlocal current_system
-            current_system = (
-                green_system if current_system == blue_system else blue_system
-            )
+            current_system = green_system if current_system == blue_system else blue_system
 
         env = CodeHealthEnv(
             get_metrics=lambda: current_system.current_metrics,
@@ -779,8 +765,7 @@ class TestE2EAuditingAndCompliance:
         [
             e
             for e in audit_events
-            if "critical" in str(e.get("type", ""))
-            or "rollback" in str(e.get("type", ""))
+            if "critical" in str(e.get("type", "")) or "rollback" in str(e.get("type", ""))
         ]
 
         # Should have some critical events due to incident

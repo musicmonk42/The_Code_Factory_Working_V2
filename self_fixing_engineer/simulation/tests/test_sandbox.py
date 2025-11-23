@@ -173,9 +173,7 @@ async def test_cleanup_sandbox_docker(monkeypatch):
         MagicMock(
             return_value=MagicMock(
                 containers=MagicMock(
-                    get=MagicMock(
-                        return_value=MagicMock(stop=MagicMock(), remove=MagicMock())
-                    )
+                    get=MagicMock(return_value=MagicMock(stop=MagicMock(), remove=MagicMock()))
                 )
             )
         ),
@@ -256,9 +254,7 @@ async def test_deploy_to_kubernetes_success(monkeypatch):
                 ),
                 read_namespaced_pod_log=MagicMock(return_value="output"),
                 list_namespaced_pod=MagicMock(
-                    return_value=MagicMock(
-                        items=[MagicMock(metadata=MagicMock(name="mock-pod"))]
-                    )
+                    return_value=MagicMock(items=[MagicMock(metadata=MagicMock(name="mock-pod"))])
                 ),
             )
         ),
@@ -319,11 +315,7 @@ async def test_burst_to_cloud_aws_success(monkeypatch):
     monkeypatch.setattr("simulation.sandbox.AWS_AVAILABLE", True)
     monkeypatch.setattr(
         "simulation.sandbox.boto3.client",
-        MagicMock(
-            return_value=MagicMock(
-                submit_job=MagicMock(return_value={"jobId": "test_id"})
-            )
-        ),
+        MagicMock(return_value=MagicMock(submit_job=MagicMock(return_value={"jobId": "test_id"}))),
     )
     result = await burst_to_cloud({"job_name": "test"}, "aws")
     assert result["status"] == "CLOUD_BURST_INITIATED"
@@ -412,10 +404,6 @@ async def test_periodic_external_service_check(monkeypatch):
 async def test_start_background_tasks(monkeypatch):
     """Test starting background tasks."""
     monkeypatch.setattr("simulation.sandbox.check_external_services_async", AsyncMock())
-    monkeypatch.setattr(
-        "simulation.sandbox._periodic_external_service_check", AsyncMock()
-    )
-    monkeypatch.setattr(
-        "simulation.sandbox._periodic_audit_log_verification", AsyncMock()
-    )
+    monkeypatch.setattr("simulation.sandbox._periodic_external_service_check", AsyncMock())
+    monkeypatch.setattr("simulation.sandbox._periodic_audit_log_verification", AsyncMock())
     await _start_background_tasks()

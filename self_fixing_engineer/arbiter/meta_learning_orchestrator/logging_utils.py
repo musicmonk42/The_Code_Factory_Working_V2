@@ -147,9 +147,7 @@ class PIIRedactorFilter(logging.Filter):
 
             keys_str = os.getenv("PII_SENSITIVE_KEYS", "")
             if keys_str:
-                self._sensitive_keys = {
-                    k.strip() for k in keys_str.split(",") if k.strip()
-                }
+                self._sensitive_keys = {k.strip() for k in keys_str.split(",") if k.strip()}
             else:
                 # Use defaults if env var is empty or not set
                 self._sensitive_keys = set(self.DEFAULT_SENSITIVE_KEYS)
@@ -235,9 +233,7 @@ class PIIRedactorFilter(logging.Filter):
             return redacted
         return value
 
-    def _redact_dict(
-        self, data: Dict[str, Any], seen: Set[int], depth: int
-    ) -> Dict[str, Any]:
+    def _redact_dict(self, data: Dict[str, Any], seen: Set[int], depth: int) -> Dict[str, Any]:
         """Recursively redacts sensitive keys and values within a dictionary."""
         redacted_data = {}
         for key, value in data.items():

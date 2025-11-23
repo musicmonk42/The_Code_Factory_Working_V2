@@ -51,9 +51,7 @@ PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
 logger = logging.getLogger("pubsub_audit_plugin")
 if not logger.handlers:
     if PRODUCTION_MODE:
-        LOG_FILE_PATH = os.getenv(
-            "PUBSUB_PLUGIN_LOG_FILE", "/var/log/pubsub_plugin.log"
-        )
+        LOG_FILE_PATH = os.getenv("PUBSUB_PLUGIN_LOG_FILE", "/var/log/pubsub_plugin.log")
         try:
             os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
             handler = logging.FileHandler(LOG_FILE_PATH)
@@ -65,9 +63,7 @@ if not logger.handlers:
             )
             # Do not use alert_operator here, as it may not be ready. Fall back to stdout and alert on that channel.
             handler = logging.StreamHandler(sys.stdout)
-            sys.stderr.write(
-                "CRITICAL: Pub/Sub plugin file logging failed. Aborting startup.\n"
-            )
+            sys.stderr.write("CRITICAL: Pub/Sub plugin file logging failed. Aborting startup.\n")
             sys.exit(1)
 
         class JsonFormatter(logging.Formatter):
@@ -116,9 +112,7 @@ try:
     from plugins.core_audit import audit_logger
     from plugins.core_secrets import SECRETS_MANAGER
 except ImportError as e:
-    logger.critical(
-        f"CRITICAL: Missing core dependency for Pub/Sub plugin: {e}. Aborting startup."
-    )
+    logger.critical(f"CRITICAL: Missing core dependency for Pub/Sub plugin: {e}. Aborting startup.")
     sys.exit(1)
 
 
@@ -145,9 +139,7 @@ except ImportError as e:
     logger.critical(
         f"CRITICAL: pydantic or pydantic-settings not found. Schema validation is critical. Aborting startup: {e}."
     )
-    alert_operator(
-        "CRITICAL: pydantic missing. Pub/Sub plugin aborted.", level="CRITICAL"
-    )
+    alert_operator("CRITICAL: pydantic missing. Pub/Sub plugin aborted.", level="CRITICAL")
     sys.exit(1)
 
 try:
@@ -177,9 +169,7 @@ try:
         decode_responses=True,
     )
 except Exception as e:
-    logger.warning(
-        f"Failed to connect to Redis for caching: {e}. Caching will be disabled."
-    )
+    logger.warning(f"Failed to connect to Redis for caching: {e}. Caching will be disabled.")
     REDIS_CLIENT = None
 
 
@@ -193,9 +183,7 @@ class PubSubSettings(BaseSettings):
     topic_id: str = Field(..., min_length=1, description="Pub/Sub Topic ID.")
 
     # Publisher client batching settings
-    batch_max_messages: int = Field(
-        1000, ge=1, description="Maximum messages per batch."
-    )
+    batch_max_messages: int = Field(1000, ge=1, description="Maximum messages per batch.")
     batch_max_bytes: int = Field(
         1024 * 1024, ge=1, description="Maximum bytes per batch (1MB default)."
     )
@@ -232,13 +220,9 @@ class PubSubSettings(BaseSettings):
     )
 
     # Dry Run and Main/Example: The dry_run setting must not be present or executable in production builds.
-    dry_run: bool = Field(
-        False, description="If true, events are logged but not sent to Pub/Sub."
-    )
+    dry_run: bool = Field(False, description="If true, events are logged but not sent to Pub/Sub.")
 
-    audit_schema_version: int = Field(
-        1, ge=1, description="Version of the audit event schema."
-    )
+    audit_schema_version: int = Field(1, ge=1, description="Version of the audit event schema.")
 
     # Topic and Project ID Enforcement: MANDATORY: project_id and topic_id must be on an operator-managed allowlist.
     allowed_project_ids: Optional[List[str]] = Field(
@@ -364,9 +348,7 @@ except ValidationError as e:
         f"CRITICAL: PubSubSettings validation failed: {e}. Aborting startup.",
         exc_info=True,
     )
-    alert_operator(
-        f"CRITICAL: PubSubSettings validation failed: {e}. Aborting.", level="CRITICAL"
-    )
+    alert_operator(f"CRITICAL: PubSubSettings validation failed: {e}. Aborting.", level="CRITICAL")
     sys.exit(1)
 except Exception as e:
     logger.critical(
@@ -483,9 +465,7 @@ class CircuitBreaker:
                 self._is_open = False
                 self._failure_count = 0
                 self._metrics.CIRCUIT_BREAKER_STATUS.set(0)
-                logger.warning(
-                    "Circuit breaker has been reset. Resuming publish attempts."
-                )
+                logger.warning("Circuit breaker has been reset. Resuming publish attempts.")
                 audit_logger.log_event("pubsub_circuit_breaker_reset", status="closed")
                 alert_operator(
                     "INFO: Pub/Sub Circuit Breaker RESET. Resuming publishes.",
@@ -503,9 +483,7 @@ class CircuitBreaker:
                 self._is_open = True
                 self._last_failure_time = time.monotonic()
                 self._metrics.CIRCUIT_BREAKER_STATUS.set(1)
-                logger.error(
-                    "Circuit breaker tripped due to excessive publish failures."
-                )
+                logger.error("Circuit breaker tripped due to excessive publish failures.")
                 audit_logger.log_event(
                     "pubsub_circuit_breaker_tripped",
                     status="open",
@@ -538,9 +516,7 @@ class PubSubGateway:
         self._worker_tasks: List[asyncio.Task] = []
         self._topic_path = ""
         self._gcp_credentials = None
-        self._sem = asyncio.Semaphore(
-            settings.num_workers * 2
-        )  # Client-side rate limiting
+        self._sem = asyncio.Semaphore(settings.num_workers * 2)  # Client-side rate limiting
 
         # Define the custom retry policy based on Google's best practices
         self.custom_retry = api_retry.Retry(
@@ -587,15 +563,11 @@ class PubSubGateway:
                 credentials_json = SECRETS_MANAGER.get_secret(
                     gcp_credentials_secret_id, required=True
                 )
-                self._gcp_credentials = (
-                    service_account.Credentials.from_service_account_info(
-                        json.loads(credentials_json)
-                    )
+                self._gcp_credentials = service_account.Credentials.from_service_account_info(
+                    json.loads(credentials_json)
                 )
                 logger.info("GCP credentials loaded securely from secrets manager.")
-                audit_logger.log_event(
-                    "gcp_credentials_loaded", source="secrets_manager"
-                )
+                audit_logger.log_event("gcp_credentials_loaded", source="secrets_manager")
             except Exception as e:
                 raise AnalyzerCriticalError(
                     f"Failed to load GCP credentials from secret manager '{gcp_credentials_secret_id}': {e}"
@@ -629,9 +601,7 @@ class PubSubGateway:
                     self._publisher_client.get_topic,
                     request={"topic": self._topic_path},
                 )
-                logger.info(
-                    f"Pub/Sub Topic '{self.settings.topic_id}' validated successfully."
-                )
+                logger.info(f"Pub/Sub Topic '{self.settings.topic_id}' validated successfully.")
             except google_exceptions.NotFound:
                 raise AnalyzerCriticalError(
                     f"Pub/Sub Topic '{self.settings.topic_id}' not found. Aborting startup."
@@ -642,8 +612,7 @@ class PubSubGateway:
                 )
 
             self._worker_tasks = [
-                asyncio.create_task(self._worker())
-                for _ in range(self.settings.num_workers)
+                asyncio.create_task(self._worker()) for _ in range(self.settings.num_workers)
             ]
             logger.info(
                 f"Pub/Sub Gateway started with {self.settings.num_workers} workers.",
@@ -671,10 +640,7 @@ class PubSubGateway:
         try:
             await asyncio.wait_for(
                 asyncio.gather(*self._worker_tasks),
-                timeout=self.settings.batch_max_latency_sec
-                * self.settings.num_workers
-                * 2
-                + 10,
+                timeout=self.settings.batch_max_latency_sec * self.settings.num_workers * 2 + 10,
             )
             logger.info("Pub/Sub Gateway worker tasks finished.")
             audit_logger.log_event("pubsub_gateway_worker_finished")
@@ -683,21 +649,15 @@ class PubSubGateway:
                 "Pub/Sub Gateway worker tasks timed out during shutdown. Some messages may be lost."
             )
         except Exception as e:
-            raise AnalyzerCriticalError(
-                f"Unexpected error during worker task shutdown: {e}."
-            )
+            raise AnalyzerCriticalError(f"Unexpected error during worker task shutdown: {e}.")
 
         if self._publisher_client:
             try:
                 await asyncio.to_thread(self._publisher_client.stop)
                 logger.info("Pub/Sub PublisherClient stopped.")
-                audit_logger.log_event(
-                    "pubsub_publisher_client_stopped", status="success"
-                )
+                audit_logger.log_event("pubsub_publisher_client_stopped", status="success")
             except Exception as e:
-                raise AnalyzerCriticalError(
-                    f"Failed to stop Pub/Sub PublisherClient cleanly: {e}."
-                )
+                raise AnalyzerCriticalError(f"Failed to stop Pub/Sub PublisherClient cleanly: {e}.")
 
         logger.info("Pub/Sub Gateway shutdown complete.")
         audit_logger.log_event("pubsub_gateway_shutdown_complete", status="success")
@@ -705,9 +665,7 @@ class PubSubGateway:
     def publish(self, event_name: str, service_name: str, details: Dict[str, Any]):
         """Validates and enqueues an event for publishing. Returns instantly."""
         try:
-            event = AuditEvent(
-                event_name=event_name, service_name=service_name, details=details
-            )
+            event = AuditEvent(event_name=event_name, service_name=service_name, details=details)
 
             self._event_queue.put_nowait(event)
             self.metrics.EVENTS_QUEUED.labels(event_name=event_name).inc()
@@ -753,17 +711,13 @@ class PubSubGateway:
         except AnalyzerCriticalError as e:
             # This is raised by the PII validator; log and alert
             logger.critical(f"CRITICAL: {e}")
-            audit_logger.log_event(
-                "pubsub_pii_validation_failed", event_name=event_name
-            )
+            audit_logger.log_event("pubsub_pii_validation_failed", event_name=event_name)
             alert_operator(
                 f"CRITICAL: Pub/Sub event PII validation failed for '{event_name}': {e}.",
                 level="CRITICAL",
             )
         except Exception as e:
-            raise AnalyzerCriticalError(
-                f"Unexpected error enqueueing event '{event_name}': {e}"
-            )
+            raise AnalyzerCriticalError(f"Unexpected error enqueueing event '{event_name}': {e}")
 
     async def _publish_batch(self, batch: List[AuditEvent]):
         with _tracer.start_as_current_span(
@@ -801,12 +755,10 @@ class PubSubGateway:
                 await asyncio.gather(*futures)
 
                 duration = time.monotonic() - start_time
-                self.metrics.PUBLISH_LATENCY.labels(
-                    topic=self.settings.topic_id
-                ).observe(duration)
-                self.metrics.EVENTS_PUBLISHED_SUCCESS.labels(
-                    topic=self.settings.topic_id
-                ).inc(len(batch))
+                self.metrics.PUBLISH_LATENCY.labels(topic=self.settings.topic_id).observe(duration)
+                self.metrics.EVENTS_PUBLISHED_SUCCESS.labels(topic=self.settings.topic_id).inc(
+                    len(batch)
+                )
                 self.circuit_breaker.record_success()
                 if span:
                     span.set_status(trace.Status(trace.StatusCode.OK))
@@ -836,9 +788,7 @@ class PubSubGateway:
                 if span:
                     span.record_exception(e)
                 if span:
-                    span.set_status(
-                        trace.Status(trace.StatusCode.ERROR, "Publish failed")
-                    )
+                    span.set_status(trace.Status(trace.StatusCode.ERROR, "Publish failed"))
                 audit_logger.log_event(
                     "pubsub_publish_failure",
                     batch_size=len(batch),
@@ -860,9 +810,7 @@ class PubSubGateway:
                 if span:
                     span.record_exception(e)
                 if span:
-                    span.set_status(
-                        trace.Status(trace.StatusCode.ERROR, "Unhandled publish error")
-                    )
+                    span.set_status(trace.Status(trace.StatusCode.ERROR, "Unhandled publish error"))
                 audit_logger.log_event(
                     "pubsub_publish_failure",
                     batch_size=len(batch),
@@ -874,9 +822,7 @@ class PubSubGateway:
                     f"CRITICAL: Unhandled exception during Pub/Sub publish: {e}.",
                     level="CRITICAL",
                 )
-                raise AnalyzerCriticalError(
-                    "Unhandled exception during Pub/Sub publish."
-                )
+                raise AnalyzerCriticalError("Unhandled exception during Pub/Sub publish.")
 
     async def _worker(self):
         while True:
@@ -896,9 +842,7 @@ class PubSubGateway:
                         )
                         if event is None:
                             self._event_queue.task_done()
-                            self._event_queue.put_nowait(
-                                None
-                            )  # Re-add sentinel for other workers
+                            self._event_queue.put_nowait(None)  # Re-add sentinel for other workers
                             break
                         batch.append(event)
                     except asyncio.TimeoutError:
@@ -909,9 +853,7 @@ class PubSubGateway:
                         "[DRY RUN] Would publish batch.",
                         extra={"context": {"batch_size": len(batch)}},
                     )
-                    audit_logger.log_event(
-                        "pubsub_dry_run_publish", batch_size=len(batch)
-                    )
+                    audit_logger.log_event("pubsub_dry_run_publish", batch_size=len(batch))
                     for event in batch:
                         self._event_queue.task_done()
                     continue
@@ -924,9 +866,7 @@ class PubSubGateway:
                 logger.info("Pub/Sub worker task cancelled.")
                 break
             except Exception as e:
-                raise AnalyzerCriticalError(
-                    f"Unhandled exception in Pub/Sub worker: {e}."
-                )
+                raise AnalyzerCriticalError(f"Unhandled exception in Pub/Sub worker: {e}.")
 
         logger.info("Event processor task finished.")
 
@@ -1002,9 +942,7 @@ if not PRODUCTION_MODE:
                 {"amount": 99.99, "currency": "USD"},
             )
 
-            logger.info(
-                "Main application logic continues immediately after publishing."
-            )
+            logger.info("Main application logic continues immediately after publishing.")
 
             # Allow time for workers to process and publish events
             await asyncio.sleep(5)
@@ -1015,9 +953,7 @@ if not PRODUCTION_MODE:
         except SystemExit:
             pass
         except Exception as e:
-            logger.critical(
-                f"Unhandled exception during example run: {e}", exc_info=True
-            )
+            logger.critical(f"Unhandled exception during example run: {e}", exc_info=True)
             alert_operator(
                 f"CRITICAL: Unhandled exception during Pub/Sub example run: {e}.",
                 level="CRITICAL",

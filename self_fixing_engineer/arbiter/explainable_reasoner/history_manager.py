@@ -44,9 +44,7 @@ except ImportError:
             if self.data_type == "image" and self.data:
                 import base64
 
-                data_snippet = (
-                    f"base64_preview:{base64.b64encode(self.data).decode()[:50]}..."
-                )
+                data_snippet = f"base64_preview:{base64.b64encode(self.data).decode()[:50]}..."
             elif self.data_type == "audio" and self.data:
                 data_snippet = f"bytes_len:{len(self.data)}"
             elif self.data_type == "video" and self.data:
@@ -202,9 +200,7 @@ class BaseHistoryManager(ABC):
         """Decrypts text if a key is available."""
         if self._encryption_key:
             try:
-                return self._encryption_key.decrypt(
-                    encrypted_text.encode("utf-8")
-                ).decode("utf-8")
+                return self._encryption_key.decrypt(encrypted_text.encode("utf-8")).decode("utf-8")
             except InvalidToken:
                 self._logger.warning(
                     "decryption_failed_invalid_token",
@@ -236,9 +232,7 @@ class BaseHistoryManager(ABC):
             METRICS["reasoner_history_operation_latency_seconds"].labels(
                 operation=operation
             ).observe(time.monotonic() - start_time)
-        self._logger.error(
-            f"{self._backend_name}_{operation}_failed", error=str(e), exc_info=True
-        )
+        self._logger.error(f"{self._backend_name}_{operation}_failed", error=str(e), exc_info=True)
 
     async def _log_audit_event(self, event_type: str, details: Dict, operator: str):
         """Logs an event to the audit ledger if available."""
@@ -527,9 +521,9 @@ class SQLiteHistoryManager(BaseHistoryManager):
 
             self._record_op_success("prune_old_entries", start_time)
             if "reasoner_history_entries_current" in METRICS:
-                METRICS["reasoner_history_entries_current"].labels(
-                    backend=self._backend_name
-                ).set(await self.get_size())
+                METRICS["reasoner_history_entries_current"].labels(backend=self._backend_name).set(
+                    await self.get_size()
+                )
         except Exception as e:
             self._record_op_error("prune_old_entries", start_time, e)
             raise ReasonerError(
@@ -565,9 +559,9 @@ class SQLiteHistoryManager(BaseHistoryManager):
                     operator="system",
                 )
             if "reasoner_history_entries_current" in METRICS:
-                METRICS["reasoner_history_entries_current"].labels(
-                    backend=self._backend_name
-                ).set(await self.get_size())
+                METRICS["reasoner_history_entries_current"].labels(backend=self._backend_name).set(
+                    await self.get_size()
+                )
         except Exception as e:
             self._record_op_error("clear", start_time, e)
             raise ReasonerError(
@@ -586,9 +580,7 @@ class SQLiteHistoryManager(BaseHistoryManager):
             await self._conn.execute("DELETE FROM history")
             await self._conn.commit()
 
-            self._logger.info(
-                "sqlite_purge_completed", count=count, operator_id=operator_id
-            )
+            self._logger.info("sqlite_purge_completed", count=count, operator_id=operator_id)
             self._record_op_success("purge_all", start_time)
             if count > 0:
                 await self._log_audit_event(
@@ -597,9 +589,9 @@ class SQLiteHistoryManager(BaseHistoryManager):
                     operator=operator_id,
                 )
             if "reasoner_history_entries_current" in METRICS:
-                METRICS["reasoner_history_entries_current"].labels(
-                    backend=self._backend_name
-                ).set(0)
+                METRICS["reasoner_history_entries_current"].labels(backend=self._backend_name).set(
+                    0
+                )
         except Exception as e:
             self._record_op_error("purge_all", start_time, e)
             raise ReasonerError(
@@ -647,9 +639,7 @@ class SQLiteHistoryManager(BaseHistoryManager):
                         output = io.StringIO()
                         # Simplified CSV generation for example
                         for entry in batch_entries:
-                            output.write(
-                                f"\"{entry['id']}\",\"{entry['timestamp']}\"\n"
-                            )
+                            output.write(f"\"{entry['id']}\",\"{entry['timestamp']}\"\n")
                         yield output.getvalue().encode("utf-8")
 
             self._logger.info(
@@ -707,9 +697,7 @@ class PostgresHistoryManager(BaseHistoryManager):
                 "asyncpg_missing",
                 message="Postgres backend unavailable. Please install 'asyncpg'.",
             )
-            raise ReasonerError(
-                "asyncpg not installed", code=ReasonerErrorCode.CONFIGURATION_ERROR
-            )
+            raise ReasonerError("asyncpg not installed", code=ReasonerErrorCode.CONFIGURATION_ERROR)
         if not CRYPTOGRAPHY_AVAILABLE:
             self._logger.error(
                 "cryptography_missing",
@@ -899,9 +887,7 @@ class PostgresHistoryManager(BaseHistoryManager):
         """Prunes old entries based on retention days."""
         start_time = time.monotonic()
         try:
-            cutoff_timestamp = datetime.now(timezone.utc) - timedelta(
-                days=self.retention_days
-            )
+            cutoff_timestamp = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
             async with self._pool.acquire() as conn:
                 # Using DELETE ... RETURNING id allows getting the count without a second query
                 result = await conn.execute(
@@ -927,9 +913,9 @@ class PostgresHistoryManager(BaseHistoryManager):
 
             self._record_op_success("prune_old_entries", start_time)
             if "reasoner_history_entries_current" in METRICS:
-                METRICS["reasoner_history_entries_current"].labels(
-                    backend=self._backend_name
-                ).set(await self.get_size())
+                METRICS["reasoner_history_entries_current"].labels(backend=self._backend_name).set(
+                    await self.get_size()
+                )
         except Exception as e:
             self._record_op_error("prune_old_entries", start_time, e)
             raise ReasonerError(
@@ -949,9 +935,7 @@ class PostgresHistoryManager(BaseHistoryManager):
                     )
                 else:
                     result = await conn.execute("DELETE FROM history")
-                deleted_count = (
-                    int(result.split(" ")[1]) if result.startswith("DELETE") else 0
-                )
+                deleted_count = int(result.split(" ")[1]) if result.startswith("DELETE") else 0
 
             self._logger.info(
                 "postgres_clear_completed",
@@ -966,9 +950,9 @@ class PostgresHistoryManager(BaseHistoryManager):
                     "system",
                 )
             if "reasoner_history_entries_current" in METRICS:
-                METRICS["reasoner_history_entries_current"].labels(
-                    backend=self._backend_name
-                ).set(await self.get_size())
+                METRICS["reasoner_history_entries_current"].labels(backend=self._backend_name).set(
+                    await self.get_size()
+                )
         except Exception as e:
             self._record_op_error("clear", start_time, e)
             raise ReasonerError(
@@ -986,9 +970,7 @@ class PostgresHistoryManager(BaseHistoryManager):
                 if count > 0:
                     await conn.execute("TRUNCATE TABLE history")
 
-            self._logger.info(
-                "postgres_purge_completed", count=count, operator_id=operator_id
-            )
+            self._logger.info("postgres_purge_completed", count=count, operator_id=operator_id)
             self._record_op_success("purge_all", start_time)
             if count > 0:
                 await self._log_audit_event(
@@ -997,9 +979,9 @@ class PostgresHistoryManager(BaseHistoryManager):
                     operator_id,
                 )
             if "reasoner_history_entries_current" in METRICS:
-                METRICS["reasoner_history_entries_current"].labels(
-                    backend=self._backend_name
-                ).set(0)
+                METRICS["reasoner_history_entries_current"].labels(backend=self._backend_name).set(
+                    0
+                )
         except Exception as e:
             self._record_op_error("purge_all", start_time, e)
             raise ReasonerError(
@@ -1022,9 +1004,7 @@ class PostgresHistoryManager(BaseHistoryManager):
 
             async with self._pool.acquire() as conn:
                 async with conn.transaction():
-                    async for row in conn.cursor(
-                        "SELECT * FROM history ORDER BY timestamp DESC"
-                    ):
+                    async for row in conn.cursor("SELECT * FROM history ORDER BY timestamp DESC"):
                         entry = {
                             "id": row["id"],
                             "query": row["query"],
@@ -1038,9 +1018,7 @@ class PostgresHistoryManager(BaseHistoryManager):
                             yield json.dumps([entry], indent=2).encode("utf-8")
                         else:  # csv
                             # Simplified CSV generation
-                            yield f"\"{entry['id']}\",\"{entry['timestamp']}\"\n".encode(
-                                "utf-8"
-                            )
+                            yield f"\"{entry['id']}\",\"{entry['timestamp']}\"\n".encode("utf-8")
 
             self._logger.info(
                 "postgres_export_completed",
@@ -1101,9 +1079,7 @@ class RedisHistoryManager(BaseHistoryManager):
                 "redis_missing",
                 message="Redis backend unavailable. Please install 'redis'.",
             )
-            raise ReasonerError(
-                "redis not installed", code=ReasonerErrorCode.CONFIGURATION_ERROR
-            )
+            raise ReasonerError("redis not installed", code=ReasonerErrorCode.CONFIGURATION_ERROR)
         if not CRYPTOGRAPHY_AVAILABLE:
             self._logger.error(
                 "cryptography_missing",
@@ -1160,9 +1136,7 @@ class RedisHistoryManager(BaseHistoryManager):
 
             async with self._redis.pipeline() as pipe:
                 await pipe.zadd(self._history_key, {serialized_entry: timestamp})
-                await pipe.zremrangebyrank(
-                    self._history_key, 0, -self.max_history_size - 1
-                )
+                await pipe.zremrangebyrank(self._history_key, 0, -self.max_history_size - 1)
                 await pipe.execute()
 
             self._record_op_success("add_entry", start_time)
@@ -1196,9 +1170,7 @@ class RedisHistoryManager(BaseHistoryManager):
 
             async with self._redis.pipeline() as pipe:
                 await pipe.zadd(self._history_key, mapping)
-                await pipe.zremrangebyrank(
-                    self._history_key, 0, -self.max_history_size - 1
-                )
+                await pipe.zremrangebyrank(self._history_key, 0, -self.max_history_size - 1)
                 await pipe.execute()
 
             self._record_op_success("add_entries_batch", start_time)
@@ -1226,13 +1198,9 @@ class RedisHistoryManager(BaseHistoryManager):
             if session_id:
                 all_entries_raw = await self._redis.zrevrange(self._history_key, 0, -1)
                 all_entries = [json.loads(e) for e in all_entries_raw]
-                filtered = [
-                    e for e in all_entries if e.get("session_id") == session_id
-                ][:limit]
+                filtered = [e for e in all_entries if e.get("session_id") == session_id][:limit]
             else:
-                entries_raw = await self._redis.zrevrange(
-                    self._history_key, 0, limit - 1
-                )
+                entries_raw = await self._redis.zrevrange(self._history_key, 0, limit - 1)
                 filtered = [json.loads(e) for e in entries_raw]
 
             for entry in filtered:
@@ -1293,9 +1261,9 @@ class RedisHistoryManager(BaseHistoryManager):
 
             self._record_op_success("prune_old_entries", start_time)
             if "reasoner_history_entries_current" in METRICS:
-                METRICS["reasoner_history_entries_current"].labels(
-                    backend=self._backend_name
-                ).set(await self.get_size())
+                METRICS["reasoner_history_entries_current"].labels(backend=self._backend_name).set(
+                    await self.get_size()
+                )
         except Exception as e:
             self._record_op_error("prune_old_entries", start_time, e)
             raise ReasonerError(
@@ -1322,9 +1290,7 @@ class RedisHistoryManager(BaseHistoryManager):
             else:
                 count = await self._redis.delete(self._history_key)
 
-            self._logger.info(
-                "redis_clear_completed", session_id=session_id or "all", count=count
-            )
+            self._logger.info("redis_clear_completed", session_id=session_id or "all", count=count)
             self._record_op_success("clear", start_time)
             if count > 0:
                 await self._log_audit_event(
@@ -1333,9 +1299,9 @@ class RedisHistoryManager(BaseHistoryManager):
                     "system",
                 )
             if "reasoner_history_entries_current" in METRICS:
-                METRICS["reasoner_history_entries_current"].labels(
-                    backend=self._backend_name
-                ).set(await self.get_size())
+                METRICS["reasoner_history_entries_current"].labels(backend=self._backend_name).set(
+                    await self.get_size()
+                )
         except Exception as e:
             self._record_op_error("clear", start_time, e)
             raise ReasonerError(
@@ -1352,9 +1318,7 @@ class RedisHistoryManager(BaseHistoryManager):
             if count > 0:
                 await self._redis.delete(self._history_key)
 
-            self._logger.info(
-                "redis_purge_completed", count=count, operator_id=operator_id
-            )
+            self._logger.info("redis_purge_completed", count=count, operator_id=operator_id)
             self._record_op_success("purge_all", start_time)
             if count > 0:
                 await self._log_audit_event(
@@ -1363,9 +1327,9 @@ class RedisHistoryManager(BaseHistoryManager):
                     operator_id,
                 )
             if "reasoner_history_entries_current" in METRICS:
-                METRICS["reasoner_history_entries_current"].labels(
-                    backend=self._backend_name
-                ).set(0)
+                METRICS["reasoner_history_entries_current"].labels(backend=self._backend_name).set(
+                    0
+                )
         except Exception as e:
             self._record_op_error("purge_all", start_time, e)
             raise ReasonerError(
@@ -1395,9 +1359,7 @@ class RedisHistoryManager(BaseHistoryManager):
                 if output_format == "json":
                     yield json.dumps([parsed], indent=2).encode("utf-8")
                 else:  # csv
-                    yield f"\"{parsed['id']}\",\"{parsed['timestamp']}\"\n".encode(
-                        "utf-8"
-                    )
+                    yield f"\"{parsed['id']}\",\"{parsed['timestamp']}\"\n".encode("utf-8")
 
             self._logger.info(
                 "redis_export_completed", format=output_format, operator_id=operator_id

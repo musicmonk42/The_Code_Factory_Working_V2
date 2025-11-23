@@ -113,9 +113,7 @@ async def test_add_leaf_success(merkle_tree):
     assert len(merkle_tree._leaves) == 1
     assert merkle_tree.size == 1
     assert get_metric_value(MERKLE_TREE_SIZE) == 1
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaf", status="success") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaf", status="success") == 1
     spans = in_memory_exporter.get_finished_spans()
     add_span = next((span for span in spans if span.name == "merkle_add_leaf"), None)
     assert add_span is not None
@@ -138,14 +136,9 @@ async def test_add_leaves_success(merkle_tree):
     assert len(merkle_tree._leaves) == 3
     assert merkle_tree.size == 3
     assert get_metric_value(MERKLE_TREE_SIZE) == 3
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success")
-        == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success") == 1
     spans = in_memory_exporter.get_finished_spans()
-    batch_span = next(
-        (span for span in spans if span.name == "merkle_add_leaves"), None
-    )
+    batch_span = next((span for span in spans if span.name == "merkle_add_leaves"), None)
     assert batch_span is not None
     assert batch_span.attributes["merkle.num_leaves_added"] == 3
     assert batch_span.status.is_ok
@@ -159,9 +152,7 @@ async def test_get_root_success(merkle_tree):
     assert isinstance(root, str)
     # SHA256 hex length is 64 characters
     assert len(root) == 64
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="get_root", status="success") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="get_root", status="success") == 1
 
 
 @pytest.mark.asyncio
@@ -169,9 +160,7 @@ async def test_get_root_empty_tree(merkle_tree):
     """Test getting root for empty tree raises error."""
     with pytest.raises(MerkleTreeEmptyError, match="Merkle tree is empty"):
         merkle_tree.get_root()
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="get_root", status="failure") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="get_root", status="failure") == 1
 
 
 @pytest.mark.asyncio
@@ -182,13 +171,8 @@ async def test_get_proof_success(merkle_tree):
     proof = merkle_tree.get_proof(0)
     assert isinstance(proof, list)
     # Check the structure of the proof items
-    assert all(
-        isinstance(item, dict) and "node" in item and "position" in item
-        for item in proof
-    )
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="success") == 1
-    )
+    assert all(isinstance(item, dict) and "node" in item and "position" in item for item in proof)
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="success") == 1
     spans = in_memory_exporter.get_finished_spans()
     proof_span = next((span for span in spans if span.name == "merkle_get_proof"), None)
     assert proof_span is not None
@@ -202,9 +186,7 @@ async def test_get_proof_invalid_index(merkle_tree):
     await merkle_tree.add_leaf("leaf")
     with pytest.raises(IndexError, match="Leaf index.*out of bounds"):
         merkle_tree.get_proof(1)
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="failure") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="failure") == 1
 
 
 @pytest.mark.asyncio
@@ -213,9 +195,7 @@ async def test_get_proof_negative_index(merkle_tree):
     await merkle_tree.add_leaf("leaf")
     with pytest.raises(IndexError, match="Leaf index.*out of bounds"):
         merkle_tree.get_proof(-1)
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="failure") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="failure") == 1
 
 
 @pytest.mark.asyncio
@@ -225,9 +205,7 @@ async def test_get_proof_empty_tree(merkle_tree):
         MerkleTreeEmptyError, match="Attempted to get proof from an empty Merkle tree"
     ):
         merkle_tree.get_proof(0)
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="failure") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="failure") == 1
 
 
 @pytest.mark.asyncio
@@ -239,14 +217,9 @@ async def test_verify_proof_success(merkle_tree):
     proof = merkle_tree.get_proof(0)
     is_valid = MerkleTree.verify_proof(root, "leaf1", proof)
     assert is_valid
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="success")
-        == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="success") == 1
     spans = in_memory_exporter.get_finished_spans()
-    verify_span = next(
-        (span for span in spans if span.name == "merkle_verify_proof"), None
-    )
+    verify_span = next((span for span in spans if span.name == "merkle_verify_proof"), None)
     assert verify_span is not None
     assert verify_span.status.is_ok
 
@@ -270,10 +243,7 @@ async def test_verify_proof_tampered(merkle_tree):
     proof = merkle_tree.get_proof(0)
     is_valid = MerkleTree.verify_proof(root, "tampered_leaf", proof)
     assert not is_valid
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="failure")
-        == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="failure") == 1
 
 
 @pytest.mark.asyncio
@@ -282,13 +252,8 @@ async def test_verify_proof_malformed():
     root = "a" * 64  # Valid hex string
     # Invalid hex in proof node
     with pytest.raises(MerkleProofError, match="Invalid hex string in proof node"):
-        MerkleTree.verify_proof(
-            root, "leaf", [{"node": "invalid_hex!", "position": "right"}]
-        )
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="failure")
-        == 1
-    )
+        MerkleTree.verify_proof(root, "leaf", [{"node": "invalid_hex!", "position": "right"}])
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="failure") == 1
 
 
 @pytest.mark.asyncio
@@ -296,9 +261,7 @@ async def test_verify_proof_invalid_position():
     """Test verification failure for invalid position."""
     root = "a" * 64
     with pytest.raises(MerkleProofError, match="Invalid proof node position"):
-        MerkleTree.verify_proof(
-            root, "leaf", [{"node": "b" * 64, "position": "invalid"}]
-        )
+        MerkleTree.verify_proof(root, "leaf", [{"node": "b" * 64, "position": "invalid"}])
 
 
 @pytest.mark.asyncio
@@ -327,9 +290,7 @@ async def test_save_success(merkle_tree, tmp_path):
     assert loaded_data.get("store_raw") is False
     assert len(loaded_data.get("leaves", [])) == 2
 
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="save_tree", status="success") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="save_tree", status="success") == 1
     spans = in_memory_exporter.get_finished_spans()
     save_span = next((span for span in spans if span.name == "merkle_save_tree"), None)
     assert save_span is not None
@@ -366,9 +327,7 @@ async def test_load_success(tmp_path):
 
     loaded_tree = await MerkleTree.load(str(save_path))
     assert loaded_tree.size == 2
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="success") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="success") == 1
     spans = in_memory_exporter.get_finished_spans()
     load_span = next((span for span in spans if span.name == "merkle_load_tree"), None)
     assert load_span is not None
@@ -401,9 +360,7 @@ async def test_load_file_not_found(tmp_path, caplog):
     loaded_tree = await MerkleTree.load(str(non_existent_path))
     assert loaded_tree.size == 0
     assert "Merkle tree state file not found" in caplog.text
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="failure") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="failure") == 1
 
 
 @pytest.mark.asyncio
@@ -416,9 +373,7 @@ async def test_load_corrupted_file(tmp_path, caplog):
     loaded_tree = await MerkleTree.load(str(corrupted_path))
     assert loaded_tree.size == 0
     assert "is corrupted" in caplog.text
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="failure") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="failure") == 1
 
 
 @pytest.mark.asyncio
@@ -433,10 +388,7 @@ async def test_concurrent_add_leaves(merkle_tree):
     await asyncio.gather(*tasks)
     assert merkle_tree.size == 5
     assert get_metric_value(MERKLE_TREE_SIZE) == 5
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success")
-        == 3
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success") == 3
 
 
 @pytest.mark.asyncio
@@ -461,9 +413,7 @@ async def test_retry_on_save_file_error(merkle_tree, tmp_path, mocker: MockerFix
 
     # The save should eventually succeed
     assert os.path.exists(save_path)
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="save_tree", status="success") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="save_tree", status="success") == 1
 
 
 @pytest.mark.asyncio
@@ -490,9 +440,7 @@ async def test_retry_on_load_file_error(tmp_path, mocker: MockerFixture):
 
     loaded_tree = await MerkleTree.load(str(save_path))
     assert loaded_tree.size == 0
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="success") == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="success") == 1
 
 
 @pytest.mark.asyncio
@@ -534,10 +482,7 @@ async def test_large_batch_with_offload_threshold(mocker: MockerFixture):
     await tree.add_leaves(large_batch)
 
     assert tree.size == 5
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success")
-        == 1
-    )
+    assert get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success") == 1
 
 
 @pytest.mark.asyncio

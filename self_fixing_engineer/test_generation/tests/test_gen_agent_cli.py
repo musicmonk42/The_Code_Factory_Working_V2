@@ -46,9 +46,7 @@ def test_cli_loads_config_file(runner, temp_config_file):
         return 0
 
     # Patch the async generator used by the command so we don't run deep logic
-    with patch(
-        "test_generation.gen_agent.cli._generate_async", new=check_env_and_succeed
-    ):
+    with patch("test_generation.gen_agent.cli._generate_async", new=check_env_and_succeed):
         result = runner.invoke(
             cli.cli,
             ["--config-file", str(temp_config_file), "generate", "--session", "test"],
@@ -69,9 +67,7 @@ async def test_run_async_command_graceful_shutdown():
             main_task_cancelled.set()  # Signal that this inner task was cancelled
             raise
 
-    with patch(
-        "test_generation.gen_agent.cli.install_default_handlers"
-    ) as mock_install:
+    with patch("test_generation.gen_agent.cli.install_default_handlers") as mock_install:
         # Run the command and let it install its signal handler
         task = asyncio.create_task(cli._run_async_command(fake_main()))
         await asyncio.sleep(0.01)  # Give asyncio time to schedule and run the setup
@@ -153,13 +149,9 @@ async def test_graceful_shutdown_logs_message(caplog):
     """Test that the signal handler used by _run_async_command logs a message."""
 
     async def dummy_task():
-        await asyncio.sleep(
-            5
-        )  # A task that does nothing, just to keep the command alive.
+        await asyncio.sleep(5)  # A task that does nothing, just to keep the command alive.
 
-    with patch(
-        "test_generation.gen_agent.cli.install_default_handlers"
-    ) as mock_install:
+    with patch("test_generation.gen_agent.cli.install_default_handlers") as mock_install:
         with caplog.at_level(logging.WARNING):
             # Start the command, which will install the real handler via our mock
             task = asyncio.create_task(cli._run_async_command(dummy_task()))
@@ -193,9 +185,7 @@ async def test_feedback_async_command(runner, tmp_path):
         "test_generation.gen_agent.cli.summarize_feedback",
         new=AsyncMock(return_value={"total_runs": 1}),
     ):
-        result = runner.invoke(
-            cli.cli, ["feedback", "summarize", "--log-file", str(log_file_path)]
-        )
+        result = runner.invoke(cli.cli, ["feedback", "summarize", "--log-file", str(log_file_path)])
 
     assert result.exit_code == 0
 

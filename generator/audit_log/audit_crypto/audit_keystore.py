@@ -155,9 +155,7 @@ class FileSystemKeyStorageBackend:
         os.makedirs(os.path.dirname(lock_file_path), exist_ok=True)
 
         lock_mode = "r" if shared else "a+"
-        lock_type = (
-            portalocker.LockFlags.SHARED if shared else portalocker.LockFlags.EXCLUSIVE
-        )
+        lock_type = portalocker.LockFlags.SHARED if shared else portalocker.LockFlags.EXCLUSIVE
 
         self.logger.debug(
             f"Attempting to acquire {'shared' if shared else 'exclusive'} lock for {filepath}"
@@ -177,9 +175,7 @@ class FileSystemKeyStorageBackend:
                 f"Acquired {'shared' if shared else 'exclusive'} lock for {filepath}."
             )
         except Exception as e:
-            self.logger.error(
-                f"Failed to acquire lock for {filepath}: {e}", exc_info=True
-            )
+            self.logger.error(f"Failed to acquire lock for {filepath}: {e}", exc_info=True)
             # Ensure the file object is closed if it was opened but locking failed
             if filepath in self._lock_files:
                 await self._lock_files[filepath].close()
@@ -200,9 +196,7 @@ class FileSystemKeyStorageBackend:
                 await asyncio.to_thread(portalocker.unlock, f)
                 self.logger.debug(f"Released lock for {filepath}")
             except Exception as e:
-                self.logger.error(
-                    f"Failed to release lock for {filepath}: {e}", exc_info=True
-                )
+                self.logger.error(f"Failed to release lock for {filepath}: {e}", exc_info=True)
             finally:
                 # 2. Close the file object
                 await f.close()
@@ -270,9 +264,7 @@ class FileSystemKeyStorageBackend:
         """
         # --- FIX 2: Skip this entire check on Windows ---
         if os.name == "nt":
-            self.logger.debug(
-                f"Skipping permission check for '{filepath}' on Windows (nt)."
-            )
+            self.logger.debug(f"Skipping permission check for '{filepath}' on Windows (nt).")
             return
         # --- END FIX ---
 
@@ -344,9 +336,7 @@ class FileSystemKeyStorageBackend:
         # Acquire shared lock for reading
         await self._acquire_lock(filepath, shared=True)
         try:
-            await self._verify_permissions(
-                filepath
-            )  # Verify permissions before reading
+            await self._verify_permissions(filepath)  # Verify permissions before reading
             async with aiofiles.open(filepath, "r") as f:
                 content = await f.read()
                 try:
@@ -387,7 +377,9 @@ class FileSystemKeyStorageBackend:
         ]
         if not all(k in metadata for k in required_meta_fields):
             missing_fields = [f for f in required_meta_fields if f not in metadata]
-            error_msg = f"Missing essential metadata in file for key '{key_id}'. Missing: {missing_fields}"
+            error_msg = (
+                f"Missing essential metadata in file for key '{key_id}'. Missing: {missing_fields}"
+            )
             self.logger.error(
                 error_msg,
                 extra={
@@ -496,9 +488,7 @@ class FileSystemKeyStorageBackend:
                 f"File system backend deletion failed for key {key_id}: {e}"
             ) from e
         finally:
-            await self._release_lock(
-                filepath
-            )  # Ensure lock is released even if delete fails
+            await self._release_lock(filepath)  # Ensure lock is released even if delete fails
 
 
 # --- Key Storage ---
@@ -555,9 +545,7 @@ class KeyStore:
             )
         else:
             self.backend = backend
-            self.logger.info(
-                f"KeyStore initialized with custom backend: {type(backend).__name__}."
-            )
+            self.logger.info(f"KeyStore initialized with custom backend: {type(backend).__name__}.")
 
     async def store_key(
         self,
@@ -618,14 +606,10 @@ class KeyStore:
                 # Order and content of AAD MUST be consistent between encryption and decryption
                 encryptor.authenticate_additional_data(key_id.encode("utf-8"))
                 encryptor.authenticate_additional_data(algo.encode("utf-8"))
-                encryptor.authenticate_additional_data(
-                    str(creation_time).encode("utf-8")
-                )
+                encryptor.authenticate_additional_data(str(creation_time).encode("utf-8"))
                 encryptor.authenticate_additional_data(status.encode("utf-8"))
                 if retired_at is not None:
-                    encryptor.authenticate_additional_data(
-                        str(retired_at).encode("utf-8")
-                    )
+                    encryptor.authenticate_additional_data(str(retired_at).encode("utf-8"))
 
                 ciphertext = encryptor.update(key_data_bytes) + encryptor.finalize()
                 encrypted_payload = nonce + ciphertext + encryptor.tag
@@ -638,13 +622,9 @@ class KeyStore:
                 if retired_at is not None:
                     metadata["retired_at"] = retired_at
 
-                encrypted_payload_b64 = base64.b64encode(encrypted_payload).decode(
-                    "utf-8"
-                )
+                encrypted_payload_b64 = base64.b64encode(encrypted_payload).decode("utf-8")
 
-                await self.backend.store_key_data(
-                    key_id, encrypted_payload_b64, metadata
-                )
+                await self.backend.store_key_data(key_id, encrypted_payload_b64, metadata)
 
                 self.logger.info(
                     f"Key '{key_id}' stored securely via {type(self.backend).__name__}.",
@@ -656,9 +636,7 @@ class KeyStore:
                     },
                 )
                 KEY_STORE_COUNT.labels(provider_type="software", status="success").inc()
-                await log_action(
-                    "key_store", key_id=key_id, algo=algo, status=status, success=True
-                )
+                await log_action("key_store", key_id=key_id, algo=algo, status=status, success=True)
 
             except Exception as e:
                 self.logger.error(
@@ -879,9 +857,7 @@ class KeyStore:
                     else None
                 )
 
-                if filepath and os.path.exists(
-                    filepath
-                ):  # Only verify permissions if file exists
+                if filepath and os.path.exists(filepath):  # Only verify permissions if file exists
                     # We must cast the backend to the concrete type to call the protected method
                     if isinstance(self.backend, FileSystemKeyStorageBackend):
                         await self.backend._verify_permissions(filepath)
@@ -922,9 +898,7 @@ class KeyStore:
                     provider_type="software",
                     operation="delete_key_file",
                 ).inc()
-                await log_action(
-                    "key_delete", key_id=key_id, success=False, error=str(e)
-                )
+                await log_action("key_delete", key_id=key_id, success=False, error=str(e))
                 raise CryptoOperationError(f"Failed to delete key {key_id}: {e}") from e
 
 

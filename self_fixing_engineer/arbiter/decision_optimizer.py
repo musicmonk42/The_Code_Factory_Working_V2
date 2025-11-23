@@ -80,9 +80,7 @@ class MetaLearningService:
         self.logger = logger
 
     async def get_latest_prioritization_weights(self) -> Optional[Dict[str, float]]:
-        self.logger.debug(
-            "Fetching latest prioritization weights from meta-learning service."
-        )
+        self.logger.debug("Fetching latest prioritization weights from meta-learning service.")
         await asyncio.sleep(0.1)
         return None
 
@@ -98,9 +96,7 @@ class MetaLearningService:
         await asyncio.sleep(0.05)
         return None
 
-    async def get_plugin_code(
-        self, kind: str, name: str, version: str
-    ) -> Optional[Callable]:
+    async def get_plugin_code(self, kind: str, name: str, version: str) -> Optional[Callable]:
         self.logger.debug(
             f"Fetching code for plugin {kind}:{name} version {version} from meta-learning service."
         )
@@ -114,9 +110,7 @@ if not logger.handlers:
     import sys
 
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -248,9 +242,7 @@ class DecisionOptimizer:
         self.arbiter = arbiter
         self.arena = arena if arena else (arbiter.arena if arbiter else None)
         self.sfe_core_engine = sfe_core_engine
-        self.meta_learning_service = meta_learning_service or MetaLearningService(
-            self.logger
-        )
+        self.meta_learning_service = meta_learning_service or MetaLearningService(self.logger)
 
         self.prioritizer = prioritizer or self._default_prioritize
         self.allocator = allocator or self._default_allocate
@@ -265,16 +257,13 @@ class DecisionOptimizer:
                 if config
                 else {"priority": 0.5, "deadline": 0.3, "risk": 0.15, "context": 0.05}
             ),
-            "max_tasks_per_agent": (
-                config.get("max_tasks_per_agent", 10) if config else 10
-            ),
+            "max_tasks_per_agent": (config.get("max_tasks_per_agent", 10) if config else 10),
             "encryption_key": (
                 config.get(
                     "encryption_key",
                     (
                         settings.ENCRYPTION_KEY.get_secret_value()
-                        if hasattr(settings, "ENCRYPTION_KEY")
-                        and settings.ENCRYPTION_KEY
+                        if hasattr(settings, "ENCRYPTION_KEY") and settings.ENCRYPTION_KEY
                         else None
                     ),
                 )
@@ -422,9 +411,7 @@ class DecisionOptimizer:
             await self.redis_client.ping()
             self.logger.info("Connected to Redis successfully for SFE operations.")
         except Exception as e:
-            self.logger.critical(
-                f"Failed to connect to Redis for SFE: {e}", exc_info=True
-            )
+            self.logger.critical(f"Failed to connect to Redis for SFE: {e}", exc_info=True)
             raise ConnectionError(f"Failed to connect to Redis for SFE: {e}") from e
 
         if not self.db and hasattr(self.settings, "DATABASE_URL"):
@@ -461,9 +448,7 @@ class DecisionOptimizer:
             try:
                 await self.redis_client.close()
             except Exception as e:
-                self.logger.error(
-                    f"Error closing Redis client for SFE: {e}", exc_info=True
-                )
+                self.logger.error(f"Error closing Redis client for SFE: {e}", exc_info=True)
             self.logger.info("Redis client closed for SFE.")
 
         if self.db and hasattr(self.db, "disconnect"):
@@ -491,13 +476,9 @@ class DecisionOptimizer:
 
     async def refresh_strategies(self):
         STRATEGY_REFRESH_COUNT.inc()
-        self.logger.info(
-            "Attempting to refresh SFE strategies from meta-learning pipeline."
-        )
+        self.logger.info("Attempting to refresh SFE strategies from meta-learning pipeline.")
         try:
-            new_weights = (
-                await self.meta_learning_service.get_latest_prioritization_weights()
-            )
+            new_weights = await self.meta_learning_service.get_latest_prioritization_weights()
             if new_weights:
                 async with self.lock:
                     old_weights = self.config["default_weights"]
@@ -511,9 +492,7 @@ class DecisionOptimizer:
                 )
 
             if self.policy_engine:
-                new_policy_rules = (
-                    await self.meta_learning_service.get_latest_policy_rules()
-                )
+                new_policy_rules = await self.meta_learning_service.get_latest_policy_rules()
                 if new_policy_rules:
                     if hasattr(self.policy_engine, "update_rules"):
                         async with self.lock:
@@ -527,19 +506,14 @@ class DecisionOptimizer:
                             "SFE PolicyEngine does not support dynamic rule updates. Skipping."
                         )
 
-            new_prioritizer_version = (
-                await self.meta_learning_service.get_latest_plugin_version(
-                    "PRIORITIZER", "advanced_prioritizer"
-                )
+            new_prioritizer_version = await self.meta_learning_service.get_latest_plugin_version(
+                "PRIORITIZER", "advanced_prioritizer"
             )
             if new_prioritizer_version:
-                prioritizer_plugin = self.plugin_registry.get(
-                    "PRIORITIZER", "advanced_prioritizer"
-                )
+                prioritizer_plugin = self.plugin_registry.get("PRIORITIZER", "advanced_prioritizer")
                 if (
                     prioritizer_plugin
-                    and getattr(prioritizer_plugin, "_version", "0.0")
-                    != new_prioritizer_version
+                    and getattr(prioritizer_plugin, "_version", "0.0") != new_prioritizer_version
                 ):
                     self.logger.info(
                         f"New version of 'advanced_prioritizer' plugin available: {new_prioritizer_version}. Attempting to load."
@@ -585,10 +559,7 @@ class DecisionOptimizer:
                 agent
                 for agent in available_agents.values()
                 if task.required_skills.issubset(getattr(agent, "skills", set()))
-                and (
-                    getattr(agent, "current_load", 0.0)
-                    + getattr(task, "estimated_compute", 1.0)
-                )
+                and (getattr(agent, "current_load", 0.0) + getattr(task, "estimated_compute", 1.0))
                 <= getattr(agent, "max_compute", float("inf"))
             ]
             if eligible:
@@ -650,9 +621,7 @@ class DecisionOptimizer:
             await self._log_event("remediation_auto_applying", {"proposal": proposal})
             await self._execute_fix(proposal)
         else:
-            await self._log_event(
-                "remediation_escalating_to_human", {"proposal": proposal}
-            )
+            await self._log_event("remediation_escalating_to_human", {"proposal": proposal})
 
             if not self.human_in_loop:
                 self.logger.error(
@@ -753,9 +722,7 @@ class DecisionOptimizer:
                     timestamp=timestamp_iso,
                 )
             except Exception as e:
-                self.logger.error(
-                    f"Failed to log event to SFE KnowledgeGraph: {e}", exc_info=True
-                )
+                self.logger.error(f"Failed to log event to SFE KnowledgeGraph: {e}", exc_info=True)
 
         if self.monitor:
             try:
@@ -768,9 +735,7 @@ class DecisionOptimizer:
                     }
                 )
             except Exception as e:
-                self.logger.error(
-                    f"Failed to log event to SFE Monitor: {e}", exc_info=True
-                )
+                self.logger.error(f"Failed to log event to SFE Monitor: {e}", exc_info=True)
 
         if audit_instance and hasattr(audit_instance, "add_entry"):
             try:
@@ -804,9 +769,7 @@ class DecisionOptimizer:
                     "sfe_decision_optimizer_events", json.dumps(safe_serialize(event))
                 )
             except Exception as e:
-                self.logger.error(
-                    f"Failed to publish SFE event to Redis: {e}", exc_info=True
-                )
+                self.logger.error(f"Failed to publish SFE event to Redis: {e}", exc_info=True)
 
         self.logger.debug("SFE Event logged: %s", json.dumps(event, indent=2))
 
@@ -834,9 +797,7 @@ class DecisionOptimizer:
                     try:
                         await self.feedback_manager.log_error(error_log_data)
                     except Exception as fe:
-                        self.logger.error(
-                            f"Failed to log SFE error to FeedbackManager: {fe}"
-                        )
+                        self.logger.error(f"Failed to log SFE error to FeedbackManager: {fe}")
 
                 if self.bug_manager:
                     try:
@@ -859,9 +820,7 @@ class DecisionOptimizer:
                     and self.sfe_core_engine.notification_service
                 ):
                     try:
-                        if hasattr(
-                            self.sfe_core_engine.notification_service, "send_alert"
-                        ):
+                        if hasattr(self.sfe_core_engine.notification_service, "send_alert"):
                             self.sfe_core_engine.notification_service.send_alert(
                                 f"Critical error in SFE {method.__name__}: {e}",
                                 "critical",
@@ -885,9 +844,7 @@ class DecisionOptimizer:
             if not plugin_instance:
                 raise ValueError(f"SFE Plugin {kind}:{name} not found in registry.")
 
-            if not hasattr(plugin_instance, "execute") or not callable(
-                plugin_instance.execute
-            ):
+            if not hasattr(plugin_instance, "execute") or not callable(plugin_instance.execute):
                 raise TypeError(
                     f"SFE Plugin {kind}:{name} does not have a callable 'execute' method."
                 )
@@ -968,9 +925,7 @@ class DecisionOptimizer:
 
     async def anonymize_task(self, task: Task):
         if "user_id" in task.metadata:
-            task.metadata["user_id"] = hashlib.sha256(
-                task.metadata["user_id"].encode()
-            ).hexdigest()
+            task.metadata["user_id"] = hashlib.sha256(task.metadata["user_id"].encode()).hexdigest()
         if self.knowledge_graph:
             await self.knowledge_graph.add_fact(
                 "SFEAnonymizedTasks",
@@ -1044,9 +999,7 @@ class DecisionOptimizer:
                     self.task_graph.add_edge(dep_id, task.id)
 
             if not nx.is_directed_acyclic_graph(self.task_graph):
-                raise ValueError(
-                    "SFE Task dependencies contain cycles, cannot prioritize."
-                )
+                raise ValueError("SFE Task dependencies contain cycles, cannot prioritize.")
 
             allowed_tasks = []
             if self.config["policy_check"] and self.policy_engine:
@@ -1097,11 +1050,7 @@ class DecisionOptimizer:
                 )
                 prioritized.extend(batch_prioritized)
 
-            if (
-                self.explainable_reasoner
-                and criteria
-                and criteria.get("explain", False)
-            ):
+            if self.explainable_reasoner and criteria and criteria.get("explain", False):
                 try:
                     explanation = await self.explainable_reasoner.explain(
                         "SFE Task prioritization",
@@ -1149,9 +1098,9 @@ class DecisionOptimizer:
                     if batch_db_data:
                         await self.db.save_simulation_batch(batch_db_data)
 
-                    DB_OPERATION_LATENCY.labels(
-                        operation_type="sfe_save_simulation_batch"
-                    ).observe(time.monotonic() - db_start_time)
+                    DB_OPERATION_LATENCY.labels(operation_type="sfe_save_simulation_batch").observe(
+                        time.monotonic() - db_start_time
+                    )
                 except Exception as e:
                     self.logger.error(
                         f"Failed to save SFE simulation status for prioritized tasks: {e}",
@@ -1167,9 +1116,7 @@ class DecisionOptimizer:
                     "task_count": len(prioritized),
                     "criteria": criteria,
                     "latency": time.monotonic() - start_time,
-                    "sim_id": (
-                        task_queue[0].metadata.get("sim_id") if task_queue else None
-                    ),
+                    "sim_id": (task_queue[0].metadata.get("sim_id") if task_queue else None),
                 },
             )
             return prioritized
@@ -1221,9 +1168,7 @@ class DecisionOptimizer:
                 if task.deadline and (task.deadline - now > 0)
                 else 0
             )
-            risk_score = {"low": 0.1, "medium": 0.5, "high": 1.0}.get(
-                task.risk_level, 0.5
-            )
+            risk_score = {"low": 0.1, "medium": 0.5, "high": 1.0}.get(task.risk_level, 0.5)
             context_score = 0.0
             if self.knowledge_graph:
                 context_score += await self._get_knowledge_graph_context_score(task)
@@ -1274,9 +1219,7 @@ class DecisionOptimizer:
             )
             score = len(related_facts) / 10.0
             for fact_id in related_facts:
-                fact_data = await self.knowledge_graph.get_fact(
-                    task.action_type, fact_id
-                )
+                fact_data = await self.knowledge_graph.get_fact(task.action_type, fact_id)
                 if fact_data and "relevance_score" in fact_data:
                     score += fact_data["relevance_score"] * 0.1
             return score
@@ -1351,9 +1294,7 @@ class DecisionOptimizer:
                                     "sfe_task_allocation_denied_human",
                                     {
                                         "task_id": task.id,
-                                        "reason": response.get(
-                                            "comment", "Human denial"
-                                        ),
+                                        "reason": response.get("comment", "Human denial"),
                                         "sim_id": task.metadata.get("sim_id"),
                                     },
                                 )
@@ -1389,9 +1330,7 @@ class DecisionOptimizer:
                 for task in approved_tasks:
                     plugin_execution_start_time = time.monotonic()
                     try:
-                        if self.sfe_core_engine and hasattr(
-                            self.sfe_core_engine, "execute_task"
-                        ):
+                        if self.sfe_core_engine and hasattr(self.sfe_core_engine, "execute_task"):
                             result = await self.sfe_core_engine.execute_task(
                                 task.action_type, task.sim_request, task_id=task.id
                             )
@@ -1406,13 +1345,9 @@ class DecisionOptimizer:
                             )
                         else:
                             plugin_instance = None
-                            if hasattr(
-                                self.plugin_registry, "get_plugin_by_action_name"
-                            ):
-                                plugin_instance = (
-                                    self.plugin_registry.get_plugin_by_action_name(
-                                        task.action_type
-                                    )
+                            if hasattr(self.plugin_registry, "get_plugin_by_action_name"):
+                                plugin_instance = self.plugin_registry.get_plugin_by_action_name(
+                                    task.action_type
                                 )
                             else:
                                 plugin_instance = self.plugin_registry.get(
@@ -1448,14 +1383,14 @@ class DecisionOptimizer:
                                 )
                                 continue
 
-                        PLUGIN_EXECUTION_LATENCY.labels(
-                            plugin_name=task.action_type
-                        ).observe(time.monotonic() - plugin_execution_start_time)
+                        PLUGIN_EXECUTION_LATENCY.labels(plugin_name=task.action_type).observe(
+                            time.monotonic() - plugin_execution_start_time
+                        )
 
                     except Exception as e:
-                        PLUGIN_EXECUTION_LATENCY.labels(
-                            plugin_name=task.action_type
-                        ).observe(time.monotonic() - plugin_execution_start_time)
+                        PLUGIN_EXECUTION_LATENCY.labels(plugin_name=task.action_type).observe(
+                            time.monotonic() - plugin_execution_start_time
+                        )
                         if self.bug_manager:
                             await self.bug_manager.bug_detected(
                                 "sfe_plugin_execution_error",
@@ -1468,9 +1403,7 @@ class DecisionOptimizer:
                 "sfe_allocate_resources",
                 {
                     "agent_count": len(agent_pool),
-                    "task_count": sum(
-                        len(tasks) for tasks in final_assignments.values()
-                    ),
+                    "task_count": sum(len(tasks) for tasks in final_assignments.values()),
                     "latency": time.monotonic() - start_time,
                 },
             )
@@ -1491,9 +1424,7 @@ class DecisionOptimizer:
         resource_limits: Dict[str, Any],
     ) -> Dict[str, List[Task]]:
         assignments = {agent.id: [] for agent in agent_pool}
-        max_tasks = resource_limits.get(
-            "max_tasks_per_agent", self.config["max_tasks_per_agent"]
-        )
+        max_tasks = resource_limits.get("max_tasks_per_agent", self.config["max_tasks_per_agent"])
         role_priority = {"admin": 3, "sfe_operator": 2, "user": 1}
 
         for task in task_queue:
@@ -1507,12 +1438,8 @@ class DecisionOptimizer:
                     continue
                 if agent.energy < task.estimated_compute * 10:
                     continue
-                task_required_role = str(
-                    task.metadata.get("required_role", "user")
-                ).lower()
-                if role_priority.get(agent.role, 0) < role_priority.get(
-                    task_required_role, 0
-                ):
+                task_required_role = str(task.metadata.get("required_role", "user")).lower()
+                if role_priority.get(agent.role, 0) < role_priority.get(task_required_role, 0):
                     continue
                 candidates.append(agent)
 
@@ -1544,9 +1471,7 @@ class DecisionOptimizer:
             best_agent.energy -= task.estimated_compute * 10
             if best_agent.arbiter_instance:
                 if hasattr(best_agent.arbiter_instance, "adjust_energy"):
-                    best_agent.arbiter_instance.adjust_energy(
-                        -task.estimated_compute * 10
-                    )
+                    best_agent.arbiter_instance.adjust_energy(-task.estimated_compute * 10)
 
         return assignments
 
@@ -1565,13 +1490,9 @@ class DecisionOptimizer:
                 )
 
             shared_context = shared_context or {}
-            encrypted_context = self.encrypter.encrypt(
-                json.dumps(shared_context).encode("utf-8")
-            )
+            encrypted_context = self.encrypter.encrypt(json.dumps(shared_context).encode("utf-8"))
 
-            coordination = await self.safe_execute(
-                self.coordinator, agent_pool, encrypted_context
-            )
+            coordination = await self.safe_execute(self.coordinator, agent_pool, encrypted_context)
 
             if self.redis_client:
                 await self._redis_publish(
@@ -1595,9 +1516,7 @@ class DecisionOptimizer:
             return coordination
 
         except Exception as e:
-            await self._handle_failed_task(
-                Task(id="sfe_coord_unknown", priority=0), str(e)
-            )
+            await self._handle_failed_task(Task(id="sfe_coord_unknown", priority=0), str(e))
             raise
 
     async def _default_coordinate(
@@ -1609,9 +1528,7 @@ class DecisionOptimizer:
             self.logger.error(
                 "Fernet encrypter not initialized for SFE. Cannot decrypt context for coordination."
             )
-            raise RuntimeError(
-                "Fernet encrypter is not initialized. Cannot decrypt SFE context."
-            )
+            raise RuntimeError("Fernet encrypter is not initialized. Cannot decrypt SFE context.")
 
         try:
             decrypted_context = json.loads(
@@ -1630,20 +1547,14 @@ class DecisionOptimizer:
                 f"Failed to decrypt or deserialize context during SFE coordination: {e}",
                 exc_info=True,
             )
-            raise RuntimeError(
-                f"Failed to decrypt SFE coordination context: {e}."
-            ) from e
+            raise RuntimeError(f"Failed to decrypt SFE coordination context: {e}.") from e
 
         proposals = {}
 
         for agent in agent_pool:
-            if agent.arbiter_instance and hasattr(
-                agent.arbiter_instance, "propose_action"
-            ):
+            if agent.arbiter_instance and hasattr(agent.arbiter_instance, "propose_action"):
                 try:
-                    action = await agent.arbiter_instance.propose_action(
-                        decrypted_context
-                    )
+                    action = await agent.arbiter_instance.propose_action(decrypted_context)
                     proposals[agent.id] = action
                     coordination_results[agent.id] = "proposed"
                     await self.share_learning(agent, action)
@@ -1664,9 +1575,7 @@ class DecisionOptimizer:
 
         if proposals and decrypted_context and "action_schema" in decrypted_context:
             actions = [
-                p["action"]
-                for p in proposals.values()
-                if isinstance(p, dict) and "action" in p
+                p["action"] for p in proposals.values() if isinstance(p, dict) and "action" in p
             ]
             if actions:
                 majority_action = Counter(actions).most_common(1)[0][0]
@@ -1691,9 +1600,7 @@ class DecisionOptimizer:
             )
 
         for agent in agent_pool:
-            if agent.arbiter_instance and hasattr(
-                agent.arbiter_instance, "receive_context"
-            ):
+            if agent.arbiter_instance and hasattr(agent.arbiter_instance, "receive_context"):
                 try:
                     await agent.arbiter_instance.receive_context(decrypted_context)
                     coordination_results[agent.id] = "context_updated"
@@ -1747,9 +1654,7 @@ class DecisionOptimizer:
                     f"SFE Agent {agent_id} not found in agent_pool during rollback. Possible stale agent reference."
                 )
 
-        await self._log_event(
-            "sfe_allocation_rollback", {"agent_count": len(assignments)}
-        )
+        await self._log_event("sfe_allocation_rollback", {"agent_count": len(assignments)})
 
     async def get_metrics(self) -> Dict[str, Any]:
         """Retrieves current SFE DecisionOptimizer metrics."""
@@ -1768,9 +1673,7 @@ class DecisionOptimizer:
     async def explain_decision(self, decision_id: str) -> Dict[str, Any]:
         """Generates an explanation for a specific SFE decision."""
         EXPLANATION_EVENTS.inc()
-        decision_event = next(
-            (e for e in self.event_log if e["id"] == decision_id), None
-        )
+        decision_event = next((e for e in self.event_log if e["id"] == decision_id), None)
 
         if not decision_event:
             if self.knowledge_graph:
@@ -1828,9 +1731,7 @@ class DecisionOptimizer:
         except WebSocketDisconnect:
             self.logger.info("SFE WebSocket disconnected for event streaming.")
         except Exception as e:
-            self.logger.error(
-                f"Error during SFE WebSocket streaming: {e}", exc_info=True
-            )
+            self.logger.error(f"Error during SFE WebSocket streaming: {e}", exc_info=True)
             if self.feedback_manager:
                 await self.feedback_manager.log_error(
                     {"type": "sfe_websocket_error", "error": str(e)}
@@ -1902,9 +1803,9 @@ class DecisionOptimizer:
                         exc_info=True,
                     )
                     context_score = 0.0
-                DB_OPERATION_LATENCY.labels(
-                    operation_type="sfe_knowledge_graph_lookup"
-                ).observe(time.monotonic() - kg_start_time)
+                DB_OPERATION_LATENCY.labels(operation_type="sfe_knowledge_graph_lookup").observe(
+                    time.monotonic() - kg_start_time
+                )
 
             score = 0.7
             anomalies = 0
@@ -1982,9 +1883,9 @@ class DecisionOptimizer:
                         f"SFE Human-in-loop approval failed for trust score task {task.id}: {hitl_e}",
                         exc_info=True,
                     )
-                DB_OPERATION_LATENCY.labels(
-                    operation_type="sfe_human_in_loop_approval"
-                ).observe(time.monotonic() - human_loop_start_time)
+                DB_OPERATION_LATENCY.labels(operation_type="sfe_human_in_loop_approval").observe(
+                    time.monotonic() - human_loop_start_time
+                )
 
             await self._log_event(
                 "sfe_trust_score_computed",
@@ -2018,9 +1919,7 @@ class DecisionOptimizer:
             return score
 
         except Exception as e:
-            await self._handle_failed_task(
-                task, f"SFE Trust score computation failed: {e}"
-            )
+            await self._handle_failed_task(task, f"SFE Trust score computation failed: {e}")
             self.logger.error(
                 f"SFE Trust score computation for user {user_id} failed unexpectedly: {e}",
                 exc_info=True,

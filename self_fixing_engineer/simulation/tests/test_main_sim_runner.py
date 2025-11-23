@@ -58,9 +58,7 @@ sys.modules["cryptography.exceptions"] = MagicMock()
 mock_otel = MagicMock()
 mock_tracer = MagicMock()
 mock_span = MagicMock()
-mock_span.get_span_context.return_value = MagicMock(
-    trace_id=123456789, span_id=987654321
-)
+mock_span.get_span_context.return_value = MagicMock(trace_id=123456789, span_id=987654321)
 mock_span.__enter__ = MagicMock(return_value=mock_span)
 mock_span.__exit__ = MagicMock(return_value=None)
 mock_tracer.start_as_current_span.return_value = mock_span
@@ -350,9 +348,7 @@ class TestNotifications:
     def test_send_notification_dry_run(self):
         """Test dry-run notification."""
         # The actual implementation uses main_runner_logger.info, not print
-        with patch(
-            "simulation.plugins.main_sim_runner.main_runner_logger"
-        ) as mock_logger:
+        with patch("simulation.plugins.main_sim_runner.main_runner_logger") as mock_logger:
             send_notification("test_event", "Test message", dry_run=True)
             mock_logger.info.assert_called_once_with(
                 "Dry-run notification: [test_event] Test message"
@@ -426,9 +422,7 @@ class TestIntegration:
     def test_main_help(self):
         """Test main function with help flag."""
         # Mock discover_and_register_plugin_entrypoints to prevent the coroutine warning
-        with patch(
-            "simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"
-        ):
+        with patch("simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"):
             with patch("sys.argv", ["main_sim_runner.py", "--help"]):
                 with pytest.raises(SystemExit) as exc_info:
                     main()
@@ -439,13 +433,9 @@ class TestIntegration:
     def test_main_validate(self):
         """Test main function with validate flag."""
         # Mock discover_and_register_plugin_entrypoints to prevent the coroutine warning
-        with patch(
-            "simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"
-        ):
+        with patch("simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"):
             with patch("sys.argv", ["main_sim_runner.py", "--validate"]):
-                with patch(
-                    "simulation.plugins.main_sim_runner.validate_deployment_or_exit"
-                ):
+                with patch("simulation.plugins.main_sim_runner.validate_deployment_or_exit"):
                     with pytest.raises(SystemExit):
                         main()
                     # Validate should be called

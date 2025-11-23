@@ -82,9 +82,7 @@ class BaseConfig(BaseModel):
         """
         if isinstance(v, str):
             field = cls.model_fields.get(info.field_name)
-            if field and (getattr(field, "json_schema_extra", None) or {}).get(
-                "sanitize"
-            ):
+            if field and (getattr(field, "json_schema_extra", None) or {}).get("sanitize"):
                 return escape(v, quote=True)
         return v
 
@@ -119,8 +117,8 @@ class ImageCaptioningResult(BaseConfig):
 
 class ImageAnalysisResult(BaseConfig):
     kind: Literal["image"] = "image"
-    image_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (
-        Field(..., description="Unique identifier for the analyzed image.")
+    image_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = Field(
+        ..., description="Unique identifier for the analyzed image."
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
         None,
@@ -186,8 +184,8 @@ class AudioTranscriptionResult(BaseConfig):
 
 class AudioAnalysisResult(BaseConfig):
     kind: Literal["audio"] = "audio"
-    audio_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (
-        Field(..., description="Unique identifier for the analyzed audio.")
+    audio_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = Field(
+        ..., description="Unique identifier for the analyzed audio."
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
         None,
@@ -272,8 +270,8 @@ class VideoSummaryResult(BaseConfig):
 
 class VideoAnalysisResult(BaseConfig):
     kind: Literal["video"] = "video"
-    video_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (
-        Field(..., description="Unique identifier for the analyzed video.")
+    video_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = Field(
+        ..., description="Unique identifier for the analyzed video."
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
         None,
@@ -424,13 +422,9 @@ if __name__ == "__main__":
 
     # Example 5: Generic MultiModalAnalysisResult
     if "image_analysis" in locals():
-        print(
-            f"\nGeneric MultiModalAnalysisResult (Image): {image_analysis.model_dump()}"
-        )
+        print(f"\nGeneric MultiModalAnalysisResult (Image): {image_analysis.model_dump()}")
     if "video_analysis" in locals():
-        print(
-            f"\nGeneric MultiModalAnalysisResult (Video): {video_analysis.model_dump()}"
-        )
+        print(f"\nGeneric MultiModalAnalysisResult (Video): {video_analysis.model_dump()}")
 
     # Example 6: Deserialization with camelCase input
     json_data_camel = {
@@ -445,9 +439,7 @@ if __name__ == "__main__":
         print(
             f"\nDeserialized Image Result (from camelCase JSON):\n{deserialized_image_camel.model_dump_json(indent=2, by_alias=True)}"
         )
-        assert (
-            deserialized_image_camel.image_id == "img_from_json_camel"
-        )  # Check snake_case access
+        assert deserialized_image_camel.image_id == "img_from_json_camel"  # Check snake_case access
         assert (
             deserialized_image_camel.captioning_result.caption
             == "An image loaded from JSON with camelCase."

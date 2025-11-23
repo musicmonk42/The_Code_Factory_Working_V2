@@ -117,58 +117,35 @@ class AlertChannel(Enum):
 class AlertConfig:
     """Configuration for alerting system."""
 
-    slack_webhook_url: Optional[str] = field(
-        default_factory=lambda: os.getenv("SLACK_WEBHOOK_URL")
-    )
+    slack_webhook_url: Optional[str] = field(default_factory=lambda: os.getenv("SLACK_WEBHOOK_URL"))
     pagerduty_routing_key: Optional[str] = field(
         default_factory=lambda: os.getenv("PAGERDUTY_ROUTING_KEY")
     )
-    email_smtp_host: Optional[str] = field(
-        default_factory=lambda: os.getenv("SMTP_HOST")
-    )
-    email_smtp_port: int = field(
-        default_factory=lambda: int(os.getenv("SMTP_PORT", "587"))
-    )
-    email_from: Optional[str] = field(
-        default_factory=lambda: os.getenv("ALERT_EMAIL_FROM")
-    )
-    email_to: List[str] = field(
-        default_factory=lambda: os.getenv("ALERT_EMAIL_TO", "").split(",")
-    )
-    sns_topic_arn: Optional[str] = field(
-        default_factory=lambda: os.getenv("SNS_TOPIC_ARN")
-    )
-    datadog_api_key: Optional[str] = field(
-        default_factory=lambda: os.getenv("DATADOG_API_KEY")
-    )
-    opsgenie_api_key: Optional[str] = field(
-        default_factory=lambda: os.getenv("OPSGENIE_API_KEY")
-    )
+    email_smtp_host: Optional[str] = field(default_factory=lambda: os.getenv("SMTP_HOST"))
+    email_smtp_port: int = field(default_factory=lambda: int(os.getenv("SMTP_PORT", "587")))
+    email_from: Optional[str] = field(default_factory=lambda: os.getenv("ALERT_EMAIL_FROM"))
+    email_to: List[str] = field(default_factory=lambda: os.getenv("ALERT_EMAIL_TO", "").split(","))
+    sns_topic_arn: Optional[str] = field(default_factory=lambda: os.getenv("SNS_TOPIC_ARN"))
+    datadog_api_key: Optional[str] = field(default_factory=lambda: os.getenv("DATADOG_API_KEY"))
+    opsgenie_api_key: Optional[str] = field(default_factory=lambda: os.getenv("OPSGENIE_API_KEY"))
     webhook_urls: List[str] = field(
         default_factory=lambda: os.getenv("WEBHOOK_URLS", "").split(",")
     )
     enabled_channels: List[AlertChannel] = field(
         default_factory=lambda: [
-            AlertChannel(ch)
-            for ch in os.getenv("ALERT_CHANNELS", "log,slack").split(",")
+            AlertChannel(ch) for ch in os.getenv("ALERT_CHANNELS", "log,slack").split(",")
         ]
     )
 
 
 # Metrics collectors (if Prometheus is available)
 if PROMETHEUS_AVAILABLE:
-    alert_counter = Counter(
-        "analyzer_alerts_total", "Total number of alerts", ["level", "channel"]
-    )
+    alert_counter = Counter("analyzer_alerts_total", "Total number of alerts", ["level", "channel"])
     operation_histogram = Histogram(
         "analyzer_operation_duration_seconds", "Operation duration", ["operation"]
     )
-    error_counter = Counter(
-        "analyzer_errors_total", "Total number of errors", ["error_type"]
-    )
-    active_operations = Gauge(
-        "analyzer_active_operations", "Number of active operations"
-    )
+    error_counter = Counter("analyzer_errors_total", "Total number of errors", ["error_type"])
+    active_operations = Gauge("analyzer_active_operations", "Number of active operations")
     cache_hits = Counter("analyzer_cache_hits_total", "Cache hit count")
     cache_misses = Counter("analyzer_cache_misses_total", "Cache miss count")
 else:
@@ -256,8 +233,7 @@ class CircuitBreaker:
 
     def _should_attempt_reset(self) -> bool:
         return (
-            self.last_failure_time
-            and time.time() - self.last_failure_time >= self.recovery_timeout
+            self.last_failure_time and time.time() - self.last_failure_time >= self.recovery_timeout
         )
 
     def _on_success(self):
@@ -371,9 +347,7 @@ def retry_with_backoff(
                         time.sleep(sleep_time)
                         backoff *= backoff_multiplier
                     else:
-                        logger.error(
-                            f"All {max_retries} attempts failed for {func.__name__}"
-                        )
+                        logger.error(f"All {max_retries} attempts failed for {func.__name__}")
 
             raise last_exception
 
@@ -396,9 +370,7 @@ def retry_with_backoff(
                         await asyncio.sleep(sleep_time)
                         backoff *= backoff_multiplier
                     else:
-                        logger.error(
-                            f"All {max_retries} attempts failed for {func.__name__}"
-                        )
+                        logger.error(f"All {max_retries} attempts failed for {func.__name__}")
 
             raise last_exception
 
@@ -638,9 +610,7 @@ def _send_email_alert(alert_data: Dict[str, Any]):
     body = json.dumps(alert_data, indent=2)
     msg.attach(MIMEText(body, "plain"))
 
-    with smtplib.SMTP(
-        _alert_config.email_smtp_host, _alert_config.email_smtp_port
-    ) as server:
+    with smtplib.SMTP(_alert_config.email_smtp_host, _alert_config.email_smtp_port) as server:
         server.starttls()
         # Add authentication if needed
         server.send_message(msg)
@@ -875,9 +845,7 @@ def get_system_health() -> Dict[str, Any]:
     }
 
     # Circuit breakers
-    open_breakers = [
-        name for name, cb in _circuit_breakers.items() if cb.state == "open"
-    ]
+    open_breakers = [name for name, cb in _circuit_breakers.items() if cb.state == "open"]
     health["checks"]["circuit_breakers"] = {
         "open_count": len(open_breakers),
         "open_breakers": open_breakers,

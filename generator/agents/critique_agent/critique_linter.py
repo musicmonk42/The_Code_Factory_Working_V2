@@ -49,15 +49,9 @@ tracer = trace.get_tracer(__name__)
 
 # Metrics
 LINT_CALLS = Counter("critique_lint_calls_total", "Lint calls", ["language", "tool"])
-LINT_LATENCY = Histogram(
-    "critique_lint_latency_seconds", "Lint latency", ["language", "tool"]
-)
-LINT_ERRORS_COUNT = Gauge(
-    "critique_lint_errors", "Errors found", ["language", "severity"]
-)
-LINT_TRENDS = Histogram(
-    "critique_lint_trends", "Error trends over time", ["language", "severity"]
-)
+LINT_LATENCY = Histogram("critique_lint_latency_seconds", "Lint latency", ["language", "tool"])
+LINT_ERRORS_COUNT = Gauge("critique_lint_errors", "Errors found", ["language", "severity"])
+LINT_TRENDS = Histogram("critique_lint_trends", "Error trends over time", ["language", "severity"])
 
 # Error Explanations
 ERROR_EXPLANATIONS = {
@@ -227,9 +221,7 @@ def eslint_json(raw_output: str) -> List[Dict]:
                 all_issues.append(
                     {
                         "code": issue.get("ruleId", "UNKNOWN"),
-                        "severity": (
-                            "error" if issue.get("severity", 2) == 2 else "warning"
-                        ),
+                        "severity": ("error" if issue.get("severity", 2) == 2 else "warning"),
                         "message": issue.get("message", ""),
                         "file": file_path,
                         "line": issue.get("line", 0),
@@ -277,9 +269,7 @@ def golangci_lint_json(raw_output: str) -> List[Dict]:
 
 def staticcheck_json(raw_output: str) -> List[Dict]:
     try:
-        issues = [
-            json.loads(line) for line in raw_output.strip().splitlines() if line.strip()
-        ]
+        issues = [json.loads(line) for line in raw_output.strip().splitlines() if line.strip()]
         return [
             {
                 "code": issue.get("code", "UNKNOWN"),
@@ -305,14 +295,10 @@ def staticcheck_json(raw_output: str) -> List[Dict]:
 
 def clippy_json(raw_output: str) -> List[Dict]:
     try:
-        issues = [
-            json.loads(line) for line in raw_output.strip().splitlines() if line.strip()
-        ]
+        issues = [json.loads(line) for line in raw_output.strip().splitlines() if line.strip()]
         all_issues = []
         for issue in issues:
-            if issue.get("reason") == "compiler-message" and issue.get(
-                "message", {}
-            ).get("code"):
+            if issue.get("reason") == "compiler-message" and issue.get("message", {}).get("code"):
                 code_id = issue["message"]["code"]["code"]
                 message = issue["message"]["message"]
                 spans = issue["message"].get("spans", [])
@@ -332,9 +318,7 @@ def clippy_json(raw_output: str) -> List[Dict]:
                         "rationale": ERROR_EXPLANATIONS.get("rust", {})
                         .get(code_id, {})
                         .get("rationale", ""),
-                        "link": ERROR_EXPLANATIONS.get("rust", {})
-                        .get(code_id, {})
-                        .get("link", ""),
+                        "link": ERROR_EXPLANATIONS.get("rust", {}).get(code_id, {}).get("link", ""),
                         "snippet": spans[0].get("text", [""])[0] if spans else "",
                     }
                 )
@@ -363,9 +347,7 @@ def checkstyle_json(raw_output: str) -> List[Dict]:
                         "rationale": ERROR_EXPLANATIONS.get("java", {})
                         .get(code, {})
                         .get("rationale", ""),
-                        "link": ERROR_EXPLANATIONS.get("java", {})
-                        .get(code, {})
-                        .get("link", ""),
+                        "link": ERROR_EXPLANATIONS.get("java", {}).get(code, {}).get("link", ""),
                         "snippet": "",
                     }
                 )
@@ -632,9 +614,7 @@ class LintPlugin(ABC):
         else:
             if not shutil.which(cmd[0]):
                 # Capability check
-                logger.error(
-                    f"Linter tool executable '{cmd[0]}' not found in PATH. Skipping."
-                )
+                logger.error(f"Linter tool executable '{cmd[0]}' not found in PATH. Skipping.")
                 return {
                     "success": False,
                     "stdout": "",
@@ -741,9 +721,7 @@ class PythonLintPlugin(LintPlugin):
             tool_cfg.get("container_image"),
         )
 
-    def parse_output(
-        self, output: str, tool: str, language: str
-    ) -> List[Dict[str, Any]]:
+    def parse_output(self, output: str, tool: str, language: str) -> List[Dict[str, Any]]:
         # This function is not used directly, as the parser is set in LINTER_CONFIG.
         return []
 
@@ -770,9 +748,7 @@ class JavaScriptLintPlugin(LintPlugin):
             tool_cfg.get("container_image"),
         )
 
-    def parse_output(
-        self, output: str, tool: str, language: str
-    ) -> List[Dict[str, Any]]:
+    def parse_output(self, output: str, tool: str, language: str) -> List[Dict[str, Any]]:
         return eslint_json(output)
 
 
@@ -805,9 +781,7 @@ class RustLintPlugin(LintPlugin):
             tool_cfg.get("container_image"),
         )
 
-    def parse_output(
-        self, output: str, tool: str, language: str
-    ) -> List[Dict[str, Any]]:
+    def parse_output(self, output: str, tool: str, language: str) -> List[Dict[str, Any]]:
         return clippy_json(output)
 
 
@@ -865,9 +839,7 @@ class GoLintPlugin(LintPlugin):
             tool_cfg.get("container_image"),
         )
 
-    def parse_output(
-        self, output: str, tool: str, language: str
-    ) -> List[Dict[str, Any]]:
+    def parse_output(self, output: str, tool: str, language: str) -> List[Dict[str, Any]]:
         if tool == "golangci-lint":
             return golangci_lint_json(output)
         elif tool == "staticcheck":
@@ -897,9 +869,7 @@ class JavaLintPlugin(LintPlugin):
                 tool_cfg.get("container_image"),
             )
             if not compile_result["success"]:
-                logger.error(
-                    f"Java compilation failed for {file_path}: {compile_result['stderr']}"
-                )
+                logger.error(f"Java compilation failed for {file_path}: {compile_result['stderr']}")
                 return {
                     "success": False,
                     "stdout": "",
@@ -940,9 +910,7 @@ class JavaLintPlugin(LintPlugin):
             tool_cfg.get("container_image"),
         )
 
-    def parse_output(
-        self, output: str, tool: str, language: str
-    ) -> List[Dict[str, Any]]:
+    def parse_output(self, output: str, tool: str, language: str) -> List[Dict[str, Any]]:
         if tool == "checkstyle":
             return checkstyle_json(output)
         elif tool == "spotbugs":
@@ -995,16 +963,12 @@ async def run_single_lint(
 
         parsed_errors = []
         # Linters often return non-zero exit codes when issues are found. We still need to parse the output.
-        if raw_result["stdout"] and (
-            raw_result["success"] or raw_result["returncode"] in [1, 2]
-        ):
+        if raw_result["stdout"] and (raw_result["success"] or raw_result["returncode"] in [1, 2]):
             parser_func = tool_cfg.get("parser")
             if callable(parser_func):
                 parsed_errors = parser_func(raw_result["stdout"])
             else:
-                logger.error(
-                    f"Parser for {tool_cfg['tool']} is not configured or not callable."
-                )
+                logger.error(f"Parser for {tool_cfg['tool']} is not configured or not callable.")
                 parsed_errors.append(
                     {
                         "code": "PARSER_ERROR",
@@ -1077,9 +1041,7 @@ async def run_all_lints_and_checks(
         if (
             not isinstance(code_files, dict)
             or not code_files
-            or not all(
-                isinstance(k, str) and isinstance(v, str) for k, v in code_files.items()
-            )
+            or not all(isinstance(k, str) and isinstance(v, str) for k, v in code_files.items())
         ):
             LINT_ERRORS_COUNT.labels(language, "critical").set(1)
             logger.error(
@@ -1122,14 +1084,10 @@ async def run_all_lints_and_checks(
             }
 
         effective_project_dir = (
-            Path(project_dir)
-            if project_dir and Path(project_dir).is_dir()
-            else Path(temp_dir)
+            Path(project_dir) if project_dir and Path(project_dir).is_dir() else Path(temp_dir)
         )
         if project_dir and not Path(project_dir).is_dir():
-            logger.warning(
-                f"Invalid project_dir: {project_dir}. Falling back to temp_dir."
-            )
+            logger.warning(f"Invalid project_dir: {project_dir}. Falling back to temp_dir.")
         if hitl_callback and not callable(hitl_callback):
             logger.warning("Invalid hitl_callback: not callable. Ignoring.")
             hitl_callback = None
@@ -1229,9 +1187,7 @@ if __name__ == "__main__":
         code_files = {}
         # Ensure project_dir exists if specified, otherwise the linter plugins might fail
         effective_project_dir = (
-            args.project_dir
-            if args.project_dir and Path(args.project_dir).is_dir()
-            else temp_dir
+            args.project_dir if args.project_dir and Path(args.project_dir).is_dir() else temp_dir
         )
 
         # Copy files to effective_project_dir if it's not the code-dir itself

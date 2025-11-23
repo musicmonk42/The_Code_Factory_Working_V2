@@ -180,9 +180,7 @@ async def test_corda_init_production_mode_validation(
     """
     Test production mode validation for RPC URL and credentials.
     """
-    mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_corda_clients.PRODUCTION_MODE", is_prod
-    )
+    mocker.patch("simulation.plugins.dlt_clients.dlt_corda_clients.PRODUCTION_MODE", is_prod)
 
     # Configure the secrets manager mock for this specific test case
     mocker.patch.object(SECRETS_MANAGER, "get_secret", side_effect=[user, password])
@@ -205,9 +203,7 @@ async def test_health_check_success(mock_off_chain, mock_aiohttp):
     """
     Test a successful health check returns a correct status dictionary.
     """
-    client = CordaClientWrapper(
-        {"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain
-    )
+    client = CordaClientWrapper({"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain)
 
     # Create the mock response with proper json data
     mock_response_data = {"me": {"legalIdentity": "O=NodeA,L=London,C=GB"}}
@@ -252,9 +248,7 @@ async def test_health_check_failures(
     """
     Test that health check correctly raises specific exceptions for different HTTP errors.
     """
-    client = CordaClientWrapper(
-        {"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain
-    )
+    client = CordaClientWrapper({"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain)
 
     # Create the mock response with error status
     mock_response = create_mock_response(status, text=f"Error {status}")
@@ -282,9 +276,7 @@ async def test_write_checkpoint_success(mock_off_chain, mock_aiohttp):
     """
     Test a successful write operation.
     """
-    client = CordaClientWrapper(
-        {"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain
-    )
+    client = CordaClientWrapper({"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain)
 
     # Mock the circuit breaker to handle async operations properly
     async def mock_circuit_breaker_execute(func, *args, **kwargs):
@@ -321,9 +313,7 @@ async def test_write_checkpoint_success(mock_off_chain, mock_aiohttp):
 
 
 @pytest.mark.asyncio
-async def test_write_checkpoint_retry_on_transient_error(
-    mock_off_chain, mock_aiohttp, mocker
-):
+async def test_write_checkpoint_retry_on_transient_error(mock_off_chain, mock_aiohttp, mocker):
     """
     Test that the client correctly handles a transient error by retrying.
     This test relies on the async_retry decorator working as expected.
@@ -367,9 +357,7 @@ async def test_read_checkpoint_not_found_on_dlt(mock_off_chain, mock_aiohttp):
     """
     Test that a read operation correctly raises FileNotFoundError when a checkpoint is not found.
     """
-    client = CordaClientWrapper(
-        {"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain
-    )
+    client = CordaClientWrapper({"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain)
 
     # Mock the circuit breaker
     async def mock_circuit_breaker_execute(func, *args, **kwargs):
@@ -399,9 +387,7 @@ async def test_read_checkpoint_off_chain_blob_not_found(mock_off_chain, mock_aio
     """
     Test that a read operation correctly raises FileNotFoundError when the off-chain blob is missing.
     """
-    client = CordaClientWrapper(
-        {"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain
-    )
+    client = CordaClientWrapper({"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain)
 
     # Mock circuit breaker to raise FileNotFoundError for get_blob
     async def mock_circuit_breaker_execute(func, *args, **kwargs):
@@ -444,9 +430,7 @@ async def test_rollback_checkpoint_success(mock_off_chain, mock_aiohttp):
     """
     Test a successful rollback operation.
     """
-    client = CordaClientWrapper(
-        {"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain
-    )
+    client = CordaClientWrapper({"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain)
 
     # Mock circuit breaker
     async def mock_circuit_breaker_execute(func, *args, **kwargs):
@@ -468,9 +452,7 @@ async def test_rollback_checkpoint_success(mock_off_chain, mock_aiohttp):
 
     mock_aiohttp["post"].return_value = mock_response
 
-    result = await client.rollback_checkpoint(
-        name="test-checkpoint", rollback_hash="rollback_hash"
-    )
+    result = await client.rollback_checkpoint(name="test-checkpoint", rollback_hash="rollback_hash")
 
     assert result["tx_id"] == "mock_rollback_tx_id"
     assert result["version"] == 5
@@ -481,9 +463,7 @@ async def test_session_management_and_closing(mock_off_chain, mock_aiohttp, mock
     """
     Test that a single aiohttp.ClientSession is reused and closed properly.
     """
-    client = CordaClientWrapper(
-        {"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain
-    )
+    client = CordaClientWrapper({"corda": {"rpc_url": "http://localhost:8080"}}, mock_off_chain)
 
     # Mock circuit breaker
     async def mock_circuit_breaker_execute(func, *args, **kwargs):

@@ -323,22 +323,14 @@ def test_sanitization_xss_protection():
         audio_id="audio_xss",
         transcription=AudioTranscriptionResult(text="<script>alert('xss')</script>"),
     )
-    assert (
-        audio.transcription.text
-        == "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;"
-    )
+    assert audio.transcription.text == "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;"
 
     # Test sanitization in caption
     image = ImageAnalysisResult(
         image_id="img_xss",
-        captioning_result=ImageCaptioningResult(
-            caption="<script>alert('xss')</script>"
-        ),
+        captioning_result=ImageCaptioningResult(caption="<script>alert('xss')</script>"),
     )
-    assert (
-        image.captioning_result.caption
-        == "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;"
-    )
+    assert image.captioning_result.caption == "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;"
 
 
 def test_enum_usage():
@@ -433,9 +425,7 @@ def test_id_pattern_validation():
 def test_list_max_length():
     """Test max_length constraints on list fields."""
     # Test within limit
-    image = ImageAnalysisResult(
-        image_id="img_list", detected_objects=["obj"] * 500  # Max is 500
-    )
+    image = ImageAnalysisResult(image_id="img_list", detected_objects=["obj"] * 500)  # Max is 500
     assert len(image.detected_objects) == 500
 
     # Test exceeding limit

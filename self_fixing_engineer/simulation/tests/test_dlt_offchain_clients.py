@@ -29,9 +29,7 @@ def mock_secrets_manager(mocker):
         SECRETS_MANAGER,
         "get_secret",
         side_effect=lambda key, **kwargs: (
-            json.dumps(
-                {"aws_access_key_id": "mock_id", "aws_secret_access_key": "mock_key"}
-            )
+            json.dumps({"aws_access_key_id": "mock_id", "aws_secret_access_key": "mock_key"})
             if "aws_credentials" in key.lower()
             else "mock_secret"
         ),
@@ -124,12 +122,8 @@ def mock_azure_blob_client(mocker):
     mock_secret.value = "DefaultEndpointsProtocol=https;AccountName=mockaccount;AccountKey=mockkey;EndpointSuffix=core.windows.net"
     mock_secret_client.get_secret.return_value = mock_secret
 
-    mocker.patch(
-        "azure.identity.aio.DefaultAzureCredential", return_value=mock_credential
-    )
-    mocker.patch(
-        "azure.keyvault.secrets.aio.SecretClient", return_value=mock_secret_client
-    )
+    mocker.patch("azure.identity.aio.DefaultAzureCredential", return_value=mock_credential)
+    mocker.patch("azure.keyvault.secrets.aio.SecretClient", return_value=mock_secret_client)
 
     return mock_blob_service
 
@@ -207,9 +201,7 @@ def mock_gcs_config():
             "bucket_name": "mock_bucket",
             "log_format": "json",
             "credentials_secret_id": "mock_gcs_credentials_secret_id",
-            "secrets_providers": [
-                "aws"
-            ],  # Use AWS secrets manager to avoid validation error
+            "secrets_providers": ["aws"],  # Use AWS secrets manager to avoid validation error
         }
     }
 
@@ -222,9 +214,7 @@ def mock_azure_config():
             "container_name": "mock_container",
             "log_format": "json",
             "connection_string_secret_id": "mock_connection_string_secret_id",
-            "secrets_providers": [
-                "aws"
-            ],  # Use AWS secrets manager to avoid validation error
+            "secrets_providers": ["aws"],  # Use AWS secrets manager to avoid validation error
         }
     }
 
@@ -240,9 +230,7 @@ def suppress_logs():
 
 
 @pytest.mark.asyncio
-async def test_s3_health_check_success(
-    mock_s3_config, mock_aioboto3_client, mock_boto3_client
-):
+async def test_s3_health_check_success(mock_s3_config, mock_aioboto3_client, mock_boto3_client):
     """Test successful health check for S3 client."""
     client = S3OffChainClient(mock_s3_config)
     await client.initialize()
@@ -253,9 +241,7 @@ async def test_s3_health_check_success(
 
 
 @pytest.mark.asyncio
-async def test_s3_health_check_failure(
-    mock_s3_config, mock_aioboto3_client, mock_boto3_client
-):
+async def test_s3_health_check_failure(mock_s3_config, mock_aioboto3_client, mock_boto3_client):
     """Test failed health check for S3 client."""
     client = S3OffChainClient(mock_s3_config)
     await client.initialize()
@@ -288,9 +274,7 @@ async def test_s3_health_check_failure(
 
 
 @pytest.mark.asyncio
-async def test_s3_save_blob_success(
-    mock_s3_config, mock_aioboto3_client, mock_boto3_client
-):
+async def test_s3_save_blob_success(mock_s3_config, mock_aioboto3_client, mock_boto3_client):
     """Test successful blob save for S3 client."""
     client = S3OffChainClient(mock_s3_config)
     await client.initialize()
@@ -301,9 +285,7 @@ async def test_s3_save_blob_success(
 
 
 @pytest.mark.asyncio
-async def test_s3_get_blob_success(
-    mock_s3_config, mock_aioboto3_client, mock_boto3_client
-):
+async def test_s3_get_blob_success(mock_s3_config, mock_aioboto3_client, mock_boto3_client):
     """Test successful blob retrieval for S3 client."""
     client = S3OffChainClient(mock_s3_config)
     await client.initialize()
@@ -316,9 +298,7 @@ async def test_s3_get_blob_success(
 
 
 @pytest.mark.asyncio
-async def test_s3_save_blob_empty_payload(
-    mock_s3_config, mock_aioboto3_client, mock_boto3_client
-):
+async def test_s3_save_blob_empty_payload(mock_s3_config, mock_aioboto3_client, mock_boto3_client):
     """Test that saving an empty payload raises a validation error."""
     client = S3OffChainClient(mock_s3_config)
     await client.initialize()
@@ -403,9 +383,7 @@ async def test_azure_blob_get_blob_success(
 @pytest.mark.asyncio
 async def test_ipfs_health_check_success(mock_ipfs_client):
     """Test successful health check for IPFS client."""
-    mock_config = {
-        "ipfs": {"api_url": "mock_url", "log_format": "json", "temp_file_ttl": 3600.0}
-    }
+    mock_config = {"ipfs": {"api_url": "mock_url", "log_format": "json", "temp_file_ttl": 3600.0}}
     client = IPFSClient(mock_config)
     await client.initialize()
     result = await client.health_check()
@@ -415,9 +393,7 @@ async def test_ipfs_health_check_success(mock_ipfs_client):
 @pytest.mark.asyncio
 async def test_ipfs_save_blob_success(mock_ipfs_client):
     """Test successful blob save for IPFS client."""
-    mock_config = {
-        "ipfs": {"api_url": "mock_url", "log_format": "json", "temp_file_ttl": 3600.0}
-    }
+    mock_config = {"ipfs": {"api_url": "mock_url", "log_format": "json", "temp_file_ttl": 3600.0}}
     client = IPFSClient(mock_config)
     await client.initialize()
     off_chain_id = await client.save_blob("test_prefix", b"test_payload")
@@ -427,9 +403,7 @@ async def test_ipfs_save_blob_success(mock_ipfs_client):
 @pytest.mark.asyncio
 async def test_ipfs_get_blob_success(mock_ipfs_client):
     """Test successful blob retrieval for IPFS client."""
-    mock_config = {
-        "ipfs": {"api_url": "mock_url", "log_format": "json", "temp_file_ttl": 3600.0}
-    }
+    mock_config = {"ipfs": {"api_url": "mock_url", "log_format": "json", "temp_file_ttl": 3600.0}}
     client = IPFSClient(mock_config)
     await client.initialize()
     retrieved_blob = await client.get_blob("mock_hash")
@@ -438,9 +412,7 @@ async def test_ipfs_get_blob_success(mock_ipfs_client):
 
 def test_in_memory_client_forbidden_in_prod(mocker):
     """Test that InMemoryOffChainClient is forbidden in production mode."""
-    mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_offchain_clients.PRODUCTION_MODE", True
-    )
+    mocker.patch("simulation.plugins.dlt_clients.dlt_offchain_clients.PRODUCTION_MODE", True)
     with pytest.raises(DLTClientConfigurationError):
         InMemoryOffChainClient({"in_memory": {}})
 
@@ -448,9 +420,7 @@ def test_in_memory_client_forbidden_in_prod(mocker):
 @pytest.mark.asyncio
 async def test_in_memory_save_and_get_blob_success(mocker):
     """Test successful save and get blob operation on the InMemory client."""
-    mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_offchain_clients.PRODUCTION_MODE", False
-    )
+    mocker.patch("simulation.plugins.dlt_clients.dlt_offchain_clients.PRODUCTION_MODE", False)
     mock_config = {"in_memory": {"log_format": "json", "temp_file_ttl": 3600.0}}
     client = InMemoryOffChainClient(mock_config)
     payload = b"this is a test blob"

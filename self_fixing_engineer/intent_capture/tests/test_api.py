@@ -58,9 +58,7 @@ def app(test_secret_key):
 @pytest.fixture
 async def async_client(app):
     """Asynchronous TestClient for making API calls."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
@@ -145,9 +143,7 @@ async def test_predict_success(
     assert data["response"] == "mocked agent response"
     assert data["trace"]["status"] == "mocked_success"
     mock_get_or_create_agent.assert_awaited_with(valid_token)
-    mock_get_or_create_agent.return_value.predict.assert_awaited_with(
-        "Hello, agent!", timeout=30
-    )
+    mock_get_or_create_agent.return_value.predict.assert_awaited_with("Hello, agent!", timeout=30)
 
 
 @pytest.mark.asyncio
@@ -199,9 +195,7 @@ async def test_predict_agent_error(
     }
     auth_token = jwt.encode(auth_token_payload, test_secret_key, algorithm="HS512")
 
-    mock_get_or_create_agent.side_effect = AgentError(
-        "Something went wrong in the agent"
-    )
+    mock_get_or_create_agent.side_effect = AgentError("Something went wrong in the agent")
 
     headers = {"Authorization": f"Bearer {auth_token}"}
     payload = {"user_input": "trigger error", "session_token": valid_token}
@@ -258,9 +252,7 @@ async def test_prune_sessions_success(async_client: AsyncClient, test_secret_key
 
 
 @pytest.mark.asyncio
-async def test_prune_sessions_forbidden(
-    async_client: AsyncClient, test_secret_key: str
-):
+async def test_prune_sessions_forbidden(async_client: AsyncClient, test_secret_key: str):
     """Test for 403 Forbidden when user has not consented to pruning."""
     token_payload = {
         "sub": "test_user",

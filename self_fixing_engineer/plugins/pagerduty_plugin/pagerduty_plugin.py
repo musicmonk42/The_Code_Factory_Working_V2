@@ -74,9 +74,7 @@ class PagerDutyJsonFormatter(logging.Formatter):
 
 logger = logging.getLogger("pagerduty_audit_plugin")
 if not logger.handlers:
-    LOG_FILE_PATH = os.getenv(
-        "PAGERDUTY_PLUGIN_LOG_FILE", "/var/log/pagerduty_plugin.log"
-    )
+    LOG_FILE_PATH = os.getenv("PAGERDUTY_PLUGIN_LOG_FILE", "/var/log/pagerduty_plugin.log")
     handler: logging.Handler
     if PRODUCTION_MODE:
         try:
@@ -128,9 +126,7 @@ async def get_redis_client() -> Optional["redis.Redis"]:
         logger.info("Successfully connected to Redis for caching.")
         return REDIS_CLIENT
     except Exception as e:
-        logger.warning(
-            f"Failed to connect to Redis for caching: {e}. Caching will be disabled."
-        )
+        logger.warning(f"Failed to connect to Redis for caching: {e}. Caching will be disabled.")
         REDIS_CLIENT = None
         return None
 
@@ -175,9 +171,7 @@ class PagerDutySettings(BaseSettings):
     timeout_seconds: float = Field(
         10.0, ge=1.0, description="Timeout for HTTP requests to PagerDuty API."
     )
-    max_retries: int = Field(
-        3, ge=0, description="Maximum number of retries for sending an event."
-    )
+    max_retries: int = Field(3, ge=0, description="Maximum number of retries for sending an event.")
     retry_backoff_factor: float = Field(
         2.0, ge=1.0, description="Exponential backoff factor for retries."
     )
@@ -217,9 +211,7 @@ class PagerDutySettings(BaseSettings):
                     f"Non-HTTPS endpoint '{self.pagerduty_api_url}' detected in PRODUCTION_MODE. HTTPS is mandatory."
                 )
 
-            allowed_urls_str = SECRETS_MANAGER.get_secret(
-                "PAGERDUTY_ALLOWED_URLS", required=True
-            )
+            allowed_urls_str = SECRETS_MANAGER.get_secret("PAGERDUTY_ALLOWED_URLS", required=True)
             allowed_endpoints = {u.strip() for u in allowed_urls_str.split(",")}
             if self.pagerduty_api_url not in allowed_endpoints:
                 raise ValueError(
@@ -274,9 +266,7 @@ class PagerDutyMetrics:
             "A static info metric with plugin metadata.",
             registry=registry,
         )
-        self.INFO.info(
-            {"version": "1.0.0", "env": "prod" if PRODUCTION_MODE else "dev"}
-        )
+        self.INFO.info({"version": "1.0.0", "env": "prod" if PRODUCTION_MODE else "dev"})
 
         self.EVENTS_QUEUED = Counter(
             "pagerduty_audit_events_queued_total",
@@ -352,9 +342,7 @@ class PagerDutyEventPayload(BaseModel):
     @classmethod
     def validate_timestamp(cls, v: str) -> str:
         if not _ISO8601_Z_REGEX.match(v):
-            raise ValueError(
-                "Timestamp must be in ISO 8601 UTC format (YYYY-MM-DDTHH:MM:SSZ)."
-            )
+            raise ValueError("Timestamp must be in ISO 8601 UTC format (YYYY-MM-DDTHH:MM:SSZ).")
         return v
 
     @model_validator(mode="before")
@@ -402,9 +390,9 @@ class PagerDutyAPIRequest(BaseModel):
     def _sign_request(self) -> str:
         """Generates an HMAC signature for the request payload."""
         request_payload = self.model_dump(exclude={"signature"})
-        request_json_str = json.dumps(
-            request_payload, sort_keys=True, ensure_ascii=False
-        ).encode("utf-8")
+        request_json_str = json.dumps(request_payload, sort_keys=True, ensure_ascii=False).encode(
+            "utf-8"
+        )
         pagerduty_hmac_key = SECRETS_MANAGER.get_secret(
             "PAGERDUTY_HMAC_KEY", required=PRODUCTION_MODE
         )
@@ -432,18 +420,14 @@ class PagerDutyGateway:
         self._session: Optional[aiohttp.ClientSession] = None
         self._session_lock = asyncio.Lock()
 
-        self._event_queue: asyncio.Queue = asyncio.Queue(
-            maxsize=self.settings.max_queue_size
-        )
+        self._event_queue: asyncio.Queue = asyncio.Queue(maxsize=self.settings.max_queue_size)
         self._workers: List[asyncio.Task] = []
 
         self._routing_key: Optional[str] = SECRETS_MANAGER.get_secret(
             self.settings.routing_key_secret_id, required=True
         )
         if not self._routing_key:
-            raise StartupCriticalError(
-                "PagerDuty routing key not found in secrets manager."
-            )
+            raise StartupCriticalError("PagerDuty routing key not found in secrets manager.")
 
         self._circuit_state: Literal["closed", "open", "half_open"] = "closed"
         self._failure_count = 0
@@ -493,8 +477,7 @@ class PagerDutyGateway:
         try:
             await asyncio.wait_for(
                 self._event_queue.join(),
-                timeout=self.settings.timeout_seconds * self.settings.max_retries * 2
-                + 10,
+                timeout=self.settings.timeout_seconds * self.settings.max_retries * 2 + 10,
             )
             logger.info("PagerDuty Gateway queue drained successfully.")
             audit_logger.log_event(
@@ -519,9 +502,7 @@ class PagerDutyGateway:
                 f"Queue drain timed out with {remaining_events} events remaining."
             )
         except Exception as e:
-            logger.critical(
-                f"CRITICAL: Unexpected error during queue drain: {e}.", exc_info=True
-            )
+            logger.critical(f"CRITICAL: Unexpected error during queue drain: {e}.", exc_info=True)
             audit_logger.log_event(
                 "pagerduty_gateway_shutdown_failure",
                 reason="queue_drain_error",
@@ -550,9 +531,7 @@ class PagerDutyGateway:
     async def _get_session(self) -> aiohttp.ClientSession:
         async with self._session_lock:
             if self._session is None or self._session.closed:
-                timeout = aiohttp.ClientTimeout(
-                    total=self.settings.timeout_seconds, connect=5
-                )
+                timeout = aiohttp.ClientTimeout(total=self.settings.timeout_seconds, connect=5)
                 self._session = aiohttp.ClientSession(timeout=timeout, trust_env=True)
         return self._session
 
@@ -561,18 +540,11 @@ class PagerDutyGateway:
         Checks the circuit breaker state and handles state transitions.
         """
         if self._circuit_state == "open":
-            if (
-                time.monotonic() - self._last_failure_time
-                > self.settings.circuit_breaker_reset_sec
-            ):
+            if time.monotonic() - self._last_failure_time > self.settings.circuit_breaker_reset_sec:
                 self._circuit_state = "half_open"
                 self.metrics.CIRCUIT_BREAKER_STATUS.set(0.5)
-                logger.warning(
-                    "Circuit breaker in half-open state. Will attempt a single request."
-                )
-                audit_logger.log_event(
-                    "pagerduty_circuit_breaker_half_open", status="half_open"
-                )
+                logger.warning("Circuit breaker in half-open state. Will attempt a single request.")
+                audit_logger.log_event("pagerduty_circuit_breaker_half_open", status="half_open")
             else:
                 raise PagerDutyEventError(
                     "Circuit breaker is open. PagerDuty requests are temporarily suspended."
@@ -591,9 +563,7 @@ class PagerDutyGateway:
             if self._half_open_probe_lock.locked():
                 self._half_open_probe_lock.release()
             logger.info("Half-open probe succeeded; circuit is now closed.")
-            audit_logger.log_event(
-                "pagerduty_circuit_breaker_success_reset", status="closed"
-            )
+            audit_logger.log_event("pagerduty_circuit_breaker_success_reset", status="closed")
             return
 
         if self._failure_count > 0:
@@ -610,9 +580,7 @@ class PagerDutyGateway:
             if self._half_open_probe_lock.locked():
                 self._half_open_probe_lock.release()
             logger.error("Half-open probe failed; circuit is now open.")
-            alert_operator(
-                "CRITICAL: PagerDuty CB probe failed. TRIPPED again.", level="CRITICAL"
-            )
+            alert_operator("CRITICAL: PagerDuty CB probe failed. TRIPPED again.", level="CRITICAL")
             return
 
         self._failure_count += 1
@@ -657,17 +625,13 @@ class PagerDutyGateway:
 
             try:
                 session = await self._get_session()
-                async with session.post(
-                    self.settings.pagerduty_api_url, json=request_body
-                ) as resp:
+                async with session.post(self.settings.pagerduty_api_url, json=request_body) as resp:
                     duration = time.monotonic() - start_time
                     self.metrics.SEND_LATENCY.observe(duration)
 
                     if resp.status in [200, 202]:
                         self._handle_success()
-                        self.metrics.EVENTS_SENT_SUCCESS.labels(
-                            action=request.event_action
-                        ).inc()
+                        self.metrics.EVENTS_SENT_SUCCESS.labels(action=request.event_action).inc()
                         logger.info(
                             "Successfully sent PagerDuty event.",
                             extra={"context": log_context, "status": resp.status},
@@ -694,9 +658,7 @@ class PagerDutyGateway:
 
                     if 400 <= resp.status < 500:
                         self._handle_failure(request.event_action, request.dedup_key)
-                        self.metrics.EVENTS_FAILED_PERMANENTLY.labels(
-                            reason="client_error"
-                        ).inc()
+                        self.metrics.EVENTS_FAILED_PERMANENTLY.labels(reason="client_error").inc()
                         logger.error(
                             "Permanent PagerDuty client error. Dropping event.",
                             extra={
@@ -724,9 +686,7 @@ class PagerDutyGateway:
                 )
                 if attempt == self.settings.max_retries:
                     self._handle_failure(request.event_action, request.dedup_key)
-                    self.metrics.EVENTS_FAILED_PERMANENTLY.labels(
-                        reason="server_error"
-                    ).inc()
+                    self.metrics.EVENTS_FAILED_PERMANENTLY.labels(reason="server_error").inc()
                     logger.error(
                         "Failed to send PagerDuty event after all retries.",
                         extra={"context": log_context},
@@ -767,9 +727,7 @@ class PagerDutyGateway:
                 break
 
             if self.settings.dry_run:
-                safe_body = request.model_dump(
-                    exclude_none=True, exclude={"routing_key"}
-                )
+                safe_body = request.model_dump(exclude_none=True, exclude={"routing_key"})
                 safe_body["payload"]["custom_details"] = scrub_sensitive_data(
                     safe_body["payload"]["custom_details"]
                 )
@@ -791,9 +749,7 @@ class PagerDutyGateway:
                 self.metrics.EVENTS_DROPPED.inc()
                 logger.warning(
                     "Event dropped due to error.",
-                    extra={
-                        "context": {"dedup_key": request.dedup_key, "error": str(e)}
-                    },
+                    extra={"context": {"dedup_key": request.dedup_key, "error": str(e)}},
                 )
                 audit_logger.log_event(
                     "pagerduty_event_dropped",
@@ -825,9 +781,7 @@ class PagerDutyGateway:
         """Puts a request onto the queue, logging a failure if full."""
         try:
             if request.payload:
-                self.metrics.EVENTS_QUEUED.labels(
-                    severity=request.payload.severity
-                ).inc()
+                self.metrics.EVENTS_QUEUED.labels(severity=request.payload.severity).inc()
             await self._event_queue.put(request)
             self.metrics.QUEUE_SIZE.set(self._event_queue.qsize())
         except asyncio.QueueFull:

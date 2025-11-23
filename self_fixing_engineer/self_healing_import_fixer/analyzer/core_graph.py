@@ -51,9 +51,7 @@ try:
     from .core_utils import alert_operator, scrub_secrets
     from .core_secrets import SECRETS_MANAGER
 except ImportError as e:
-    logger.critical(
-        f"CRITICAL: Missing core dependency for core_graph: {e}. Aborting startup."
-    )
+    logger.critical(f"CRITICAL: Missing core dependency for core_graph: {e}. Aborting startup.")
     # Since alert_operator might not be imported, we need a fallback here
     # The original file's logic has alert_operator in the try block, so this
     # raises a new error with a slightly different message to be more accurate
@@ -150,8 +148,7 @@ class ImportGraphAnalyzer:
             )
 
         self.whitelisted_paths: List[str] = [
-            os.path.abspath(p)
-            for p in self.config.get("whitelisted_paths", [self.project_root])
+            os.path.abspath(p) for p in self.config.get("whitelisted_paths", [self.project_root])
         ]
         if not any(self.project_root.startswith(wp) for wp in self.whitelisted_paths):
             raise AnalyzerCriticalError(
@@ -160,9 +157,7 @@ class ImportGraphAnalyzer:
 
         # Security: Restrict file system access to read-only for scanning.
         try:
-            logger.info(
-                f"Ensuring read-only access for scanning project root: {self.project_root}"
-            )
+            logger.info(f"Ensuring read-only access for scanning project root: {self.project_root}")
             if not os.access(self.project_root, os.R_OK):
                 raise AnalyzerCriticalError(
                     f"No read access to project root '{self.project_root}'."
@@ -182,9 +177,7 @@ class ImportGraphAnalyzer:
         self.max_python_files = self.config.get("max_python_files", 5000)
         self.max_graph_nodes = self.config.get("max_graph_nodes", 10000)
         self.max_memory_mb = self.config.get("max_memory_mb", 2048)
-        self.parsing_error_threshold = self.config.get(
-            "parsing_error_threshold", 0.001
-        )  # 0.1%
+        self.parsing_error_threshold = self.config.get("parsing_error_threshold", 0.001)  # 0.1%
 
         self._set_memory_limit()
 
@@ -204,9 +197,7 @@ class ImportGraphAnalyzer:
         if resource is not None and self.max_memory_mb > 0:
             try:
                 memory_limit_bytes = self.max_memory_mb * 1024 * 1024
-                resource.setrlimit(
-                    resource.RLIMIT_AS, (memory_limit_bytes, memory_limit_bytes)
-                )
+                resource.setrlimit(resource.RLIMIT_AS, (memory_limit_bytes, memory_limit_bytes))
                 logger.info(f"Set process memory limit to {self.max_memory_mb} MB.")
             except Exception as e:
                 logger.warning(
@@ -218,9 +209,7 @@ class ImportGraphAnalyzer:
                     level="WARNING",
                 )
         else:
-            logger.info(
-                "Memory limits not supported or enabled on this platform/configuration."
-            )
+            logger.info("Memory limits not supported or enabled on this platform/configuration.")
 
     def _find_python_files(self) -> List[str]:
         """
@@ -310,9 +299,7 @@ class ImportGraphAnalyzer:
                 elif isinstance(node, ast.ImportFrom):
                     if node.module:
                         if node.level > 0:
-                            current_module_parts = self._get_module_name(
-                                file_path
-                            ).split(".")
+                            current_module_parts = self._get_module_name(file_path).split(".")
                             base_module_parts = current_module_parts[
                                 : len(current_module_parts) - node.level + 1
                             ]
@@ -325,9 +312,7 @@ class ImportGraphAnalyzer:
                         else:
                             imported_modules.add(node.module.split(".")[0])
         except SyntaxError as e:
-            logger.warning(
-                f"Syntax error in {file_path}: {e}. Skipping import parsing."
-            )
+            logger.warning(f"Syntax error in {file_path}: {e}. Skipping import parsing.")
             raise NonCriticalError(f"Syntax error in file: {file_path}") from e
         except Exception as e:
             logger.error(f"Error parsing imports from {file_path}: {e}", exc_info=True)
@@ -368,12 +353,8 @@ class ImportGraphAnalyzer:
             raise AnalyzerCriticalError("File system permission error during scan.")
 
         if not python_files:
-            logger.warning(
-                "No Python files found for graph analysis. Returning empty graph."
-            )
-            audit_logger.log_event(
-                "graph_build_skipped", reason="no_python_files_found"
-            )
+            logger.warning("No Python files found for graph analysis. Returning empty graph.")
+            audit_logger.log_event("graph_build_skipped", reason="no_python_files_found")
             return self.graph
 
         async def run_parsing_tasks():
@@ -392,17 +373,14 @@ class ImportGraphAnalyzer:
                 self.graph[module_name] = set()
 
             if isinstance(result, Exception):
-                logger.error(
-                    f"Error processing imports for {file_path}: {result}", exc_info=True
-                )
+                logger.error(f"Error processing imports for {file_path}: {result}", exc_info=True)
                 self.syntax_error_files.append(file_path)
                 continue  # Module is in graph with empty imports
 
             imports = result
             for imported_module_name in imports:
                 if imported_module_name in self.module_paths or any(
-                    imported_module_name.startswith(f"{m}.")
-                    for m in self.module_paths.keys()
+                    imported_module_name.startswith(f"{m}.") for m in self.module_paths.keys()
                 ):
                     self.graph[module_name].add(imported_module_name)
                 else:
@@ -459,9 +437,7 @@ class ImportGraphAnalyzer:
         )
         return self.graph
 
-    def detect_cycles(
-        self, graph: Optional[Dict[str, Set[str]]] = None
-    ) -> List[List[str]]:
+    def detect_cycles(self, graph: Optional[Dict[str, Set[str]]] = None) -> List[List[str]]:
         """
         Detects import cycles in the graph using DFS.
         Audit Logging: All detected cycles must be logged to audit trail.
@@ -508,9 +484,7 @@ class ImportGraphAnalyzer:
         logger.info(f"Cycle detection complete. Found {len(cycles)} cycles.")
         return cycles
 
-    def detect_dead_nodes(
-        self, graph: Optional[Dict[str, Set[str]]] = None
-    ) -> Set[str]:
+    def detect_dead_nodes(self, graph: Optional[Dict[str, Set[str]]] = None) -> Set[str]:
         """
         Detects 'dead' or 'unused' nodes (modules) in the graph.
         Dead nodes are modules that aren't imported by any other module.
@@ -540,9 +514,7 @@ class ImportGraphAnalyzer:
         )
         return dead_nodes
 
-    def visualize_graph(
-        self, output_file: str = "import_graph", format: str = "pdf"
-    ) -> None:
+    def visualize_graph(self, output_file: str = "import_graph", format: str = "pdf") -> None:
         """
         Generates a DOT file visualization of the import graph and attempts to render it.
         Graphviz Handling: Do not allow external process spawn (dot rendering) unless explicitly operator-approved.
@@ -601,9 +573,7 @@ class ImportGraphAnalyzer:
 
         try:
             dot.render(full_output_path, format=format, view=False, cleanup=True)
-            logger.info(
-                f"Import graph visualization saved to {full_output_path}.{format}."
-            )
+            logger.info(f"Import graph visualization saved to {full_output_path}.{format}.")
             audit_logger.log_event(
                 "graph_visualization_generated",
                 path=f"{full_output_path}.{format}",
@@ -611,9 +581,7 @@ class ImportGraphAnalyzer:
                 project_root=self.project_root,
             )
         except Exception as e:
-            logger.error(
-                f"Failed to render graph visualization. Error: {e}", exc_info=True
-            )
+            logger.error(f"Failed to render graph visualization. Error: {e}", exc_info=True)
             audit_logger.log_event(
                 "graph_visualization_failed",
                 reason=str(e),
@@ -627,9 +595,7 @@ class ImportGraphAnalyzer:
 
 # Example usage (for testing this module independently)
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
-    )
+    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.setLevel(logging.DEBUG)
 
     # Dummy AuditLogger for independent testing
@@ -788,9 +754,7 @@ if __name__ == "__main__":
             "Graph build completed (should have exited in production mode if PRODUCTION_MODE is True)."
         )
     except AnalyzerCriticalError as e:
-        print(
-            f"Caught expected AnalyzerCriticalError due to high parsing error rate: {e}"
-        )
+        print(f"Caught expected AnalyzerCriticalError due to high parsing error rate: {e}")
     except Exception as e:
         print(f"Caught unexpected exception during graph build with errors: {e}")
     finally:

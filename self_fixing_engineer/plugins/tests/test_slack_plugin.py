@@ -27,9 +27,7 @@ if sys.platform.startswith("win"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Add the parent directory to sys.path to allow imports
-sys.path.insert(
-    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # Mock aiohttp at module level before importing slack_plugin
 mock_aiohttp = MagicMock()
@@ -88,9 +86,7 @@ def setup_environment(monkeypatch):
         monkeypatch.setenv("SLACK_WAL_HMAC_KEY", "test-wal-hmac-key")
         monkeypatch.setenv("SLACK_GATEWAY_SIGNING_SECRET", "test-signing-secret")
         monkeypatch.setenv("SLACK_GATEWAY_ADMIN_API_KEY", "test-admin-key")
-        monkeypatch.setenv(
-            "SLACK_GATEWAY_ENCRYPTION_KEY", Fernet.generate_key().decode()
-        )
+        monkeypatch.setenv("SLACK_GATEWAY_ENCRYPTION_KEY", Fernet.generate_key().decode())
         monkeypatch.setenv(
             "SLACK_GATEWAY_TARGETS",
             json.dumps(
@@ -295,9 +291,7 @@ def test_slack_gateway_settings_admin_api_host_prod(monkeypatch, sample_settings
     """Test non-localhost admin API host fails in production."""
     monkeypatch.setattr("plugins.slack_plugin.slack_plugin.PROD_MODE", True)
     sample_settings_dict["admin_api_host"] = "0.0.0.0"
-    with pytest.raises(
-        ValidationError, match="admin API must only be exposed on localhost"
-    ):
+    with pytest.raises(ValidationError, match="admin API must only be exposed on localhost"):
         SlackGatewaySettings(**sample_settings_dict)
 
 
@@ -305,9 +299,7 @@ def test_slack_gateway_settings_immutable_prod(monkeypatch, sample_settings_dict
     """Test settings are immutable in production."""
     monkeypatch.setattr("plugins.slack_plugin.slack_plugin.PROD_MODE", True)
     settings = SlackGatewaySettings(**sample_settings_dict)
-    with pytest.raises(
-        AttributeError, match="Configuration is immutable in production mode"
-    ):
+    with pytest.raises(AttributeError, match="Configuration is immutable in production mode"):
         settings.dry_run = True
 
 
@@ -325,9 +317,7 @@ async def test_slack_gateway_settings_dry_run_prod(
         await manager.startup()
 
 
-def test_slack_gateway_settings_url_not_in_allowlist_prod(
-    monkeypatch, sample_settings_dict
-):
+def test_slack_gateway_settings_url_not_in_allowlist_prod(monkeypatch, sample_settings_dict):
     """Test URL not in allowlist fails in production."""
     monkeypatch.setattr("plugins.slack_plugin.slack_plugin.PROD_MODE", True)
     sample_settings_dict["url_allowlist"] = ["https://other.slack.com/.*"]
@@ -361,9 +351,7 @@ def test_slack_metrics_update_system_metrics(sample_metrics):
     sample_metrics.SYSTEM_CPU_USAGE.set = MagicMock()
     sample_metrics.SYSTEM_MEMORY_USAGE.set = MagicMock()
 
-    with patch("psutil.cpu_percent", return_value=50.0), patch(
-        "psutil.virtual_memory"
-    ) as mock_vm:
+    with patch("psutil.cpu_percent", return_value=50.0), patch("psutil.virtual_memory") as mock_vm:
         mock_vm_obj = MagicMock()
         mock_vm_obj.used = 1024 * 1024
         mock_vm.return_value = mock_vm_obj
@@ -419,10 +407,7 @@ def test_slack_block_kit_serializer():
     payload = serializer.encode_payload(event, target, "hostname")
     assert payload["username"] == "Audit Gateway"
     assert payload["attachments"][0]["color"] == "#36a64f"
-    assert (
-        "test alert from hostname"
-        in payload["attachments"][0]["blocks"][3]["text"]["text"]
-    )
+    assert "test alert from hostname" in payload["attachments"][0]["blocks"][3]["text"]["text"]
 
 
 # --- PersistentWALQueue Tests ---
@@ -432,9 +417,9 @@ async def test_persistent_wal_queue_startup(temp_dir, mock_secrets_manager):
     mock_secrets_manager.get_secret.return_value = "test-signing-secret"
 
     # Mock os.listdir to return empty (no existing files)
-    with patch("os.listdir", return_value=[]), patch("os.makedirs"), patch(
-        "os.chmod"
-    ), patch("os.rename"), patch("aiofiles.open", new_callable=AsyncMock) as mock_open:
+    with patch("os.listdir", return_value=[]), patch("os.makedirs"), patch("os.chmod"), patch(
+        "os.rename"
+    ), patch("aiofiles.open", new_callable=AsyncMock) as mock_open:
 
         mock_file = AsyncMock()
         mock_file.flush = AsyncMock()
@@ -463,9 +448,9 @@ async def test_persistent_wal_queue_put_get(temp_dir, mock_secrets_manager):
     async def mock_stat_func(*args, **kwargs):
         return mock_stat_result
 
-    with patch("os.listdir", return_value=[]), patch("os.makedirs"), patch(
-        "os.chmod"
-    ), patch("os.rename"), patch("aiofiles.os.stat", mock_stat_func):
+    with patch("os.listdir", return_value=[]), patch("os.makedirs"), patch("os.chmod"), patch(
+        "os.rename"
+    ), patch("aiofiles.os.stat", mock_stat_func):
 
         mock_file = AsyncMock()
         mock_file.write = AsyncMock()
@@ -481,9 +466,7 @@ async def test_persistent_wal_queue_put_get(temp_dir, mock_secrets_manager):
             queue = PersistentWALQueue("test_target", str(temp_dir), 1000)
             await queue.startup()
 
-            event = SlackEvent(
-                event_name="test", details={"data": "value"}, sequence_id=1
-            )
+            event = SlackEvent(event_name="test", details={"data": "value"}, sequence_id=1)
             await queue.put(event)
             assert queue.qsize() == 1
 
@@ -496,9 +479,7 @@ async def test_persistent_wal_queue_put_get(temp_dir, mock_secrets_manager):
 # --- CircuitBreaker Tests ---
 def test_circuit_breaker_initial_state(sample_metrics):
     """Test circuit breaker initial state."""
-    cb = CircuitBreaker(
-        threshold=5, reset_seconds=60, metrics=sample_metrics, target_name="test"
-    )
+    cb = CircuitBreaker(threshold=5, reset_seconds=60, metrics=sample_metrics, target_name="test")
     assert cb._is_open is False
     assert cb._failure_count == 0
 
@@ -518,9 +499,7 @@ def test_circuit_breaker_trip(sample_metrics):
 
 def test_circuit_breaker_reset(sample_metrics):
     """Test circuit breaker reset after timeout."""
-    cb = CircuitBreaker(
-        threshold=3, reset_seconds=0.1, metrics=sample_metrics, target_name="test"
-    )
+    cb = CircuitBreaker(threshold=3, reset_seconds=0.1, metrics=sample_metrics, target_name="test")
     cb._is_open = True
     cb._last_failure_time = time.monotonic() - 0.2
     cb.check()
@@ -529,22 +508,16 @@ def test_circuit_breaker_reset(sample_metrics):
 
 def test_circuit_breaker_check_open_raises(sample_metrics):
     """Test circuit breaker check raises when open."""
-    cb = CircuitBreaker(
-        threshold=3, reset_seconds=60, metrics=sample_metrics, target_name="test"
-    )
+    cb = CircuitBreaker(threshold=3, reset_seconds=60, metrics=sample_metrics, target_name="test")
     cb._is_open = True
     cb._last_failure_time = time.monotonic()
-    with pytest.raises(
-        ConnectionAbortedError, match="Circuit breaker for test is open"
-    ):
+    with pytest.raises(ConnectionAbortedError, match="Circuit breaker for test is open"):
         cb.check()
 
 
 def test_circuit_breaker_record_success(sample_metrics):
     """Test circuit breaker success recording."""
-    cb = CircuitBreaker(
-        threshold=3, reset_seconds=60, metrics=sample_metrics, target_name="test"
-    )
+    cb = CircuitBreaker(threshold=3, reset_seconds=60, metrics=sample_metrics, target_name="test")
     cb._failure_count = 2
     cb.record_success()
     assert cb._failure_count == 0
@@ -554,9 +527,7 @@ def test_circuit_breaker_record_success(sample_metrics):
 @pytest.mark.asyncio
 async def test_token_bucket_acquire(sample_metrics):
     """Test token bucket rate limiting."""
-    tb = TokenBucket(
-        rate=100.0, capacity=100.0, metrics=sample_metrics, target_name="test"
-    )
+    tb = TokenBucket(rate=100.0, capacity=100.0, metrics=sample_metrics, target_name="test")
     initial_tokens = tb._tokens
     await tb.acquire()
     assert tb._tokens < initial_tokens
@@ -565,9 +536,7 @@ async def test_token_bucket_acquire(sample_metrics):
 @pytest.mark.asyncio
 async def test_token_bucket_rate_limit_429(sample_metrics):
     """Test token bucket adjusts rate on 429 response."""
-    tb = TokenBucket(
-        rate=1.0, capacity=10.0, metrics=sample_metrics, target_name="test"
-    )
+    tb = TokenBucket(rate=1.0, capacity=10.0, metrics=sample_metrics, target_name="test")
     initial_rate = tb._rate
     tb.record_status(429)
     # The rate should be reduced by half on a 429 response
@@ -577,9 +546,7 @@ async def test_token_bucket_rate_limit_429(sample_metrics):
 @pytest.mark.asyncio
 async def test_token_bucket_refill(sample_metrics):
     """Test token bucket refill mechanism."""
-    tb = TokenBucket(
-        rate=10.0, capacity=10.0, metrics=sample_metrics, target_name="test"
-    )
+    tb = TokenBucket(rate=10.0, capacity=10.0, metrics=sample_metrics, target_name="test")
     tb._tokens = 0
     tb._last_refill = time.monotonic() - 1  # 1 second ago
     tb._refill()
@@ -588,9 +555,7 @@ async def test_token_bucket_refill(sample_metrics):
 
 # --- SlackGateway Tests ---
 @pytest.mark.asyncio
-async def test_slack_gateway_init(
-    sample_settings_dict, sample_metrics, mock_secrets_manager
-):
+async def test_slack_gateway_init(sample_settings_dict, sample_metrics, mock_secrets_manager):
     """Test successful SlackGateway initialization."""
     target = SlackTarget(name="alerts", webhook_url="https://hooks.slack.com/alerts")
     settings = SlackGatewaySettings(**sample_settings_dict)
@@ -631,9 +596,7 @@ def test_slack_gateway_manager_init(sample_settings_dict, sample_metrics):
     assert "block_kit_serializer" in manager._serializers
 
 
-def test_slack_gateway_manager_register_serializer(
-    sample_settings_dict, sample_metrics
-):
+def test_slack_gateway_manager_register_serializer(sample_settings_dict, sample_metrics):
     """Test registering a custom serializer."""
     settings = SlackGatewaySettings(**sample_settings_dict)
     manager = SlackGatewayManager(settings, sample_metrics, None)
@@ -650,9 +613,7 @@ async def test_slack_gateway_manager_startup_prod_no_opentelemetry(
 ):
     """Test startup fails in production without OpenTelemetry."""
     monkeypatch.setattr("plugins.slack_plugin.slack_plugin.PROD_MODE", True)
-    monkeypatch.setattr(
-        "plugins.slack_plugin.slack_plugin.OPENTELEMETRY_AVAILABLE", False
-    )
+    monkeypatch.setattr("plugins.slack_plugin.slack_plugin.OPENTELEMETRY_AVAILABLE", False)
 
     settings = SlackGatewaySettings(**sample_settings_dict)
     manager = SlackGatewayManager(settings, sample_metrics, None)
@@ -661,9 +622,7 @@ async def test_slack_gateway_manager_startup_prod_no_opentelemetry(
 
 
 @pytest.mark.asyncio
-async def test_slack_gateway_manager_health_check(
-    sample_settings_dict, sample_metrics, temp_dir
-):
+async def test_slack_gateway_manager_health_check(sample_settings_dict, sample_metrics, temp_dir):
     """Test health check."""
     sample_settings_dict["persistence_dir"] = str(temp_dir)
     settings = SlackGatewaySettings(**sample_settings_dict)
@@ -740,9 +699,9 @@ async def test_dead_letter_to_file(temp_dir, mock_secrets_manager):
         file_operations["chmod_called"] = True
 
     # Apply mocks
-    with patch(
-        "plugins.slack_plugin.slack_plugin.DEAD_LETTER_DIR", str(temp_dir)
-    ), patch("aiofiles.open", mock_aiofiles_open), patch("os.chmod", mock_chmod):
+    with patch("plugins.slack_plugin.slack_plugin.DEAD_LETTER_DIR", str(temp_dir)), patch(
+        "aiofiles.open", mock_aiofiles_open
+    ), patch("os.chmod", mock_chmod):
 
         # Ensure the temp_dir exists
         temp_dir.mkdir(exist_ok=True)

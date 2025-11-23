@@ -150,9 +150,7 @@ class SecurityConfig:
     # Encryption
     ENCRYPTION_ALGORITHM = os.environ.get("CHECKPOINT_ENCRYPTION_ALGO", "AES-256-GCM")
     KEY_DERIVATION = os.environ.get("CHECKPOINT_KDF", "PBKDF2")
-    KDF_ITERATIONS = int(
-        os.environ.get("CHECKPOINT_KDF_ITERATIONS", "600000")
-    )  # NIST SP 800-63B
+    KDF_ITERATIONS = int(os.environ.get("CHECKPOINT_KDF_ITERATIONS", "600000"))  # NIST SP 800-63B
 
     # Hashing
     HASH_ALGORITHM = os.environ.get("CHECKPOINT_HASH_ALGO", "SHA3-256")
@@ -193,14 +191,10 @@ class SecurityConfig:
                     "SHA3-384",
                     "SHA3-512",
                 ]:
-                    errors.append(
-                        f"FIPS mode requires SHA-2/3 hashing, got {cls.HASH_ALGORITHM}"
-                    )
+                    errors.append(f"FIPS mode requires SHA-2/3 hashing, got {cls.HASH_ALGORITHM}")
 
             if cls.KDF_ITERATIONS < 600000:
-                errors.append(
-                    f"KDF iterations {cls.KDF_ITERATIONS} below NIST minimum of 600000"
-                )
+                errors.append(f"KDF iterations {cls.KDF_ITERATIONS} below NIST minimum of 600000")
 
         if errors:
             for error in errors:
@@ -231,9 +225,7 @@ if PROMETHEUS_AVAILABLE:
         buckets=(0.00001, 0.00005, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1),
     )
 
-    KEY_ROTATIONS = Counter(
-        "checkpoint_key_rotations_total", "Key rotation operations", ["status"]
-    )
+    KEY_ROTATIONS = Counter("checkpoint_key_rotations_total", "Key rotation operations", ["status"])
 
     DATA_INTEGRITY_CHECKS = Counter(
         "checkpoint_integrity_checks_total", "Data integrity verifications", ["result"]
@@ -355,9 +347,7 @@ class CryptoProvider:
 
         # Only enforce minimum for actual encryption keys
         if key_type == "key" and length < SecurityConfig.MIN_KEY_LENGTH:
-            raise ValueError(
-                f"Key length {length} below minimum {SecurityConfig.MIN_KEY_LENGTH}"
-            )
+            raise ValueError(f"Key length {length} below minimum {SecurityConfig.MIN_KEY_LENGTH}")
 
         with tracer.start_as_current_span("crypto.generate_key") as span:
             if span:
@@ -439,9 +429,7 @@ class CryptoProvider:
                     key = kdf.derive(password)
 
                 elif SecurityConfig.KEY_DERIVATION == "ARGON2" and ARGON2_AVAILABLE:
-                    hasher = argon2.PasswordHasher(
-                        time_cost=3, memory_cost=65536, parallelism=4
-                    )
+                    hasher = argon2.PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
                     # Argon2 returns a full hash string, extract the raw hash
                     full_hash = hasher.hash(password)
                     # For key derivation, we'll use HKDF to expand
@@ -489,9 +477,7 @@ class CryptoProvider:
                 logger.error(f"Key derivation failed: {e}")
                 raise
 
-    def encrypt_aes_gcm(
-        self, plaintext: bytes, key: bytes
-    ) -> Tuple[bytes, bytes, bytes]:
+    def encrypt_aes_gcm(self, plaintext: bytes, key: bytes) -> Tuple[bytes, bytes, bytes]:
         """
         Encrypt using AES-256-GCM (AEAD).
 
@@ -517,9 +503,7 @@ class CryptoProvider:
 
         return ciphertext, nonce, tag
 
-    def decrypt_aes_gcm(
-        self, ciphertext: bytes, key: bytes, nonce: bytes, tag: bytes
-    ) -> bytes:
+    def decrypt_aes_gcm(self, ciphertext: bytes, key: bytes, nonce: bytes, tag: bytes) -> bytes:
         """
         Decrypt using AES-256-GCM.
 
@@ -619,13 +603,9 @@ def hash_data(
         if isinstance(data, dict):
             # Deterministic JSON serialization
             if ORJSON_AVAILABLE:
-                data_bytes = orjson.dumps(
-                    data, option=orjson.OPT_SORT_KEYS | orjson.OPT_UTC_Z
-                )
+                data_bytes = orjson.dumps(data, option=orjson.OPT_SORT_KEYS | orjson.OPT_UTC_Z)
             else:
-                data_bytes = json.dumps(data, sort_keys=True, default=str).encode(
-                    encoding
-                )
+                data_bytes = json.dumps(data, sort_keys=True, default=str).encode(encoding)
         elif isinstance(data, str):
             data_bytes = data.encode(encoding)
         else:
@@ -658,9 +638,7 @@ def hash_data(
             logger.warning(f"Unknown algorithm {algorithm}, using SHA256")
 
         if PROMETHEUS_AVAILABLE:
-            CRYPTO_OPERATIONS.labels(
-                operation="hash", algorithm=algorithm, status="success"
-            ).inc()
+            CRYPTO_OPERATIONS.labels(operation="hash", algorithm=algorithm, status="success").inc()
 
         return hash_value
 
@@ -811,9 +789,7 @@ def decompress_data(data: bytes, algorithm: Optional[str] = None) -> bytes:
             if data[:2] == b"\x1f\x8b":  # GZIP
                 algorithm = "GZIP"
             elif (
-                data[:2] == b"\x78\x9c"
-                or data[:2] == b"\x78\x5e"
-                or data[:2] == b"\x78\xda"
+                data[:2] == b"\x78\x9c" or data[:2] == b"\x78\x5e" or data[:2] == b"\x78\xda"
             ):  # ZLIB variants
                 algorithm = "ZLIB"
             elif data[:3] == b"BZh":  # BZ2
@@ -838,9 +814,7 @@ def decompress_data(data: bytes, algorithm: Optional[str] = None) -> bytes:
                         if span:
                             span.set_attribute("compression.algorithm", try_algo)
                             span.set_attribute("compression.input_size", len(data))
-                            span.set_attribute(
-                                "compression.output_size", len(decompressed)
-                            )
+                            span.set_attribute("compression.output_size", len(decompressed))
 
                         return decompressed
                     except:
@@ -1039,11 +1013,7 @@ def anonymize_data(
 
             elif method == "tokenize":
                 # Replace with token (requires token mapping storage)
-                token = (
-                    base64.urlsafe_b64encode(crypto.generate_key(8))
-                    .decode()
-                    .rstrip("=")
-                )
+                token = base64.urlsafe_b64encode(crypto.generate_key(8)).decode().rstrip("=")
                 current[field] = f"TOKEN_{token}"
 
             elif method == "generalize":
@@ -1055,9 +1025,7 @@ def anonymize_data(
                     # Keep only first letter
                     current[field] = original_value[0] + "***" if original_value else ""
 
-            audit_logger.info(
-                "Anonymized field", extra={"field": field_path, "method": method}
-            )
+            audit_logger.info("Anonymized field", extra={"field": field_path, "method": method})
 
     return anonymized
 

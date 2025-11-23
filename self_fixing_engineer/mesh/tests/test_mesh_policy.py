@@ -394,9 +394,7 @@ class TestPolicyEnforcement:
             )
         else:
             # For mock JWT, we'll patch the decode method
-            with patch.object(
-                jwt, "decode", return_value={"user": "test", "mfa_verified": False}
-            ):
+            with patch.object(jwt, "decode", return_value={"user": "test", "mfa_verified": False}):
                 no_mfa_token = "no_mfa.jwt.token"
 
         allowed = await policy_enforcer.enforce_policy("read", token=no_mfa_token)
@@ -409,9 +407,7 @@ class TestPolicyEnforcement:
         await policy_enforcer.load_policy()
 
         # Invalid token
-        allowed = await policy_enforcer.enforce_policy(
-            "read", token="invalid.jwt.token"
-        )
+        allowed = await policy_enforcer.enforce_policy("read", token="invalid.jwt.token")
         assert not allowed
 
     @pytest.mark.asyncio
@@ -576,9 +572,7 @@ class TestPerformance:
     async def test_concurrent_operations(self, local_backend, test_policy):
         """Test concurrent policy operations."""
         tasks = [
-            local_backend.save(
-                f"concurrent_{i}", {**test_policy, "id": f"concurrent_{i}"}
-            )
+            local_backend.save(f"concurrent_{i}", {**test_policy, "id": f"concurrent_{i}"})
             for i in range(20)
         ]
 
@@ -626,9 +620,7 @@ except Exception as e:
     sys.exit(1)
 """
 
-        result = subprocess.run(
-            [sys.executable, "-c", test_code], capture_output=True, text=True
-        )
+        result = subprocess.run([sys.executable, "-c", test_code], capture_output=True, text=True)
 
         # Check that it exited with our expected code (100)
         assert (

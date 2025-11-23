@@ -52,9 +52,7 @@ class RedisBridgeConfig(BaseModel):
     REDIS_URL: str = Field(
         default="redis://localhost:6379/0", description="The connection URL for Redis."
     )
-    POOL_SIZE: int = Field(
-        default=10, description="Maximum number of connections in the pool."
-    )
+    POOL_SIZE: int = Field(default=10, description="Maximum number of connections in the pool.")
     TIMEOUT_SECONDS: float = Field(
         default=5.0, description="Connection and operation timeout in seconds."
     )
@@ -65,9 +63,7 @@ class RedisBridgeConfig(BaseModel):
     DEDUP_KEY_TTL_SECONDS: int = Field(
         default=3600, description="TTL for message deduplication keys."
     )
-    HANDLER_MAX_RETRIES: int = Field(
-        default=3, description="Maximum retries for message handlers."
-    )
+    HANDLER_MAX_RETRIES: int = Field(default=3, description="Maximum retries for message handlers.")
     HANDLER_RETRY_BASE_DELAY: float = Field(
         default=0.1, description="Base delay for handler retries (seconds)."
     )
@@ -77,9 +73,7 @@ class RedisBridgeConfig(BaseModel):
     HANDLER_RETRY_JITTER: float = Field(
         default=0.5, description="Jitter factor for retry delays (0-1)."
     )
-    DLQ_CHANNEL_SUFFIX: str = Field(
-        default="_dlq", description="Suffix for dead-letter channels."
-    )
+    DLQ_CHANNEL_SUFFIX: str = Field(default="_dlq", description="Suffix for dead-letter channels.")
     ENABLE_METRICS: bool = Field(
         default=True, description="Enable Prometheus metrics if available."
     )
@@ -380,11 +374,7 @@ class RedisBridge:
                     internal_message = Message(
                         topic=topic,
                         payload=payload,
-                        priority=(
-                            payload.get("priority", 0)
-                            if isinstance(payload, dict)
-                            else 0
-                        ),
+                        priority=(payload.get("priority", 0) if isinstance(payload, dict) else 0),
                         timestamp=time.time(),
                         trace_id=(
                             payload.get("trace_id", str(uuid.uuid4()))
@@ -393,15 +383,9 @@ class RedisBridge:
                         ),
                         encrypted=False,  # Redis messages come as plain JSON
                         idempotency_key=(
-                            payload.get("idempotency_key")
-                            if isinstance(payload, dict)
-                            else None
+                            payload.get("idempotency_key") if isinstance(payload, dict) else None
                         ),
-                        context=(
-                            payload.get("context", {})
-                            if isinstance(payload, dict)
-                            else {}
-                        ),
+                        context=(payload.get("context", {}) if isinstance(payload, dict) else {}),
                     )
                 except json.JSONDecodeError as e:
                     logger.error(
@@ -422,9 +406,7 @@ class RedisBridge:
                 logger.warning(f"Redis listener connection issue: {e}. Retrying...")
                 await asyncio.sleep(1)
             except Exception as e:
-                logger.error(
-                    f"Unexpected error in Redis listener loop: {e}", exc_info=True
-                )
+                logger.error(f"Unexpected error in Redis listener loop: {e}", exc_info=True)
                 await asyncio.sleep(1)
 
         logger.info("Redis listener loop exited.")
@@ -492,9 +474,7 @@ class RedisBridge:
             return False  # Conservative fail: assume not seen if Redis is down
         except Exception as e:
             self.circuit.record_failure()
-            logger.error(
-                f"Unexpected error during Redis dedup check: {e}", exc_info=True
-            )
+            logger.error(f"Unexpected error during Redis dedup check: {e}", exc_info=True)
             return False
 
     async def set_dedup_cache(self, key: str, value: str) -> None:

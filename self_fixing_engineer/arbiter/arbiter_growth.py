@@ -116,9 +116,7 @@ from prometheus_client.metrics import (
 VALID_METRIC_TYPES = (_Counter, _Histogram, _Summary, _Gauge)
 
 
-def get_or_create_metric(
-    metric_class, name, documentation, labelnames=(), buckets=None
-):
+def get_or_create_metric(metric_class, name, documentation, labelnames=(), buckets=None):
     try:
         existing = REGISTRY._names_to_collectors.get(name)
         if existing and isinstance(existing, metric_class):
@@ -279,9 +277,7 @@ class ConfigStore:
                     content = await f.read()
                     fallback_configs = json.loads(content)
                     self._cache.update(fallback_configs)
-                    logger.info(
-                        f"Loaded configurations from fallback file: {self.fallback_path}"
-                    )
+                    logger.info(f"Loaded configurations from fallback file: {self.fallback_path}")
             except Exception as e:
                 logger.error(
                     f"Failed to read or parse fallback config file {self.fallback_path}: {e}"
@@ -340,9 +336,7 @@ class ConfigStore:
         try:
             if self.client:
                 # etcd client's `status` method is a good way to check connectivity.
-                await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: self.client.status()
-                )
+                await asyncio.get_event_loop().run_in_executor(None, lambda: self.client.status())
                 return {"status": "healthy"}
             else:
                 return {"status": "unhealthy", "message": "Etcd client not initialized"}
@@ -365,9 +359,7 @@ class TokenBucketRateLimiter:
             now = datetime.now(timezone.utc).timestamp()
             max_tokens = await self.config_store.get_config("rate_limit_tokens")
             refill_rate = await self.config_store.get_config("rate_limit_refill_rate")
-            timeout = timeout or await self.config_store.get_config(
-                "rate_limit_timeout"
-            )
+            timeout = timeout or await self.config_store.get_config("rate_limit_timeout")
             elapsed = now - self.last_refill
             self.tokens = min(max_tokens, self.tokens + elapsed * refill_rate)
             self.last_refill = now
@@ -409,9 +401,9 @@ class ContextAwareCallable:
                 )
                 start_time = datetime.now(timezone.utc).timestamp()
                 await self._coro()
-                GROWTH_OPERATION_EXECUTION_LATENCY.labels(
-                    arbiter=self._arbiter_id
-                ).observe(datetime.now(timezone.utc).timestamp() - start_time)
+                GROWTH_OPERATION_EXECUTION_LATENCY.labels(arbiter=self._arbiter_id).observe(
+                    datetime.now(timezone.utc).timestamp() - start_time
+                )
         finally:
             detach(token)
 
@@ -424,9 +416,7 @@ class IdempotencyStore:
         self.redis = redis.from_url(redis_url, decode_responses=True)
 
     async def check_and_set(self, key: str, ttl: int = 3600) -> bool:
-        with tracer.start_as_current_span(
-            "idempotency_check", attributes={"idempotency.key": key}
-        ):
+        with tracer.start_as_current_span("idempotency_check", attributes={"idempotency.key": key}):
             result = await self.redis.set(
                 f"idempotency:{key}", "processed", nx=True, ex=ttl
             )  # Added "idempotency:" prefix
@@ -528,17 +518,13 @@ class SQLiteStorageBackend:
             record = await session.get(GrowthSnapshot, arbiter_id)
             if record:
                 skills = (
-                    json.loads(
-                        self.cipher.decrypt(record.skills_encrypted).decode("utf-8")
-                    )
+                    json.loads(self.cipher.decrypt(record.skills_encrypted).decode("utf-8"))
                     if record.skills_encrypted
                     else record.skills
                 )
                 user_preferences = (
                     json.loads(
-                        self.cipher.decrypt(record.user_preferences_encrypted).decode(
-                            "utf-8"
-                        )
+                        self.cipher.decrypt(record.user_preferences_encrypted).decode("utf-8")
                     )
                     if record.user_preferences_encrypted
                     else record.user_preferences
@@ -610,9 +596,7 @@ class SQLiteStorageBackend:
             events = []
             for r in result.scalars().all():
                 try:
-                    details = json.loads(
-                        self.cipher.decrypt(r.details_encrypted).decode("utf-8")
-                    )
+                    details = json.loads(self.cipher.decrypt(r.details_encrypted).decode("utf-8"))
                     events.append(
                         {
                             "type": r.event_type,
@@ -623,9 +607,7 @@ class SQLiteStorageBackend:
                         }
                     )
                 except Exception as e:
-                    logger.error(
-                        f"Failed to decrypt event ID {r.id} for {arbiter_id}: {e}"
-                    )
+                    logger.error(f"Failed to decrypt event ID {r.id} for {arbiter_id}: {e}")
             return events
 
     @tracer.start_as_current_span("sqlite_save_audit_log")
@@ -672,9 +654,7 @@ class SQLiteStorageBackend:
     async def load_all_audit_logs(self, arbiter_id: str) -> List[Dict[str, Any]]:
         async with self.session_factory() as session:
             result = await session.execute(
-                select(AuditLog)
-                .filter_by(arbiter_id=arbiter_id)
-                .order_by(AuditLog.id.asc())
+                select(AuditLog).filter_by(arbiter_id=arbiter_id).order_by(AuditLog.id.asc())
             )
             return [
                 {
@@ -744,9 +724,7 @@ class RedisStreamsStorageBackend:
         if snapshot_data_bytes:
             # Manually decode bytes to string for known fields
             level = int(snapshot_data_bytes.get(b"level", b"1").decode())
-            schema_version = float(
-                snapshot_data_bytes.get(b"schema_version", b"1.0").decode()
-            )
+            schema_version = float(snapshot_data_bytes.get(b"schema_version", b"1.0").decode())
             event_offset = snapshot_data_bytes.get(b"event_offset", b"0").decode()
 
             # Handle encrypted skills and preferences
@@ -754,29 +732,21 @@ class RedisStreamsStorageBackend:
             if b"skills_encrypted" in snapshot_data_bytes and self.cipher:
                 try:
                     skills_encrypted = snapshot_data_bytes[b"skills_encrypted"]
-                    skills = json.loads(
-                        self.cipher.decrypt(skills_encrypted).decode("utf-8")
-                    )
+                    skills = json.loads(self.cipher.decrypt(skills_encrypted).decode("utf-8"))
                 except Exception as e:
-                    logger.error(
-                        f"Failed to decrypt Redis skills for {arbiter_id}: {e}"
-                    )
+                    logger.error(f"Failed to decrypt Redis skills for {arbiter_id}: {e}")
             elif b"skills" in snapshot_data_bytes:
                 skills = json.loads(snapshot_data_bytes[b"skills"].decode("utf-8"))
 
             user_preferences = {}
             if b"user_preferences_encrypted" in snapshot_data_bytes and self.cipher:
                 try:
-                    user_preferences_encrypted = snapshot_data_bytes[
-                        b"user_preferences_encrypted"
-                    ]
+                    user_preferences_encrypted = snapshot_data_bytes[b"user_preferences_encrypted"]
                     user_preferences = json.loads(
                         self.cipher.decrypt(user_preferences_encrypted).decode("utf-8")
                     )
                 except Exception as e:
-                    logger.error(
-                        f"Failed to decrypt Redis user preferences for {arbiter_id}: {e}"
-                    )
+                    logger.error(f"Failed to decrypt Redis user preferences for {arbiter_id}: {e}")
             elif b"user_preferences" in snapshot_data_bytes:
                 user_preferences = json.loads(
                     snapshot_data_bytes[b"user_preferences"].decode("utf-8")
@@ -815,9 +785,9 @@ class RedisStreamsStorageBackend:
             )
         else:
             save_data[b"skills"] = json.dumps(data["skills"]).encode("utf-8")
-            save_data[b"user_preferences"] = json.dumps(
-                data.get("user_preferences", {})
-            ).encode("utf-8")
+            save_data[b"user_preferences"] = json.dumps(data.get("user_preferences", {})).encode(
+                "utf-8"
+            )
 
         await self.redis.hset(snapshot_key, mapping=save_data)
 
@@ -842,9 +812,7 @@ class RedisStreamsStorageBackend:
                 json.dumps(event["details"]).encode("utf-8")
             )
         else:
-            event_data_to_store[b"details"] = json.dumps(event["details"]).encode(
-                "utf-8"
-            )
+            event_data_to_store[b"details"] = json.dumps(event["details"]).encode("utf-8")
 
         # Add OpenTelemetry context to event data
         carrier = {}
@@ -914,9 +882,7 @@ class RedisStreamsStorageBackend:
                 if b"details_encrypted" in msg_data and self.cipher:
                     try:
                         event["details"] = json.loads(
-                            self.cipher.decrypt(msg_data[b"details_encrypted"]).decode(
-                                "utf-8"
-                            )
+                            self.cipher.decrypt(msg_data[b"details_encrypted"]).decode("utf-8")
                         )
                     except Exception as e:
                         logger.error(
@@ -1002,14 +968,10 @@ class KafkaStorageBackend:
         self.consumer: Optional[AIOKafkaConsumer] = None
         self.zookeeper: Optional[KazooClient] = None
         self.zookeeper_lock: Optional[Any] = None  # Placeholder for ZK distributed lock
-        self.cipher: Optional[Fernet] = (
-            Fernet(encryption_key) if encryption_key else None
-        )
+        self.cipher: Optional[Fernet] = Fernet(encryption_key) if encryption_key else None
 
         # Schema Registry setup
-        self.schema_registry_client = SchemaRegistryClient(
-            {"url": self.schema_registry_url}
-        )
+        self.schema_registry_client = SchemaRegistryClient({"url": self.schema_registry_url})
         self.event_schema = {
             "type": "record",
             "name": "GrowthEventRecord",
@@ -1055,15 +1017,9 @@ class KafkaStorageBackend:
                 },  # Kafka offset is string (e.g., "partition:offset")
             ],
         }
-        self.event_serializer = AvroSerializer(
-            self.schema_registry_client, self.event_schema
-        )
-        self.event_deserializer = AvroDeserializer(
-            self.schema_registry_client, self.event_schema
-        )
-        self.snapshot_serializer = AvroSerializer(
-            self.schema_registry_client, self.snapshot_schema
-        )
+        self.event_serializer = AvroSerializer(self.schema_registry_client, self.event_schema)
+        self.event_deserializer = AvroDeserializer(self.schema_registry_client, self.event_schema)
+        self.snapshot_serializer = AvroSerializer(self.schema_registry_client, self.snapshot_schema)
         self.snapshot_deserializer = AvroDeserializer(
             self.schema_registry_client, self.snapshot_schema
         )
@@ -1136,9 +1092,7 @@ class KafkaStorageBackend:
                 # Assign to all partitions to get the latest from any
                 partitions = consumer.partitions_for_topic(snapshot_topic)
                 if not partitions:
-                    logger.info(
-                        f"No partitions found for snapshot topic {snapshot_topic}."
-                    )
+                    logger.info(f"No partitions found for snapshot topic {snapshot_topic}.")
                     return None
 
                 tps = [TopicPartition(snapshot_topic, p) for p in partitions]
@@ -1158,9 +1112,7 @@ class KafkaStorageBackend:
                         # Process the last message
                         latest_message = msgs[-1]
                         if self.snapshot_deserializer:
-                            snapshot_data = self.snapshot_deserializer(
-                                latest_message.value
-                            )
+                            snapshot_data = self.snapshot_deserializer(latest_message.value)
                             # If encrypted, decrypt the relevant fields
                             if self.cipher:
                                 if snapshot_data.get("skills_encrypted"):
@@ -1180,9 +1132,7 @@ class KafkaStorageBackend:
                                 snapshot_data.pop("user_preferences_encrypted", None)
 
                             # Ensure skills and user_preferences are dicts even if from old schema
-                            snapshot_data["skills"] = (
-                                snapshot_data.get("skills", {}) or {}
-                            )
+                            snapshot_data["skills"] = snapshot_data.get("skills", {}) or {}
                             snapshot_data["user_preferences"] = (
                                 snapshot_data.get("user_preferences", {}) or {}
                             )
@@ -1231,9 +1181,7 @@ class KafkaStorageBackend:
             await self.producer.send_and_wait(
                 snapshot_topic, serialized_data, key=arbiter_id.encode("utf-8")
             )
-            logger.info(
-                f"Saved snapshot for {arbiter_id} to Kafka topic {snapshot_topic}"
-            )
+            logger.info(f"Saved snapshot for {arbiter_id} to Kafka topic {snapshot_topic}")
         except Exception as e:
             logger.error(f"Failed to save snapshot for {arbiter_id} to Kafka: {e}")
             raise
@@ -1266,9 +1214,7 @@ class KafkaStorageBackend:
         event_data_avro["trace_context"] = json.dumps(carrier)
 
         # Ensure correct types for Avro serialization
-        event_data_avro["event_version"] = float(
-            event_data_avro.get("event_version", 1.0)
-        )
+        event_data_avro["event_version"] = float(event_data_avro.get("event_version", 1.0))
 
         try:
             # Send with transaction
@@ -1360,9 +1306,7 @@ class KafkaStorageBackend:
                             deserialized_event = self.event_deserializer(message.value)
 
                             # Decrypt details if necessary
-                            if self.cipher and deserialized_event.get(
-                                "details_encrypted"
-                            ):
+                            if self.cipher and deserialized_event.get("details_encrypted"):
                                 try:
                                     deserialized_event["details"] = json.loads(
                                         self.cipher.decrypt(
@@ -1373,9 +1317,7 @@ class KafkaStorageBackend:
                                     logger.error(
                                         f"Failed to decrypt Kafka event details for {arbiter_id} (offset: {message.offset}): {e}"
                                     )
-                                    deserialized_event["details"] = {
-                                        "_decryption_error": str(e)
-                                    }
+                                    deserialized_event["details"] = {"_decryption_error": str(e)}
                             elif (
                                 not deserialized_event.get("details")
                                 and deserialized_event.get("details_encrypted") is None
@@ -1513,9 +1455,7 @@ class KafkaStorageBackend:
                     partition_latest_msg = max(msgs, key=lambda m: m.offset)
                     if partition_latest_msg.offset > latest_offset_overall:
                         latest_offset_overall = partition_latest_msg.offset
-                        latest_log_entry = json.loads(
-                            partition_latest_msg.value.decode("utf-8")
-                        )
+                        latest_log_entry = json.loads(partition_latest_msg.value.decode("utf-8"))
 
             if latest_log_entry:
                 last_hash = latest_log_entry.get("log_hash", "genesis_hash")
@@ -1626,9 +1566,7 @@ class GrowthSnapshot(Base):
     skills_encrypted = Column(Text)  # Stores encrypted JSON string
     user_preferences_encrypted = Column(Text)  # Stores encrypted JSON string
     schema_version = Column(Float, default=1.0)
-    event_offset = Column(
-        String, default="0"
-    )  # Can be SQLite row ID or Kafka "partition:offset"
+    event_offset = Column(String, default="0")  # Can be SQLite row ID or Kafka "partition:offset"
 
 
 class GrowthEventRecord(Base):
@@ -1735,27 +1673,19 @@ class ArbiterGrowthManager:
                 ok = await self._validate_audit_chain()
                 if not ok:
                     logger.critical("Audit chain tampered for %s", self.arbiter)
-                    raise AuditChainTamperedError(
-                        f"Audit chain tampered for {self.arbiter}"
-                    )
+                    raise AuditChainTamperedError(f"Audit chain tampered for {self.arbiter}")
 
-                self._load_task = asyncio.create_task(
-                    self._load_state_and_replay_events()
-                )
+                self._load_task = asyncio.create_task(self._load_state_and_replay_events())
                 await self._load_task  # Wait for initial load and replay to complete
 
                 self._flush_task = asyncio.create_task(self._periodic_flush())
 
                 # Start the evolution cycle task
-                self._evolution_task = asyncio.create_task(
-                    self._periodic_evolution_cycle()
-                )
+                self._evolution_task = asyncio.create_task(self._periodic_evolution_cycle())
 
                 logger.info(f"[{self.arbiter}] Growth manager started")
             except Exception as e:
-                GROWTH_ERRORS_TOTAL.labels(
-                    arbiter=self.arbiter, error_type="start"
-                ).inc()
+                GROWTH_ERRORS_TOTAL.labels(arbiter=self.arbiter, error_type="start").inc()
                 logger.error(
                     f"[{self.arbiter}] Failed to start growth manager: {e}",
                     exc_info=True,
@@ -1766,12 +1696,8 @@ class ArbiterGrowthManager:
         """Periodically triggers the _run_evolution_cycle."""
         while self._running:
             try:
-                interval = await self.config_store.get_config(
-                    "evolution_cycle_interval_seconds"
-                )
-                logger.info(
-                    f"Next evolution cycle for {self.arbiter} in {interval} seconds."
-                )
+                interval = await self.config_store.get_config("evolution_cycle_interval_seconds")
+                logger.info(f"Next evolution cycle for {self.arbiter} in {interval} seconds.")
                 await asyncio.sleep(interval)
                 await self._run_evolution_cycle()
             except asyncio.CancelledError:
@@ -1809,9 +1735,7 @@ class ArbiterGrowthManager:
             # 2. Model Retraining (Conceptual)
             # This would trigger an external ML training pipeline.
             # The 'MetaLearning' class (from agent_core.py) would conceptually manage this.
-            logger.info(
-                "  2. Triggering meta-learning model retraining via MLOps pipeline..."
-            )
+            logger.info("  2. Triggering meta-learning model retraining via MLOps pipeline...")
             # This call would interact with your MLOps platform API:
             # e.g., mlops_platform.trigger_training_job(data_source_id, model_name)
             # Upon successful training, a new model version would be available.
@@ -1819,9 +1743,7 @@ class ArbiterGrowthManager:
             # 3. Model Deployment / Configuration Update (Conceptual)
             # After a new model is trained and validated, it needs to be deployed or its influence
             # reflected in the arbiter's configuration.
-            logger.info(
-                "  3. Deploying new model version / updating arbiter configuration..."
-            )
+            logger.info("  3. Deploying new model version / updating arbiter configuration...")
             # This could involve:
             #   - Updating a config store (like etcd) with new weights, prompt templates, or behavioral parameters.
             #   - Deploying a new service version if the model is embedded or served via an API.
@@ -1831,9 +1753,7 @@ class ArbiterGrowthManager:
             # await self.config_store.set_config("new_prompt_template_id", "optimized_v3")
 
             # 4. A/B Testing / Canary Deployment (Conceptual)
-            logger.info(
-                "  4. Monitoring A/B tests or canary deployments for new behaviors..."
-            )
+            logger.info("  4. Monitoring A/B tests or canary deployments for new behaviors...")
 
             # 5. Audit Logging the Evolution
             await self._audit_log(
@@ -1844,18 +1764,14 @@ class ArbiterGrowthManager:
                     # "new_model_version": "v2.1", # Add actual version if applicable
                 },
             )
-            logger.info(
-                f"Evolution cycle for arbiter {self.arbiter} completed successfully."
-            )
+            logger.info(f"Evolution cycle for arbiter {self.arbiter} completed successfully.")
 
     async def _validate_audit_chain(self) -> bool:
         """Validates the integrity of the audit chain for this arbiter."""
         import hashlib  # Explicitly import hashlib here for clarity
 
         with tracer.start_as_current_span("validate_audit_chain"):
-            logger.info(
-                f"Performing audit chain validation for arbiter: {self.arbiter}"
-            )
+            logger.info(f"Performing audit chain validation for arbiter: {self.arbiter}")
             all_logs = await self._call_maybe_async(
                 self.storage_backend.load_all_audit_logs, self.arbiter
             )
@@ -1868,7 +1784,9 @@ class ArbiterGrowthManager:
             for log in all_logs:
                 current_timestamp = log["timestamp"]
                 if prev_timestamp and current_timestamp < prev_timestamp:
-                    error_msg = f"Audit chain TAMPERED! Timestamp out of order at {current_timestamp}."
+                    error_msg = (
+                        f"Audit chain TAMPERED! Timestamp out of order at {current_timestamp}."
+                    )
                     logger.critical(error_msg)
                     GROWTH_ERRORS_TOTAL.labels(
                         arbiter=self.arbiter, error_type="audit_tampered"
@@ -1884,16 +1802,16 @@ class ArbiterGrowthManager:
                 operation = log.get("operation", "")
                 timestamp = log.get("timestamp", "")
                 details_str = json.dumps(log.get("details", {}), sort_keys=True)
-                prev_hash = log.get(
-                    "previous_log_hash", log.get("previous_hash", last_hash)
-                )
+                prev_hash = log.get("previous_log_hash", log.get("previous_hash", last_hash))
 
                 recalculated_hash = hashlib.sha256(
                     f"{arbiter_id}{operation}{timestamp}{details_str}{prev_hash}".encode()
                 ).hexdigest()
 
                 if log["log_hash"] != recalculated_hash:
-                    error_msg = f"Audit chain TAMPERED! Corrupted log hash at timestamp {log['timestamp']}."
+                    error_msg = (
+                        f"Audit chain TAMPERED! Corrupted log hash at timestamp {log['timestamp']}."
+                    )
                     logger.critical(error_msg)
                     GROWTH_ERRORS_TOTAL.labels(
                         arbiter=self.arbiter, error_type="audit_tampered"
@@ -1931,9 +1849,7 @@ class ArbiterGrowthManager:
                     )
                     GROWTH_AUDIT_ANCHORS_TOTAL.labels(arbiter=self.arbiter).inc()
             except Exception as e:
-                GROWTH_ERRORS_TOTAL.labels(
-                    arbiter=self.arbiter, error_type="audit_anchor"
-                ).inc()
+                GROWTH_ERRORS_TOTAL.labels(arbiter=self.arbiter, error_type="audit_anchor").inc()
                 logger.error(f"Failed to anchor audit chain for {self.arbiter}: {e}")
 
     def _on_load_done(self, fut: asyncio.Future) -> None:
@@ -1955,12 +1871,8 @@ class ArbiterGrowthManager:
                 logger.info(f"Periodic flush for {self.arbiter} cancelled.")
                 break
             except Exception as e:
-                logger.error(
-                    f"Error in periodic flush for {self.arbiter}: {e}", exc_info=True
-                )
-                GROWTH_ERRORS_TOTAL.labels(
-                    arbiter=self.arbiter, error_type="periodic_flush"
-                ).inc()
+                logger.error(f"Error in periodic flush for {self.arbiter}: {e}", exc_info=True)
+                GROWTH_ERRORS_TOTAL.labels(arbiter=self.arbiter, error_type="periodic_flush").inc()
                 await asyncio.sleep(min_interval)  # Don't spin too fast on error
 
     async def shutdown(self) -> None:
@@ -1992,9 +1904,7 @@ class ArbiterGrowthManager:
                 await self._call_maybe_async(op)
             except Exception as e:
                 logger.error(f"Error processing pending operation during shutdown: {e}")
-                GROWTH_ERRORS_TOTAL.labels(
-                    arbiter=self.arbiter, error_type="shutdown"
-                ).inc()
+                GROWTH_ERRORS_TOTAL.labels(arbiter=self.arbiter, error_type="shutdown").inc()
 
         # Ensure final state is saved
         await self._save_if_dirty(force=True)
@@ -2012,14 +1922,10 @@ class ArbiterGrowthManager:
         with tracer.start_as_current_span(
             "load_state_and_replay_events", attributes={"arbiter.id": self.arbiter}
         ):
-            logger.info(
-                f"Loading state and replaying events for arbiter: {self.arbiter}"
-            )
+            logger.info(f"Loading state and replaying events for arbiter: {self.arbiter}")
 
             # 1. Load the latest snapshot
-            snapshot_data = await self._call_maybe_async(
-                self.storage_backend.load, self.arbiter
-            )
+            snapshot_data = await self._call_maybe_async(self.storage_backend.load, self.arbiter)
             if snapshot_data:
                 # Validate and apply schema migrations if necessary
                 if snapshot_data.get("schema_version", 1.0) < self.SCHEMA_VERSION:
@@ -2037,9 +1943,7 @@ class ArbiterGrowthManager:
                 logger.info(
                     f"No existing snapshot found for {self.arbiter}. Starting with default state."
                 )
-                self._state = ArbiterState(
-                    arbiter_id=self.arbiter
-                )  # Ensure arbiter_id is set
+                self._state = ArbiterState(arbiter_id=self.arbiter)  # Ensure arbiter_id is set
 
             # 2. Replay events from the last recorded offset
             # The event_offset can be an integer (for SQLite ID) or a string (for Kafka "partition:offset").
@@ -2069,9 +1973,7 @@ class ArbiterGrowthManager:
             # This handles operations that might have been queued before _load_task completed.
             while not self._pending_operations.empty():
                 op = await self._pending_operations.get_nowait()
-                await self._call_maybe_async(
-                    op
-                )  # Execute them immediately after state is ready
+                await self._call_maybe_async(op)  # Execute them immediately after state is ready
 
             await self._save_if_dirty(force=True)  # Save final state after replay
             logger.info(
@@ -2096,20 +1998,18 @@ class ArbiterGrowthManager:
                 initial_score = event.details.get("initial_score", 0.1)
                 if skill_name:
                     self._state.set_skill_score(skill_name, initial_score)
-                    GROWTH_SKILL_IMPROVEMENT.labels(
-                        arbiter=self.arbiter, skill=skill_name
-                    ).observe(initial_score)
+                    GROWTH_SKILL_IMPROVEMENT.labels(arbiter=self.arbiter, skill=skill_name).observe(
+                        initial_score
+                    )
             elif event.type == "skill_improved":
                 skill_name = event.details.get("skill_name")
                 improvement_amount = event.details.get("improvement_amount", 0.01)
                 if skill_name:
                     current_score = self._state.skills.get(skill_name, 0.0)
-                    self._state.set_skill_score(
-                        skill_name, current_score + improvement_amount
+                    self._state.set_skill_score(skill_name, current_score + improvement_amount)
+                    GROWTH_SKILL_IMPROVEMENT.labels(arbiter=self.arbiter, skill=skill_name).observe(
+                        improvement_amount
                     )
-                    GROWTH_SKILL_IMPROVEMENT.labels(
-                        arbiter=self.arbiter, skill=skill_name
-                    ).observe(improvement_amount)
             elif event.type == "level_up":
                 new_level = event.details.get("new_level")
                 if new_level and new_level > self._state.level:
@@ -2126,9 +2026,7 @@ class ArbiterGrowthManager:
                 if preference_key is not None:
                     self._state.user_preferences[preference_key] = preference_value
             else:
-                logger.warning(
-                    f"Unknown event type received: {event.type} for {self.arbiter}"
-                )
+                logger.warning(f"Unknown event type received: {event.type} for {self.arbiter}")
 
             self._dirty = True  # Mark state as dirty after applying any event
 
@@ -2150,9 +2048,7 @@ class ArbiterGrowthManager:
             except Exception as e:
                 GROWTH_SAVE_ERRORS.labels(arbiter=self.arbiter).inc()
                 self._last_error = str(e)
-                logger.error(
-                    f"Failed to save snapshot for {self.arbiter}: {e}", exc_info=True
-                )
+                logger.error(f"Failed to save snapshot for {self.arbiter}: {e}", exc_info=True)
                 raise
         else:
             await self.__do_save_snapshot()
@@ -2165,9 +2061,7 @@ class ArbiterGrowthManager:
             # For Kafka, it would be the "partition:offset" string of the last processed message.
             # The _apply_event should update self._state.event_offset with the canonical offset.
             snapshot_data = self._state.model_dump()
-            await self._call_maybe_async(
-                self.storage_backend.save, self.arbiter, snapshot_data
-            )
+            await self._call_maybe_async(self.storage_backend.save, self.arbiter, snapshot_data)
             GROWTH_SNAPSHOTS.labels(arbiter=self.arbiter).inc()
             self._dirty = False
             self._event_count_since_snapshot = 0
@@ -2180,9 +2074,7 @@ class ArbiterGrowthManager:
             return
         snapshot_interval = await self.config_store.get_config("snapshot_interval")
         # Only save if state is dirty AND (forced or enough events have occurred)
-        if self._dirty and (
-            force or self._event_count_since_snapshot >= snapshot_interval
-        ):
+        if self._dirty and (force or self._event_count_since_snapshot >= snapshot_interval):
             logger.debug(
                 f"Attempting to save snapshot for {self.arbiter} (dirty: {self._dirty}, events since snapshot: {self._event_count_since_snapshot}, force: {force})"
             )
@@ -2212,7 +2104,9 @@ class ArbiterGrowthManager:
         details_hash = hashlib.sha256(
             json.dumps(event.details, sort_keys=True).encode()
         ).hexdigest()
-        key_components = f"{self.arbiter}:{event.type}:{event.timestamp}:{details_hash}:{service_name}"
+        key_components = (
+            f"{self.arbiter}:{event.type}:{event.timestamp}:{details_hash}:{service_name}"
+        )
         return hashlib.sha256(key_components.encode()).hexdigest()
 
     def register_hook(self, hook: PluginHook, stage: str = "after") -> None:
@@ -2239,9 +2133,7 @@ class ArbiterGrowthManager:
                 GROWTH_CIRCUIT_BREAKER_TRIPS.labels(
                     arbiter=self.arbiter, breaker_name="push_event"
                 ).inc()
-                logger.error(
-                    f"Failed to push event for {self.arbiter}: Circuit breaker is open."
-                )
+                logger.error(f"Failed to push event for {self.arbiter}: Circuit breaker is open.")
                 raise CircuitBreakerOpenError(self._last_error)
         else:
             await self.__do_push_event(event)
@@ -2254,9 +2146,7 @@ class ArbiterGrowthManager:
             await self._call_maybe_async(
                 self.storage_backend.save_event, self.arbiter, event.model_dump()
             )
-            logger.debug(
-                f"Event '{event.type}' saved to primary storage for {self.arbiter}."
-            )
+            logger.debug(f"Event '{event.type}' saved to primary storage for {self.arbiter}.")
             self._event_count_since_snapshot += (
                 1  # Increment counter after successful event persistence
             )
@@ -2266,9 +2156,7 @@ class ArbiterGrowthManager:
             # Use idempotency store to prevent duplicate processing if retries occur.
 
             # Example for Knowledge Graph
-            kg_idempotency_key = self._generate_idempotency_key(
-                event, "knowledge_graph"
-            )
+            kg_idempotency_key = self._generate_idempotency_key(event, "knowledge_graph")
             if await self._call_maybe_async(
                 self.idempotency_store.check_and_set, kg_idempotency_key
             ):
@@ -2278,9 +2166,7 @@ class ArbiterGrowthManager:
                     event_type=event.type,
                     event_details=event.details,
                 )
-                logger.debug(
-                    f"Event '{event.type}' pushed to Knowledge Graph for {self.arbiter}."
-                )
+                logger.debug(f"Event '{event.type}' pushed to Knowledge Graph for {self.arbiter}.")
             else:
                 logger.info(
                     f"Knowledge Graph update for event '{event.type}' (key: {kg_idempotency_key}) skipped due to idempotency."
@@ -2288,9 +2174,7 @@ class ArbiterGrowthManager:
 
             # Example for Feedback Manager
             if self.feedback_manager:
-                fm_idempotency_key = self._generate_idempotency_key(
-                    event, "feedback_manager"
-                )
+                fm_idempotency_key = self._generate_idempotency_key(event, "feedback_manager")
                 if await self._call_maybe_async(
                     self.idempotency_store.check_and_set, fm_idempotency_key
                 ):
@@ -2318,9 +2202,7 @@ class ArbiterGrowthManager:
                 datetime.now(timezone.utc).timestamp() - start_time
             )
 
-    async def _queue_operation(
-        self, operation_coro: Callable[[], Awaitable[None]]
-    ) -> None:
+    async def _queue_operation(self, operation_coro: Callable[[], Awaitable[None]]) -> None:
         """
         Queues an operation for asynchronous processing, applying rate limiting and managing queue size.
         If the load task is still running, operations are truly queued. Once loaded, they are executed immediately.
@@ -2335,22 +2217,16 @@ class ArbiterGrowthManager:
 
         # Check queue size before adding to prevent unbounded growth
         if self._pending_operations.qsize() >= self.MAX_PENDING_OPERATIONS:
-            GROWTH_PENDING_QUEUE.labels(arbiter=self.arbiter).set(
-                self._pending_operations.qsize()
-            )
+            GROWTH_PENDING_QUEUE.labels(arbiter=self.arbiter).set(self._pending_operations.qsize())
             raise OperationQueueFullError(
                 f"Operation queue for {self.arbiter} is full. Max: {self.MAX_PENDING_OPERATIONS}"
             )
 
-        GROWTH_PENDING_QUEUE.labels(arbiter=self.arbiter).set(
-            self._pending_operations.qsize() + 1
-        )
+        GROWTH_PENDING_QUEUE.labels(arbiter=self.arbiter).set(self._pending_operations.qsize() + 1)
 
         # Always execute immediately if load task is complete - this fixes the test issue
         if self._load_task and self._load_task.done():
-            logger.debug(
-                f"Executing operation directly for {self.arbiter} (load task complete)."
-            )
+            logger.debug(f"Executing operation directly for {self.arbiter} (load task complete).")
             try:
                 await self._call_maybe_async(context_aware_op)
             finally:
@@ -2364,9 +2240,7 @@ class ArbiterGrowthManager:
             )
             await self._pending_operations.put(context_aware_op)
 
-    async def record_growth_event(
-        self, event_type: str, details: Dict[str, Any]
-    ) -> None:
+    async def record_growth_event(self, event_type: str, details: Dict[str, Any]) -> None:
         """
         Records a new growth event. This is the primary public API for external systems
         to signal growth-related activities. The event will be processed through the
@@ -2388,9 +2262,7 @@ class ArbiterGrowthManager:
 
                 # Execute 'before' hooks
                 for hook in self._before_hooks:
-                    await self._call_maybe_async(
-                        hook.on_growth_event, event, self._state
-                    )
+                    await self._call_maybe_async(hook.on_growth_event, event, self._state)
 
                 # Push event to external systems (idempotent, async) and persist to storage
                 await self._call_maybe_async(self._push_event, event)
@@ -2401,9 +2273,7 @@ class ArbiterGrowthManager:
 
                 # Execute 'after' hooks
                 for hook in self._after_hooks:
-                    await self._call_maybe_async(
-                        hook.on_growth_event, event, self._state
-                    )
+                    await self._call_maybe_async(hook.on_growth_event, event, self._state)
 
                 # Trigger snapshot save if criteria met
                 await self._save_if_dirty()
@@ -2443,9 +2313,7 @@ class ArbiterGrowthManager:
                     "context": context or {},
                 },
             )
-            logger.info(
-                f"[{self.arbiter}] Queued event for skill acquisition: {skill_name}"
-            )
+            logger.info(f"[{self.arbiter}] Queued event for skill acquisition: {skill_name}")
         except (OperationQueueFullError, RateLimitError, ArbiterGrowthError) as e:
             GROWTH_ERRORS_TOTAL.labels(
                 arbiter=self.arbiter, error_type="acquire_skill_queue_fail"
@@ -2481,9 +2349,7 @@ class ArbiterGrowthManager:
                     "context": context or {},
                 },
             )
-            logger.info(
-                f"[{self.arbiter}] Queued event for skill improvement: {skill_name}"
-            )
+            logger.info(f"[{self.arbiter}] Queued event for skill improvement: {skill_name}")
         except (OperationQueueFullError, RateLimitError, ArbiterGrowthError) as e:
             GROWTH_ERRORS_TOTAL.labels(
                 arbiter=self.arbiter, error_type="improve_skill_queue_fail"
@@ -2507,9 +2373,7 @@ class ArbiterGrowthManager:
             )
             logger.info(f"[{self.arbiter}] Queued event for level up.")
         except (OperationQueueFullError, RateLimitError, ArbiterGrowthError) as e:
-            GROWTH_ERRORS_TOTAL.labels(
-                arbiter=self.arbiter, error_type="level_up_queue_fail"
-            ).inc()
+            GROWTH_ERRORS_TOTAL.labels(arbiter=self.arbiter, error_type="level_up_queue_fail").inc()
             logger.error(f"[{self.arbiter}] Failed to queue level up event: {e}")
             raise
 
@@ -2530,9 +2394,7 @@ class ArbiterGrowthManager:
             await self.record_growth_event(
                 "experience_gained", {"amount": amount, "context": context or {}}
             )
-            logger.info(
-                f"[{self.arbiter}] Queued event for gaining experience: {amount}"
-            )
+            logger.info(f"[{self.arbiter}] Queued event for gaining experience: {amount}")
         except (OperationQueueFullError, RateLimitError, ArbiterGrowthError) as e:
             GROWTH_ERRORS_TOTAL.labels(
                 arbiter=self.arbiter, error_type="gain_experience_queue_fail"
@@ -2559,16 +2421,12 @@ class ArbiterGrowthManager:
                 "user_preference_updated",
                 {"key": key, "value": value, "context": context or {}},
             )
-            logger.info(
-                f"[{self.arbiter}] Queued event for updating user preference: {key}"
-            )
+            logger.info(f"[{self.arbiter}] Queued event for updating user preference: {key}")
         except (OperationQueueFullError, RateLimitError, ArbiterGrowthError) as e:
             GROWTH_ERRORS_TOTAL.labels(
                 arbiter=self.arbiter, error_type="update_user_pref_queue_fail"
             ).inc()
-            logger.error(
-                f"[{self.arbiter}] Failed to queue user preference update event: {e}"
-            )
+            logger.error(f"[{self.arbiter}] Failed to queue user preference update event: {e}")
             raise
 
     async def _record_event_now(self, event: "GrowthEvent") -> None:
@@ -2597,17 +2455,13 @@ class ArbiterGrowthManager:
                     },
                 )
         except Exception as e:
-            logger.exception(
-                "[%s] Optional idempotency/KG hook failed: %s", self.arbiter, e
-            )
+            logger.exception("[%s] Optional idempotency/KG hook failed: %s", self.arbiter, e)
 
         # 4) apply to in-memory state (unknown types may warn at _apply_event)
         try:
             await self._apply_event(event)
         except Exception as e:
-            logger.exception(
-                "[%s] Failed to apply event %s: %s", self.arbiter, event.type, e
-            )
+            logger.exception("[%s] Failed to apply event %s: %s", self.arbiter, event.type, e)
 
         # 5) bump counters and snapshot
         self._dirty = True
@@ -2640,9 +2494,7 @@ class ArbiterGrowthManager:
         """
         try:
             storage_status = await self._call_maybe_async(self.storage_backend.ping)
-            idempotency_status = await self._call_maybe_async(
-                self.idempotency_store.ping
-            )
+            idempotency_status = await self._call_maybe_async(self.idempotency_store.ping)
             config_status = await self._call_maybe_async(self.config_store.ping)
 
             health_data = {
@@ -2673,9 +2525,7 @@ class ArbiterGrowthManager:
             logger.info(f"[{self.arbiter}] Health check completed: {health_data}")
             return health_data
         except Exception as e:
-            GROWTH_ERRORS_TOTAL.labels(
-                arbiter=self.arbiter, error_type="health_check"
-            ).inc()
+            GROWTH_ERRORS_TOTAL.labels(arbiter=self.arbiter, error_type="health_check").inc()
             logger.error(f"[{self.arbiter}] Health check failed: {e}", exc_info=True)
             raise ArbiterGrowthError(f"Health check failed: {e}") from e
 

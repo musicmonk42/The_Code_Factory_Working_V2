@@ -31,9 +31,7 @@ def mock_logger():
 @pytest.fixture
 def mock_sentry():
     """Mock sentry_sdk for capture_exception."""
-    with patch(
-        "arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", True
-    ), patch(
+    with patch("arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", True), patch(
         "arbiter.explainable_reasoner.reasoner_errors.sentry_sdk"
     ) as mock_sentry_sdk:
         mock_scope = MagicMock()
@@ -57,9 +55,7 @@ def test_reasoner_error_code_attributes():
 
     # Dynamically discover all error codes
     error_codes = [
-        attr
-        for attr in dir(ReasonerErrorCode)
-        if not attr.startswith("_") and attr.isupper()
+        attr for attr in dir(ReasonerErrorCode) if not attr.startswith("_") and attr.isupper()
     ]
 
     # Verify each code
@@ -101,9 +97,7 @@ def test_error_code_values():
         ("Generic error", ReasonerErrorCode.GENERIC_ERROR, None, {"resource": "test"}),
     ],
 )
-def test_reasoner_error_init_and_log(
-    mock_logger, message, code, original_exception, extra_kwargs
-):
+def test_reasoner_error_init_and_log(mock_logger, message, code, original_exception, extra_kwargs):
     """Test error initialization and logging."""
     error = ReasonerError(message, code, original_exception, **extra_kwargs)
 
@@ -139,9 +133,7 @@ def test_reasoner_error_sentry_capture(mock_sentry, mock_logger):
 
         # Check that the scope was configured with all context
         scope = mock_sentry.push_scope.return_value.__enter__.return_value
-        scope.set_tag.assert_called_with(
-            "reasoner_error_code", ReasonerErrorCode.UNEXPECTED_ERROR
-        )
+        scope.set_tag.assert_called_with("reasoner_error_code", ReasonerErrorCode.UNEXPECTED_ERROR)
         scope.set_extra.assert_any_call("original_exception", "Inner")
         scope.set_extra.assert_any_call("user_id", "456")
         scope.set_extra.assert_any_call("request_id", "xyz")
@@ -149,13 +141,9 @@ def test_reasoner_error_sentry_capture(mock_sentry, mock_logger):
 
 def test_sentry_not_captured_no_dsn(mock_logger):
     """Test that Sentry is not used when DSN is not configured."""
-    with patch(
-        "arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", True
-    ), patch(
+    with patch("arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", True), patch(
         "arbiter.explainable_reasoner.reasoner_errors.sentry_sdk"
-    ) as mock_sentry, patch.dict(
-        os.environ, {}, clear=True
-    ):
+    ) as mock_sentry, patch.dict(os.environ, {}, clear=True):
 
         ReasonerError("No sentry", ReasonerErrorCode.GENERIC_ERROR)
         mock_sentry.capture_exception.assert_not_called()
@@ -163,9 +151,9 @@ def test_sentry_not_captured_no_dsn(mock_logger):
 
 def test_sentry_not_available(mock_logger):
     """Test behavior when Sentry is not installed."""
-    with patch(
-        "arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", False
-    ), patch("arbiter.explainable_reasoner.reasoner_errors.sentry_sdk") as mock_sentry:
+    with patch("arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", False), patch(
+        "arbiter.explainable_reasoner.reasoner_errors.sentry_sdk"
+    ) as mock_sentry:
 
         ReasonerError("No sentry", ReasonerErrorCode.GENERIC_ERROR)
         mock_sentry.capture_exception.assert_not_called()
@@ -200,13 +188,8 @@ def test_to_api_response_with_traceback():
     assert "details" in response["error"]
     assert "original_exception" in response["error"]["details"]
     assert "traceback" in response["error"]["details"]
-    assert (
-        "Traceback (most recent call last)" in response["error"]["details"]["traceback"]
-    )
-    assert (
-        "ZeroDivisionError: division by zero"
-        in response["error"]["details"]["traceback"]
-    )
+    assert "Traceback (most recent call last)" in response["error"]["details"]["traceback"]
+    assert "ZeroDivisionError: division by zero" in response["error"]["details"]["traceback"]
 
 
 def test_to_api_response_no_original_exc():
@@ -312,9 +295,7 @@ def test_reasoner_error_empty_message():
 
 def test_reasoner_error_none_values():
     """Test error with None values in kwargs."""
-    error = ReasonerError(
-        "Test", ReasonerErrorCode.GENERIC_ERROR, user_id=None, session_id=None
-    )
+    error = ReasonerError("Test", ReasonerErrorCode.GENERIC_ERROR, user_id=None, session_id=None)
     assert error.extra_kwargs["user_id"] is None
     assert error.extra_kwargs["session_id"] is None
 
@@ -336,6 +317,4 @@ def test_known_error_codes_exist():
     ]
 
     for code_name in known_codes:
-        assert hasattr(
-            ReasonerErrorCode, code_name
-        ), f"Missing expected error code: {code_name}"
+        assert hasattr(ReasonerErrorCode, code_name), f"Missing expected error code: {code_name}"

@@ -155,11 +155,7 @@ class PromptClarifier:
 
         CLARIFIER_CYCLES.labels(status="started").inc()
         start_time = time.perf_counter()
-        span = (
-            self.tracer.start_span("prompt_clarification_cycle")
-            if self.tracer
-            else None
-        )
+        span = self.tracer.start_span("prompt_clarification_cycle") if self.tracer else None
 
         try:
             # Step 1: Ask for documentation formats if not already asked this session
@@ -220,9 +216,7 @@ class PromptClarifier:
                     self.circuit_breaker.record_failure(e)
                     if span:
                         span.set_status(
-                            self.Status(
-                                self.StatusCode.ERROR, f"Doc format query failed: {e}"
-                            )
+                            self.Status(self.StatusCode.ERROR, f"Doc format query failed: {e}")
                         )
                         span.record_exception(e)
 
@@ -248,24 +242,18 @@ class PromptClarifier:
                 self.circuit_breaker.record_failure(e)
                 if span:
                     span.set_status(
-                        self.Status(
-                            self.StatusCode.ERROR, f"Compliance query failed: {e}"
-                        )
+                        self.Status(self.StatusCode.ERROR, f"Compliance query failed: {e}")
                     )
                     span.record_exception(e)
 
             # Step 3: Delegate the core clarification logic to the main Clarifier instance
             # Note: We do not pass user_context here, as the core clarifier does not handle it directly.
-            self.logger.info(
-                "Delegating core clarification process to Clarifier instance."
-            )
+            self.logger.info("Delegating core clarification process to Clarifier instance.")
             updated_requirements = await self.core_clarifier.get_clarifications(
                 ambiguities, requirements
             )
 
-            CLARIFIER_LATENCY.labels(status="success").observe(
-                time.perf_counter() - start_time
-            )
+            CLARIFIER_LATENCY.labels(status="success").observe(time.perf_counter() - start_time)
             asyncio.create_task(
                 log_action(
                     "prompt_clarification_cycle",
@@ -277,15 +265,11 @@ class PromptClarifier:
             )
             if span:
                 span.set_attribute("clarifier.status", "success")
-                span.set_status(
-                    self.Status(self.StatusCode.OK, "Prompt clarification completed")
-                )
+                span.set_status(self.Status(self.StatusCode.OK, "Prompt clarification completed"))
             return updated_requirements
 
         except Exception as e:
-            CLARIFIER_ERRORS.labels(
-                error_type="prompt_clarification_cycle_failed"
-            ).inc()
+            CLARIFIER_ERRORS.labels(error_type="prompt_clarification_cycle_failed").inc()
             self.logger.error(
                 f"Prompt clarification cycle failed: {e}",
                 exc_info=True,
@@ -300,9 +284,7 @@ class PromptClarifier:
             self.circuit_breaker.record_failure(e)
             if span:
                 span.set_status(
-                    self.Status(
-                        self.StatusCode.ERROR, f"Prompt clarification failed: {e}"
-                    )
+                    self.Status(self.StatusCode.ERROR, f"Prompt clarification failed: {e}")
                 )
                 span.record_exception(e)
             raise
@@ -344,9 +326,7 @@ async def run(
     with patch("generator.clarifier.clarifier.Clarifier") as MockClarifier:
         # Configure the mock to have async methods
         mock_clarifier_instance = MagicMock()
-        mock_clarifier_instance.get_clarifications = AsyncMock(
-            return_value=requirements
-        )
+        mock_clarifier_instance.get_clarifications = AsyncMock(return_value=requirements)
         mock_clarifier_instance.graceful_shutdown = AsyncMock()
         MockClarifier.return_value = mock_clarifier_instance
 
@@ -429,9 +409,7 @@ async def main():
 
             async def test_delegation(self):
                 mock_channel = AsyncMock()
-                mock_channel.prompt = AsyncMock(
-                    return_value=["answer"]
-                )  # for doc prompt
+                mock_channel.prompt = AsyncMock(return_value=["answer"])  # for doc prompt
                 self.clarifier.interaction = mock_channel
                 self.clarifier.core_clarifier.get_clarifications = AsyncMock(
                     return_value=self.requirements

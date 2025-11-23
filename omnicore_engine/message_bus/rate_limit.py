@@ -97,9 +97,7 @@ class RateLimiterConfig:
         # Per-client overrides
         self.client_overrides: Dict[str, RateLimitConfig] = {}
 
-    def set_client_limit(
-        self, client_id: str, max_requests: int, window_seconds: int
-    ) -> None:
+    def set_client_limit(self, client_id: str, max_requests: int, window_seconds: int) -> None:
         """Override limits for a specific client."""
         self.client_overrides[client_id] = RateLimitConfig(
             max_requests=max_requests,
@@ -164,9 +162,7 @@ class RateLimitExceeded(RateLimitError):
     def __init__(self, client_id: str, retry_after: float):
         self.client_id = client_id
         self.retry_after = retry_after
-        super().__init__(
-            f"Rate limit exceeded for {client_id}. Retry after {retry_after:.2f}s."
-        )
+        super().__init__(f"Rate limit exceeded for {client_id}. Retry after {retry_after:.2f}s.")
 
 
 # --------------------------------------------------------------------------- #
@@ -244,9 +240,7 @@ class RateLimiter:
                     self._client_locks.pop(cid, None)
                 if expired and self.config.enable_metrics:
                     _set_active_clients(len(self._in_memory))
-                logger.debug(
-                    "Cleaned up expired rate limit entries.", count=len(expired)
-                )
+                logger.debug("Cleaned up expired rate limit entries.", count=len(expired))
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -274,9 +268,7 @@ class RateLimiter:
         else:
             return await self._check_in_memory(client_id, cfg, now)
 
-    async def _check_in_memory(
-        self, client_id: str, cfg: RateLimitConfig, now: float
-    ) -> bool:
+    async def _check_in_memory(self, client_id: str, cfg: RateLimitConfig, now: float) -> bool:
         """In-memory sliding window check."""
         lock = self._client_locks[client_id]
         async with lock:
@@ -304,9 +296,7 @@ class RateLimiter:
                 _set_active_clients(len(self._in_memory))
             return True
 
-    async def _check_redis(
-        self, client_id: str, cfg: RateLimitConfig, now: float
-    ) -> bool:
+    async def _check_redis(self, client_id: str, cfg: RateLimitConfig, now: float) -> bool:
         """Redis-backed distributed check using Lua script for atomicity."""
         script = """
         local key = KEYS[1]
@@ -352,9 +342,7 @@ class RateLimiter:
             _inc_metric("allowed", client_id)
             return True
         except (ConnectionError, TimeoutError) as e:
-            logger.error(
-                "Redis rate limit check failed, falling back to in-memory.", exc_info=e
-            )
+            logger.error("Redis rate limit check failed, falling back to in-memory.", exc_info=e)
             _inc_metric("error", client_id)
             return await self._check_in_memory(client_id, cfg, now)
         except Exception as e:

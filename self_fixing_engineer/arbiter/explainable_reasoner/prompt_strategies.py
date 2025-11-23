@@ -42,9 +42,7 @@ except ImportError:
             if self.data_type == "image" and self.data:
                 import base64
 
-                data_snippet = (
-                    f"base64_preview:{base64.b64encode(self.data).decode()[:50]}..."
-                )
+                data_snippet = f"base64_preview:{base64.b64encode(self.data).decode()[:50]}..."
             elif self.data_type in ("audio", "video") and self.data:
                 data_snippet = f"bytes_len:{len(self.data)}"
 
@@ -438,9 +436,7 @@ class StructuredPromptStrategy(PromptStrategy):
                 "response_format": "json",
                 "json_schema": {
                     "type": "object",
-                    "properties": {
-                        "reasoning": {"type": "array", "items": {"type": "string"}}
-                    },
+                    "properties": {"reasoning": {"type": "array", "items": {"type": "string"}}},
                 },
             }
 
@@ -472,9 +468,7 @@ class PromptStrategyFactory:
     def register_strategy(cls, name: str, strategy_class: Type[PromptStrategy]):
         """Registers a new prompt strategy class with the factory."""
         if not issubclass(strategy_class, PromptStrategy):
-            raise TypeError(
-                f"Class {strategy_class.__name__} must inherit from PromptStrategy."
-            )
+            raise TypeError(f"Class {strategy_class.__name__} must inherit from PromptStrategy.")
         if name in cls._strategies:
             _prompt_strategy_logger.warning(
                 "strategy_re-registration", name=name, new_class=strategy_class.__name__
@@ -497,9 +491,7 @@ class PromptStrategyFactory:
             env_strategy = os.getenv("REASONER_PROMPT_STRATEGY")
             if env_strategy and env_strategy in cls._strategies:
                 strategy_name = env_strategy
-                _prompt_strategy_logger.debug(
-                    "default_strategy_overridden", strategy=strategy_name
-                )
+                _prompt_strategy_logger.debug("default_strategy_overridden", strategy=strategy_name)
 
         strategy_class = cls._strategies.get(strategy_name)
         if not strategy_class:

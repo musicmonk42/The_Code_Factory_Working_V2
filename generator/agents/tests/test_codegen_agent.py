@@ -133,9 +133,7 @@ async def test_sqlite_feedback_store_round_trip(temp_codegen_env):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(
-    reason="RedisFeedbackStore requires real or fully wired Redis; skipped."
-)
+@pytest.mark.skip(reason="RedisFeedbackStore requires real or fully wired Redis; skipped.")
 async def test_redis_feedback_store_smoke(temp_codegen_env):
     store = RedisFeedbackStore({"url": "redis://localhost:6379/0"})
     req_hash = str(uuid.uuid4())
@@ -207,9 +205,7 @@ async def test_generate_code_rate_limit_returns_error_file(mock_llm, temp_codege
     "agents.codegen_agent.codegen_agent.call_llm_api",
     side_effect=Exception("Circuit open"),
 )
-async def test_generate_code_circuit_breaker_returns_error_file(
-    mock_llm, temp_codegen_env
-):
+async def test_generate_code_circuit_breaker_returns_error_file(mock_llm, temp_codegen_env):
     requirements = _dict_requirements(temp_codegen_env)
 
     result = await generate_code(
@@ -228,16 +224,12 @@ async def test_generate_code_circuit_breaker_returns_error_file(
     "agents.codegen_agent.codegen_agent.call_llm_api",
     new_callable=AsyncMock,
 )
-async def test_generate_code_success_with_json_string_response(
-    mock_llm, temp_codegen_env
-):
+async def test_generate_code_success_with_json_string_response(mock_llm, temp_codegen_env):
     """
     When LLM returns a JSON string parseable by parse_llm_response,
     generate_code should expose those files.
     """
-    mock_llm.return_value = json.dumps(
-        {"files": {"main.py": "def ok():\n    return 1\n"}}
-    )
+    mock_llm.return_value = json.dumps({"files": {"main.py": "def ok():\n    return 1\n"}})
 
     requirements = _dict_requirements(temp_codegen_env)
 

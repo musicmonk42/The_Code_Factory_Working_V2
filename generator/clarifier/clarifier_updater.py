@@ -88,14 +88,9 @@ except ImportError:
         if isinstance(data, str):
             return redact_func(data)
         elif isinstance(data, dict):
-            return {
-                k: _recursive_transform(v, detect_func, redact_func)
-                for k, v in data.items()
-            }
+            return {k: _recursive_transform(v, detect_func, redact_func) for k, v in data.items()}
         elif isinstance(data, list):
-            return [
-                _recursive_transform(item, detect_func, redact_func) for item in data
-            ]
+            return [_recursive_transform(item, detect_func, redact_func) for item in data]
         return data
 
 
@@ -143,9 +138,7 @@ try:
 
     resource = Resource.create({"service.name": "clarifier-updater"})
     provider = TracerProvider(resource=resource, sampler=ALWAYS_ON)
-    processor = BatchSpanProcessor(
-        OTLPSpanExporter(endpoint="http://otel-collector:4317")
-    )
+    processor = BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4317"))
     provider.add_span_processor(processor)
     trace.set_tracer_provider(provider)
 
@@ -159,9 +152,7 @@ except ImportError:
 
 # --- Metrics ---
 UPDATE_CYCLES = Counter("clarifier_updates_total", "Requirement updates")
-UPDATE_ERRORS = Counter(
-    "clarifier_update_errors", "Update errors", ["type", "component"]
-)
+UPDATE_ERRORS = Counter("clarifier_update_errors", "Update errors", ["type", "component"])
 UPDATE_CONFLICTS = Gauge("clarifier_conflicts", "Conflicts detected", ["conflict_type"])
 REDACTION_EVENTS = Counter(
     "clarifier_redaction_events_total", "PII/Secret redactions", ["pattern_type"]
@@ -174,15 +165,11 @@ SCHEMA_MIGRATIONS = Counter(
 INFERENCE_LATENCY = Histogram(
     "clarifier_inference_latency_seconds", "LLM inference latency", ["model_name"]
 )
-SELF_TEST_PASS = Gauge(
-    "clarifier_updater_self_test", "Self-test status (1=pass, 0=fail)"
-)
+SELF_TEST_PASS = Gauge("clarifier_updater_self_test", "Self-test status (1=pass, 0=fail)")
 HISTORY_STORAGE_LATENCY = Histogram(
     "clarifier_history_storage_seconds", "History storage latency", ["operation"]
 )
-ALERT_SEND_EVENTS = Counter(
-    "clarifier_alert_send_total", "Total alerts sent", ["severity"]
-)
+ALERT_SEND_EVENTS = Counter("clarifier_alert_send_total", "Total alerts sent", ["severity"])
 
 # --- Schema Definitions ---
 SCHEMAS = {
@@ -254,9 +241,7 @@ CURRENT_SCHEMA_VERSION = settings.SCHEMA_VERSION
 
 
 # --- Schema Migration Steps Registry ---
-async def _migrate_schema_v1_to_v2(
-    data: Dict[str, Any], span: Optional[Any]
-) -> Dict[str, Any]:
+async def _migrate_schema_v1_to_v2(data: Dict[str, Any], span: Optional[Any]) -> Dict[str, Any]:
     """Migrates schema from version 1 to 2."""
     if span:
         span.add_event("Migrating v1 to v2")
@@ -269,15 +254,11 @@ async def _migrate_schema_v1_to_v2(
     return data
 
 
-async def _migrate_schema_v2_to_v3(
-    data: Dict[str, Any], span: Optional[Any]
-) -> Dict[str, Any]:
+async def _migrate_schema_v2_to_v3(data: Dict[str, Any], span: Optional[Any]) -> Dict[str, Any]:
     """Migrates schema from version 2 to 3 (hypothetical)."""
     if span:
         span.add_event("Migrating v2 to v3")
-    data["new_v3_required_field"] = data.get(
-        "new_v3_required_field", "default_v3_value"
-    )
+    data["new_v3_required_field"] = data.get("new_v3_required_field", "default_v3_value")
     if "deprecated_field_v1_v2" in data:
         del data["deprecated_field_v1_v2"]
         logger.debug("Migrated from v2: Removed 'deprecated_field_v1_v2'.")
@@ -384,14 +365,10 @@ class HistoryStore:
         except Exception as e:
             logger.error(f"Failed to store history: {e}", exc_info=True)
             UPDATE_ERRORS.labels("history", "store_failed").inc()
-            await send_alert(
-                f"Failed to store requirements history: {e}", severity="high"
-            )
+            await send_alert(f"Failed to store requirements history: {e}", severity="high")
             raise
 
-    async def query(
-        self, version: Optional[int] = None, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def query(self, version: Optional[int] = None, limit: int = 100) -> List[Dict[str, Any]]:
         """Queries history entries, decrypts, and decompresses them."""
         if self.conn is None:
             await self._init_db()
@@ -406,9 +383,7 @@ class HistoryStore:
         params.append(limit)
 
         try:
-            rows_cursor = await asyncio.to_thread(
-                self.conn.execute, query_sql, tuple(params)
-            )
+            rows_cursor = await asyncio.to_thread(self.conn.execute, query_sql, tuple(params))
             rows = await asyncio.to_thread(rows_cursor.fetchall)
 
             entries = []
@@ -441,9 +416,7 @@ class HistoryStore:
         except Exception as e:
             logger.error(f"History query failed: {e}", exc_info=True)
             UPDATE_ERRORS.labels("history", "query_failed").inc()
-            await send_alert(
-                f"Failed to query requirements history: {e}", severity="high"
-            )
+            await send_alert(f"Failed to query requirements history: {e}", severity="high")
             return []
 
     async def close(self):
@@ -454,9 +427,7 @@ class HistoryStore:
                 self.conn = None
                 logger.info("HistoryStore closed.")
             except Exception as e:
-                logger.error(
-                    f"Error closing HistoryStore connection: {e}", exc_info=True
-                )
+                logger.error(f"Error closing HistoryStore connection: {e}", exc_info=True)
                 UPDATE_ERRORS.labels("history", "close_failed").inc()
 
 
@@ -502,22 +473,16 @@ class GrokLLMClient(LLMClient):
                     raw_response_content = await response.text()
                     try:
                         llm_response_json = json.loads(raw_response_content)
-                        content = llm_response_json["choices"][0]["message"][
-                            "content"
-                        ].strip()
+                        content = llm_response_json["choices"][0]["message"]["content"].strip()
                         return json.loads(content)
                     except (json.JSONDecodeError, KeyError) as inner_e:
                         logger.error(
                             f"LLM returned valid HTTP status but invalid JSON content or structure. Raw response: {raw_response_content[:500]}...",
                             exc_info=True,
                         )
-                        raise ValueError(
-                            f"LLM content parsing failed: {inner_e}"
-                        ) from inner_e
+                        raise ValueError(f"LLM content parsing failed: {inner_e}") from inner_e
         except aiohttp.ClientError as e:
-            raise requests.exceptions.RequestException(
-                f"LLM API client error: {e}"
-            ) from e
+            raise requests.exceptions.RequestException(f"LLM API client error: {e}") from e
         except json.JSONDecodeError as e:
             raise ValueError(f"LLM API returned non-JSON response: {e}") from e
         except Exception as e:
@@ -571,9 +536,7 @@ class DefaultConflictResolver(ConflictResolver):
                 try:
                     action = user_feedback(conflict_desc)
                     if action == "ignore":
-                        logger.info(
-                            f"Ignoring conflict: {conflict_desc} per user feedback."
-                        )
+                        logger.info(f"Ignoring conflict: {conflict_desc} per user feedback.")
                         action_taken = True
                     elif action == "prioritize_new" and feature and clarity:
                         if feature in resolved_requirements.get("features", []):
@@ -607,20 +570,14 @@ class DefaultConflictResolver(ConflictResolver):
                         logger.warning(
                             f"Unknown user feedback action: {action} for conflict: {conflict_desc}."
                         )
-                        UPDATE_ERRORS.labels(
-                            "conflict_resolution", "invalid_user_action"
-                        ).inc()
+                        UPDATE_ERRORS.labels("conflict_resolution", "invalid_user_action").inc()
                 except Exception as e:
                     logger.error(
                         f"Error executing user feedback for conflict '{conflict_desc}': {e}",
                         exc_info=True,
                     )
-                    UPDATE_ERRORS.labels(
-                        "conflict_resolution", "user_feedback_error"
-                    ).inc()
-                    await send_alert(
-                        f"Error in user feedback for conflict: {e}", severity="medium"
-                    )
+                    UPDATE_ERRORS.labels("conflict_resolution", "user_feedback_error").inc()
+                    await send_alert(f"Error in user feedback for conflict: {e}", severity="medium")
             elif strategy == "auto_merge":
                 if conflict_type == "feature_contradiction" and feature and clarity:
                     if feature in resolved_requirements.get("features", []):
@@ -729,9 +686,7 @@ class RequirementsUpdater:
             span.set_attribute("schema.target_version", target_version)
 
         if original_version < target_version:
-            logger.info(
-                f"Migrating schema from v{original_version} to v{target_version}"
-            )
+            logger.info(f"Migrating schema from v{original_version} to v{target_version}")
             backup = copy.deepcopy(current)
             try:
                 for version_from in range(original_version, target_version):
@@ -800,9 +755,7 @@ class RequirementsUpdater:
         else:
             self._validate_schema_internal(requirements, None)
 
-    def _validate_schema_internal(
-        self, requirements: Dict[str, Any], span: Optional[Any]
-    ) -> None:
+    def _validate_schema_internal(self, requirements: Dict[str, Any], span: Optional[Any]) -> None:
         schema = SCHEMAS.get(self.config.SCHEMA_VERSION)
         if not schema:
             if span:
@@ -826,9 +779,7 @@ class RequirementsUpdater:
             try:
                 asyncio.get_running_loop()
                 asyncio.create_task(
-                    send_alert(
-                        f"Schema validation failed: {e.message}", severity="critical"
-                    )
+                    send_alert(f"Schema validation failed: {e.message}", severity="critical")
                 )
             except RuntimeError:
                 # No event loop running, log only
@@ -865,9 +816,7 @@ class RequirementsUpdater:
             if span:
                 span.set_status(StatusCode.ERROR, "LLM API key is missing.")
                 span.set_attribute("inference.skipped", True)
-            await send_alert(
-                "LLM API key is missing, inference skipped.", severity="medium"
-            )
+            await send_alert("LLM API key is missing, inference skipped.", severity="medium")
             return {"inferred_features": [], "inferred_constraints": []}
 
         start_time = time.perf_counter()
@@ -887,13 +836,9 @@ class RequirementsUpdater:
             if (
                 not isinstance(inferred, dict)
                 or not isinstance(inferred.get("inferred_features"), list)
-                or not all(
-                    isinstance(f, str) for f in inferred.get("inferred_features", [])
-                )
+                or not all(isinstance(f, str) for f in inferred.get("inferred_features", []))
                 or not isinstance(inferred.get("inferred_constraints"), list)
-                or not all(
-                    isinstance(c, str) for c in inferred.get("inferred_constraints", [])
-                )
+                or not all(isinstance(c, str) for c in inferred.get("inferred_constraints", []))
             ):
 
                 logger.error(
@@ -961,9 +906,7 @@ class RequirementsUpdater:
             if span:
                 span.set_status(StatusCode.ERROR, f"LLM Unexpected Error: {e}")
                 span.record_exception(e)
-            await send_alert(
-                f"Unexpected LLM inference error: {type(e).__name__}", severity="high"
-            )
+            await send_alert(f"Unexpected LLM inference error: {type(e).__name__}", severity="high")
             return {"inferred_features": [], "inferred_constraints": []}
 
     def _redact_answers(self, answers: Dict[str, Any]) -> Dict[str, Any]:
@@ -983,9 +926,7 @@ class RequirementsUpdater:
         for k, v in answers.items():
             if redacted_answers.get(k) != v:
                 redaction_count += 1
-                REDACTION_EVENTS.labels(
-                    pattern_type="general_redaction_performed"
-                ).inc()
+                REDACTION_EVENTS.labels(pattern_type="general_redaction_performed").inc()
 
         if span:
             span.set_attribute("redaction.count", redaction_count)
@@ -1001,9 +942,7 @@ class RequirementsUpdater:
         """Detects conflicts in requirements."""
         if HAS_OPENTELEMETRY:
             with tracer.start_as_current_span("detect_conflicts") as span:
-                return self._detect_conflicts_internal(
-                    requirements, clarifications, span
-                )
+                return self._detect_conflicts_internal(requirements, clarifications, span)
         return self._detect_conflicts_internal(requirements, clarifications, None)
 
     def _detect_conflicts_internal(
@@ -1014,9 +953,12 @@ class RequirementsUpdater:
     ) -> List[Dict[str, str]]:
         conflicts = []
         for feature, clarity in clarifications.items():
-            if feature in requirements.get(
-                "features", []
-            ) and clarity.lower().strip() in ["no", "false", "n/a", "not required"]:
+            if feature in requirements.get("features", []) and clarity.lower().strip() in [
+                "no",
+                "false",
+                "n/a",
+                "not required",
+            ]:
                 conflict = {
                     "type": "feature_contradiction",
                     "description": f"Conflict: Feature '{feature}' exists in requirements but clarified as '{clarity}'.",
@@ -1106,9 +1048,9 @@ class RequirementsUpdater:
         hashable_data = {k: v for k, v in current.items() if k not in ["version_hash"]}
         hashable_data["prev_hash"] = prev_hash
 
-        canonical_json = json.dumps(
-            hashable_data, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
+        canonical_json = json.dumps(hashable_data, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
         current["version_hash"] = hashlib.sha256(canonical_json).hexdigest()
         current["prev_hash"] = prev_hash
 
@@ -1147,9 +1089,9 @@ class RequirementsUpdater:
 
         hashable_data = {k: v for k, v in entry.items() if k != "version_hash"}
 
-        canonical_json = json.dumps(
-            hashable_data, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
+        canonical_json = json.dumps(hashable_data, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
         recomputed_hash = hashlib.sha256(canonical_json).hexdigest()
 
         if recomputed_hash == entry["version_hash"]:
@@ -1219,17 +1161,13 @@ class RequirementsUpdater:
             self.clarifications_snapshot = dict(zip(ambiguities, answers))
 
             # 1. Schema evolution
-            self.requirements_snapshot = await self._migrate_schema(
-                self.requirements_snapshot
-            )
+            self.requirements_snapshot = await self._migrate_schema(self.requirements_snapshot)
             self._validate_schema(self.requirements_snapshot)
             if span:
                 span.add_event("Schema migrated and validated")
 
             # 2. Redaction
-            self.clarifications_snapshot = self._redact_answers(
-                self.clarifications_snapshot
-            )
+            self.clarifications_snapshot = self._redact_answers(self.clarifications_snapshot)
             if span:
                 span.add_event("Answers redacted")
 
@@ -1270,9 +1208,7 @@ class RequirementsUpdater:
                 UPDATE_CONFLICTS.labels(conflict_type="none").set(0)
 
             # 6. Versioning/provenance
-            final_requirements = self._add_versioning(
-                self.requirements_snapshot, user, reason
-            )
+            final_requirements = self._add_versioning(self.requirements_snapshot, user, reason)
 
             # 7. Store history
             await self.history_store.store(final_requirements)
@@ -1370,9 +1306,7 @@ class RequirementsUpdater:
             # REFACTORED: These checks now rely on the *imported* runner.security_utils
             if "[REDACTED_API_KEY]" not in updated_for_test["clarifications"].get(
                 "test_secret", ""
-            ) or "[REDACTED_EMAIL]" not in updated_for_test["clarifications"].get(
-                "email_pii", ""
-            ):
+            ) or "[REDACTED_EMAIL]" not in updated_for_test["clarifications"].get("email_pii", ""):
                 logger.error(
                     "Self-test FAILED: Redaction compliance check failed. Sensitive data not redacted."
                 )
@@ -1406,9 +1340,7 @@ class RequirementsUpdater:
             SELF_TEST_PASS.set(1)
             return True
         except Exception as e:
-            logger.error(
-                f"Self-test FAILED due to an unexpected error: {e}", exc_info=True
-            )
+            logger.error(f"Self-test FAILED due to an unexpected error: {e}", exc_info=True)
             SELF_TEST_PASS.set(0)
             # FIX: Use await instead of asyncio.run()
             await send_alert(f"Updater self-test failed: {e}", severity="critical")
@@ -1417,9 +1349,7 @@ class RequirementsUpdater:
     async def _clear_history_for_test(self):
         """Utility to clear history database for a clean test run (used by self_test)."""
         if self.history_store.conn:
-            await asyncio.to_thread(
-                self.history_store.conn.execute, "DELETE FROM history"
-            )
+            await asyncio.to_thread(self.history_store.conn.execute, "DELETE FROM history")
             await asyncio.to_thread(self.history_store.conn.commit)
             logger.info("History database cleared for self-test.")
 

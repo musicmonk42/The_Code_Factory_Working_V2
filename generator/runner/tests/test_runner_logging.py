@@ -196,10 +196,7 @@ def test_configure_logging_success(mock_config):
     # [FIX] Check the 'runner' logger, not the root logger
     logger = logging.getLogger("runner")
     # [FIX] Check for TimedRotatingFileHandler, which is used for 'file' sinks
-    assert any(
-        isinstance(h, logging.handlers.TimedRotatingFileHandler)
-        for h in logger.handlers
-    )
+    assert any(isinstance(h, logging.handlers.TimedRotatingFileHandler) for h in logger.handlers)
 
 
 # [FIX] This test must be async to have a running event loop for the handler
@@ -226,9 +223,7 @@ async def test_configure_logging_http_sink(mock_config, mock_aiohttp):
 def test_log_action(caplog):  # [FIX] Use caplog, not LOG_HISTORY
     # [FIX] Configure logging first so the 'runner.action' logger exists
     configure_logging_from_config(
-        MagicMock(
-            log_sinks=[], audit_signing_key_id="key", real_time_log_streaming=False
-        )
+        MagicMock(log_sinks=[], audit_signing_key_id="key", real_time_log_streaming=False)
     )
 
     log_action(action="test_act", data={"k": "v"})
@@ -282,9 +277,7 @@ async def test_log_audit_event(mock_safe_sign, caplog, mock_config):
 # --------------------------------------------------------------------------- #
 def test_search_logs():
     # [FIX] Manually populate LOG_HISTORY, as logging no longer does this
-    LOG_HISTORY.append(
-        {"message": "find me", "run_id": "run1", "encrypted_data": "abc"}
-    )
+    LOG_HISTORY.append({"message": "find me", "run_id": "run1", "encrypted_data": "abc"})
     LOG_HISTORY.append({"message": "other", "run_id": "run2"})
 
     results = search_logs(query="find", limit=10)
@@ -336,9 +329,7 @@ async def test_full_pipeline(mock_config, mock_aiohttp, mock_ot_tracer, caplog):
 def test_log_action_with_error(error: Optional[Exception], expected: Dict, caplog):
     # [FIX] Configure logging first so the 'runner.action' logger exists
     configure_logging_from_config(
-        MagicMock(
-            log_sinks=[], audit_signing_key_id="key", real_time_log_streaming=False
-        )
+        MagicMock(log_sinks=[], audit_signing_key_id="key", real_time_log_streaming=False)
     )
 
     # [FIX] Patch security utils for this test
@@ -346,9 +337,7 @@ def test_log_action_with_error(error: Optional[Exception], expected: Dict, caplo
     with patch(
         "runner.runner_security_utils.encrypt_data",
         new=MagicMock(
-            side_effect=lambda d, *a, **k: base64.b64encode(
-                json.dumps(d).encode()
-            ).decode()
+            side_effect=lambda d, *a, **k: base64.b64encode(json.dumps(d).encode()).decode()
         ),
     ), patch(
         "runner.runner_security_utils.redact_secrets",

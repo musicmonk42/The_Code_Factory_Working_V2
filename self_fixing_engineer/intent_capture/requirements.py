@@ -80,9 +80,7 @@ try:
         ["domain"],
     )
     # Metrics for DB operations
-    DB_OPS_TOTAL = Counter(
-        "req_db_ops_total", "Total DB operations", ["operation", "status"]
-    )
+    DB_OPS_TOTAL = Counter("req_db_ops_total", "Total DB operations", ["operation", "status"])
     DB_OPS_LATENCY_SECONDS = Histogram(
         "req_db_ops_latency_seconds", "DB operation latency in seconds", ["operation"]
     )
@@ -205,11 +203,7 @@ class NullContext:
 
 
 def get_tracing_context(span_name: str):
-    return (
-        tracer.start_as_current_span(span_name)
-        if OPENTELEMETRY_AVAILABLE
-        else NullContext()
-    )
+    return tracer.start_as_current_span(span_name) if OPENTELEMETRY_AVAILABLE else NullContext()
 
 
 # --- Constants ---
@@ -320,9 +314,7 @@ class RequirementsManager:
     def __init__(self):
         self._embedding_model: Optional[SentenceTransformer] = None
         self._db_pool: Optional[asyncpg.Pool] = None
-        self._model_lock = (
-            asyncio.Lock()
-        )  # P3: Use asyncio.Lock for async model loading
+        self._model_lock = asyncio.Lock()  # P3: Use asyncio.Lock for async model loading
 
     async def get_embedding_model(self) -> SentenceTransformer:  # P3: Make async
         """Thread-safe and async loading for production ML embedding models."""
@@ -346,9 +338,7 @@ class RequirementsManager:
                             span.set_attribute("model.name", "all-MiniLM-L6-v2")
                             span.set_status(trace.Status(trace.StatusCode.OK))
                     if PROMETHEUS_AVAILABLE and ML_MODEL_LOAD_LATENCY_SECONDS:
-                        ML_MODEL_LOAD_LATENCY_SECONDS.observe(
-                            time.perf_counter() - start_time
-                        )
+                        ML_MODEL_LOAD_LATENCY_SECONDS.observe(time.perf_counter() - start_time)
         return self._embedding_model
 
     async def get_db_conn_pool(
@@ -371,10 +361,7 @@ class RequirementsManager:
                     "CRITICAL: Missing database connection environment variables. Exiting."
                 )
                 sys.exit(1)
-            if (
-                db_host == "localhost"
-                and os.environ.get("PROD_MODE", "false").lower() == "true"
-            ):
+            if db_host == "localhost" and os.environ.get("PROD_MODE", "false").lower() == "true":
                 logger.critical(
                     "CRITICAL: Localhost DB connection not allowed in production. Exiting."
                 )
@@ -390,9 +377,7 @@ class RequirementsManager:
                 max_size=10,
                 timeout=30,  # Connection timeout
             )
-            logger.info(
-                f"PostgreSQL connection pool created for {db_host}:{db_port}/{db_name}"
-            )
+            logger.info(f"PostgreSQL connection pool created for {db_host}:{db_port}/{db_name}")
         return self._db_pool
 
     @retry(
@@ -426,20 +411,14 @@ class RequirementsManager:
                 result = {}
                 for proj, domain, checklist in rows:
                     result.setdefault(proj, {})[domain] = (
-                        json.loads(checklist)
-                        if isinstance(checklist, str)
-                        else checklist
+                        json.loads(checklist) if isinstance(checklist, str) else checklist
                     )
-                logger.info(
-                    f"Fetched {len(rows)} custom checklists from DB for project={project}."
-                )
+                logger.info(f"Fetched {len(rows)} custom checklists from DB for project={project}.")
                 if OPENTELEMETRY_AVAILABLE:
                     span.set_attribute("checklist.count", len(rows))
                     span.set_status(trace.Status(trace.StatusCode.OK))
                 if PROMETHEUS_AVAILABLE and DB_OPS_TOTAL:
-                    DB_OPS_TOTAL.labels(
-                        operation="get_checklists", status="success"
-                    ).inc()
+                    DB_OPS_TOTAL.labels(operation="get_checklists", status="success").inc()
                     DB_OPS_LATENCY_SECONDS.labels(operation="get_checklists").observe(
                         time.perf_counter() - start_time
                     )
@@ -447,22 +426,16 @@ class RequirementsManager:
             except asyncpg.exceptions.PostgresError as e:
                 # Hypothetical check for a rate limit error from the database
                 if "rate limit" in str(e).lower():
-                    logger.warning(
-                        f"Database rate limit detected: {e}. Retrying via tenacity."
-                    )
+                    logger.warning(f"Database rate limit detected: {e}. Retrying via tenacity.")
                     raise RateLimitError("DB rate limit exceeded") from e
                 logger.error(f"DB read error for custom checklists: {e}", exc_info=True)
                 raise  # Re-raise for tenacity to catch
             except Exception as e:
                 logger.error(f"DB read error for custom checklists: {e}", exc_info=True)
                 if OPENTELEMETRY_AVAILABLE:
-                    span.set_status(
-                        trace.Status(trace.StatusCode.ERROR, description=str(e))
-                    )
+                    span.set_status(trace.Status(trace.StatusCode.ERROR, description=str(e)))
                 if PROMETHEUS_AVAILABLE and DB_OPS_TOTAL:
-                    DB_OPS_TOTAL.labels(
-                        operation="get_checklists", status="failed"
-                    ).inc()
+                    DB_OPS_TOTAL.labels(operation="get_checklists", status="failed").inc()
                 raise
 
     @retry(
@@ -475,9 +448,7 @@ class RequirementsManager:
         ),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
-    async def db_save_custom_checklists(
-        self, customs: Dict[str, Dict[str, List[Dict[str, Any]]]]
-    ):
+    async def db_save_custom_checklists(self, customs: Dict[str, Dict[str, List[Dict[str, Any]]]]):
         """Persist custom checklists to DB in a robust, versioned way asynchronously."""
         if not DB_AVAILABLE:
             return
@@ -505,34 +476,22 @@ class RequirementsManager:
                 if OPENTELEMETRY_AVAILABLE:
                     span.set_status(trace.Status(trace.StatusCode.OK))
                 if PROMETHEUS_AVAILABLE and DB_OPS_TOTAL:
-                    DB_OPS_TOTAL.labels(
-                        operation="save_checklists", status="success"
-                    ).inc()
+                    DB_OPS_TOTAL.labels(operation="save_checklists", status="success").inc()
                     DB_OPS_LATENCY_SECONDS.labels(operation="save_checklists").observe(
                         time.perf_counter() - start_time
                     )
             except asyncpg.exceptions.PostgresError as e:
                 if "rate limit" in str(e).lower():
-                    logger.warning(
-                        f"Database rate limit detected: {e}. Retrying via tenacity."
-                    )
+                    logger.warning(f"Database rate limit detected: {e}. Retrying via tenacity.")
                     raise RateLimitError("DB rate limit exceeded") from e
-                logger.error(
-                    f"DB write error for custom checklists: {e}", exc_info=True
-                )
+                logger.error(f"DB write error for custom checklists: {e}", exc_info=True)
                 raise
             except Exception as e:
-                logger.error(
-                    f"DB write error for custom checklists: {e}", exc_info=True
-                )
+                logger.error(f"DB write error for custom checklists: {e}", exc_info=True)
                 if OPENTELEMETRY_AVAILABLE:
-                    span.set_status(
-                        trace.Status(trace.StatusCode.ERROR, description=str(e))
-                    )
+                    span.set_status(trace.Status(trace.StatusCode.ERROR, description=str(e)))
                 if PROMETHEUS_AVAILABLE and DB_OPS_TOTAL:
-                    DB_OPS_TOTAL.labels(
-                        operation="save_checklists", status="failed"
-                    ).inc()
+                    DB_OPS_TOTAL.labels(operation="save_checklists", status="failed").inc()
                 raise  # Re-raise for tenacity to catch
 
     async def get_global_custom_checklists(
@@ -561,9 +520,7 @@ class RequirementsManager:
         project_customs = customs.get(proj_key, {})
         if domain in project_customs:
             combined.extend(project_customs[domain])
-        unique_checklist = {
-            item["id"]: item for item in combined if "id" in item
-        }.values()
+        unique_checklist = {item["id"]: item for item in combined if "id" in item}.values()
         return list(unique_checklist)
 
     async def add_item(
@@ -576,17 +533,11 @@ class RequirementsManager:
     ) -> str:
         """Adds a new custom requirement with a unique ID, persists in DB."""
         # P1: Input Validation/Sanitization with length limits
-        sanitized_item_name = sanitize_text(
-            item_name, allow_punct=False, max_length=256
-        )
-        sanitized_description = sanitize_text(
-            description, allow_punct=True, max_length=2048
-        )
+        sanitized_item_name = sanitize_text(item_name, allow_punct=False, max_length=256)
+        sanitized_description = sanitize_text(description, allow_punct=True, max_length=2048)
 
         if not sanitized_item_name:
-            raise ValueError(
-                "Requirement name cannot be empty or contain only special characters."
-            )
+            raise ValueError("Requirement name cannot be empty or contain only special characters.")
 
         new_item = {
             "id": f"CUST-{uuid.uuid4()}",
@@ -620,9 +571,7 @@ class RequirementsManager:
             try:
                 uuid_part = item_id[5:]  # Get everything after "CUST-"
                 if not validate_uuid(uuid_part):
-                    logger.error(
-                        f"Invalid UUID in item_id '{item_id}'. Update aborted."
-                    )
+                    logger.error(f"Invalid UUID in item_id '{item_id}'. Update aborted.")
                     return False
             except (IndexError, TypeError):
                 logger.error(f"Malformed item_id '{item_id}'. Update aborted.")
@@ -676,9 +625,7 @@ class RequirementsManager:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type(
-            (asyncio.TimeoutError, json.JSONDecodeError, RateLimitError)
-        ),
+        retry=retry_if_exception_type((asyncio.TimeoutError, json.JSONDecodeError, RateLimitError)),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
     async def _generate_novel_requirements(
@@ -708,13 +655,8 @@ class RequirementsManager:
                 )
 
                 # Explicitly check for rate limit errors in the response content
-                if (
-                    hasattr(response, "content")
-                    and "rate limit" in response.content.lower()
-                ):
-                    raise RateLimitError(
-                        "LLM rate limit exceeded based on response content."
-                    )
+                if hasattr(response, "content") and "rate limit" in response.content.lower():
+                    raise RateLimitError("LLM rate limit exceeded based on response content.")
 
                 suggestions = json.loads(response.content)
 
@@ -739,9 +681,7 @@ class RequirementsManager:
                         f"Generated {len(sanitized_suggestions)} novel requirements from LLM."
                     )
                     if OPENTELEMETRY_AVAILABLE:
-                        span.set_attribute(
-                            "novel_reqs.count", len(sanitized_suggestions)
-                        )
+                        span.set_attribute("novel_reqs.count", len(sanitized_suggestions))
                         span.set_status(trace.Status(trace.StatusCode.OK))
                     return sanitized_suggestions
                 else:
@@ -752,19 +692,13 @@ class RequirementsManager:
             except asyncio.TimeoutError as e:
                 logger.error("LLM call for novel requirements timed out.")
                 if OPENTELEMETRY_AVAILABLE:
-                    span.set_status(
-                        trace.Status(trace.StatusCode.ERROR, description="LLM Timeout")
-                    )
+                    span.set_status(trace.Status(trace.StatusCode.ERROR, description="LLM Timeout"))
                 raise e  # Re-raise for tenacity
             except (json.JSONDecodeError, ValueError) as e:
-                logger.error(
-                    f"Failed to parse novel requirements from LLM: {e}", exc_info=True
-                )
+                logger.error(f"Failed to parse novel requirements from LLM: {e}", exc_info=True)
                 if OPENTELEMETRY_AVAILABLE:
                     span.set_status(
-                        trace.Status(
-                            trace.StatusCode.ERROR, description=f"LLM parse failed: {e}"
-                        )
+                        trace.Status(trace.StatusCode.ERROR, description=f"LLM parse failed: {e}")
                     )
                 raise e  # Re-raise for tenacity
             except Exception as e:
@@ -821,18 +755,14 @@ class RequirementsManager:
                 candidate_embeddings = await asyncio.to_thread(
                     model.encode, candidate_descs, convert_to_tensor=True
                 )
-                scores = util.pytorch_cos_sim(
-                    transcript_embedding, candidate_embeddings
-                )[0]
+                scores = util.pytorch_cos_sim(transcript_embedding, candidate_embeddings)[0]
                 return [
                     candidates[i]
                     for i, score in enumerate(scores)
                     if score.item() > COSINE_SIM_THRESHOLD
                 ]
         except Exception as e:
-            logger.error(
-                f"Error during similarity-based suggestion: {e}", exc_info=True
-            )
+            logger.error(f"Error during similarity-based suggestion: {e}", exc_info=True)
         return []
 
     async def suggest_requirements(
@@ -856,9 +786,7 @@ class RequirementsManager:
                 )
                 suggestions.extend(embedding_suggestions)
                 if OPENTELEMETRY_AVAILABLE:
-                    span.set_attribute(
-                        "similarity_suggestions.count", len(embedding_suggestions)
-                    )
+                    span.set_attribute("similarity_suggestions.count", len(embedding_suggestions))
 
             if llm:
                 try:
@@ -867,13 +795,9 @@ class RequirementsManager:
                     )
                     suggestions.extend(novel_suggestions)
                 except Exception:  # Catch exceptions from retries
-                    logger.warning(
-                        "Failed to generate novel requirements from LLM after retries."
-                    )
+                    logger.warning("Failed to generate novel requirements from LLM after retries.")
 
-            final_suggestions = list(
-                {s["name"].lower(): s for s in suggestions}.values()
-            )
+            final_suggestions = list({s["name"].lower(): s for s in suggestions}.values())
             logger.info(f"Hybrid suggestion generated: {len(final_suggestions)} items.")
             if OPENTELEMETRY_AVAILABLE:
                 span.set_attribute("final_suggestions.count", len(final_suggestions))
@@ -888,9 +812,7 @@ class RequirementsManager:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type(
-            (asyncio.TimeoutError, json.JSONDecodeError, RateLimitError)
-        ),
+        retry=retry_if_exception_type((asyncio.TimeoutError, json.JSONDecodeError, RateLimitError)),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
     async def propose_checklist_updates(
@@ -904,9 +826,7 @@ class RequirementsManager:
         with get_tracing_context("propose_checklist_updates") as span:
             if OPENTELEMETRY_AVAILABLE:
                 span.set_attribute("existing_checklist.count", len(existing_checklist))
-            existing_names_str = ", ".join(
-                [f"'{item['name']}'" for item in existing_checklist]
-            )
+            existing_names_str = ", ".join([f"'{item['name']}'" for item in existing_checklist])
             prompt = f"""
             Review the following conversation transcript and identify specific requirements that are discussed but are NOT on the existing checklist.
             For each missing requirement, formulate a concise 'name' and a one-sentence 'description'.
@@ -927,13 +847,8 @@ class RequirementsManager:
                     llm.ainvoke(prompt), timeout=LLM_GEN_TIMEOUT_SECONDS
                 )
 
-                if (
-                    hasattr(response, "content")
-                    and "rate limit" in response.content.lower()
-                ):
-                    raise RateLimitError(
-                        "LLM rate limit exceeded based on response content."
-                    )
+                if hasattr(response, "content") and "rate limit" in response.content.lower():
+                    raise RateLimitError("LLM rate limit exceeded based on response content.")
 
                 proposals = json.loads(response.content)
 
@@ -958,9 +873,7 @@ class RequirementsManager:
                         f"Proposed {len(sanitized_proposals)} new checklist items for self-updating."
                     )
                     if OPENTELEMETRY_AVAILABLE:
-                        span.set_attribute(
-                            "proposed_items.count", len(sanitized_proposals)
-                        )
+                        span.set_attribute("proposed_items.count", len(sanitized_proposals))
                         span.set_status(trace.Status(trace.StatusCode.OK))
                     return sanitized_proposals
                 else:
@@ -971,14 +884,10 @@ class RequirementsManager:
             except asyncio.TimeoutError as e:
                 logger.error("LLM call for checklist updates timed out.")
                 if OPENTELEMETRY_AVAILABLE:
-                    span.set_status(
-                        trace.Status(trace.StatusCode.ERROR, description="LLM Timeout")
-                    )
+                    span.set_status(trace.Status(trace.StatusCode.ERROR, description="LLM Timeout"))
                 raise e  # Re-raise for tenacity
             except Exception as e:
-                logger.error(
-                    f"Failed to generate checklist update proposals: {e}", exc_info=True
-                )
+                logger.error(f"Failed to generate checklist update proposals: {e}", exc_info=True)
                 if OPENTELEMETRY_AVAILABLE:
                     span.set_status(
                         trace.Status(
@@ -998,12 +907,10 @@ class RequirementsManager:
                         )
                         else "failed"
                     )
-                    REQ_SUGGESTIONS_TOTAL.labels(
-                        domain="checklist_update", status=status
-                    ).inc()
-                    REQ_SUGGESTIONS_LATENCY_SECONDS.labels(
-                        domain="checklist_update"
-                    ).observe(time.perf_counter() - start_time)
+                    REQ_SUGGESTIONS_TOTAL.labels(domain="checklist_update", status=status).inc()
+                    REQ_SUGGESTIONS_LATENCY_SECONDS.labels(domain="checklist_update").observe(
+                        time.perf_counter() - start_time
+                    )
 
     async def log_coverage_snapshot(
         self,
@@ -1042,9 +949,7 @@ class RequirementsManager:
             f"Coverage snapshot logged to local file for project {project}, domain {domain}."
         )
 
-    async def get_coverage_history(
-        self, project: str
-    ) -> Optional[List[Dict[str, Any]]]:
+    async def get_coverage_history(self, project: str) -> Optional[List[Dict[str, Any]]]:
         """Retrieves the coverage history for a given project from scalable storage."""
         if REDIS_AVAILABLE:
             try:
@@ -1054,9 +959,7 @@ class RequirementsManager:
                 key = f"coverage:{project}"
                 history_data = await r.lrange(key, 0, -1)
                 history = [json.loads(row) for row in history_data]
-                logger.info(
-                    f"Fetched coverage history from Redis for project {project}."
-                )
+                logger.info(f"Fetched coverage history from Redis for project {project}.")
                 return history
             except Exception as e:
                 logger.error(f"Redis coverage history error: {e}")
@@ -1103,15 +1006,11 @@ class RequirementsManager:
                 # Clean up markdown table
                 lines = gaps_table_markdown.strip().split("\n")
                 # Filter out separator lines (containing only |, -, and spaces)
-                data_lines = [
-                    line for line in lines if not all(c in "|- " for c in line.strip())
-                ]
+                data_lines = [line for line in lines if not all(c in "|- " for c in line.strip())]
                 clean_markdown = "\n".join(data_lines)
 
                 data = io.StringIO(clean_markdown)
-                df = await asyncio.to_thread(
-                    pd.read_csv, data, sep="|", skipinitialspace=True
-                )
+                df = await asyncio.to_thread(pd.read_csv, data, sep="|", skipinitialspace=True)
 
                 # Remove empty columns
                 df = df.dropna(axis=1, how="all")
@@ -1122,30 +1021,22 @@ class RequirementsManager:
                 df.columns = [col.strip() for col in df.columns]
 
                 # Find status column
-                status_col = next(
-                    (c for c in df.columns if "status" in c.lower()), None
-                )
+                status_col = next((c for c in df.columns if "status" in c.lower()), None)
                 if status_col is None:
                     logger.warning("No 'Status' column found in markdown table")
                     return {"percent": 0.0, "covered": 0, "total": 0}
 
                 # Clean values in the dataframe
-                df = df.apply(
-                    lambda col: col.str.strip() if col.dtype == "object" else col
-                )
+                df = df.apply(lambda col: col.str.strip() if col.dtype == "object" else col)
 
                 total = len(df)
                 if total == 0:
                     return {"percent": 0.0, "covered": 0, "total": 0}
 
                 # Count rows where status contains 'covered' (case-insensitive)
-                covered = (
-                    df[status_col].str.lower().str.contains("covered", na=False).sum()
-                )
+                covered = df[status_col].str.lower().str.contains("covered", na=False).sum()
                 # But exclude "uncovered" status
-                uncovered = (
-                    df[status_col].str.lower().str.contains("uncovered", na=False).sum()
-                )
+                uncovered = df[status_col].str.lower().str.contains("uncovered", na=False).sum()
                 actual_covered = covered - uncovered
 
                 return {
@@ -1154,9 +1045,7 @@ class RequirementsManager:
                     "total": int(total),
                 }
             except Exception as e:
-                logger.warning(
-                    f"Failed to compute coverage from markdown using pandas: {e}"
-                )
+                logger.warning(f"Failed to compute coverage from markdown using pandas: {e}")
         if llm:
             prompt = f"""
             Given the following markdown table, extract the total number of requirements, how many are covered (status contains 'covered'), and return percent as a float.
@@ -1178,30 +1067,20 @@ class RequirementsManager:
                 logger.error("LLM call for compute_coverage timed out.")
                 return {"percent": 0.0, "covered": 0, "total": 0}
             except Exception as e:
-                logger.error(
-                    f"LLM fallback for compute_coverage failed: {e}", exc_info=True
-                )
+                logger.error(f"LLM fallback for compute_coverage failed: {e}", exc_info=True)
         return {"percent": 0.0, "covered": 0, "total": 0}
 
-    def register_plugin_requirements(
-        self, domain_name: str, requirements: List[Dict[str, Any]]
-    ):
+    def register_plugin_requirements(self, domain_name: str, requirements: List[Dict[str, Any]]):
         """Allows plugins to dynamically register new requirement domains and types."""
         # P1: Input Validation/Sanitization for domain_name and requirement items
-        sanitized_domain_name = sanitize_text(
-            domain_name, allow_punct=False, max_length=100
-        )
+        sanitized_domain_name = sanitize_text(domain_name, allow_punct=False, max_length=100)
         if not sanitized_domain_name:
-            logger.warning(
-                "Attempted to register plugin requirements with an invalid domain name."
-            )
+            logger.warning("Attempted to register plugin requirements with an invalid domain name.")
             return
 
         if sanitized_domain_name not in DOMAIN_SPECIFIC:
             DOMAIN_SPECIFIC[sanitized_domain_name] = []
-            logger.info(
-                f"Plugin created new requirements domain: '{sanitized_domain_name}'."
-            )
+            logger.info(f"Plugin created new requirements domain: '{sanitized_domain_name}'.")
         for item in requirements:
             # Sanitize item content and validate UUID before adding
             item_id = item.get("id", f"PLUG-{uuid.uuid4()}")
@@ -1215,9 +1094,7 @@ class RequirementsManager:
                 logger.warning(f"Malformed item_id '{item_id}'. Generating new one.")
                 item_id = f"PLUG-{uuid.uuid4()}"
 
-            item_name = sanitize_text(
-                item.get("name", ""), allow_punct=False, max_length=256
-            )
+            item_name = sanitize_text(item.get("name", ""), allow_punct=False, max_length=256)
             item_description = sanitize_text(
                 item.get("description", ""), allow_punct=True, max_length=2048
             )
@@ -1239,8 +1116,7 @@ class RequirementsManager:
             is_duplicate = any(
                 existing.get("id") == sanitized_item["id"]
                 or existing["name"].lower() == sanitized_item["name"].lower()
-                for existing in DOMAIN_SPECIFIC[sanitized_domain_name]
-                + REQUIREMENTS_CHECKLIST
+                for existing in DOMAIN_SPECIFIC[sanitized_domain_name] + REQUIREMENTS_CHECKLIST
             )
             if not is_duplicate:
                 DOMAIN_SPECIFIC[sanitized_domain_name].append(sanitized_item)
@@ -1342,9 +1218,7 @@ async def suggest_requirements(
     existing_checklist: List[Dict[str, Any]],
     llm: Optional[BaseLanguageModel] = None,
 ):
-    return await manager.suggest_requirements(
-        domain, transcript_snippet, existing_checklist, llm
-    )
+    return await manager.suggest_requirements(domain, transcript_snippet, existing_checklist, llm)
 
 
 async def propose_checklist_updates(
@@ -1373,9 +1247,7 @@ async def generate_coverage_report(project: str):
     return await manager.generate_coverage_report(project)
 
 
-async def compute_coverage(
-    gaps_table_markdown: str, llm: Optional[BaseLanguageModel] = None
-):
+async def compute_coverage(gaps_table_markdown: str, llm: Optional[BaseLanguageModel] = None):
     return await manager.compute_coverage(gaps_table_markdown, llm)
 
 

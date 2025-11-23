@@ -135,9 +135,7 @@ async def test_policy_engine_should_generate_tests_local_denied_regulated(
 ):
     """Test local policy denies regulated module."""
     engine = PolicyEngine("atco_policies.json", temp_project_root)
-    allowed, reason = await engine.should_generate_tests(
-        "financial_data/module.py", "python"
-    )
+    allowed, reason = await engine.should_generate_tests("financial_data/module.py", "python")
     assert not allowed
     assert "regulated modules" in reason
 
@@ -150,9 +148,7 @@ async def test_policy_engine_should_generate_tests_opa_enabled(
     engine = PolicyEngine("atco_policies.json", temp_project_root)
     engine.policies["opa_integration_enabled"] = True
 
-    with patch(
-        "test_generation.policy_and_audit.aiohttp.ClientSession.post"
-    ) as mock_post:
+    with patch("test_generation.policy_and_audit.aiohttp.ClientSession.post") as mock_post:
         mock_response = AsyncMock()
         mock_response.json.return_value = {"result": True, "reason": "OPA allowed"}
         mock_response.raise_for_status.return_value = None
@@ -164,9 +160,7 @@ async def test_policy_engine_should_generate_tests_opa_enabled(
 
 
 @pytest.mark.asyncio
-async def test_policy_engine_should_generate_tests_opa_failure(
-    mock_policy_file, temp_project_root
-):
+async def test_policy_engine_should_generate_tests_opa_failure(mock_policy_file, temp_project_root):
     """Test OPA failure defaults to deny."""
     engine = PolicyEngine("atco_policies.json", temp_project_root)
     engine.policies["opa_integration_enabled"] = True
@@ -186,9 +180,7 @@ async def test_policy_engine_should_integrate_test_local_allowed(
 ):
     """Test local policy allows integration."""
     engine = PolicyEngine("atco_policies.json", temp_project_root)
-    allowed, reason = await engine.should_integrate_test(
-        "module.py", 0.8, "python", False, "NONE"
-    )
+    allowed, reason = await engine.should_integrate_test("module.py", 0.8, "python", False, "NONE")
     assert allowed
     assert "Policy allows" in reason
 
@@ -199,9 +191,7 @@ async def test_policy_engine_should_integrate_test_local_denied_quality(
 ):
     """Test local policy denies low quality score."""
     engine = PolicyEngine("atco_policies.json", temp_project_root)
-    allowed, reason = await engine.should_integrate_test(
-        "module.py", 0.6, "python", False, "NONE"
-    )
+    allowed, reason = await engine.should_integrate_test("module.py", 0.6, "python", False, "NONE")
     assert not allowed
     assert "below minimum required" in reason
 
@@ -212,9 +202,7 @@ async def test_policy_engine_requires_pr_for_integration_local_required(
 ):
     """Test local policy requires PR for language."""
     engine = PolicyEngine("atco_policies.json", temp_project_root)
-    requires_pr, reason = await engine.requires_pr_for_integration(
-        "module.js", "javascript", 0.8
-    )
+    requires_pr, reason = await engine.requires_pr_for_integration("module.js", "javascript", 0.8)
     assert requires_pr
     assert "Human review required" in reason
 
@@ -225,9 +213,7 @@ async def test_policy_engine_requires_pr_for_integration_local_not_required(
 ):
     """Test local policy does not require PR."""
     engine = PolicyEngine("atco_policies.json", temp_project_root)
-    requires_pr, reason = await engine.requires_pr_for_integration(
-        "module.py", "python", 0.9
-    )
+    requires_pr, reason = await engine.requires_pr_for_integration("module.py", "python", 0.9)
     assert not requires_pr
     assert "Direct integration allowed" in reason
 
@@ -239,13 +225,9 @@ async def test_policy_engine_metrics(mock_policy_file, temp_project_root):
 
     engine = PolicyEngine("atco_policies.json", temp_project_root)
 
-    with patch(
-        "test_generation.policy_and_audit.policy_evaluations_total"
-    ) as mock_counter:
+    with patch("test_generation.policy_and_audit.policy_evaluations_total") as mock_counter:
         await engine.should_generate_tests("module.py", "python")
-        mock_counter.labels.assert_called_with(
-            result="allowed", rule="generation_rules_local"
-        )
+        mock_counter.labels.assert_called_with(result="allowed", rule="generation_rules_local")
 
 
 # --- Tests for AuditLogger ---
@@ -269,9 +251,9 @@ async def test_audit_logger_log_event(temp_project_root):
     """Test logging an event with DLT and local logger."""
     logger = AuditLogger("audit.log")
 
-    with patch.object(
-        logger.dlt_logger, "add_entry", AsyncMock()
-    ) as mock_dlt_add, patch("logging.getLogger") as mock_local_logger:
+    with patch.object(logger.dlt_logger, "add_entry", AsyncMock()) as mock_dlt_add, patch(
+        "logging.getLogger"
+    ) as mock_local_logger:
         mock_audit_logger = MagicMock()
         mock_local_logger.return_value = mock_audit_logger
 
@@ -340,9 +322,7 @@ async def test_event_bus_publish_webhook(mock_config):
     mock_config["webhook_events"] = ["test_event"]
     bus = EventBus(mock_config)
 
-    with patch(
-        "test_generation.policy_and_audit.aiohttp.ClientSession.post"
-    ) as mock_post:
+    with patch("test_generation.policy_and_audit.aiohttp.ClientSession.post") as mock_post:
         mock_response = AsyncMock()
         mock_response.raise_for_status.return_value = None
         mock_post.return_value.__aenter__.return_value = mock_response
@@ -357,16 +337,12 @@ async def test_event_bus_publish_slack(mock_config):
     mock_config["slack_events"] = ["test_event"]
     bus = EventBus(mock_config)
 
-    with patch(
-        "test_generation.policy_and_audit.aiohttp.ClientSession.post"
-    ) as mock_post:
+    with patch("test_generation.policy_and_audit.aiohttp.ClientSession.post") as mock_post:
         mock_response = AsyncMock()
         mock_response.raise_for_status.return_value = None
         mock_post.return_value.__aenter__.return_value = mock_response
 
-        await bus.publish(
-            "test_event", {"module": "test_module", "reason": "test_reason"}
-        )
+        await bus.publish("test_event", {"module": "test_module", "reason": "test_reason"})
         mock_post.assert_called_once()
         call_args = mock_post.call_args[1]["json"]
         assert "ATCO Alert: *test_event*" in call_args["text"]
@@ -383,9 +359,7 @@ async def test_event_bus_publish_metrics_failure(mock_config):
     with patch(
         "test_generation.policy_and_audit.aiohttp.ClientSession.post",
         side_effect=Exception("Network error"),
-    ), patch(
-        "test_generation.policy_and_audit.notification_failures_total"
-    ) as mock_counter:
+    ), patch("test_generation.policy_and_audit.notification_failures_total") as mock_counter:
         await bus.publish("test_event", {"key": "value"})
 
         mock_counter.labels.assert_called_with(service="Slack", event_name="test_event")
@@ -398,9 +372,7 @@ async def test_event_bus_publish_redaction(mock_config):
     mock_config["slack_events"] = ["test_event"]
     bus = EventBus(mock_config)
 
-    with patch(
-        "test_generation.policy_and_audit.aiohttp.ClientSession.post"
-    ) as mock_post:
+    with patch("test_generation.policy_and_audit.aiohttp.ClientSession.post") as mock_post:
         mock_response = AsyncMock()
         mock_response.raise_for_status.return_value = None
         mock_post.return_value.__aenter__.return_value = mock_response

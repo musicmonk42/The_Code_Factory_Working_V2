@@ -207,9 +207,7 @@ def setup_teardown_env_vars():
 # --- Basic Initialization Tests ---
 
 
-def test_aimanager_init_success(
-    mock_core_dependencies, mock_httpx_client, mock_openai_client
-):
+def test_aimanager_init_success(mock_core_dependencies, mock_httpx_client, mock_openai_client):
     """Verifies successful AIManager initialization with valid config."""
     config = {
         "llm_api_key_secret_id": "LLM_API_KEY",
@@ -228,9 +226,7 @@ def test_aimanager_init_success(
     assert manager.max_tokens == 300
 
 
-def test_aimanager_init_defaults(
-    mock_core_dependencies, mock_httpx_client, mock_openai_client
-):
+def test_aimanager_init_defaults(mock_core_dependencies, mock_httpx_client, mock_openai_client):
     """Test AIManager initialization with default values."""
     manager = AIManager({"llm_endpoint": "https://api.openai.com/v1"})
 
@@ -261,9 +257,7 @@ def test_production_mode_requires_proxy(mock_core_dependencies):
 def test_production_mode_forbids_auto_apply(mock_core_dependencies):
     """Test that production mode forbids auto-apply patches."""
     with patch("fixer_ai.PRODUCTION_MODE", True):
-        with pytest.raises(
-            AnalyzerCriticalError, match="allow_auto_apply_patches.*forbidden"
-        ):
+        with pytest.raises(AnalyzerCriticalError, match="allow_auto_apply_patches.*forbidden"):
             AIManager(
                 {
                     "llm_endpoint": "https://api.openai.com/v1",
@@ -383,9 +377,7 @@ async def test_token_quota_enforcement(
 
 
 @pytest.mark.asyncio
-async def test_call_llm_api_success(
-    mock_core_dependencies, mock_openai_client, mock_redis_client
-):
+async def test_call_llm_api_success(mock_core_dependencies, mock_openai_client, mock_redis_client):
     """Test successful API call."""
     manager = AIManager({"llm_endpoint": "https://api.openai.com/v1"})
 
@@ -420,9 +412,7 @@ def test_get_ai_suggestions(mock_core_dependencies, mock_openai_client):
     """Test public get_ai_suggestions function."""
     with patch("fixer_ai.AIManager") as mock_manager_class:
         mock_manager = Mock()
-        mock_manager.get_refactoring_suggestion = AsyncMock(
-            return_value="Line 1\nLine 2"
-        )
+        mock_manager.get_refactoring_suggestion = AsyncMock(return_value="Line 1\nLine 2")
         mock_manager_class.return_value = mock_manager
 
         suggestions = get_ai_suggestions("Test context")
@@ -433,9 +423,7 @@ def test_get_ai_patch(mock_core_dependencies, mock_openai_client):
     """Test public get_ai_patch function."""
     with patch("fixer_ai.AIManager") as mock_manager_class:
         mock_manager = Mock()
-        mock_manager.get_cycle_breaking_suggestion = AsyncMock(
-            return_value="Patch 1\nPatch 2"
-        )
+        mock_manager.get_cycle_breaking_suggestion = AsyncMock(return_value="Patch 1\nPatch 2")
         mock_manager_class.return_value = mock_manager
 
         patches = get_ai_patch("problem", "code", ["suggestion"])
