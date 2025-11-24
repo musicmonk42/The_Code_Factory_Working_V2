@@ -28,7 +28,7 @@ All critical components are functioning correctly. The platform is ready for use
 | Self-Fixing Engineer | 552 | 552 | ✅ Match |
 | **Total Python Files** | **803** | **805** | ✅ Close Match |
 
-*Note: 2 extra files are acceptable variance due to test files and utilities.*
+*Note: 2 extra files identified as root-level utilities: `cleanup_old_docs.py` and `test_cleanup_old_docs.py` - These are helper scripts added after the documentation was written.*
 
 #### Dependencies
 - Expected: 374+ packages
@@ -262,12 +262,16 @@ The following capabilities require external API keys to be fully functional:
 1. **Generator Plugin Wrapper Line Count**
    - Documentation: 16,290 lines
    - Actual: 433 lines
-   - Assessment: ✅ File exists and is functional; documentation appears to be outdated or referring to a different metric
+   - Assessment: ⚠️ Significant discrepancy that requires documentation update
+   - **Recommendation:** Update REPOSITORY_CAPABILITIES.md line 636 to reflect actual size (433 lines)
+   - Note: The file is fully functional; this is purely a documentation accuracy issue
 
 2. **Arbiter Directory Line Count**
-   - Documentation: 26,626+ lines
+   - Documentation: 26,626+ lines  
    - Actual: 120,727 lines
-   - Assessment: ✅ Significantly MORE code than documented (this is positive!)
+   - Assessment: ✅ Significantly MORE code than documented (4.5x more - this is positive!)
+   - **Recommendation:** Update REPOSITORY_CAPABILITIES.md line 3 to reflect actual total (120,727+ lines in Arbiter)
+   - Note: The "+" in documentation suggests this was expected to grow, and it has
 
 ### Resolved Issues
 
@@ -283,6 +287,16 @@ These are optional and don't affect core functionality:
 2. Install `fastapi-csrf-protect` for additional web security
 3. Set up PostgreSQL for production (SQLite works for development)
 4. Configure external services (Neo4j, Redis, Kafka) for advanced features
+
+### Recommended Documentation Updates
+
+To improve accuracy, the following updates to REPOSITORY_CAPABILITIES.md are recommended:
+
+1. **Line 636** - Update generator_plugin_wrapper.py from "16,290 lines" to "433 lines"
+2. **Line 3** - Update Arbiter total from "26,626+ lines" to "120,727+ lines"  
+3. **Line 34** - Update total Python files from "803" to "805" (or keep as "800+" for flexibility)
+
+These are minor documentation updates that don't affect functionality but would improve accuracy.
 
 ---
 
