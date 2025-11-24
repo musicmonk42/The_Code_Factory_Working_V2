@@ -1,0 +1,69 @@
+name: Clean Old Documentation
+
+on:
+  # Run daily at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to keep files'
+        required: false
+        default: '2'
+      dry_run:
+        description: 'Dry run (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Run cleanup (scheduled)
+        if: github.event_name == 'schedule'
+        run: |
+          echo "Running scheduled cleanup of audit/test docs older than 2 days..."
+          python cleanup_old_docs.py --yes
+      
+      - name: Run cleanup (manual - dry run)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'
+        run: |
+          echo "Running manual cleanup in dry-run mode..."
+          python cleanup_old_docs.py --days ${{ github.event.inputs.days }} --dry-run
+      
+      - name: Run cleanup (manual)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false'
+        run: |
+          echo "Running manual cleanup..."
+          python cleanup_old_docs.py --days ${{ github.event.inputs.days }} --yes
+      
+      - name: Commit and push if changes
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false')
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Check if there are any changes
+          if [[ -n $(git status -s) ]]; then
+            git add -A
+            git commit -m "chore: automated cleanup of old audit/test documents"
+            git push
+            echo "✓ Changes committed and pushed"
+          else
+            echo "✓ No files were deleted, nothing to commit"
+          fi
