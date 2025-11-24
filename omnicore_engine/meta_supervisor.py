@@ -87,7 +87,12 @@ try:
     )
 except ImportError:
     ExplainableReasonerPlugin = None
-from redis.asyncio import RedisError, redis
+
+try:
+    from redis.asyncio import RedisError, Redis
+except ImportError:
+    RedisError = Exception
+    Redis = None
 
 logger = logging.getLogger("MetaSupervisor")
 # Ensure logger is configured
@@ -1294,7 +1299,7 @@ class MetaSupervisor:
                 report = await self.generate_mentor_report()
                 if report:
                     async with self.rate_limiter:
-                        async with redis.from_url(
+                        async with Redis.from_url(
                             settings.REDIS_URL, decode_responses=True
                         ) as client:
                             await client.publish("mentor_reports", json.dumps(report))
@@ -1878,7 +1883,7 @@ class MetaSupervisor:
             )
 
             async with self.rate_limiter:
-                async with redis.from_url(
+                async with Redis.from_url(
                     settings.REDIS_URL, decode_responses=True
                 ) as client:
                     await client.publish(
