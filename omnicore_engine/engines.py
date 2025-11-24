@@ -27,16 +27,41 @@ from arbiter import Arbiter
 from arbiter.utils import (
     get_system_metrics_async,
 )  # New import needed for helper function
-from envs.code_health_env import CodeHealthEnv  # New import for the RL environment
-from intent_capture.api import app as intent_capture_api
-from self_healing_import_fixer.import_fixer.import_fixer_engine import (
-    ImportFixerEngine,
-    create_import_fixer_engine,
-)
-from test_generation.orchestrator import TestGenerationOrchestrator
 
-from self_fixing_engineer.agent_orchestration.crew_manager import CrewManager
-from self_fixing_engineer.simulation.simulation_module import UnifiedSimulationModule
+# Optional imports that may not be available in all environments
+try:
+    from envs.code_health_env import CodeHealthEnv
+except ImportError:
+    CodeHealthEnv = None
+
+try:
+    from intent_capture.api import app as intent_capture_api
+except ImportError:
+    intent_capture_api = None
+
+try:
+    from self_healing_import_fixer.import_fixer.import_fixer_engine import (
+        ImportFixerEngine,
+        create_import_fixer_engine,
+    )
+except ImportError:
+    ImportFixerEngine = None
+    create_import_fixer_engine = None
+
+try:
+    from test_generation.orchestrator import TestGenerationOrchestrator
+except ImportError:
+    TestGenerationOrchestrator = None
+
+try:
+    from self_fixing_engineer.agent_orchestration.crew_manager import CrewManager
+except ImportError:
+    CrewManager = None
+
+try:
+    from self_fixing_engineer.simulation.simulation_module import UnifiedSimulationModule
+except ImportError:
+    UnifiedSimulationModule = None
 
 # --- Engine Registry for discoverable components ---
 ENGINE_REGISTRY = {}
