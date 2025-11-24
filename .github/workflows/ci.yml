@@ -203,7 +203,7 @@ jobs:
             exit 1
           }
           # Verify arbiter is importable with detailed diagnostics
-          python -c "import importlib; m = importlib.import_module('arbiter'); print('arbiter import OK:', getattr(m, '__file__', '<no __file__>'))" || {
+          python -c "import arbiter; print(f'arbiter imported from {arbiter.__file__}')" || {
             echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
             exit 1
           }
@@ -239,15 +239,22 @@ jobs:
           export PYTHONPATH="$PYTHONPATH:$PWD"
           if [ -d omnicore_engine/tests ]; then
             echo "Running per-file diagnostic to find CPU-heavy test..."
-            for f in $(git ls-files 'omnicore_engine/tests/**/*.py' | grep -E 'test_.*\.py$' | sort); do
+            DIAGNOSTIC_FAILED=0
+            for f in $(find omnicore_engine/tests -name 'test_*.py' | sort); do
               echo "==> Testing $f"
               /usr/bin/time -v pytest -q "$f" --maxfail=1 --timeout=60 || {
                 echo "Problem detected in $f"
+                DIAGNOSTIC_FAILED=1
                 break
               }
             done
-            echo "Now running full pytest (for coverage) if diagnostic succeeded..."
-            pytest omnicore_engine/tests/ --cov=omnicore_engine --cov-report=xml --cov-report=term -v --timeout=300 --maxfail=1
+            if [ $DIAGNOSTIC_FAILED -eq 0 ]; then
+              echo "Now running full pytest (for coverage) after successful diagnostics..."
+              pytest omnicore_engine/tests/ --cov=omnicore_engine --cov-report=xml --cov-report=term -v --timeout=300 --maxfail=1
+            else
+              echo "Skipping full test run due to diagnostic failure"
+              exit 1
+            fi
           else
             echo "Error: No tests directory found. Failing the build."
             exit 1
