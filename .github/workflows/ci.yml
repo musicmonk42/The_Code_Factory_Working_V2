@@ -9,6 +9,12 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
+  # OpenTelemetry package versions - pinned for compatibility
+  OTEL_API_VERSION: '1.38.0'
+  OTEL_SDK_VERSION: '1.38.0'
+  OTEL_EXPORTER_VERSION: '1.38.0'
+  OTEL_INSTRUMENTATION_VERSION: '0.59b0'
+  OTEL_SEMANTIC_CONVENTIONS_VERSION: '0.59b0'
 
 permissions:
   contents: read
@@ -143,6 +149,14 @@ jobs:
             pip install --no-cache-dir -r generator/master_requirements.txt
           fi
           pip install --no-cache-dir pytest-cov
+          # Force-reinstall OpenTelemetry packages to ensure correct versions
+          pip install --force-reinstall \
+            opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
+            opentelemetry-instrumentation-fastapi==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-instrumentation==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
+            opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
+            opentelemetry-api==${{ env.OTEL_API_VERSION }}
           
       - name: Run Generator tests
         run: |
@@ -246,6 +260,14 @@ jobs:
           # Install missing runtime/test dependencies
           pip install --no-cache-dir fastapi-csrf-protect circuitbreaker defusedxml || true
           pip install --no-cache-dir pytest-cov
+          # Force-reinstall OpenTelemetry packages to ensure correct versions
+          pip install --force-reinstall \
+            opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
+            opentelemetry-instrumentation-fastapi==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-instrumentation==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
+            opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
+            opentelemetry-api==${{ env.OTEL_API_VERSION }}
           
       - name: Free more disk space before tests
         run: |
@@ -320,6 +342,14 @@ jobs:
             pip install --no-cache-dir -r self_fixing_engineer/requirements.txt
           fi
           pip install --no-cache-dir pytest-cov
+          # Force-reinstall OpenTelemetry packages to ensure correct versions
+          pip install --force-reinstall \
+            opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
+            opentelemetry-instrumentation-fastapi==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-instrumentation==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
+            opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
+            opentelemetry-api==${{ env.OTEL_API_VERSION }}
           
       - name: Run SFE tests
         run: |
@@ -407,6 +437,14 @@ jobs:
           if [ -f master_requirements.txt ]; then
             pip install --no-cache-dir -r master_requirements.txt || true
           fi
+          # Force-reinstall OpenTelemetry packages to ensure correct versions
+          pip install --force-reinstall \
+            opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
+            opentelemetry-instrumentation-fastapi==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-instrumentation==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
+            opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
+            opentelemetry-api==${{ env.OTEL_API_VERSION }}
           
       - name: Run integration tests
         env:
