@@ -23,7 +23,7 @@ except Exception:
             return None
 
 
-from arbiter.arbiter import Arbiter
+from arbiter import Arbiter
 from arbiter.utils import (
     get_system_metrics_async,
 )  # New import needed for helper function

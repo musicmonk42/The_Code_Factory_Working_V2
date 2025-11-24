@@ -72,7 +72,7 @@ try:
     # Updated imports to reflect the new arbiter package structure
     import sqlalchemy
     from arbiter.agent_state import ArbiterConfig
-    from arbiter.arbiter import Arbiter
+    from arbiter import Arbiter
     from arbiter.arena import ArbiterArena
     from arbiter.explainable_reasoner import ExplainableReasonerPlugin
     from arbiter.knowledge_loader import KnowledgeLoader
