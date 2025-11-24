@@ -371,7 +371,7 @@ class CircuitBreaker:
                 try:
                     asyncio.get_running_loop()
                     asyncio.create_task(
-                        log_action("circuit_breaker_event", status="half_open")
+                        log_action("circuit_breaker_event", {"status": "half_open"})
                     )
                 except RuntimeError:
                     # No event loop - log synchronously
@@ -455,7 +455,9 @@ class CircuitBreaker:
             try:
                 asyncio.get_running_loop()
                 asyncio.create_task(
-                    log_action("circuit_breaker_event", status="closed_after_success")
+                    log_action(
+                        "circuit_breaker_event", {"status": "closed_after_success"}
+                    )
                 )
             except RuntimeError:
                 pass  # Silent fail for non-critical logging
@@ -671,7 +673,9 @@ class SQLiteContextManager(ContextManager):
     async def add_to_context(self, data: Dict[str, Any]):
         if not self.conn:
             self.logger.error("SQLiteContextManager not connected.")
-            await log_action("context_add", status="fail", reason="not_connected")
+            await log_action(
+                "context_add", {"status": "fail", "reason": "not_connected"}
+            )
             raise RuntimeError("SQLiteContextManager not connected.")
         entry_id = str(uuid.uuid4())
         try:
@@ -718,7 +722,9 @@ class SQLiteContextManager(ContextManager):
         if self.conn:
             await asyncio.to_thread(self.conn.close)
             self.logger.info("SQLiteContextManager closed.")
-            await log_action("context_manager_close", type="sqlite", status="success")
+            await log_action(
+                "context_manager_close", {"type": "sqlite", "status": "success"}
+            )
 
     @property
     def is_production_ready(self) -> bool:
@@ -757,11 +763,13 @@ class InMemoryContextManager(ContextManager):
 
     async def add_to_context(self, data: Dict[str, Any]):
         self.logger.debug("InMemoryContextManager: Adding data to context (no-op).")
-        await log_action("context_add", status="no_op_in_memory")
+        await log_action("context_add", {"status": "no_op_in_memory"})
 
     async def close(self):
         self.logger.info("InMemoryContextManager closed (no-op).")
-        await log_action("context_manager_close", type="in_memory", status="success")
+        await log_action(
+            "context_manager_close", {"type": "in_memory", "status": "success"}
+        )
 
     @property
     def is_production_ready(self) -> bool:

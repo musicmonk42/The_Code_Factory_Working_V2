@@ -436,7 +436,9 @@ class HistoryStore:
                 time.perf_counter() - start_time
             )
             # FIX: Removed await from synchronous log_action call
-            log_action("history_queried", category="history", count=len(entries))
+            log_action(
+                "history_queried", {"category": "history", "count": len(entries)}
+            )
             return entries
         except Exception as e:
             logger.error(f"History query failed: {e}", exc_info=True)
