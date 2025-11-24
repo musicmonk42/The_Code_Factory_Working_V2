@@ -113,14 +113,51 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
+      - name: Free up disk space for Docker build
+        run: |
+          # Remove large packages and unused tools to free disk space
+          echo "=== Disk space before cleanup ==="
+          df -h
+          # Remove large tool chains and runtimes
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo rm -rf /opt/hostedtoolcache
+          # Remove additional large directories
+          sudo rm -rf /usr/local/graalvm
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/local/sqlpackage
+          # Clear package manager caches
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+          sudo rm -rf /var/cache/apt/archives/*
+          # Clear other caches
+          find /tmp -maxdepth 1 -type f -mtime +1 -delete 2>/dev/null || true
+          find /var/tmp -maxdepth 1 -type f -mtime +1 -delete 2>/dev/null || true
+          # Aggressively prune Docker
+          docker system prune -af || true
+          # Clear BuildKit cache
+          docker buildx prune -af || true
+          echo "=== Disk space after cleanup ==="
+          df -h
+        
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         
       - name: Build Docker image
+        env:
+          DOCKER_BUILDKIT: 1
+          BUILDKIT_PROGRESS: plain
         run: |
           docker build -t code-factory:scan -f Dockerfile . \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            --progress=plain
+            --build-arg SKIP_HEAVY_DEPS=1 \
+            --build-arg BUILDKIT_INLINE_CACHE=1
+          # Clean up build cache immediately after build
+          docker builder prune -af || true
           
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master

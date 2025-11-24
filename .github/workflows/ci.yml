@@ -110,13 +110,16 @@ jobs:
           fi
           pip install --no-cache-dir pytest-cov
           # Force-reinstall OpenTelemetry packages to ensure correct versions
-          pip install --force-reinstall \
+          # Use --no-deps to avoid pulling incompatible protobuf 6.x
+          pip install --force-reinstall --no-deps \
             opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
             opentelemetry-instrumentation-fastapi==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
             opentelemetry-instrumentation==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Ensure protobuf version is correct after OpenTelemetry install
+          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
@@ -216,13 +219,16 @@ jobs:
           pip install --no-cache-dir fastapi-csrf-protect circuitbreaker defusedxml || true
           pip install --no-cache-dir pytest-cov
           # Force-reinstall OpenTelemetry packages to ensure correct versions
-          pip install --force-reinstall \
+          # Use --no-deps to avoid pulling incompatible protobuf 6.x
+          pip install --force-reinstall --no-deps \
             opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
             opentelemetry-instrumentation-fastapi==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
             opentelemetry-instrumentation==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Ensure protobuf version is correct after OpenTelemetry install
+          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
@@ -336,13 +342,16 @@ jobs:
             pip install --no-cache-dir -r requirements.txt
           fi
           # Force-reinstall OpenTelemetry packages to ensure correct versions
-          pip install --force-reinstall \
+          # Use --no-deps to avoid pulling incompatible protobuf 6.x
+          pip install --force-reinstall --no-deps \
             opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
             opentelemetry-instrumentation-fastapi==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
             opentelemetry-instrumentation==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Ensure protobuf version is correct after OpenTelemetry install
+          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           

@@ -74,7 +74,7 @@ Deprecated==1.2.18
 dill==0.3.9
 distro==1.9.0
 docker==7.1.0
-docutils==0.19
+docutils==0.21.2
 durationpy==0.10
 dynaconf==3.2.12
 ecdsa==0.19.1
