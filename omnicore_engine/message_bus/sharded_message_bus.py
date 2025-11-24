@@ -9,7 +9,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 
 import structlog
 
@@ -37,7 +37,10 @@ import aiohttp
 # Assuming 'safe_serialize' is either in 'omnicore_engine.core' or 'omnicore_engine.utils'
 # Using 'omnicore_engine.core' for robustness based on project pattern:
 from omnicore_engine.core import safe_serialize
-from omnicore_engine.database import Database
+
+if TYPE_CHECKING:
+    from omnicore_engine.database import Database
+
 from omnicore_engine.message_bus.message_types import Message
 
 # FIX: Corrected absolute imports by removing the unnecessary 'app.' prefix.
@@ -128,7 +131,7 @@ class ShardedMessageBus:
     def __init__(
         self,
         config: ArbiterConfig = None,
-        db: Optional[Database] = None,
+        db: Optional["Database"] = None,
         audit_client: Optional[Any] = None,
     ):
         self.security_utils = get_security_utils()

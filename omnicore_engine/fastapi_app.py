@@ -72,7 +72,7 @@ try:
     # Updated imports to reflect the new arbiter package structure
     import sqlalchemy
     from arbiter.agent_state import ArbiterConfig
-    from arbiter.arbiter import Arbiter
+    from arbiter import Arbiter
     from arbiter.arena import ArbiterArena
     from arbiter.explainable_reasoner import ExplainableReasonerPlugin
     from arbiter.knowledge_loader import KnowledgeLoader
@@ -218,13 +218,13 @@ class SizeLimitMiddleware(BaseHTTPMiddleware):
 
 
 # In fastapi_app.py, add security middleware
-from security_config import get_security_config
+from omnicore_engine.security_config import get_security_config
 
 from omnicore_engine.security_utils import RateLimiter, get_security_utils
 
 security_config = get_security_config()
 security_utils = get_security_utils()
-rate_limiter = RateLimiter()
+rate_limiter = RateLimiter(max_calls=100, per_seconds=60)  # Default: 100 calls per minute
 
 
 # Add authentication middleware

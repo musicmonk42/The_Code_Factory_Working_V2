@@ -17,7 +17,6 @@ from arbiter.config import ArbiterConfig
 
 # External project imports
 from omnicore_engine.core import safe_serialize
-from omnicore_engine.database.database import Database
 
 # Relative imports from the new modular structure
 from .message_types import Message
@@ -25,6 +24,7 @@ from .message_types import Message
 settings = ArbiterConfig()
 
 if TYPE_CHECKING:
+    from omnicore_engine.database.database import Database
     from .integrations.kafka_bridge import KafkaBridge
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 class DeadLetterQueue:
     def __init__(
         self,
-        db: Database,
+        db: "Database",
         kafka_bridge: Optional["KafkaBridge"],
         priority_threshold: int,
     ):
