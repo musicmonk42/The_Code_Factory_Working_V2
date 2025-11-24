@@ -22,30 +22,18 @@ help: ## Show this help message
 # Installation
 # =============================================================================
 
-install: ## Install all dependencies for production
-	@echo "$(BLUE)Installing production dependencies...$(NC)"
+install: ## Install all dependencies for unified platform (production)
+	@echo "$(BLUE)Installing unified platform dependencies...$(NC)"
 	pip install --upgrade pip setuptools wheel
 	pip install -r requirements.txt
-	cd generator && pip install -r requirements.txt
-	cd omnicore_engine && pip install -r requirements.txt
-	cd self_fixing_engineer && pip install -r requirements.txt
 	@echo "$(GREEN)Installation complete!$(NC)"
 
 install-dev: ## Install all dependencies including development tools
-	@echo "$(BLUE)Installing development dependencies...$(NC)"
+	@echo "$(BLUE)Installing unified platform development dependencies...$(NC)"
 	pip install --upgrade pip setuptools wheel
 	pip install -r requirements.txt
 	pip install pytest pytest-cov pytest-asyncio pytest-mock black ruff flake8 mypy bandit safety pip-audit
-	cd generator && pip install -r requirements.txt
-	cd omnicore_engine && pip install -r requirements.txt
-	cd self_fixing_engineer && pip install -r requirements.txt
 	@echo "$(GREEN)Development installation complete!$(NC)"
-
-install-master: ## Install from master_requirements.txt (all dependencies)
-	@echo "$(BLUE)Installing all dependencies from master_requirements.txt...$(NC)"
-	pip install --upgrade pip setuptools wheel
-	pip install -r master_requirements.txt
-	@echo "$(GREEN)Master installation complete!$(NC)"
 
 # =============================================================================
 # Testing

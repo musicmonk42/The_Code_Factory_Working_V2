@@ -71,12 +71,9 @@ cp .env.example .env
 # Edit .env file with your API keys
 nano .env
 
-# Install dependencies
+# Install dependencies for the unified platform
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r generator/requirements.txt
-pip install -r omnicore_engine/requirements.txt
-pip install -r self_fixing_engineer/requirements.txt
 
 # Start with Docker
 docker-compose up -d

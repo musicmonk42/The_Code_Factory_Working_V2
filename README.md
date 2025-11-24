@@ -167,15 +167,12 @@ cp .env.example .env
 
 
 Install Dependencies:
-# Install all dependencies
+# Install all dependencies for the unified platform
 make install-dev
 
 # Or manually:
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r generator/requirements.txt
-pip install -r omnicore_engine/requirements.txt
-pip install -r self_fixing_engineer/requirements.txt
 
 
 Start Redis (required):

@@ -33,30 +33,9 @@ jobs:
           
       - name: Update requirements files
         run: |
-          # Update main requirements
+          # Update unified platform requirements
           if [ -f requirements.txt ]; then
             pip-compile --upgrade --resolver=backtracking requirements.txt || true
-          fi
-          
-          # Update generator requirements
-          if [ -f generator/requirements.txt ]; then
-            cd generator
-            pip-compile --upgrade --resolver=backtracking requirements.txt || true
-            cd ..
-          fi
-          
-          # Update omnicore requirements
-          if [ -f omnicore_engine/requirements.txt ]; then
-            cd omnicore_engine
-            pip-compile --upgrade --resolver=backtracking requirements.txt || true
-            cd ..
-          fi
-          
-          # Update SFE requirements
-          if [ -f self_fixing_engineer/requirements.txt ]; then
-            cd self_fixing_engineer
-            pip-compile --upgrade --resolver=backtracking requirements.txt || true
-            cd ..
           fi
           
       - name: Check for changes
@@ -80,11 +59,7 @@ jobs:
             
             Please review the changes and ensure all tests pass before merging.
             
-            Updated components:
-            - Main requirements
-            - Generator requirements
-            - OmniCore Engine requirements
-            - Self-Fixing Engineer requirements
+            Updated unified platform requirements.
           branch: automated/dependency-updates
           delete-branch: true
           labels: dependencies, automated
@@ -106,17 +81,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           
-          echo "## Outdated Packages Report" > outdated-report.md
+          echo "## Outdated Packages Report - Unified Platform" > outdated-report.md
           echo "" >> outdated-report.md
           
-          for req_file in requirements.txt generator/requirements.txt omnicore_engine/requirements.txt self_fixing_engineer/requirements.txt; do
-            if [ -f "$req_file" ]; then
-              echo "### $req_file" >> outdated-report.md
-              pip install -r "$req_file" > /dev/null 2>&1 || true
-              pip list --outdated --format=markdown >> outdated-report.md || true
-              echo "" >> outdated-report.md
-            fi
-          done
+          if [ -f requirements.txt ]; then
+            echo "### requirements.txt (Unified Platform)" >> outdated-report.md
+            pip install -r requirements.txt > /dev/null 2>&1 || true
+            pip list --outdated --format=markdown >> outdated-report.md || true
+            echo "" >> outdated-report.md
+          fi
           
       - name: Upload outdated report
         uses: actions/upload-artifact@v4
