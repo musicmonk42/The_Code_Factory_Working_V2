@@ -360,6 +360,8 @@ make docker-clean      # Clean Docker resources
 Maintenance:
 make clean             # Clean generated files and caches
 make clean-all         # Deep clean (includes Docker and databases)
+make clean-old-docs    # Preview old audit/test docs to be deleted (dry-run)
+make clean-old-docs-force  # Remove audit/test docs older than 2 days
 make health-check      # Check service health
 
 See Makefile for all available commands.
