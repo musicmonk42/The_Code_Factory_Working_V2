@@ -201,10 +201,11 @@ jobs:
         with:
           python-version: '3.11'
           
-      - name: Install pip-licenses
+      - name: Install pip-licenses and jq
         run: |
           python -m pip install --upgrade pip
           pip install pip-licenses
+          sudo apt-get update && sudo apt-get install -y jq
           
       - name: Check licenses
         run: |
@@ -230,14 +231,19 @@ jobs:
               pip install pip-licenses
               pip-licenses --format=json > "$TEMP_DIR/licenses-requirements.json" || true
               
-              # Check for GPL/AGPL licenses using jq (ignore LGPL)
-              if command -v jq >/dev/null 2>&1; then
-                RESTRICTIVE=$(jq -r '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not)) | "\(.Name) \(.Version) - \(.License)"' "$TEMP_DIR/licenses-requirements.json" 2>/dev/null || true)
-                if [ -n "$RESTRICTIVE" ]; then
-                  echo "⚠️  Found packages with restrictive licenses:"
-                  echo "$RESTRICTIVE"
-                  HAS_ISSUES=1
-                fi
+              # Whitelist packages that are allowed despite containing "GPL" in the license string
+              # Add package names here (exact Name values from pip-licenses output)
+              WHITELIST='["docutils"]'
+              
+              # Use jq to find packages whose License includes GPL/AGPL (but not LGPL), excluding whitelist
+              RESTRICTIVE=$(jq -r --argjson wl "$WHITELIST" \
+                '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not) and ([.Name] | inside($wl) | not)) | "\(.Name) \(.Version) - \(.License)"' \
+                "$TEMP_DIR/licenses-requirements.json" || true)
+              
+              if [ -n "$RESTRICTIVE" ]; then
+                echo "⚠️  Found packages with restrictive licenses:"
+                echo "$RESTRICTIVE"
+                HAS_ISSUES=1
               fi
               
               # Generate markdown report for artifacts
