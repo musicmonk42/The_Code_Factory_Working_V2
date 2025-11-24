@@ -355,19 +355,22 @@ Divide two numbers with zero-division handling.
 @pytest.fixture
 def mock_presidio_full():
     """Mock Presidio across all modules."""
-    with patch(
-        "generator.agents.docgen_agent.docgen_agent.AnalyzerEngine"
-    ) as mock_a1, patch(
-        "generator.agents.docgen_agent.docgen_agent.AnonymizerEngine"
-    ) as mock_an1, patch(
-        "generator.agents.docgen_agent.docgen_prompt.AnalyzerEngine"
-    ) as mock_a2, patch(
-        "generator.agents.docgen_agent.docgen_prompt.AnonymizerEngine"
-    ) as mock_an2, patch(
-        "generator.agents.docgen_agent.docgen_response_validator.AnalyzerEngine"
-    ) as mock_a3, patch(
-        "generator.agents.docgen_agent.docgen_response_validator.AnonymizerEngine"
-    ) as mock_an3:
+    with (
+        patch("generator.agents.docgen_agent.docgen_agent.AnalyzerEngine") as mock_a1,
+        patch(
+            "generator.agents.docgen_agent.docgen_agent.AnonymizerEngine"
+        ) as mock_an1,
+        patch("generator.agents.docgen_agent.docgen_prompt.AnalyzerEngine") as mock_a2,
+        patch(
+            "generator.agents.docgen_agent.docgen_prompt.AnonymizerEngine"
+        ) as mock_an2,
+        patch(
+            "generator.agents.docgen_agent.docgen_response_validator.AnalyzerEngine"
+        ) as mock_a3,
+        patch(
+            "generator.agents.docgen_agent.docgen_response_validator.AnonymizerEngine"
+        ) as mock_an3,
+    ):
 
         # Configure all analyzer/anonymizer mocks
         for analyzer_mock in [mock_a1, mock_a2, mock_a3]:

@@ -158,11 +158,14 @@ def cleanup_test_environment():
 async def mock_presidio():
     """Mock Presidio analyzer and anonymizer."""
     # --- FIX: Patch the names as they are imported in audit_utils ---
-    with patch(
-        "generator.audit_log.audit_utils.AnalyzerEngine", create=True
-    ) as mock_analyzer_cls, patch(
-        "generator.audit_log.audit_utils.AnonymizerEngine", create=True
-    ) as mock_anonymizer_cls:
+    with (
+        patch(
+            "generator.audit_log.audit_utils.AnalyzerEngine", create=True
+        ) as mock_analyzer_cls,
+        patch(
+            "generator.audit_log.audit_utils.AnonymizerEngine", create=True
+        ) as mock_anonymizer_cls,
+    ):
 
         mock_analyzer_inst = MagicMock()
         mock_anonymizer_inst = MagicMock()
@@ -248,12 +251,15 @@ def mock_crypto_provider_factory(mock_software_key_master):
         mock_atomic_write.return_value = None  # Ensure it doesn't raise the OS error
 
         # Patch the global factory instance and the internal accessor function
-        with patch(
-            "generator.audit_log.audit_crypto.audit_crypto_factory.crypto_provider_factory",
-            mock_factory,
-        ), patch(
-            "generator.audit_log.audit_crypto.audit_crypto_factory._ensure_software_key_master",
-            mock_software_key_master,
+        with (
+            patch(
+                "generator.audit_log.audit_crypto.audit_crypto_factory.crypto_provider_factory",
+                mock_factory,
+            ),
+            patch(
+                "generator.audit_log.audit_crypto.audit_crypto_factory._ensure_software_key_master",
+                mock_software_key_master,
+            ),
         ):
             # Re-initialize the global AUDIT_LOG instance after patching the factory
             # to ensure AuditLog.__init__ uses the mock.
@@ -273,9 +279,10 @@ def mock_crypto_provider_factory(mock_software_key_master):
 @pytest_asyncio.fixture
 async def mock_metrics():
     """Mock Prometheus metrics."""
-    with patch("generator.audit_log.audit_log.Counter") as mock_counter, patch(
-        "generator.audit_log.audit_log.Histogram"
-    ) as mock_histogram:
+    with (
+        patch("generator.audit_log.audit_log.Counter") as mock_counter,
+        patch("generator.audit_log.audit_log.Histogram") as mock_histogram,
+    ):
         mock_metrics = {
             "audit_log_writes_total": MagicMock(),
             "audit_log_errors_total": MagicMock(),

@@ -196,11 +196,14 @@ class TestLLMPluginManager(IsolatedAsyncioTestCase):
 
         PLUGIN_ERRORS.labels.reset_mock()
 
-        with patch.object(
-            self.manager, "_get_expected_hash", return_value="expected_hash"
-        ), patch.object(
-            self.manager, "_verify_integrity", return_value=False
-        ) as mock_verify:
+        with (
+            patch.object(
+                self.manager, "_get_expected_hash", return_value="expected_hash"
+            ),
+            patch.object(
+                self.manager, "_verify_integrity", return_value=False
+            ) as mock_verify,
+        ):
             await self.manager._scan_and_load_plugins()
 
         self.assertNotIn("tampered", self.manager.list_providers())

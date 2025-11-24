@@ -333,9 +333,11 @@ async def test_property_based_test_success_no_fuzz_functions(
     sys.modules[module_name] = module
 
     # FIX: Add patch for importlib.reload to prevent ModuleNotFoundError
-    with patch("runner.runner_mutation.HAS_HYPOTHESIS", True), patch(
-        "importlib.import_module", return_value=module
-    ), patch("importlib.reload", return_value=None):
+    with (
+        patch("runner.runner_mutation.HAS_HYPOTHESIS", True),
+        patch("importlib.import_module", return_value=module),
+        patch("importlib.reload", return_value=None),
+    ):
         result = await property_based_test(temp_dir, mock_config, code_files)
 
     assert result["status"] == "skipped"
@@ -474,9 +476,11 @@ async def test_full_pipeline(
     sys.modules[module_name] = pb_module
 
     # FIX: Add patch for importlib.reload
-    with patch("runner.runner_mutation.HAS_HYPOTHESIS", True), patch(
-        "importlib.import_module", return_value=pb_module
-    ), patch("importlib.reload", return_value=None):
+    with (
+        patch("runner.runner_mutation.HAS_HYPOTHESIS", True),
+        patch("importlib.import_module", return_value=pb_module),
+        patch("importlib.reload", return_value=None),
+    ):
         prop_result = await property_based_test(
             temp_dir, mock_config, {f"{module_name}.py": "x = 1"}
         )

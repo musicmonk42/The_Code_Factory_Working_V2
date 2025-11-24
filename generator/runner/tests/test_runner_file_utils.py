@@ -173,8 +173,9 @@ async def test_load_file_content_integrity_tamper(temp_file: Path, mock_aiofiles
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
 async def test_load_file_content_no_deps(temp_file: Path):
-    with patch("runner.runner_file_utils.aiofiles", None), patch(
-        "runner.runner_file_utils.xattr", None
+    with (
+        patch("runner.runner_file_utils.aiofiles", None),
+        patch("runner.runner_file_utils.xattr", None),
     ):
         content = "Fallback"
         temp_file.write_text(content)

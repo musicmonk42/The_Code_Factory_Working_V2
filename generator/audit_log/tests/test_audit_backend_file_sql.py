@@ -153,11 +153,13 @@ def event_loop():
 @pytest_asyncio.fixture(autouse=True)
 async def mock_alerts_and_otel():
     """Mock alerts and tracing for all tests."""
-    with patch(
-        "audit_log.audit_backend.audit_backend_core.send_alert", new_callable=AsyncMock
-    ) as mock_alert, patch(
-        "audit_log.audit_backend.audit_backend_core.tracer"
-    ) as mock_tracer:
+    with (
+        patch(
+            "audit_log.audit_backend.audit_backend_core.send_alert",
+            new_callable=AsyncMock,
+        ) as mock_alert,
+        patch("audit_log.audit_backend.audit_backend_core.tracer") as mock_tracer,
+    ):
 
         mock_span = MagicMock()
         mock_tracer.start_as_current_span.return_value.__enter__.return_value = (

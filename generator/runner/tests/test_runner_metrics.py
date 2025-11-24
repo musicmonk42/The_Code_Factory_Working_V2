@@ -163,9 +163,11 @@ def mock_external_sdks():
     """Mocks Datadog, Boto3, and aiofiles."""
 
     # Update patch targets from 'runner.metrics' to 'runner.runner_metrics'
-    with patch("runner.runner_metrics.datadog", MagicMock()) as mock_dd, patch(
-        "runner.runner_metrics.boto3", MagicMock()
-    ) as mock_boto, patch("runner.runner_metrics.aiofiles", MagicMock()) as mock_aio:
+    with (
+        patch("runner.runner_metrics.datadog", MagicMock()) as mock_dd,
+        patch("runner.runner_metrics.boto3", MagicMock()) as mock_boto,
+        patch("runner.runner_metrics.aiofiles", MagicMock()) as mock_aio,
+    ):
 
         # Configure Boto3 mock
         mock_cw_client = MagicMock()

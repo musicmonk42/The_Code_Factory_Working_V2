@@ -20,15 +20,13 @@ import yaml
 @pytest.fixture
 def mock_dependencies():
     """Mock all external dependencies."""
-    with patch("generator.main.main.Runner") as mock_runner, patch(
-        "generator.main.main.load_config"
-    ) as mock_config, patch(
-        "generator.main.main.get_metrics_dict"
-    ) as mock_metrics, patch(
-        "generator.main.main.MainApp"
-    ) as mock_app, patch(
-        "generator.main.main.main_cli"
-    ) as mock_cli:
+    with (
+        patch("generator.main.main.Runner") as mock_runner,
+        patch("generator.main.main.load_config") as mock_config,
+        patch("generator.main.main.get_metrics_dict") as mock_metrics,
+        patch("generator.main.main.MainApp") as mock_app,
+        patch("generator.main.main.main_cli") as mock_cli,
+    ):
 
         mock_config.return_value = {
             "backend": "test",
@@ -156,9 +154,11 @@ class TestInterfaceLaunching:
     async def test_gui_interface_launch(self, mock_dependencies):
         """Test launching GUI interface."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.main_cli") as mock_cli, patch(
-            "generator.main.main.MainApp"
-        ) as MockApp, patch("generator.main.main.setup_signals"):
+        with (
+            patch("generator.main.main.main_cli") as mock_cli,
+            patch("generator.main.main.MainApp") as MockApp,
+            patch("generator.main.main.setup_signals"),
+        ):
 
             mock_app_instance = MagicMock()
             MockApp.return_value = mock_app_instance
@@ -177,8 +177,9 @@ class TestInterfaceLaunching:
     async def test_cli_interface_launch(self):
         """Test launching CLI interface."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.main_cli") as mock_cli, patch(
-            "generator.main.main.setup_signals"
+        with (
+            patch("generator.main.main.main_cli") as mock_cli,
+            patch("generator.main.main.setup_signals"),
         ):
 
             # Simulate the interface == 'cli' branch
@@ -192,14 +193,12 @@ class TestInterfaceLaunching:
     async def test_api_interface_launch(self):
         """Test launching API interface."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.uvicorn") as mock_uvicorn, patch(
-            "generator.main.main.fastapi_app"
-        ) as mock_app, patch(
-            "generator.main.main.api_create_db_tables"
-        ) as mock_create_db, patch(
-            "generator.main.main.FastAPIInstrumentor"
-        ) as mock_instrumentor, patch(
-            "generator.main.main.setup_signals"
+        with (
+            patch("generator.main.main.uvicorn") as mock_uvicorn,
+            patch("generator.main.main.fastapi_app") as mock_app,
+            patch("generator.main.main.api_create_db_tables") as mock_create_db,
+            patch("generator.main.main.FastAPIInstrumentor") as mock_instrumentor,
+            patch("generator.main.main.setup_signals"),
         ):
 
             mock_server = MagicMock()
@@ -251,9 +250,10 @@ class TestHealthChecks:
     async def test_health_check_with_api(self):
         """Test health check including API check."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.perform_health_check") as mock_health, patch(
-            "generator.main.main.aiohttp.ClientSession"
-        ) as mock_session:
+        with (
+            patch("generator.main.main.perform_health_check") as mock_health,
+            patch("generator.main.main.aiohttp.ClientSession") as mock_session,
+        ):
 
             mock_health.return_value = True
 
@@ -269,9 +269,11 @@ class TestConfigurationReload:
     def test_on_config_reload_valid(self):
         """Test configuration reload with valid config."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.validate_config") as mock_validate, patch(
-            "generator.main.main.log_action"
-        ) as mock_log, patch("generator.main.main.logger") as mock_logger:
+        with (
+            patch("generator.main.main.validate_config") as mock_validate,
+            patch("generator.main.main.log_action") as mock_log,
+            patch("generator.main.main.logger") as mock_logger,
+        ):
 
             mock_validate.return_value = True
 
@@ -290,11 +292,12 @@ class TestConfigurationReload:
     def test_on_config_reload_invalid(self):
         """Test configuration reload with invalid config."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.validate_config") as mock_validate, patch(
-            "generator.main.main.send_alert"
-        ) as mock_alert, patch("generator.main.main.logger") as mock_logger, patch(
-            "generator.main.main.asyncio.run"
-        ) as mock_run:
+        with (
+            patch("generator.main.main.validate_config") as mock_validate,
+            patch("generator.main.main.send_alert") as mock_alert,
+            patch("generator.main.main.logger") as mock_logger,
+            patch("generator.main.main.asyncio.run") as mock_run,
+        ):
 
             mock_validate.side_effect = ValueError("Invalid config")
 
@@ -318,9 +321,10 @@ class TestSignalHandling:
     def test_setup_signals(self):
         """Test signal handler setup."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.signal.signal") as mock_signal, patch(
-            "generator.main.main.setup_signals"
-        ) as mock_setup:
+        with (
+            patch("generator.main.main.signal.signal") as mock_signal,
+            patch("generator.main.main.setup_signals") as mock_setup,
+        ):
 
             loop = asyncio.new_event_loop()
             mock_setup(loop, runner_instance=None, api_process=None)
@@ -421,9 +425,10 @@ class TestAllInterfaceMode:
     async def test_all_mode_api_readiness_check(self):
         """Test API readiness check in 'all' mode."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.aiohttp.ClientSession") as MockSession, patch(
-            "generator.main.main.multiprocessing.Process"
-        ) as MockProcess:
+        with (
+            patch("generator.main.main.aiohttp.ClientSession") as MockSession,
+            patch("generator.main.main.multiprocessing.Process") as MockProcess,
+        ):
 
             # --- START FIX for 'assert None is True' ---
             # The mock_response needs to be the async context manager itself
@@ -481,9 +486,10 @@ class TestErrorHandling:
     async def test_import_error_handling(self):
         """Test handling of import errors."""
         # FIX: Patch 'generator.main.main.IMPORT_ERROR'
-        with patch(
-            "generator.main.main.IMPORT_ERROR", Exception("Import failed")
-        ), patch("generator.main.main.logger") as mock_logger:
+        with (
+            patch("generator.main.main.IMPORT_ERROR", Exception("Import failed")),
+            patch("generator.main.main.logger") as mock_logger,
+        ):
 
             # Simulate main execution with import error
             import_error = Exception("Import failed")
@@ -497,9 +503,10 @@ class TestErrorHandling:
     def test_critical_error_alert(self):
         """Test that critical errors trigger alerts."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.send_alert") as mock_alert, patch(
-            "generator.main.main.asyncio.run"
-        ) as mock_run:
+        with (
+            patch("generator.main.main.send_alert") as mock_alert,
+            patch("generator.main.main.asyncio.run") as mock_run,
+        ):
 
             error_message = "Critical system failure"
 
@@ -511,11 +518,12 @@ class TestErrorHandling:
     def test_gui_crash_handling(self):
         """Test handling of GUI crashes."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.MainApp") as MockApp, patch(
-            "generator.main.main.send_alert"
-        ) as mock_alert, patch("generator.main.main.asyncio.run") as mock_run, patch(
-            "generator.main.main.logger"
-        ) as mock_logger:
+        with (
+            patch("generator.main.main.MainApp") as MockApp,
+            patch("generator.main.main.send_alert") as mock_alert,
+            patch("generator.main.main.asyncio.run") as mock_run,
+            patch("generator.main.main.logger") as mock_logger,
+        ):
 
             mock_app = MagicMock()
             mock_app.run.side_effect = Exception("GUI crashed")
@@ -540,9 +548,10 @@ class TestOpenTelemetry:
     def test_tracer_initialization(self):
         """Test OpenTelemetry tracer is initialized."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.trace") as mock_trace, patch(
-            "generator.main.main.TracerProvider"
-        ) as MockProvider:
+        with (
+            patch("generator.main.main.trace") as mock_trace,
+            patch("generator.main.main.TracerProvider") as MockProvider,
+        ):
 
             # Tracer should be initialized
             assert True  # Module-level initialization
@@ -565,9 +574,10 @@ class TestMainEntryPoint:
     def test_main_entry_point_with_import_error(self):
         """Test main entry point handles import errors."""
         # FIX: Patch 'generator.main.main.X'
-        with patch(
-            "generator.main.main.IMPORT_ERROR", Exception("Import failed")
-        ), patch("generator.main.main.logger") as mock_logger:
+        with (
+            patch("generator.main.main.IMPORT_ERROR", Exception("Import failed")),
+            patch("generator.main.main.logger") as mock_logger,
+        ):
 
             # Simulate main execution with import error
             import_error = Exception("Import failed")
@@ -581,9 +591,10 @@ class TestMainEntryPoint:
     def test_main_entry_point_successful(self):
         """Test successful main entry point execution."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.main") as mock_main, patch(
-            "generator.main.main.asyncio.get_event_loop"
-        ) as mock_loop:
+        with (
+            patch("generator.main.main.main") as mock_main,
+            patch("generator.main.main.asyncio.get_event_loop") as mock_loop,
+        ):
 
             mock_ctx = MagicMock()
             mock_ctx.params = {"interface": "cli"}

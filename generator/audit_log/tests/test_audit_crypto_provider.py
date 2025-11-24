@@ -406,9 +406,12 @@ async def hsm_provider(
     # So, the original logic is fine.
 
     # Stop the background tasks from starting automatically
-    with patch.object(
-        HSMCryptoProvider, "_initialize_hsm_session", AsyncMock()
-    ) as mock_init, patch.object(HSMCryptoProvider, "_monitor_hsm_health", AsyncMock()):
+    with (
+        patch.object(
+            HSMCryptoProvider, "_initialize_hsm_session", AsyncMock()
+        ) as mock_init,
+        patch.object(HSMCryptoProvider, "_monitor_hsm_health", AsyncMock()),
+    ):
 
         provider = HSMCryptoProvider(
             software_key_master_accessor=mock_accessors[0],
@@ -477,11 +480,14 @@ class TestSoftwareCryptoProvider:
         )
 
         # FIX: Removed asyncio.run patch
-        with patch.object(
-            SoftwareCryptoProvider, "_load_existing_keys", AsyncMock()
-        ) as mock_load, patch.object(
-            SoftwareCryptoProvider, "_rotate_keys_periodically", AsyncMock()
-        ) as mock_rotate:
+        with (
+            patch.object(
+                SoftwareCryptoProvider, "_load_existing_keys", AsyncMock()
+            ) as mock_load,
+            patch.object(
+                SoftwareCryptoProvider, "_rotate_keys_periodically", AsyncMock()
+            ) as mock_rotate,
+        ):
 
             provider = None
             try:

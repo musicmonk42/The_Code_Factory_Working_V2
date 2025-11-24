@@ -106,7 +106,9 @@ class IntegrationTestRunner:
         """Test all services are healthy"""
         self.log("Checking service health...")
         response = requests.get(f"{self.base_url}/health", timeout=10)
-        assert response.status_code == 200, f"Health check failed: {response.status_code}"
+        assert (
+            response.status_code == 200
+        ), f"Health check failed: {response.status_code}"
         data = response.json()
         assert data.get("status") == "healthy", f"Service not healthy: {data}"
 
@@ -166,8 +168,13 @@ class IntegrationTestRunner:
             "language": "python",
             "framework": "flask",
         }
-        response = requests.post(f"{self.base_url}/api/v1/generate", json=payload, timeout=30)
-        assert response.status_code in [200, 202], f"Generation failed: {response.status_code}"
+        response = requests.post(
+            f"{self.base_url}/api/v1/generate", json=payload, timeout=30
+        )
+        assert response.status_code in [
+            200,
+            202,
+        ], f"Generation failed: {response.status_code}"
         data = response.json()
         generation_id = data.get("id")
         assert generation_id, "No generation ID returned"
@@ -215,7 +222,9 @@ class IntegrationTestRunner:
         """Test SFE checkpoint creation"""
         self.log("Testing SFE checkpoint...")
         payload = {"type": "test", "data": {"test": "checkpoint"}}
-        response = requests.post(f"{self.base_url}/api/v1/sfe/checkpoint", json=payload, timeout=30)
+        response = requests.post(
+            f"{self.base_url}/api/v1/sfe/checkpoint", json=payload, timeout=30
+        )
         assert response.status_code in [200, 201], "Checkpoint creation failed"
 
     # =========================================================================
@@ -229,7 +238,9 @@ class IntegrationTestRunner:
         headers = response.headers
 
         # Check for important security headers
-        assert "X-Content-Type-Options" in headers, "X-Content-Type-Options header missing"
+        assert (
+            "X-Content-Type-Options" in headers
+        ), "X-Content-Type-Options header missing"
         assert headers["X-Content-Type-Options"] == "nosniff"
 
         # Check CORS headers are configured
@@ -446,7 +457,9 @@ def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description="Run integration tests")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
-    parser.add_argument("--fail-fast", "-f", action="store_true", help="Stop on first failure")
+    parser.add_argument(
+        "--fail-fast", "-f", action="store_true", help="Stop on first failure"
+    )
     parser.add_argument(
         "--suite",
         "-s",
@@ -455,7 +468,9 @@ def main():
         help="Test suite to run (default: full)",
     )
     parser.add_argument("--output", "-o", help="Output report to JSON file")
-    parser.add_argument("--base-url", help="Base URL for API (default: http://localhost:8000)")
+    parser.add_argument(
+        "--base-url", help="Base URL for API (default: http://localhost:8000)"
+    )
 
     args = parser.parse_args()
 

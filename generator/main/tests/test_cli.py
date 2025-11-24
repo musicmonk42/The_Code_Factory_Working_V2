@@ -124,11 +124,12 @@ prod: &prod_env
 @pytest.fixture
 def mock_dependencies():
     """Mock all external dependencies."""
-    with patch("main.cli.WorkflowEngine") as mock_engine, patch(
-        "main.cli.load_config"
-    ) as mock_config, patch("main.cli.logger") as mock_logger, patch(
-        "main.cli.get_metrics_dict"
-    ) as mock_metrics:
+    with (
+        patch("main.cli.WorkflowEngine") as mock_engine,
+        patch("main.cli.load_config") as mock_config,
+        patch("main.cli.logger") as mock_logger,
+        patch("main.cli.get_metrics_dict") as mock_metrics,
+    ):
 
         mock_engine_instance = MagicMock()
         mock_engine_instance.orchestrate = AsyncMock(

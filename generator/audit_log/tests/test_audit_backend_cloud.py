@@ -315,9 +315,10 @@ def tmp_dir_cleanup(tmp_path):
 async def mock_boto3_clients():
     """Mock boto3 client('s3') and client('athena') and wire in expected methods."""
     # We must patch the boto3 import *within the dynamically loaded module*
-    with patch(f"{cloud.__name__}.boto3.client") as mock_client, patch(
-        f"{cloud.__name__}.retry_operation"
-    ) as mock_retry:
+    with (
+        patch(f"{cloud.__name__}.boto3.client") as mock_client,
+        patch(f"{cloud.__name__}.retry_operation") as mock_retry,
+    ):
         mock_s3 = MagicMock(name="s3")
         mock_athena = MagicMock(name="athena")
 
@@ -505,11 +506,11 @@ async def test_s3_health_check_ok(mock_boto3_clients):
 async def mock_gcs_clients():
     # Patch the imports *within the dynamically loaded module*
     # --- FIX: Remove redundant patches for Table, LoadJobConfig, etc. ---
-    with patch(f"{cloud.__name__}.gcs.Client") as mock_gcs_client_constructor, patch(
-        f"{cloud.__name__}.retry_operation"
-    ) as mock_retry, patch(
-        "google.cloud.bigquery.Client"
-    ) as mock_bq_client_constructor:
+    with (
+        patch(f"{cloud.__name__}.gcs.Client") as mock_gcs_client_constructor,
+        patch(f"{cloud.__name__}.retry_operation") as mock_retry,
+        patch("google.cloud.bigquery.Client") as mock_bq_client_constructor,
+    ):
         # --- END FIX ---
 
         # --- Mock GCS (Storage) ---
@@ -643,9 +644,10 @@ async def test_gcs_query_via_bigquery(mock_gcs_clients):
 @pytest_asyncio.fixture
 async def mock_azure_clients():
     # Patch imports *within the dynamically loaded module*
-    with patch(f"{cloud.__name__}.BlobServiceClient") as mock_bsc_constructor, patch(
-        f"{cloud.__name__}.retry_operation"
-    ) as mock_retry:
+    with (
+        patch(f"{cloud.__name__}.BlobServiceClient") as mock_bsc_constructor,
+        patch(f"{cloud.__name__}.retry_operation") as mock_retry,
+    ):
 
         # --- Mock Azure Clients ---
         # Use MagicMock for the client since from_connection_string and get_container_client are sync

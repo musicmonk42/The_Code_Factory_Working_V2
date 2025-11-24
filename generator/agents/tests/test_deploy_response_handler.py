@@ -118,9 +118,11 @@ def sample_json():
 def registry():
     """Fixture to create a HandlerRegistry with watchers patched."""
     # Patch observer to prevent file system watchers from starting during tests
-    with patch("watchdog.observers.Observer"), patch(
-        "os.path.exists", return_value=True
-    ), patch("os.makedirs"):
+    with (
+        patch("watchdog.observers.Observer"),
+        patch("os.path.exists", return_value=True),
+        patch("os.makedirs"),
+    ):
         reg = HandlerRegistry()
         yield reg
 
