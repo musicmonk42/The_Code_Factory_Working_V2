@@ -135,17 +135,33 @@ docker-clean: ## Remove all Docker containers, images, and volumes
 # Development
 # =============================================================================
 
-run-generator: ## Run Generator locally
+run-generator: ## Run Generator locally (port 8000)
 	@echo "$(BLUE)Starting Generator...$(NC)"
-	cd generator && python main.py --interface api
+	cd generator && python main/main.py --interface api
 
-run-omnicore: ## Run OmniCore Engine locally
+run-omnicore: ## Run OmniCore Engine locally (port 8001)
 	@echo "$(BLUE)Starting OmniCore Engine...$(NC)"
-	cd omnicore_engine && python -m uvicorn fastapi_app:app --host 0.0.0.0 --port 8000 --reload
+	python -m uvicorn omnicore_engine.fastapi_app:app --host 0.0.0.0 --port 8001 --reload
+
+run-sfe: ## Run Self-Fixing Engineer locally (port 8002)
+	@echo "$(BLUE)Starting Self-Fixing Engineer...$(NC)"
+	cd self_fixing_engineer && python main.py --mode api --port 8002
+
+run-all: ## Run all modules using unified launcher
+	@echo "$(BLUE)Starting all modules...$(NC)"
+	python launch.py --all
+
+run-all-dev: ## Run all modules in development mode with auto-reload
+	@echo "$(BLUE)Starting all modules in development mode...$(NC)"
+	python launch.py --all --dev
 
 run-cli: ## Run OmniCore CLI
 	@echo "$(BLUE)Running OmniCore CLI...$(NC)"
-	cd omnicore_engine && python -m omnicore_engine.cli --help
+	python omnicore_engine/cli.py --help
+
+launch-status: ## Show status of running modules
+	@echo "$(BLUE)Checking module status...$(NC)"
+	python launch.py --status
 
 health-check: ## Run health check on all services
 	@echo "$(BLUE)Running health checks...$(NC)"
