@@ -233,9 +233,14 @@ jobs:
               
               # Whitelist packages that are allowed despite containing "GPL" in the license string
               # Add package names here (exact Name values from pip-licenses output)
+              # - docutils: Multi-licensed (BSD/PSF/GPL/Public Domain) - acceptable under BSD or PSF license
               WHITELIST='["docutils"]'
               
               # Use jq to find packages whose License includes GPL/AGPL (but not LGPL), excluding whitelist
+              # Filter logic:
+              # 1. License contains "AGPL" or "GPL" (case-insensitive)
+              # 2. License does NOT contain "LGPL" (case-insensitive)
+              # 3. Package name is NOT in the whitelist
               RESTRICTIVE=$(jq -r --argjson wl "$WHITELIST" \
                 '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not) and ([.Name] | inside($wl) | not)) | "\(.Name) \(.Version) - \(.License)"' \
                 "$TEMP_DIR/licenses-requirements.json" || true)
