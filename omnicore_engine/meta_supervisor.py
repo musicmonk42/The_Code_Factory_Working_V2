@@ -1299,10 +1299,13 @@ class MetaSupervisor:
                 report = await self.generate_mentor_report()
                 if report:
                     async with self.rate_limiter:
-                        async with Redis.from_url(
-                            settings.REDIS_URL, decode_responses=True
-                        ) as client:
-                            await client.publish("mentor_reports", json.dumps(report))
+                        if Redis is not None:
+                            async with Redis.from_url(
+                                settings.REDIS_URL, decode_responses=True
+                            ) as client:
+                                await client.publish("mentor_reports", json.dumps(report))
+                        else:
+                            self.logger.warning("Redis not available, skipping mentor report publish")
                     self.logger.info(
                         f"Published mentor report: {report.get('summary', 'No summary')}."
                     )
@@ -1883,13 +1886,16 @@ class MetaSupervisor:
             )
 
             async with self.rate_limiter:
-                async with Redis.from_url(
-                    settings.REDIS_URL, decode_responses=True
-                ) as client:
-                    await client.publish(
-                        "meta_supervisor_status",
-                        json.dumps(status_report, default=safe_serialize),
-                    )
+                if Redis is not None:
+                    async with Redis.from_url(
+                        settings.REDIS_URL, decode_responses=True
+                    ) as client:
+                        await client.publish(
+                            "meta_supervisor_status",
+                            json.dumps(status_report, default=safe_serialize),
+                        )
+                else:
+                    self.logger.warning("Redis not available, skipping status publish")
             self.logger.info("MetaSupervisor status published to Redis.")
         except Exception as e:
             self.logger.error(f"Status publishing failed: {e}", exc_info=True)
