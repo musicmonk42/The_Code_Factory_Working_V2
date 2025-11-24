@@ -283,14 +283,18 @@ async def test_audit_snapshot_replay(tmp_path):
     audit._db_client = db
 
     # Test snapshotting (using the real method name)
-    with patch.object(
-        audit.policy_engine,
-        "should_auto_learn",
-        AsyncMock(return_value=(True, "allowed")),
-    ), patch.object(
-        audit._db_client, "query_audit_records", AsyncMock(return_value=[])
-    ), patch.object(
-        audit._db_client, "snapshot_audit_state", AsyncMock(return_value=None)
+    with (
+        patch.object(
+            audit.policy_engine,
+            "should_auto_learn",
+            AsyncMock(return_value=(True, "allowed")),
+        ),
+        patch.object(
+            audit._db_client, "query_audit_records", AsyncMock(return_value=[])
+        ),
+        patch.object(
+            audit._db_client, "snapshot_audit_state", AsyncMock(return_value=None)
+        ),
     ):
 
         snapshot_id = await audit.snapshot_audit_state("test_user")
@@ -298,12 +302,15 @@ async def test_audit_snapshot_replay(tmp_path):
         assert snapshot_id is not None
 
     # Test replay (using the real method name)
-    with patch.object(
-        audit.policy_engine,
-        "should_auto_learn",
-        AsyncMock(return_value=(True, "allowed")),
-    ), patch.object(
-        audit._db_client, "query_audit_records", AsyncMock(return_value=[])
+    with (
+        patch.object(
+            audit.policy_engine,
+            "should_auto_learn",
+            AsyncMock(return_value=(True, "allowed")),
+        ),
+        patch.object(
+            audit._db_client, "query_audit_records", AsyncMock(return_value=[])
+        ),
     ):
 
         # Mocking decryption result for validation
@@ -321,11 +328,14 @@ async def test_audit_snapshot_replay(tmp_path):
     await db.initialize()
 
     # We need to mock the ExplainAudit object to test the replay logic as written
-    with patch(
-        "omnicore_engine.audit.ExplainAudit.replay", new_callable=AsyncMock
-    ) as mock_replay, patch(
-        "omnicore_engine.audit.ExplainAudit.get_records", new_callable=AsyncMock
-    ) as mock_get_records:
+    with (
+        patch(
+            "omnicore_engine.audit.ExplainAudit.replay", new_callable=AsyncMock
+        ) as mock_replay,
+        patch(
+            "omnicore_engine.audit.ExplainAudit.get_records", new_callable=AsyncMock
+        ) as mock_get_records,
+    ):
 
         audit = ExplainAudit(db)
 

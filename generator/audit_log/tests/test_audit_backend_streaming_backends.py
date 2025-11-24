@@ -158,16 +158,20 @@ def cleanup_prometheus_registry():
 async def mock_send_alert():
     """Mock send_alert in all modules where it is imported."""
     # --- FIX: Patch all 3 locations and forward to a master mock ---
-    with patch(
-        "generator.audit_log.audit_backend.audit_backend_streaming_backends.send_alert",
-        new_callable=AsyncMock,
-    ) as mock_streaming_alert, patch(
-        "generator.audit_log.audit_backend.audit_backend_streaming_utils.send_alert",
-        new_callable=AsyncMock,
-    ) as mock_utils_alert, patch(
-        "generator.audit_log.audit_backend.audit_backend_core.send_alert",
-        new_callable=AsyncMock,
-    ) as mock_core_alert:
+    with (
+        patch(
+            "generator.audit_log.audit_backend.audit_backend_streaming_backends.send_alert",
+            new_callable=AsyncMock,
+        ) as mock_streaming_alert,
+        patch(
+            "generator.audit_log.audit_backend.audit_backend_streaming_utils.send_alert",
+            new_callable=AsyncMock,
+        ) as mock_utils_alert,
+        patch(
+            "generator.audit_log.audit_backend.audit_backend_core.send_alert",
+            new_callable=AsyncMock,
+        ) as mock_core_alert,
+    ):
 
         # Create a "master" mock that all tests will reference
         master_mock = AsyncMock()
@@ -255,14 +259,13 @@ async def http_backend(mock_aiohttp, cleanup_test_environment):
     dlq_file = str(TEST_LOG_DIR / "http_dlq.jsonl")
 
     # --- FIX: Patch all background tasks to prevent them from running during tests ---
-    with patch.object(
-        HTTPBackend, "_flush_batch_periodically", new_callable=AsyncMock
-    ), patch.object(
-        HTTPBackend, "_health_check_periodically", new_callable=AsyncMock
-    ), patch.object(
-        HTTPBackend, "_process_internal_retry_queue", new_callable=AsyncMock
-    ), patch.object(
-        FileBackedRetryQueue, "start_processor", new_callable=AsyncMock
+    with (
+        patch.object(HTTPBackend, "_flush_batch_periodically", new_callable=AsyncMock),
+        patch.object(HTTPBackend, "_health_check_periodically", new_callable=AsyncMock),
+        patch.object(
+            HTTPBackend, "_process_internal_retry_queue", new_callable=AsyncMock
+        ),
+        patch.object(FileBackedRetryQueue, "start_processor", new_callable=AsyncMock),
     ):
 
         backend = HTTPBackend(
@@ -287,14 +290,15 @@ async def kafka_backend(mock_aiokafka, cleanup_test_environment):
     dlq_file = str(TEST_LOG_DIR / "kafka_dlq.jsonl")
 
     # --- FIX: Patch all background tasks ---
-    with patch.object(
-        KafkaBackend, "_flush_batch_periodically", new_callable=AsyncMock
-    ), patch.object(
-        KafkaBackend, "_health_check_periodically", new_callable=AsyncMock
-    ), patch.object(
-        KafkaBackend, "_process_internal_retry_queue", new_callable=AsyncMock
-    ), patch.object(
-        FileBackedRetryQueue, "start_processor", new_callable=AsyncMock
+    with (
+        patch.object(KafkaBackend, "_flush_batch_periodically", new_callable=AsyncMock),
+        patch.object(
+            KafkaBackend, "_health_check_periodically", new_callable=AsyncMock
+        ),
+        patch.object(
+            KafkaBackend, "_process_internal_retry_queue", new_callable=AsyncMock
+        ),
+        patch.object(FileBackedRetryQueue, "start_processor", new_callable=AsyncMock),
     ):
 
         backend = KafkaBackend(
@@ -318,12 +322,14 @@ async def splunk_backend(mock_aiohttp, cleanup_test_environment):
     dlq_file = str(TEST_LOG_DIR / "splunk_dlq.jsonl")
 
     # --- FIX: Patch all background tasks ---
-    with patch.object(
-        SplunkBackend, "_flush_batch_periodically", new_callable=AsyncMock
-    ), patch.object(
-        SplunkBackend, "_health_check_periodically", new_callable=AsyncMock
-    ), patch.object(
-        FileBackedRetryQueue, "start_processor", new_callable=AsyncMock
+    with (
+        patch.object(
+            SplunkBackend, "_flush_batch_periodically", new_callable=AsyncMock
+        ),
+        patch.object(
+            SplunkBackend, "_health_check_periodically", new_callable=AsyncMock
+        ),
+        patch.object(FileBackedRetryQueue, "start_processor", new_callable=AsyncMock),
     ):
 
         backend = SplunkBackend(
@@ -348,10 +354,13 @@ async def inmemory_backend(cleanup_test_environment):
     snapshot_file = str(TEST_LOG_DIR / "inmemory_snapshot.jsonl.gz")
 
     # --- FIX: Patch all background tasks ---
-    with patch.object(
-        InMemoryBackend, "_flush_batch_periodically", new_callable=AsyncMock
-    ), patch.object(
-        InMemoryBackend, "_health_check_periodically", new_callable=AsyncMock
+    with (
+        patch.object(
+            InMemoryBackend, "_flush_batch_periodically", new_callable=AsyncMock
+        ),
+        patch.object(
+            InMemoryBackend, "_health_check_periodically", new_callable=AsyncMock
+        ),
     ):
 
         backend = InMemoryBackend({"snapshot_file": snapshot_file})
@@ -874,10 +883,13 @@ class TestInMemoryBackend:
         """Test eviction based on max entry count."""
         # Need to init a new backend for this test with specific params
         # --- FIX: Patch background tasks for this specific instance ---
-        with patch.object(
-            InMemoryBackend, "_flush_batch_periodically", new_callable=AsyncMock
-        ), patch.object(
-            InMemoryBackend, "_health_check_periodically", new_callable=AsyncMock
+        with (
+            patch.object(
+                InMemoryBackend, "_flush_batch_periodically", new_callable=AsyncMock
+            ),
+            patch.object(
+                InMemoryBackend, "_health_check_periodically", new_callable=AsyncMock
+            ),
         ):
             backend = InMemoryBackend({"max_memory_entries": 2})
             # --- FIX: Call start() to create tasks ---

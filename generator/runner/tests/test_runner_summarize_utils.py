@@ -65,21 +65,29 @@ def mock_dependencies():
     Patches all external dependencies for the module in one place.
     """
     # CRITICAL FIX: Patch functions where they are USED (in summarize_utils), not where they are defined
-    with patch(
-        "runner.summarize_utils.call_llm_api", new_callable=AsyncMock
-    ) as mock_llm, patch(
-        "runner.summarize_utils.log_audit_event", new_callable=AsyncMock
-    ) as mock_audit, patch(
-        "runner.summarize_utils.send_alert", new_callable=AsyncMock
-    ) as mock_alert, patch(
-        "runner.summarize_utils.redact_secrets", new_callable=AsyncMock
-    ) as mock_redact, patch(
-        "runner.summarize_utils.collect_feedback", new_callable=MagicMock
-    ) as mock_feedback, patch(
-        "runner.summarize_utils.UTIL_ERRORS", new_callable=MagicMock
-    ) as mock_errors, patch(
-        "runner.summarize_utils.detect_anomaly", new_callable=MagicMock
-    ) as mock_anomaly:
+    with (
+        patch(
+            "runner.summarize_utils.call_llm_api", new_callable=AsyncMock
+        ) as mock_llm,
+        patch(
+            "runner.summarize_utils.log_audit_event", new_callable=AsyncMock
+        ) as mock_audit,
+        patch(
+            "runner.summarize_utils.send_alert", new_callable=AsyncMock
+        ) as mock_alert,
+        patch(
+            "runner.summarize_utils.redact_secrets", new_callable=AsyncMock
+        ) as mock_redact,
+        patch(
+            "runner.summarize_utils.collect_feedback", new_callable=MagicMock
+        ) as mock_feedback,
+        patch(
+            "runner.summarize_utils.UTIL_ERRORS", new_callable=MagicMock
+        ) as mock_errors,
+        patch(
+            "runner.summarize_utils.detect_anomaly", new_callable=MagicMock
+        ) as mock_anomaly,
+    ):
 
         # Default behavior for redact_secrets is to return the input
         mock_redact.side_effect = lambda x: x

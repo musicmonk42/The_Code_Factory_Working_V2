@@ -179,9 +179,11 @@ class TestShardedMessageBus(unittest.TestCase):
 
     async def test_publish_basic(self):
         """Test basic message publishing."""
-        with patch("message_bus.sharded_message_bus.KafkaBridge"), patch(
-            "message_bus.sharded_message_bus.RedisBridge"
-        ), patch("message_bus.sharded_message_bus.DeadLetterQueue"):
+        with (
+            patch("message_bus.sharded_message_bus.KafkaBridge"),
+            patch("message_bus.sharded_message_bus.RedisBridge"),
+            patch("message_bus.sharded_message_bus.DeadLetterQueue"),
+        ):
 
             bus = ShardedMessageBus(
                 config=self.mock_config, db=self.mock_db, audit_client=self.mock_audit
@@ -199,9 +201,11 @@ class TestShardedMessageBus(unittest.TestCase):
 
     async def test_publish_with_rate_limiting(self):
         """Test publishing with rate limiting."""
-        with patch("message_bus.sharded_message_bus.KafkaBridge"), patch(
-            "message_bus.sharded_message_bus.RedisBridge"
-        ), patch("message_bus.sharded_message_bus.DeadLetterQueue"):
+        with (
+            patch("message_bus.sharded_message_bus.KafkaBridge"),
+            patch("message_bus.sharded_message_bus.RedisBridge"),
+            patch("message_bus.sharded_message_bus.DeadLetterQueue"),
+        ):
 
             bus = ShardedMessageBus(config=self.mock_config)
 
@@ -218,9 +222,11 @@ class TestShardedMessageBus(unittest.TestCase):
 
     async def test_publish_with_encryption(self):
         """Test publishing with encryption."""
-        with patch("message_bus.sharded_message_bus.KafkaBridge"), patch(
-            "message_bus.sharded_message_bus.RedisBridge"
-        ), patch("message_bus.sharded_message_bus.DeadLetterQueue"):
+        with (
+            patch("message_bus.sharded_message_bus.KafkaBridge"),
+            patch("message_bus.sharded_message_bus.RedisBridge"),
+            patch("message_bus.sharded_message_bus.DeadLetterQueue"),
+        ):
 
             bus = ShardedMessageBus(config=self.mock_config, db=self.mock_db)
 
@@ -237,9 +243,11 @@ class TestShardedMessageBus(unittest.TestCase):
 
     async def test_publish_with_idempotency(self):
         """Test idempotent message publishing."""
-        with patch("message_bus.sharded_message_bus.KafkaBridge"), patch(
-            "message_bus.sharded_message_bus.RedisBridge"
-        ), patch("message_bus.sharded_message_bus.DeadLetterQueue"):
+        with (
+            patch("message_bus.sharded_message_bus.KafkaBridge"),
+            patch("message_bus.sharded_message_bus.RedisBridge"),
+            patch("message_bus.sharded_message_bus.DeadLetterQueue"),
+        ):
 
             bus = ShardedMessageBus(config=self.mock_config)
             bus._publish_to_shard = AsyncMock(return_value=True)
@@ -267,9 +275,11 @@ class TestShardedMessageBus(unittest.TestCase):
 
     async def test_subscribe_and_unsubscribe(self):
         """Test subscription management."""
-        with patch("message_bus.sharded_message_bus.KafkaBridge"), patch(
-            "message_bus.sharded_message_bus.RedisBridge"
-        ), patch("message_bus.sharded_message_bus.DeadLetterQueue"):
+        with (
+            patch("message_bus.sharded_message_bus.KafkaBridge"),
+            patch("message_bus.sharded_message_bus.RedisBridge"),
+            patch("message_bus.sharded_message_bus.DeadLetterQueue"),
+        ):
 
             bus = ShardedMessageBus(config=self.mock_config)
 
@@ -292,9 +302,11 @@ class TestShardedMessageBus(unittest.TestCase):
 
     async def test_request_response_pattern(self):
         """Test request-response pattern."""
-        with patch("message_bus.sharded_message_bus.KafkaBridge"), patch(
-            "message_bus.sharded_message_bus.RedisBridge"
-        ), patch("message_bus.sharded_message_bus.DeadLetterQueue"):
+        with (
+            patch("message_bus.sharded_message_bus.KafkaBridge"),
+            patch("message_bus.sharded_message_bus.RedisBridge"),
+            patch("message_bus.sharded_message_bus.DeadLetterQueue"),
+        ):
 
             bus = ShardedMessageBus(config=self.mock_config)
 
@@ -325,9 +337,11 @@ class TestShardedMessageBus(unittest.TestCase):
 
     async def test_batch_publish(self):
         """Test batch message publishing."""
-        with patch("message_bus.sharded_message_bus.KafkaBridge"), patch(
-            "message_bus.sharded_message_bus.RedisBridge"
-        ), patch("message_bus.sharded_message_bus.DeadLetterQueue"):
+        with (
+            patch("message_bus.sharded_message_bus.KafkaBridge"),
+            patch("message_bus.sharded_message_bus.RedisBridge"),
+            patch("message_bus.sharded_message_bus.DeadLetterQueue"),
+        ):
 
             bus = ShardedMessageBus(config=self.mock_config)
             bus.publish = AsyncMock(return_value=True)
@@ -346,9 +360,11 @@ class TestShardedMessageBus(unittest.TestCase):
 
     async def test_pre_publish_hook(self):
         """Test pre-publish hook functionality."""
-        with patch("message_bus.sharded_message_bus.KafkaBridge"), patch(
-            "message_bus.sharded_message_bus.RedisBridge"
-        ), patch("message_bus.sharded_message_bus.DeadLetterQueue"):
+        with (
+            patch("message_bus.sharded_message_bus.KafkaBridge"),
+            patch("message_bus.sharded_message_bus.RedisBridge"),
+            patch("message_bus.sharded_message_bus.DeadLetterQueue"),
+        ):
 
             bus = ShardedMessageBus(config=self.mock_config)
 
@@ -369,11 +385,11 @@ class TestShardedMessageBus(unittest.TestCase):
 
     async def test_shutdown(self):
         """Test graceful shutdown."""
-        with patch("message_bus.sharded_message_bus.KafkaBridge") as mock_kafka, patch(
-            "message_bus.sharded_message_bus.RedisBridge"
-        ) as mock_redis, patch(
-            "message_bus.sharded_message_bus.DeadLetterQueue"
-        ) as mock_dlq:
+        with (
+            patch("message_bus.sharded_message_bus.KafkaBridge") as mock_kafka,
+            patch("message_bus.sharded_message_bus.RedisBridge") as mock_redis,
+            patch("message_bus.sharded_message_bus.DeadLetterQueue") as mock_dlq,
+        ):
 
             # Setup mocks
             mock_kafka_instance = Mock()
@@ -404,9 +420,11 @@ class TestShardedMessageBusIntegration(unittest.TestCase):
 
     async def test_end_to_end_message_flow(self):
         """Test complete message flow from publish to callback."""
-        with patch("message_bus.sharded_message_bus.KafkaBridge"), patch(
-            "message_bus.sharded_message_bus.RedisBridge"
-        ), patch("message_bus.sharded_message_bus.DeadLetterQueue"):
+        with (
+            patch("message_bus.sharded_message_bus.KafkaBridge"),
+            patch("message_bus.sharded_message_bus.RedisBridge"),
+            patch("message_bus.sharded_message_bus.DeadLetterQueue"),
+        ):
 
             config = Mock()
             config.message_bus_shard_count = 2

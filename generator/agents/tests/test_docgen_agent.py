@@ -128,11 +128,14 @@ def temp_repo():
 @pytest.fixture
 def mock_llm_calls():
     """Mock all LLM API calls, targeting the functions where they are imported in docgen_agent."""
-    with patch(
-        "agents.docgen_agent.docgen_agent.call_llm_api", new_callable=AsyncMock
-    ) as mock_llm, patch(
-        "agents.docgen_agent.docgen_agent.call_ensemble_api", new_callable=AsyncMock
-    ) as mock_ensemble:
+    with (
+        patch(
+            "agents.docgen_agent.docgen_agent.call_llm_api", new_callable=AsyncMock
+        ) as mock_llm,
+        patch(
+            "agents.docgen_agent.docgen_agent.call_ensemble_api", new_callable=AsyncMock
+        ) as mock_ensemble,
+    ):
 
         mock_llm.return_value = {
             "content": "# Mocked LLM Docs",
@@ -167,18 +170,16 @@ def agent(temp_repo):
     """Provides a DocGenAgent instance with mocked dependencies."""
     # This fixture is now mainly for tests that DON'T want to test the
     # real agent.generate_documentation method.
-    with patch("agents.docgen_agent.DocGenPromptAgent") as MockPromptAgent, patch(
-        "agents.docgen_agent.ResponseValidator"
-    ) as MockValidator, patch(
-        "agents.docgen_agent.tiktoken.get_encoding"
-    ) as mock_tiktoken, patch(
-        "agents.docgen_agent.SphinxDocGenerator"
-    ) as MockSphinxGen, patch(
-        "agents.docgen_agent.BatchProcessor"
-    ) as MockBatchProcessor, patch(
-        "agents.docgen_agent.docgen_agent.call_llm_api", new_callable=AsyncMock
-    ), patch(
-        "agents.docgen_agent.docgen_agent.call_ensemble_api", new_callable=AsyncMock
+    with (
+        patch("agents.docgen_agent.DocGenPromptAgent") as MockPromptAgent,
+        patch("agents.docgen_agent.ResponseValidator") as MockValidator,
+        patch("agents.docgen_agent.tiktoken.get_encoding") as mock_tiktoken,
+        patch("agents.docgen_agent.SphinxDocGenerator") as MockSphinxGen,
+        patch("agents.docgen_agent.BatchProcessor") as MockBatchProcessor,
+        patch("agents.docgen_agent.docgen_agent.call_llm_api", new_callable=AsyncMock),
+        patch(
+            "agents.docgen_agent.docgen_agent.call_ensemble_api", new_callable=AsyncMock
+        ),
     ):
 
         MockPromptAgent.return_value.get_doc_prompt = AsyncMock(
@@ -416,13 +417,15 @@ class TestDocGenAgent:
         scrubbed_content = "scrubbed_content"
 
         # FIX: Patch the correct import path for scrub_text
-        with patch.object(Path, "is_file", return_value=True), patch(
-            "aiofiles.open"
-        ) as mock_open, patch(
-            "agents.docgen_agent.docgen_agent.scrub_text", return_value=scrubbed_content
-        ) as mock_scrub, patch.object(
-            Path, "stat"
-        ) as mock_stat_method:
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("aiofiles.open") as mock_open,
+            patch(
+                "agents.docgen_agent.docgen_agent.scrub_text",
+                return_value=scrubbed_content,
+            ) as mock_scrub,
+            patch.object(Path, "stat") as mock_stat_method,
+        ):
 
             mock_file = AsyncMock()
             mock_file.read.return_value = file_content
@@ -563,12 +566,15 @@ class TestErrorHandling:
         agent = DocGenAgent(repo_path=str(temp_repo))
 
         # Patch the inner call_llm_api which will be retried
-        with patch(
-            "agents.docgen_agent.docgen_agent.call_llm_api",
-            side_effect=mock_llm_with_retry,
-        ) as mock_llm, patch(
-            "agents.docgen_agent.docgen_agent.ResponseValidator"
-        ) as MockValidator:  # <--- FIX: Correct patch path
+        with (
+            patch(
+                "agents.docgen_agent.docgen_agent.call_llm_api",
+                side_effect=mock_llm_with_retry,
+            ) as mock_llm,
+            patch(
+                "agents.docgen_agent.docgen_agent.ResponseValidator"
+            ) as MockValidator,
+        ):  # <--- FIX: Correct patch path
 
             MockValidator.return_value.process_and_validate_response = AsyncMock(
                 return_value={
@@ -583,12 +589,15 @@ class TestErrorHandling:
             )
 
             # Mock summarizer calls which also use call_llm_api
-            with patch(
-                "agents.docgen_agent.docgen_agent.call_summarizer",
-                new_callable=AsyncMock,
-            ), patch(
-                "agents.docgen_agent.docgen_agent.ensemble_summarizers",
-                new_callable=AsyncMock,
+            with (
+                patch(
+                    "agents.docgen_agent.docgen_agent.call_summarizer",
+                    new_callable=AsyncMock,
+                ),
+                patch(
+                    "agents.docgen_agent.docgen_agent.ensemble_summarizers",
+                    new_callable=AsyncMock,
+                ),
             ):
 
                 result = await agent.generate_documentation(
@@ -742,15 +751,19 @@ class TestIntegration:
         }
 
         # Let the real DocGenAgent run. It will use the temp_repo's dummy template.
-        with patch(
-            "agents.docgen_agent.docgen_agent.ResponseValidator"
-        ) as MockValidator, patch.object(
-            DocGenAgent, "_gather_context", new_callable=AsyncMock
-        ), patch(
-            "agents.docgen_agent.docgen_agent.call_summarizer", new_callable=AsyncMock
-        ), patch(
-            "agents.docgen_agent.docgen_agent.ensemble_summarizers",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "agents.docgen_agent.docgen_agent.ResponseValidator"
+            ) as MockValidator,
+            patch.object(DocGenAgent, "_gather_context", new_callable=AsyncMock),
+            patch(
+                "agents.docgen_agent.docgen_agent.call_summarizer",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "agents.docgen_agent.docgen_agent.ensemble_summarizers",
+                new_callable=AsyncMock,
+            ),
         ):
 
             MockValidator.return_value.process_and_validate_response = AsyncMock(
@@ -787,18 +800,23 @@ class TestIntegration:
             }
 
         # Let the real agent run, but patch the LLM call it makes
-        with patch(
-            "agents.docgen_agent.docgen_agent.call_llm_api",
-            side_effect=mock_llm_alternating,
-        ), patch(
-            "agents.docgen_agent.docgen_agent.ResponseValidator"
-        ) as MockValidator, patch.object(
-            DocGenAgent, "_gather_context", new_callable=AsyncMock
-        ), patch(
-            "agents.docgen_agent.docgen_agent.call_summarizer", new_callable=AsyncMock
-        ), patch(
-            "agents.docgen_agent.docgen_agent.ensemble_summarizers",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "agents.docgen_agent.docgen_agent.call_llm_api",
+                side_effect=mock_llm_alternating,
+            ),
+            patch(
+                "agents.docgen_agent.docgen_agent.ResponseValidator"
+            ) as MockValidator,
+            patch.object(DocGenAgent, "_gather_context", new_callable=AsyncMock),
+            patch(
+                "agents.docgen_agent.docgen_agent.call_summarizer",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "agents.docgen_agent.docgen_agent.ensemble_summarizers",
+                new_callable=AsyncMock,
+            ),
         ):
 
             MockValidator.return_value.process_and_validate_response = AsyncMock(
@@ -856,18 +874,25 @@ class TestIntegration:
             return (True, "Approved")
 
         # Let the real agent run, patching internals
-        with patch.object(
-            DocGenAgent,
-            "_human_approval",
-            new_callable=AsyncMock,
-            side_effect=mock_approval_granted,
-        ), patch.object(DocGenAgent, "_gather_context", new_callable=AsyncMock), patch(
-            "agents.docgen_agent.docgen_agent.ResponseValidator"
-        ) as MockValidator, patch(
-            "agents.docgen_agent.docgen_agent.call_summarizer", new_callable=AsyncMock
-        ), patch(
-            "agents.docgen_agent.docgen_agent.ensemble_summarizers",
-            new_callable=AsyncMock,
+        with (
+            patch.object(
+                DocGenAgent,
+                "_human_approval",
+                new_callable=AsyncMock,
+                side_effect=mock_approval_granted,
+            ),
+            patch.object(DocGenAgent, "_gather_context", new_callable=AsyncMock),
+            patch(
+                "agents.docgen_agent.docgen_agent.ResponseValidator"
+            ) as MockValidator,
+            patch(
+                "agents.docgen_agent.docgen_agent.call_summarizer",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "agents.docgen_agent.docgen_agent.ensemble_summarizers",
+                new_callable=AsyncMock,
+            ),
         ):
 
             MockValidator.return_value.process_and_validate_response = AsyncMock(
@@ -907,9 +932,14 @@ class TestPerformanceAndEdgeCases:
         large_content = "def function():\n    pass\n" * 1000
 
         # FIX: Patch the correct import path for scrub_text
-        with patch("aiofiles.open") as mock_open, patch(
-            "agents.docgen_agent.docgen_agent.scrub_text", return_value=large_content
-        ) as mock_scrub, patch.object(Path, "is_file", return_value=True):
+        with (
+            patch("aiofiles.open") as mock_open,
+            patch(
+                "agents.docgen_agent.docgen_agent.scrub_text",
+                return_value=large_content,
+            ) as mock_scrub,
+            patch.object(Path, "is_file", return_value=True),
+        ):
 
             mock_file = AsyncMock()
             mock_file.read.return_value = large_content

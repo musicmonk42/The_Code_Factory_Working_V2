@@ -300,9 +300,12 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
         ambiguities = ["user authentication"]
 
         # 2. Mock LLM components
-        with patch("generator.clarifier.clarifier.GrokLLM") as MockLLM, patch(
-            "generator.clarifier.clarifier.DefaultPrioritizer"
-        ) as MockPrioritizer:
+        with (
+            patch("generator.clarifier.clarifier.GrokLLM") as MockLLM,
+            patch(
+                "generator.clarifier.clarifier.DefaultPrioritizer"
+            ) as MockPrioritizer,
+        ):
 
             # Setup LLM mock
             mock_llm_instance = MagicMock()
@@ -388,11 +391,13 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
     async def test_prompt_clarifier_integration(self):
         """Test PromptClarifier integration with core clarifier."""
 
-        with patch("generator.clarifier.clarifier.GrokLLM"), patch(
-            "generator.clarifier.clarifier.DefaultPrioritizer"
-        ) as MockPrioritizer, patch(
-            "generator.clarifier.clarifier_prompt.get_channel"
-        ) as MockGetChannel:
+        with (
+            patch("generator.clarifier.clarifier.GrokLLM"),
+            patch(
+                "generator.clarifier.clarifier.DefaultPrioritizer"
+            ) as MockPrioritizer,
+            patch("generator.clarifier.clarifier_prompt.get_channel") as MockGetChannel,
+        ):
 
             # Setup prioritizer
             mock_prioritizer = MagicMock()
@@ -546,9 +551,12 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
     async def test_error_recovery_integration(self):
         """Test error recovery across components."""
 
-        with patch("generator.clarifier.clarifier.GrokLLM") as MockLLM, patch(
-            "generator.clarifier.clarifier.DefaultPrioritizer"
-        ) as MockPrioritizer:
+        with (
+            patch("generator.clarifier.clarifier.GrokLLM") as MockLLM,
+            patch(
+                "generator.clarifier.clarifier.DefaultPrioritizer"
+            ) as MockPrioritizer,
+        ):
 
             # Make prioritizer fail first, then succeed
             call_count = 0
@@ -606,9 +614,13 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_clarifications(self):
         """Test handling multiple concurrent clarification requests."""
 
-        with patch("generator.clarifier.clarifier.GrokLLM"), patch(
-            "generator.clarifier.clarifier.DefaultPrioritizer"
-        ) as MockPrioritizer, patch("builtins.input", return_value="answer"):
+        with (
+            patch("generator.clarifier.clarifier.GrokLLM"),
+            patch(
+                "generator.clarifier.clarifier.DefaultPrioritizer"
+            ) as MockPrioritizer,
+            patch("builtins.input", return_value="answer"),
+        ):
 
             mock_prioritizer = MagicMock()
             mock_prioritizer.prioritize = AsyncMock(
@@ -719,9 +731,13 @@ class TestComponentInteractions(unittest.IsolatedAsyncioTestCase):
         from generator.clarifier.clarifier import Clarifier, SQLiteContextManager
         from generator.clarifier.clarifier_updater import RequirementsUpdater
 
-        with patch("generator.clarifier.clarifier.GrokLLM"), patch(
-            "generator.clarifier.clarifier.DefaultPrioritizer"
-        ) as MockPrioritizer, patch("builtins.input", return_value="clarified answer"):
+        with (
+            patch("generator.clarifier.clarifier.GrokLLM"),
+            patch(
+                "generator.clarifier.clarifier.DefaultPrioritizer"
+            ) as MockPrioritizer,
+            patch("builtins.input", return_value="clarified answer"),
+        ):
 
             mock_prioritizer = MagicMock()
             mock_prioritizer.prioritize = AsyncMock(

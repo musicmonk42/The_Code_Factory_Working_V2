@@ -1528,7 +1528,9 @@ class MetaSupervisor:
 
             # Delete the cleaned up records from the active audit table
             # Assuming db client has a method to delete audit records by timestamp or UUID list
-            async with self.db.AsyncSessionLocal() as session:  # Direct session use for DDL/cleanup
+            async with (
+                self.db.AsyncSessionLocal() as session
+            ):  # Direct session use for DDL/cleanup
                 from sqlalchemy import text  # Import text for raw SQL
 
                 await session.execute(

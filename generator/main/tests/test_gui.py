@@ -31,11 +31,12 @@ sys.modules["intent_parser.intent_parser"] = MagicMock()
 @pytest.fixture
 async def mock_dependencies():  # <<< FIX: Made fixture async
     """Mock all external dependencies."""
-    with patch("main.gui.Runner") as mock_runner, patch(
-        "main.gui.IntentParser"
-    ) as mock_parser, patch("main.gui.load_config") as mock_config, patch(
-        "main.gui.ConfigWatcher"
-    ) as mock_watcher:
+    with (
+        patch("main.gui.Runner") as mock_runner,
+        patch("main.gui.IntentParser") as mock_parser,
+        patch("main.gui.load_config") as mock_config,
+        patch("main.gui.ConfigWatcher") as mock_watcher,
+    ):
 
         mock_config.return_value = {
             "backend": "test",
@@ -314,8 +315,9 @@ class TestRunnerTab:
     @pytest.mark.asyncio
     async def test_submit_runner_input_valid(self, app_instance):
         """Test submitting valid runner input."""
-        with patch.object(app_instance, "_make_api_request") as mock_api, patch.object(
-            app_instance, "_set_success_message", new_callable=AsyncMock
+        with (
+            patch.object(app_instance, "_make_api_request") as mock_api,
+            patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
             mock_api.return_value = {"status": "success", "run_id": "123"}
             app_instance.query_one("#runner_input").value = '{"test": "data"}'
@@ -326,11 +328,12 @@ class TestRunnerTab:
     async def test_submit_runner_input_invalid_json(self, app_instance):
         """Test submitting invalid JSON to runner."""
 
-        with patch.object(
-            app_instance.runner_log, "write"
-        ) as mock_log_write, patch.object(
-            app_instance, "_set_error_message", new_callable=AsyncMock
-        ) as mock_set_error:
+        with (
+            patch.object(app_instance.runner_log, "write") as mock_log_write,
+            patch.object(
+                app_instance, "_set_error_message", new_callable=AsyncMock
+            ) as mock_set_error,
+        ):
 
             app_instance.query_one("#runner_input").value = "{ invalid json }"
             await app_instance.run_workflow_from_button()
@@ -362,10 +365,10 @@ class TestParserTab:
     @pytest.mark.asyncio
     async def test_parse_text_input(self, app_instance):
         """Test parsing text input."""
-        with patch.object(app_instance, "_make_api_request") as mock_api, patch.object(
-            app_instance.runner_log, "write"
-        ) as mock_log_write, patch.object(
-            app_instance, "_set_success_message", new_callable=AsyncMock
+        with (
+            patch.object(app_instance, "_make_api_request") as mock_api,
+            patch.object(app_instance.runner_log, "write") as mock_log_write,
+            patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
 
             mock_api.return_value = {"result": "parsed"}
@@ -392,12 +395,11 @@ class TestParserTab:
         test_file = tmp_path / "test.md"
         test_file.write_text("# Test Content")
 
-        with patch.object(app_instance, "_make_api_request") as mock_api, patch(
-            "main.gui.aiofiles.open", new_callable=AsyncMock
-        ), patch.object(
-            app_instance.runner_log, "write"
-        ) as mock_log_write, patch.object(
-            app_instance, "_set_success_message", new_callable=AsyncMock
+        with (
+            patch.object(app_instance, "_make_api_request") as mock_api,
+            patch("main.gui.aiofiles.open", new_callable=AsyncMock),
+            patch.object(app_instance.runner_log, "write") as mock_log_write,
+            patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
 
             mock_api.return_value = {"result": "parsed"}
@@ -436,10 +438,10 @@ class TestClarifierTab:
     @pytest.mark.asyncio
     async def test_submit_clarification(self, app_instance):
         """Test submitting clarification response."""
-        with patch.object(app_instance, "_make_api_request") as mock_api, patch.object(
-            app_instance.runner_log, "write"
-        ) as mock_log_write, patch.object(
-            app_instance, "_set_success_message", new_callable=AsyncMock
+        with (
+            patch.object(app_instance, "_make_api_request") as mock_api,
+            patch.object(app_instance.runner_log, "write") as mock_log_write,
+            patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
 
             mock_api.return_value = {"message": "Clarification received"}
@@ -479,14 +481,19 @@ class TestMetricsTab:
                 {"version": "1.2.3"},  # Version call
             ]
 
-            with patch.object(
-                app_instance.metrics_display, "update"
-            ) as mock_display_update, patch.object(
-                app_instance.metrics_display_api_version, "update"
-            ) as mock_version_update, patch.object(
-                app_instance, "_set_error_message", new_callable=AsyncMock
-            ), patch.object(
-                app_instance, "_set_success_message", new_callable=AsyncMock
+            with (
+                patch.object(
+                    app_instance.metrics_display, "update"
+                ) as mock_display_update,
+                patch.object(
+                    app_instance.metrics_display_api_version, "update"
+                ) as mock_version_update,
+                patch.object(
+                    app_instance, "_set_error_message", new_callable=AsyncMock
+                ),
+                patch.object(
+                    app_instance, "_set_success_message", new_callable=AsyncMock
+                ),
             ):
 
                 await app_instance.update_metrics_display()
@@ -501,16 +508,13 @@ class TestMetricsTab:
     @pytest.mark.asyncio
     async def test_update_metrics_local(self, app_instance):
         """Test updating metrics display from local runner metrics."""
-        with patch("main.gui.RUN_QUEUE.get_size", return_value=5) as mock_q, patch(
-            "main.gui.RUN_PASS_RATE.get", return_value=95.5
-        ) as mock_pass, patch(
-            "main.gui.RUN_RESOURCE_USAGE.get", return_value=75.0
-        ) as mock_res, patch(
-            "main.gui.HEALTH_STATUS.get", return_value="OK"
-        ) as mock_health, patch.object(
-            app_instance.metrics_display, "update"
-        ) as mock_display_update, patch.object(
-            app_instance, "_set_success_message", new_callable=AsyncMock
+        with (
+            patch("main.gui.RUN_QUEUE.get_size", return_value=5) as mock_q,
+            patch("main.gui.RUN_PASS_RATE.get", return_value=95.5) as mock_pass,
+            patch("main.gui.RUN_RESOURCE_USAGE.get", return_value=75.0) as mock_res,
+            patch("main.gui.HEALTH_STATUS.get", return_value="OK") as mock_health,
+            patch.object(app_instance.metrics_display, "update") as mock_display_update,
+            patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
 
             await app_instance._update_metrics()  # Call internal method directly
@@ -523,9 +527,12 @@ class TestMetricsTab:
     async def test_metrics_refresh_interval_change(self, app_instance):
         """Test changing metrics refresh interval."""
 
-        with patch.object(app_instance, "set_interval") as mock_interval, patch.object(
-            app_instance, "_set_success_message", new_callable=AsyncMock
-        ) as mock_success:
+        with (
+            patch.object(app_instance, "set_interval") as mock_interval,
+            patch.object(
+                app_instance, "_set_success_message", new_callable=AsyncMock
+            ) as mock_success,
+        ):
 
             from textual.widgets import Select
 
@@ -560,10 +567,9 @@ class TestConfigReload:
         app_instance.config_watcher = MagicMock()
         app_instance.config_watcher._reload = MagicMock()
 
-        with patch.object(
-            app_instance.runner_log, "write"
-        ) as mock_log_write, patch.object(
-            app_instance, "_set_success_message", new_callable=AsyncMock
+        with (
+            patch.object(app_instance.runner_log, "write") as mock_log_write,
+            patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
 
             app_instance.query_one("#reload-runner-config").press()
@@ -578,12 +584,12 @@ class TestConfigReload:
         app_instance.parser_config_watcher = MagicMock()
         app_instance.parser_config_watcher._reload = MagicMock()
 
-        with patch.object(
-            app_instance, "_trigger_backend_config_reload", new_callable=AsyncMock
-        ) as mock_trigger, patch.object(
-            app_instance.runner_log, "write"
-        ) as mock_log_write, patch.object(
-            app_instance, "_set_success_message", new_callable=AsyncMock
+        with (
+            patch.object(
+                app_instance, "_trigger_backend_config_reload", new_callable=AsyncMock
+            ) as mock_trigger,
+            patch.object(app_instance.runner_log, "write") as mock_log_write,
+            patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
 
             app_instance.query_one("#reload-parser-config").press()

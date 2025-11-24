@@ -129,8 +129,9 @@ def sample_context():
 @pytest.fixture
 def agent(temp_repo):
     """Fixture to create a DeployPromptAgent pointed at the temp repo's dirs."""
-    with patch("os.path.exists", return_value=True), patch(
-        "watchdog.observers.Observer"
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("watchdog.observers.Observer"),
     ):
         agent = DeployPromptAgent(few_shot_dir=str(temp_repo / "few_shot_examples"))
         # Point the agent's template registry to the temp template dir
@@ -155,8 +156,9 @@ class TestDeployPromptAgentInit:
 
     def test_init_with_valid_dirs(self, temp_repo):
         """Test initializing agent with valid dirs."""
-        with patch("os.path.exists", return_value=True), patch(
-            "watchdog.observers.Observer"
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("watchdog.observers.Observer"),
         ):
             agent = DeployPromptAgent(few_shot_dir=str(temp_repo / "few_shot_examples"))
 
@@ -173,9 +175,11 @@ class TestDeployPromptAgentInit:
     def test_init_without_dirs(self):
         """Test initialization when directories don't exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with patch("os.path.exists", side_effect=[False, True, False, True]), patch(
-                "os.makedirs"
-            ), patch("watchdog.observers.Observer"):
+            with (
+                patch("os.path.exists", side_effect=[False, True, False, True]),
+                patch("os.makedirs"),
+                patch("watchdog.observers.Observer"),
+            ):
 
                 agent = DeployPromptAgent(
                     few_shot_dir=str(Path(tmpdir) / "missing_examples")
@@ -517,12 +521,15 @@ class TestABTesting:
         agent.retrieve_few_shot = AsyncMock(return_value=[])
         agent.optimize_prompt_with_feedback = AsyncMock(side_effect=lambda s, *args: s)
 
-        with patch(
-            "generator.agents.deploy_agent.deploy_prompt.optimize_deployment_prompt_text",
-            new_callable=AsyncMock,
-        ) as mock_optimize, patch(
-            "generator.agents.deploy_agent.deploy_prompt.call_ensemble_api"
-        ) as mock_llm:
+        with (
+            patch(
+                "generator.agents.deploy_agent.deploy_prompt.optimize_deployment_prompt_text",
+                new_callable=AsyncMock,
+            ) as mock_optimize,
+            patch(
+                "generator.agents.deploy_agent.deploy_prompt.call_ensemble_api"
+            ) as mock_llm,
+        ):
 
             mock_optimize.side_effect = lambda s: s
             mock_llm.return_value = {
@@ -729,12 +736,15 @@ class TestProvenanceTracking:
         agent.retrieve_few_shot = AsyncMock(return_value=[])
         agent.optimize_prompt_with_feedback = AsyncMock(side_effect=lambda s, *args: s)
 
-        with patch(
-            "generator.agents.deploy_agent.deploy_prompt.optimize_deployment_prompt_text",
-            new_callable=AsyncMock,
-        ) as mock_optimize, patch(
-            "generator.agents.deploy_agent.deploy_prompt.add_provenance"
-        ) as mock_provenance:
+        with (
+            patch(
+                "generator.agents.deploy_agent.deploy_prompt.optimize_deployment_prompt_text",
+                new_callable=AsyncMock,
+            ) as mock_optimize,
+            patch(
+                "generator.agents.deploy_agent.deploy_prompt.add_provenance"
+            ) as mock_provenance,
+        ):
 
             mock_optimize.side_effect = lambda s: s
 

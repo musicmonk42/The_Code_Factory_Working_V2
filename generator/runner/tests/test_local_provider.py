@@ -145,9 +145,11 @@ async def test_load_plugins_success(provider: LocalProvider, tmp_path: Path) -> 
     dummy_post = MagicMock(return_value={"content": "POST"})
 
     # FIX: Added yaml import and proper mocking
-    with patch("builtins.open", mock_open(read_data=yaml_content)), patch(
-        "yaml.safe_load", return_value=yaml.safe_load(yaml_content)
-    ), patch("importlib.import_module") as mock_import:
+    with (
+        patch("builtins.open", mock_open(read_data=yaml_content)),
+        patch("yaml.safe_load", return_value=yaml.safe_load(yaml_content)),
+        patch("importlib.import_module") as mock_import,
+    ):
         mock_import.side_effect = [
             MagicMock(dummy_pre=dummy_pre),
             MagicMock(dummy_post=dummy_post),

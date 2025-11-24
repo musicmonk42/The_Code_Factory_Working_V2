@@ -107,9 +107,10 @@ class TestEndToEndWorkflow:
     @pytest.mark.asyncio
     async def test_complete_generation_workflow(self, test_environment):
         """Test complete workflow from README to generated app."""
-        with patch("main.main.Runner") as MockRunner, patch(
-            "main.main.IntentParser"
-        ) as MockParser:
+        with (
+            patch("main.main.Runner") as MockRunner,
+            patch("main.main.IntentParser") as MockParser,
+        ):
 
             # Setup mocks
             mock_runner = MagicMock()
@@ -335,9 +336,10 @@ class TestConfigurationPropagation:
     @pytest.mark.asyncio
     async def test_config_reload_propagates(self, test_environment):
         """Test config reload propagates to all components."""
-        with patch("main.main.ConfigWatcher") as MockWatcher, patch(
-            "main.main.load_config"
-        ) as mock_load:
+        with (
+            patch("main.main.ConfigWatcher") as MockWatcher,
+            patch("main.main.load_config") as mock_load,
+        ):
 
             original_config = yaml.safe_load(
                 test_environment["runner_config"].read_text()

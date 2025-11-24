@@ -70,14 +70,14 @@ test-watch: ## Run tests in watch mode (requires pytest-watch)
 # Code Quality
 # =============================================================================
 
-lint: ## Run all linters
-	@echo "$(BLUE)Running linters...$(NC)"
+lint: ## Run all linters on entire platform
+	@echo "$(BLUE)Running linters on entire platform...$(NC)"
 	@echo "$(YELLOW)Running Black...$(NC)"
-	black --check generator/ omnicore_engine/ self_fixing_engineer/
+	black --check generator/ omnicore_engine/ self_fixing_engineer/ *.py
 	@echo "$(YELLOW)Running Ruff...$(NC)"
-	ruff check generator/ omnicore_engine/ self_fixing_engineer/
+	ruff check generator/ omnicore_engine/ self_fixing_engineer/ *.py
 	@echo "$(YELLOW)Running Flake8...$(NC)"
-	flake8 generator/ omnicore_engine/ self_fixing_engineer/ --count --select=E9,F63,F7,F82 --show-source --statistics
+	flake8 generator/ omnicore_engine/ self_fixing_engineer/ *.py --count --select=E9,F63,F7,F82 --show-source --statistics
 	@echo "$(GREEN)Linting complete!$(NC)"
 
 format: ## Format code with Black

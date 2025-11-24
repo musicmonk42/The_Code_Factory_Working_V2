@@ -344,16 +344,19 @@ def test_log_action_with_error(error: Optional[Exception], expected: Dict, caplo
 
     # [FIX] Patch security utils for this test
     # *** FIX: Patch the correct location where the function is imported from ***
-    with patch(
-        "runner.runner_security_utils.encrypt_data",
-        new=MagicMock(
-            side_effect=lambda d, *a, **k: base64.b64encode(
-                json.dumps(d).encode()
-            ).decode()
+    with (
+        patch(
+            "runner.runner_security_utils.encrypt_data",
+            new=MagicMock(
+                side_effect=lambda d, *a, **k: base64.b64encode(
+                    json.dumps(d).encode()
+                ).decode()
+            ),
         ),
-    ), patch(
-        "runner.runner_security_utils.redact_secrets",
-        new=MagicMock(side_effect=lambda d, *a, **k: d),
+        patch(
+            "runner.runner_security_utils.redact_secrets",
+            new=MagicMock(side_effect=lambda d, *a, **k: d),
+        ),
     ):
 
         # [FIX] The log_action function in runner_logging.py does not accept an 'error' kwarg
