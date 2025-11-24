@@ -1960,23 +1960,26 @@ if __name__ == "__main__":
         },
     ):
         # Mock security util dependencies before calling configure_logging_from_config
-        with patch(
-            "runner.runner_security_utils.encrypt_data",
-            new=MagicMock(
-                side_effect=lambda d, *a, **k: base64.b64encode(
-                    json.dumps(d).encode()
-                ).decode()
+        with (
+            patch(
+                "runner.runner_security_utils.encrypt_data",
+                new=MagicMock(
+                    side_effect=lambda d, *a, **k: base64.b64encode(
+                        json.dumps(d).encode()
+                    ).decode()
+                ),
             ),
-        ), patch(
-            "runner.runner_security_utils.redact_secrets",
-            new=MagicMock(
-                side_effect=lambda d, *a, **k: (
-                    d.replace("api_key=123xyz", "[REDACTED]").replace(
-                        "dev@example.com", "[REDACTED]"
+            patch(
+                "runner.runner_security_utils.redact_secrets",
+                new=MagicMock(
+                    side_effect=lambda d, *a, **k: (
+                        d.replace("api_key=123xyz", "[REDACTED]").replace(
+                            "dev@example.com", "[REDACTED]"
+                        )
+                        if isinstance(d, str)
+                        else d
                     )
-                    if isinstance(d, str)
-                    else d
-                )
+                ),
             ),
         ):
 

@@ -1282,10 +1282,13 @@ async def run(requirements: Dict[str, Any], ambiguities: List[str]) -> Dict[str,
 class TestClarifier(unittest.TestCase):
     def setUp(self):
         # This setup might need adjustment if Clarifier's __init__ requires more args
-        with patch("__main__.get_config"), patch("__main__.get_fernet"), patch(
-            "__main__.get_logger"
-        ), patch("__main__.get_tracer"), patch("__main__.get_circuit_breaker"), patch(
-            "__main__.get_channel"
+        with (
+            patch("__main__.get_config"),
+            patch("__main__.get_fernet"),
+            patch("__main__.get_logger"),
+            patch("__main__.get_tracer"),
+            patch("__main__.get_circuit_breaker"),
+            patch("__main__.get_channel"),
         ):
             self.clarifier = Clarifier()
         self.requirements = {"features": ["test"]}
@@ -1330,17 +1333,20 @@ class TestClarifier(unittest.TestCase):
 
     async def test_save_history(self):
         # Mock dependencies for _save_history
-        with patch("aiofiles.open", new_callable=AsyncMock), patch("os.rename"), patch(
-            "os.chmod"
+        with (
+            patch("aiofiles.open", new_callable=AsyncMock),
+            patch("os.rename"),
+            patch("os.chmod"),
         ):
             self.clarifier.history = [{"test": "data"}]  # Ensure history is not empty
             await self.clarifier._save_history()
             # Assertions can be made here about the mocked calls if needed
 
     async def test_graceful_shutdown(self):
-        with patch.object(
-            self.clarifier.context_manager, "close", AsyncMock()
-        ), patch.object(self.clarifier, "_save_history", AsyncMock()):
+        with (
+            patch.object(self.clarifier.context_manager, "close", AsyncMock()),
+            patch.object(self.clarifier, "_save_history", AsyncMock()),
+        ):
             await self.clarifier.graceful_shutdown("test")
             self.assertTrue(self.clarifier.shutdown_event.is_set())
 

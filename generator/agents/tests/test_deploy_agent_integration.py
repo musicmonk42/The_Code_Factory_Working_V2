@@ -212,9 +212,10 @@ venv/
 @pytest.fixture
 def mock_external_tools():
     """Mock all external tool calls (docker, helm, trivy, etc.)."""
-    with patch("subprocess.run") as mock_run, patch(
-        "asyncio.create_subprocess_exec"
-    ) as mock_async_exec:
+    with (
+        patch("subprocess.run") as mock_run,
+        patch("asyncio.create_subprocess_exec") as mock_async_exec,
+    ):
 
         # Mock successful subprocess calls
         mock_process = MagicMock()
@@ -230,17 +231,23 @@ def mock_external_tools():
 @pytest.fixture
 def mock_llm_calls():
     """Mock all LLM API calls."""
-    with patch(
-        "generator.agents.deploy_agent.deploy_agent.call_llm_api"
-    ) as mock_agent_llm, patch(
-        "generator.agents.deploy_agent.deploy_agent.call_ensemble_api"
-    ) as mock_agent_ensemble, patch(
-        "generator.agents.deploy_agent.deploy_prompt.call_ensemble_api"
-    ) as mock_prompt_ensemble, patch(
-        "generator.agents.deploy_agent.deploy_response_handler.call_ensemble_api"
-    ) as mock_handler_ensemble, patch(
-        "generator.agents.deploy_agent.deploy_validator.call_ensemble_api"
-    ) as mock_validator_ensemble:
+    with (
+        patch(
+            "generator.agents.deploy_agent.deploy_agent.call_llm_api"
+        ) as mock_agent_llm,
+        patch(
+            "generator.agents.deploy_agent.deploy_agent.call_ensemble_api"
+        ) as mock_agent_ensemble,
+        patch(
+            "generator.agents.deploy_agent.deploy_prompt.call_ensemble_api"
+        ) as mock_prompt_ensemble,
+        patch(
+            "generator.agents.deploy_agent.deploy_response_handler.call_ensemble_api"
+        ) as mock_handler_ensemble,
+        patch(
+            "generator.agents.deploy_agent.deploy_validator.call_ensemble_api"
+        ) as mock_validator_ensemble,
+    ):
 
         # Default LLM responses
         def dockerfile_response(*args, **kwargs):

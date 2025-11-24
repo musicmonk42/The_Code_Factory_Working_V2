@@ -377,16 +377,14 @@ async def main():
         class TestPromptClarifier(unittest.TestCase):
             def setUp(self):
                 # We patch the dependencies of PromptClarifier's __init__
-                with patch("generator.clarifier.clarifier.get_config"), patch(
-                    "generator.clarifier.clarifier.get_fernet"
-                ), patch("generator.clarifier.clarifier.get_logger"), patch(
-                    "generator.clarifier.clarifier.get_tracer"
-                ), patch(
-                    "generator.clarifier.clarifier.get_circuit_breaker"
-                ), patch(
-                    "generator.clarifier.clarifier_user_prompt.get_channel"
-                ), patch(
-                    "generator.clarifier.clarifier.Clarifier"
+                with (
+                    patch("generator.clarifier.clarifier.get_config"),
+                    patch("generator.clarifier.clarifier.get_fernet"),
+                    patch("generator.clarifier.clarifier.get_logger"),
+                    patch("generator.clarifier.clarifier.get_tracer"),
+                    patch("generator.clarifier.clarifier.get_circuit_breaker"),
+                    patch("generator.clarifier.clarifier_user_prompt.get_channel"),
+                    patch("generator.clarifier.clarifier.Clarifier"),
                 ):
                     self.clarifier = PromptClarifier()
                 self.requirements = {"features": ["test"]}

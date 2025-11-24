@@ -522,17 +522,22 @@ instance_id: tui_test_instance"""
         )._value = 1
 
         # Mock the underlying Prometheus client to expose these values
-        with patch(
-            "runner.runner_app.RUN_QUEUE.labels",
-            MagicMock(return_value=MagicMock(_value=2)),
-        ), patch("runner.runner_app.RUN_PASS_RATE", MagicMock(_value=0.95)), patch(
-            "runner.runner_app.RUN_RESOURCE_USAGE.labels",
-            MagicMock(
-                side_effect=[MagicMock(_value=75.0), MagicMock(_value=50.0)]
-            ),  # CPU, MEM
-        ), patch(
-            "runner.runner_app.HEALTH_STATUS.labels",
-            MagicMock(return_value=MagicMock(_value=1)),
+        with (
+            patch(
+                "runner.runner_app.RUN_QUEUE.labels",
+                MagicMock(return_value=MagicMock(_value=2)),
+            ),
+            patch("runner.runner_app.RUN_PASS_RATE", MagicMock(_value=0.95)),
+            patch(
+                "runner.runner_app.RUN_RESOURCE_USAGE.labels",
+                MagicMock(
+                    side_effect=[MagicMock(_value=75.0), MagicMock(_value=50.0)]
+                ),  # CPU, MEM
+            ),
+            patch(
+                "runner.runner_app.HEALTH_STATUS.labels",
+                MagicMock(return_value=MagicMock(_value=1)),
+            ),
         ):
 
             await app.update_ui()

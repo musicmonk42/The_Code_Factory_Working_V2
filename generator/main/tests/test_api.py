@@ -78,11 +78,12 @@ def session_cleanup():
 @pytest.fixture
 def mock_dependencies():
     """Mock all external dependencies."""
-    with patch("main.api.Runner") as mock_runner, patch(
-        "main.api.IntentParser"
-    ) as mock_parser, patch("main.api.get_metrics_dict") as mock_metrics, patch(
-        "main.api.search_logs"
-    ) as mock_search_logs:  # <<< FIX: Added patch for search_logs
+    with (
+        patch("main.api.Runner") as mock_runner,
+        patch("main.api.IntentParser") as mock_parser,
+        patch("main.api.get_metrics_dict") as mock_metrics,
+        patch("main.api.search_logs") as mock_search_logs,
+    ):  # <<< FIX: Added patch for search_logs
 
         mock_runner_instance = MagicMock()
         mock_runner_instance.run = AsyncMock(return_value={"status": "success"})

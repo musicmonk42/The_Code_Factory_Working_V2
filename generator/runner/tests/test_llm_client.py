@@ -30,21 +30,19 @@ from runner.runner_errors import ConfigurationError, LLMError
 @pytest.fixture
 def mock_imports(event_loop):
     """Mocks external dependencies used by LLMClient."""
-    with patch(
-        "runner.llm_client.aioredis.from_url", new_callable=MagicMock
-    ) as mock_redis_from_url, patch(
-        "runner.llm_client.tiktoken"
-    ) as mock_tiktoken, patch(
-        "runner.llm_client.aiohttp"
-    ) as mock_aiohttp, patch(
-        "runner.llm_client.load_dotenv"
-    ) as mock_load_dotenv, patch(
-        "runner.llm_client.LLMPluginManager"
-    ) as mock_plugin_manager, patch(
-        "runner.llm_client.log_audit_event", new_callable=AsyncMock
-    ) as mock_audit, patch(
-        "runner.llm_client.metrics"
-    ) as mock_metrics:
+    with (
+        patch(
+            "runner.llm_client.aioredis.from_url", new_callable=MagicMock
+        ) as mock_redis_from_url,
+        patch("runner.llm_client.tiktoken") as mock_tiktoken,
+        patch("runner.llm_client.aiohttp") as mock_aiohttp,
+        patch("runner.llm_client.load_dotenv") as mock_load_dotenv,
+        patch("runner.llm_client.LLMPluginManager") as mock_plugin_manager,
+        patch(
+            "runner.llm_client.log_audit_event", new_callable=AsyncMock
+        ) as mock_audit,
+        patch("runner.llm_client.metrics") as mock_metrics,
+    ):
 
         # Mock Redis client returned by from_url - use AsyncMock for async methods
         mock_redis = AsyncMock()
