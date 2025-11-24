@@ -95,6 +95,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
+          # Excluded 4.21.x versions have known compatibility issues with certain packages
           pip install --no-cache-dir "protobuf!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0,>=3.20.2"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
@@ -117,7 +118,7 @@ jobs:
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
           # Check for dependency conflicts
-          pip check || (echo "WARNING: Dependency conflicts detected:" && pip list --format=columns && exit 1)
+          pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
       - name: Run unified platform tests
         run: |
@@ -182,6 +183,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
+          # Excluded 4.21.x versions have known compatibility issues with certain packages
           pip install --no-cache-dir "protobuf!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0,>=3.20.2"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
@@ -203,7 +205,7 @@ jobs:
             exit 1
           }
           # Verify arbiter is importable with detailed diagnostics
-          python -c "import arbiter; print(f'arbiter imported from {arbiter.__file__}')" || {
+          python -c 'import arbiter; print("arbiter imported from", arbiter.__file__)' || {
             echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
             exit 1
           }
@@ -222,7 +224,7 @@ jobs:
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
           # Check for dependency conflicts
-          pip check || (echo "WARNING: Dependency conflicts detected:" && pip list --format=columns && exit 1)
+          pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
       - name: Free more disk space before tests
         run: |
@@ -238,6 +240,8 @@ jobs:
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
           if [ -d omnicore_engine/tests ]; then
+            # Per-file diagnostic isolates CPU-heavy tests and provides resource usage metrics
+            # This approach helps identify which specific test file causes SIGXCPU timeouts
             echo "Running per-file diagnostic to find CPU-heavy test..."
             DIAGNOSTIC_FAILED=0
             for f in $(find omnicore_engine/tests -name 'test_*.py' | sort); do
@@ -314,6 +318,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
+          # Excluded 4.21.x versions have known compatibility issues with certain packages
           pip install --no-cache-dir "protobuf!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0,>=3.20.2"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
@@ -337,7 +342,7 @@ jobs:
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
           # Check for dependency conflicts
-          pip check || (echo "WARNING: Dependency conflicts detected:" && pip list --format=columns && exit 1)
+          pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
       - name: Run integration tests
         env:
