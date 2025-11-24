@@ -117,6 +117,8 @@ jobs:
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Force-reinstall protobuf to ensure it stays in the correct version range
+          pip install --force-reinstall "protobuf>=3.20.2,!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
@@ -223,6 +225,8 @@ jobs:
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Force-reinstall protobuf to ensure it stays in the correct version range
+          pip install --force-reinstall "protobuf>=3.20.2,!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
@@ -343,6 +347,8 @@ jobs:
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Force-reinstall protobuf to ensure it stays in the correct version range
+          pip install --force-reinstall "protobuf>=3.20.2,!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
