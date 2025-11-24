@@ -9,6 +9,8 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
+  # Protobuf version constraint - pinned for compatibility with google-ai-generativelanguage
+  PROTOBUF_VERSION: '>=3.20.2,!=4.21.*,<6.0.0'
   # OpenTelemetry package versions - pinned for compatibility
   OTEL_API_VERSION: '1.38.0'
   OTEL_SDK_VERSION: '1.38.0'
@@ -96,7 +98,7 @@ jobs:
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir "protobuf${{ env.PROTOBUF_VERSION }}"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -118,7 +120,7 @@ jobs:
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
           # Force-reinstall protobuf to ensure it stays in the correct version range
-          pip install --force-reinstall "protobuf>=3.20.2,!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0"
+          pip install --force-reinstall "protobuf${{ env.PROTOBUF_VERSION }}"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
@@ -186,7 +188,7 @@ jobs:
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir "protobuf${{ env.PROTOBUF_VERSION }}"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -226,7 +228,7 @@ jobs:
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
           # Force-reinstall protobuf to ensure it stays in the correct version range
-          pip install --force-reinstall "protobuf>=3.20.2,!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0"
+          pip install --force-reinstall "protobuf${{ env.PROTOBUF_VERSION }}"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
@@ -325,7 +327,7 @@ jobs:
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir "protobuf${{ env.PROTOBUF_VERSION }}"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -348,7 +350,7 @@ jobs:
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
           # Force-reinstall protobuf to ensure it stays in the correct version range
-          pip install --force-reinstall "protobuf>=3.20.2,!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0"
+          pip install --force-reinstall "protobuf${{ env.PROTOBUF_VERSION }}"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
