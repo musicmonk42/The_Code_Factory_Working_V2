@@ -296,7 +296,12 @@ async def get_user_id(token: str = Depends(oauth2_scheme)):
 
 plugin_upload_lock = asyncio.Lock()
 # Use ENCRYPTION_KEY_BYTES which is properly initialized by ArbiterConfig
-encrypter = Fernet(settings.ENCRYPTION_KEY_BYTES if hasattr(settings, 'ENCRYPTION_KEY_BYTES') and settings.ENCRYPTION_KEY_BYTES else Fernet.generate_key())
+# The ArbiterConfig singleton initializes this during __new__, so it should always be available
+try:
+    encrypter = Fernet(settings.ENCRYPTION_KEY_BYTES)
+except (AttributeError, ValueError) as e:
+    logger.error(f"Failed to initialize Fernet encrypter: {e}. Generating temporary key for testing.")
+    encrypter = Fernet(Fernet.generate_key())
 meta_supervisor_instance = None
 
 
