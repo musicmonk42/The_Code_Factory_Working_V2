@@ -35,11 +35,9 @@ WORKDIR /app
 # Copy only requirements first for better layer caching
 COPY requirements.txt* master_requirements.txt* ./
 
-# Copy subdirectory requirements if they exist for better layer caching
-# Use wildcards to make these optional - if file doesn't exist, Docker won't fail
-COPY generator/requirements.tx[t] generator/ 
-COPY omnicore_engine/requirements.tx[t] omnicore_engine/
-COPY self_fixing_engineer/requirements.tx[t] self_fixing_engineer/
+# Note: All three modules (generator, omnicore_engine, self_fixing_engineer) are part
+# of a single unified platform. Dependencies are installed from the root requirements.txt
+# which includes all necessary packages for the entire platform.
 
 # Upgrade packaging tools and install dependencies if found
 # Try with SSL verification first; if it fails due to proxy/MITM, retry with trusted hosts
@@ -49,7 +47,9 @@ RUN pip install --upgrade pip setuptools wheel || \
     (echo "WARNING: pip upgrade failed with SSL verification, retrying with --trusted-host" && \
      pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip setuptools wheel)
 
-# Install project dependencies
+# Install unified platform dependencies
+# Note: All three modules (generator, omnicore_engine, self_fixing_engineer) share
+# the same requirements.txt as part of a unified platform.
 # Note: --trusted-host bypasses SSL verification as a fallback for environments with
 # SSL inspection/MITM proxies. Production builds with proper SSL should use the primary path.
 ARG SKIP_HEAVY_DEPS=0
@@ -59,10 +59,6 @@ RUN if [ "$SKIP_HEAVY_DEPS" = "1" ]; then \
         pip install --no-cache-dir -r requirements.txt || \
         (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
          pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt); \
-    elif [ -f generator/requirements.txt ]; then \
-        pip install --no-cache-dir -r generator/requirements.txt || \
-        (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
-         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r generator/requirements.txt); \
     elif [ -f pyproject.toml ]; then \
         pip install --no-cache-dir . || \
         (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \

@@ -35,50 +35,32 @@ services:
   #     retries: 5
   #   restart: unless-stopped
 
-  # Generator component
-  generator:
+  # Unified Code Factory Platform
+  # Note: All three modules (generator, omnicore_engine, self_fixing_engineer) 
+  # are part of a single unified platform and are built together.
+  codefactory:
     build:
-      context: ./generator
+      context: .
       dockerfile: Dockerfile
-    container_name: codefactory-generator
+    container_name: codefactory-platform
     environment:
       - APP_ENV=development
       - GROK_API_KEY=${GROK_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - REDIS_URL=redis://redis:6379
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./generator:/app
-      - generator-output:/app/output
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    command: python main.py --interface api
-
-  # OmniCore Engine
-  omnicore:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: codefactory-omnicore
-    environment:
-      - APP_ENV=development
-      - REDIS_URL=redis://redis:6379
       - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
       - AUDIT_LOG_PATH=/app/audit_trail.log
     ports:
-      - "8001:8000"
-      - "8002:8001"  # Metrics port
+      - "8000:8000"  # Main API endpoint
+      - "8001:8001"  # Metrics port
     volumes:
-      - ./omnicore_engine:/app/omnicore_engine
-      - ./self_fixing_engineer:/app/self_fixing_engineer
-      - omnicore-output:/app/output
+      - .:/app
+      - platform-output:/app/output
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    # Default command runs the unified platform API
     command: python -m uvicorn omnicore_engine.fastapi_app:app --host 0.0.0.0 --port 8000
 
   # Prometheus for metrics (optional)
@@ -115,8 +97,7 @@ services:
 volumes:
   redis-data:
   postgres-data:
-  generator-output:
-  omnicore-output:
+  platform-output:
   prometheus-data:
   grafana-data:
 

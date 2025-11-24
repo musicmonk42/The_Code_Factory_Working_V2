@@ -61,26 +61,30 @@ Sandboxing: Secure execution with AppArmor/seccomp (simulation/sandbox.py).
 
 
 Architecture
+**Note:** The Code Factory is a **unified platform** where the three primary modules (Generator, OmniCore Engine, and Self-Fixing Engineer) are tightly integrated and deployed together. They share the same dependencies, Docker image, and CI/CD pipeline as a single cohesive system.
+
 The Code Factory is a modular, decoupled ecosystem:
 
-README-to-App Code Generator (RCG, D:\Code_Factory\Generator):
+README-to-App Code Generator (RCG, generator/):
 
 Generates code, tests, configs, and docs using agents (codegen_agent.py, testgen_agent.py, etc.).
 Includes bug/compliance management (critique_agent, security_utils.py).
-Operates independently but integrates with OmniCore.
+Part of the unified platform, integrates with OmniCore.
 
 
-OmniCore Omega Pro Engine (OmniCore, D:\Code_Factory\omnicore_engine):
+OmniCore Omega Pro Engine (OmniCore, omnicore_engine/):
 
 Coordinates RCG and SFE via sharded_message_bus.py.
 Manages plugins (plugin_registry.py), persistence (database.py), and auditing (audit.py).
 Supports CLI (cli.py) and API (fastapi_app.py).
+Part of the unified platform.
 
 
-Self-Fixing Engineer (SFE, D:\Code_Factory\self_fixing_engineer):
+Self-Fixing Engineer (SFE, self_fixing_engineer/):
 
 Powered by Arbiter AI (arbiter.py), it handles maintenance via codebase_analyzer.py, bug_manager.py, intent_capture/agent_core.py, and mesh/checkpoint_manager.py.
 Includes DLT (checkpoint_chaincode.go, CheckpointContract.sol), SIEM (siem_factory.py), and self-evolution (evolution.py).
+Part of the unified platform.
 
 
 
@@ -163,15 +167,12 @@ cp .env.example .env
 
 
 Install Dependencies:
-# Install all dependencies
+# Install all dependencies for the unified platform
 make install-dev
 
 # Or manually:
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r generator/requirements.txt
-pip install -r omnicore_engine/requirements.txt
-pip install -r self_fixing_engineer/requirements.txt
 
 
 Start Redis (required):
