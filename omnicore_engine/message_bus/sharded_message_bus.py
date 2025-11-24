@@ -9,7 +9,17 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from functools import partial
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Pattern,
+    Tuple,
+    Union,
+)
 
 import structlog
 

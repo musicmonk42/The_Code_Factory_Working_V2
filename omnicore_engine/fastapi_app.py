@@ -224,7 +224,9 @@ from omnicore_engine.security_utils import RateLimiter, get_security_utils
 
 security_config = get_security_config()
 security_utils = get_security_utils()
-rate_limiter = RateLimiter(max_calls=100, per_seconds=60)  # Default: 100 calls per minute
+rate_limiter = RateLimiter(
+    max_calls=100, per_seconds=60
+)  # Default: 100 calls per minute
 
 
 # Add authentication middleware
