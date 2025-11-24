@@ -94,6 +94,8 @@ jobs:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip
+          # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
+          pip install --no-cache-dir "protobuf!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0,>=3.20.2"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -114,6 +116,8 @@ jobs:
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Check for dependency conflicts
+          pip check || (echo "WARNING: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
       - name: Run unified platform tests
         run: |
@@ -177,6 +181,8 @@ jobs:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip
+          # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
+          pip install --no-cache-dir "protobuf!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0,>=3.20.2"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -190,14 +196,14 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt || echo "WARNING: Some requirements failed (may be optional)"
           fi
-          # Install self_fixing_engineer package (contains arbiter - CRITICAL)
+          # Install self_fixing_engineer package (contains arbiter - CRITICAL) with verbose output
           echo "Installing self_fixing_engineer package (contains arbiter)..."
-          python -m pip install --no-cache-dir -e ./self_fixing_engineer || {
+          python -m pip install -v --no-cache-dir -e ./self_fixing_engineer || {
             echo "ERROR: Failed to install self_fixing_engineer package"
             exit 1
           }
-          # Verify arbiter is importable
-          python -c "import arbiter; print('arbiter module successfully imported')" || {
+          # Verify arbiter is importable with detailed diagnostics
+          python -c "import importlib; m = importlib.import_module('arbiter'); print('arbiter import OK:', getattr(m, '__file__', '<no __file__>'))" || {
             echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
             exit 1
           }
@@ -215,6 +221,8 @@ jobs:
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Check for dependency conflicts
+          pip check || (echo "WARNING: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
       - name: Free more disk space before tests
         run: |
@@ -230,7 +238,16 @@ jobs:
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
           if [ -d omnicore_engine/tests ]; then
-            pytest omnicore_engine/tests/ --cov=omnicore_engine --cov-report=xml --cov-report=term -v --timeout=120 --maxfail=1
+            echo "Running per-file diagnostic to find CPU-heavy test..."
+            for f in $(git ls-files 'omnicore_engine/tests/**/*.py' | grep -E 'test_.*\.py$' | sort); do
+              echo "==> Testing $f"
+              /usr/bin/time -v pytest -q "$f" --maxfail=1 --timeout=60 || {
+                echo "Problem detected in $f"
+                break
+              }
+            done
+            echo "Now running full pytest (for coverage) if diagnostic succeeded..."
+            pytest omnicore_engine/tests/ --cov=omnicore_engine --cov-report=xml --cov-report=term -v --timeout=300 --maxfail=1
           else
             echo "Error: No tests directory found. Failing the build."
             exit 1
@@ -289,6 +306,8 @@ jobs:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip
+          # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
+          pip install --no-cache-dir "protobuf!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0,>=3.20.2"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -310,6 +329,8 @@ jobs:
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Check for dependency conflicts
+          pip check || (echo "WARNING: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
       - name: Run integration tests
         env:
