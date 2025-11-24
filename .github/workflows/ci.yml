@@ -143,6 +143,14 @@ jobs:
             pip install --no-cache-dir -r generator/master_requirements.txt
           fi
           pip install --no-cache-dir pytest-cov
+          # Force-reinstall OpenTelemetry packages to ensure correct versions
+          pip install --force-reinstall \
+            opentelemetry-semantic-conventions==0.59b0 \
+            opentelemetry-instrumentation-fastapi==0.59b0 \
+            opentelemetry-instrumentation==0.59b0 \
+            opentelemetry-exporter-otlp-proto-grpc==1.38.0 \
+            opentelemetry-sdk==1.38.0 \
+            opentelemetry-api==1.38.0
           
       - name: Run Generator tests
         run: |
@@ -246,6 +254,14 @@ jobs:
           # Install missing runtime/test dependencies
           pip install --no-cache-dir fastapi-csrf-protect circuitbreaker defusedxml || true
           pip install --no-cache-dir pytest-cov
+          # Force-reinstall OpenTelemetry packages to ensure correct versions
+          pip install --force-reinstall \
+            opentelemetry-semantic-conventions==0.59b0 \
+            opentelemetry-instrumentation-fastapi==0.59b0 \
+            opentelemetry-instrumentation==0.59b0 \
+            opentelemetry-exporter-otlp-proto-grpc==1.38.0 \
+            opentelemetry-sdk==1.38.0 \
+            opentelemetry-api==1.38.0
           
       - name: Free more disk space before tests
         run: |
@@ -320,6 +336,14 @@ jobs:
             pip install --no-cache-dir -r self_fixing_engineer/requirements.txt
           fi
           pip install --no-cache-dir pytest-cov
+          # Force-reinstall OpenTelemetry packages to ensure correct versions
+          pip install --force-reinstall \
+            opentelemetry-semantic-conventions==0.59b0 \
+            opentelemetry-instrumentation-fastapi==0.59b0 \
+            opentelemetry-instrumentation==0.59b0 \
+            opentelemetry-exporter-otlp-proto-grpc==1.38.0 \
+            opentelemetry-sdk==1.38.0 \
+            opentelemetry-api==1.38.0
           
       - name: Run SFE tests
         run: |
@@ -407,6 +431,14 @@ jobs:
           if [ -f master_requirements.txt ]; then
             pip install --no-cache-dir -r master_requirements.txt || true
           fi
+          # Force-reinstall OpenTelemetry packages to ensure correct versions
+          pip install --force-reinstall \
+            opentelemetry-semantic-conventions==0.59b0 \
+            opentelemetry-instrumentation-fastapi==0.59b0 \
+            opentelemetry-instrumentation==0.59b0 \
+            opentelemetry-exporter-otlp-proto-grpc==1.38.0 \
+            opentelemetry-sdk==1.38.0 \
+            opentelemetry-api==1.38.0
           
       - name: Run integration tests
         env:
