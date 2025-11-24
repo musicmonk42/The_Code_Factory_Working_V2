@@ -242,7 +242,7 @@ jobs:
               # 2. License does NOT contain "LGPL" (case-insensitive)
               # 3. Package name is NOT in the whitelist
               RESTRICTIVE=$(jq -r --argjson wl "$WHITELIST" \
-                '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not) and ([.Name] | inside($wl) | not)) | "\(.Name) \(.Version) - \(.License)"' \
+                '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not) and (.Name | IN($wl[]; .) | not)) | "\(.Name) \(.Version) - \(.License)"' \
                 "$TEMP_DIR/licenses-requirements.json" || true)
               
               if [ -n "$RESTRICTIVE" ]; then
