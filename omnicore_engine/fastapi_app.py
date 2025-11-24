@@ -258,10 +258,13 @@ def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError):
 
 @CsrfProtect.load_config
 def get_csrf_config():
-    class CsrfConfig:
-        secret_key = settings.JWT_SECRET_KEY.get_secret_value()
-
-    return CsrfConfig()
+    """Return CSRF configuration as a Pydantic BaseSettings compatible class"""
+    from pydantic_settings import BaseSettings
+    
+    class CsrfSettings(BaseSettings):
+        secret_key: str = settings.JWT_SECRET_KEY.get_secret_value()
+    
+    return CsrfSettings()
 
 
 async def get_user_id(token: str = Depends(oauth2_scheme)):
@@ -292,7 +295,8 @@ async def get_user_id(token: str = Depends(oauth2_scheme)):
 
 
 plugin_upload_lock = asyncio.Lock()
-encrypter = Fernet(settings.ENCRYPTION_KEY.get_secret_value().encode("utf-8"))
+# Use ENCRYPTION_KEY_BYTES which is properly initialized by ArbiterConfig
+encrypter = Fernet(settings.ENCRYPTION_KEY_BYTES if hasattr(settings, 'ENCRYPTION_KEY_BYTES') and settings.ENCRYPTION_KEY_BYTES else Fernet.generate_key())
 meta_supervisor_instance = None
 
 
