@@ -201,6 +201,16 @@ clean: ## Clean up generated files and caches
 clean-all: clean docker-clean db-reset ## Deep clean (removes Docker resources and databases)
 	@echo "$(GREEN)Deep cleanup complete!$(NC)"
 
+clean-old-docs: ## Remove audit/test documents older than 2 days (interactive)
+	@echo "$(BLUE)Cleaning old audit and test documents...$(NC)"
+	python cleanup_old_docs.py --dry-run
+	@echo "$(YELLOW)To actually delete files, run: make clean-old-docs-force$(NC)"
+
+clean-old-docs-force: ## Remove audit/test documents older than 2 days (automatic)
+	@echo "$(BLUE)Cleaning old audit and test documents...$(NC)"
+	python cleanup_old_docs.py --yes
+	@echo "$(GREEN)Old docs cleanup complete!$(NC)"
+
 # =============================================================================
 # Documentation
 # =============================================================================
