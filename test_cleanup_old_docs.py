@@ -7,7 +7,7 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Import the cleanup module
 import sys
@@ -76,7 +76,7 @@ def test_find_old_audit_files():
         old_file.write_text("old audit content")
         
         # Modify the timestamp to make it 3 days old
-        three_days_ago = (datetime.now() - timedelta(days=3)).timestamp()
+        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).timestamp()
         os.utime(old_file, (three_days_ago, three_days_ago))
         
         # Find old files (older than 2 days)
@@ -111,7 +111,7 @@ def test_file_patterns():
             file_path.write_text("test content")
             
             # Make it 3 days old
-            three_days_ago = (datetime.now() - timedelta(days=3)).timestamp()
+            three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).timestamp()
             os.utime(file_path, (three_days_ago, three_days_ago))
         
         # Find old files
@@ -145,7 +145,7 @@ def test_cleanup_script_dry_run():
         test_file.write_text("test content")
         
         # Make it old
-        three_days_ago = (datetime.now() - timedelta(days=3)).timestamp()
+        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).timestamp()
         os.utime(test_file, (three_days_ago, three_days_ago))
         
         # Run the script in dry-run mode (would need to adapt script to accept base_path)

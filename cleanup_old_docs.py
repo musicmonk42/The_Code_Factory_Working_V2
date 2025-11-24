@@ -16,23 +16,23 @@ Options:
 import argparse
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Tuple
 
 
-# Patterns for files to clean up (case-insensitive matching)
+# Patterns for files to clean up
+# Note: glob patterns are case-sensitive on Unix-like systems
 FILE_PATTERNS = [
     "*AUDIT*.md",
     "*audit*.md",
     "*TEST*.md", 
     "*test*.md",
-    "*.log.json",
-    "dlt_audit*.json*",
     "*_REPORT.md",
     "*_report.md",
-    "LINT_TEST_REPORT.md",
-    "LOAD_TESTING.md",
+    "*.log.json",
+    "dlt_audit*",
+    "*audit*.json*",
 ]
 
 # Files to exclude from cleanup (important documentation)
@@ -66,8 +66,8 @@ EXCLUDE_DIRS = [
 def get_file_age_days(file_path: Path) -> float:
     """Get the age of a file in days based on modification time."""
     mtime = file_path.stat().st_mtime
-    file_datetime = datetime.fromtimestamp(mtime)
-    age = datetime.now() - file_datetime
+    file_datetime = datetime.fromtimestamp(mtime, tz=timezone.utc)
+    age = datetime.now(timezone.utc) - file_datetime
     return age.total_seconds() / 86400  # Convert to days
 
 
