@@ -1303,9 +1303,13 @@ class MetaSupervisor:
                             async with Redis.from_url(
                                 settings.REDIS_URL, decode_responses=True
                             ) as client:
-                                await client.publish("mentor_reports", json.dumps(report))
+                                await client.publish(
+                                    "mentor_reports", json.dumps(report)
+                                )
                         else:
-                            self.logger.warning("Redis not available, skipping mentor report publish")
+                            self.logger.warning(
+                                "Redis not available, skipping mentor report publish"
+                            )
                     self.logger.info(
                         f"Published mentor report: {report.get('summary', 'No summary')}."
                     )

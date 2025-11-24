@@ -31,7 +31,9 @@ async def test_end_to_end_plugin_api(tmp_path):
     assert response.json()["suggestion"]["result"] == "data"
 
 
-@pytest.mark.skip(reason="command_handlers not exported from cli module - needs refactoring")
+@pytest.mark.skip(
+    reason="command_handlers not exported from cli module - needs refactoring"
+)
 @pytest.mark.asyncio
 async def test_end_to_end_plugin_cli(tmp_path):
     # Mock the plugin registry's execute method to simulate the CLI calling a plugin

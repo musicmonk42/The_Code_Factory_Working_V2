@@ -59,7 +59,9 @@ except ImportError:
     CrewManager = None
 
 try:
-    from self_fixing_engineer.simulation.simulation_module import UnifiedSimulationModule
+    from self_fixing_engineer.simulation.simulation_module import (
+        UnifiedSimulationModule,
+    )
 except ImportError:
     UnifiedSimulationModule = None
 
