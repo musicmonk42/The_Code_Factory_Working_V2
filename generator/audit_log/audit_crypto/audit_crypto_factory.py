@@ -519,7 +519,8 @@ async def send_alert(
             extra={"operation": "send_alert_success", "severity": severity},
         )
         await log_action(
-            "send_alert", status="success", severity=severity, message=message
+            "send_alert",
+            {"status": "success", "severity": severity, "message": message},
         )
     except Exception as e:
         logger.error(
@@ -532,10 +533,12 @@ async def send_alert(
         ).inc()
         await log_action(
             "send_alert",
-            status="fail",
-            severity=severity,
-            message=message,
-            error=str(e),
+            {
+                "status": "fail",
+                "severity": severity,
+                "message": message,
+                "error": str(e),
+            },
         )
 
 

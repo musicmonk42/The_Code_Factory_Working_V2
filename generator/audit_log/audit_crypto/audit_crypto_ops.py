@@ -924,7 +924,7 @@ async def verify_chain(entries: List[Dict[str, Any]]) -> bool:
             "Audit log chain verification successful.",
             extra={"operation": "verify_chain_success"},
         )
-        await log_action("verify_chain", status="success")
+        await log_action("verify_chain", {"status": "success"})
         return True
     except CryptoOperationError as e:
         logger.error(

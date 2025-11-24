@@ -158,16 +158,16 @@ def _conditional_log_action(action: str, status: str, **kwargs):
         )
         return
 
+    # Combine status and kwargs into details dict
+    details = {"status": status, **kwargs}
     # Prepare synchronous log message
-    sync_log_message = (
-        f"Sync log fallback: action='{action}', status='{status}', details={kwargs}"
-    )
+    sync_log_message = f"Sync log fallback: action='{action}', details={details}"
 
     try:
         # Check if an event loop is running
         loop = asyncio.get_running_loop()
         # If running, schedule the log action as a task
-        loop.create_task(log_action(action, status=status, **kwargs))
+        loop.create_task(log_action(action, details))
         logger.debug(f"Async task created for log_action: {action}")
     except RuntimeError:
         # No running event loop (e.g., during module import or sync context)
@@ -1394,7 +1394,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                     "SoftwareCryptoProvider: Periodic key rotation task cancelled.",
                     extra={"operation": "periodic_rotation_task_cancelled"},
                 )
-                await log_action("periodic_rotation_task", status="cancelled")
+                await log_action("periodic_rotation_task", {"status": "cancelled"})
                 break  # Re-raise is not needed if we just break the loop
             except Exception as e:
                 self.logger.error(
@@ -1413,7 +1413,9 @@ class SoftwareCryptoProvider(CryptoProvider):
                         severity="critical",
                     )
                 )
-                await log_action("periodic_rotation_task", status="fail", error=str(e))
+                await log_action(
+                    "periodic_rotation_task", {"status": "fail", "error": str(e)}
+                )
                 # Sleep before retrying the loop on unexpected error
                 await asyncio.sleep(self.settings.KEY_ROTATION_INTERVAL_SECONDS / 2)
 
@@ -1585,7 +1587,7 @@ class HSMCryptoProvider(CryptoProvider):
                     extra={"operation": "hsm_session_already_valid"},
                 )
                 HSM_SESSION_HEALTH.labels(provider_type="hsm").set(1)
-                await log_action("hsm_session_init", status="already_valid")
+                await log_action("hsm_session_init", {"status": "already_valid"})
                 return
 
             self.logger.info(
@@ -1764,7 +1766,9 @@ class HSMCryptoProvider(CryptoProvider):
                             backend_name=self.__class__.__name__,
                             op_name="hsm_reinit_session",
                         )
-                        await log_action("hsm_health_monitor", status="reinit_success")
+                        await log_action(
+                            "hsm_health_monitor", {"status": "reinit_success"}
+                        )
                     except Exception as e:
                         self.logger.error(
                             f"Failed to re-initialize HSM session after retries: {e}. HSM features remain unavailable.",
@@ -1786,13 +1790,13 @@ class HSMCryptoProvider(CryptoProvider):
                         "HSM session is healthy.",
                         extra={"operation": "hsm_session_healthy"},
                     )
-                    await log_action("hsm_health_monitor", status="healthy")
+                    await log_action("hsm_health_monitor", {"status": "healthy"})
             except asyncio.CancelledError:
                 self.logger.info(
                     "HSMCryptoProvider: Health monitor task cancelled.",
                     extra={"operation": "hsm_monitor_cancelled"},
                 )
-                await log_action("hsm_health_monitor", status="cancelled")
+                await log_action("hsm_health_monitor", {"status": "cancelled"})
                 break
             except Exception as e:
                 self.logger.error(
@@ -1810,7 +1814,9 @@ class HSMCryptoProvider(CryptoProvider):
                         f"HSM health monitor encountered an error: {e}", severity="high"
                     )
                 )
-                await log_action("hsm_health_monitor", status="fail", error=str(e))
+                await log_action(
+                    "hsm_health_monitor", {"status": "fail", "error": str(e)}
+                )
 
     async def generate_key(self, algo: str) -> str:
         """
@@ -2665,7 +2671,7 @@ class HSMCryptoProvider(CryptoProvider):
                     extra={"operation": "hsm_session_close_success"},
                 )
                 HSM_SESSION_HEALTH.labels(provider_type="hsm").set(0)
-                await log_action("hsm_session_close", status="success")
+                await log_action("hsm_session_close", {"status": "success"})
             except pkcs11.exceptions.PKCS11Error as e:
                 self.logger.error(
                     f"Failed to close HSM session due to PKCS11 error: {e}",
@@ -2677,7 +2683,9 @@ class HSMCryptoProvider(CryptoProvider):
                     provider_type="hsm",
                     operation="close_session",
                 ).inc()
-                await log_action("hsm_session_close", status="fail", error=str(e))
+                await log_action(
+                    "hsm_session_close", {"status": "fail", "error": str(e)}
+                )
             except Exception as e:
                 self.logger.error(
                     f"Unexpected error closing HSM session: {e}",
@@ -2689,7 +2697,9 @@ class HSMCryptoProvider(CryptoProvider):
                     provider_type="hsm",
                     operation="close_session",
                 ).inc()
-                await log_action("hsm_session_close", status="fail", error=str(e))
+                await log_action(
+                    "hsm_session_close", {"status": "fail", "error": str(e)}
+                )
 
         await super().close()
         self.logger.info("HSMCryptoProvider closed.", extra={"operation": "close_end"})

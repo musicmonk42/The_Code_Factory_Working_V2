@@ -808,7 +808,10 @@ class KeyStore:
                     provider_type="software",
                     operation="load_key",
                 ).inc()
-                await log_action("key_load", key_id=key_id, success=False, error=str(e))
+                await log_action(
+                    "key_load",
+                    {"key_id": key_id, "success": False, "error": str(e)},
+                )
                 raise CryptoOperationError(f"Failed to load key {key_id}: {e}") from e
 
     async def list_keys(self) -> List[Dict[str, Any]]:
@@ -846,7 +849,7 @@ class KeyStore:
                     provider_type="software",
                     operation="list_keys",
                 ).inc()
-                await log_action("list_keys", success=False, error=str(e))
+                await log_action("list_keys", {"success": False, "error": str(e)})
                 raise CryptoOperationError(f"Failed to list keys: {e}") from e
 
     async def delete_key_file(self, key_id: str) -> bool:
@@ -895,7 +898,7 @@ class KeyStore:
                             "key_id": key_id,
                         },
                     )
-                    await log_action("key_delete", key_id=key_id, success=True)
+                    await log_action("key_delete", {"key_id": key_id, "success": True})
                 else:
                     self.logger.warning(
                         f"Attempted to delete key '{key_id}', but it was not found or could not be deleted by backend {type(self.backend).__name__}.",
