@@ -96,7 +96,7 @@ jobs:
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir "protobuf!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -184,7 +184,7 @@ jobs:
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir "protobuf!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -205,7 +205,7 @@ jobs:
             exit 1
           }
           # Verify arbiter is importable with detailed diagnostics
-          python -c 'import arbiter; print("arbiter imported from", arbiter.__file__)' || {
+          python -c "import arbiter; print('arbiter imported from', arbiter.__file__)" || {
             echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
             exit 1
           }
@@ -242,6 +242,8 @@ jobs:
           if [ -d omnicore_engine/tests ]; then
             # Per-file diagnostic isolates CPU-heavy tests and provides resource usage metrics
             # This approach helps identify which specific test file causes SIGXCPU timeouts
+            # 60-second timeout per file is intentionally strict for quick diagnosis;
+            # the full pytest run uses 300s for legitimate slow tests
             echo "Running per-file diagnostic to find CPU-heavy test..."
             DIAGNOSTIC_FAILED=0
             for f in $(find omnicore_engine/tests -name 'test_*.py' | sort); do
@@ -319,7 +321,7 @@ jobs:
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir "protobuf!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
