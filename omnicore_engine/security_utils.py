@@ -866,6 +866,105 @@ class EnterpriseSecurityUtils:
         except Exception:
             return False
 
+    # ----- Filename Sanitization -----
+    def sanitize_filename(self, filename: str) -> str:
+        """
+        Sanitize a filename to prevent path traversal and other security issues.
+        
+        Args:
+            filename: The filename to sanitize.
+            
+        Returns:
+            A sanitized filename safe for filesystem operations.
+            
+        Raises:
+            ValueError: If the filename is invalid or potentially dangerous.
+        """
+        if not filename or not isinstance(filename, str):
+            raise ValueError("Invalid filename: must be a non-empty string")
+        
+        # Remove any path components (prevent path traversal)
+        filename = os.path.basename(filename)
+        
+        # Remove null bytes
+        filename = filename.replace("\x00", "")
+        
+        # Remove or replace dangerous characters
+        # Allow only alphanumerics, underscores, hyphens, and dots
+        sanitized = re.sub(r"[^\w\-.]", "_", filename)
+        
+        # Prevent hidden files (starting with .)
+        if sanitized.startswith("."):
+            sanitized = "_" + sanitized[1:]
+        
+        # Prevent empty result
+        if not sanitized or sanitized == "." or sanitized == "..":
+            raise ValueError("Invalid filename after sanitization")
+        
+        # Limit length
+        max_length = 255
+        if len(sanitized) > max_length:
+            name, ext = os.path.splitext(sanitized)
+            sanitized = name[: max_length - len(ext)] + ext
+        
+        return sanitized
+
+    # ----- File Type Validation -----
+    def validate_file_type(
+        self, filepath: str, content: bytes
+    ) -> tuple[bool, str]:
+        """
+        Validate that a file has an acceptable type based on its content.
+        
+        Args:
+            filepath: Path to the file (used for extension check).
+            content: The file content bytes.
+            
+        Returns:
+            A tuple of (is_valid, detected_mime_type).
+        """
+        # Allowed extensions for plugin files
+        allowed_extensions = {".py", ".json", ".yaml", ".yml", ".toml"}
+        
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext not in allowed_extensions:
+            return False, f"disallowed_extension:{ext}"
+        
+        # Basic content validation for Python files
+        if ext == ".py":
+            try:
+                # Check if content is valid UTF-8 text
+                content.decode("utf-8")
+                return True, "text/x-python"
+            except UnicodeDecodeError:
+                return False, "binary/unknown"
+        
+        # JSON validation
+        if ext == ".json":
+            try:
+                content.decode("utf-8")
+                return True, "application/json"
+            except UnicodeDecodeError:
+                return False, "binary/unknown"
+        
+        # YAML validation
+        if ext in {".yaml", ".yml"}:
+            try:
+                content.decode("utf-8")
+                return True, "text/yaml"
+            except UnicodeDecodeError:
+                return False, "binary/unknown"
+        
+        # TOML validation
+        if ext == ".toml":
+            try:
+                content.decode("utf-8")
+                return True, "text/toml"
+            except UnicodeDecodeError:
+                return False, "binary/unknown"
+        
+        return True, "application/octet-stream"
+
 
 # Singleton pattern
 _LOCK = threading.Lock()

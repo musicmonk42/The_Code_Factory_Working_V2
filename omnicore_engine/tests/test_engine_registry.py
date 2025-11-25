@@ -3,6 +3,7 @@ Test suite for omnicore_engine/engines.py
 Tests engine registry, plugin service, and OmniCoreOmega orchestrator.
 """
 
+import asyncio
 import os
 
 # Add the parent directory to path for imports
@@ -70,7 +71,7 @@ class TestPluginService:
         with patch("omnicore_engine.engines.Database") as mock_db:
             with patch("omnicore_engine.engines.ShardedMessageBus") as mock_bus:
                 with patch("omnicore_engine.engines.ArbiterConfig") as mock_config:
-                    mock_config.return_value.database_path = "test.db"
+                    mock_config.return_value.DB_PATH = "sqlite:///test.db"
                     mock_registry = Mock()
                     mock_bus_instance = Mock()
                     mock_bus_instance.subscribe = AsyncMock()
@@ -84,12 +85,16 @@ class TestPluginService:
                         "config": mock_config,
                     }
 
-    def test_plugin_service_initialization(self, mock_dependencies):
+    @pytest.mark.asyncio
+    async def test_plugin_service_initialization(self, mock_dependencies):
         """Test PluginService initialization"""
         service = PluginService(mock_dependencies["registry"])
 
         assert service.plugin_registry == mock_dependencies["registry"]
         assert service.message_bus is not None
+
+        # Allow async tasks to run
+        await asyncio.sleep(0)
 
         # Verify subscriptions were created
         calls = mock_dependencies["bus"].subscribe.call_args_list
