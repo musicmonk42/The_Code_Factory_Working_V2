@@ -49,15 +49,20 @@ class TestPluginEventHandler:
         with patch("omnicore_engine.plugin_event_handler.settings") as mock_settings:
             mock_settings.plugin_dir = "/default/plugins"
 
-            # Test with default plugin_dir
-            handler = PluginEventHandler(mock_registry)
-            assert handler.registry == mock_registry
-            assert handler.plugin_dir == "/default/plugins"
-            assert handler.last_modified_times == {}
+            # Mock asyncio.get_event_loop to avoid event loop issues in tests
+            with patch("omnicore_engine.plugin_event_handler.asyncio.get_event_loop") as mock_get_loop:
+                mock_loop = Mock()
+                mock_get_loop.return_value = mock_loop
+                
+                # Test with default plugin_dir
+                handler = PluginEventHandler(mock_registry)
+                assert handler.registry == mock_registry
+                assert handler.plugin_dir == "/default/plugins"
+                assert handler.last_modified_times == {}
 
-            # Test with custom plugin_dir
-            handler = PluginEventHandler(mock_registry, "/custom/plugins")
-            assert handler.plugin_dir == "/custom/plugins"
+                # Test with custom plugin_dir
+                handler = PluginEventHandler(mock_registry, "/custom/plugins")
+                assert handler.plugin_dir == "/custom/plugins"
 
     @pytest.mark.asyncio
     async def test_schedule_async_task_running_loop(self, handler):
