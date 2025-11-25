@@ -164,6 +164,8 @@ try:
     from runner.runner_logging import log_action
     from runner.runner_logging import logger as runner_logger_instance
     from runner.runner_metrics import (  # FIX: Import bootstrap_metrics
+        APP_RUNNING_STATUS,
+        APP_STARTUP_DURATION,
         bootstrap_metrics,
         get_metrics_dict,
     )
@@ -389,9 +391,9 @@ def setup_observability(log_level: str):
 try:
     if "bootstrap_metrics" in globals() and callable(bootstrap_metrics):
         bootstrap_metrics()  # Ensure they are created
-    metrics_dict = get_metrics_dict()
-    APP_RUNNING_GAUGE = metrics_dict["app_running_status"]
-    APP_STARTUP_DURATION = metrics_dict["app_startup_duration_seconds"]
+    # Use the imported metric objects directly instead of looking them up in get_metrics_dict
+    APP_RUNNING_GAUGE = APP_RUNNING_STATUS
+    # APP_STARTUP_DURATION is already imported from runner_metrics
     logger.info("Loaded metrics from central runner registry.")
 except Exception as e:
     logger.critical(

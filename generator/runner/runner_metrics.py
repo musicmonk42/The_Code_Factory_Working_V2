@@ -210,6 +210,19 @@ HEALTH_STATUS = prom.Gauge(
 )
 # --- END FIX ---
 
+# --- App-level Metrics (used by main.py) ---
+APP_RUNNING_STATUS = prom.Gauge(
+    "app_running_status",
+    "Application running status (1=running, 0=stopped)",
+    ["app_name", "instance_id"],
+)
+APP_STARTUP_DURATION = prom.Histogram(
+    "app_startup_duration_seconds",
+    "Application startup duration in seconds",
+    ["app_name", "instance_id"],
+)
+# --- END App-level Metrics ---
+
 DISTRIBUTED_NODES_ACTIVE = prom.Gauge(
     "runner_distributed_nodes_active",
     "Number of active distributed nodes in the cluster",
@@ -1599,3 +1612,26 @@ stream_chunk_latency = prom.Histogram(
 LLM_CALLS_TOTAL = LLM_REQUESTS_TOTAL  # Renamed to LLM_REQUESTS_TOTAL
 LLM_TOKEN_INPUT_TOTAL = LLM_TOKENS_INPUT  # Renamed to LLM_TOKENS_INPUT
 LLM_TOKEN_OUTPUT_TOTAL = LLM_TOKENS_OUTPUT  # Renamed to LLM_TOKENS_OUTPUT
+
+
+# --- Bootstrap Function (used by main.py) ---
+def bootstrap_metrics() -> None:
+    """
+    Initialize all metrics with default values.
+    This ensures metrics are registered with the Prometheus registry
+    before they are accessed by get_metrics_dict().
+    """
+    # Initialize app-level metrics with default values
+    # Using a default instance_id to ensure they appear in the registry
+    default_instance = os.getenv("INSTANCE_ID", "default")
+    
+    # Initialize APP_RUNNING_STATUS
+    APP_RUNNING_STATUS.labels(app_name="main", instance_id=default_instance).set(0)
+    
+    # Initialize APP_STARTUP_DURATION (observe a zero value to register it)
+    # Histograms don't need explicit initialization, but we can observe a placeholder
+    
+    # Initialize other commonly used metrics with default values
+    HEALTH_STATUS.labels(component_name="main", instance_id=default_instance).set(1)
+    
+    logger.debug("Metrics bootstrapped with default values.")
