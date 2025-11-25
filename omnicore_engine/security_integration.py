@@ -138,7 +138,7 @@ class SessionContext(BaseModel):
     created_at: datetime
     expires_at: datetime
     ip_address: str
-    device_fingerprint: Optional[str]
+    device_fingerprint: Optional[str] = None
     mfa_verified: bool = False
     security_level: SecurityLevel = SecurityLevel.CONFIDENTIAL
 
