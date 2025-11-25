@@ -62,18 +62,21 @@ chmod 600 output
 
 Usage
 Running the Main Module
-Launch the desired interface:
+Launch the desired interface from the generator directory:
+
+```bash
 # CLI
-python main.py --interface cli
+python -m main.main --interface cli
 
 # GUI
-python main.py --interface gui
+python -m main.main --interface gui
 
 # API
-python main.py --interface api
+python -m main.main --interface api
 
 # All interfaces
-python main.py --interface all
+python -m main.main --interface all
+```
 
 Example: Running a Workflow
 
@@ -83,7 +86,10 @@ Constraint: Must be secure
 SSN: 123-45-6789
 
 
-CLI:python main.py --interface cli run --input requirements.md --user-id test_user
+CLI:
+```bash
+python -m main.main --interface cli run --input requirements.md --user-id test_user
+```
 
 Expected output:Workflow completed: output_path
 

@@ -138,9 +138,14 @@ except ImportError as e:
         pass
 
     # Dummy Classes
+    class _DummyState:
+        """Dummy state object that allows setting arbitrary attributes."""
+        def __init__(self):
+            pass
+
     class _DummyFastAPI:
         def __init__(self, *args, **kwargs):
-            self.state = {}
+            self.state = _DummyState()
 
         def __call__(self, *args, **kwargs):
             return self
@@ -337,13 +342,16 @@ except ImportError as e:
     trace = _DummyTrace()
 
     class TracerProvider:
-        pass
+        def __init__(self, *args, **kwargs):
+            pass
 
     class BatchSpanProcessor:
-        pass
+        def __init__(self, *args, **kwargs):
+            pass
 
     class ConsoleSpanExporter:
-        pass
+        def __init__(self, *args, **kwargs):
+            pass
 
     class Status:
         def __init__(self, code, description=None):

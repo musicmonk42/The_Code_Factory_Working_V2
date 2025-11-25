@@ -15,7 +15,7 @@ make test-generator          # Run Generator tests
 docker-compose up generator  # Run with Docker
 
 # From generator directory
-python main.py --interface api        # Start API server
+python -m main.main --interface api   # Start API server
 python demo_investor.py               # Run demo
 pytest tests/ -v                      # Run tests
 ```
