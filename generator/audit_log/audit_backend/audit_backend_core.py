@@ -290,7 +290,7 @@ def _as_json_list(name: str, default: list) -> list:
     return default
 
 
-def _safe_settings_get(name: str, default):
+def _safe_settings_get(name: str, default: Any) -> Any:
     """Get settings value with test/dev mode fallback."""
     try:
         return settings.get(name, default)

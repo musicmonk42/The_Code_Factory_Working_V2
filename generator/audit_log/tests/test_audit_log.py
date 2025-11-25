@@ -162,7 +162,7 @@ sys.modules[backend_core_name] = backend_core
 sys.modules["generator.audit_log.audit_backend"].get_backend = get_backend
 # --- END FIX ---
 
-# --- Stub 3: audit_crypto for crypto provider ---
+# --- Stub 2: audit_crypto for crypto provider ---
 # Create stub for audit_crypto package and audit_crypto_factory module
 if "generator.audit_log.audit_crypto" not in sys.modules:
     audit_crypto_pkg = ModuleType("generator.audit_log.audit_crypto")
@@ -217,7 +217,7 @@ if audit_keystore_name not in sys.modules:
     sys.modules[audit_keystore_name] = audit_keystore
     sys.modules["generator.audit_log.audit_crypto"].audit_keystore = audit_keystore
 
-# --- Stub 2: audit_utils - Note: We don't stub audit_utils here anymore.
+# --- Note: We don't stub audit_utils here anymore.
 # The audit_log module imports the real audit_utils, so we patch it in fixtures instead.
 utils_name = "generator.audit_log.audit_utils"
 
