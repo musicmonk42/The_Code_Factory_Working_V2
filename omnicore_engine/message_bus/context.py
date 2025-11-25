@@ -10,18 +10,18 @@ if TYPE_CHECKING:
 # Issue #3 fix: Use contextvars instead of threading.local() for async compatibility
 # Thread-locals don't work with asyncio tasks - context gets lost across awaits
 _context_var: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar(
-    'execution_context', default={}
+    "execution_context", default={}
 )
 
 
 class ExecutionContext:
     """
     Async-safe execution context using contextvars.
-    
+
     This replaces threading.local() which doesn't work correctly with asyncio tasks.
     Context is preserved across awaits and properly isolated between concurrent tasks.
     """
-    
+
     @classmethod
     def get_current(cls) -> Dict[str, Any]:
         """Get a copy of the current execution context."""

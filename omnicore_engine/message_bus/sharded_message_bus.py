@@ -312,7 +312,7 @@ class ShardedMessageBus:
     def _get_loop(self):
         """
         Get the current running event loop.
-        
+
         Issue #15 fix: Raise an error instead of returning potentially stale/closed loop.
         """
         try:
@@ -1255,7 +1255,9 @@ class ShardedMessageBus:
 
             self.shard_count -= 1
             self.topic_to_shard_cache.clear()
-            logger.info(f"Removed shard {shard_id}. New shard count: {self.shard_count}.")
+            logger.info(
+                f"Removed shard {shard_id}. New shard count: {self.shard_count}."
+            )
             self.rebalancing_in_progress.set()
 
     async def _rebalance_callback(

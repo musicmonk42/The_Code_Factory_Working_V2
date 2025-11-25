@@ -192,7 +192,9 @@ class RedisBridge:
         self.redis_client: Optional[Redis] = None
         self.pubsub_client: Optional[PubSub] = None
         self._listener_task: Optional[asyncio.Task] = None
-        self._listener_lock = asyncio.Lock()  # Issue #23 fix: Lock for listener creation
+        self._listener_lock = (
+            asyncio.Lock()
+        )  # Issue #23 fix: Lock for listener creation
         self._running = False
         self._stop_event = asyncio.Event()
         self._subscribers: Dict[str, List[MessageHandler]] = {}
@@ -300,12 +302,12 @@ class RedisBridge:
             if message.encrypted:
                 # Payload is already encrypted string/bytes, don't re-serialize
                 if isinstance(message.payload, bytes):
-                    payload_str = message.payload.decode('utf-8')
+                    payload_str = message.payload.decode("utf-8")
                 else:
                     payload_str = str(message.payload)
             else:
                 payload_str = json.dumps(message.payload, default=safe_serialize)
-            
+
             await self.redis_client.publish(message.topic, payload_str)
             self.circuit.record_success()
             _metrics_inc_publish("success", message.topic)
@@ -357,7 +359,7 @@ class RedisBridge:
     async def subscribe(self, topic: str, handler: MessageHandler) -> None:
         """
         Registers a handler for messages published from the Redis channel.
-        
+
         Issue #21, #27 fix: Make method async and subscribe to Redis immediately if running.
         """
         if topic not in self._subscribers:
@@ -369,7 +371,7 @@ class RedisBridge:
             if topic not in self._subscribed_topics:
                 await self.pubsub_client.subscribe(topic)
                 self._subscribed_topics.add(topic)
-                
+
                 # Start listener if needed
                 await self._ensure_listener_running()
         else:
@@ -470,7 +472,7 @@ class RedisBridge:
             # Just log and optionally publish to DLQ
             logger.warning(
                 f"No handlers registered for Redis topic {topic}. Message dropped.",
-                extra={"trace_id": message.trace_id}
+                extra={"trace_id": message.trace_id},
             )
             # Optionally publish to DLQ instead of dropping
             try:

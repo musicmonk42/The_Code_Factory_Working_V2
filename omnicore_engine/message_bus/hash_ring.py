@@ -12,11 +12,11 @@ logger = logging.getLogger(__name__)
 class ConsistentHashRing:
     """
     A consistent hash ring implementation for distributed message routing.
-    
+
     Thread-safety: Uses asyncio.Lock for async-safe operations (Issue #10 fix).
     For synchronous access, use the sync variants or acquire the lock manually.
     """
-    
+
     def __init__(self, nodes: List[str], replicas: int = 100):
         self.replicas = replicas
         self.ring = []
