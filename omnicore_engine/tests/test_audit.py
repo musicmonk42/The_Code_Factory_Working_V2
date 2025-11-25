@@ -44,8 +44,8 @@ def _sqlite_url_from_path(path: Path) -> str:
 # Mock settings for tests
 def _get_mock_settings():
     mock_settings = MagicMock()
-    mock_settings.DATABASE_URL = "sqlite:///test.db"
-    mock_settings.DB_PATH = "sqlite:///test.db"
+    mock_settings.DATABASE_URL = "sqlite+aiosqlite:///test.db"
+    mock_settings.DB_PATH = "sqlite+aiosqlite:///test.db"
     mock_settings.REDIS_URL = "redis://localhost:6379/0"
     mock_settings.ENCRYPTION_KEY = MagicMock()
     mock_settings.ENCRYPTION_KEY.get_secret_value.return_value = (
