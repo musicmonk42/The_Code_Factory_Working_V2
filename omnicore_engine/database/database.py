@@ -258,7 +258,8 @@ class Database:
 
         # Load security configuration
         self.security_config = get_security_config()
-        self.security_utils = EnterpriseSecurityUtils(self.security_config.dict())
+        # EnterpriseSecurityUtils uses keyword-only args with defaults
+        self.security_utils = EnterpriseSecurityUtils()
 
         self.db_path = db_path
 
