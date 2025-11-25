@@ -65,7 +65,7 @@ async def test_audit_entry(tmp_path):
 
     # Apply Fix: Patch the missing setting only during the Database initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
-    with patch("omnicore_engine.database.settings.database_path", db_url):
+    with patch("omnicore_engine.database.settings.DB_PATH", db_url):
         db = Database(db_url)
         await db.initialize()
 
@@ -141,7 +141,7 @@ async def test_audit_db_failure(mocker, tmp_path):
 
     # Apply Fix: Patch the missing setting only during the Database initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
-    with patch("omnicore_engine.database.settings.database_path", db_url):
+    with patch("omnicore_engine.database.settings.DB_PATH", db_url):
         db = Database(db_url)
         await db.initialize()
 
@@ -182,7 +182,7 @@ async def test_merkle_tree_integrity(tmp_path):
 
     # Apply Fix: Patch the missing setting only during the Database initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
-    with patch("omnicore_engine.database.settings.database_path", db_url):
+    with patch("omnicore_engine.database.settings.DB_PATH", db_url):
         db = Database(db_url)
         await db.initialize()
 
@@ -223,7 +223,7 @@ async def test_audit_snapshot_replay(tmp_path):
 
     # Apply Fix: Patch the missing setting only during the Database initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
-    with patch("omnicore_engine.database.settings.database_path", db_url):
+    with patch("omnicore_engine.database.settings.DB_PATH", db_url):
         db = Database(db_url)
         await db.initialize()
 
@@ -318,7 +318,7 @@ async def test_concurrent_audit_entries(tmp_path):
 
     # Apply Fix: Patch the missing setting only during the Database initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
-    with patch("omnicore_engine.database.settings.database_path", db_url):
+    with patch("omnicore_engine.database.settings.DB_PATH", db_url):
         db = Database(db_url)
         await db.initialize()
 

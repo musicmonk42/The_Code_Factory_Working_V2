@@ -1,4 +1,4 @@
-from .database import Database
+from .database import Database, settings
 from .metrics_helpers import (
     get_or_create_counter_local,
     get_or_create_gauge_local,

@@ -351,8 +351,8 @@ class Database:
         self.encrypter = self.security_utils  # Use security_utils encryption methods
 
         self.feedback_manager = FeedbackManager(
-            db_dsn=settings.database_path,
-            redis_url=settings.redis_url,
+            db_dsn=settings.DB_PATH,
+            redis_url=settings.REDIS_URL,
             encryption_key=settings.ENCRYPTION_KEY.get_secret_value(),
         )
         self.policy_engine = PolicyEngine(arbiter_instance=None)
