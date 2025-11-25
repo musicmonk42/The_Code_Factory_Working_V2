@@ -48,6 +48,24 @@ if str(REPO_ROOT) not in sys.path:
 # CRITICAL FIX: Set the flag to prevent the module's self-tests from running aggressively on import
 os.environ["RUNNING_TESTS"] = "true"
 
+# CRITICAL FIX: Clear Prometheus metrics that may have been registered by previous imports
+# This prevents "Duplicated timeseries in CollectorRegistry" error when running with other tests
+try:
+    from prometheus_client import REGISTRY
+    # Try to unregister any existing audit_utils metrics to avoid duplicates
+    collectors_to_remove = []
+    for collector in REGISTRY._collector_to_names:
+        names = REGISTRY._collector_to_names.get(collector, [])
+        if any('audit_utils' in name for name in names):
+            collectors_to_remove.append(collector)
+    for collector in collectors_to_remove:
+        try:
+            REGISTRY.unregister(collector)
+        except Exception:
+            pass
+except Exception:
+    pass
+
 module_path = Path(__file__).parent.parent / "audit_utils.py"
 spec = importlib.util.spec_from_file_location(
     "generator.audit_log.audit_utils", str(module_path)
