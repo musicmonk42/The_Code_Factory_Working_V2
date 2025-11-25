@@ -112,11 +112,11 @@ if str(REPO_ROOT) not in sys.path:
 # --------------------------------------------------------------------------- #
 
 # Ensure parent packages exist in sys.modules
+# Note: Do NOT create stub for audit_utils - it should be the real module
 pkg_roots = [
     "generator",
     "generator.audit_log",
     "generator.audit_log.audit_backend",
-    "generator.audit_log.audit_utils",  # NEW: Root for utils
 ]
 for name in pkg_roots:
     if name not in sys.modules:
@@ -162,18 +162,64 @@ sys.modules[backend_core_name] = backend_core
 sys.modules["generator.audit_log.audit_backend"].get_backend = get_backend
 # --- END FIX ---
 
+# --- Stub 2: audit_crypto for crypto provider ---
+# Create stub for audit_crypto package and audit_crypto_factory module
+if "generator.audit_log.audit_crypto" not in sys.modules:
+    audit_crypto_pkg = ModuleType("generator.audit_log.audit_crypto")
+    audit_crypto_pkg.__path__ = []  # Make it a package
+    sys.modules["generator.audit_log.audit_crypto"] = audit_crypto_pkg
 
-# --- Stub 2: audit_utils (to allow presidio patching) ---
+# Create a mock crypto provider
+class _MockCryptoProvider:
+    """Mock crypto provider for tests."""
+    def __init__(self):
+        self.initialized = True
+    
+    async def sign(self, data, key_id=None):
+        return b"mock_signature"
+    
+    async def verify(self, data, signature, key_id=None):
+        return True
+    
+    async def encrypt(self, data, key_id=None):
+        return data
+    
+    async def decrypt(self, data, key_id=None):
+        return data
+
+# Create the factory module stub
+audit_crypto_factory_name = "generator.audit_log.audit_crypto.audit_crypto_factory"
+if audit_crypto_factory_name not in sys.modules:
+    audit_crypto_factory = ModuleType(audit_crypto_factory_name)
+    # Add the mock provider to the factory
+    mock_provider = _MockCryptoProvider()
+    audit_crypto_factory.crypto_provider = mock_provider
+    # Add a mock factory class
+    class _MockCryptoProviderFactory:
+        @staticmethod
+        def get_provider(provider_type="software"):
+            return mock_provider
+    audit_crypto_factory.crypto_provider_factory = _MockCryptoProviderFactory()
+    audit_crypto_factory.CryptoProviderFactory = _MockCryptoProviderFactory
+    audit_crypto_factory._ensure_software_key_master = AsyncMock()
+    sys.modules[audit_crypto_factory_name] = audit_crypto_factory
+    sys.modules["generator.audit_log.audit_crypto"].audit_crypto_factory = audit_crypto_factory
+
+# Create stub for audit_keystore module
+audit_keystore_name = "generator.audit_log.audit_crypto.audit_keystore"
+if audit_keystore_name not in sys.modules:
+    audit_keystore = ModuleType(audit_keystore_name)
+    # Add mock FileSystemKeyStorageBackend
+    class _MockFileSystemKeyStorageBackend:
+        async def _atomic_write_and_set_permissions(self, *args, **kwargs):
+            return None
+    audit_keystore.FileSystemKeyStorageBackend = _MockFileSystemKeyStorageBackend
+    sys.modules[audit_keystore_name] = audit_keystore
+    sys.modules["generator.audit_log.audit_crypto"].audit_keystore = audit_keystore
+
+# --- Note: We don't stub audit_utils here anymore.
+# The audit_log module imports the real audit_utils, so we patch it in fixtures instead.
 utils_name = "generator.audit_log.audit_utils"
-utils_module = ModuleType(utils_name)
-
-# Provide empty placeholder modules expected by the Presidio patch paths
-utils_module.presidio_analyzer = SimpleNamespace(AnalyzerEngine=MagicMock)
-utils_module.presidio_anonymizer = SimpleNamespace(AnonymizerEngine=MagicMock)
-
-# Register stub
-sys.modules[utils_name] = utils_module
-
 
 # --------------------------------------------------------------------------- #
 # 3. Import module under test (now using stubbed backend_core)
@@ -221,27 +267,21 @@ async def mock_presidio():
     Mock Presidio analyzer/anonymizer so any PII-redaction logic in audit_log
     can run without external deps.
 
-    The actual patching targets are now inside the stubbed audit_utils module,
-    but for simplicity, we mock the top-level classes used in the stub.
+    We patch the analyzer and anonymizer objects directly in audit_utils since
+    that's where they are instantiated and used.
     """
-    # The patch path now directly targets the stubbed classes in audit_utils
+    mock_analyzer = MagicMock()
+    mock_anonymizer = MagicMock()
+    mock_analyzer.analyze.return_value = []
+    mock_anonymizer.anonymize.return_value = MagicMock(text="[REDACTED]")
+
+    # Patch the analyzer and anonymizer instances in audit_utils if they exist
     with (
-        patch(
-            f"{utils_name}.presidio_analyzer.AnalyzerEngine",
-            autospec=True,
-        ) as mock_analyzer_cls,
-        patch(
-            f"{utils_name}.presidio_anonymizer.AnonymizerEngine",
-            autospec=True,
-        ) as mock_anonymizer_cls,
+        patch(f"{utils_name}.analyzer", mock_analyzer, create=True),
+        patch(f"{utils_name}.anonymizer", mock_anonymizer, create=True),
+        patch(f"{utils_name}.PRESIDIO_AVAILABLE", False),
     ):
-        analyzer = MagicMock()
-        anonymizer = MagicMock()
-        analyzer.analyze.return_value = []
-        anonymizer.anonymize.return_value = MagicMock(text="[REDACTED]")
-        mock_analyzer_cls.return_value = analyzer
-        mock_anonymizer_cls.return_value = anonymizer
-        yield analyzer, anonymizer
+        yield mock_analyzer, mock_anonymizer
 
 
 @pytest_asyncio.fixture

@@ -105,14 +105,40 @@ def cleanup_metrics():
     Clears metric values before each test to ensure isolation,
     but avoids unregistering global metrics which are needed.
     """
-    # Labeled Counter/Gauge reset: Use ._metrics.clear()
-    LOG_WRITES._metrics.clear()
+    # FIX: In prometheus_client >= 0.16.0, labeled metrics use clear() method
+    # For older versions or different metric types, we use try/except
+    try:
+        # For labeled metrics, clear all label combinations
+        if hasattr(LOG_WRITES, 'clear'):
+            LOG_WRITES.clear()
+        elif hasattr(LOG_WRITES, '_metrics'):
+            LOG_WRITES._metrics.clear()
+    except Exception:
+        pass
 
-    # Unlabeled counters (like LOG_ERRORS) should be reset to 0.0 or left alone.
+    try:
+        if hasattr(ERROR_TYPES, 'clear'):
+            ERROR_TYPES.clear()
+        elif hasattr(ERROR_TYPES, '_metrics'):
+            ERROR_TYPES._metrics.clear()
+    except Exception:
+        pass
 
-    ERROR_TYPES._metrics.clear()
-    PLUGIN_INVOCATIONS._metrics.clear()
-    CRYPTO_FAILURES._metrics.clear()
+    try:
+        if hasattr(PLUGIN_INVOCATIONS, 'clear'):
+            PLUGIN_INVOCATIONS.clear()
+        elif hasattr(PLUGIN_INVOCATIONS, '_metrics'):
+            PLUGIN_INVOCATIONS._metrics.clear()
+    except Exception:
+        pass
+
+    try:
+        if hasattr(CRYPTO_FAILURES, 'clear'):
+            CRYPTO_FAILURES.clear()
+        elif hasattr(CRYPTO_FAILURES, '_metrics'):
+            CRYPTO_FAILURES._metrics.clear()
+    except Exception:
+        pass
 
     # Resetting Gauges (VULN_COUNT, PERF_SCORE) to 0.0 or initial state
     for level in ["critical", "high", "medium"]:
@@ -120,7 +146,10 @@ def cleanup_metrics():
             VULN_COUNT.labels(level).set(0.0)
         except Exception:
             pass
-    PERF_SCORE.set(0.0)
+    try:
+        PERF_SCORE.set(0.0)
+    except Exception:
+        pass
 
     yield
     # No cleanup needed after yield as metric updates are handled by the next fixture run.
