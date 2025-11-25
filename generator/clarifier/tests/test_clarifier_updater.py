@@ -118,6 +118,7 @@ except ImportError:
     # Create a minimal stub if import fails
     import sys
     from types import ModuleType
+
     if "generator" not in sys.modules:
         gen_stub = ModuleType("generator")
         gen_stub.__path__ = []  # Make it a package
@@ -153,6 +154,7 @@ patcher_clarifier_get_logger.start()
 # Import clarifier_updater module now (with clarifier patches in place)
 # This makes the module path valid for subsequent patchers
 import generator.clarifier.clarifier_updater as clarifier_updater_module
+
 
 # Now also patch in clarifier_updater for when it's imported
 # FIX 1: log_action should be synchronous (not async)

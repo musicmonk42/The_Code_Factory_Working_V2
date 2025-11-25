@@ -140,6 +140,7 @@ except ImportError as e:
     # Dummy Classes
     class _DummyState:
         """Dummy state object that allows setting arbitrary attributes."""
+
         def __init__(self):
             pass
 
@@ -498,6 +499,7 @@ trace.get_tracer_provider().add_span_processor(
     BatchSpanProcessor(span_exporter)
 )  # Use ConsoleExporter for local dev
 tracer = trace.get_tracer(__name__)
+
 
 # --- Helper for DEV/TEST Mode ---
 def _is_dev_or_test_mode() -> bool:

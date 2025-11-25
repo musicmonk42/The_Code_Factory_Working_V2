@@ -190,11 +190,11 @@ if _is_test_or_dev_mode():
         os.environ.setdefault("HEALTH_CHECK_INTERVAL", "30")
         os.environ.setdefault("RETRY_MAX_ATTEMPTS", "3")
         os.environ.setdefault("RETRY_BACKOFF_FACTOR", "0.1")
-        
+
         # Clear any cached settings to pick up new env vars
-        if hasattr(settings, '_wrapped') and settings._wrapped is not None:
+        if hasattr(settings, "_wrapped") and settings._wrapped is not None:
             pass  # Settings already initialized
-        
+
         # Try validation, but don't fail in test/dev mode
         try:
             settings.validators.validate()
@@ -348,6 +348,7 @@ if _is_test_or_dev_mode():
     logger.info("[audit_backend_core] Running in test/dev mode - using mock encrypter")
     try:
         from cryptography.fernet import Fernet
+
         # Generate a valid Fernet key for testing
         test_key = Fernet.generate_key()
         ENCRYPTER = MultiFernet([Fernet(test_key)])
@@ -394,7 +395,9 @@ else:
     except Exception as e:
         # If you still want strict prod behavior, raise
         logger.critical(f"Failed to initialize encryption keys: {e}", exc_info=True)
-        raise CryptoInitializationError(f"Failed to initialize encryption keys: {e}") from e
+        raise CryptoInitializationError(
+            f"Failed to initialize encryption keys: {e}"
+        ) from e
     # --- END: EDITS 2, 3, 4 ---
 
 

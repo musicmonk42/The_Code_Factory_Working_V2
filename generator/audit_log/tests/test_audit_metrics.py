@@ -109,33 +109,33 @@ def cleanup_metrics():
     # For older versions or different metric types, we use try/except
     try:
         # For labeled metrics, clear all label combinations
-        if hasattr(LOG_WRITES, 'clear'):
+        if hasattr(LOG_WRITES, "clear"):
             LOG_WRITES.clear()
-        elif hasattr(LOG_WRITES, '_metrics'):
+        elif hasattr(LOG_WRITES, "_metrics"):
             LOG_WRITES._metrics.clear()
     except Exception:
         pass
 
     try:
-        if hasattr(ERROR_TYPES, 'clear'):
+        if hasattr(ERROR_TYPES, "clear"):
             ERROR_TYPES.clear()
-        elif hasattr(ERROR_TYPES, '_metrics'):
+        elif hasattr(ERROR_TYPES, "_metrics"):
             ERROR_TYPES._metrics.clear()
     except Exception:
         pass
 
     try:
-        if hasattr(PLUGIN_INVOCATIONS, 'clear'):
+        if hasattr(PLUGIN_INVOCATIONS, "clear"):
             PLUGIN_INVOCATIONS.clear()
-        elif hasattr(PLUGIN_INVOCATIONS, '_metrics'):
+        elif hasattr(PLUGIN_INVOCATIONS, "_metrics"):
             PLUGIN_INVOCATIONS._metrics.clear()
     except Exception:
         pass
 
     try:
-        if hasattr(CRYPTO_FAILURES, 'clear'):
+        if hasattr(CRYPTO_FAILURES, "clear"):
             CRYPTO_FAILURES.clear()
-        elif hasattr(CRYPTO_FAILURES, '_metrics'):
+        elif hasattr(CRYPTO_FAILURES, "_metrics"):
             CRYPTO_FAILURES._metrics.clear()
     except Exception:
         pass
