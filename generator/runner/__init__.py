@@ -191,20 +191,19 @@ _runner_logging = None
 _runner_metrics = None
 
 try:
+    # Import order: alphabetical by module name for consistency
+    from . import alerting as _runner_alerting
+    from . import feedback_handlers as _runner_feedback_handlers
     from . import runner_config as _runner_config
-    from . import runner_errors as _runner_errors
-    from . import runner_metrics as _runner_metrics
     from . import runner_contracts as _runner_contracts
     from . import runner_core as _runner_core
+    from . import runner_errors as _runner_errors
     from . import runner_logging as _runner_logging
-    from . import feedback_handlers as _runner_feedback_handlers
-    from . import alerting as _runner_alerting
-except ImportError as e:
+    from . import runner_metrics as _runner_metrics
+except ImportError:
     # Circular import during initial load - modules will be available later
-    import logging as _logging
-    _logging.getLogger(__name__).debug(
-        f"Deferred import due to circular dependency: {e}"
-    )
+    # when accessed directly (e.g., from runner.alerting import send_alert)
+    pass
 
 # Backwards compatibility aliases so older imports used by tests/clients still work.
 # Allows `from runner.config import ...` to resolve to `runner.runner_config`
