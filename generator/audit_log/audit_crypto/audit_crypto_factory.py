@@ -218,10 +218,13 @@ _IS_TESTING = (
 # Disable multi-env mode to allow reading settings from the root of audit_config.yaml
 # Multi-env mode expects sections like [development], [production] in the config file
 environments = False
+# Use absolute path to ensure the config file is found regardless of working directory
+_module_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_config_path = os.path.join(_module_dir, "audit_config.yaml")
 settings = Dynaconf(
     environments=environments,  # <-- disabled in tests
     envvar_prefix="AUDIT_CRYPTO",
-    settings_files=["audit_config.yaml"],
+    settings_files=[_config_path],
     # FIX: Remove conditional validators to prevent RecursionError
     validators=[
         Validator("PROVIDER_TYPE", must_exist=True, is_in=["software", "hsm"]),
