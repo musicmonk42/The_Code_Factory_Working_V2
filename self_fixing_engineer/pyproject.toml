@@ -185,7 +185,7 @@ strict = true
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-minversion = "8.0"
+minversion = "7.0"
 # This now points to the correct test directory
 addopts = "-ra -q --cov=arbiter --cov-report=html"
 testpaths = [

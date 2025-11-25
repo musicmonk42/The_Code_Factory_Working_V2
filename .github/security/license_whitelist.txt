@@ -1,0 +1,7 @@
+# License whitelist for CI license compliance checks
+# These packages report GPL/AGPL in their metadata but are approved exceptions
+# Format: package name (one per line)
+#
+# docutils: Reports "BSD License; GNU General Public License (GPL); Public Domain; Python Software Foundation License"
+# The primary license is BSD/PSF, and GPL is listed as an option but we use BSD-licensed code.
+docutils

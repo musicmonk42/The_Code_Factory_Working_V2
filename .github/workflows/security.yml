@@ -233,10 +233,22 @@ jobs:
               # Check for GPL/AGPL licenses using jq (ignore LGPL)
               if command -v jq >/dev/null 2>&1; then
                 RESTRICTIVE=$(jq -r '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not)) | "\(.Name) \(.Version) - \(.License)"' "$TEMP_DIR/licenses-requirements.json" 2>/dev/null || true)
+                
+                # Apply whitelist if present
+                WHITELIST_FILE=".github/security/license_whitelist.txt"
                 if [ -n "$RESTRICTIVE" ]; then
-                  echo "⚠️  Found packages with restrictive licenses:"
-                  echo "$RESTRICTIVE"
-                  HAS_ISSUES=1
+                  if [ -f "$WHITELIST_FILE" ]; then
+                    # Filter out whitelisted packages (exclude comment lines)
+                    FILTERED=$(echo "$RESTRICTIVE" | grep -v -F -f <(grep -v '^#' "$WHITELIST_FILE" | grep -v '^$') || true)
+                  else
+                    FILTERED="$RESTRICTIVE"
+                  fi
+                  
+                  if [ -n "$FILTERED" ]; then
+                    echo "⚠️  Found packages with restrictive licenses:"
+                    echo "$FILTERED"
+                    HAS_ISSUES=1
+                  fi
                 fi
               fi
               

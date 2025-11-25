@@ -198,10 +198,17 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
           fi
-          # Install self_fixing_engineer package (contains arbiter - CRITICAL) with verbose output
-          echo "Installing self_fixing_engineer package (contains arbiter)..."
-          python -m pip install -v --no-cache-dir -c .github/constraints.txt -e ./self_fixing_engineer || {
-            echo "ERROR: Failed to install self_fixing_engineer package"
+          # Install self_fixing_engineer package (contains arbiter - CRITICAL) with --no-deps
+          # to avoid pulling heavy dependencies (torch, transformers, etc.) that may fail in CI
+          echo "Installing self_fixing_engineer package (contains arbiter) without heavy deps..."
+          python -m pip install -v --no-cache-dir -e ./self_fixing_engineer --no-deps || {
+            echo "ERROR: Failed to install self_fixing_engineer package (no-deps)"
+            exit 1
+          }
+          # Install essential test dependencies after package install
+          pip install --no-cache-dir -c .github/constraints.txt \
+            pytest==7.4.0 pytest-asyncio==0.21.0 pytest-mock==3.11.0 pytest-cov || {
+            echo "ERROR: Failed to install pytest dependencies"
             exit 1
           }
           # Verify arbiter is importable with detailed diagnostics
