@@ -96,7 +96,7 @@ class PluginService:
     def __init__(self, plugin_registry):
         self.plugin_registry = plugin_registry
         self.message_bus = ShardedMessageBus(
-            config=ArbiterConfig(), db=Database(ArbiterConfig().database_path)
+            config=ArbiterConfig(), db=Database(ArbiterConfig().DB_PATH)
         )
 
         # Subscribe to a channel for a bug detected by the Arbiter
@@ -213,7 +213,7 @@ class OmniCoreOmega:
 
     @classmethod
     def create_and_initialize(cls):
-        db = Database(settings.database_path)
+        db = Database(settings.DB_PATH)
         message_bus = ShardedMessageBus(config=settings, db=db)
         plugin_service = PluginService(global_plugin_registry)
         simulation_engine = UnifiedSimulationModule(

@@ -11,98 +11,28 @@ import pytest
 # Add current directory to sys.path for package imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Mock arbiter module
-sys.modules["arbiter"] = MagicMock()
-sys.modules["arbiter.config"] = MagicMock()
+# Import the module under test directly - no need to mock arbiter at module level
+from omnicore_engine.audit import ExplainAudit
+from omnicore_engine.database import Database
 
-# Mock security modules
-sys.modules["security_utils"] = MagicMock()
-sys.modules["security_config"] = MagicMock()
 
-# Mock settings and return values
-mock_settings = MagicMock()
-mock_settings.DATABASE_URL = "sqlite:///test.db"
-mock_settings.DB_PATH = "sqlite:///test.db"  # ArbiterConfig uses DB_PATH
-mock_settings.REDIS_URL = "redis://localhost:6379/0"
-mock_settings.ENCRYPTION_KEY = MagicMock()
-mock_settings.ENCRYPTION_KEY.get_secret_value.return_value = (
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-)
-mock_settings.KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
-mock_settings.AUDIT_BLOCKCHAIN_ENABLED = False
-mock_settings.WEB3_PROVIDER_URL = None
-mock_settings.AUDIT_BUFFER_SIZE = 5
-mock_settings.AUDIT_FLUSH_INTERVAL = 1
+# Define a simple Mock Merkle Tree class required by ExplainAudit initialization
+class MockMerkleTree:
+    def __init__(self):
+        self.leaves = []
+        self.root = "initial_root"
+        self.counter = 0
 
-# Ensure all patched modules return mocks as required by ExplainAudit's __init__
-mock_settings.FeedbackManager = MagicMock()
-mock_settings.FeedbackManager.return_value = MagicMock()
-mock_settings.FeedbackType = MagicMock()
-mock_settings.PLUGIN_REGISTRY = MagicMock()
-mock_settings.PluginPerformanceTracker = MagicMock()
-mock_settings.PluginPerformanceTracker.return_value = MagicMock()
-mock_settings.ShadowDeployManager = MagicMock()
-mock_settings.ShadowDeployManager.return_value = MagicMock()
-mock_settings.PluginVersionManager = MagicMock()
-mock_settings.PluginVersionManager.return_value = MagicMock()
-mock_settings.PolicyEngine = MagicMock()
-mock_settings.PolicyEngine.return_value = MagicMock()
-mock_settings.KnowledgeGraph = MagicMock()
-mock_settings.KnowledgeGraph.return_value = MagicMock()
+    def add_leaf(self, content):
+        self.leaves.append(content)
 
-# Link the mocked settings object
-sys.modules["arbiter.config"].ArbiterConfig = MagicMock(return_value=mock_settings)
+    def _recalculate_root(self):
+        self.counter += 1
+        # Generate a distinct root for each update
+        self.root = f"root_{self.counter}_{hashlib.sha256(b''.join(self.leaves)).hexdigest()[:8]}"
 
-# --- 3. Patching the imports and importing the module under test ---
-# The patch targets MUST be updated to reflect the new relative import structure within the package.
-# The tests will run as if they are in the 'omnicore_engine' package's 'tests' directory.
-with (
-    # Patches for the objects imported directly into the audit module's namespace
-    patch("omnicore_engine.audit.settings", mock_settings),
-    patch("omnicore_engine.audit.FeedbackManager", mock_settings.FeedbackManager),
-    patch("omnicore_engine.audit.FeedbackType", mock_settings.FeedbackType),
-    patch("omnicore_engine.audit.PLUGIN_REGISTRY", mock_settings.PLUGIN_REGISTRY),
-    patch(
-        "omnicore_engine.audit.PluginPerformanceTracker",
-        mock_settings.PluginPerformanceTracker,
-    ),
-    patch(
-        "omnicore_engine.audit.ShadowDeployManager", mock_settings.ShadowDeployManager
-    ),
-    patch(
-        "omnicore_engine.audit.PluginVersionManager", mock_settings.PluginVersionManager
-    ),
-    patch("omnicore_engine.audit.PolicyEngine", mock_settings.PolicyEngine),
-    patch("omnicore_engine.audit.KnowledgeGraph", mock_settings.KnowledgeGraph),
-    # Patches for local methods/functions within the audit module
-    patch("omnicore_engine.audit.safe_serialize", side_effect=json.dumps),
-    patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_settings),
-    patch("omnicore_engine.audit.WEB3_AVAILABLE", False),
-    patch("omnicore_engine.audit.KAFKA_AVAILABLE", False),
-):
-    # Import the module under test now that its dependencies are mocked
-    from omnicore_engine.audit import ExplainAudit
-
-    # Import Database for setup, ensuring it can be resolved now that security_utils/config are mocked
-    from omnicore_engine.database import Database
-
-    # Define a simple Mock Merkle Tree class required by ExplainAudit initialization
-    class MockMerkleTree:
-        def __init__(self):
-            self.leaves = []
-            self.root = "initial_root"
-            self.counter = 0
-
-        def add_leaf(self, content):
-            self.leaves.append(content)
-
-        def _recalculate_root(self):
-            self.counter += 1
-            # Generate a distinct root for each update
-            self.root = f"root_{self.counter}_{hashlib.sha256(b''.join(self.leaves)).hexdigest()[:8]}"
-
-        def get_merkle_root(self):
-            return self.root
+    def get_merkle_root(self):
+        return self.root
 
 
 # Helper function to construct the proper async SQLite URL
@@ -111,13 +41,31 @@ def _sqlite_url_from_path(path: Path) -> str:
     return f"sqlite+aiosqlite:///{path.resolve()}"
 
 
+# Mock settings for tests
+def _get_mock_settings():
+    mock_settings = MagicMock()
+    mock_settings.DATABASE_URL = "sqlite+aiosqlite:///test.db"
+    mock_settings.DB_PATH = "sqlite+aiosqlite:///test.db"
+    mock_settings.REDIS_URL = "redis://localhost:6379/0"
+    mock_settings.ENCRYPTION_KEY = MagicMock()
+    mock_settings.ENCRYPTION_KEY.get_secret_value.return_value = (
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    )
+    mock_settings.KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
+    mock_settings.AUDIT_BLOCKCHAIN_ENABLED = False
+    mock_settings.WEB3_PROVIDER_URL = None
+    mock_settings.AUDIT_BUFFER_SIZE = 5
+    mock_settings.AUDIT_FLUSH_INTERVAL = 1
+    return mock_settings
+
+
 @pytest.mark.asyncio
 async def test_audit_entry(tmp_path):
     mock_merkle_tree = MockMerkleTree()
 
     # Apply Fix: Patch the missing setting only during the Database initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
-    with patch("omnicore_engine.database.settings.database_path", db_url):
+    with patch("omnicore_engine.database.settings.DB_PATH", db_url):
         db = Database(db_url)
         await db.initialize()
 
@@ -193,7 +141,7 @@ async def test_audit_db_failure(mocker, tmp_path):
 
     # Apply Fix: Patch the missing setting only during the Database initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
-    with patch("omnicore_engine.database.settings.database_path", db_url):
+    with patch("omnicore_engine.database.settings.DB_PATH", db_url):
         db = Database(db_url)
         await db.initialize()
 
@@ -234,7 +182,7 @@ async def test_merkle_tree_integrity(tmp_path):
 
     # Apply Fix: Patch the missing setting only during the Database initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
-    with patch("omnicore_engine.database.settings.database_path", db_url):
+    with patch("omnicore_engine.database.settings.DB_PATH", db_url):
         db = Database(db_url)
         await db.initialize()
 
@@ -275,7 +223,7 @@ async def test_audit_snapshot_replay(tmp_path):
 
     # Apply Fix: Patch the missing setting only during the Database initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
-    with patch("omnicore_engine.database.settings.database_path", db_url):
+    with patch("omnicore_engine.database.settings.DB_PATH", db_url):
         db = Database(db_url)
         await db.initialize()
 
@@ -370,7 +318,7 @@ async def test_concurrent_audit_entries(tmp_path):
 
     # Apply Fix: Patch the missing setting only during the Database initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
-    with patch("omnicore_engine.database.settings.database_path", db_url):
+    with patch("omnicore_engine.database.settings.DB_PATH", db_url):
         db = Database(db_url)
         await db.initialize()
 

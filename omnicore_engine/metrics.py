@@ -54,6 +54,16 @@ def _get_or_create_metric(
     return metric
 
 
+# Public helper function for creating counters
+def get_or_create_counter(
+    name: str,
+    documentation: str,
+    labelnames: tuple = (),
+) -> Counter:
+    """Create or retrieve a Prometheus Counter metric."""
+    return _get_or_create_metric(Counter, name, documentation, labelnames)
+
+
 # --- FIX: Define Fallback Classes at the Top-Level Scope ---
 # This resolves the NameError and makes the code more robust.
 

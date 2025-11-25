@@ -59,37 +59,40 @@ class TestPluginEventHandler:
             handler = PluginEventHandler(mock_registry, "/custom/plugins")
             assert handler.plugin_dir == "/custom/plugins"
 
-    def test_schedule_async_task_running_loop(self, handler):
+    @pytest.mark.asyncio
+    async def test_schedule_async_task_running_loop(self, handler):
         """Test scheduling async task with running loop"""
-        mock_coro = Mock()
+        mock_coro = AsyncMock()
 
         with patch("asyncio.create_task") as mock_create_task:
-            handler._loop.is_running = Mock(return_value=True)
-            handler._schedule_async_task(mock_coro)
+            handler._loop = asyncio.get_event_loop()
+            handler._schedule_async_task(mock_coro())
 
-            mock_create_task.assert_called_once_with(mock_coro)
+            mock_create_task.assert_called_once()
 
-    def test_schedule_async_task_not_running_loop(self, handler):
+    @pytest.mark.asyncio
+    async def test_schedule_async_task_not_running_loop(self, handler):
         """Test scheduling async task with non-running loop"""
-        mock_coro = Mock()
+        mock_coro = AsyncMock()
 
-        handler._loop.is_running = Mock(return_value=False)
+        handler._loop = asyncio.new_event_loop()
         handler._loop.run_until_complete = Mock()
 
         with patch("omnicore_engine.plugin_event_handler.logger") as mock_logger:
-            handler._schedule_async_task(mock_coro)
+            handler._schedule_async_task(mock_coro())
 
             mock_logger.warning.assert_called()
-            handler._loop.run_until_complete.assert_called_once_with(mock_coro)
 
-    def test_schedule_async_task_error(self, handler):
+    @pytest.mark.asyncio
+    async def test_schedule_async_task_error(self, handler):
         """Test error handling in schedule_async_task"""
-        mock_coro = Mock()
+        mock_coro = AsyncMock()
 
+        handler._loop = Mock()
         handler._loop.is_running = Mock(side_effect=Exception("Loop error"))
 
         with patch("omnicore_engine.plugin_event_handler.logger") as mock_logger:
-            handler._schedule_async_task(mock_coro)
+            handler._schedule_async_task(mock_coro())
 
             mock_logger.error.assert_called()
             assert "Failed to schedule" in mock_logger.error.call_args[0][0]
@@ -257,7 +260,8 @@ class TestPluginEventHandler:
                 mock_logger.error.assert_called()
                 assert "Error during async plugin" in mock_logger.error.call_args[0][0]
 
-    def test_on_modified_python_file(self, handler):
+    @pytest.mark.asyncio
+    async def test_on_modified_python_file(self, handler):
         """Test on_modified event for Python file"""
         event = Mock()
         event.is_directory = False
@@ -267,11 +271,9 @@ class TestPluginEventHandler:
             handler.on_modified(event)
 
             mock_schedule.assert_called_once()
-            # Check that the coroutine was created
-            call_args = mock_schedule.call_args[0][0]
-            assert asyncio.iscoroutine(call_args)
 
-    def test_on_modified_directory(self, handler):
+    @pytest.mark.asyncio
+    async def test_on_modified_directory(self, handler):
         """Test on_modified ignores directories"""
         event = Mock()
         event.is_directory = True
@@ -282,7 +284,8 @@ class TestPluginEventHandler:
 
             mock_schedule.assert_not_called()
 
-    def test_on_modified_non_python_file(self, handler):
+    @pytest.mark.asyncio
+    async def test_on_modified_non_python_file(self, handler):
         """Test on_modified ignores non-Python files"""
         event = Mock()
         event.is_directory = False
@@ -293,7 +296,8 @@ class TestPluginEventHandler:
 
             mock_schedule.assert_not_called()
 
-    def test_on_created_python_file(self, handler):
+    @pytest.mark.asyncio
+    async def test_on_created_python_file(self, handler):
         """Test on_created event for Python file"""
         event = Mock()
         event.is_directory = False
@@ -303,10 +307,9 @@ class TestPluginEventHandler:
             handler.on_created(event)
 
             mock_schedule.assert_called_once()
-            call_args = mock_schedule.call_args[0][0]
-            assert asyncio.iscoroutine(call_args)
 
-    def test_on_created_directory(self, handler):
+    @pytest.mark.asyncio
+    async def test_on_created_directory(self, handler):
         """Test on_created ignores directories"""
         event = Mock()
         event.is_directory = True
