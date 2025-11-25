@@ -15,6 +15,8 @@ env:
   OTEL_EXPORTER_VERSION: '1.38.0'
   OTEL_INSTRUMENTATION_VERSION: '0.59b0'
   OTEL_SEMANTIC_CONVENTIONS_VERSION: '0.59b0'
+  # Protobuf version constraint - required by google-ai-generativelanguage, grpcio-tools, etc.
+  PROTOBUF_VERSION: '!=4.21.*,<6.0.0,>=3.20.2'
 
 permissions:
   contents: read
@@ -96,7 +98,7 @@ jobs:
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir "protobuf${{ env.PROTOBUF_VERSION }}"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -117,6 +119,8 @@ jobs:
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Force-reinstall protobuf to ensure it stays in the <6 family after all other installs
+          pip install --force-reinstall "protobuf${{ env.PROTOBUF_VERSION }}"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
@@ -184,7 +188,7 @@ jobs:
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir "protobuf${{ env.PROTOBUF_VERSION }}"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -223,6 +227,8 @@ jobs:
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Force-reinstall protobuf to ensure it stays in the <6 family after all other installs
+          pip install --force-reinstall "protobuf${{ env.PROTOBUF_VERSION }}"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
@@ -321,7 +327,7 @@ jobs:
           python -m pip install --upgrade pip
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir "protobuf!=4.21.*,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir "protobuf${{ env.PROTOBUF_VERSION }}"
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
             pytest==7.4.0 \
@@ -343,6 +349,8 @@ jobs:
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Force-reinstall protobuf to ensure it stays in the <6 family after all other installs
+          pip install --force-reinstall "protobuf${{ env.PROTOBUF_VERSION }}"
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
           
