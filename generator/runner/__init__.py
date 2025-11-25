@@ -180,44 +180,60 @@ import sys as _sys
 # NEW: Import the logging module for aliasing
 # NEW: Import the errors module for aliasing
 # NEW: Import the contracts module for aliasing
-from . import alerting as _runner_alerting
-from . import feedback_handlers as _runner_feedback_handlers
-from . import runner_config as _runner_config
-from . import runner_contracts as _runner_contracts
-from . import runner_core as _runner_core
-from . import runner_errors as _runner_errors
-from . import runner_logging as _runner_logging
-from . import runner_metrics as _runner_metrics
+# FIX: Wrap imports in try-except to handle circular import during initial module load
+_runner_alerting = None
+_runner_feedback_handlers = None
+_runner_config = None
+_runner_contracts = None
+_runner_core = None
+_runner_errors = None
+_runner_logging = None
+_runner_metrics = None
+
+try:
+    # Import order: alphabetical by module name for consistency
+    from . import alerting as _runner_alerting
+    from . import feedback_handlers as _runner_feedback_handlers
+    from . import runner_config as _runner_config
+    from . import runner_contracts as _runner_contracts
+    from . import runner_core as _runner_core
+    from . import runner_errors as _runner_errors
+    from . import runner_logging as _runner_logging
+    from . import runner_metrics as _runner_metrics
+except ImportError:
+    # Circular import during initial load - modules will be available later
+    # when accessed directly (e.g., from runner.alerting import send_alert)
+    pass
 
 # Backwards compatibility aliases so older imports used by tests/clients still work.
 # Allows `from runner.config import ...` to resolve to `runner.runner_config`
-if "runner.config" not in _sys.modules:
+if _runner_config is not None and "runner.config" not in _sys.modules:
     _sys.modules["runner.config"] = _runner_config
 
 # Allows `from runner.core import ...` to resolve to `runner.runner_core`
-if "runner.core" not in _sys.modules:
+if _runner_core is not None and "runner.core" not in _sys.modules:
     _sys.modules["runner.core"] = _runner_core
 
 # NEW: Allows `from runner.contracts import ...` to resolve to `runner.runner_contracts`
-if "runner.contracts" not in _sys.modules:
+if _runner_contracts is not None and "runner.contracts" not in _sys.modules:
     _sys.modules["runner.contracts"] = _runner_contracts
 
 # NEW: Allows `from runner.errors import ...` to resolve to `runner.runner_errors`
-if "runner.errors" not in _sys.modules:
+if _runner_errors is not None and "runner.errors" not in _sys.modules:
     _sys.modules["runner.errors"] = _runner_errors
 
 # NEW: Allows `from runner.logging import ...` to resolve to `runner.runner_logging`
-if "runner.logging" not in _sys.modules:
+if _runner_logging is not None and "runner.logging" not in _sys.modules:
     _sys.modules["runner.logging"] = _runner_logging
 
 # NEW: Allows `from runner.feedback_handlers import ...` to resolve to `runner.runner_feedback_handlers`
-if "runner.feedback_handlers" not in _sys.modules:
+if _runner_feedback_handlers is not None and "runner.feedback_handlers" not in _sys.modules:
     _sys.modules["runner.feedback_handlers"] = _runner_feedback_handlers
 
 # NEW: Allows `from runner.alerting import ...` to resolve to the alerting module
-if "runner.alerting" not in _sys.modules:
+if _runner_alerting is not None and "runner.alerting" not in _sys.modules:
     _sys.modules["runner.alerting"] = _runner_alerting
 
 # NEW: Allows `from runner.metrics import ...` to resolve to `runner.runner_metrics`
-if "runner.metrics" not in _sys.modules:
+if _runner_metrics is not None and "runner.metrics" not in _sys.modules:
     _sys.modules["runner.metrics"] = _runner_metrics
