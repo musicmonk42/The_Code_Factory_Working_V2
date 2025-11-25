@@ -112,11 +112,11 @@ if str(REPO_ROOT) not in sys.path:
 # --------------------------------------------------------------------------- #
 
 # Ensure parent packages exist in sys.modules
+# Note: Do NOT create stub for audit_utils - it should be the real module
 pkg_roots = [
     "generator",
     "generator.audit_log",
     "generator.audit_log.audit_backend",
-    "generator.audit_log.audit_utils",  # NEW: Root for utils
 ]
 for name in pkg_roots:
     if name not in sys.modules:
@@ -163,17 +163,9 @@ sys.modules["generator.audit_log.audit_backend"].get_backend = get_backend
 # --- END FIX ---
 
 
-# --- Stub 2: audit_utils (to allow presidio patching) ---
+# --- Stub 2: audit_utils - Note: We don't stub audit_utils here anymore.
+# The audit_log module imports the real audit_utils, so we patch it in fixtures instead.
 utils_name = "generator.audit_log.audit_utils"
-utils_module = ModuleType(utils_name)
-
-# Provide empty placeholder modules expected by the Presidio patch paths
-utils_module.presidio_analyzer = SimpleNamespace(AnalyzerEngine=MagicMock)
-utils_module.presidio_anonymizer = SimpleNamespace(AnonymizerEngine=MagicMock)
-
-# Register stub
-sys.modules[utils_name] = utils_module
-
 
 # --------------------------------------------------------------------------- #
 # 3. Import module under test (now using stubbed backend_core)
@@ -221,27 +213,21 @@ async def mock_presidio():
     Mock Presidio analyzer/anonymizer so any PII-redaction logic in audit_log
     can run without external deps.
 
-    The actual patching targets are now inside the stubbed audit_utils module,
-    but for simplicity, we mock the top-level classes used in the stub.
+    We patch the analyzer and anonymizer objects directly in audit_utils since
+    that's where they are instantiated and used.
     """
-    # The patch path now directly targets the stubbed classes in audit_utils
+    mock_analyzer = MagicMock()
+    mock_anonymizer = MagicMock()
+    mock_analyzer.analyze.return_value = []
+    mock_anonymizer.anonymize.return_value = MagicMock(text="[REDACTED]")
+
+    # Patch the analyzer and anonymizer instances in audit_utils if they exist
     with (
-        patch(
-            f"{utils_name}.presidio_analyzer.AnalyzerEngine",
-            autospec=True,
-        ) as mock_analyzer_cls,
-        patch(
-            f"{utils_name}.presidio_anonymizer.AnonymizerEngine",
-            autospec=True,
-        ) as mock_anonymizer_cls,
+        patch(f"{utils_name}.analyzer", mock_analyzer, create=True),
+        patch(f"{utils_name}.anonymizer", mock_anonymizer, create=True),
+        patch(f"{utils_name}.PRESIDIO_AVAILABLE", False),
     ):
-        analyzer = MagicMock()
-        anonymizer = MagicMock()
-        analyzer.analyze.return_value = []
-        anonymizer.anonymize.return_value = MagicMock(text="[REDACTED]")
-        mock_analyzer_cls.return_value = analyzer
-        mock_anonymizer_cls.return_value = anonymizer
-        yield analyzer, anonymizer
+        yield mock_analyzer, mock_anonymizer
 
 
 @pytest_asyncio.fixture

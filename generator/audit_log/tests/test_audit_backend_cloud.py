@@ -23,8 +23,8 @@ os.environ.setdefault("AUDIT_COMPRESSION_ALGO", "gzip")
 os.environ.setdefault("AUDIT_COMPRESSION_LEVEL", "6")
 os.environ.setdefault("AUDIT_BATCH_FLUSH_INTERVAL", "5")
 os.environ.setdefault("AUDIT_BATCH_MAX_SIZE", "100")
-# CRITICAL FIX 1: Prevent automatic background health checks by setting interval to 0
-os.environ.setdefault("AUDIT_HEALTH_CHECK_INTERVAL", "0")
+# CRITICAL FIX 1: Prevent automatic background health checks by setting interval to minimum valid
+os.environ.setdefault("AUDIT_HEALTH_CHECK_INTERVAL", "30")
 # CRITICAL FIX 2: Prevent automatic schema migration during startup tests
 os.environ.setdefault("AUDIT_SCHEMA_MIGRATION_ENABLED", "false")
 os.environ.setdefault("AUDIT_RETRY_MAX_ATTEMPTS", "3")
