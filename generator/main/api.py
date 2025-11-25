@@ -499,23 +499,45 @@ trace.get_tracer_provider().add_span_processor(
 )  # Use ConsoleExporter for local dev
 tracer = trace.get_tracer(__name__)
 
+# --- Helper for DEV/TEST Mode ---
+def _is_dev_or_test_mode() -> bool:
+    """
+    Returns True when running in development or test mode.
+    This allows the application to start without production configuration.
+    """
+    if os.getenv("TESTING"):
+        return True
+    if os.getenv("DEV_MODE", "").lower() == "true":
+        return True
+    if os.getenv("DEV_MODE") == "1":
+        return True
+    app_env = os.getenv("APP_ENV", "").lower()
+    if app_env in ("development", "dev", "local"):
+        return True
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return True
+    if os.getenv("RUNNING_TESTS", "").lower() == "true":
+        return True
+    return False
+
+
 # --- Security Configuration ---
 # PRODUCTION FIX: Load secrets from a secure location (e.g., a vault client or environment variables).
 # The application will fail to start if critical secrets are not set.
-# Allow tests to bypass this check by setting TESTING environment variable
+# Allow tests and development mode to bypass this check
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if (
-    not SECRET_KEY and not os.getenv("TESTING") and _FASTAPI_AVAILABLE
-):  # Only raise if not testing AND fastapi is available
+    not SECRET_KEY and not _is_dev_or_test_mode() and _FASTAPI_AVAILABLE
+):  # Only raise if not in dev/test mode AND fastapi is available
     logger.critical(
         "JWT_SECRET_KEY environment variable not set. This is required for production."
     )
     raise ValueError("JWT_SECRET_KEY environment variable not set.")
 elif not SECRET_KEY:
-    # Use a test secret key if in testing mode
-    SECRET_KEY = "test-secret-key-do-not-use-in-production"
+    # Use a development/test secret key
+    SECRET_KEY = "dev-secret-key-do-not-use-in-production"
     if _FASTAPI_AVAILABLE:  # Only log warning if we are not using full dummies
-        logger.warning("Using test SECRET_KEY - this is only for testing!")
+        logger.warning("Using development SECRET_KEY - this is NOT for production use!")
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30  # JWT token expiration time
@@ -536,21 +558,17 @@ api_key_header = APIKeyHeader(
 DATABASE_URL = os.getenv("DATABASE_URL")
 # FIX: Add DEV_MODE fallback to prevent startup crash
 if not DATABASE_URL:
-    if os.getenv("DEV_MODE"):
+    if _is_dev_or_test_mode():
         DATABASE_URL = "sqlite:///./dev.db"
         if _FASTAPI_AVAILABLE:
-            logger.warning("DEV_MODE=1: using sqlite:///./dev.db")
-    elif _FASTAPI_AVAILABLE and not os.getenv(
-        "TESTING"
-    ):  # Only raise if not testing AND fastapi is available
+            logger.warning("Development mode: using sqlite:///./dev.db")
+    elif _FASTAPI_AVAILABLE:  # Only raise in production with FastAPI available
         logger.critical(
             "DATABASE_URL environment variable not set. This is required for production."
         )
         raise ValueError("DATABASE_URL environment variable not set.")
-    elif not _FASTAPI_AVAILABLE:
-        DATABASE_URL = "sqlite:///./dummy.db"  # Use a dummy value for dummy engine
     else:
-        DATABASE_URL = "sqlite:///./test.db"  # Use a test value for testing
+        DATABASE_URL = "sqlite:///./dummy.db"  # Use a dummy value for dummy engine
 
 Base = declarative_base()  # Uses dummy if not available
 

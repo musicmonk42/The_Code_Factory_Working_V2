@@ -199,6 +199,14 @@ def _is_test_or_dev_mode() -> bool:
         return True
     if os.getenv("RUNNING_TESTS", "").lower() == "true":
         return True
+    # Also check for common development environment indicators
+    if os.getenv("DEV_MODE", "").lower() == "true":
+        return True
+    if os.getenv("DEV_MODE") == "1":
+        return True
+    app_env = os.getenv("APP_ENV", "").lower()
+    if app_env in ("development", "dev", "local"):
+        return True
     return False
 
 
@@ -208,8 +216,9 @@ _IS_TESTING = (
     os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("RUNNING_TESTS") == "True"
 )
 
-# Use multi-env mode only in production
-environments = os.getenv("TESTING") != "1"
+# Disable multi-env mode to allow reading settings from the root of audit_config.yaml
+# Multi-env mode expects sections like [development], [production] in the config file
+environments = False
 settings = Dynaconf(
     environments=environments,  # <-- disabled in tests
     envvar_prefix="AUDIT_CRYPTO",
