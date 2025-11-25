@@ -41,6 +41,7 @@ try:
         FileSystemKeyStorageBackend,
         KeyStore,
     )
+
     _IMPORT_ERROR = None
 except ImportError as e:
     _IMPORT_ERROR = str(e)
@@ -53,6 +54,7 @@ except ImportError as e:
 
 # We need to mock the external dependencies that audit_keystore imports# This is a helper function to apply all mocks to a test class
 _PATCHED_KEYSTORE_DEPS = False
+
 
 # Decorator to skip tests if imports failed
 def skip_if_import_failed(cls):
@@ -72,11 +74,11 @@ def patch_keystore_dependencies(cls):
     extra positional arguments into test methods.
     """
     global _PATCHED_KEYSTORE_DEPS
-    
+
     # Skip patching if imports failed
     if _IMPORT_ERROR:
         return cls
-        
+
     if _PATCHED_KEYSTORE_DEPS:
         # Patches already active; just return the class unchanged.
         return cls

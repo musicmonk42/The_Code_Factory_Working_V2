@@ -52,11 +52,12 @@ os.environ["RUNNING_TESTS"] = "true"
 # This prevents "Duplicated timeseries in CollectorRegistry" error when running with other tests
 try:
     from prometheus_client import REGISTRY
+
     # Try to unregister any existing audit_utils metrics to avoid duplicates
     collectors_to_remove = []
     for collector in REGISTRY._collector_to_names:
         names = REGISTRY._collector_to_names.get(collector, [])
-        if any('audit_utils' in name for name in names):
+        if any("audit_utils" in name for name in names):
             collectors_to_remove.append(collector)
     for collector in collectors_to_remove:
         try:
@@ -492,9 +493,7 @@ def test_certificate_loading(mock_audit_log):
         # Call the patched function directly from cryptography module
         from cryptography import x509
 
-        cert = x509.load_der_x509_certificate(
-            cert_der, backend=default_backend()
-        )
+        cert = x509.load_der_x509_certificate(cert_der, backend=default_backend())
 
         assert cert == mock_cert
         mock_load.assert_called_once()
@@ -511,7 +510,7 @@ def test_concurrent_hash_computation(mock_audit_log):
     for i in range(5):
         result = compute_hash(f"data_{i}".encode())
         results.append(result)
-    
+
     # Verify all results were computed
     assert len(results) == 5
     # Verify all results are unique (different inputs produce different hashes)
