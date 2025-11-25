@@ -260,10 +260,10 @@ def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError):
 def get_csrf_config():
     """Return CSRF configuration as a Pydantic BaseSettings compatible class"""
     from pydantic_settings import BaseSettings
-    
+
     class CsrfSettings(BaseSettings):
         secret_key: str = settings.JWT_SECRET_KEY.get_secret_value()
-    
+
     return CsrfSettings()
 
 
@@ -300,7 +300,9 @@ plugin_upload_lock = asyncio.Lock()
 try:
     encrypter = Fernet(settings.ENCRYPTION_KEY_BYTES)
 except (AttributeError, ValueError) as e:
-    logger.error(f"Failed to initialize Fernet encrypter: {e}. Generating temporary key for testing.")
+    logger.error(
+        f"Failed to initialize Fernet encrypter: {e}. Generating temporary key for testing."
+    )
     encrypter = Fernet(Fernet.generate_key())
 meta_supervisor_instance = None
 
