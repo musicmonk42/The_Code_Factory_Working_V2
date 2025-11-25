@@ -96,8 +96,7 @@ jobs:
           python -m pip install --upgrade pip
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
-          # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir -c .github/constraints.txt "protobuf!=4.21.*,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir -c .github/constraints.txt protobuf
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest==7.4.0 \
@@ -185,8 +184,7 @@ jobs:
           python -m pip install --upgrade pip
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
-          # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir -c .github/constraints.txt "protobuf!=4.21.*,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir -c .github/constraints.txt protobuf
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest==7.4.0 \
@@ -323,8 +321,7 @@ jobs:
           python -m pip install --upgrade pip
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
-          # Excluded 4.21.x versions have known compatibility issues with certain packages
-          pip install --no-cache-dir -c .github/constraints.txt "protobuf!=4.21.*,<6.0.0,>=3.20.2"
+          pip install --no-cache-dir -c .github/constraints.txt protobuf
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest==7.4.0 \
