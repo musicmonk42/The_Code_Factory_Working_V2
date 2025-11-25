@@ -473,7 +473,6 @@ class Database:
 
     async def create_tables(self):
         DB_OPERATIONS.labels(operation="create_tables").inc()
-        start_time = time.time()
         try:
             # Run DDL operations first (Issue #9 fix - run migrations separately)
             async with self.engine.begin() as conn:
@@ -1060,7 +1059,6 @@ class Database:
         user_id: Optional[str] = None,
     ):
         DB_OPERATIONS.labels(operation="save_simulation").inc()
-        start_time = time.time()
 
         async with self.AsyncSessionLocal() as session:
             try:
@@ -1123,7 +1121,6 @@ class Database:
     @circuit(failure_threshold=5, recovery_timeout=60)
     async def get_simulation(self, sim_id: str) -> Optional[Dict[str, Any]]:
         DB_OPERATIONS.labels(operation="get_simulation").inc()
-        start_time = time.time()
         async with self.AsyncSessionLocal() as session:
             try:
                 result = await session.execute(
@@ -1183,7 +1180,6 @@ class Database:
     @retry(tries=3, delay=1, backoff=2)
     async def save_agent_state(self, agent: Any):
         DB_OPERATIONS.labels(operation="save_agent_state").inc()
-        start_time = time.time()
         async with self.AsyncSessionLocal() as session:
             try:
                 allowed, reason = await self.policy_engine.should_auto_learn(
@@ -1366,7 +1362,6 @@ class Database:
         self, filters: Dict[str, Any] = None, limit: int = 100, offset: int = 0
     ) -> List[Dict[str, Any]]:
         DB_OPERATIONS.labels(operation="query_agent_states").inc()
-        start_time = time.time()
         async with self.AsyncSessionLocal() as session:
             try:
                 query = select(AgentState)
@@ -1415,7 +1410,6 @@ class Database:
     @retry(tries=3, delay=1, backoff=2)
     async def save_audit_record(self, record: Dict[str, Any]):
         AUDIT_DB_OPERATIONS.labels(operation="save_audit_record").inc()
-        start_time = time.time()
 
         async with self.AsyncSessionLocal() as session:
             try:
@@ -1488,7 +1482,6 @@ class Database:
             List of audit record dictionaries
         """
         AUDIT_DB_OPERATIONS.labels(operation="query_audit_records").inc()
-        start_time = time.time()
         try:
             async with self.AsyncSessionLocal() as session:
                 query = select(ExplainAuditRecord)
@@ -1557,7 +1550,6 @@ class Database:
     @circuit(failure_threshold=5, recovery_timeout=60)
     async def get_audit_snapshot(self, snapshot_id: str) -> Optional[Dict[str, Any]]:
         AUDIT_DB_OPERATIONS.labels(operation="get_audit_snapshot").inc()
-        start_time = time.time()
         query = "SELECT state, user_id, timestamp FROM audit_snapshots WHERE snapshot_id = ?"
         try:
             if self.is_postgres:
@@ -1599,7 +1591,6 @@ class Database:
         self, snapshot_id: str, encrypted_state: str, user_id: str
     ):
         AUDIT_DB_OPERATIONS.labels(operation="snapshot_audit_state").inc()
-        start_time = time.time()
         user_id = validate_user_id(user_id)
         query = "INSERT OR REPLACE INTO audit_snapshots (snapshot_id, state, user_id, timestamp) VALUES (?, ?, ?, ?)"
         try:
@@ -1639,7 +1630,6 @@ class Database:
     @retry(tries=3, delay=1, backoff=2)
     async def snapshot_world_state(self, user_id: str) -> str:
         DB_OPERATIONS.labels(operation="snapshot_world_state").inc()
-        start_time = time.time()
         user_id = validate_user_id(user_id)
         snapshot_id = str(uuid.uuid4())
         try:
@@ -1697,7 +1687,6 @@ class Database:
     @retry(tries=3, delay=1, backoff=2)
     async def restore_world_state(self, snapshot_id: str, user_id: str):
         DB_OPERATIONS.labels(operation="restore_world_state").inc()
-        start_time = time.time()
         user_id = validate_user_id(user_id)
         try:
             if self.is_postgres:
