@@ -527,7 +527,14 @@ class KafkaBridge:
                                 exc,
                             )
                             self._metrics.inc_errors(msg.topic)
-                            await self._maybe_publish_dlq(msg)
+                            # Issue #28 fix: Wrap DLQ publish in try-except to prevent worker death
+                            try:
+                                await self._maybe_publish_dlq(msg)
+                            except Exception as dlq_exc:
+                                logger.error(
+                                    "Failed to publish to DLQ for topic=%s: %s",
+                                    msg.topic, dlq_exc
+                                )
                         finally:
                             latency = asyncio.get_event_loop().time() - start
                             self._metrics.observe_latency(msg.topic, latency)
@@ -596,6 +603,8 @@ class KafkaBridge:
             return
         dlq_topic = f"{msg.topic}{self.cfg.dlq_suffix}"
         try:
+            # Issue #29 fix: Safely handle None headers
+            existing_headers = msg.headers if msg.headers is not None else []
             await self._producer.send_and_wait(
                 dlq_topic,
                 msg.value,
@@ -604,7 +613,7 @@ class KafkaBridge:
                     ("source-topic", msg.topic.encode("utf-8")),
                     ("original-offset", str(msg.offset).encode("utf-8")),
                 ]
-                + (msg.headers or []),
+                + existing_headers,
             )
             logger.warning(
                 "Message routed to DLQ %s (original topic=%s offset=%s)",
