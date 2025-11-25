@@ -20,6 +20,21 @@ import os
 import uuid
 import zlib
 
+# --- CRITICAL: Set environment variables BEFORE any imports that use dynaconf ---
+os.environ.setdefault("AUDIT_LOG_DEV_MODE", "true")
+os.environ.setdefault(
+    "ENCRYPTION_KEYS",
+    '[{"key_id":"test_key_1","key":"hYnO2bq3m0yqgqz5WJt9j3ZCsb3dC-5H9qv1Hj4XGxw=","algorithm":"FERNET"}]',
+)
+os.environ.setdefault("COMPRESSION_ALGO", "gzip")
+os.environ.setdefault("COMPRESSION_LEVEL", "9")
+os.environ.setdefault("BATCH_FLUSH_INTERVAL", "10")
+os.environ.setdefault("BATCH_MAX_SIZE", "100")
+os.environ.setdefault("HEALTH_CHECK_INTERVAL", "30")
+os.environ.setdefault("RETRY_MAX_ATTEMPTS", "3")
+os.environ.setdefault("RETRY_BACKOFF_FACTOR", "0.1")
+os.environ.setdefault("TAMPER_DETECTION_ENABLED", "true")
+
 # --- END FIX ---
 from pathlib import Path
 from typing import Any, Dict
@@ -100,10 +115,9 @@ def cleanup_test_environment(monkeypatch):
     }
 
     # Patch the 'settings' object *where it is used* (in audit_backend_core)
-    # We must also patch the import in audit_backend_streaming_backends
+    # Only patch modules that actually use settings
     for module_to_patch in [
         "generator.audit_log.audit_backend.audit_backend_core",
-        "generator.audit_log.audit_backend.audit_backend_streaming_backends",
     ]:
         try:
             monkeypatch.setattr(
@@ -125,8 +139,8 @@ def cleanup_test_environment(monkeypatch):
                     validators=MagicMock(validate=MagicMock()),
                 ),
             )
-        except ImportError:
-            continue  # If one of the modules doesn't exist, fine
+        except (ImportError, AttributeError):
+            continue  # If one of the modules doesn't exist or doesn't have settings, fine
 
     # Also patch the _is_test_or_dev_mode to ensure validation passes
     monkeypatch.setattr(
