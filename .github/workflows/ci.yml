@@ -97,18 +97,15 @@ jobs:
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           pip install --no-cache-dir -c .github/constraints.txt protobuf
-          # Pin critical dependencies to ensure compatibility
-          pip install --no-cache-dir -c .github/constraints.txt \
-            pytest==7.4.0 \
-            pytest-asyncio==0.21.0 \
-            pytest-mock==3.11.0 \
-            tomli_w \
-            typing-extensions
-          # Install unified platform requirements
+          # Install unified platform requirements first
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt
           fi
-          pip install --no-cache-dir -c .github/constraints.txt pytest-cov
+          # Install additional test dependencies (versions aligned with requirements.txt)
+          pip install --no-cache-dir -c .github/constraints.txt \
+            pytest-cov \
+            tomli_w \
+            typing-extensions
           # Force-reinstall OpenTelemetry packages to ensure correct versions
           pip install --force-reinstall -c .github/constraints.txt \
             opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
@@ -185,16 +182,7 @@ jobs:
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           pip install --no-cache-dir -c .github/constraints.txt protobuf
-          # Pin critical dependencies to ensure compatibility
-          pip install --no-cache-dir -c .github/constraints.txt \
-            pytest==7.4.0 \
-            pytest-asyncio==0.21.0 \
-            pytest-mock==3.11.0 \
-            pytest-timeout \
-            tomli_w \
-            typing-extensions \
-            aiohttp==3.8.5
-          # Install unified platform requirements
+          # Install unified platform requirements first
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
           fi
@@ -214,7 +202,7 @@ jobs:
           # Install common test/runtime extras that may be missing
           pip install --no-cache-dir -c .github/constraints.txt PyYAML httpx PyJWT || true
           pip install --no-cache-dir -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
-          pip install --no-cache-dir -c .github/constraints.txt pytest-cov
+          pip install --no-cache-dir -c .github/constraints.txt pytest-cov pytest-timeout tomli_w typing-extensions
           # Force-reinstall OpenTelemetry packages to ensure correct versions
           pip install --force-reinstall -c .github/constraints.txt \
             opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
@@ -322,19 +310,17 @@ jobs:
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           pip install --no-cache-dir -c .github/constraints.txt protobuf
-          # Pin critical dependencies to ensure compatibility
+          # Install unified platform requirements first
+          if [ -f requirements.txt ]; then
+            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt
+          fi
+          # Install additional test dependencies
           pip install --no-cache-dir -c .github/constraints.txt \
-            pytest==7.4.0 \
-            pytest-asyncio==0.21.0 \
-            pytest-mock==3.11.0 \
+            pytest-cov \
             pytest-timeout \
             pytest-xdist \
             tomli_w \
             typing-extensions
-          # Install unified platform requirements
-          if [ -f requirements.txt ]; then
-            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt
-          fi
           # Force-reinstall OpenTelemetry packages to ensure correct versions
           pip install --force-reinstall -c .github/constraints.txt \
             opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
