@@ -143,6 +143,8 @@ class SFEAgentState(AgentState):
 # ----------------------------------------------------------------------
 #  Indexes for performance
 # ----------------------------------------------------------------------
+# Issue #19 fix: Add index on AgentState.name for frequent hashed agent_id lookups
+Index("ix_agent_state_name", AgentState.name)
 Index("ix_explain_audit_kind", ExplainAuditRecord.kind)
 Index("ix_explain_audit_ts", ExplainAuditRecord.ts)
 Index("ix_explain_audit_agent_id", ExplainAuditRecord.agent_id)

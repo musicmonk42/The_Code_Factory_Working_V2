@@ -192,6 +192,7 @@ class RedisBridge:
         self.redis_client: Optional[Redis] = None
         self.pubsub_client: Optional[PubSub] = None
         self._listener_task: Optional[asyncio.Task] = None
+        self._listener_lock = asyncio.Lock()  # Issue #23 fix: Lock for listener creation
         self._running = False
         self._stop_event = asyncio.Event()
         self._subscribers: Dict[str, List[MessageHandler]] = {}
@@ -208,6 +209,15 @@ class RedisBridge:
         if self._listener_task is None:
             return True
         return self._listener_task.done()
+
+    async def _ensure_listener_running(self) -> None:
+        """Issue #23 fix: Idempotently starts the listener task."""
+        async with self._listener_lock:
+            if self._should_start_listener():
+                if self._listener_task and self._listener_task.done():
+                    self._listener_task = None
+                if self._listener_task is None:
+                    self._listener_task = asyncio.create_task(self._listener_loop())
 
     async def start(self):
         """Initializes the Redis connection pool and starts listener if subscribed."""
@@ -232,11 +242,7 @@ class RedisBridge:
                 await self.pubsub_client.subscribe(topic)
 
             # Start the listener loop in the background if we have subscriptions
-            if self._should_start_listener():
-                if self._listener_task and self._listener_task.done():
-                    # Clean up old task
-                    self._listener_task = None
-                self._listener_task = asyncio.create_task(self._listener_loop())
+            await self._ensure_listener_running()
 
             self.circuit.record_success()
             logger.info(
@@ -290,7 +296,16 @@ class RedisBridge:
             return False
 
         try:
-            payload_str = json.dumps(message.payload, default=safe_serialize)
+            # Issue #22 fix: Handle encrypted payloads correctly
+            if message.encrypted:
+                # Payload is already encrypted string/bytes, don't re-serialize
+                if isinstance(message.payload, bytes):
+                    payload_str = message.payload.decode('utf-8')
+                else:
+                    payload_str = str(message.payload)
+            else:
+                payload_str = json.dumps(message.payload, default=safe_serialize)
+            
             await self.redis_client.publish(message.topic, payload_str)
             self.circuit.record_success()
             _metrics_inc_publish("success", message.topic)
@@ -339,19 +354,27 @@ class RedisBridge:
 
     # --- Subscription ---
 
-    def subscribe(self, topic: str, handler: MessageHandler) -> None:
-        """Registers a handler for messages published from the Redis channel."""
+    async def subscribe(self, topic: str, handler: MessageHandler) -> None:
+        """
+        Registers a handler for messages published from the Redis channel.
+        
+        Issue #21, #27 fix: Make method async and subscribe to Redis immediately if running.
+        """
         if topic not in self._subscribers:
             self._subscribers[topic] = []
         self._subscribers[topic].append(handler)
-        self._subscribed_topics.add(topic)
 
-        if self._running and self.pubsub_client and self._should_start_listener():
-            # If we subscribe while running, we need to ensure the listener is active
-            if self._listener_task and self._listener_task.done():
-                # Clean up old task
-                self._listener_task = None
-            self._listener_task = asyncio.create_task(self._listener_loop())
+        # Issue #21 fix: If already running, subscribe immediately
+        if self._running and self.pubsub_client:
+            if topic not in self._subscribed_topics:
+                await self.pubsub_client.subscribe(topic)
+                self._subscribed_topics.add(topic)
+                
+                # Start listener if needed
+                await self._ensure_listener_running()
+        else:
+            # Not running yet, just add to set for later
+            self._subscribed_topics.add(topic)
 
         logger.info("Subscribed to Redis topic.", topic=topic)
 
@@ -359,6 +382,12 @@ class RedisBridge:
         """Background loop to listen for Pub/Sub messages."""
         while self._running and not self._stop_event.is_set():
             try:
+                # Issue #25 fix: Check circuit breaker before attempting operations
+                if not self.circuit.can_attempt():
+                    logger.warning("Circuit is open, pausing Redis listener")
+                    await asyncio.sleep(self.circuit.recovery_timeout)
+                    continue
+
                 if not self.pubsub_client:
                     logger.warning("PubSub client not available, waiting...")
                     await asyncio.sleep(1)
@@ -409,6 +438,8 @@ class RedisBridge:
                     logger.error(
                         f"Failed to decode JSON from Redis topic {topic}: {e}. Payload: {payload_str[:100]}..."
                     )
+                    # Issue #26 fix: Record failure to circuit breaker on decode errors
+                    self.circuit.record_failure()
                     _metrics_inc_consume("decode_fail", topic)
                     continue
 
@@ -435,18 +466,17 @@ class RedisBridge:
         """Dispatches message to handlers with configurable retries."""
         handlers = self._subscribers.get(topic, [])
         if not handlers:
-            # Fallback to internal bus dispatch
-            # Check if executors exist
-            if (
-                hasattr(self.message_bus, "callback_executors")
-                and self.message_bus.callback_executors
-            ):
-                executor = self.message_bus.callback_executors[0]
-                await self.message_bus._dispatch_message_to_subscribers_and_externals(
-                    message, executor
-                )
-            else:
-                logger.warning(f"No callback executors available for topic {topic}")
+            # Issue #24 fix: Don't fallback to message bus to avoid infinite loop
+            # Just log and optionally publish to DLQ
+            logger.warning(
+                f"No handlers registered for Redis topic {topic}. Message dropped.",
+                extra={"trace_id": message.trace_id}
+            )
+            # Optionally publish to DLQ instead of dropping
+            try:
+                await self.publish_dlq(message, "No handlers registered")
+            except Exception as dlq_err:
+                logger.error(f"Failed to publish to DLQ: {dlq_err}")
             return
 
         for handler in handlers:

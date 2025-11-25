@@ -199,6 +199,8 @@ class ShardedMessageBus:
         ] = defaultdict(list)
         self._subscriber_lock = asyncio.Lock()
         self._publish_lock = asyncio.Lock()
+        # Issue #13 fix: Add lock for shard management operations
+        self._shard_management_lock = asyncio.Lock()
         self.shard_locks = [OrderedLock(i) for i in range(self.shard_count)]
         self.shard_paused = [False] * self.shard_count  # Track paused state per shard
 
@@ -308,12 +310,18 @@ class ShardedMessageBus:
         )
 
     def _get_loop(self):
-        """Get the current running event loop, with fallback to stored loop."""
+        """
+        Get the current running event loop.
+        
+        Issue #15 fix: Raise an error instead of returning potentially stale/closed loop.
+        """
         try:
             return asyncio.get_running_loop()
         except RuntimeError:
-            # Fallback to stored loop for backwards compatibility
-            return self._loop
+            raise RuntimeError(
+                "ShardedMessageBus operation called outside async context. "
+                "Ensure you're calling from within an async function."
+            )
 
     def _start_dispatchers(self) -> None:
         """Starts asynchronous dispatcher tasks for each queue."""
@@ -520,6 +528,11 @@ class ShardedMessageBus:
             message.topic, self.retry_policies.get("default", RetryPolicy())
         )
         actual_retries = retries if retries is not None else policy.max_retries
+
+        # Issue #12 fix: Wait for shard to resume if paused (backpressure enforcement)
+        while self.shard_paused[shard_id] and self.running:
+            logger_for_publish.debug("Shard is paused, waiting for resume...")
+            await asyncio.sleep(0.1)
 
         async with self.shard_locks[shard_id]:
             for attempt in range(actual_retries + 1):
@@ -1132,68 +1145,69 @@ class ShardedMessageBus:
         if not self.dynamic_shards_enabled:
             raise ValueError("Dynamic sharding not enabled.")
 
-        # --- FIX 1: Use .clear() instead of await .set() ---
-        self.rebalancing_in_progress.clear()
-        logger.info("Starting dynamic shard addition.")
+        # Issue #13 fix: Use lock to prevent race conditions in shard management
+        async with self._shard_management_lock:
+            self.rebalancing_in_progress.clear()
+            logger.info("Starting dynamic shard addition.")
 
-        new_shard_id = self.shard_count
+            new_shard_id = self.shard_count
 
-        self.queues.append(asyncio.PriorityQueue(maxsize=self.max_queue_size))
-        self.high_priority_queues.append(
-            asyncio.PriorityQueue(maxsize=self.max_queue_size)
-        )
-        self.executors.append(
-            ThreadPoolExecutor(
-                max_workers=self.workers_per_shard,
-                thread_name_prefix=f"msgbus-normal-shard-{new_shard_id}",
+            self.queues.append(asyncio.PriorityQueue(maxsize=self.max_queue_size))
+            self.high_priority_queues.append(
+                asyncio.PriorityQueue(maxsize=self.max_queue_size)
             )
-        )
-        self.high_priority_executors.append(
-            ThreadPoolExecutor(
-                max_workers=self.workers_per_shard,
-                thread_name_prefix=f"msgbus-hp-shard-{new_shard_id}",
-            )
-        )
-        self.callback_executors.append(
-            ThreadPoolExecutor(
-                max_workers=self.workers_per_shard,
-                thread_name_prefix=f"msgbus-callbacks-{new_shard_id}",
-            )
-        )
-        self.shard_locks.append(OrderedLock(new_shard_id))
-
-        self.dispatcher_tasks.append(
-            asyncio.create_task(
-                self._dispatcher_loop(
-                    new_shard_id,
-                    self.queues[-1],
-                    self.executors[-1],
-                    high_priority=False,
+            self.executors.append(
+                ThreadPoolExecutor(
+                    max_workers=self.workers_per_shard,
+                    thread_name_prefix=f"msgbus-normal-shard-{new_shard_id}",
                 )
             )
-        )
-        self.dispatcher_tasks.append(
-            asyncio.create_task(
-                self._dispatcher_loop(
-                    new_shard_id,
-                    self.high_priority_queues[-1],
-                    self.high_priority_executors[-1],
-                    high_priority=True,
+            self.high_priority_executors.append(
+                ThreadPoolExecutor(
+                    max_workers=self.workers_per_shard,
+                    thread_name_prefix=f"msgbus-hp-shard-{new_shard_id}",
                 )
             )
-        )
+            self.callback_executors.append(
+                ThreadPoolExecutor(
+                    max_workers=self.workers_per_shard,
+                    thread_name_prefix=f"msgbus-callbacks-{new_shard_id}",
+                )
+            )
+            self.shard_locks.append(OrderedLock(new_shard_id))
+            self.shard_paused.append(False)  # Initialize paused state for new shard
 
-        self.hash_ring.add_node_dynamic(
-            str(new_shard_id),
-            partial(self._rebalance_callback, old_shard_count=self.shard_count),
-        )
-        self.shard_count += 1
-        self.topic_to_shard_cache.clear()  # Invalidate cache after rebalance
-        logger.info(
-            f"Added new shard {new_shard_id}. New shard count: {self.shard_count}."
-        )
-        # --- FIX 1: Use .set() at the end ---
-        self.rebalancing_in_progress.set()
+            self.dispatcher_tasks.append(
+                asyncio.create_task(
+                    self._dispatcher_loop(
+                        new_shard_id,
+                        self.queues[-1],
+                        self.executors[-1],
+                        high_priority=False,
+                    )
+                )
+            )
+            self.dispatcher_tasks.append(
+                asyncio.create_task(
+                    self._dispatcher_loop(
+                        new_shard_id,
+                        self.high_priority_queues[-1],
+                        self.high_priority_executors[-1],
+                        high_priority=True,
+                    )
+                )
+            )
+
+            self.hash_ring.add_node_dynamic(
+                str(new_shard_id),
+                partial(self._rebalance_callback, old_shard_count=self.shard_count),
+            )
+            self.shard_count += 1
+            self.topic_to_shard_cache.clear()  # Invalidate cache after rebalance
+            logger.info(
+                f"Added new shard {new_shard_id}. New shard count: {self.shard_count}."
+            )
+            self.rebalancing_in_progress.set()
 
     async def remove_shard(self, shard_id: int):
         """Dynamically remove a shard and rebalance."""
@@ -1203,45 +1217,46 @@ class ShardedMessageBus:
             logger.warning("Cannot remove shard; only one shard remains.")
             return
 
-        # --- FIX 1: Use .clear() instead of await .set() ---
-        self.rebalancing_in_progress.clear()
-        logger.info(f"Starting dynamic shard removal for shard {shard_id}.")
+        # Issue #13 fix: Use lock to prevent race conditions in shard management
+        async with self._shard_management_lock:
+            self.rebalancing_in_progress.clear()
+            logger.info(f"Starting dynamic shard removal for shard {shard_id}.")
 
-        await self.queues[shard_id].join()
-        await self.high_priority_queues[shard_id].join()
+            await self.queues[shard_id].join()
+            await self.high_priority_queues[shard_id].join()
 
-        self.dispatcher_tasks[shard_id * 2].cancel()
-        self.dispatcher_tasks[shard_id * 2 + 1].cancel()
+            self.dispatcher_tasks[shard_id * 2].cancel()
+            self.dispatcher_tasks[shard_id * 2 + 1].cancel()
 
-        await asyncio.gather(
-            self.dispatcher_tasks[shard_id * 2],
-            self.dispatcher_tasks[shard_id * 2 + 1],
-            return_exceptions=True,
-        )
+            await asyncio.gather(
+                self.dispatcher_tasks[shard_id * 2],
+                self.dispatcher_tasks[shard_id * 2 + 1],
+                return_exceptions=True,
+            )
 
-        self.executors[shard_id].shutdown(wait=True)
-        self.high_priority_executors[shard_id].shutdown(wait=True)
-        self.callback_executors[shard_id].shutdown(wait=True)
+            self.executors[shard_id].shutdown(wait=True)
+            self.high_priority_executors[shard_id].shutdown(wait=True)
+            self.callback_executors[shard_id].shutdown(wait=True)
 
-        self.hash_ring.remove_node_dynamic(
-            str(shard_id),
-            partial(self._rebalance_callback, old_shard_count=self.shard_count),
-        )
+            self.hash_ring.remove_node_dynamic(
+                str(shard_id),
+                partial(self._rebalance_callback, old_shard_count=self.shard_count),
+            )
 
-        # Remove all state associated with the shard
-        del self.queues[shard_id]
-        del self.high_priority_queues[shard_id]
-        del self.executors[shard_id]
-        del self.high_priority_executors[shard_id]
-        del self.callback_executors[shard_id]
-        del self.dispatcher_tasks[shard_id * 2 : shard_id * 2 + 2]
-        del self.shard_locks[shard_id]
+            # Remove all state associated with the shard
+            del self.queues[shard_id]
+            del self.high_priority_queues[shard_id]
+            del self.executors[shard_id]
+            del self.high_priority_executors[shard_id]
+            del self.callback_executors[shard_id]
+            del self.dispatcher_tasks[shard_id * 2 : shard_id * 2 + 2]
+            del self.shard_locks[shard_id]
+            del self.shard_paused[shard_id]  # Remove paused state for removed shard
 
-        self.shard_count -= 1
-        self.topic_to_shard_cache.clear()
-        logger.info(f"Removed shard {shard_id}. New shard count: {self.shard_count}.")
-        # --- FIX 1: Use .set() at the end ---
-        self.rebalancing_in_progress.set()
+            self.shard_count -= 1
+            self.topic_to_shard_cache.clear()
+            logger.info(f"Removed shard {shard_id}. New shard count: {self.shard_count}.")
+            self.rebalancing_in_progress.set()
 
     async def _rebalance_callback(
         self, node: str, affected_keys: List[str], old_shard_count: int

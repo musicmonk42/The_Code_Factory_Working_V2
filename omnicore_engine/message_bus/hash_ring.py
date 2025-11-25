@@ -1,31 +1,44 @@
 # message_bus/hash_ring.py
 
+import asyncio
 import bisect
 import hashlib
 import logging
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class ConsistentHashRing:
+    """
+    A consistent hash ring implementation for distributed message routing.
+    
+    Thread-safety: Uses asyncio.Lock for async-safe operations (Issue #10 fix).
+    For synchronous access, use the sync variants or acquire the lock manually.
+    """
+    
     def __init__(self, nodes: List[str], replicas: int = 100):
         self.replicas = replicas
         self.ring = []
         self.nodes = []
+        self._lock: Optional[asyncio.Lock] = None  # Lazy initialization for async lock
         if not nodes:
             logger.warning("Initializing ConsistentHashRing with no nodes.")
         for node in nodes:
             # We add nodes one by one to use the internal add_node logic.
-            self.add_node(node)
+            self._add_node_sync(node)
         logger.info(
             "ConsistentHashRing initialized.", nodes=self.nodes, replicas=self.replicas
         )
 
-    def add_node(self, node: str) -> None:
-        """
-        Adds a node to the hash ring, preventing duplicates.
-        """
+    def _get_lock(self) -> asyncio.Lock:
+        """Get or create the asyncio lock (lazy initialization)."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    def _add_node_sync(self, node: str) -> None:
+        """Synchronous node addition (for use during __init__ or with external locking)."""
         if node in self.nodes:
             logger.warning(
                 "Attempted to add a duplicate node to the hash ring. Skipping.",
@@ -40,10 +53,20 @@ class ConsistentHashRing:
         self.nodes.sort()  # Keep the list of nodes sorted for consistency
         logger.info("Added node to hash ring.", node=node)
 
-    def remove_node(self, node: str) -> None:
+    def add_node(self, node: str) -> None:
         """
-        Removes a node from the hash ring.
+        Adds a node to the hash ring, preventing duplicates.
+        Note: For async contexts, prefer add_node_async().
         """
+        self._add_node_sync(node)
+
+    async def add_node_async(self, node: str) -> None:
+        """Async-safe version of add_node."""
+        async with self._get_lock():
+            self._add_node_sync(node)
+
+    def _remove_node_sync(self, node: str) -> None:
+        """Synchronous node removal."""
         if node not in self.nodes:
             logger.warning(
                 "Attempted to remove non-existent node from hash ring.", node=node
@@ -55,10 +78,20 @@ class ConsistentHashRing:
         self.nodes.remove(node)
         logger.info("Removed node from hash ring.", node=node)
 
-    def get_node(self, key: str) -> str:
+    def remove_node(self, node: str) -> None:
         """
-        Given a key, finds the node responsible for it.
+        Removes a node from the hash ring.
+        Note: For async contexts, prefer remove_node_async().
         """
+        self._remove_node_sync(node)
+
+    async def remove_node_async(self, node: str) -> None:
+        """Async-safe version of remove_node."""
+        async with self._get_lock():
+            self._remove_node_sync(node)
+
+    def _get_node_sync(self, key: str) -> str:
+        """Synchronous node lookup."""
         if not self.ring:
             raise ValueError("No nodes in hash ring. Cannot get node.")
 
@@ -73,6 +106,18 @@ class ConsistentHashRing:
             idx = 0
 
         return self.ring[idx][1]
+
+    def get_node(self, key: str) -> str:
+        """
+        Given a key, finds the node responsible for it.
+        Note: For async contexts, prefer get_node_async() for consistency.
+        """
+        return self._get_node_sync(key)
+
+    async def get_node_async(self, key: str) -> str:
+        """Async-safe version of get_node."""
+        async with self._get_lock():
+            return self._get_node_sync(key)
 
     def _hash(self, key: str) -> int:
         """

@@ -1,30 +1,44 @@
 # message_bus/context.py
 
-import threading
+import contextvars
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 if TYPE_CHECKING:
     from .message_types import Message
     from .sharded_message_bus import ShardedMessageBus
 
+# Issue #3 fix: Use contextvars instead of threading.local() for async compatibility
+# Thread-locals don't work with asyncio tasks - context gets lost across awaits
+_context_var: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar(
+    'execution_context', default={}
+)
+
 
 class ExecutionContext:
-    _local = threading.local()
-
+    """
+    Async-safe execution context using contextvars.
+    
+    This replaces threading.local() which doesn't work correctly with asyncio tasks.
+    Context is preserved across awaits and properly isolated between concurrent tasks.
+    """
+    
     @classmethod
     def get_current(cls) -> Dict[str, Any]:
-        if not hasattr(cls._local, "context"):
-            cls._local.context = {}
-        return cls._local.context
+        """Get a copy of the current execution context."""
+        ctx = _context_var.get()
+        return dict(ctx)  # Return copy to prevent external modification
 
     @classmethod
     def set(cls, **kwargs):
-        cls.get_current().update(kwargs)
+        """Update the current execution context with new values."""
+        ctx = _context_var.get()
+        new_ctx = {**ctx, **kwargs}
+        _context_var.set(new_ctx)
 
     @classmethod
     def clear(cls):
-        if hasattr(cls._local, "context"):
-            cls._local.context.clear()
+        """Clear the current execution context."""
+        _context_var.set({})
 
 
 class ContextPropagationMiddleware:

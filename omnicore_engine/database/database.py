@@ -1,6 +1,7 @@
 # File: omnicore_engine/database.py
 from __future__ import annotations
 
+import asyncio
 import base64
 import collections.abc
 import hashlib
@@ -10,7 +11,6 @@ import logging.handlers
 import re
 import shutil
 import sqlite3
-import sys
 import time
 import uuid
 from datetime import date, datetime
@@ -219,6 +219,17 @@ DEFAULT_AGENT_Y = 0
 DEFAULT_AGENT_ENERGY = 100
 DEFAULT_AGENT_WORLD_SIZE = 100
 
+# Whitelist of allowed filter fields for query_agent_states to prevent SQL injection
+ALLOWED_FILTER_FIELDS = {'agent_type', 'world_size', 'energy', 'x', 'y'}
+
+# Whitelist of allowed filter fields for query_audit_records
+ALLOWED_AUDIT_FILTER_FIELDS = {'kind', 'name', 'sim_id', 'agent_id', 'tenant_id', 'ts_start', 'ts_end'}
+
+
+class DecryptionError(Exception):
+    """Raised when decryption fails, indicating data corruption or invalid key."""
+    pass
+
 
 class Database:
     """
@@ -251,13 +262,12 @@ class Database:
             "future": True,  # Use future=True for SQLAlchemy 2.0 style
         }
 
-        # Add timeout parameters for all engines
-        engine_params["connect_args"] = {
-            "timeout": 30,
-            "options": "-c statement_timeout=30000",
-        }
-
+        # Set connect_args conditionally per database type (Issue #7 fix)
         if self.db_path.startswith("postgresql://"):
+            engine_params["connect_args"] = {
+                "timeout": 30,
+                "options": "-c statement_timeout=30000",
+            }
             self.engine: AsyncEngine = create_async_engine(
                 self.db_path, **engine_params
             )
@@ -275,9 +285,12 @@ class Database:
                 logger.critical(
                     f"Failed to create database file directory {db_dir}: {e}"
                 )
-                sys.exit(1)
+                raise RuntimeError(f"Failed to create database directory {db_dir}: {e}") from e
 
-            engine_params["connect_args"]["check_same_thread"] = False
+            engine_params["connect_args"] = {
+                "timeout": 30,
+                "check_same_thread": False,
+            }
             self.engine: AsyncEngine = create_async_engine(
                 self.db_path, **engine_params
             )
@@ -295,8 +308,11 @@ class Database:
                 logger.critical(
                     f"Failed to create database file directory {db_dir}: {e}"
                 )
-                sys.exit(1)
-            engine_params["connect_args"]["check_same_thread"] = False
+                raise RuntimeError(f"Failed to create database directory {db_dir}: {e}") from e
+            engine_params["connect_args"] = {
+                "timeout": 30,
+                "check_same_thread": False,
+            }
             self.engine: AsyncEngine = create_async_engine(
                 self.db_path, **engine_params
             )
@@ -362,7 +378,7 @@ class Database:
                 logger.critical(
                     f"Failed to create database file directory (for local SQLite) {self.sqlite_db_file_path.parent}: {e}"
                 )
-                sys.exit(1)
+                raise RuntimeError(f"Failed to create database directory: {e}") from e
 
         base_data_dir = (
             self.sqlite_db_file_path.parent
@@ -383,6 +399,11 @@ class Database:
             "connection_pool_size": int(getattr(settings, "DB_POOL_SIZE", 5)),
         }
 
+        # Validate encryption key (Issue #16 fix)
+        encryption_key = settings.ENCRYPTION_KEY.get_secret_value()
+        if not validate_fernet_key(encryption_key.encode() if isinstance(encryption_key, str) else encryption_key):
+            logger.warning("ENCRYPTION_KEY is not a valid Fernet key format")
+
         try:
             self.CONFIG["backup_dir"].mkdir(parents=True, exist_ok=True)
             logger.info(f"Ensured backup directory exists: {self.CONFIG['backup_dir']}")
@@ -390,41 +411,26 @@ class Database:
             logger.critical(
                 f"Failed to create backup directory {self.CONFIG['backup_dir']}: {e}"
             )
-            sys.exit(1)
+            raise RuntimeError(f"Failed to create backup directory: {e}") from e
 
         self._serializers: Dict[type, Callable[[Any], Any]] = {}
+        
+        # Lock for key rotation to prevent race conditions (Issue #8 fix)
+        self._rotation_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
+        """
+        Initialize the database by creating tables and running migrations.
+        
+        This method delegates to create_tables() to avoid code duplication (Issue #17 fix).
+        """
         try:
             logger.info("Database component: Starting async initialization...")
 
             if not self.is_postgres:
                 await self._initialize_legacy_tables_async()
 
-            async with self.engine.execution_options(
-                isolation_level="SERIALIZABLE"
-            ).begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-
-                try:
-                    from alembic import command, config
-
-                    alembic_cfg = config.Config()
-                    Path(__file__).parent
-                    project_root = Path(__file__).parent.parent
-                    alembic_cfg.set_main_option(
-                        "script_location", str(project_root / "migrations")
-                    )
-                    alembic_cfg.set_main_option("sqlalchemy.url", self.db_path)
-                    command.upgrade(alembic_cfg, "head")
-                    logger.info("Schema migrations applied successfully (via Alembic).")
-                except ImportError:
-                    logger.warning(
-                        "Alembic is not installed. Skipping schema migrations."
-                    )
-                except Exception as e:
-                    logger.critical(f"Failed to apply migrations: {e}", exc_info=True)
-                    sys.exit(1)
+            await self.create_tables()
 
             if self.is_postgres:
                 await self.migrate_to_citus()
@@ -432,7 +438,6 @@ class Database:
                     "For PostgreSQL, ensure data migration from SQLite (if any) is handled externally."
                 )
 
-            logger.info("Database tables ensured (created/verified asynchronously).")
             logger.info(
                 "Database component: Async initialization completed successfully."
             )
@@ -453,38 +458,37 @@ class Database:
         DB_OPERATIONS.labels(operation="create_tables").inc()
         start_time = time.time()
         try:
-            async with self.engine.execution_options(
-                isolation_level="SERIALIZABLE"
-            ).begin() as conn:
+            # Run DDL operations first (Issue #9 fix - run migrations separately)
+            async with self.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
 
-                try:
-                    from alembic import command, config
+            # Run migrations separately outside DDL transaction
+            try:
+                from alembic import command, config
 
-                    alembic_cfg = config.Config()
-                    Path(__file__).parent
-                    project_root = Path(__file__).parent.parent
-                    alembic_cfg.set_main_option(
-                        "script_location", str(project_root / "migrations")
-                    )
-                    alembic_cfg.set_main_option("sqlalchemy.url", self.db_path)
-                    command.upgrade(alembic_cfg, "head")
-                    logger.info("Schema migrations applied successfully (via Alembic).")
-                except ImportError:
-                    logger.warning(
-                        "Alembic is not installed. Skipping schema migrations."
-                    )
-                except Exception as e:
-                    logger.critical(f"Failed to apply migrations: {e}", exc_info=True)
-                    sys.exit(1)
-
-                logger.info(
-                    "Database tables ensured (created/verified asynchronously)."
+                alembic_cfg = config.Config()
+                Path(__file__).parent
+                project_root = Path(__file__).parent.parent
+                alembic_cfg.set_main_option(
+                    "script_location", str(project_root / "migrations")
                 )
-        except sqlalchemy.exc.SQLAlchemyError as e:
-            DB_ERRORS.labels(operation="create_tables").observe(
-                time.time() - start_time
+                alembic_cfg.set_main_option("sqlalchemy.url", self.db_path)
+                command.upgrade(alembic_cfg, "head")
+                logger.info("Schema migrations applied successfully (via Alembic).")
+            except ImportError:
+                logger.warning(
+                    "Alembic is not installed. Skipping schema migrations."
+                )
+            except Exception as e:
+                logger.critical(f"Failed to apply migrations: {e}", exc_info=True)
+                raise RuntimeError(f"Failed to apply database migrations: {e}") from e
+
+            logger.info(
+                "Database tables ensured (created/verified asynchronously)."
             )
+        except sqlalchemy.exc.SQLAlchemyError as e:
+            # Fix Issue #1: Use .inc() for Counter instead of .observe()
+            DB_ERRORS.labels(operation="create_tables").inc()
             await self.feedback_manager.record_feedback(
                 user_id="system",
                 feedback_type=FeedbackType.BUG_REPORT,
@@ -591,7 +595,7 @@ class Database:
                     f"Failed to create legacy/non-ORM tables asynchronously: {e}",
                     exc_info=True,
                 )
-                sys.exit(1)
+                raise RuntimeError(f"Failed to create legacy tables: {e}") from e
 
     def register_serializer(
         self, type_: type, serializer: Callable[[Any], Any]
@@ -615,6 +619,19 @@ class Database:
             raise ValueError(f"Data is not JSON-serializable: {e}")
 
     def _decrypt_json(self, data: Union[str, bytes], encrypted: bool) -> Any:
+        """
+        Decrypt and deserialize JSON data.
+        
+        Args:
+            data: Encrypted or plain JSON data
+            encrypted: Whether the data is encrypted
+            
+        Returns:
+            Deserialized data
+            
+        Raises:
+            DecryptionError: If decryption or deserialization fails (Issue #9 fix)
+        """
         try:
             if encrypted:
                 if isinstance(data, str):
@@ -625,11 +642,21 @@ class Database:
             if isinstance(data, bytes):
                 return json.loads(data.decode("utf-8"))
             return json.loads(data)
-        except (InvalidToken, Exception) as e:
+        except InvalidToken as e:
             logger.error(
-                f"Failed to decrypt or deserialize JSON data: {e}", exc_info=True
+                f"Failed to decrypt data: {e}", exc_info=True
             )
-            return {}
+            raise DecryptionError(f"Failed to decrypt data: {e}") from e
+        except json.JSONDecodeError as e:
+            logger.error(
+                f"Failed to deserialize JSON data: {e}", exc_info=True
+            )
+            raise DecryptionError(f"Invalid JSON after decryption: {e}") from e
+        except Exception as e:
+            logger.error(
+                f"Unexpected error during decryption: {e}", exc_info=True
+            )
+            raise DecryptionError(f"Unexpected decryption error: {e}") from e
 
     @asynccontextmanager
     async def _get_aiosqlite_connection(self):
@@ -1073,9 +1100,7 @@ class Database:
                     "save_simulation", sim_id, user_id or "system", {"status": status}
                 )
             except Exception as e:
-                DB_ERRORS.labels(operation="save_simulation").observe(
-                    time.time() - start_time
-                )
+                DB_ERRORS.labels(operation="save_simulation").inc()
                 await session.rollback()
                 await self.feedback_manager.record_feedback(
                     user_id=user_id or "system",
@@ -1135,9 +1160,7 @@ class Database:
                     }
                 return None
             except Exception as e:
-                DB_ERRORS.labels(operation="get_simulation").observe(
-                    time.time() - start_time
-                )
+                DB_ERRORS.labels(operation="get_simulation").inc()
                 await self.feedback_manager.record_feedback(
                     user_id="system",
                     feedback_type=FeedbackType.BUG_REPORT,
@@ -1243,9 +1266,7 @@ class Database:
                     {"name": state.name, "type": state.agent_type},
                 )
             except Exception as e:
-                DB_ERRORS.labels(operation="save_agent_state").observe(
-                    time.time() - start_time
-                )
+                DB_ERRORS.labels(operation="save_agent_state").inc()
                 await session.rollback()
                 await self.feedback_manager.record_feedback(
                     user_id=agent.id,
@@ -1343,9 +1364,12 @@ class Database:
             try:
                 query = select(AgentState)
                 if filters:
+                    # Issue #6 fix: Whitelist allowed filter fields to prevent SQL injection
                     for key, value in filters.items():
-                        if hasattr(AgentState, key):
+                        if key in ALLOWED_FILTER_FIELDS and hasattr(AgentState, key):
                             query = query.filter(getattr(AgentState, key) == value)
+                        elif key not in ALLOWED_FILTER_FIELDS:
+                            logger.warning(f"Ignoring unsupported filter field: {key}")
                 query = query.limit(limit).offset(offset)
                 result = await session.execute(query)
                 states = result.scalars().all()
@@ -1368,9 +1392,7 @@ class Database:
                 )
                 return result_data
             except Exception as e:
-                DB_ERRORS.labels(operation="query_agent_states").observe(
-                    time.time() - start_time
-                )
+                DB_ERRORS.labels(operation="query_agent_states").inc()
                 await self.feedback_manager.record_feedback(
                     user_id="system",
                     feedback_type=FeedbackType.BUG_REPORT,
@@ -1426,13 +1448,8 @@ class Database:
                 await session.commit()
 
                 AUDIT_DB_OPERATIONS.labels(operation="save_audit_record_success").inc()
-                AUDIT_DB_OPERATIONS.labels(operation="save_audit_record").observe(
-                    time.time() - start_time
-                )
             except Exception as e:
-                AUDIT_DB_ERRORS.labels(operation="save_audit_record").observe(
-                    time.time() - start_time
-                )
+                AUDIT_DB_ERRORS.labels(operation="save_audit_record").inc()
                 await session.rollback()
                 await self.feedback_manager.record_feedback(
                     user_id="system",
@@ -1447,8 +1464,19 @@ class Database:
 
     @circuit(failure_threshold=5, recovery_timeout=60)
     async def query_audit_records(
-        self, filters: Optional[Dict[str, Any]] = None, use_dream_mode: bool = False
+        self, filters: Optional[Dict[str, Any]] = None, use_dream_mode: bool = False, decrypt: bool = False
     ) -> List[Dict]:
+        """
+        Query audit records with optional filtering and decryption.
+        
+        Args:
+            filters: Optional dictionary of field-value pairs to filter records
+            use_dream_mode: Reserved for future use
+            decrypt: If True, decrypt encrypted fields in the results (Issue #20 fix)
+            
+        Returns:
+            List of audit record dictionaries
+        """
         AUDIT_DB_OPERATIONS.labels(operation="query_audit_records").inc()
         start_time = time.time()
         try:
@@ -1456,25 +1484,43 @@ class Database:
                 query = select(ExplainAuditRecord)
 
                 if filters:
+                    # Whitelist filter fields for audit records
                     for key, value in filters.items():
-                        if value is not None and hasattr(ExplainAuditRecord, key):
+                        if value is not None:
                             if key == "ts_start":
                                 query = query.filter(ExplainAuditRecord.ts >= value)
                             elif key == "ts_end":
                                 query = query.filter(ExplainAuditRecord.ts <= value)
-                            else:
+                            elif key in ALLOWED_AUDIT_FILTER_FIELDS and hasattr(ExplainAuditRecord, key):
                                 query = query.filter(
                                     getattr(ExplainAuditRecord, key) == value
                                 )
+                            else:
+                                logger.warning(f"Ignoring unsupported audit filter field: {key}")
 
                 result = await session.execute(query)
                 records = result.scalars().all()
-                # Serialize SQLAlchemy objects to dictionaries using helper function
-                return [serialize_audit_record(r) for r in records]
+                
+                # Serialize SQLAlchemy objects to dictionaries
+                serialized_records = [serialize_audit_record(r) for r in records]
+                
+                # Issue #20 fix: Decrypt sensitive fields if requested
+                if decrypt and settings.EXPERIMENTAL_FEATURES_ENABLED:
+                    decrypted_records = []
+                    for record_dict in serialized_records:
+                        for field in ['detail', 'context', 'custom_attributes', 'rationale', 'simulation_outcomes']:
+                            if record_dict.get(field):
+                                try:
+                                    record_dict[field] = self._decrypt_json(record_dict[field], encrypted=True)
+                                except DecryptionError as e:
+                                    logger.warning(f"Failed to decrypt {field}: {e}")
+                                    # Keep original encrypted value
+                        decrypted_records.append(record_dict)
+                    return decrypted_records
+                
+                return serialized_records
         except Exception as e:
-            AUDIT_DB_ERRORS.labels(operation="query_audit_records").observe(
-                time.time() - start_time
-            )
+            AUDIT_DB_ERRORS.labels(operation="query_audit_records").inc()
             await self.feedback_manager.record_feedback(
                 user_id="system",
                 feedback_type=FeedbackType.BUG_REPORT,
@@ -1519,9 +1565,7 @@ class Database:
                     return None
             return None
         except Exception as e:
-            AUDIT_DB_ERRORS.labels(operation="get_audit_snapshot").observe(
-                time.time() - start_time
-            )
+            AUDIT_DB_ERRORS.labels(operation="get_audit_snapshot").inc()
             logger.error(
                 f"Error retrieving audit snapshot {snapshot_id}: {e}", exc_info=True
             )
@@ -1554,9 +1598,7 @@ class Database:
                 await conn.commit()
             AUDIT_DB_OPERATIONS.labels(operation="snapshot_audit_state_success").inc()
         except Exception as e:
-            AUDIT_DB_ERRORS.labels(operation="snapshot_audit_state").observe(
-                time.time() - start_time
-            )
+            AUDIT_DB_ERRORS.labels(operation="snapshot_audit_state").inc()
             logger.error(
                 f"Error saving audit snapshot {snapshot_id}: {e}", exc_info=True
             )
@@ -1616,9 +1658,7 @@ class Database:
             )
             return snapshot_id
         except Exception as e:
-            DB_ERRORS.labels(operation="snapshot_world_state").observe(
-                time.time() - start_time
-            )
+            DB_ERRORS.labels(operation="snapshot_world_state").inc()
             logger.error(f"Error creating world state snapshot: {e}", exc_info=True)
             await self.feedback_manager.record_feedback(
                 user_id="system",
@@ -1673,9 +1713,7 @@ class Database:
                 {"agent_count": len(states_list)},
             )
         except Exception as e:
-            DB_ERRORS.labels(operation="restore_world_state").observe(
-                time.time() - start_time
-            )
+            DB_ERRORS.labels(operation="restore_world_state").inc()
             logger.error(
                 f"Error restoring world state snapshot {snapshot_id}: {e}",
                 exc_info=True,
@@ -1704,13 +1742,14 @@ class Database:
                 raise
 
             try:
-                # This assumes 'agent_state' and 'explain_audit' are the table names
-                # and 'name' and 'uuid' are the column names.
+                # Issue #12 fix: Reference model tablenames instead of hardcoded strings
+                agent_state_table = AgentState.__tablename__
+                explain_audit_table = ExplainAuditRecord.__tablename__
                 await session.execute(
-                    text("SELECT create_distributed_table('agent_state', 'name');")
+                    text(f"SELECT create_distributed_table('{agent_state_table}', 'name');")
                 )
                 await session.execute(
-                    text("SELECT create_distributed_table('explain_audit', 'uuid');")
+                    text(f"SELECT create_distributed_table('{explain_audit_table}', 'uuid');")
                 )
                 await session.commit()
                 logger.info("Migrated to Citus with distribution keys.")
@@ -1730,119 +1769,121 @@ class Database:
 
         Note: This method temporarily switches from EnterpriseSecurityUtils to FernetEncryption
         for key rotation operations. Both provide compatible encrypt/decrypt interfaces.
-        Thread-safety: This operation should be performed during maintenance windows or with
-        application-level coordination to prevent concurrent encryption operations.
+        
+        Thread-safety: Uses asyncio.Lock to prevent concurrent encryption operations (Issue #8 fix).
         """
         # Validate input
         if not isinstance(new_key, bytes):
             raise TypeError("new_key must be bytes")
+        
+        # Issue #16 fix: Validate the new key
+        if not validate_fernet_key(new_key):
+            raise ValueError("Invalid Fernet key format")
 
-        # TODO: Add proper locking mechanism for production use
-        logger.warning(
-            "Key rotation modifies global settings without locking. Ensure no concurrent operations."
-        )
+        # Issue #8 fix: Use lock to prevent race conditions
+        async with self._rotation_lock:
+            old_encrypter = self.encrypter
 
-        old_encrypter = self.encrypter
-
-        try:
-            new_key_str = new_key.decode("utf-8")
-        except UnicodeDecodeError as e:
-            raise ValueError(f"new_key must contain valid UTF-8 bytes: {e}")
-
-        all_keys = [new_key_str] + settings.FERNET_KEYS.get_secret_value().split(",")
-
-        # Update settings (Note: This modifies global state without proper locking)
-        settings.FERNET_KEYS = SecretStr(",".join(all_keys))
-
-        # Temporarily switch to FernetEncryption for multi-key support during rotation
-        self.encrypter = FernetEncryption([k.encode("utf-8") for k in all_keys])
-
-        logger.info("Starting key rotation and re-encryption of existing data...")
-
-        async with self.AsyncSessionLocal() as session:
             try:
-                # Re-encrypt AgentState records
-                results = await session.execute(select(AgentState))
-                agents = results.scalars().all()
-                for agent in agents:
-                    if agent.inventory_v2:
-                        try:
-                            decrypted = old_encrypter.decrypt(
-                                agent.inventory_v2.encode("utf-8")
-                            )
-                            agent.inventory_v2 = self.encrypter.encrypt(
-                                decrypted
-                            ).decode("utf-8")
-                        except InvalidToken:
-                            logger.error(
-                                f"Failed to decrypt inventory for agent {agent.name}. Skipping re-encryption."
-                            )
+                new_key_str = new_key.decode("utf-8")
+            except UnicodeDecodeError as e:
+                raise ValueError(f"new_key must contain valid UTF-8 bytes: {e}")
 
-                    if agent.language_v2:
-                        try:
-                            decrypted = old_encrypter.decrypt(
-                                agent.language_v2.encode("utf-8")
-                            )
-                            agent.language_v2 = self.encrypter.encrypt(
-                                decrypted
-                            ).decode("utf-8")
-                        except InvalidToken:
-                            logger.error(
-                                f"Failed to decrypt language for agent {agent.name}. Skipping re-encryption."
-                            )
+            all_keys = [new_key_str] + settings.FERNET_KEYS.get_secret_value().split(",")
 
-                    if agent.memory_v2:
-                        try:
-                            decrypted = old_encrypter.decrypt(
-                                agent.memory_v2.encode("utf-8")
-                            )
-                            agent.memory_v2 = self.encrypter.encrypt(decrypted).decode(
-                                "utf-8"
-                            )
-                        except InvalidToken:
-                            logger.error(
-                                f"Failed to decrypt memory for agent {agent.name}. Skipping re-encryption."
-                            )
+            # Temporarily switch to FernetEncryption for multi-key support during rotation
+            # Note: Atomic swap within the lock prevents race conditions
+            self.encrypter = FernetEncryption([k.encode("utf-8") for k in all_keys])
+            
+            # Update global settings after encrypter swap
+            settings.FERNET_KEYS = SecretStr(",".join(all_keys))
 
-                    if agent.personality_v2:
-                        try:
-                            decrypted = old_encrypter.decrypt(
-                                agent.personality_v2.encode("utf-8")
-                            )
-                            agent.personality_v2 = self.encrypter.encrypt(
-                                decrypted
-                            ).decode("utf-8")
-                        except InvalidToken:
-                            logger.error(
-                                f"Failed to decrypt personality for agent {agent.name}. Skipping re-encryption."
-                            )
+            logger.info("Starting key rotation and re-encryption of existing data...")
 
-                    if agent.custom_attributes_v2:
-                        try:
-                            decrypted = old_encrypter.decrypt(
-                                agent.custom_attributes_v2.encode("utf-8")
-                            )
-                            agent.custom_attributes_v2 = self.encrypter.encrypt(
-                                decrypted
-                            ).decode("utf-8")
-                        except InvalidToken:
-                            logger.error(
-                                f"Failed to decrypt custom attributes for agent {agent.name}. Skipping re-encryption."
-                            )
+            async with self.AsyncSessionLocal() as session:
+                try:
+                    # Re-encrypt AgentState records
+                    results = await session.execute(select(AgentState))
+                    agents = results.scalars().all()
+                    for agent in agents:
+                        if agent.inventory_v2:
+                            try:
+                                decrypted = old_encrypter.decrypt(
+                                    agent.inventory_v2.encode("utf-8")
+                                )
+                                agent.inventory_v2 = self.encrypter.encrypt(
+                                    decrypted
+                                ).decode("utf-8")
+                            except InvalidToken:
+                                logger.error(
+                                    f"Failed to decrypt inventory for agent {agent.name}. Skipping re-encryption."
+                                )
 
-                await session.commit()
-                logger.info(
-                    f"Re-encrypted {len(agents)} AgentState records with the new key."
-                )
+                        if agent.language_v2:
+                            try:
+                                decrypted = old_encrypter.decrypt(
+                                    agent.language_v2.encode("utf-8")
+                                )
+                                agent.language_v2 = self.encrypter.encrypt(
+                                    decrypted
+                                ).decode("utf-8")
+                            except InvalidToken:
+                                logger.error(
+                                    f"Failed to decrypt language for agent {agent.name}. Skipping re-encryption."
+                                )
 
-            except Exception as e:
-                logger.error(
-                    f"Error during key rotation re-encryption: {e}", exc_info=True
-                )
-                await session.rollback()
-                raise
+                        if agent.memory_v2:
+                            try:
+                                decrypted = old_encrypter.decrypt(
+                                    agent.memory_v2.encode("utf-8")
+                                )
+                                agent.memory_v2 = self.encrypter.encrypt(decrypted).decode(
+                                    "utf-8"
+                                )
+                            except InvalidToken:
+                                logger.error(
+                                    f"Failed to decrypt memory for agent {agent.name}. Skipping re-encryption."
+                                )
 
-        logger.info("Key rotation complete.")
+                        if agent.personality_v2:
+                            try:
+                                decrypted = old_encrypter.decrypt(
+                                    agent.personality_v2.encode("utf-8")
+                                )
+                                agent.personality_v2 = self.encrypter.encrypt(
+                                    decrypted
+                                ).decode("utf-8")
+                            except InvalidToken:
+                                logger.error(
+                                    f"Failed to decrypt personality for agent {agent.name}. Skipping re-encryption."
+                                )
+
+                        if agent.custom_attributes_v2:
+                            try:
+                                decrypted = old_encrypter.decrypt(
+                                    agent.custom_attributes_v2.encode("utf-8")
+                                )
+                                agent.custom_attributes_v2 = self.encrypter.encrypt(
+                                    decrypted
+                                ).decode("utf-8")
+                            except InvalidToken:
+                                logger.error(
+                                    f"Failed to decrypt custom attributes for agent {agent.name}. Skipping re-encryption."
+                                )
+
+                    await session.commit()
+                    logger.info(
+                        f"Re-encrypted {len(agents)} AgentState records with the new key."
+                    )
+
+                except Exception as e:
+                    logger.error(
+                        f"Error during key rotation re-encryption: {e}", exc_info=True
+                    )
+                    await session.rollback()
+                    raise
+
+            logger.info("Key rotation complete.")
 
     async def save_generator_state(self, agent_id: str, data: Dict[str, Any]):
         """
