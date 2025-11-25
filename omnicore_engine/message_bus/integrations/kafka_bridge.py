@@ -533,7 +533,8 @@ class KafkaBridge:
                             except Exception as dlq_exc:
                                 logger.error(
                                     "Failed to publish to DLQ for topic=%s: %s",
-                                    msg.topic, dlq_exc
+                                    msg.topic,
+                                    dlq_exc,
                                 )
                         finally:
                             latency = asyncio.get_event_loop().time() - start

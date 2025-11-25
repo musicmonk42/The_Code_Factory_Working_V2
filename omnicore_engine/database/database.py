@@ -220,14 +220,23 @@ DEFAULT_AGENT_ENERGY = 100
 DEFAULT_AGENT_WORLD_SIZE = 100
 
 # Whitelist of allowed filter fields for query_agent_states to prevent SQL injection
-ALLOWED_FILTER_FIELDS = {'agent_type', 'world_size', 'energy', 'x', 'y'}
+ALLOWED_FILTER_FIELDS = {"agent_type", "world_size", "energy", "x", "y"}
 
 # Whitelist of allowed filter fields for query_audit_records
-ALLOWED_AUDIT_FILTER_FIELDS = {'kind', 'name', 'sim_id', 'agent_id', 'tenant_id', 'ts_start', 'ts_end'}
+ALLOWED_AUDIT_FILTER_FIELDS = {
+    "kind",
+    "name",
+    "sim_id",
+    "agent_id",
+    "tenant_id",
+    "ts_start",
+    "ts_end",
+}
 
 
 class DecryptionError(Exception):
     """Raised when decryption fails, indicating data corruption or invalid key."""
+
     pass
 
 
@@ -285,7 +294,9 @@ class Database:
                 logger.critical(
                     f"Failed to create database file directory {db_dir}: {e}"
                 )
-                raise RuntimeError(f"Failed to create database directory {db_dir}: {e}") from e
+                raise RuntimeError(
+                    f"Failed to create database directory {db_dir}: {e}"
+                ) from e
 
             engine_params["connect_args"] = {
                 "timeout": 30,
@@ -308,7 +319,9 @@ class Database:
                 logger.critical(
                     f"Failed to create database file directory {db_dir}: {e}"
                 )
-                raise RuntimeError(f"Failed to create database directory {db_dir}: {e}") from e
+                raise RuntimeError(
+                    f"Failed to create database directory {db_dir}: {e}"
+                ) from e
             engine_params["connect_args"] = {
                 "timeout": 30,
                 "check_same_thread": False,
@@ -401,7 +414,11 @@ class Database:
 
         # Validate encryption key (Issue #16 fix)
         encryption_key = settings.ENCRYPTION_KEY.get_secret_value()
-        if not validate_fernet_key(encryption_key.encode() if isinstance(encryption_key, str) else encryption_key):
+        if not validate_fernet_key(
+            encryption_key.encode()
+            if isinstance(encryption_key, str)
+            else encryption_key
+        ):
             logger.warning("ENCRYPTION_KEY is not a valid Fernet key format")
 
         try:
@@ -414,14 +431,14 @@ class Database:
             raise RuntimeError(f"Failed to create backup directory: {e}") from e
 
         self._serializers: Dict[type, Callable[[Any], Any]] = {}
-        
+
         # Lock for key rotation to prevent race conditions (Issue #8 fix)
         self._rotation_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """
         Initialize the database by creating tables and running migrations.
-        
+
         This method delegates to create_tables() to avoid code duplication (Issue #17 fix).
         """
         try:
@@ -476,16 +493,12 @@ class Database:
                 command.upgrade(alembic_cfg, "head")
                 logger.info("Schema migrations applied successfully (via Alembic).")
             except ImportError:
-                logger.warning(
-                    "Alembic is not installed. Skipping schema migrations."
-                )
+                logger.warning("Alembic is not installed. Skipping schema migrations.")
             except Exception as e:
                 logger.critical(f"Failed to apply migrations: {e}", exc_info=True)
                 raise RuntimeError(f"Failed to apply database migrations: {e}") from e
 
-            logger.info(
-                "Database tables ensured (created/verified asynchronously)."
-            )
+            logger.info("Database tables ensured (created/verified asynchronously).")
         except sqlalchemy.exc.SQLAlchemyError as e:
             # Fix Issue #1: Use .inc() for Counter instead of .observe()
             DB_ERRORS.labels(operation="create_tables").inc()
@@ -621,14 +634,14 @@ class Database:
     def _decrypt_json(self, data: Union[str, bytes], encrypted: bool) -> Any:
         """
         Decrypt and deserialize JSON data.
-        
+
         Args:
             data: Encrypted or plain JSON data
             encrypted: Whether the data is encrypted
-            
+
         Returns:
             Deserialized data
-            
+
         Raises:
             DecryptionError: If decryption or deserialization fails (Issue #9 fix)
         """
@@ -643,19 +656,13 @@ class Database:
                 return json.loads(data.decode("utf-8"))
             return json.loads(data)
         except InvalidToken as e:
-            logger.error(
-                f"Failed to decrypt data: {e}", exc_info=True
-            )
+            logger.error(f"Failed to decrypt data: {e}", exc_info=True)
             raise DecryptionError(f"Failed to decrypt data: {e}") from e
         except json.JSONDecodeError as e:
-            logger.error(
-                f"Failed to deserialize JSON data: {e}", exc_info=True
-            )
+            logger.error(f"Failed to deserialize JSON data: {e}", exc_info=True)
             raise DecryptionError(f"Invalid JSON after decryption: {e}") from e
         except Exception as e:
-            logger.error(
-                f"Unexpected error during decryption: {e}", exc_info=True
-            )
+            logger.error(f"Unexpected error during decryption: {e}", exc_info=True)
             raise DecryptionError(f"Unexpected decryption error: {e}") from e
 
     @asynccontextmanager
@@ -1464,16 +1471,19 @@ class Database:
 
     @circuit(failure_threshold=5, recovery_timeout=60)
     async def query_audit_records(
-        self, filters: Optional[Dict[str, Any]] = None, use_dream_mode: bool = False, decrypt: bool = False
+        self,
+        filters: Optional[Dict[str, Any]] = None,
+        use_dream_mode: bool = False,
+        decrypt: bool = False,
     ) -> List[Dict]:
         """
         Query audit records with optional filtering and decryption.
-        
+
         Args:
             filters: Optional dictionary of field-value pairs to filter records
             use_dream_mode: Reserved for future use
             decrypt: If True, decrypt encrypted fields in the results (Issue #20 fix)
-            
+
         Returns:
             List of audit record dictionaries
         """
@@ -1491,33 +1501,45 @@ class Database:
                                 query = query.filter(ExplainAuditRecord.ts >= value)
                             elif key == "ts_end":
                                 query = query.filter(ExplainAuditRecord.ts <= value)
-                            elif key in ALLOWED_AUDIT_FILTER_FIELDS and hasattr(ExplainAuditRecord, key):
+                            elif key in ALLOWED_AUDIT_FILTER_FIELDS and hasattr(
+                                ExplainAuditRecord, key
+                            ):
                                 query = query.filter(
                                     getattr(ExplainAuditRecord, key) == value
                                 )
                             else:
-                                logger.warning(f"Ignoring unsupported audit filter field: {key}")
+                                logger.warning(
+                                    f"Ignoring unsupported audit filter field: {key}"
+                                )
 
                 result = await session.execute(query)
                 records = result.scalars().all()
-                
+
                 # Serialize SQLAlchemy objects to dictionaries
                 serialized_records = [serialize_audit_record(r) for r in records]
-                
+
                 # Issue #20 fix: Decrypt sensitive fields if requested
                 if decrypt and settings.EXPERIMENTAL_FEATURES_ENABLED:
                     decrypted_records = []
                     for record_dict in serialized_records:
-                        for field in ['detail', 'context', 'custom_attributes', 'rationale', 'simulation_outcomes']:
+                        for field in [
+                            "detail",
+                            "context",
+                            "custom_attributes",
+                            "rationale",
+                            "simulation_outcomes",
+                        ]:
                             if record_dict.get(field):
                                 try:
-                                    record_dict[field] = self._decrypt_json(record_dict[field], encrypted=True)
+                                    record_dict[field] = self._decrypt_json(
+                                        record_dict[field], encrypted=True
+                                    )
                                 except DecryptionError as e:
                                     logger.warning(f"Failed to decrypt {field}: {e}")
                                     # Keep original encrypted value
                         decrypted_records.append(record_dict)
                     return decrypted_records
-                
+
                 return serialized_records
         except Exception as e:
             AUDIT_DB_ERRORS.labels(operation="query_audit_records").inc()
@@ -1746,10 +1768,14 @@ class Database:
                 agent_state_table = AgentState.__tablename__
                 explain_audit_table = ExplainAuditRecord.__tablename__
                 await session.execute(
-                    text(f"SELECT create_distributed_table('{agent_state_table}', 'name');")
+                    text(
+                        f"SELECT create_distributed_table('{agent_state_table}', 'name');"
+                    )
                 )
                 await session.execute(
-                    text(f"SELECT create_distributed_table('{explain_audit_table}', 'uuid');")
+                    text(
+                        f"SELECT create_distributed_table('{explain_audit_table}', 'uuid');"
+                    )
                 )
                 await session.commit()
                 logger.info("Migrated to Citus with distribution keys.")
@@ -1769,13 +1795,13 @@ class Database:
 
         Note: This method temporarily switches from EnterpriseSecurityUtils to FernetEncryption
         for key rotation operations. Both provide compatible encrypt/decrypt interfaces.
-        
+
         Thread-safety: Uses asyncio.Lock to prevent concurrent encryption operations (Issue #8 fix).
         """
         # Validate input
         if not isinstance(new_key, bytes):
             raise TypeError("new_key must be bytes")
-        
+
         # Issue #16 fix: Validate the new key
         if not validate_fernet_key(new_key):
             raise ValueError("Invalid Fernet key format")
@@ -1789,12 +1815,14 @@ class Database:
             except UnicodeDecodeError as e:
                 raise ValueError(f"new_key must contain valid UTF-8 bytes: {e}")
 
-            all_keys = [new_key_str] + settings.FERNET_KEYS.get_secret_value().split(",")
+            all_keys = [new_key_str] + settings.FERNET_KEYS.get_secret_value().split(
+                ","
+            )
 
             # Temporarily switch to FernetEncryption for multi-key support during rotation
             # Note: Atomic swap within the lock prevents race conditions
             self.encrypter = FernetEncryption([k.encode("utf-8") for k in all_keys])
-            
+
             # Update global settings after encrypter swap
             settings.FERNET_KEYS = SecretStr(",".join(all_keys))
 
@@ -1837,9 +1865,9 @@ class Database:
                                 decrypted = old_encrypter.decrypt(
                                     agent.memory_v2.encode("utf-8")
                                 )
-                                agent.memory_v2 = self.encrypter.encrypt(decrypted).decode(
-                                    "utf-8"
-                                )
+                                agent.memory_v2 = self.encrypter.encrypt(
+                                    decrypted
+                                ).decode("utf-8")
                             except InvalidToken:
                                 logger.error(
                                     f"Failed to decrypt memory for agent {agent.name}. Skipping re-encryption."
