@@ -101,7 +101,7 @@ jobs:
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest==7.4.0 \
             pytest-asyncio==0.21.0 \
-            pytest-mock==3.11.0 \
+            pytest-mock==3.15.0 \
             tomli_w \
             typing-extensions
           # Install unified platform requirements
@@ -189,7 +189,7 @@ jobs:
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest==7.4.0 \
             pytest-asyncio==0.21.0 \
-            pytest-mock==3.11.0 \
+            pytest-mock==3.15.0 \
             pytest-timeout \
             tomli_w \
             typing-extensions \
@@ -207,7 +207,7 @@ jobs:
           }
           # Install essential test dependencies after package install
           pip install --no-cache-dir -c .github/constraints.txt \
-            pytest==7.4.0 pytest-asyncio==0.21.0 pytest-mock==3.11.0 pytest-cov || {
+            pytest==7.4.0 pytest-asyncio==0.21.0 pytest-mock==3.15.0 pytest-cov || {
             echo "ERROR: Failed to install pytest dependencies"
             exit 1
           }
@@ -333,7 +333,7 @@ jobs:
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest==7.4.0 \
             pytest-asyncio==0.21.0 \
-            pytest-mock==3.11.0 \
+            pytest-mock==3.15.0 \
             pytest-timeout \
             pytest-xdist \
             tomli_w \

@@ -237,11 +237,14 @@ jobs:
                 # Apply whitelist if present
                 WHITELIST_FILE=".github/security/license_whitelist.txt"
                 if [ -n "$RESTRICTIVE" ]; then
+                  FILTERED="$RESTRICTIVE"
                   if [ -f "$WHITELIST_FILE" ]; then
-                    # Filter out whitelisted packages (exclude comment lines)
-                    FILTERED=$(echo "$RESTRICTIVE" | grep -v -F -f <(grep -v '^#' "$WHITELIST_FILE" | grep -v '^$') || true)
-                  else
-                    FILTERED="$RESTRICTIVE"
+                    # Create a clean whitelist (no comments or empty lines)
+                    CLEAN_WHITELIST=$(grep -v '^#' "$WHITELIST_FILE" | grep -v '^$' || true)
+                    if [ -n "$CLEAN_WHITELIST" ]; then
+                      # Filter out whitelisted packages
+                      FILTERED=$(echo "$RESTRICTIVE" | grep -v -F -f <(echo "$CLEAN_WHITELIST") || true)
+                    fi
                   fi
                   
                   if [ -n "$FILTERED" ]; then
