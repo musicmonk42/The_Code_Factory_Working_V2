@@ -200,9 +200,8 @@ def _is_test_or_dev_mode() -> bool:
     if os.getenv("RUNNING_TESTS", "").lower() == "true":
         return True
     # Also check for common development environment indicators
-    if os.getenv("DEV_MODE", "").lower() == "true":
-        return True
-    if os.getenv("DEV_MODE") == "1":
+    dev_mode = os.getenv("DEV_MODE", "").lower()
+    if dev_mode in ("true", "1"):
         return True
     app_env = os.getenv("APP_ENV", "").lower()
     if app_env in ("development", "dev", "local"):
