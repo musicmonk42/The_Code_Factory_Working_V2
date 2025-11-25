@@ -1624,14 +1624,11 @@ def bootstrap_metrics() -> None:
     # Initialize app-level metrics with default values
     # Using a default instance_id to ensure they appear in the registry
     default_instance = os.getenv("INSTANCE_ID", "default")
-    
+
     # Initialize APP_RUNNING_STATUS
     APP_RUNNING_STATUS.labels(app_name="main", instance_id=default_instance).set(0)
-    
-    # Initialize APP_STARTUP_DURATION (observe a zero value to register it)
-    # Histograms don't need explicit initialization, but we can observe a placeholder
-    
+
     # Initialize other commonly used metrics with default values
     HEALTH_STATUS.labels(component_name="main", instance_id=default_instance).set(1)
-    
+
     logger.debug("Metrics bootstrapped with default values.")

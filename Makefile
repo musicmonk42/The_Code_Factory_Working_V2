@@ -137,7 +137,7 @@ docker-clean: ## Remove all Docker containers, images, and volumes
 
 run-generator: ## Run Generator locally
 	@echo "$(BLUE)Starting Generator...$(NC)"
-	cd generator && python main.py --interface api
+	cd generator && python -m main.main --interface api
 
 run-omnicore: ## Run OmniCore Engine locally
 	@echo "$(BLUE)Starting OmniCore Engine...$(NC)"

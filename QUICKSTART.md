@@ -134,9 +134,31 @@ docker run -d -p 6379:6379 redis:7-alpine
 ```bash
 # Terminal 1
 make run-generator
-# or
+# or from the generator directory:
 cd generator
-python main.py --interface api
+python -m main.main --interface api
+
+# For Git Bash on Windows, use:
+cd generator
+python -m main.main --interface api
+```
+
+#### Running Multiple Interfaces (Git Bash)
+
+To run both main.py and the API simultaneously in Git Bash:
+
+```bash
+# Terminal 1 - Start the API server
+cd generator
+python -m main.main --interface api
+
+# Terminal 2 - Start with all interfaces (CLI, GUI, API)
+cd generator
+python -m main.main --interface all
+
+# Or run specific interfaces:
+python -m main.main --interface cli   # CLI only
+python -m main.main --interface gui   # GUI only
 ```
 
 ### 3. Start OmniCore Engine
@@ -258,6 +280,27 @@ netstat -ano | findstr :8000  # Windows
 make clean
 make install-dev
 ```
+
+**Common Import Error Fixes:**
+
+- **"No module named 'runner.alerting'"**: This module re-exports `send_alert` from `runner_logging`. Make sure you're running from the `generator` directory.
+
+- **"attempted relative import with no known parent package"**: Use module syntax instead of direct execution:
+  ```bash
+  # Wrong:
+  python main/main.py
+  
+  # Correct:
+  cd generator
+  python -m main.main --interface api
+  ```
+
+- **Missing dependencies**: Install all required packages:
+  ```bash
+  pip install -r requirements.txt
+  # Or install specific packages:
+  pip install python-dotenv pydantic prometheus_client aiohttp aiofiles opentelemetry-api opentelemetry-sdk
+  ```
 
 #### 3. Redis Connection Error
 
