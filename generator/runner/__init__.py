@@ -180,12 +180,14 @@ import sys as _sys
 # NEW: Import the logging module for aliasing
 # NEW: Import the errors module for aliasing
 # NEW: Import the contracts module for aliasing
+from . import alerting as _runner_alerting
 from . import feedback_handlers as _runner_feedback_handlers
 from . import runner_config as _runner_config
 from . import runner_contracts as _runner_contracts
 from . import runner_core as _runner_core
 from . import runner_errors as _runner_errors
 from . import runner_logging as _runner_logging
+from . import runner_metrics as _runner_metrics
 
 # Backwards compatibility aliases so older imports used by tests/clients still work.
 # Allows `from runner.config import ...` to resolve to `runner.runner_config`
@@ -211,3 +213,11 @@ if "runner.logging" not in _sys.modules:
 # NEW: Allows `from runner.feedback_handlers import ...` to resolve to `runner.runner_feedback_handlers`
 if "runner.feedback_handlers" not in _sys.modules:
     _sys.modules["runner.feedback_handlers"] = _runner_feedback_handlers
+
+# NEW: Allows `from runner.alerting import ...` to resolve to `runner.alerting`
+if "runner.alerting" not in _sys.modules:
+    _sys.modules["runner.alerting"] = _runner_alerting
+
+# NEW: Allows `from runner.metrics import ...` to resolve to `runner.runner_metrics`
+if "runner.metrics" not in _sys.modules:
+    _sys.modules["runner.metrics"] = _runner_metrics
