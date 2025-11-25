@@ -162,6 +162,60 @@ sys.modules[backend_core_name] = backend_core
 sys.modules["generator.audit_log.audit_backend"].get_backend = get_backend
 # --- END FIX ---
 
+# --- Stub 3: audit_crypto for crypto provider ---
+# Create stub for audit_crypto package and audit_crypto_factory module
+if "generator.audit_log.audit_crypto" not in sys.modules:
+    audit_crypto_pkg = ModuleType("generator.audit_log.audit_crypto")
+    audit_crypto_pkg.__path__ = []  # Make it a package
+    sys.modules["generator.audit_log.audit_crypto"] = audit_crypto_pkg
+
+# Create a mock crypto provider
+class _MockCryptoProvider:
+    """Mock crypto provider for tests."""
+    def __init__(self):
+        self.initialized = True
+    
+    async def sign(self, data, key_id=None):
+        return b"mock_signature"
+    
+    async def verify(self, data, signature, key_id=None):
+        return True
+    
+    async def encrypt(self, data, key_id=None):
+        return data
+    
+    async def decrypt(self, data, key_id=None):
+        return data
+
+# Create the factory module stub
+audit_crypto_factory_name = "generator.audit_log.audit_crypto.audit_crypto_factory"
+if audit_crypto_factory_name not in sys.modules:
+    audit_crypto_factory = ModuleType(audit_crypto_factory_name)
+    # Add the mock provider to the factory
+    mock_provider = _MockCryptoProvider()
+    audit_crypto_factory.crypto_provider = mock_provider
+    # Add a mock factory class
+    class _MockCryptoProviderFactory:
+        @staticmethod
+        def get_provider(provider_type="software"):
+            return mock_provider
+    audit_crypto_factory.crypto_provider_factory = _MockCryptoProviderFactory()
+    audit_crypto_factory.CryptoProviderFactory = _MockCryptoProviderFactory
+    audit_crypto_factory._ensure_software_key_master = AsyncMock()
+    sys.modules[audit_crypto_factory_name] = audit_crypto_factory
+    sys.modules["generator.audit_log.audit_crypto"].audit_crypto_factory = audit_crypto_factory
+
+# Create stub for audit_keystore module
+audit_keystore_name = "generator.audit_log.audit_crypto.audit_keystore"
+if audit_keystore_name not in sys.modules:
+    audit_keystore = ModuleType(audit_keystore_name)
+    # Add mock FileSystemKeyStorageBackend
+    class _MockFileSystemKeyStorageBackend:
+        async def _atomic_write_and_set_permissions(self, *args, **kwargs):
+            return None
+    audit_keystore.FileSystemKeyStorageBackend = _MockFileSystemKeyStorageBackend
+    sys.modules[audit_keystore_name] = audit_keystore
+    sys.modules["generator.audit_log.audit_crypto"].audit_keystore = audit_keystore
 
 # --- Stub 2: audit_utils - Note: We don't stub audit_utils here anymore.
 # The audit_log module imports the real audit_utils, so we patch it in fixtures instead.
