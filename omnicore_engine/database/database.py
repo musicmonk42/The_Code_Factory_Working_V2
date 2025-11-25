@@ -1807,7 +1807,6 @@ class Database:
                     agents = results.scalars().all()
                     for agent in agents:
                         if agent.inventory_v2:
-                        if agent.inventory_v2:
                             try:
                                 decrypted = old_encrypter.decrypt(
                                     agent.inventory_v2.encode("utf-8")
