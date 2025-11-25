@@ -110,6 +110,29 @@ patcher_otel_batch_processor.start()
 patcher_otel_set_tracer.start()
 patcher_otel_exporter.start()
 
+# Import the clarifier module first so it exists in sys.modules before patching
+# This is necessary because patch() requires the module path to be valid
+try:
+    import generator.clarifier.clarifier as _clarifier_module
+except ImportError:
+    # Create a minimal stub if import fails
+    import sys
+    from types import ModuleType
+    if "generator" not in sys.modules:
+        gen_stub = ModuleType("generator")
+        gen_stub.__path__ = []  # Make it a package
+        sys.modules["generator"] = gen_stub
+    if "generator.clarifier" not in sys.modules:
+        clarifier_stub = ModuleType("generator.clarifier")
+        clarifier_stub.__path__ = []  # Make it a package
+        sys.modules["generator.clarifier"] = clarifier_stub
+    if "generator.clarifier.clarifier" not in sys.modules:
+        _clarifier_module = ModuleType("generator.clarifier.clarifier")
+        _clarifier_module.get_config = MagicMock(return_value=mock_config_instance)
+        _clarifier_module.get_fernet = MagicMock(return_value=mock_fernet_instance)
+        _clarifier_module.get_logger = MagicMock(return_value=mock_logger)
+        sys.modules["generator.clarifier.clarifier"] = _clarifier_module
+
 # CRITICAL: Patch at the clarifier module level BEFORE clarifier_updater imports it
 # This prevents the module-level get_config() call from failing
 patcher_clarifier_get_config = patch(
@@ -127,6 +150,9 @@ patcher_clarifier_get_config.start()
 patcher_clarifier_get_fernet.start()
 patcher_clarifier_get_logger.start()
 
+# Import clarifier_updater module now (with clarifier patches in place)
+# This makes the module path valid for subsequent patchers
+import generator.clarifier.clarifier_updater as clarifier_updater_module
 
 # Now also patch in clarifier_updater for when it's imported
 # FIX 1: log_action should be synchronous (not async)
