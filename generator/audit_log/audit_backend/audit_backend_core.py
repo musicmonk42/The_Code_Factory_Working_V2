@@ -217,7 +217,7 @@ else:
     # In production, enforce strict validation
     try:
         settings.validators.validate()
-    except ValidationError as e:
+    except ValidationError:
         raise
 
 
