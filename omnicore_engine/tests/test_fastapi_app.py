@@ -18,22 +18,7 @@ from fastapi.testclient import TestClient
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Mock dependencies before importing the app
-with patch("fastapi_app.omnicore_engine") as mock_engine:
-    with patch("omnicore_engine.fastapi_app.settings") as mock_settings:
-        mock_settings.LOG_LEVEL = "INFO"
-        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = "test_secret"
-        mock_settings.ENCRYPTION_KEY.get_secret_value.return_value = (
-            "test_encryption_key_32_bytes_long!"
-        )
-        mock_settings.database_path = "sqlite:///:memory:"
-        mock_settings.redis_url = "redis://localhost"
-        mock_settings.ARENA_PORT = 8001
-        mock_settings.MERKLE_TREE_BRANCHING_FACTOR = 2
-        mock_settings.MERKLE_TREE_PRIVATE_KEY = None
-        mock_settings.EXPERIMENTAL_FEATURES_ENABLED = True
-
-        from omnicore_engine.fastapi_app import app
+from omnicore_engine.fastapi_app import app
 
 
 class TestStartupShutdown:
@@ -121,12 +106,15 @@ class TestSecurityMiddleware:
 
     def test_jwt_authentication(self):
         """Test JWT token validation"""
-        from omnicore_engine.fastapi_app import get_user_id
+        from omnicore_engine.fastapi_app import get_user_id, settings
+
+        # Get the actual JWT secret from settings
+        jwt_secret = settings.JWT_SECRET_KEY.get_secret_value()
 
         # Valid token
         valid_token = jwt.encode(
             {"sub": "user123", "exp": datetime.utcnow() + timedelta(hours=1)},
-            "test_secret",
+            jwt_secret,
             algorithm="HS256",
         )
 
@@ -137,7 +125,7 @@ class TestSecurityMiddleware:
         # Expired token
         expired_token = jwt.encode(
             {"sub": "user123", "exp": datetime.utcnow() - timedelta(hours=1)},
-            "test_secret",
+            jwt_secret,
             algorithm="HS256",
         )
 
@@ -293,109 +281,154 @@ class TestAdminEndpoints:
 
     def create_auth_token(self):
         """Helper to create valid auth token"""
+        from omnicore_engine.fastapi_app import settings
+
+        jwt_secret = settings.JWT_SECRET_KEY.get_secret_value()
         return jwt.encode(
             {"sub": "admin_user", "exp": datetime.utcnow() + timedelta(hours=1)},
-            "test_secret",
+            jwt_secret,
             algorithm="HS256",
         )
 
-    @patch("omnicore_engine.fastapi_app.settings")
-    def test_admin_api_disabled(self, mock_settings):
+    def test_admin_api_disabled(self):
         """Test admin API when disabled"""
-        mock_settings.EXPERIMENTAL_FEATURES_ENABLED = False
+        from omnicore_engine.fastapi_app import settings
 
-        client = TestClient(app)
-        response = client.get("/admin/feature-flag")
+        # Save original value
+        original_value = settings.EXPERIMENTAL_FEATURES_ENABLED
 
-        assert response.status_code == 404
+        try:
+            # Disable experimental features
+            settings.EXPERIMENTAL_FEATURES_ENABLED = False
+
+            client = TestClient(app)
+            response = client.get("/admin/feature-flag")
+
+            assert response.status_code == 404
+        finally:
+            # Restore original value
+            settings.EXPERIMENTAL_FEATURES_ENABLED = original_value
 
     @patch("omnicore_engine.fastapi_app.omnicore_engine")
     @patch("omnicore_engine.fastapi_app.PluginMarketplace")
     def test_install_plugin(self, mock_marketplace_class, mock_engine):
         """Test plugin installation"""
-        mock_marketplace = Mock()
-        mock_marketplace.install_plugin = AsyncMock()
-        mock_marketplace_class.return_value = mock_marketplace
-        mock_engine.database = Mock()
+        from omnicore_engine.fastapi_app import settings
 
-        client = TestClient(app)
-        token = self.create_auth_token()
+        # Enable experimental features for this test
+        original_value = settings.EXPERIMENTAL_FEATURES_ENABLED
+        settings.EXPERIMENTAL_FEATURES_ENABLED = True
 
-        response = client.post(
-            "/admin/plugins/install",
-            json={"kind": "execution", "name": "test_plugin", "version": "1.0.0"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        try:
+            mock_marketplace = Mock()
+            mock_marketplace.install_plugin = AsyncMock()
+            mock_marketplace_class.return_value = mock_marketplace
+            mock_engine.database = Mock()
 
-        assert response.status_code == 200
-        assert "installed" in response.json()["message"]
+            client = TestClient(app)
+            token = self.create_auth_token()
+
+            response = client.post(
+                "/admin/plugins/install",
+                json={"kind": "execution", "name": "test_plugin", "version": "1.0.0"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+            assert response.status_code == 200
+            assert "installed" in response.json()["message"]
+        finally:
+            settings.EXPERIMENTAL_FEATURES_ENABLED = original_value
 
     @patch("omnicore_engine.fastapi_app.omnicore_engine")
     @patch("omnicore_engine.fastapi_app.PluginMarketplace")
     def test_rate_plugin(self, mock_marketplace_class, mock_engine):
         """Test plugin rating"""
-        mock_marketplace = Mock()
-        mock_marketplace.rate_plugin = AsyncMock()
-        mock_marketplace_class.return_value = mock_marketplace
-        mock_engine.database = Mock()
+        from omnicore_engine.fastapi_app import settings
 
-        client = TestClient(app)
-        token = self.create_auth_token()
+        original_value = settings.EXPERIMENTAL_FEATURES_ENABLED
+        settings.EXPERIMENTAL_FEATURES_ENABLED = True
 
-        response = client.post(
-            "/admin/plugins/rate",
-            json={
-                "kind": "execution",
-                "name": "test_plugin",
-                "version": "1.0.0",
-                "rating": 5,
-                "comment": "Great plugin!",
-            },
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        try:
+            mock_marketplace = Mock()
+            mock_marketplace.rate_plugin = AsyncMock()
+            mock_marketplace_class.return_value = mock_marketplace
+            mock_engine.database = Mock()
 
-        assert response.status_code == 200
-        assert "rated" in response.json()["message"]
+            client = TestClient(app)
+            token = self.create_auth_token()
+
+            response = client.post(
+                "/admin/plugins/rate",
+                json={
+                    "kind": "execution",
+                    "name": "test_plugin",
+                    "version": "1.0.0",
+                    "rating": 5,
+                    "comment": "Great plugin!",
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+            assert response.status_code == 200
+            assert "rated" in response.json()["message"]
+        finally:
+            settings.EXPERIMENTAL_FEATURES_ENABLED = original_value
 
     @patch("omnicore_engine.fastapi_app.omnicore_engine")
     def test_export_audit_proof_bundle(self, mock_engine):
         """Test audit proof bundle export"""
-        mock_audit = Mock()
-        mock_proof_exporter = Mock()
-        mock_proof_exporter.export_proof_bundle = AsyncMock(
-            return_value={"merkle_root": "abc123", "records": []}
-        )
-        mock_audit.proof_exporter = mock_proof_exporter
-        mock_engine.audit = mock_audit
+        from omnicore_engine.fastapi_app import settings
 
-        client = TestClient(app)
-        token = self.create_auth_token()
+        original_value = settings.EXPERIMENTAL_FEATURES_ENABLED
+        settings.EXPERIMENTAL_FEATURES_ENABLED = True
 
-        response = client.get(
-            "/admin/audit/export-proof-bundle",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        try:
+            mock_audit = Mock()
+            mock_proof_exporter = Mock()
+            mock_proof_exporter.export_proof_bundle = AsyncMock(
+                return_value={"merkle_root": "abc123", "records": []}
+            )
+            mock_audit.proof_exporter = mock_proof_exporter
+            mock_engine.audit = mock_audit
 
-        assert response.status_code == 200
-        assert response.json()["status"] == "success"
-        assert "merkle_root" in response.json()["data"]
+            client = TestClient(app)
+            token = self.create_auth_token()
+
+            response = client.get(
+                "/admin/audit/export-proof-bundle",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "success"
+            assert "merkle_root" in response.json()["data"]
+        finally:
+            settings.EXPERIMENTAL_FEATURES_ENABLED = original_value
 
     @patch("omnicore_engine.fastapi_app.meta_supervisor_instance")
     def test_generate_test_cases(self, mock_meta):
         """Test test case generation via meta supervisor"""
-        mock_meta.generate_test_cases = AsyncMock(
-            return_value={"test_cases": ["test1", "test2"]}
-        )
+        from omnicore_engine.fastapi_app import settings
 
-        client = TestClient(app)
-        token = self.create_auth_token()
+        original_value = settings.EXPERIMENTAL_FEATURES_ENABLED
+        settings.EXPERIMENTAL_FEATURES_ENABLED = True
 
-        response = client.get(
-            "/admin/generate-test-cases", headers={"Authorization": f"Bearer {token}"}
-        )
+        try:
+            mock_meta.generate_test_cases = AsyncMock(
+                return_value={"test_cases": ["test1", "test2"]}
+            )
 
-        assert response.status_code == 200
-        assert response.json()["status"] == "success"
+            client = TestClient(app)
+            token = self.create_auth_token()
+
+            response = client.get(
+                "/admin/generate-test-cases", headers={"Authorization": f"Bearer {token}"}
+            )
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "success"
+        finally:
+            settings.EXPERIMENTAL_FEATURES_ENABLED = original_value
 
 
 class TestWorkflowEndpoints:
@@ -404,6 +437,9 @@ class TestWorkflowEndpoints:
     @patch("omnicore_engine.fastapi_app.omnicore_engine")
     def test_code_factory_workflow(self, mock_engine):
         """Test code factory workflow endpoint"""
+        from omnicore_engine.fastapi_app import settings
+
+        jwt_secret = settings.JWT_SECRET_KEY.get_secret_value()
         mock_bus = Mock()
         mock_bus.publish = AsyncMock()
         mock_engine.message_bus = mock_bus
@@ -411,7 +447,7 @@ class TestWorkflowEndpoints:
         client = TestClient(app)
         token = jwt.encode(
             {"sub": "user123", "exp": datetime.utcnow() + timedelta(hours=1)},
-            "test_secret",
+            jwt_secret,
             algorithm="HS256",
         )
 
@@ -512,7 +548,8 @@ class TestErrorHandling:
         response = client.post("/api/simulation/execute", json={"config": {}})
 
         assert response.status_code == 500
-        assert "Simulation failed" in response.json()["message"]
+        # FastAPI wraps the detail in {"detail": ...}
+        assert "Simulation failed" in response.json()["detail"]["message"]
 
     @patch("omnicore_engine.fastapi_app.chatbot_arbiter")
     @patch("omnicore_engine.fastapi_app.ARBITER_AVAILABLE", True)

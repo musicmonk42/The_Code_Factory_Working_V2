@@ -136,10 +136,9 @@ class TestBase:
 class TestMetricsFunctions:
     """Test plugin and test metrics functions"""
 
-    @patch("omnicore_engine.scenario_plugin_manager.actual_get_plugin_metrics")
-    def test_get_plugin_metrics_success(self, mock_metrics):
+    def test_get_plugin_metrics_success(self):
         """Test successful plugin metrics retrieval"""
-        mock_metrics.return_value = {"metric1": 10, "metric2": 20}
+        mock_metrics = Mock(return_value={"metric1": 10, "metric2": 20})
 
         with patch.dict(
             "sys.modules",
@@ -155,10 +154,9 @@ class TestMetricsFunctions:
             assert "error" in result
             assert "Metrics system not available" in result["error"]
 
-    @patch("omnicore_engine.scenario_plugin_manager.actual_get_plugin_metrics")
-    def test_get_plugin_metrics_exception(self, mock_metrics):
+    def test_get_plugin_metrics_exception(self):
         """Test plugin metrics with exception"""
-        mock_metrics.side_effect = Exception("Metrics error")
+        mock_metrics = Mock(side_effect=Exception("Metrics error"))
 
         with patch.dict(
             "sys.modules",
@@ -181,14 +179,18 @@ class TestExplainableAI:
 
     def test_initialization_with_reasoner(self):
         """Test ExplainableAI initialization with reasoner available"""
-        mock_reasoner = Mock()
+        mock_reasoner_class = Mock()
+        mock_reasoner_instance = Mock()
+        mock_reasoner_class.return_value = mock_reasoner_instance
+        mock_module = Mock()
+        mock_module.ExplainableReasoner = mock_reasoner_class
 
-        with patch(
-            "omnicore_engine.scenario_plugin_manager.ExplainableReasoner",
-            return_value=mock_reasoner,
+        with patch.dict(
+            "sys.modules",
+            {"omnicore_engine.explainable_reasoner": mock_module},
         ):
             ai = ExplainableAI()
-            assert ai.reasoner == mock_reasoner
+            assert ai.reasoner == mock_reasoner_instance
             assert not ai.is_initialized
 
     def test_initialization_without_reasoner(self):
@@ -316,29 +318,57 @@ class TestOmniCoreEngine:
         assert engine.components == {}
 
     @pytest.mark.asyncio
-    @patch("omnicore_engine.scenario_plugin_manager.Database")
-    @patch("omnicore_engine.scenario_plugin_manager.ExplainAudit")
-    @patch("omnicore_engine.scenario_plugin_manager.PLUGIN_REGISTRY")
-    @patch("omnicore_engine.scenario_plugin_manager.start_plugin_observer")
-    @patch("omnicore_engine.scenario_plugin_manager.FeedbackManager")
-    async def test_initialize_components(
-        self, mock_feedback, mock_observer, mock_registry, mock_audit, mock_db, engine
-    ):
+    async def test_initialize_components(self, engine):
         """Test component initialization"""
-        # Setup mocks
+        # Setup mocks for modules that are imported inside initialize()
         mock_db_instance = Mock()
         mock_db_instance.initialize = AsyncMock()
-        mock_db.return_value = mock_db_instance
+        mock_db_class = Mock(return_value=mock_db_instance)
 
         mock_audit_instance = Mock()
         mock_audit_instance.initialize = AsyncMock()
-        mock_audit.return_value = mock_audit_instance
+        mock_audit_class = Mock(return_value=mock_audit_instance)
 
         mock_feedback_instance = Mock()
         mock_feedback_instance.initialize = AsyncMock()
-        mock_feedback.return_value = mock_feedback_instance
+        mock_feedback_class = Mock(return_value=mock_feedback_instance)
 
-        await engine.initialize()
+        mock_registry = Mock()
+        mock_registry.plugins = {}
+        mock_registry.load_from_directory = Mock()
+
+        mock_observer = Mock()
+
+        mock_merkle_tree = Mock()
+
+        # Create mock modules
+        mock_database_module = Mock()
+        mock_database_module.Database = mock_db_class
+
+        mock_audit_module = Mock()
+        mock_audit_module.ExplainAudit = mock_audit_class
+
+        mock_plugin_registry_module = Mock()
+        mock_plugin_registry_module.PLUGIN_REGISTRY = mock_registry
+        mock_plugin_registry_module.start_plugin_observer = mock_observer
+
+        mock_feedback_module = Mock()
+        mock_feedback_module.FeedbackManager = mock_feedback_class
+
+        mock_merkle_module = Mock()
+        mock_merkle_module.MerkleTree = Mock(return_value=mock_merkle_tree)
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "omnicore_engine.database": mock_database_module,
+                "omnicore_engine.audit": mock_audit_module,
+                "omnicore_engine.plugin_registry": mock_plugin_registry_module,
+                "omnicore_engine.feedback_manager": mock_feedback_module,
+                "omnicore_engine.merkle_tree": mock_merkle_module,
+            },
+        ):
+            await engine.initialize()
 
         assert engine.is_initialized
         assert "database" in engine.components
@@ -350,15 +380,33 @@ class TestOmniCoreEngine:
     @pytest.mark.asyncio
     async def test_shutdown(self, engine):
         """Test engine shutdown"""
-        # Create mock components
-        mock_component1 = Mock()
-        mock_component1.shutdown = AsyncMock()
-        mock_component2 = Mock()
-        mock_component2.shutdown = AsyncMock()
+        # Create mock components with the names that shutdown() expects
+        mock_database = Mock()
+        mock_database.shutdown = AsyncMock()
+        mock_audit = Mock()
+        mock_audit.shutdown = AsyncMock()
+        mock_plugin_registry = Mock()
+        mock_plugin_registry.shutdown = AsyncMock()
+        mock_feedback_manager = Mock()
+        mock_feedback_manager.shutdown = AsyncMock()
+        mock_explainable_ai = Mock()
+        mock_explainable_ai.shutdown = AsyncMock()
 
         engine._is_initialized = True
-        engine.components = {"comp1": mock_component1, "comp2": mock_component2}
-        engine.component_locks = {"comp1": asyncio.Lock(), "comp2": asyncio.Lock()}
+        engine.components = {
+            "database": mock_database,
+            "audit": mock_audit,
+            "plugin_registry": mock_plugin_registry,
+            "feedback_manager": mock_feedback_manager,
+            "explainable_ai": mock_explainable_ai,
+        }
+        engine.component_locks = {
+            "database": asyncio.Lock(),
+            "audit": asyncio.Lock(),
+            "plugin_registry": asyncio.Lock(),
+            "feedback_manager": asyncio.Lock(),
+            "explainable_ai": asyncio.Lock(),
+        }
 
         await engine.shutdown()
 
@@ -422,11 +470,16 @@ class TestOmniCoreEngine:
         mock_plugin = Mock()
         mock_plugin.execute = AsyncMock(return_value="task_result")
 
-        with patch(
-            "omnicore_engine.scenario_plugin_manager.PLUGIN_REGISTRY"
-        ) as mock_registry:
-            mock_registry.get_plugin_for_task = Mock(return_value=mock_plugin)
+        mock_registry = Mock()
+        mock_registry.get_plugin_for_task = Mock(return_value=mock_plugin)
 
+        mock_plugin_registry_module = Mock()
+        mock_plugin_registry_module.PLUGIN_REGISTRY = mock_registry
+
+        with patch.dict(
+            "sys.modules",
+            {"omnicore_engine.plugin_registry": mock_plugin_registry_module},
+        ):
             result = await engine.perform_task("test_task", param1="value1")
 
             assert result == "task_result"
@@ -437,11 +490,16 @@ class TestOmniCoreEngine:
     @pytest.mark.asyncio
     async def test_perform_task_no_plugin(self, engine):
         """Test performing task without available plugin"""
-        with patch(
-            "omnicore_engine.scenario_plugin_manager.PLUGIN_REGISTRY"
-        ) as mock_registry:
-            mock_registry.get_plugin_for_task = Mock(return_value=None)
+        mock_registry = Mock()
+        mock_registry.get_plugin_for_task = Mock(return_value=None)
 
+        mock_plugin_registry_module = Mock()
+        mock_plugin_registry_module.PLUGIN_REGISTRY = mock_registry
+
+        with patch.dict(
+            "sys.modules",
+            {"omnicore_engine.plugin_registry": mock_plugin_registry_module},
+        ):
             result = await engine.perform_task("test_task")
 
             assert result is None
@@ -452,11 +510,16 @@ class TestOmniCoreEngine:
         mock_plugin = Mock()
         mock_plugin.execute = AsyncMock(side_effect=Exception("Plugin error"))
 
-        with patch(
-            "omnicore_engine.scenario_plugin_manager.PLUGIN_REGISTRY"
-        ) as mock_registry:
-            mock_registry.get_plugin_for_task = Mock(return_value=mock_plugin)
+        mock_registry = Mock()
+        mock_registry.get_plugin_for_task = Mock(return_value=mock_plugin)
 
+        mock_plugin_registry_module = Mock()
+        mock_plugin_registry_module.PLUGIN_REGISTRY = mock_registry
+
+        with patch.dict(
+            "sys.modules",
+            {"omnicore_engine.plugin_registry": mock_plugin_registry_module},
+        ):
             result = await engine.perform_task("test_task")
 
             assert result is None
