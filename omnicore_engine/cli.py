@@ -268,15 +268,6 @@ def main():
     sanitize_env_vars()
     # Use the module-level parser
     global parser
-    parser = argparse.ArgumentParser(
-        description="OmniCore Omega Pro Engine CLI with DecisionOptimizer and audit integration",
-        epilog="Examples:\n"
-        "  python -m app.cli optimize --task_file tasks.json --output results.json\n"
-        "  python -m app.cli query-agents --filters filters.json --use_dream_mode\n"
-        "  python -m app.cli audit-replay --sim_id sim1 --start_time 1624556800 --end_time 1624556900\n"
-        "  python -m app.cli plugin-install --kind CUSTOM --name my_new_plugin --version 1.0.0\n"
-        '  python -m app.cli message-bus publish my.topic \'{"key": "value"}\' --encrypt',
-    )
     parser.add_argument(
         "--host",
         type=str,

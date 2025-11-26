@@ -784,29 +784,17 @@ class ExplainAudit:
         allowed = True
         reason = ""
         try:
-            current_loop = None
+            # Fix: Check if we're in a running loop context
             try:
-                # Fix: Use get_running_loop with proper fallback
-                try:
-                    current_loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    current_loop = None
-                
-                if current_loop is not None and current_loop.is_running():
-                    # Cannot use run_until_complete in a running loop, schedule it
-                    # This is a sync function, so we'll just use the fallback
-                    allowed, reason = asyncio.run(
-                        self.policy_engine.should_auto_learn(
-                            user_id_for_policy, action_for_policy, metadata_for_policy
-                        )
-                    )
-                else:
-                    allowed, reason = asyncio.run(
-                        self.policy_engine.should_auto_learn(
-                            user_id_for_policy, action_for_policy, metadata_for_policy
-                        )
-                    )
+                current_loop = asyncio.get_running_loop()
+                # If we're inside a running loop, we cannot call asyncio.run()
+                # Skip the policy check in sync context when loop is running
+                # The async version add_entry_async should be used instead
+                logger.debug(
+                    "Running loop detected in sync add_entry. Skipping async policy check."
+                )
             except RuntimeError:
+                # No running loop - safe to use asyncio.run()
                 allowed, reason = asyncio.run(
                     self.policy_engine.should_auto_learn(
                         user_id_for_policy, action_for_policy, metadata_for_policy
