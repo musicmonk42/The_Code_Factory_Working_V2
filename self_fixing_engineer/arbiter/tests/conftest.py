@@ -109,6 +109,12 @@ def _setup_opentelemetry_context():
             def set_status(self, status):
                 pass
 
+            def record_exception(self, exception, attributes=None, timestamp=None, escaped=None):
+                pass
+
+            def add_event(self, name, attributes=None, timestamp=None):
+                pass
+
             def get_span_context(self):
                 # Return a mock span context
                 class MockSpanContext:
