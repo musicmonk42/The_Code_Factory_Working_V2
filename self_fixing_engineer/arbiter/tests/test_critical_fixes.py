@@ -52,9 +52,11 @@ class TestThreadingLockFix:
         # Check that _kind_locks uses threading.RLock
         registry = PluginRegistry()
         # The locks should be threading.RLock instances
+        # Note: threading.RLock is a factory function, the actual type is _thread.RLock
+        rlock_type = type(threading.RLock())
         for lock in registry._kind_locks.values():
             assert isinstance(
-                lock, threading.RLock
+                lock, rlock_type
             ), f"Expected RLock, got {type(lock)}"
 
 
