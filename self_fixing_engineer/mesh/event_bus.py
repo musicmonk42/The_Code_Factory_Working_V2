@@ -128,6 +128,9 @@ try:
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
+    redis = None  # type: ignore
+    ConnectionPool = None  # type: ignore
+    ClusterConnectionPool = None  # type: ignore
 
 try:
     from cryptography.fernet import Fernet, MultiFernet
@@ -550,8 +553,17 @@ def _setup_bus():
             logger.info("Redis ConnectionPool initialized.")
 
 
-def get_redis_client() -> redis.Redis:
-    """Retrieves a securely configured Redis client from the module-level pool."""
+def get_redis_client() -> "redis.Redis":
+    """Retrieves a securely configured Redis client from the module-level pool.
+    
+    Returns:
+        redis.Redis: A configured Redis client instance.
+        
+    Raises:
+        ImportError: If redis-py is not installed.
+    """
+    if not REDIS_AVAILABLE:
+        raise ImportError("Redis is not available. Please install redis-py.")
     if not _redis_connection_pool:
         _setup_bus()
     return redis.Redis(connection_pool=_redis_connection_pool)

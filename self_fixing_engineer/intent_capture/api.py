@@ -55,7 +55,7 @@ import redis.asyncio as aredis
 import sentry_sdk
 
 # --- Local Application Imports ---
-from agent_core import (
+from intent_capture.agent_core import (
     AgentError,
     ConfigurationError,
     InvalidSessionError,

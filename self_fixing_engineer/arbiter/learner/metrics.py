@@ -6,19 +6,7 @@ from typing import Any, Dict, Optional, Tuple, Type
 import structlog
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Info, Summary
 
-# Structured logging setup
-structlog.configure(
-    processors=[
-        structlog.processors.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.stdlib.add_log_level_number,
-        structlog.stdlib.add_logger_name,
-        structlog.processors.JSONRenderer(),
-    ],
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    wrapper_class=structlog.stdlib.BoundLogger,
-    cache_logger_on_first_use=True,
-)
+# Use standard logger (structlog is configured in __init__.py)
 logger = structlog.get_logger(__name__)
 
 # Global labels that will be added to all metrics

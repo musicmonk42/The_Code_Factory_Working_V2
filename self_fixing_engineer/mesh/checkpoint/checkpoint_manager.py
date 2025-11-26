@@ -221,28 +221,35 @@ class AuditLogger:
     """Structured audit logging with compliance requirements."""
 
     def __init__(self, log_path: str):
-        # Ensure the parent directory for the log file exists before initializing the handler.
-        log_dir = Path(log_path).parent
-        log_dir.mkdir(parents=True, exist_ok=True)
-
         self.logger = logging.getLogger("checkpoint.audit")
         self.logger.setLevel(logging.INFO)
         self.logger.propagate = (
             False  # <--- FIX: Prevent logs from bubbling up to root logger
         )
 
-        handler = RotatingFileHandler(
-            log_path,
-            maxBytes=Environment.LOG_MAX_BYTES,
-            backupCount=Environment.LOG_BACKUP_COUNT,
-        )
+        try:
+            # Ensure the parent directory for the log file exists before initializing the handler.
+            log_dir = Path(log_path).parent
+            log_dir.mkdir(parents=True, exist_ok=True)
 
-        formatter = logging.Formatter(
-            '{"timestamp":"%(asctime)s","level":"%(levelname)s","service":"checkpoint",'
-            '"tenant":"%(tenant)s","message":"%(message)s","context":%(context)s}'
-        )
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+            handler = RotatingFileHandler(
+                log_path,
+                maxBytes=Environment.LOG_MAX_BYTES,
+                backupCount=Environment.LOG_BACKUP_COUNT,
+            )
+
+            formatter = logging.Formatter(
+                '{"timestamp":"%(asctime)s","level":"%(levelname)s","service":"checkpoint",'
+                '"tenant":"%(tenant)s","message":"%(message)s","context":%(context)s}'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+        except (PermissionError, OSError) as e:
+            # Fall back to a NullHandler if we can't write to the log directory
+            logging.getLogger(__name__).warning(
+                f"Could not create audit log at {log_path}: {e}. Using NullHandler."
+            )
+            self.logger.addHandler(logging.NullHandler())
 
     def log(self, event: str, context: Dict[str, Any], level: str = "INFO") -> None:
         """Logs an audit event with context."""
@@ -337,7 +344,13 @@ if TRACING_AVAILABLE:
 
     # Guard against re-initializing the provider, which logs a warning.
     current_provider = trace.get_tracer_provider()
-    if not isinstance(current_provider, TracerProvider):
+    try:
+        # TracerProvider may not be a valid type for isinstance if another module
+        # has replaced it with a proxy or mock during testing
+        if TracerProvider is not None and not isinstance(current_provider, TracerProvider):
+            trace.set_tracer_provider(provider)
+    except TypeError:
+        # Handle case where TracerProvider is a proxy/mock that doesn't support isinstance
         trace.set_tracer_provider(provider)
 
     tracer = trace.get_tracer(__name__, __version__)

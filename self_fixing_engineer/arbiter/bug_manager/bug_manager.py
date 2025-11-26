@@ -346,7 +346,7 @@ class BugManager:
     ) -> None:
         # Apply rate limiting manually using instance rate_limiter
         return await self._rate_limiter.rate_limit(self._report_impl)(
-            self, error_data, severity, location, custom_details
+            error_data, severity, location, custom_details
         )
 
     async def _report_impl(

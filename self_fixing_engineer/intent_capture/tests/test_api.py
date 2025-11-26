@@ -12,8 +12,8 @@ import intent_capture.agent_core as agent_core_module
 import intent_capture.api as api_module
 import pytest
 
-# FIX: Import from agent_core directly to match how api.py imports
-from agent_core import AgentError, ConfigurationError
+# FIX: Import from intent_capture.agent_core to use absolute path
+from intent_capture.agent_core import AgentError, ConfigurationError
 from fastapi import status
 from httpx import ASGITransport, AsyncClient
 

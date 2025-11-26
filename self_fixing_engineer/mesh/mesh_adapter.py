@@ -72,7 +72,9 @@ except ImportError:
 
 try:
     import aioredis  # type: ignore
-except ImportError:
+except (ImportError, TypeError):
+    # TypeError occurs in Python 3.12+ due to asyncio.TimeoutError being the same
+    # as builtins.TimeoutError, causing duplicate base class error in aioredis
     aioredis = None
 
 try:
