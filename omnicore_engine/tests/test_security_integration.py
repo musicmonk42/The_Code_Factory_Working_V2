@@ -191,8 +191,17 @@ class TestSecurityIntegrationManager:
         manager._is_account_locked = AsyncMock(return_value=False)
         manager._audit_security_event = AsyncMock()
 
+        # Create a proper mock request object with headers that return strings
         request = Mock()
+        request.client = Mock()
         request.client.host = "192.168.1.1"
+        # Set up headers as a mock that returns string values for .get() calls
+        request.headers = Mock()
+        request.headers.get = Mock(side_effect=lambda key, default="": {
+            "user-agent": "TestAgent/1.0",
+            "accept-language": "en-US",
+            "accept-encoding": "gzip",
+        }.get(key, default))
 
         session = await manager.authenticate(
             username="testuser",
@@ -372,8 +381,9 @@ class TestSecurityMiddleware:
         manager.config.MAX_REQUEST_SIZE_BYTES = 1024
         manager.config.SECURITY_HEADERS = {"X-Frame-Options": "DENY"}
         manager.security_utils = Mock()
-        manager.security_utils._rate_limiter = Mock()
-        manager.security_utils._rate_limiter.is_allowed.return_value = True
+        # Use rate_limiter (without underscore) to match the middleware implementation
+        manager.security_utils.rate_limiter = Mock()
+        manager.security_utils.rate_limiter.is_allowed = Mock(return_value=True)
         manager._audit_security_event = AsyncMock()
 
         return SecurityMiddleware(app, manager)
@@ -402,9 +412,8 @@ class TestSecurityMiddleware:
     @pytest.mark.asyncio
     async def test_rate_limit_exceeded(self, middleware):
         """Test rate limiting"""
-        middleware.security_manager.security_utils._rate_limiter.is_allowed.return_value = (
-            False
-        )
+        # Set rate limiter to return False (not allowed)
+        middleware.rate_limiter.is_allowed = Mock(return_value=False)
 
         request = Mock()
         request.client.host = "192.168.1.1"
