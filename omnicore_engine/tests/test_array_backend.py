@@ -390,9 +390,10 @@ class TestBenchmarking:
         # Check that benchmarks were recorded
         results = backend.get_benchmarking_results()
         assert len(results) >= 3
-        assert "astype_operation" in results
-        assert "reshape_operation" in results
-        assert "sum_operation" in results
+        # BackendBenchmarker uses {module}_{operation} format for keys
+        assert "numpy_astype_operation" in results
+        assert "numpy_reshape_operation" in results
+        assert "numpy_sum_operation" in results
         backend = ArrayBackend(mode="numpy")
         backend.enable_benchmarking = True
 
