@@ -471,8 +471,7 @@ class MetaSupervisor:
                 # Use db.get_preferences as the source for config changes if a dedicated table isn't present
                 # Assuming 'config_changes' are stored as preferences under a specific user_id like "system_config_changes"
                 config_result = await self._rate_limited_operation(
-                    lambda: self.db.get_preferences(user_id="recent_config_changes")
-                    or {}
+                    lambda: self.db.get_preferences(user_id="recent_config_changes") or {}
                 )
                 self.cached_config_changes = config_result.get(
                     "changes", []

@@ -202,7 +202,6 @@ class TestPluginInspection:
                 return_value={"explanation": "test"}
             )
             return supervisor
-            return supervisor
 
     @pytest.mark.asyncio
     @patch("omnicore_engine.meta_supervisor.get_plugin_metrics")
