@@ -247,7 +247,7 @@ async def security_middleware(request: Request, call_next):
 
 app.add_middleware(SizeLimitMiddleware)
 app.add_middleware(
-    TrustedHostMiddleware, allowed_hosts=["*.yourdomain.com", "localhost", "127.0.0.1"]
+    TrustedHostMiddleware, allowed_hosts=["*.yourdomain.com", "localhost", "127.0.0.1", "testserver"]
 )
 
 
@@ -619,7 +619,7 @@ async def explain_simulation(request: Request):
 
 @router.post("/notify")
 async def notify(request: Request):
-    API_REQUESTS.labels(endpoint="/notify").inc()
+    API_REQUESTS.labels(endpoint="/notify", method="POST").inc()
     start_time = time.time()
     try:
         data = await request.json()
@@ -628,14 +628,14 @@ async def notify(request: Request):
         )
         return {"status": "received", "data": data}
     except Exception as e:
-        API_ERRORS.labels(endpoint="/notify").observe(time.time() - start_time)
+        API_ERRORS.labels(endpoint="/notify", method="POST", error_type="exception").inc()
         logger.error(f"Error in /notify: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"message": str(e)})
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_bot(chat_request: ChatRequest):
-    API_REQUESTS.labels(endpoint="/chat").inc()
+    API_REQUESTS.labels(endpoint="/chat", method="POST").inc()
     start_time = time.time()
     if not ARBITER_AVAILABLE:
         return ChatResponse(
@@ -659,7 +659,7 @@ async def chat_with_bot(chat_request: ChatRequest):
         )
         return ChatResponse(response=chatbot_response, status="success")
     except Exception as e:
-        API_ERRORS.labels(endpoint="/chat").observe(time.time() - start_time)
+        API_ERRORS.labels(endpoint="/chat", method="POST", error_type="exception").inc()
         logger.error(f"Chatbot response error: {e}", exc_info=True)
         return ChatResponse(
             response="Error processing request.", status="error", message=str(e)
@@ -683,13 +683,13 @@ async def analyze_code(codebase_path: str):
 
 @router.get("/health")
 async def health_check_api():
-    API_REQUESTS.labels(endpoint="/health").inc()
+    API_REQUESTS.labels(endpoint="/health", method="GET").inc()
     return await omnicore_engine.health_check()
 
 
 @app.post("/code-factory-workflow")
 async def code_factory_workflow(request: Request, user_id: str = Depends(get_user_id)):
-    API_REQUESTS.labels(endpoint="/code-factory-workflow").inc()
+    API_REQUESTS.labels(endpoint="/code-factory-workflow", method="POST").inc()
     payload = await request.json()
     message = Message(topic="start_workflow", payload=payload)
     await omnicore_engine.message_bus.publish(message.topic, message.payload)
@@ -713,7 +713,7 @@ async def get_feature_flag(
         None, description="Specific feature flag name to retrieve"
     )
 ):
-    API_REQUESTS.labels(endpoint="/admin/feature-flag_get").inc()
+    API_REQUESTS.labels(endpoint="/admin/feature-flag", method="GET").inc()
     return {
         "status": "not_implemented",
         "message": "Feature flag management to be implemented.",
@@ -726,7 +726,7 @@ async def set_feature_flag(
     request_body: FeatureFlagUpdateRequest,
     user_id: str = Depends(get_user_id),
 ):
-    API_REQUESTS.labels(endpoint="/admin/feature-flag_post").inc()
+    API_REQUESTS.labels(endpoint="/admin/feature-flag", method="POST").inc()
     return {
         "status": "not_implemented",
         "message": "Feature flag management to be implemented.",
@@ -737,7 +737,7 @@ async def set_feature_flag(
 async def install_plugin(
     request_body: PluginInstallRequest, user_id: str = Depends(get_user_id)
 ):
-    API_REQUESTS.labels(endpoint="/admin/plugins/install").inc()
+    API_REQUESTS.labels(endpoint="/admin/plugins/install", method="POST").inc()
     try:
         marketplace = PluginMarketplace(db=omnicore_engine.database)
         await marketplace.install_plugin(
@@ -759,7 +759,7 @@ async def install_plugin(
 async def rate_plugin(
     request_body: PluginRateRequest, user_id: str = Depends(get_user_id)
 ):
-    API_REQUESTS.labels(endpoint="/admin/plugins/rate").inc()
+    API_REQUESTS.labels(endpoint="/admin/plugins/rate", method="POST").inc()
     try:
         marketplace = PluginMarketplace(db=omnicore_engine.database)
         await marketplace.rate_plugin(
@@ -786,7 +786,7 @@ async def export_audit_proof_bundle(
     ),
     user_id: str = Depends(get_user_id),
 ):
-    API_REQUESTS.labels(endpoint="/admin/audit/export-proof-bundle").inc()
+    API_REQUESTS.labels(endpoint="/admin/audit/export-proof-bundle", method="GET").inc()
     if not omnicore_engine.audit:
         raise HTTPException(status_code=500, detail="Audit system not initialized.")
 
@@ -807,7 +807,7 @@ async def export_audit_proof_bundle(
 
 @admin_router.get("/generate-test-cases")
 async def generate_test_cases(user_id: str = Depends(get_user_id)):
-    API_REQUESTS.labels(endpoint="/admin/generate-test-cases").inc()
+    API_REQUESTS.labels(endpoint="/admin/generate-test-cases", method="GET").inc()
     if meta_supervisor_instance is None:
         raise HTTPException(status_code=500, detail="MetaSupervisor not initialized.")
 
