@@ -273,8 +273,10 @@ class Database:
         # Fix: Handle raw file paths by converting to SQLite URL
         # If the path doesn't start with a known URL scheme, assume it's a SQLite file path
         if not db_path.startswith(("sqlite://", "sqlite+aiosqlite://", "postgresql://", "mysql://", "mssql://")):
-            # Treat as a raw file path - convert to SQLite URL
-            db_path = f"sqlite+aiosqlite:///{db_path}"
+            # Treat as a raw file path - use Path to handle cross-platform paths correctly
+            file_path = Path(db_path).resolve()
+            # Convert to URI format for proper handling of Windows paths
+            db_path = f"sqlite+aiosqlite:///{file_path.as_posix()}"
             logger.info(f"Converted raw path to SQLite URL: {db_path}")
 
         # Ensure async driver is used for SQLite

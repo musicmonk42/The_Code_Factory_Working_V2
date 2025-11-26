@@ -728,13 +728,13 @@ class ExplainAudit:
                     "Event loop not running, attempting to run coroutine directly. This might block."
                 )
                 try:
-                    # Try to get or create an event loop
+                    # Create a new event loop for this synchronous context
+                    # Don't set it as the thread's default to avoid threading issues
+                    new_loop = asyncio.new_event_loop()
                     try:
-                        loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                    loop.run_until_complete(coro)
+                        new_loop.run_until_complete(coro)
+                    finally:
+                        new_loop.close()
                 except RuntimeError:
                     asyncio.run(coro)
         except RuntimeError as e:
@@ -1632,4 +1632,7 @@ class ExplainAudit:
         Returns:
             A dictionary containing the proof bundle.
         """
+        if self.proof_exporter is None:
+            logger.warning("Proof exporter not available. Returning empty bundle.")
+            return {"error": "Proof exporter not available"}
         return await self.proof_exporter.export_proof_bundle(user_id, tenant_id)
