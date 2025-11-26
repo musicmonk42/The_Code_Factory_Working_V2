@@ -121,9 +121,10 @@ from omnicore_engine.audit import ExplainAudit
 from omnicore_engine.database import Database
 
 
-# NOTE: The duplicate test definitions below have been removed as they used incorrect
-# SQLAlchemy URL format (str(tmp_path / "test.db") instead of proper sqlite+aiosqlite:/// URLs).
-# The correct versions of the tests are defined above this point and use _sqlite_url_from_path().
+# NOTE: Previously duplicated test definitions that used incorrect SQLAlchemy URL format
+# (str(tmp_path / "test.db") instead of proper sqlite+aiosqlite:/// URLs) have been removed.
+# The first test_audit_entry function defined earlier in this file (starting around line 62)
+# is the correct version that uses _sqlite_url_from_path() for proper URL formatting.
 
 
 @pytest.mark.asyncio
