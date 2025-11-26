@@ -118,6 +118,7 @@ def _setup_opentelemetry_context():
                         self.is_remote = False
                         self.trace_flags = 0
                         self.trace_state = None
+                        self.is_valid = False
 
                 return MockSpanContext()
 
@@ -149,7 +150,7 @@ def _setup_opentelemetry_context():
 
 
 # Run the OpenTelemetry context setup immediately
-# _setup_opentelemetry_context() # FIX: This line is commented out to prevent it from breaking the tests.
+_setup_opentelemetry_context()
 
 
 # -----------------------------------------------------------------------------
@@ -415,13 +416,19 @@ def _install_inmemory_exporter():
     # Define a minimal exporter
     class InMemorySpanExporter:  # pragma: no cover - trivial shim
         def __init__(self, *args, **kwargs):
-            pass
+            self._spans = []
 
         def export(self, *args, **kwargs):
             return None
 
         def shutdown(self, *args, **kwargs):
             return None
+
+        def clear(self):
+            self._spans = []
+
+        def get_finished_spans(self):
+            return self._spans
 
     # Install on parent module (attribute)
     setattr(parent_mod, "InMemorySpanExporter", InMemorySpanExporter)
@@ -430,15 +437,21 @@ def _install_inmemory_exporter():
 
 
 # Try the standard import first; if it fails or the attribute is absent, install our shim.
+_USING_SHIM = False
 try:
-    # Some envs expose it here:
-
-    # If import succeeded but attribute missing on the module object, still install shim
-    mod = sys.modules.get("opentelemetry.sdk.trace.export")
-    if mod is None or not hasattr(mod, "InMemorySpanExporter"):
+    # Try to import the real InMemorySpanExporter
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter as _RealExporter
+    # Verify it has the methods we need
+    if not hasattr(_RealExporter, 'clear'):
         _install_inmemory_exporter()
+        _USING_SHIM = True
+except ImportError:
+    # Module not available, install our shim
+    _install_inmemory_exporter()
+    _USING_SHIM = True
 except Exception:
     _install_inmemory_exporter()
+    _USING_SHIM = True
 
 
 # -----------------------------------------------------------------------------
@@ -542,6 +555,7 @@ def mock_opentelemetry(monkeypatch):
                     self.is_remote = False
                     self.trace_flags = 0
                     self.trace_state = None
+                    self.is_valid = False
 
             return MockSpanContext()
 
