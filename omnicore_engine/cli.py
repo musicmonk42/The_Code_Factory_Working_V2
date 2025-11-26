@@ -786,7 +786,6 @@ def main():
         metadata = vars(parsed_args)
 
         CLI_COMMANDS.labels(command=action).inc()
-        start_time_cli = time.time()
 
         allowed, reason = await policy_engine_cli.should_auto_learn(
             "CLI", action, user_id, metadata
