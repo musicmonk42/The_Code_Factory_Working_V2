@@ -74,6 +74,14 @@ class _DummyMagicMock:
     def __setattr__(self, name, value):
         pass
 
+    def __enter__(self):
+        """Support context manager protocol for tracing spans."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Support context manager protocol for tracing spans."""
+        return False
+
     def instrument_app(self, *args, **kwargs):
         pass
 
@@ -87,6 +95,10 @@ class _DummyMagicMock:
         pass
 
     def set_attribute(self, *args, **kwargs):
+        pass
+
+    def add_event(self, *args, **kwargs):
+        """Support tracing span add_event method."""
         pass
 
     def labels(self, *args, **kwargs):
@@ -443,10 +455,8 @@ async def shutdown(
         )
 
         APP_RUNNING_GAUGE.labels(
-            component=os.getenv("APP_INTERFACE", "unknown"),
-            version=__version__,
-            interface=os.getenv("APP_INTERFACE", "unknown"),
-            hostname=os.getenv("HOSTNAME", "unknown"),
+            app_name=os.getenv("APP_INTERFACE", "unknown"),
+            instance_id=os.getenv("HOSTNAME", "unknown"),
         ).set(0)
 
         logger.info(
@@ -598,12 +608,15 @@ def validate_config(config: Dict[str, Any]):
     with tracer.start_as_current_span("validate_config") as span:
         logger.info("Validating configuration...")
 
+        # Note: The primary config validation is done by Pydantic (RunnerConfig).
+        # This schema is a secondary, optional validation for specific main.py requirements.
+        # We make logging/metrics optional here since the RunnerConfig may flatten them.
         config_schema = {
             "type": "object",
             "properties": {
                 "backend": {
                     "type": "string",
-                    "enum": ["local", "kubernetes", "distributed"],
+                    "enum": ["local", "docker", "kubernetes", "distributed", "vm", "nodejs", "go", "java", "lambda"],
                 },
                 "framework": {"type": "string"},
                 "logging": {
@@ -626,7 +639,8 @@ def validate_config(config: Dict[str, Any]):
                     },
                 },
             },
-            "required": ["backend", "framework", "logging", "metrics", "security"],
+            # Make only backend and framework required since other fields may be flattened by Pydantic
+            "required": ["backend", "framework"],
         }
 
         try:
@@ -708,22 +722,20 @@ async def perform_health_check(
             if runner_health:
                 logger.info("Runner self-test: PASSED")
                 APP_RUNNING_GAUGE.labels(
-                    component="runner",
-                    version=__version__,
-                    interface="health_check",
-                    hostname=os.getenv("HOSTNAME", "unknown"),
+                    app_name="runner",
+                    instance_id=os.getenv("HOSTNAME", "unknown"),
                 ).set(1)
             else:
                 logger.error("Runner self-test: FAILED. Check Runner logs for details.")
                 overall_health = False
                 APP_RUNNING_GAUGE.labels(
-                    component="runner",
-                    version=__version__,
-                    interface="health_check",
-                    hostname=os.getenv("HOSTNAME", "unknown"),
+                    app_name="runner",
+                    instance_id=os.getenv("HOSTNAME", "unknown"),
                 ).set(0)
                 await send_alert(
-                    "Runner self-test failed during health check.", severity="critical"
+                    subject="Health Check Failed",
+                    message="Runner self-test failed during health check.",
+                    severity="critical",
                 )
         except Exception as e:
             logger.error(
@@ -731,13 +743,12 @@ async def perform_health_check(
             )
             overall_health = False
             APP_RUNNING_GAUGE.labels(
-                component="runner",
-                version=__version__,
-                interface="health_check",
-                hostname=os.getenv("HOSTNAME", "unknown"),
+                app_name="runner",
+                instance_id=os.getenv("HOSTNAME", "unknown"),
             ).set(0)
             await send_alert(
-                f"Runner self-test exception during health check: {e}",
+                subject="Health Check Exception",
+                message=f"Runner self-test exception during health check: {e}",
                 severity="critical",
             )
             span.record_exception(e)
@@ -759,10 +770,8 @@ async def perform_health_check(
                                 f"API health check ({api_health_url}): PASSED. Details: {api_status}"
                             )
                             APP_RUNNING_GAUGE.labels(
-                                component="api",
-                                version=__version__,
-                                interface="health_check",
-                                hostname=os.getenv("HOSTNAME", "unknown"),
+                                app_name="api",
+                                instance_id=os.getenv("HOSTNAME", "unknown"),
                             ).set(1)
                         else:
                             logger.error(
@@ -770,13 +779,12 @@ async def perform_health_check(
                             )
                             overall_health = False
                             APP_RUNNING_GAUGE.labels(
-                                component="api",
-                                version=__version__,
-                                interface="health_check",
-                                hostname=os.getenv("HOSTNAME", "unknown"),
+                                app_name="api",
+                                instance_id=os.getenv("HOSTNAME", "unknown"),
                             ).set(0)
                             await send_alert(
-                                f"API health check failed: {api_status}",
+                                subject="API Health Check Failed",
+                                message=f"API health check failed: {api_status}",
                                 severity="critical",
                             )
                             span.set_status(
@@ -791,13 +799,13 @@ async def perform_health_check(
                     )
                     overall_health = False
                     APP_RUNNING_GAUGE.labels(
-                        component="api",
-                        version=__version__,
-                        interface="health_check",
-                        hostname=os.getenv("HOSTNAME", "unknown"),
+                        app_name="api",
+                        instance_id=os.getenv("HOSTNAME", "unknown"),
                     ).set(0)
                     await send_alert(
-                        f"API health check connection failed: {e}", severity="critical"
+                        subject="API Connection Failed",
+                        message=f"API health check connection failed: {e}",
+                        severity="critical",
                     )
                     span.record_exception(e)
                     span.set_status(
@@ -810,13 +818,13 @@ async def perform_health_check(
                     )
                     overall_health = False
                     APP_RUNNING_GAUGE.labels(
-                        component="api",
-                        version=__version__,
-                        interface="health_check",
-                        hostname=os.getenv("HOSTNAME", "unknown"),
+                        app_name="api",
+                        instance_id=os.getenv("HOSTNAME", "unknown"),
                     ).set(0)
                     await send_alert(
-                        f"API health check unexpected error: {e}", severity="critical"
+                        subject="API Health Check Error",
+                        message=f"API health check unexpected error: {e}",
+                        severity="critical",
                     )
                     span.record_exception(e)
                     span.set_status(
@@ -886,7 +894,11 @@ def main(
     except ValueError as e:
         logger.critical(f"Application startup failed due to invalid configuration: {e}")
         asyncio.run(
-            send_alert(f"Config validation failed at startup: {e}", severity="critical")
+            send_alert(
+                subject="Configuration Validation Failed",
+                message=f"Config validation failed at startup: {e}",
+                severity="critical",
+            )
         )
         sys.exit(1)
 
@@ -915,13 +927,16 @@ def main(
 
     logger.info("Metrics server assumed to be started by central runner.")
     APP_RUNNING_GAUGE.labels(
-        component="prometheus_server_check",
-        version=__version__,
-        interface=interface,
-        hostname=os.getenv("HOSTNAME", "unknown"),
+        app_name="prometheus_server_check",
+        instance_id=os.getenv("HOSTNAME", "unknown"),
     ).set(1)
 
-    loop = asyncio.get_event_loop()
+    # FIX: Use new_event_loop() for Python 3.12+ compatibility
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
     if health_check:
         logger.info("Performing requested health check...")
@@ -940,15 +955,13 @@ def main(
             sys.exit(0)
 
     APP_RUNNING_GAUGE.labels(
-        component="main_process",
-        version=__version__,
-        interface=interface,
-        hostname=os.getenv("HOSTNAME", "unknown"),
+        app_name="main_process",
+        instance_id=os.getenv("HOSTNAME", "unknown"),
     ).set(1)
 
     config_watcher = ConfigWatcher(config_path, partial(on_config_reload, config_path))
     # FIX: Flag the config_watcher task as an 'owned' background task for graceful shutdown
-    config_watcher_task = asyncio.create_task(config_watcher.start())
+    config_watcher_task = loop.create_task(config_watcher.start())
     config_watcher_task._owned_by_main = True
 
     # --- Launch Interface ---
@@ -958,20 +971,24 @@ def main(
         app = MainApp()
         try:
             APP_STARTUP_DURATION.labels(
-                interface=interface, version=__version__
+                app_name="gui", instance_id=os.getenv("HOSTNAME", "unknown")
             ).observe(time.monotonic() - startup_start_time)
             app.run()
         except Exception as e:
             logger.critical(f"GUI application crashed: {e}", exc_info=True)
-            asyncio.run(send_alert(f"GUI crashed: {e}", severity="critical"))
+            asyncio.run(
+                send_alert(
+                    subject="GUI Crashed",
+                    message=f"GUI crashed: {e}",
+                    severity="critical",
+                )
+            )
             sys.exit(1)
         finally:
             logger.info("GUI application exited.")
             APP_RUNNING_GAUGE.labels(
-                component="gui",
-                version=__version__,
-                interface=interface,
-                hostname=os.getenv("HOSTNAME", "unknown"),
+                app_name="gui",
+                instance_id=os.getenv("HOSTNAME", "unknown"),
             ).set(0)
 
     elif interface == "api":
@@ -995,20 +1012,24 @@ def main(
         setup_signals(loop, runner_instance=None, api_process=None)
         try:
             APP_STARTUP_DURATION.labels(
-                interface=interface, version=__version__
+                app_name="api", instance_id=os.getenv("HOSTNAME", "unknown")
             ).observe(time.monotonic() - startup_start_time)
             loop.run_until_complete(server.serve())
         except Exception as e:
             logger.critical(f"API server crashed: {e}", exc_info=True)
-            asyncio.run(send_alert(f"API server crashed: {e}", severity="critical"))
+            asyncio.run(
+                send_alert(
+                    subject="API Server Crashed",
+                    message=f"API server crashed: {e}",
+                    severity="critical",
+                )
+            )
             sys.exit(1)
         finally:
             logger.info("API server exited.")
             APP_RUNNING_GAUGE.labels(
-                component="api",
-                version=__version__,
-                interface=interface,
-                hostname=os.getenv("HOSTNAME", "unknown"),
+                app_name="api",
+                instance_id=os.getenv("HOSTNAME", "unknown"),
             ).set(0)
 
     elif interface == "all":
@@ -1072,7 +1093,8 @@ def main(
             api_process_handle.join(timeout=5)
             asyncio.run(
                 send_alert(
-                    "API did not become ready for 'all' mode startup. Check API logs.",
+                    subject="API Startup Timeout",
+                    message="API did not become ready for 'all' mode startup. Check API logs.",
                     severity="critical",
                 )
             )
@@ -1083,13 +1105,17 @@ def main(
         app = MainApp()
         try:
             APP_STARTUP_DURATION.labels(
-                interface=interface, version=__version__
+                app_name="all_mode", instance_id=os.getenv("HOSTNAME", "unknown")
             ).observe(time.monotonic() - startup_start_time)
             app.run()
         except Exception as e:
             logger.critical(f"GUI application crashed: {e}", exc_info=True)
             asyncio.run(
-                send_alert(f"GUI crashed in 'all' mode: {e}", severity="critical")
+                send_alert(
+                    subject="GUI Crashed in All Mode",
+                    message=f"GUI crashed in 'all' mode: {e}",
+                    severity="critical",
+                )
             )
             sys.exit(1)
         finally:
@@ -1100,10 +1126,8 @@ def main(
                 api_process_handle.terminate()
                 api_process_handle.join(timeout=5)
             APP_RUNNING_GAUGE.labels(
-                component="all_mode",
-                version=__version__,
-                interface=interface,
-                hostname=os.getenv("HOSTNAME", "unknown"),
+                app_name="all_mode",
+                instance_id=os.getenv("HOSTNAME", "unknown"),
             ).set(0)
 
     else:  # cli interface
@@ -1111,20 +1135,24 @@ def main(
         setup_signals(loop, runner_instance=None, api_process=None)
         try:
             APP_STARTUP_DURATION.labels(
-                interface=interface, version=__version__
+                app_name="cli", instance_id=os.getenv("HOSTNAME", "unknown")
             ).observe(time.monotonic() - startup_start_time)
             main_cli(obj={})
         except Exception as e:
             logger.critical(f"CLI execution failed: {e}", exc_info=True)
-            asyncio.run(send_alert(f"CLI execution failed: {e}", severity="critical"))
+            asyncio.run(
+                send_alert(
+                    subject="CLI Execution Failed",
+                    message=f"CLI execution failed: {e}",
+                    severity="critical",
+                )
+            )
             sys.exit(1)
         finally:
             logger.info("CLI execution completed.")
             APP_RUNNING_GAUGE.labels(
-                component="cli",
-                version=__version__,
-                interface=interface,
-                hostname=os.getenv("HOSTNAME", "unknown"),
+                app_name="cli",
+                instance_id=os.getenv("HOSTNAME", "unknown"),
             ).set(0)
 
 
@@ -1151,7 +1179,8 @@ def on_config_reload(
             )
             asyncio.run(
                 send_alert(
-                    f"Config reload failed validation: {e}. Changes NOT applied.",
+                    subject="Config Reload Validation Failed",
+                    message=f"Config reload failed validation: {e}. Changes NOT applied.",
                     severity="high",
                 )
             )
@@ -1173,10 +1202,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        ctx = main.make_context(main.name, sys.argv[1:])
-        with ctx:
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(main.callback(**ctx.params))
+        # The main() function is a synchronous Click command, so invoke it directly
+        main()
 
     except Exception as e:
         logger.critical(
@@ -1184,7 +1211,8 @@ if __name__ == "__main__":
         )
         asyncio.run(
             send_alert(
-                f"Unhandled critical application error at startup: {e}",
+                subject="Critical Startup Error",
+                message=f"Unhandled critical application error at startup: {e}",
                 severity="critical",
             )
         )

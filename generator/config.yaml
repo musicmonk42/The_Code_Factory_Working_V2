@@ -20,6 +20,10 @@ resources:  # Resource limits per task.
 log_sinks:  # List of log sinks (stream, file, cloud).
   - type: stream
     config: {}  # Sink-specific config (e.g., file: path=/logs/runner.log).
+logging:  # Logging configuration (required for validation).
+  level: "INFO"  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+metrics:  # Metrics configuration (required for validation).
+  port: 9090  # Prometheus metrics port.
 network:
   allow_internet: true  # Allow internet access in sandbox.
 security:
