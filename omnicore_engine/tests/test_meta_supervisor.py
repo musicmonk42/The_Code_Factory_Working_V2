@@ -424,6 +424,10 @@ class TestThresholdOptimization:
             supervisor = MetaSupervisor(interval=60, backend_mode="torch")
             supervisor.db = Mock()
             supervisor.db.save_preferences = AsyncMock()
+            # Initialize models for tests that require torch-backed functionality
+            if TORCH_AVAILABLE:
+                supervisor.rl_model = supervisor._init_rl_model()
+                supervisor.prediction_model = supervisor._init_prediction_model()
             return supervisor
 
     @pytest.mark.asyncio
@@ -487,6 +491,10 @@ class TestModelManagement:
             # Use regular Mock with return_value since lambda wraps sync calls
             supervisor.db.save_preferences = Mock()
             supervisor.db.get_preferences = Mock()
+            # Initialize models for tests that require torch-backed functionality
+            if TORCH_AVAILABLE:
+                supervisor.rl_model = supervisor._init_rl_model()
+                supervisor.prediction_model = supervisor._init_prediction_model()
             return supervisor
 
     @pytest.mark.asyncio
