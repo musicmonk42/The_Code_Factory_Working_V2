@@ -240,3 +240,5 @@ reasoner.log.*
 *.pfx
 !*.example.pem
 !*.example.key
+agentic_audit_integrity.json
+integration_test_report.json
