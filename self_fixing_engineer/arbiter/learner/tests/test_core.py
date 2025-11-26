@@ -452,34 +452,38 @@ class TestLearner:
     @pytest.mark.asyncio
     async def test_encryption_for_encrypted_domain(self, learner):
         """Test that values are encrypted for encrypted domains."""
-        # Add domain to encrypted list
+        # Save original and add domain to encrypted list
+        original_encrypted_domains = ArbiterConfig.ENCRYPTED_DOMAINS.copy()
         ArbiterConfig.ENCRYPTED_DOMAINS = ["SecretDomain"]
 
-        with patch("arbiter.learner.core.should_auto_learn") as mock_policy:
-            mock_policy.return_value = (True, None)
+        try:
+            with patch("arbiter.learner.core.should_auto_learn") as mock_policy:
+                mock_policy.return_value = (True, None)
 
-            with patch("arbiter.learner.core.validate_data") as mock_validate:
-                mock_validate.return_value = {"is_valid": True}
+                with patch("arbiter.learner.core.validate_data") as mock_validate:
+                    mock_validate.return_value = {"is_valid": True}
 
-                with patch("arbiter.learner.core.generate_explanation") as mock_explain:
-                    mock_explain.return_value = "Encrypted explanation"
+                    with patch("arbiter.learner.core.generate_explanation") as mock_explain:
+                        mock_explain.return_value = "Encrypted explanation"
 
-                    with patch("arbiter.learner.core.persist_knowledge"):
-                        result = await learner.learn_new_thing(
-                            domain="SecretDomain",
-                            key="secret_key",
-                            value={"secret": "data"},
-                            user_id="test_user",
-                        )
+                        with patch("arbiter.learner.core.persist_knowledge"):
+                            result = await learner.learn_new_thing(
+                                domain="SecretDomain",
+                                key="secret_key",
+                                value={"secret": "data"},
+                                user_id="test_user",
+                            )
 
-                        assert result["status"] == "learned"
+                            assert result["status"] == "learned"
 
-                        # Check that the value in memory is encrypted (bytes)
-                        stored = learner.arbiter.state["memory"]["SecretDomain"][
-                            "secret_key"
-                        ]
+                            # Check that the value in memory is encrypted (bytes)
+                            stored = learner.arbiter.state["memory"]["SecretDomain"][
+                                "secret_key"
+                            ]
                         assert isinstance(stored["value"], bytes)
                         assert stored["value"].startswith(b"v1:")  # Key ID prefix
+        finally:
+            ArbiterConfig.ENCRYPTED_DOMAINS = original_encrypted_domains
 
     @pytest.mark.asyncio
     async def test_self_audit_task(self, learner):

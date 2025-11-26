@@ -416,13 +416,19 @@ def _install_inmemory_exporter():
     # Define a minimal exporter
     class InMemorySpanExporter:  # pragma: no cover - trivial shim
         def __init__(self, *args, **kwargs):
-            pass
+            self._spans = []
 
         def export(self, *args, **kwargs):
             return None
 
         def shutdown(self, *args, **kwargs):
             return None
+
+        def clear(self):
+            self._spans = []
+
+        def get_finished_spans(self):
+            return self._spans
 
     # Install on parent module (attribute)
     setattr(parent_mod, "InMemorySpanExporter", InMemorySpanExporter)
