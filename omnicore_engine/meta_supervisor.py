@@ -470,10 +470,10 @@ class MetaSupervisor:
             try:
                 # Use db.get_preferences as the source for config changes if a dedicated table isn't present
                 # Assuming 'config_changes' are stored as preferences under a specific user_id like "system_config_changes"
-                self.cached_config_changes = await self._rate_limited_operation(
-                    lambda: self.db.get_preferences(user_id="recent_config_changes")
-                    or {}
-                ).get(
+                config_result = await self._rate_limited_operation(
+                    lambda: self.db.get_preferences(user_id="recent_config_changes") or {}
+                )
+                self.cached_config_changes = config_result.get(
                     "changes", []
                 )  # Expects a dict like {"changes": [...]}
 
@@ -516,7 +516,11 @@ class MetaSupervisor:
             self.logger.debug(
                 f"Main loop iteration finished in {elapsed_time:.2f}s. Sleeping for {sleep_duration:.2f}s."
             )
-            await asyncio.wait([self._stopped.wait()], timeout=sleep_duration)
+            # Use asyncio.wait_for with Event.wait() instead of asyncio.wait with coroutine list
+            try:
+                await asyncio.wait_for(self._stopped.wait(), timeout=sleep_duration)
+            except asyncio.TimeoutError:
+                pass  # Normal timeout, continue loop
 
     async def _rate_limited_operation(
         self, operation: Callable, *args, **kwargs

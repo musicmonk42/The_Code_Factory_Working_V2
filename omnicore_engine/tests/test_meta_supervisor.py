@@ -3,6 +3,7 @@ Test suite for omnicore_engine/meta_supervisor.py
 Tests the MetaSupervisor orchestration and optimization system.
 """
 
+import asyncio
 import os
 
 # Add the parent directory to path for imports
@@ -86,28 +87,33 @@ class TestInputValidation:
         assert _is_anomalous(record) == False  # Always returns False in placeholder
 
 
+def create_mock_settings():
+    """Helper function to create properly configured mock settings with real numerical values"""
+    settings = Mock()
+    settings.DATABASE_URL = "sqlite:///:memory:"
+    settings.REDIS_URL = "redis://localhost"
+    settings.PLUGIN_ERROR_THRESHOLD = 0.1
+    settings.TEST_FAILURE_THRESHOLD = 0.2
+    settings.ETHICS_DRIFT_THRESHOLD = 0.05
+    settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+    settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+    settings.ENABLE_PROACTIVE_MODEL_RETRAINING = False
+    settings.DB_RETRY_ATTEMPTS = 3
+    settings.DB_RETRY_DELAY = 0.1
+    settings.MODEL_RETRAIN_EPOCHS = 5
+    settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+    settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
+    settings.AUDIT_LOG_RETENTION_DAYS = 30
+    return settings
+
+
 class TestMetaSupervisorInitialization:
     """Test MetaSupervisor initialization"""
 
     @pytest.fixture
     def mock_settings(self):
         """Create mock settings"""
-        settings = Mock()
-        settings.DATABASE_URL = "sqlite:///:memory:"
-        settings.REDIS_URL = "redis://localhost"
-        settings.PLUGIN_ERROR_THRESHOLD = 0.1
-        settings.TEST_FAILURE_THRESHOLD = 0.2
-        settings.ETHICS_DRIFT_THRESHOLD = 0.05
-        settings.SUPERVISOR_RATE_LIMIT_OPS = 10
-        settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
-        settings.ENABLE_PROACTIVE_MODEL_RETRAINING = False
-        settings.DB_RETRY_ATTEMPTS = 3
-        settings.DB_RETRY_DELAY = 0.1
-        settings.MODEL_RETRAIN_EPOCHS = 5
-        settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
-        settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
-        settings.AUDIT_LOG_RETENTION_DAYS = 30
-        return settings
+        return create_mock_settings()
 
     @patch("omnicore_engine.meta_supervisor.settings")
     def test_initialization(self, mock_global_settings):
@@ -133,14 +139,25 @@ class TestMetaSupervisorInitialization:
         mock_global_settings.PLUGIN_ERROR_THRESHOLD = 0.1
         mock_global_settings.TEST_FAILURE_THRESHOLD = 0.2
         mock_global_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+        mock_global_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+        mock_global_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+        mock_global_settings.DB_RETRY_ATTEMPTS = 3
+        mock_global_settings.DB_RETRY_DELAY = 0.1
+        mock_global_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+        mock_global_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
         supervisor = MetaSupervisor(interval=60, backend_mode="torch")
 
         assert supervisor.backend.mode == "torch"
-        assert supervisor.rl_model is not None
-        if TORCH_AVAILABLE:
-            assert isinstance(supervisor.rl_model, torch.nn.Module)
-        assert supervisor.prediction_model is not None
+        # rl_model and prediction_model are initialized in async initialize(), not __init__
+        # So after __init__, they are None until initialize() is called
+        assert supervisor.rl_model is None
+        assert supervisor.prediction_model is None
+        
+        # Verify that _init_rl_model would work with torch backend
+        model = supervisor._init_rl_model()
+        assert model is not None
+        assert isinstance(model, torch.nn.Module)
 
     @pytest.mark.asyncio
     @patch("omnicore_engine.meta_supervisor.Database")
@@ -166,6 +183,7 @@ class TestPluginInspection:
     def supervisor(self):
         """Create supervisor instance with mocked dependencies"""
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
+            # Set ALL required numerical settings as real values
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
@@ -173,6 +191,8 @@ class TestPluginInspection:
             mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
             mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
             mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
 
             # Use numpy backend to avoid torch dependency
             supervisor = MetaSupervisor(interval=60, backend_mode="numpy")
@@ -253,6 +273,10 @@ class TestTestInspection:
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
             mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
             mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60)
             supervisor.db = Mock()
@@ -307,6 +331,10 @@ class TestConfigInspection:
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
             mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
             mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60)
             supervisor.db = Mock()
@@ -327,24 +355,29 @@ class TestConfigInspection:
         """Test config inspection detects and rolls back ethical drift"""
         mock_record.return_value = None
 
-        supervisor.cached_config_changes = [
+        test_changes = [
             {
                 "user_id": "user1",
                 "new_value": {"setting": "bad"},
                 "previous": {"setting": "good"},
             }
         ]
+        # Override _rate_limited_operation to return our test data
+        supervisor._rate_limited_operation = AsyncMock(return_value=test_changes)
         supervisor.detect_ethical_drift = AsyncMock(return_value=True)
 
         await supervisor.inspect_config()
 
+        # Should be called once for our single config change
         supervisor.detect_ethical_drift.assert_called_once()
-        # Rollback should be called via asyncio.to_thread
 
     @pytest.mark.asyncio
     async def test_detect_ethical_drift_policy_denied(self, supervisor):
         """Test ethical drift detection when policy denies"""
-        supervisor.policy_engine.should_auto_learn = AsyncMock(
+        # Use regular Mock since the call goes through lambda wrapper
+        # which makes it synchronous (returns the coroutine, not awaits it)
+        # But the lambda returns the result directly, so we need sync mock
+        supervisor.policy_engine.should_auto_learn = Mock(
             return_value=(False, "Denied")
         )
 
@@ -356,10 +389,11 @@ class TestConfigInspection:
     @pytest.mark.asyncio
     async def test_detect_ethical_drift_high_impact(self, supervisor):
         """Test ethical drift detection with high knowledge graph impact"""
-        supervisor.policy_engine.should_auto_learn = AsyncMock(
+        # Use regular Mock since the call goes through lambda wrapper
+        supervisor.policy_engine.should_auto_learn = Mock(
             return_value=(True, "Allowed")
         )
-        supervisor.knowledge_graph.add_fact = AsyncMock(
+        supervisor.knowledge_graph.add_fact = Mock(
             return_value={"ethical_impact": 0.8}
         )
         supervisor.thresholds["ethics_drift"] = 0.05
@@ -382,6 +416,10 @@ class TestThresholdOptimization:
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
             mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
             mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60, backend_mode="torch")
             supervisor.db = Mock()
@@ -389,6 +427,7 @@ class TestThresholdOptimization:
             return supervisor
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(not TORCH_AVAILABLE, reason="torch not available")
     async def test_optimize_thresholds_with_rl_model(self, supervisor_torch):
         """Test threshold optimization with RL model"""
         supervisor_torch._get_system_state = AsyncMock(
@@ -413,6 +452,10 @@ class TestThresholdOptimization:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+            mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+            mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
 
             supervisor = MetaSupervisor(interval=60, backend_mode="numpy")
 
@@ -432,14 +475,22 @@ class TestModelManagement:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+            mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+            mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60, backend_mode="torch")
             supervisor.db = Mock()
-            supervisor.db.save_preferences = AsyncMock()
-            supervisor.db.get_preferences = AsyncMock()
+            # Use regular Mock with return_value since lambda wraps sync calls
+            supervisor.db.save_preferences = Mock()
+            supervisor.db.get_preferences = Mock()
             return supervisor
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(not TORCH_AVAILABLE, reason="torch not available")
     async def test_save_models(self, supervisor_torch):
         """Test saving models to database"""
         await supervisor_torch.save_models()
@@ -451,21 +502,10 @@ class TestModelManagement:
         assert "prediction_model" in call_args[1]["value"]
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(not TORCH_AVAILABLE, reason="torch not available")
     async def test_load_models_specific_version(self, supervisor_torch):
         """Test loading specific model version"""
-        model_data = {
-            "version": "test_version",
-            "rl_model": torch.save(
-                supervisor_torch.rl_model.state_dict(), open("/tmp/test.pt", "wb")
-            ),
-            "prediction_model": torch.save(
-                supervisor_torch.prediction_model.state_dict(),
-                open("/tmp/test2.pt", "wb"),
-            ),
-            "timestamp": time.time(),
-        }
-
-        # Mock the hex encoding properly
+        # Create proper model data with hex-encoded model states
         import io
 
         rl_buffer = io.BytesIO()
@@ -473,8 +513,12 @@ class TestModelManagement:
         torch.save(supervisor_torch.rl_model.state_dict(), rl_buffer)
         torch.save(supervisor_torch.prediction_model.state_dict(), pred_buffer)
 
-        model_data["rl_model"] = rl_buffer.getvalue().hex()
-        model_data["prediction_model"] = pred_buffer.getvalue().hex()
+        model_data = {
+            "version": "test_version",
+            "rl_model": rl_buffer.getvalue().hex(),
+            "prediction_model": pred_buffer.getvalue().hex(),
+            "timestamp": time.time(),
+        }
 
         supervisor_torch.db.get_preferences.return_value = model_data
 
@@ -493,9 +537,16 @@ class TestSupervisorLifecycle:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+            mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+            mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60)
-            supervisor.save_models = AsyncMock()
+            # Use regular Mock since save_models goes through _rate_limited_operation
+            supervisor.save_models = Mock()
             supervisor.explainer = Mock()
             supervisor.explainer.explain = AsyncMock(
                 return_value={"explanation": "test"}
@@ -514,6 +565,12 @@ class TestSupervisorLifecycle:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+            mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+            mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60)
             supervisor.db = Mock()
@@ -541,14 +598,29 @@ class TestSupervisorLifecycle:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+            mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+            mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60)
-            supervisor.save_models = AsyncMock()
+            # Use regular Mock since save_models goes through _rate_limited_operation
+            supervisor.save_models = Mock()
 
-            # Add mock sub-supervisor
+            # Create a mock task that properly mimics an asyncio Task
             mock_task = Mock()
             mock_task.done.return_value = False
-            mock_task.cancel = Mock()
+            mock_task.cancel.return_value = None
+            
+            # Create an async coroutine for when the task is awaited after cancellation
+            async def cancelled_task():
+                raise asyncio.CancelledError()
+            
+            # Mock __await__ to make it awaitable
+            mock_task.__await__ = lambda self: cancelled_task().__await__()
+            
             supervisor.sub_supervisors["sub_test"] = mock_task
 
             await supervisor.stop()
@@ -566,10 +638,19 @@ class TestReportGeneration:
         """Test mentor report generation"""
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
+            mock_settings.TEST_FAILURE_THRESHOLD = 0.2
+            mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+            mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+            mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60)
             supervisor.db = Mock()
-            supervisor.db.query_audit_records = AsyncMock(
+            # Use regular Mock since query_audit_records goes through _rate_limited_operation
+            supervisor.db.query_audit_records = Mock(
                 return_value=[
                     {"kind": "meta_supervisor", "explanation": "Lesson 1"},
                     {"kind": "config_rollback", "detail": "Ethical issue"},
@@ -601,6 +682,12 @@ class TestMainLoop:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
             mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+            mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+            mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(
                 interval=0.01
@@ -611,6 +698,8 @@ class TestMainLoop:
             supervisor.inspect_config = AsyncMock()
             supervisor.optimize_thresholds = AsyncMock()
             supervisor.publish_meta_status = AsyncMock()
+            # Mock _rate_limited_operation to return a dict with "changes" key
+            supervisor._rate_limited_operation = AsyncMock(return_value={"changes": []})
 
             with patch("omnicore_engine.meta_supervisor.MAX_ITERATIONS", 2):
                 await supervisor.run()
@@ -623,6 +712,14 @@ class TestMainLoop:
         """Test run loop with specific focus"""
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
+            mock_settings.TEST_FAILURE_THRESHOLD = 0.2
+            mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+            mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+            mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=0.01, focus="plugins")
             supervisor.initialize = AsyncMock()
@@ -630,9 +727,12 @@ class TestMainLoop:
             supervisor.inspect_tests = AsyncMock()
             supervisor.inspect_config = AsyncMock()
             supervisor.publish_meta_status = AsyncMock()
-            supervisor._stopped.set()  # Stop immediately
-
-            await supervisor.run()
+            # Mock _rate_limited_operation to return a dict with "changes" key
+            supervisor._rate_limited_operation = AsyncMock(return_value={"changes": []})
+            
+            # Run with max iterations of 1 to verify focus works
+            with patch("omnicore_engine.meta_supervisor.MAX_ITERATIONS", 1):
+                await supervisor.run()
 
             supervisor.inspect_plugins.assert_called()
             supervisor.inspect_tests.assert_not_called()
@@ -647,12 +747,21 @@ class TestMetaPolicies:
         """Test setting meta-policy when allowed"""
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
+            mock_settings.TEST_FAILURE_THRESHOLD = 0.2
+            mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+            mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+            mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60)
             supervisor.db = Mock()
-            supervisor.db.save_preferences = AsyncMock()
+            # Use regular Mock since calls go through _rate_limited_operation with lambda
+            supervisor.db.save_preferences = Mock()
             supervisor.policy_engine = Mock()
-            supervisor.policy_engine.should_auto_learn = AsyncMock(
+            supervisor.policy_engine.should_auto_learn = Mock(
                 return_value=(True, "Allowed")
             )
             supervisor.explainer = Mock()
@@ -673,10 +782,19 @@ class TestMetaPolicies:
         """Test setting meta-policy when denied"""
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
+            mock_settings.TEST_FAILURE_THRESHOLD = 0.2
+            mock_settings.ETHICS_DRIFT_THRESHOLD = 0.05
+            mock_settings.SUPERVISOR_RATE_LIMIT_OPS = 10
+            mock_settings.SUPERVISOR_RATE_LIMIT_PERIOD = 60
+            mock_settings.DB_RETRY_ATTEMPTS = 3
+            mock_settings.DB_RETRY_DELAY = 0.1
+            mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
+            mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60)
             supervisor.policy_engine = Mock()
-            supervisor.policy_engine.should_auto_learn = AsyncMock(
+            # Use regular Mock since calls go through _rate_limited_operation with lambda
+            supervisor.policy_engine.should_auto_learn = Mock(
                 return_value=(False, "Denied")
             )
 
