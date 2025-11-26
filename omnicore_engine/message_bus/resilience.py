@@ -37,8 +37,7 @@ class CircuitBreaker:
             if self.failure_count >= self.failure_threshold and self.state == "closed":
                 self.state = "open"
                 logger.warning(
-                    "Circuit breaker opened due to repeated failures",
-                    threshold=self.failure_threshold,
+                    f"Circuit breaker opened due to repeated failures (threshold={self.failure_threshold})"
                 )
 
     def record_success(self):

@@ -117,6 +117,7 @@ except ImportError:
     pass
 
 TORCH_AVAILABLE = False
+torch = None  # Define torch as None for test patching compatibility
 try:
     import torch
 
@@ -496,24 +497,6 @@ class ArrayBackend:
     """
     Unified array backend class with support for multiple backends.
     """
-
-    def __init__(self, mode: str = "auto", enable_benchmarking: bool = False):
-        self.mode = mode
-        self.enable_benchmarking = enable_benchmarking
-        self.benchmarker = Benchmarker() if enable_benchmarking else None
-        self.xp = xp  # Use the global xp
-
-        if self.mode == "auto":
-            if CUPY_AVAILABLE:
-                self.mode = "cupy"
-            elif DASK_AVAILABLE:
-                self.mode = "dask"
-            elif TORCH_AVAILABLE:
-                self.mode = "torch"
-            else:
-                self.mode = "numpy"
-
-        get_logger().info(f"ArrayBackend initialized in {self.mode} mode.")
 
     def array(self, data: Any, dtype: Optional[Any] = None) -> Any:
         """
@@ -1184,6 +1167,7 @@ class ArrayBackend:
         use_quantum=False,
         use_neuromorphic=False,
         logger: Optional[logging.Logger] = None,
+        enable_benchmarking: bool = False,
     ):
         """
         Initialize the ArrayBackend with the specified mode and hardware preferences.
@@ -1195,6 +1179,7 @@ class ArrayBackend:
             use_quantum (bool): Whether to use Qiskit for quantum computing.
             use_neuromorphic (bool): Whether to use NengoLoihi for neuromorphic computing.
             logger (Optional[logging.Logger]): Logger instance to use. If None, a new one is created.
+            enable_benchmarking (bool): Whether to enable benchmarking for array operations.
         """
         self.logger = logger if logger else logging.getLogger(__name__)
         self.mode = mode
@@ -1204,8 +1189,8 @@ class ArrayBackend:
         self.use_neuromorphic = use_neuromorphic and HAS_NENGO_LOIHI
         self.xp = self._init_backend()
         self.benchmarker = BackendBenchmarker()
-        # Control benchmarking overhead with a setting
-        self.enable_benchmarking = getattr(
+        # Control benchmarking overhead with a setting or explicit parameter
+        self.enable_benchmarking = enable_benchmarking or getattr(
             settings(), "enable_array_backend_benchmarking", False
         )
         if self.enable_benchmarking:
@@ -1226,9 +1211,13 @@ class ArrayBackend:
         """
         self.message_bus = message_bus
         if self.message_bus:
-            computation_filter = MessageFilter(
-                lambda payload: isinstance(payload, dict) and "type" in payload
-            )
+            # Only use MessageFilter if available (may be None if message_bus module not imported)
+            if MessageFilter is not None:
+                computation_filter = MessageFilter(
+                    lambda payload: isinstance(payload, dict) and "type" in payload
+                )
+            else:
+                computation_filter = None
             # FIXED: Decoupled message processing from the core ArrayBackend class.
             # A new dedicated handler function is introduced to maintain separation of concerns.
             self.message_bus.subscribe(
@@ -1254,8 +1243,7 @@ class ArrayBackend:
             return
 
         self.logger.info(
-            f"Received computation task on topic: {message.topic}",
-            trace_id=message.trace_id,
+            f"Received computation task on topic: {message.topic} (trace_id={message.trace_id})"
         )
 
         try:
@@ -1270,8 +1258,7 @@ class ArrayBackend:
                     self.logger.debug("Decrypted message payload for computation task.")
                 except Exception as e:
                     self.logger.error(
-                        f"Failed to decrypt message payload for {message.topic}: {e}",
-                        trace_id=message.trace_id,
+                        f"Failed to decrypt message payload for {message.topic}: {e} (trace_id={message.trace_id})"
                     )
                     await self.message_bus.publish(
                         f"computation.error.{message.trace_id}",
@@ -1362,15 +1349,13 @@ class ArrayBackend:
                     encrypt=True,
                 )
                 self.logger.info(
-                    f"Published computation result for {message.topic}",
-                    trace_id=message.trace_id,
+                    f"Published computation result for {message.topic} (trace_id={message.trace_id})"
                 )
 
         except Exception as e:
             self.logger.error(
-                f"ArrayBackend computation failed for {message.topic}: {e}",
+                f"ArrayBackend computation failed for {message.topic}: {e} (trace_id={message.trace_id})",
                 exc_info=True,
-                trace_id=message.trace_id,
             )
             await self.message_bus.publish(
                 f"computation.error.{message.trace_id}",
