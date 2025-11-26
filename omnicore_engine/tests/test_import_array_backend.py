@@ -70,11 +70,11 @@ def test_module_imports_cleanly():
     This ensures import-time side effects are minimal.
     """
 
-    # Note: Due to prometheus_client's global registry, we cannot safely 
+    # Note: Due to prometheus_client's global registry, we cannot safely
     # reload the module without causing duplicate metric errors.
     # Instead, we verify that the module has been imported correctly
     # and has the expected attributes.
-    
+
     import omnicore_engine.array_backend as m
 
     # cp should be defined (even if None) for test patching

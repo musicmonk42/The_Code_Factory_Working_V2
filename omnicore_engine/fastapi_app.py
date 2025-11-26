@@ -247,7 +247,8 @@ async def security_middleware(request: Request, call_next):
 
 app.add_middleware(SizeLimitMiddleware)
 app.add_middleware(
-    TrustedHostMiddleware, allowed_hosts=["*.yourdomain.com", "localhost", "127.0.0.1", "testserver"]
+    TrustedHostMiddleware,
+    allowed_hosts=["*.yourdomain.com", "localhost", "127.0.0.1", "testserver"],
 )
 
 
@@ -628,7 +629,9 @@ async def notify(request: Request):
         )
         return {"status": "received", "data": data}
     except Exception as e:
-        API_ERRORS.labels(endpoint="/notify", method="POST", error_type="exception").inc()
+        API_ERRORS.labels(
+            endpoint="/notify", method="POST", error_type="exception"
+        ).inc()
         logger.error(f"Error in /notify: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"message": str(e)})
 
@@ -839,7 +842,9 @@ async def fix_imports(file: UploadFile = Depends(validate_upload)):
         if AIManager is None:
             raise HTTPException(
                 status_code=503,
-                detail={"message": "AI Import Fixer is not available. Required module not installed."}
+                detail={
+                    "message": "AI Import Fixer is not available. Required module not installed."
+                },
             )
 
         ai_manager = AIManager()

@@ -26,7 +26,9 @@ async def test_end_to_end_plugin_api(tmp_path):
     test_file.write_text("data")
 
     # Patch both AIManager at the module level and its instantiation
-    with patch("omnicore_engine.fastapi_app.AIManager", Mock(return_value=mock_ai_manager)):
+    with patch(
+        "omnicore_engine.fastapi_app.AIManager", Mock(return_value=mock_ai_manager)
+    ):
         with open(test_file, "rb") as f:
             response = client.post("/fix-imports/", files={"file": ("test.py", f)})
 
@@ -95,7 +97,9 @@ async def test_concurrent_plugin_execution(tmp_path):
     test_file.write_text("data")
 
     # Patch AIManager for all concurrent requests
-    with patch("omnicore_engine.fastapi_app.AIManager", Mock(return_value=mock_ai_manager)):
+    with patch(
+        "omnicore_engine.fastapi_app.AIManager", Mock(return_value=mock_ai_manager)
+    ):
         # Define an async function to make a single API request.
         async def make_request():
             with open(test_file, "rb") as f:

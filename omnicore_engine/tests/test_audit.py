@@ -163,14 +163,14 @@ async def test_audit_db_failure(mocker, tmp_path):
         # Verify the entry is in the buffer
         assert len(audit.buffer) >= 1
 
-        # Call _flush_buffer - it should either raise an exception or 
+        # Call _flush_buffer - it should either raise an exception or
         # the error_raised flag should be set
         try:
             await audit._flush_buffer()
         except Exception as e:
             # Exception was properly raised
             assert "DB error" in str(e)
-        
+
         # The save_audit_record mock should have been called
         assert error_raised, "DB save was not attempted"
 
@@ -204,7 +204,6 @@ async def test_merkle_tree_integrity(tmp_path):
 
     # Assert that the roots are different after adding entries
     assert root1 != root2
-
 
 
 # --- Test Snapshot and Replay ---

@@ -85,15 +85,15 @@ class TestMetricCreation:
         # Use an existing metric that was already created at module load time
         # This tests the "get" functionality of _get_or_create_metric
         from omnicore_engine.metrics import PLUGIN_EXECUTIONS_TOTAL
-        
+
         # Get the same metric using the function
         result = _get_or_create_metric(
-            Counter, 
-            "omnicore_plugin_executions_total", 
+            Counter,
+            "omnicore_plugin_executions_total",
             "Different description",
-            ("kind", "name")
+            ("kind", "name"),
         )
-        
+
         # Should return the existing metric (prometheus adds _total suffix internally)
         # Check that the result is a Counter with the expected base name
         assert "omnicore_plugin_executions" in result._name
@@ -103,13 +103,15 @@ class TestMetricCreation:
     def test_get_metric_type_mismatch_warning(self):
         """Test warning when metric type doesn't match"""
         # First, register a counter metric with the test name in the test_registry
-        counter_metric = Counter("test_mismatch", "Test metric", registry=self.test_registry)
-        
+        counter_metric = Counter(
+            "test_mismatch", "Test metric", registry=self.test_registry
+        )
+
         with patch("omnicore_engine.metrics.REGISTRY", self.test_registry):
             with patch("omnicore_engine.metrics.logger") as mock_logger:
                 # Try to get as Gauge - should warn because metric already exists as Counter
                 result = _get_or_create_metric(Gauge, "test_mismatch", "Test metric")
-                
+
                 # Verify the warning was called
                 mock_logger.warning.assert_called()
 
@@ -360,9 +362,10 @@ class TestPrometheusServerStartup:
         """Test server starts with environment variable port"""
         # This test verifies that the metrics module CAN start a server
         # The actual port used depends on what's available at import time
-        # Since the module has already started a server, we just verify 
+        # Since the module has already started a server, we just verify
         # the start_http_server function is available and callable
         from omnicore_engine.metrics import start_http_server
+
         assert callable(start_http_server)
 
     def test_server_startup_default_port(self):
@@ -370,6 +373,7 @@ class TestPrometheusServerStartup:
         # The metrics module starts the server at import time
         # We verify that the module has the expected port handling logic
         import omnicore_engine.metrics
+
         # The module should have loaded successfully
         assert hasattr(omnicore_engine.metrics, "logger")
 
@@ -379,6 +383,7 @@ class TestPrometheusServerStartup:
         # We verify this by checking that the module imported successfully
         # (if it didn't handle the error, it would have raised during import)
         import omnicore_engine.metrics
+
         # The module should have loaded successfully with the warning handler
         assert hasattr(omnicore_engine.metrics, "REGISTRY")
 

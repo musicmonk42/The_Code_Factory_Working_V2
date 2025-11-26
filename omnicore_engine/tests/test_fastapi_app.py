@@ -422,7 +422,8 @@ class TestAdminEndpoints:
             token = self.create_auth_token()
 
             response = client.get(
-                "/admin/generate-test-cases", headers={"Authorization": f"Bearer {token}"}
+                "/admin/generate-test-cases",
+                headers={"Authorization": f"Bearer {token}"},
             )
 
             assert response.status_code == 200
