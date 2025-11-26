@@ -362,27 +362,57 @@ async def test_fallback_corrupted(
 
 
 @pytest.mark.asyncio
-async def test_fallback_corrupted(config_store_with_fallback, caplog):
+async def test_fallback_corrupted(tmp_path, mocker, caplog):
     """Tests that a corrupted fallback file is detected and ignored."""
-    checksum_file = config_store_with_fallback.fallback_path + ".sha256"
-    async with aiofiles.open(checksum_file, "w") as f:
-        await f.write("invalid_hash")
-
-    with caplog.at_level(logging.ERROR):
-        # We manually call this to isolate the test, as get_config would try other methods
-        await config_store_with_fallback._load_from_fallback()
-        assert "Fallback file integrity check failed" in caplog.text
-        # The cache should remain empty after a failed integrity check
-        assert (
-            len(
-                [
-                    k
-                    for k in config_store_with_fallback._cache.keys()
-                    if k == "fallback_key"
-                ]
-            )
-            == 0
-        )
+    # Set up file paths
+    fallback_file = tmp_path / "fallback.json"
+    checksum_file = tmp_path / "fallback.json.sha256"
+    fallback_data = {"fallback_key": "fallback_value"}
+    
+    content_str = json.dumps(fallback_data)
+    content_bytes = content_str.encode("utf-8")
+    fallback_file.write_bytes(content_bytes)
+    
+    # Write an INVALID checksum to simulate corruption
+    checksum_file.write_text("invalid_hash_value")
+    
+    # Create mock for text file reading (fallback data)
+    mock_text_file = mocker.AsyncMock()
+    mock_text_file.read = mocker.AsyncMock(return_value=content_str)
+    mock_text_file.__aenter__.return_value = mock_text_file
+    mock_text_file.__aexit__ = mocker.AsyncMock()
+    
+    # Create mock for binary file reading (for hash calculation)
+    mock_bin_file = mocker.AsyncMock()
+    mock_bin_file.read = mocker.AsyncMock(return_value=content_bytes)
+    mock_bin_file.__aenter__.return_value = mock_bin_file
+    mock_bin_file.__aexit__ = mocker.AsyncMock()
+    
+    # Create mock for checksum file reading - returns INVALID hash
+    mock_checksum_file = mocker.AsyncMock()
+    mock_checksum_file.read = mocker.AsyncMock(return_value="invalid_hash_value")
+    mock_checksum_file.__aenter__.return_value = mock_checksum_file
+    mock_checksum_file.__aexit__ = mocker.AsyncMock()
+    
+    def open_side_effect(path, mode="r", **kwargs):
+        path_str = str(path)
+        if path_str == str(fallback_file):
+            return mock_text_file if mode == "r" else mock_bin_file
+        if path_str == str(checksum_file):
+            return mock_checksum_file
+        return mocker.AsyncMock()
+    
+    patch_target = "arbiter.arbiter_growth.config_store.aiofiles.open"
+    with patch(patch_target, side_effect=open_side_effect):
+        with patch("etcd3.client", side_effect=Exception("etcd fail")):
+            with patch("os.path.exists", return_value=True):
+                store = ConfigStore(fallback_path=str(fallback_file))
+                
+                with caplog.at_level(logging.ERROR):
+                    await store._load_from_fallback()
+                    assert "Fallback file integrity check failed" in caplog.text
+                    # The cache should remain empty after a failed integrity check
+                    assert "fallback_key" not in store._cache
 
 
 @pytest.mark.asyncio
