@@ -86,7 +86,7 @@ _bootstrap_import_paths()
 # Now import compat/core modules with fallbacks for both contexts
 try:
     # Preferred absolute (installed package)
-    from self_healing_import_fixer.analyzer.graph import ImportGraphAnalyzer
+    from self_healing_import_fixer.analyzer.core_graph import ImportGraphAnalyzer
     from self_healing_import_fixer.import_fixer.compat_core import (
         PRODUCTION_MODE,
         alert_operator,
@@ -98,7 +98,7 @@ try:
 except ModuleNotFoundError:
     # Bare package (when executed inside package dir)
     try:
-        from analyzer.graph import ImportGraphAnalyzer
+        from analyzer.core_graph import ImportGraphAnalyzer
         from import_fixer.compat_core import (
             PRODUCTION_MODE,
             alert_operator,
@@ -109,7 +109,7 @@ except ModuleNotFoundError:
         )
     except ModuleNotFoundError:
         # Last chance: after sys.path bootstrapping, try again
-        from analyzer.graph import ImportGraphAnalyzer
+        from analyzer.core_graph import ImportGraphAnalyzer
         from import_fixer.compat_core import (
             PRODUCTION_MODE,
             alert_operator,
