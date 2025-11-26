@@ -118,6 +118,7 @@ def _setup_opentelemetry_context():
                         self.is_remote = False
                         self.trace_flags = 0
                         self.trace_state = None
+                        self.is_valid = False
 
                 return MockSpanContext()
 
@@ -542,6 +543,7 @@ def mock_opentelemetry(monkeypatch):
                     self.is_remote = False
                     self.trace_flags = 0
                     self.trace_state = None
+                    self.is_valid = False
 
             return MockSpanContext()
 
