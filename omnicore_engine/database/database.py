@@ -52,26 +52,32 @@ from .models import (
 )
 
 # --- optional feedback manager dependency -----------------------------------
+_FeedbackManagerClass = None
 try:
-    from omnicore_engine.feedback_manager import FeedbackManager, FeedbackType
+    from omnicore_engine.feedback_manager import FeedbackManager as _FeedbackManagerClass
+    from omnicore_engine.feedback_manager import FeedbackType
 except ImportError:
-    try:
-        from arbiter.feedback import FeedbackManager, FeedbackType
-    except ImportError:
-        # Provide a no-op shim so imports don't fail in environments/tests that
-        # don't ship the feedback manager module.
-        class FeedbackType:
-            BUG_REPORT = "BUG_REPORT"
-            INFO = "INFO"
-            WARNING = "WARNING"
-            ERROR = "ERROR"
+    _FeedbackManagerClass = None
 
-        class FeedbackManager:
-            def __init__(self, *args, **kwargs):
-                pass
+# If omnicore_engine.feedback_manager not found, provide a compatible mock
+# Note: arbiter.feedback.FeedbackManager has different interface (add_feedback vs record_feedback)
+if _FeedbackManagerClass is None:
+    # Provide a no-op shim so imports don't fail in environments/tests that
+    # don't ship the feedback manager module.
+    class FeedbackType:
+        BUG_REPORT = "BUG_REPORT"
+        INFO = "INFO"
+        WARNING = "WARNING"
+        ERROR = "ERROR"
 
-            async def record_feedback(self, **kwargs):
-                return None
+    class FeedbackManager:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def record_feedback(self, **kwargs):
+            return None
+else:
+    FeedbackManager = _FeedbackManagerClass
 
 
 settings = ArbiterConfig()
@@ -350,13 +356,39 @@ class Database:
         # Replace existing Fernet initialization with enterprise encryption
         self.encrypter = self.security_utils  # Use security_utils encryption methods
 
-        self.feedback_manager = FeedbackManager(
-            db_dsn=settings.DB_PATH,
-            redis_url=settings.REDIS_URL,
-            encryption_key=settings.ENCRYPTION_KEY.get_secret_value(),
-        )
-        self.policy_engine = PolicyEngine(arbiter_instance=None)
-        self.knowledge_graph = KnowledgeGraph()
+        # Initialize FeedbackManager if available
+        if FeedbackManager is not None:
+            try:
+                self.feedback_manager = FeedbackManager(config=settings)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to initialize FeedbackManager in Database: {e}. "
+                    f"Feedback features will be unavailable."
+                )
+                self.feedback_manager = None
+        else:
+            self.feedback_manager = None
+            logger.warning("FeedbackManager not available for Database.")
+
+        # Initialize PolicyEngine if available
+        if PolicyEngine is not None:
+            try:
+                self.policy_engine = PolicyEngine(arbiter_instance=None)
+            except Exception as e:
+                logger.warning(f"Failed to initialize PolicyEngine: {e}")
+                self.policy_engine = None
+        else:
+            self.policy_engine = None
+
+        # Initialize KnowledgeGraph if available
+        if KnowledgeGraph is not None:
+            try:
+                self.knowledge_graph = KnowledgeGraph()
+            except Exception as e:
+                logger.warning(f"Failed to initialize KnowledgeGraph: {e}")
+                self.knowledge_graph = None
+        else:
+            self.knowledge_graph = None
 
         self.plugin_registry = (
             plugin_registry.PLUGIN_REGISTRY if plugin_registry else None

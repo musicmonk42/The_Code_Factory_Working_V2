@@ -655,21 +655,7 @@ class OmniCoreEngine:
                 await self._initialize_component_instance(
                     "feedback_manager",
                     FeedbackManager,
-                    db_dsn=getattr(self.settings, "database_path", None)
-                    or getattr(self.settings, "DB_PATH", "sqlite:///./omnicore.db"),
-                    redis_url=getattr(
-                        self.settings, "redis_url", None
-                    )
-                    or getattr(self.settings, "REDIS_URL", "redis://localhost:6379/0"),
-                    encryption_key=self.settings.encryption_key.get_secret_value()
-                    if hasattr(self.settings, "encryption_key")
-                    and self.settings.encryption_key
-                    else getattr(
-                        self.settings, "ENCRYPTION_KEY", None
-                    ).get_secret_value()
-                    if hasattr(self.settings, "ENCRYPTION_KEY")
-                    and getattr(self.settings, "ENCRYPTION_KEY", None)
-                    else "default-key",
+                    config=self.settings,
                 )
                 self.feedback_manager = await self._get_component_instance(
                     "feedback_manager"

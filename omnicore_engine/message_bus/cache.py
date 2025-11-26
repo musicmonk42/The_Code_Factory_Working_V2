@@ -1,10 +1,11 @@
 # message_bus/cache.py
 
-import logging
 import threading
 import time
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 class MessageCache:
