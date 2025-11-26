@@ -823,7 +823,7 @@ def main():
                 )
             return result
         except Exception as e:
-            CLI_ERRORS.labels(command=action).observe(time.time() - start_time_cli)
+            CLI_ERRORS.labels(command=action, error_type=type(e).__name__).inc()
             logger.error(f"Command {action} failed: {e}", exc_info=True)
             await feedback_manager_cli.record_feedback(
                 user_id=user_id,
