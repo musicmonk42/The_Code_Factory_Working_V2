@@ -143,7 +143,7 @@ class SFEAgentState(AgentState):
 # ----------------------------------------------------------------------
 #  Indexes for performance
 # ----------------------------------------------------------------------
-# Note: ix_agent_state_name and ix_agentstate_name indexes are defined 
+# Note: ix_agent_state_name and ix_agentstate_name indexes are defined
 # in the parent arbiter/agent_state.py model (line 137, 558).
 # Only add indexes for columns that don't already have them.
 Index("ix_explain_audit_kind", ExplainAuditRecord.kind)

@@ -620,7 +620,17 @@ def validate_config(config: Dict[str, Any]):
             "properties": {
                 "backend": {
                     "type": "string",
-                    "enum": ["local", "docker", "kubernetes", "distributed", "vm", "nodejs", "go", "java", "lambda"],
+                    "enum": [
+                        "local",
+                        "docker",
+                        "kubernetes",
+                        "distributed",
+                        "vm",
+                        "nodejs",
+                        "go",
+                        "java",
+                        "lambda",
+                    ],
                 },
                 "framework": {"type": "string"},
                 "logging": {

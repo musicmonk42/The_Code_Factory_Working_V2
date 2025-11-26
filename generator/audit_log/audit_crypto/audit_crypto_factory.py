@@ -219,7 +219,9 @@ _IS_TESTING = (
 # Multi-env mode expects sections like [development], [production] in the config file
 environments = False
 # Use absolute path to ensure the config file is found regardless of working directory
-_module_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_module_dir = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 _config_path = os.path.join(_module_dir, "audit_config.yaml")
 settings = Dynaconf(
     environments=environments,  # <-- disabled in tests

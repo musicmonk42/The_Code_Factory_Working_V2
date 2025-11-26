@@ -411,7 +411,9 @@ class MetaSupervisor:
         The model predicts a probability of failure.
         """
         if torch is None:
-            self.logger.info("Prediction model not initialized: torch is not available. Using random predictor.")
+            self.logger.info(
+                "Prediction model not initialized: torch is not available. Using random predictor."
+            )
             return lambda x: np.random.random()  # Fallback to a random predictor
         if self.backend.mode == "torch":
             self.logger.debug("Initializing prediction model for PyTorch backend.")
@@ -1047,7 +1049,12 @@ class MetaSupervisor:
         """
         self.logger.info("Attempting to save RL and prediction model states.")
         try:
-            if torch is not None and self.backend.mode == "torch" and self.rl_model and self.prediction_model:
+            if (
+                torch is not None
+                and self.backend.mode == "torch"
+                and self.rl_model
+                and self.prediction_model
+            ):
                 import io
 
                 version = str(uuid.uuid4())
@@ -1088,7 +1095,12 @@ class MetaSupervisor:
             f"Attempting to load RL and prediction model states (version: {version if version else 'latest'})."
         )
         try:
-            if torch is not None and self.backend.mode == "torch" and self.rl_model and self.prediction_model:
+            if (
+                torch is not None
+                and self.backend.mode == "torch"
+                and self.rl_model
+                and self.prediction_model
+            ):
                 model_data = None
                 if version:
                     model_data = await self._rate_limited_operation(
@@ -1789,9 +1801,7 @@ class MetaSupervisor:
 
         return np.array(features, dtype=np.float32), np.array(targets, dtype=np.float32)
 
-    def _compute_rl_reward(
-        self, actions_tensor: Any, test_metrics: Dict
-    ) -> Any:
+    def _compute_rl_reward(self, actions_tensor: Any, test_metrics: Dict) -> Any:
         """
         Computes the reward signal for the Reinforcement Learning (RL) model based on system performance
         and how well the taken actions (threshold adjustments) align with meta-policies.

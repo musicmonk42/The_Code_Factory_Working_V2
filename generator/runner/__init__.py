@@ -227,7 +227,10 @@ if _runner_logging is not None and "runner.logging" not in _sys.modules:
     _sys.modules["runner.logging"] = _runner_logging
 
 # NEW: Allows `from runner.feedback_handlers import ...` to resolve to `runner.runner_feedback_handlers`
-if _runner_feedback_handlers is not None and "runner.feedback_handlers" not in _sys.modules:
+if (
+    _runner_feedback_handlers is not None
+    and "runner.feedback_handlers" not in _sys.modules
+):
     _sys.modules["runner.feedback_handlers"] = _runner_feedback_handlers
 
 # NEW: Allows `from runner.alerting import ...` to resolve to the alerting module
