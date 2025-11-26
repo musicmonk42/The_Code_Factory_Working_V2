@@ -11,16 +11,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+# Save original modules before mocking
+_ORIGINAL_MODULES = {}
+_MODULES_TO_MOCK = [
+    "opentelemetry", "opentelemetry.trace", "opentelemetry.metrics",
+    "plugins.dlt_backend", "syslog",
+]
+for _mod in _MODULES_TO_MOCK:
+    if _mod in sys.modules:
+        _ORIGINAL_MODULES[_mod] = sys.modules[_mod]
+
 # Mock third-party dependencies before importing
-sys.modules["cryptography.fernet"] = MagicMock()
-sys.modules["cryptography.hazmat.primitives"] = MagicMock()
-sys.modules["cryptography.hazmat.primitives.kdf.pbkdf2"] = MagicMock()
+# NOTE: Do NOT mock cryptography - other tests need the real module
 sys.modules["opentelemetry"] = MagicMock()
 sys.modules["opentelemetry.trace"] = MagicMock()
 sys.modules["opentelemetry.metrics"] = MagicMock()
 sys.modules["plugins.dlt_backend"] = MagicMock()
 sys.modules["syslog"] = MagicMock()
-sys.modules["prometheus_client"] = MagicMock()
 
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

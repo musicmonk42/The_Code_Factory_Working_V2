@@ -57,30 +57,8 @@ Base = declarative_base()
 def setup_mocks():
     """Setup all necessary mocks before importing arbiter."""
 
-    # Pydantic mocks
-    class MockSecretStr:
-        def __init__(self, value):
-            self._value = value
-
-        def get_secret_value(self):
-            return self._value
-
-    class MockField:
-        def __init__(self, default=None, **kwargs):
-            self.default = default
-
-    mock_pydantic = MagicMock()
-    mock_pydantic.BaseModel = MagicMock
-    mock_pydantic.HttpUrl = str
-    mock_pydantic.SecretStr = MockSecretStr
-    mock_pydantic.Field = MockField
-    mock_pydantic.validator = lambda *args, **kwargs: lambda f: f
-    sys.modules["pydantic"] = mock_pydantic
-
-    # Pydantic settings mock
-    mock_pydantic_settings = MagicMock()
-    mock_pydantic_settings.BaseSettings = MagicMock
-    sys.modules["pydantic_settings"] = mock_pydantic_settings
+    # NOTE: Do NOT mock pydantic or cryptography - other tests need them
+    # Pydantic mocks have been removed to avoid conflicts with other test files
 
     # All other dependencies
     mocks = {
@@ -89,15 +67,12 @@ def setup_mocks():
         "httpx": MagicMock(),
         "aiohttp": MagicMock(),
         "aioredis": MagicMock(),
-        "prometheus_client": MagicMock(),
         "sentry_sdk": MagicMock(),
         "sklearn": MagicMock(),
         "sklearn.linear_model": MagicMock(),
         "sklearn.model_selection": MagicMock(),
         "uvloop": MagicMock(),
         "aiolimiter": MagicMock(),
-        "cryptography": MagicMock(),
-        "cryptography.fernet": MagicMock(),
         "gymnasium": MagicMock(),
         "stable_baselines3": MagicMock(),
         "stable_baselines3.common": MagicMock(),
@@ -114,21 +89,7 @@ def setup_mocks():
     mocks["tenacity"].stop_after_attempt = MagicMock()
     mocks["tenacity"].wait_exponential = MagicMock()
 
-    # Prometheus mocks
-    counter_mock = MagicMock()
-    counter_mock.labels = MagicMock(return_value=MagicMock())
-    mocks["prometheus_client"].Counter = MagicMock(return_value=counter_mock)
-
-    gauge_mock = MagicMock()
-    gauge_mock.labels = MagicMock(return_value=MagicMock())
-    mocks["prometheus_client"].Gauge = MagicMock(return_value=gauge_mock)
-
-    summary_mock = MagicMock()
-    summary_mock.labels = MagicMock(return_value=MagicMock())
-    mocks["prometheus_client"].Summary = MagicMock(return_value=summary_mock)
-
-    # Cryptography mocks - Keep the original Fernet for now
-    # We'll handle it differently in the fixtures
+    # NOTE: prometheus_client mocks removed to avoid conflicts with other tests
 
     # Gym mocks
     class MockSpaces:

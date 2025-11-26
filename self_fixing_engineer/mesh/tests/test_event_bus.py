@@ -79,8 +79,28 @@ class MockTracer:
         return SpanContext()
 
 
+# Store original modules for restoration
+_ORIGINAL_MODULES = {}
+
 # Setup mocks for dependencies EXCEPT Prometheus metrics
 def setup_mocks():
+    global _ORIGINAL_MODULES
+    
+    # Save original modules before mocking
+    modules_to_mock = [
+        "redis", "redis.asyncio", "redis.exceptions",
+        "aiolimiter",
+        "opentelemetry", "opentelemetry.trace", "opentelemetry.instrumentation",
+        "opentelemetry.instrumentation.asyncio", "opentelemetry.instrumentation.redis",
+        "opentelemetry.sdk", "opentelemetry.sdk.resources", "opentelemetry.sdk.trace",
+        "opentelemetry.sdk.trace.export", "opentelemetry.exporter",
+        "opentelemetry.exporter.otlp", "opentelemetry.exporter.otlp.proto",
+        "opentelemetry.exporter.otlp.proto.http", "opentelemetry.exporter.otlp.proto.http.trace_exporter",
+    ]
+    for mod in modules_to_mock:
+        if mod in sys.modules:
+            _ORIGINAL_MODULES[mod] = sys.modules[mod]
+    
     # Redis mocks with real exceptions
     mock_redis = MagicMock()
     mock_redis_async = MagicMock()
@@ -97,18 +117,7 @@ def setup_mocks():
     sys.modules["redis.asyncio"].ClusterConnectionPool = MagicMock()
     sys.modules["redis.exceptions"] = mock_redis_exceptions
 
-    # Cryptography mocks
-    mock_fernet = MagicMock()
-    mock_fernet.Fernet = MagicMock
-    mock_multi_fernet = MagicMock()
-    mock_multi_fernet.encrypt = MagicMock(side_effect=lambda x: x + b"_encrypted")
-    mock_multi_fernet.decrypt = MagicMock(side_effect=lambda x: x[:-10])
-    mock_fernet.MultiFernet = MagicMock(return_value=mock_multi_fernet)
-    sys.modules["cryptography"] = MagicMock()
-    sys.modules["cryptography.fernet"] = mock_fernet
-
-    # Pydantic mocks
-    sys.modules["pydantic"] = MagicMock()
+    # NOTE: Do NOT mock cryptography.fernet - other tests need the real module
 
     # Other dependency mocks
     sys.modules["aiolimiter"] = MagicMock()

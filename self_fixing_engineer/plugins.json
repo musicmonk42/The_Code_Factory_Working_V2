@@ -29,6 +29,21 @@
       "signature": null,
       "is_quarantined": false,
       "health": null
+    },
+    "knowledge_loader": {
+      "name": "knowledge_loader",
+      "kind": "core_service",
+      "version": "1.0.0",
+      "author": "Arbiter Team",
+      "description": null,
+      "tags": [],
+      "loaded_at": 1764174167.4121137,
+      "plugin_type": "instance",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
     }
   },
   "analytics": {
