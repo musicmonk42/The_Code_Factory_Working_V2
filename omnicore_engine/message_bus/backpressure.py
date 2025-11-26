@@ -1,13 +1,13 @@
 # message_bus/backpressure.py
 
-import logging
+import structlog
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .sharded_message_bus import ShardedMessageBus
 
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class BackpressureManager:

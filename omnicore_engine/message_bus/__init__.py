@@ -25,7 +25,7 @@ from .hash_ring import ConsistentHashRing
 from .message_types import Message, MessageSchema
 from .rate_limit import RateLimiter, RateLimitError
 from .resilience import CircuitBreaker, RetryPolicy
-from .sharded_message_bus import ShardedMessageBus
+from .sharded_message_bus import PluginMessageBusAdapter, ShardedMessageBus
 
 # Integrations (Conditionally available)
 try:
@@ -81,6 +81,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     # Core
     "ShardedMessageBus",
+    "PluginMessageBusAdapter",
     "Message",
     "MessageSchema",
     "MessageFilter",

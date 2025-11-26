@@ -90,18 +90,20 @@ try:
     from self_healing_import_fixer.import_fixer.fixer_ai import (
         get_ai_suggestions as get_ai_suggestions_real,
     )
+    FIXER_AI_AVAILABLE = True
 except ImportError as e:
-    logger.critical(
-        f"CRITICAL: fixer_ai module not found: {e}. AI-powered refactoring suggestions are a critical feature and cannot be disabled in production. Aborting startup."
+    logger.warning(
+        f"fixer_ai module not found: {e}. AI-powered refactoring suggestions will be unavailable. "
+        f"Install openai and tiktoken to enable AI features."
     )
-    try:
-        alert_operator(
-            "CRITICAL: fixer_ai module missing. AI healing disabled. Aborting.",
-            level="CRITICAL",
-        )
-    except Exception:
-        pass
-    raise RuntimeError(f"[CRITICAL][AST] Missing fixer_ai dependency: {e}")
+    FIXER_AI_AVAILABLE = False
+
+    # Provide no-op fallbacks
+    async def get_ai_patch_real(*args, **kwargs):
+        return None
+
+    async def get_ai_suggestions_real(*args, **kwargs):
+        return []
 
 _BG_LOOP = None
 _BG_THREAD = None
@@ -147,6 +149,11 @@ def get_ai_refactoring_suggestion(context: str) -> str:
     audit_logger.log_event(
         "ai_suggestion_request", context_snippet=scrubbed_context[:200]
     )
+
+    if not FIXER_AI_AVAILABLE:
+        logger.warning("AI suggestions unavailable - FIXER_AI_AVAILABLE is False")
+        return ""
+
     try:
         suggestion = get_ai_suggestions_real(scrubbed_context)
         suggestion_str = "\n".join(suggestion)

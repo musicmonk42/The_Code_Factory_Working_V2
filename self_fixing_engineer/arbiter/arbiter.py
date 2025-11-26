@@ -72,7 +72,15 @@ try:
 except ImportError as e:
     UVLOOP_AVAILABLE = False
     logging.warning(f"Optional dependency missing: {e} (uvloop)")
-import sentry_sdk
+
+try:
+    import sentry_sdk
+
+    SENTRY_AVAILABLE = True
+except ImportError as e:
+    SENTRY_AVAILABLE = False
+    sentry_sdk = None
+    logging.warning(f"Optional dependency missing: {e} (sentry_sdk)")
 
 try:
     import redis.asyncio as redis
@@ -210,7 +218,7 @@ class MyArbiterConfig(BaseSettings):
 
 
 # --- Sentry Integration ---
-if os.getenv("SENTRY_DSN"):
+if os.getenv("SENTRY_DSN") and SENTRY_AVAILABLE and sentry_sdk:
     sentry_sdk.init(
         dsn=os.getenv("SENTRY_DSN"),
         traces_sample_rate=1.0,

@@ -3,10 +3,11 @@
 import asyncio
 import bisect
 import hashlib
-import logging
 from typing import Callable, List, Optional
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 class ConsistentHashRing:
