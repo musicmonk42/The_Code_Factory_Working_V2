@@ -121,7 +121,7 @@ try:
     import torch
 
     TORCH_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
     pass
 
 HAS_QISKIT = False

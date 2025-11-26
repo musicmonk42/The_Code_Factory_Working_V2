@@ -117,7 +117,7 @@ def main():
         try:
             __import__(dep)
             print_status(dep, True, description)
-        except ImportError:
+        except (ImportError, OSError) as e:
             print_status(dep, False, f"{description} (optional)")
 
     # Final summary

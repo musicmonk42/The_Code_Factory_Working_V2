@@ -12,7 +12,14 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import numpy as np
 import pytest
-import torch
+
+# Handle torch import error gracefully
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except (ImportError, OSError):
+    torch = None
+    TORCH_AVAILABLE = False
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -120,6 +127,7 @@ class TestMetaSupervisorInitialization:
         assert supervisor.thresholds["plugin_error"] == 0.1
 
     @patch("omnicore_engine.meta_supervisor.settings")
+    @pytest.mark.skipif(not TORCH_AVAILABLE, reason="torch not available")
     def test_initialization_with_torch_backend(self, mock_global_settings):
         """Test initialization with PyTorch backend"""
         mock_global_settings.PLUGIN_ERROR_THRESHOLD = 0.1
@@ -130,7 +138,8 @@ class TestMetaSupervisorInitialization:
 
         assert supervisor.backend.mode == "torch"
         assert supervisor.rl_model is not None
-        assert isinstance(supervisor.rl_model, torch.nn.Module)
+        if TORCH_AVAILABLE:
+            assert isinstance(supervisor.rl_model, torch.nn.Module)
         assert supervisor.prediction_model is not None
 
     @pytest.mark.asyncio
@@ -165,7 +174,8 @@ class TestPluginInspection:
             mock_settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD = 0.8
             mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
-            supervisor = MetaSupervisor(interval=60, backend_mode="torch")
+            # Use numpy backend to avoid torch dependency
+            supervisor = MetaSupervisor(interval=60, backend_mode="numpy")
             supervisor.db = Mock()
             supervisor.explainer = Mock()
             supervisor.explainer.explain = AsyncMock(

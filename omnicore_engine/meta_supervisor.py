@@ -13,7 +13,7 @@ import numpy as np
 
 try:
     import torch
-except ImportError:
+except (ImportError, OSError):
     torch = None
     logging.getLogger(__name__).warning(
         "torch not available. ML-based optimization features will be disabled."
