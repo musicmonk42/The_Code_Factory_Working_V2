@@ -14,6 +14,7 @@ Key Features:
 # --- Standard Library Imports ---
 import hashlib
 import hmac
+import importlib
 import json
 import logging
 import os
@@ -896,7 +897,6 @@ def load_analyzer(module_path: str) -> Any:
     Falls back to a no-op mock if not available.
     """
     try:
-        import importlib
         return importlib.import_module(module_path)
     except ImportError:
         return MagicMock()
