@@ -173,6 +173,11 @@ try:
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     torch = None
+    pipeline = None
+    AutoModelForCausalLM = None
+    AutoTokenizer = None
+    BitsAndBytesConfig = None
+    HfApi = None
     logging.getLogger(__name__).warning(
         "Warning: Transformers/PyTorch not found. Using fallback mode."
     )
