@@ -345,10 +345,12 @@ if TRACING_AVAILABLE:
     # Guard against re-initializing the provider, which logs a warning.
     current_provider = trace.get_tracer_provider()
     try:
+        # TracerProvider may not be a valid type for isinstance if another module
+        # has replaced it with a proxy or mock during testing
         if TracerProvider is not None and not isinstance(current_provider, TracerProvider):
             trace.set_tracer_provider(provider)
     except TypeError:
-        # Handle case where TracerProvider is not a valid type for isinstance
+        # Handle case where TracerProvider is a proxy/mock that doesn't support isinstance
         trace.set_tracer_provider(provider)
 
     tracer = trace.get_tracer(__name__, __version__)
