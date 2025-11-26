@@ -58,13 +58,13 @@ class TestEnums:
     def test_hash_algorithms(self):
         """Test HashAlgorithm enum values"""
         # The actual implementation only has PBKDF2_SHA256
-        assert hasattr(HashAlgorithm, 'PBKDF2_SHA256')
+        assert hasattr(HashAlgorithm, "PBKDF2_SHA256")
         assert HashAlgorithm.PBKDF2_SHA256.name == "PBKDF2_SHA256"
 
     def test_encryption_algorithms(self):
         """Test EncryptionAlgorithm enum values"""
         # The actual implementation only has AES_GCM
-        assert hasattr(EncryptionAlgorithm, 'AES_GCM')
+        assert hasattr(EncryptionAlgorithm, "AES_GCM")
         assert EncryptionAlgorithm.AES_GCM.name == "AES_GCM"
 
 
@@ -90,7 +90,7 @@ class TestEnterpriseSecurityUtils:
         """Test password hashing"""
         password = "Test@Password123"
         hashed = security_utils.hash_password(password)
-        
+
         assert hashed is not None
         assert hashed != password
         # Should be a valid hash string
@@ -100,19 +100,19 @@ class TestEnterpriseSecurityUtils:
         """Test password verification"""
         password = "Test@Password123"
         hashed = security_utils.hash_password(password)
-        
+
         is_valid, needs_rehash = security_utils.verify_password(password, hashed)
-        
+
         assert is_valid == True
 
     def test_encrypt_decrypt_data(self, security_utils):
         """Test data encryption and decryption"""
         test_data = "test data"
         encrypted = security_utils.encrypt(test_data)
-        
+
         assert encrypted is not None
         assert encrypted != test_data
-        
+
         # Test decryption
         decrypted = security_utils.decrypt(encrypted)
         assert decrypted == test_data.encode()
@@ -121,7 +121,7 @@ class TestEnterpriseSecurityUtils:
         """Test HTML sanitization"""
         html_input = "<script>alert('xss')</script><p>Hello</p>"
         sanitized = security_utils.sanitize_html(html_input)
-        
+
         assert "<script>" not in sanitized
         # The sanitized output should have p tag or its content
         assert "Hello" in sanitized
@@ -130,10 +130,10 @@ class TestEnterpriseSecurityUtils:
         """Test token generation and verification"""
         payload = {"user_id": "123", "role": "admin"}
         token = security_utils.generate_token(payload, ttl_seconds=3600)
-        
+
         assert token is not None
         assert len(token) > 0
-        
+
         # Verify the token
         decoded = security_utils.verify_token(token)
         assert decoded["user_id"] == "123"
@@ -218,7 +218,8 @@ class TestSecureSessionManager:
         manager = SecureSessionManager(secret="test_secret_key")
 
         session = manager.create(
-            "user123", data={"user_agent": "TestBrowser/1.0", "ip_address": "192.168.1.1"}
+            "user123",
+            data={"user_agent": "TestBrowser/1.0", "ip_address": "192.168.1.1"},
         )
 
         assert session is not None
@@ -230,9 +231,7 @@ class TestSecureSessionManager:
         """Test session retrieval"""
         manager = SecureSessionManager(secret="test_secret_key")
 
-        session = manager.create(
-            "user123", data={"user_agent": "TestBrowser/1.0"}
-        )
+        session = manager.create("user123", data={"user_agent": "TestBrowser/1.0"})
 
         # Valid session retrieval
         retrieved = manager.get(session.id)
@@ -269,9 +268,9 @@ class TestSecurityAuditLogger:
             mock_get_logger.return_value = mock_logger
 
             logger = SecurityAuditLogger()
-            
+
             logger.log("login_attempt", "user123", metadata={"ip": "192.168.1.1"})
-            
+
             # Just verify no exception was raised
             assert True
 
@@ -283,7 +282,7 @@ class TestSecurityAuditLogger:
         logger.log("event1", "user1", metadata={"data": "1"})
         logger.log("event2", "user2", metadata={"data": "2"})
         logger.log("event3", "user3", metadata={"data": "3"})
-        
+
         assert True  # If we get here, no exceptions were raised
 
 
@@ -311,7 +310,7 @@ class TestDecorators:
         # Create a mock user object with is_authenticated = True
         class MockUser:
             is_authenticated = True
-        
+
         # Should work with authenticated user
         result = protected_function(user=MockUser())
         assert result == "secret"
@@ -327,7 +326,7 @@ class TestDecorators:
         class MockUser:
             is_authenticated = True
             roles = ["admin"]
-        
+
         # Should work with authorized user
         result = admin_function(user=MockUser())
         assert result == "admin_only"

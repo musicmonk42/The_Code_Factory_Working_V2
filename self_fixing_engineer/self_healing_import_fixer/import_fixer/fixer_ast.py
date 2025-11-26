@@ -90,6 +90,7 @@ try:
     from self_healing_import_fixer.import_fixer.fixer_ai import (
         get_ai_suggestions as get_ai_suggestions_real,
     )
+
     FIXER_AI_AVAILABLE = True
 except ImportError as e:
     logger.warning(
@@ -104,6 +105,7 @@ except ImportError as e:
 
     async def get_ai_suggestions_real(*args, **kwargs):
         return []
+
 
 _BG_LOOP = None
 _BG_THREAD = None

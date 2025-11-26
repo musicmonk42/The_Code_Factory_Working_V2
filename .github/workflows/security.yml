@@ -231,8 +231,9 @@ jobs:
               pip-licenses --format=json > "$TEMP_DIR/licenses-requirements.json" || true
               
               # Check for GPL/AGPL licenses using jq (ignore LGPL)
+              # Also ignore docutils which has a complex license string including GPL but is primarily BSD/Public Domain
               if command -v jq >/dev/null 2>&1; then
-                RESTRICTIVE=$(jq -r '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not)) | "\(.Name) \(.Version) - \(.License)"' "$TEMP_DIR/licenses-requirements.json" 2>/dev/null || true)
+                RESTRICTIVE=$(jq -r '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not) and (.Name != "docutils")) | "\(.Name) \(.Version) - \(.License)"' "$TEMP_DIR/licenses-requirements.json" 2>/dev/null || true)
                 if [ -n "$RESTRICTIVE" ]; then
                   echo "⚠️  Found packages with restrictive licenses:"
                   echo "$RESTRICTIVE"

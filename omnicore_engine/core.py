@@ -459,7 +459,9 @@ class OmniCoreEngine:
                 )
             else:
                 self.knowledge_graph = None
-                self.logger.info("KnowledgeGraph not available, skipping initialization.")
+                self.logger.info(
+                    "KnowledgeGraph not available, skipping initialization."
+                )
         except Exception as e:
             self.logger.warning(
                 f"Failed to initialize KnowledgeGraph: {e}. KnowledgeGraph features will be unavailable.",

@@ -54,7 +54,9 @@ from .models import (
 # --- optional feedback manager dependency -----------------------------------
 _FeedbackManagerClass = None
 try:
-    from omnicore_engine.feedback_manager import FeedbackManager as _FeedbackManagerClass
+    from omnicore_engine.feedback_manager import (
+        FeedbackManager as _FeedbackManagerClass,
+    )
     from omnicore_engine.feedback_manager import FeedbackType
 except ImportError:
     _FeedbackManagerClass = None
@@ -76,6 +78,7 @@ if _FeedbackManagerClass is None:
 
         async def record_feedback(self, **kwargs):
             return None
+
 else:
     FeedbackManager = _FeedbackManagerClass
 
@@ -272,7 +275,7 @@ class Database:
             "sqlite+aiosqlite://"
         ):
             db_path = db_path.replace("sqlite:///", "sqlite+aiosqlite:///")
-            logger.info(f"Converted SQLite URL to use aiosqlite async driver")
+            logger.info("Converted SQLite URL to use aiosqlite async driver")
 
         self.db_path = db_path
 
