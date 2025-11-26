@@ -1878,8 +1878,15 @@ except (PermissionError, OSError) as e:
     # Fall back to a temp directory if we can't create the default one
     import tempfile
     DEAD_LETTER_DIR = os.path.join(tempfile.gettempdir(), "slack_gateway_dead_letters")
-    os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
-    logger.warning(f"Could not create dead letter directory at default location, using {DEAD_LETTER_DIR}: {e}")
+    try:
+        os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
+    except (PermissionError, OSError) as fallback_error:
+        # Last resort - use current working directory
+        DEAD_LETTER_DIR = os.path.join(os.getcwd(), ".slack_gateway_dead_letters")
+        os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
+        logger.warning(f"Could not create temp dead letter directory, using {DEAD_LETTER_DIR}: {fallback_error}")
+    else:
+        logger.warning(f"Could not create dead letter directory at default location, using {DEAD_LETTER_DIR}: {e}")
 
 
 async def dead_letter_to_file(event: SlackEvent, reason: str):
