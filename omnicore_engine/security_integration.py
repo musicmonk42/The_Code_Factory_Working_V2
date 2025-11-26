@@ -182,7 +182,7 @@ class SecurityIntegrationManager:
             message_bus: Message bus instance
         """
         self.config = config or get_security_config()
-        self.security_utils = get_security_utils(self.config.dict())
+        self.security_utils = get_security_utils()
         self.db = db
         self.audit = audit
         self.message_bus = message_bus
