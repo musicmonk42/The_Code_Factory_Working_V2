@@ -168,5 +168,5 @@ def test_get_or_create_gauge():
 
 
 def test_get_or_create_histogram():
-    hist = get_or_create_histogram("test_hist_v4", "Test hist", buckets=(0.5, 1.0))
+    hist = get_or_create_histogram("test_hist_v4", "Test hist", labelnames=(), buckets=(0.5, 1.0))
     assert hist is not None

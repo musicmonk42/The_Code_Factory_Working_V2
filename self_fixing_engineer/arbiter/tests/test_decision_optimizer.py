@@ -39,6 +39,10 @@ def mock_dependencies():
     settings.REDIS_URL = "redis://localhost:6379"
     settings.ENCRYPTION_KEY = MagicMock()
     settings.ENCRYPTION_KEY.get_secret_value.return_value = Fernet.generate_key()
+    # Add additional settings that DecisionOptimizer expects
+    settings.REDIS_POOL_SIZE = 100
+    settings.DB_POOL_SIZE = 50
+    settings.DB_BATCH_SIZE = 100
 
     plugin_registry = MagicMock()
     plugin_registry.get.return_value = None
