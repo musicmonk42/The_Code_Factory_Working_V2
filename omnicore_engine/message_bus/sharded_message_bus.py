@@ -137,6 +137,99 @@ def verify_message(message: Message, signature: str, key: bytes) -> bool:
     return hmac.compare_digest(expected, signature)
 
 
+class PluginMessageBusAdapter:
+    """
+    Adapter that provides a simplified interface for plugins to interact with the message bus.
+    Each plugin gets its own adapter instance with a dedicated prefix for topics.
+    """
+
+    def __init__(self, message_bus: "ShardedMessageBus", plugin_name: str):
+        """
+        Initialize the adapter.
+
+        Args:
+            message_bus: The ShardedMessageBus instance to wrap
+            plugin_name: The name of the plugin using this adapter
+        """
+        self.message_bus = message_bus
+        self.plugin_name = plugin_name
+        self.topic_prefix = f"plugin.{plugin_name}"
+        self.logger = structlog.get_logger(__name__).bind(
+            module="PluginMessageBusAdapter", plugin=plugin_name
+        )
+
+    async def publish(
+        self, topic: str, payload: Dict[str, Any], priority: int = 0
+    ) -> bool:
+        """
+        Publish a message to a topic with plugin prefix.
+
+        Args:
+            topic: The topic name (will be prefixed with plugin name)
+            payload: The message payload
+            priority: Message priority (0-2, higher is more urgent)
+
+        Returns:
+            True if published successfully
+        """
+        full_topic = f"{self.topic_prefix}.{topic}"
+        return await self.message_bus.publish(full_topic, payload, priority=priority)
+
+    async def subscribe(
+        self, topic: str, callback: Callable, filter_fn: Optional[Callable] = None
+    ) -> None:
+        """
+        Subscribe to a topic with plugin prefix.
+
+        Args:
+            topic: The topic name (will be prefixed with plugin name)
+            callback: The callback function to call when a message arrives
+            filter_fn: Optional filter function to filter messages
+        """
+        full_topic = f"{self.topic_prefix}.{topic}"
+        await self.message_bus.subscribe(full_topic, callback, filter_fn)
+
+    async def unsubscribe(self, topic: str, callback: Callable) -> None:
+        """
+        Unsubscribe from a topic.
+
+        Args:
+            topic: The topic name (will be prefixed with plugin name)
+            callback: The callback function to unsubscribe
+        """
+        full_topic = f"{self.topic_prefix}.{topic}"
+        await self.message_bus.unsubscribe(full_topic, callback)
+
+    async def publish_raw(
+        self, topic: str, payload: Dict[str, Any], priority: int = 0
+    ) -> bool:
+        """
+        Publish to a raw topic without plugin prefix.
+
+        Args:
+            topic: The full topic name
+            payload: The message payload
+            priority: Message priority (0-2, higher is more urgent)
+
+        Returns:
+            True if published successfully
+        """
+        return await self.message_bus.publish(topic, payload, priority=priority)
+
+    async def subscribe_raw(
+        self, topic: str, callback: Callable, filter_fn: Optional[Callable] = None
+    ) -> None:
+        """
+        Subscribe to a raw topic without plugin prefix.
+
+        Args:
+            topic: The full topic name
+            callback: The callback function to call when a message arrives
+            filter_fn: Optional filter function to filter messages
+        """
+        await self.message_bus.subscribe(topic, callback, filter_fn)
+
+
 class ShardedMessageBus:
     def __init__(
         self,
@@ -1416,10 +1509,19 @@ class ShardedMessageBus:
         current_pre_publish_hooks = self.pre_publish_hooks
         current_post_publish_hooks = self.post_publish_hooks
 
-        new_shard_count = getattr(self.config, "message_bus_shard_count", 4)
-        new_workers_per_shard = getattr(self.config, "message_bus_workers_per_shard", 2)
-        new_max_queue_size = getattr(self.config, "message_bus_max_queue_size", 10000)
-        new_callback_workers = getattr(self.config, "message_bus_callback_workers", 8)
+        # Use correct attribute names from ArbiterConfig (uppercase)
+        new_shard_count = getattr(
+            self.config, "MESSAGE_BUS_SHARD_COUNT", None
+        ) or getattr(self.config, "message_bus_shard_count", 4)
+        new_workers_per_shard = getattr(
+            self.config, "MESSAGE_BUS_WORKERS_PER_SHARD", None
+        ) or getattr(self.config, "message_bus_workers_per_shard", 2)
+        new_max_queue_size = getattr(
+            self.config, "MESSAGE_BUS_MAX_QUEUE_SIZE", None
+        ) or getattr(self.config, "message_bus_max_queue_size", 10000)
+        new_callback_workers = getattr(
+            self.config, "MESSAGE_BUS_CALLBACK_WORKERS", None
+        ) or getattr(self.config, "message_bus_callback_workers", 8)
 
         if engine_type == "simulation":
             new_shard_count = min(8, os.cpu_count() or 4)
@@ -1465,10 +1567,11 @@ class ShardedMessageBus:
                 },
             )
 
-            self.config.message_bus_shard_count = new_shard_count
-            self.config.message_bus_workers_per_shard = new_workers_per_shard
-            self.config.message_bus_max_queue_size = new_max_queue_size
-            self.config.message_bus_callback_workers = new_callback_workers
+            # Store updated values on self, not on the config (which may be immutable)
+            self.shard_count = new_shard_count
+            self.workers_per_shard = new_workers_per_shard
+            self.max_queue_size = new_max_queue_size
+            self._callback_workers = new_callback_workers
 
             await self.shutdown()
             self.__init__(

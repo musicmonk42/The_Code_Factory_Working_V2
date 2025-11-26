@@ -347,7 +347,9 @@ class OmniCoreEngine:
                 self.logger.info(f"Initializing component: {name}...")
                 instance = component_class(*args, **kwargs)
                 if hasattr(instance, "initialize") and callable(instance.initialize):
-                    await instance.initialize()
+                    result = instance.initialize()
+                    if asyncio.iscoroutine(result):
+                        await result
                 self.components[name] = instance
                 self.logger.info(f"Component '{name}' initialized successfully.")
             except Exception as e:
@@ -372,41 +374,90 @@ class OmniCoreEngine:
             return
         self.logger.info("OmniCore Engine: Starting application components...")
 
+        # Import required modules - core omnicore_engine modules first
         try:
             from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
             from sqlalchemy.orm import sessionmaker
 
-            from omnicore_engine.arbiter_growth import ArbiterGrowthManager
             from omnicore_engine.array_backend import ArrayBackend
             from omnicore_engine.audit import ExplainAudit
             from omnicore_engine.database import Database
-            from omnicore_engine.database.backends.sqlite import (  # Added import
-                SQLiteStorageBackend,
-            )
-            from omnicore_engine.decision_optimizer import DecisionOptimizer
-            from omnicore_engine.explainable_reasoner import ExplainableReasonerPlugin
-            from omnicore_engine.feedback_manager import FeedbackManager
-            from omnicore_engine.knowledge_graph import KnowledgeGraph
             from omnicore_engine.message_bus import (
                 MessageFilter,
                 PluginMessageBusAdapter,
                 ShardedMessageBus,
             )
+            from omnicore_engine.plugin_event_handler import start_plugin_observer
             from omnicore_engine.plugin_registry import (
                 PLUGIN_REGISTRY,
                 Plugin,
                 PlugInKind,
                 PluginMeta,
-                start_plugin_observer,
             )
         except ImportError as e:
             self.logger.error(f"Failed to import required modules: {e}", exc_info=True)
             raise RuntimeError(f"Module import failed: {e}")
 
+        # Import optional modules from arbiter package with graceful degradation
+        ArbiterGrowthManager = None
+        DecisionOptimizer = None
+        ExplainableReasonerPlugin = None
+        FeedbackManager = None
+        KnowledgeGraph = None
+        SQLiteStorageBackend = None
+
         try:
-            self.knowledge_graph = KnowledgeGraph(
-                config=getattr(self.settings, "knowledge_graph_config", {})
+            from arbiter.arbiter_growth.arbiter_growth_manager import (
+                ArbiterGrowthManager,
             )
+        except ImportError as e:
+            self.logger.warning(
+                f"ArbiterGrowthManager not available: {e}. Growth management features will be unavailable."
+            )
+
+        try:
+            from arbiter.decision_optimizer import DecisionOptimizer
+        except ImportError as e:
+            self.logger.warning(
+                f"DecisionOptimizer not available: {e}. Decision optimization features will be unavailable."
+            )
+
+        try:
+            from arbiter.explainable_reasoner import ExplainableReasonerPlugin
+        except ImportError as e:
+            self.logger.warning(
+                f"ExplainableReasonerPlugin not available: {e}. Explainable AI features will be unavailable."
+            )
+
+        try:
+            from arbiter.feedback import FeedbackManager
+        except ImportError as e:
+            self.logger.warning(
+                f"FeedbackManager not available: {e}. Feedback features will be unavailable."
+            )
+
+        try:
+            from arbiter.knowledge_graph import KnowledgeGraph
+        except ImportError as e:
+            self.logger.warning(
+                f"KnowledgeGraph not available: {e}. Knowledge graph features will be unavailable."
+            )
+
+        try:
+            from arbiter.arbiter_growth.storage_backends import SQLiteStorageBackend
+        except ImportError as e:
+            self.logger.warning(
+                f"SQLiteStorageBackend not available: {e}. SQLite storage backend will be unavailable."
+            )
+
+        try:
+            if KnowledgeGraph is not None:
+                self.knowledge_graph = KnowledgeGraph(
+                    config=getattr(self.settings, "knowledge_graph_config", {})
+                )
+            else:
+                self.knowledge_graph = None
+                self.logger.info("KnowledgeGraph not available, skipping initialization.")
         except Exception as e:
             self.logger.warning(
                 f"Failed to initialize KnowledgeGraph: {e}. KnowledgeGraph features will be unavailable.",
@@ -415,13 +466,19 @@ class OmniCoreEngine:
             self.knowledge_graph = None
 
         try:
-            self.decision_optimizer = DecisionOptimizer(
-                PLUGIN_REGISTRY,
-                self.settings,
-                self.logger,
-                safe_serialize,
-                config=getattr(self.settings, "decision_optimizer_config", {}),
-            )
+            if DecisionOptimizer is not None:
+                self.decision_optimizer = DecisionOptimizer(
+                    PLUGIN_REGISTRY,
+                    self.settings,
+                    self.logger,
+                    safe_serialize,
+                    config=getattr(self.settings, "decision_optimizer_config", {}),
+                )
+            else:
+                self.decision_optimizer = None
+                self.logger.info(
+                    "DecisionOptimizer not available, skipping initialization."
+                )
         except Exception as e:
             self.logger.warning(
                 f"Failed to initialize DecisionOptimizer: {e}. DecisionOptimizer features will be unavailable.",
@@ -465,10 +522,17 @@ class OmniCoreEngine:
             system_audit_merkle_tree = None
 
         try:
+            db_path = getattr(self.settings, "database_path", None) or getattr(
+                self.settings, "DB_PATH", "sqlite:///./omnicore.db"
+            )
+            # Ensure async driver is used for SQLite
+            if db_path.startswith("sqlite:///"):
+                db_path = db_path.replace("sqlite:///", "sqlite+aiosqlite:///")
+
             await self._initialize_component_instance(
                 "database",
                 Database,
-                self.settings.database_path,
+                db_path,
                 system_audit_merkle_tree=system_audit_merkle_tree,
             )
             self.database = await self._get_component_instance("database")
@@ -482,8 +546,11 @@ class OmniCoreEngine:
             )
             self.audit = await self._get_component_instance("audit")
         except Exception as e:
-            self.logger.error(f"Failed to initialize audit: {e}", exc_info=True)
-            raise RuntimeError(f"Audit initialization failed: {e}")
+            self.logger.warning(
+                f"Failed to initialize audit: {e}. Audit features will be unavailable.",
+                exc_info=True,
+            )
+            self.audit = None
 
         try:
             if self.message_bus:
@@ -545,10 +612,12 @@ class OmniCoreEngine:
             if self.message_bus:
                 PLUGIN_REGISTRY.set_message_bus(self.message_bus)
 
+            plugin_dir = getattr(self.settings, "plugin_dir", None) or getattr(
+                self.settings, "PLUGIN_DIR", "./plugins"
+            )
+
             async def _plugin_registry_initialize(self_comp_instance):
-                await PLUGIN_REGISTRY.load_from_directory(
-                    self_comp_instance.settings.plugin_dir
-                )
+                await PLUGIN_REGISTRY.load_from_directory(plugin_dir)
 
             await self._initialize_component_instance(
                 "plugin_registry",
@@ -572,7 +641,7 @@ class OmniCoreEngine:
                 settings=self.settings,
             )
             self.plugin_registry = await self._get_component_instance("plugin_registry")
-            start_plugin_observer(PLUGIN_REGISTRY, self.settings.plugin_dir)
+            start_plugin_observer(PLUGIN_REGISTRY, plugin_dir)
 
             PLUGIN_REGISTRY.load_ai_assistant_plugins()
         except Exception as e:
@@ -582,21 +651,40 @@ class OmniCoreEngine:
             raise RuntimeError(f"Plugin registry initialization failed: {e}")
 
         try:
-            await self._initialize_component_instance(
-                "feedback_manager",
-                FeedbackManager,
-                db_dsn=self.settings.database_path,
-                redis_url=self.settings.redis_url,
-                encryption_key=self.settings.encryption_key.get_secret_value(),
-            )
-            self.feedback_manager = await self._get_component_instance(
-                "feedback_manager"
-            )
+            if FeedbackManager is not None:
+                await self._initialize_component_instance(
+                    "feedback_manager",
+                    FeedbackManager,
+                    db_dsn=getattr(self.settings, "database_path", None)
+                    or getattr(self.settings, "DB_PATH", "sqlite:///./omnicore.db"),
+                    redis_url=getattr(
+                        self.settings, "redis_url", None
+                    )
+                    or getattr(self.settings, "REDIS_URL", "redis://localhost:6379/0"),
+                    encryption_key=self.settings.encryption_key.get_secret_value()
+                    if hasattr(self.settings, "encryption_key")
+                    and self.settings.encryption_key
+                    else getattr(
+                        self.settings, "ENCRYPTION_KEY", None
+                    ).get_secret_value()
+                    if hasattr(self.settings, "ENCRYPTION_KEY")
+                    and getattr(self.settings, "ENCRYPTION_KEY", None)
+                    else "default-key",
+                )
+                self.feedback_manager = await self._get_component_instance(
+                    "feedback_manager"
+                )
+            else:
+                self.feedback_manager = None
+                self.logger.warning(
+                    "FeedbackManager not available, skipping initialization."
+                )
         except Exception as e:
-            self.logger.error(
-                f"Failed to initialize feedback manager: {e}", exc_info=True
+            self.logger.warning(
+                f"Failed to initialize feedback manager: {e}. Feedback features will be unavailable.",
+                exc_info=True,
             )
-            raise RuntimeError(f"Feedback manager initialization failed: {e}")
+            self.feedback_manager = None
 
         try:
             explainable_ai_instance = ExplainableAI()
@@ -625,13 +713,19 @@ class OmniCoreEngine:
             )
             self.explainable_ai = await self._get_component_instance("explainable_ai")
         except Exception as e:
-            self.logger.error(
-                f"Failed to initialize explainable AI: {e}", exc_info=True
+            self.logger.warning(
+                f"Failed to initialize explainable AI: {e}. Explainable AI features will be unavailable.",
+                exc_info=True,
             )
-            raise RuntimeError(f"Explainable AI initialization failed: {e}")
+            self.explainable_ai = None
 
         try:
-            if self.database and self.knowledge_graph:
+            if (
+                self.database
+                and self.knowledge_graph
+                and ArbiterGrowthManager is not None
+                and SQLiteStorageBackend is not None
+            ):
                 session_factory = self.database.AsyncSessionLocal
                 storage_backend_instance = SQLiteStorageBackend(
                     session_factory=session_factory,
@@ -665,14 +759,16 @@ class OmniCoreEngine:
                     )
                     self.logger.info("ArbiterGrowthManager registered as a plugin.")
             else:
+                self.arbiter_growth_manager = None
                 self.logger.warning(
-                    "Database or KnowledgeGraph not initialized. Skipping ArbiterGrowthManager initialization."
+                    "Database, KnowledgeGraph, or ArbiterGrowthManager not initialized/available. Skipping ArbiterGrowthManager initialization."
                 )
         except Exception as e:
-            self.logger.error(
-                f"Failed to initialize ArbiterGrowthManager: {e}", exc_info=True
+            self.logger.warning(
+                f"Failed to initialize ArbiterGrowthManager: {e}. Growth management features will be unavailable.",
+                exc_info=True,
             )
-            raise RuntimeError(f"ArbiterGrowthManager initialization failed: {e}")
+            self.arbiter_growth_manager = None
 
         for component_instance, name_str in [
             (self.knowledge_graph, "knowledge_graph"),
