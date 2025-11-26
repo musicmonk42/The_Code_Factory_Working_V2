@@ -221,28 +221,35 @@ class AuditLogger:
     """Structured audit logging with compliance requirements."""
 
     def __init__(self, log_path: str):
-        # Ensure the parent directory for the log file exists before initializing the handler.
-        log_dir = Path(log_path).parent
-        log_dir.mkdir(parents=True, exist_ok=True)
-
         self.logger = logging.getLogger("checkpoint.audit")
         self.logger.setLevel(logging.INFO)
         self.logger.propagate = (
             False  # <--- FIX: Prevent logs from bubbling up to root logger
         )
 
-        handler = RotatingFileHandler(
-            log_path,
-            maxBytes=Environment.LOG_MAX_BYTES,
-            backupCount=Environment.LOG_BACKUP_COUNT,
-        )
+        try:
+            # Ensure the parent directory for the log file exists before initializing the handler.
+            log_dir = Path(log_path).parent
+            log_dir.mkdir(parents=True, exist_ok=True)
 
-        formatter = logging.Formatter(
-            '{"timestamp":"%(asctime)s","level":"%(levelname)s","service":"checkpoint",'
-            '"tenant":"%(tenant)s","message":"%(message)s","context":%(context)s}'
-        )
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+            handler = RotatingFileHandler(
+                log_path,
+                maxBytes=Environment.LOG_MAX_BYTES,
+                backupCount=Environment.LOG_BACKUP_COUNT,
+            )
+
+            formatter = logging.Formatter(
+                '{"timestamp":"%(asctime)s","level":"%(levelname)s","service":"checkpoint",'
+                '"tenant":"%(tenant)s","message":"%(message)s","context":%(context)s}'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+        except (PermissionError, OSError) as e:
+            # Fall back to a NullHandler if we can't write to the log directory
+            logging.getLogger(__name__).warning(
+                f"Could not create audit log at {log_path}: {e}. Using NullHandler."
+            )
+            self.logger.addHandler(logging.NullHandler())
 
     def log(self, event: str, context: Dict[str, Any], level: str = "INFO") -> None:
         """Logs an audit event with context."""

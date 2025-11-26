@@ -72,7 +72,8 @@ except ImportError:
 
 try:
     import aioredis  # type: ignore
-except ImportError:
+except (ImportError, TypeError):
+    # TypeError can occur in Python 3.12+ due to duplicate base class issue
     aioredis = None
 
 try:

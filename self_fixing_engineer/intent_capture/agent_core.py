@@ -81,7 +81,10 @@ from cachetools import TTLCache
 from dotenv import load_dotenv
 
 # --- LangChain & AI Core Components ---
-from langchain.memory import VectorStoreRetrieverMemory
+try:
+    from langchain.memory import VectorStoreRetrieverMemory
+except ImportError:
+    from langchain_classic.memory import VectorStoreRetrieverMemory
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.messages import (
     AIMessage,
