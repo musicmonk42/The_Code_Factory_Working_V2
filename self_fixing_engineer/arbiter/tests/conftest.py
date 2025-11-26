@@ -106,7 +106,7 @@ def _setup_opentelemetry_context():
             def set_attribute(self, key, value):
                 pass
 
-            def set_status(self, status):
+            def set_status(self, status, description=None):
                 pass
 
             def record_exception(self, exception, attributes=None, timestamp=None, escaped=None):
