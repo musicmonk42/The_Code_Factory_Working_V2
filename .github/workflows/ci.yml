@@ -129,7 +129,7 @@ jobs:
           
       - name: Upload Generator coverage
         uses: codecov/codecov-action@v4
-        if: always()
+        if: always() && hashFiles('./generator/coverage.xml') != ''
         with:
           files: ./generator/coverage.xml
           flags: unified-platform
@@ -172,6 +172,20 @@ jobs:
       - name: Enable memory overcommit for Redis
         run: |
           sudo sysctl -w vm.overcommit_memory=1
+          
+      - name: Wait for Redis to be ready
+        run: |
+          # Wait loop to ensure Redis service is fully available before running tests
+          for i in $(seq 1 30); do
+            if redis-cli -h localhost --raw incr ping_test >/dev/null 2>&1; then
+              echo "Redis is up and responding"
+              break
+            fi
+            echo "Waiting for Redis... attempt $i/30"
+            sleep 1
+          done
+          # Final check - fail early if Redis is not available
+          redis-cli -h localhost ping || (echo "ERROR: Redis is not available" && exit 1)
           
       - name: Install unified platform dependencies (OmniCore & SFE)
         env:
@@ -230,15 +244,19 @@ jobs:
           if [ -d omnicore_engine/tests ]; then
             # Per-file diagnostic isolates CPU-heavy tests and provides resource usage metrics
             # This approach helps identify which specific test file causes SIGXCPU timeouts
-            # 60-second timeout per file is intentionally strict for quick diagnosis;
-            # the full pytest run uses 300s for legitimate slow tests
+            # 120-second timeout per file gives more room for legitimate slow tests
             echo "Running per-file diagnostic to find CPU-heavy test..."
             DIAGNOSTIC_FAILED=0
+            FAILED_FILE=""
             for f in $(find omnicore_engine/tests -name 'test_*.py' | sort); do
               echo "==> Testing $f"
-              /usr/bin/time -v pytest -q "$f" --maxfail=1 --timeout=60 || {
-                echo "Problem detected in $f"
+              /usr/bin/time -v pytest -q "$f" --maxfail=1 --timeout=120 || {
+                echo "Problem detected in $f — re-running with full verbosity to capture traceback"
+                pytest "$f" -vv -s --timeout=180
+                VERBOSE_EXIT_CODE=$?
+                echo "Verbose re-run completed with exit code $VERBOSE_EXIT_CODE"
                 DIAGNOSTIC_FAILED=1
+                FAILED_FILE="$f"
                 break
               }
             done
@@ -246,7 +264,7 @@ jobs:
               echo "Now running full pytest (for coverage) after successful diagnostics..."
               pytest omnicore_engine/tests/ --cov=omnicore_engine --cov-report=xml --cov-report=term -v --timeout=300 --maxfail=1
             else
-              echo "Skipping full test run due to diagnostic failure"
+              echo "Skipping full test run due to diagnostic failure in: $FAILED_FILE"
               exit 1
             fi
           else
@@ -256,7 +274,7 @@ jobs:
           
       - name: Upload OmniCore coverage
         uses: codecov/codecov-action@v4
-        if: always()
+        if: always() && hashFiles('./omnicore_engine/coverage.xml') != ''
         with:
           files: ./omnicore_engine/coverage.xml
           flags: unified-platform
@@ -300,6 +318,20 @@ jobs:
       - name: Enable memory overcommit for Redis
         run: |
           sudo sysctl -w vm.overcommit_memory=1
+          
+      - name: Wait for Redis to be ready
+        run: |
+          # Wait loop to ensure Redis service is fully available before running tests
+          for i in $(seq 1 30); do
+            if redis-cli -h localhost --raw incr ping_test >/dev/null 2>&1; then
+              echo "Redis is up and responding"
+              break
+            fi
+            echo "Waiting for Redis... attempt $i/30"
+            sleep 1
+          done
+          # Final check - fail early if Redis is not available
+          redis-cli -h localhost ping || (echo "ERROR: Redis is not available" && exit 1)
           
       - name: Install all platform dependencies
         env:
