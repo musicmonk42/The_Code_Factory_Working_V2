@@ -35,12 +35,12 @@ from arbiter.decision_optimizer import Agent, DecisionOptimizer, Task, safe_seri
 @pytest.fixture
 def mock_dependencies():
     """Create all required mocks."""
-    settings = MagicMock(spec=ArbiterConfig)
+    settings = MagicMock()
     settings.REDIS_URL = "redis://localhost:6379"
     settings.ENCRYPTION_KEY = MagicMock()
     settings.ENCRYPTION_KEY.get_secret_value.return_value = Fernet.generate_key()
 
-    plugin_registry = MagicMock(spec=PLUGIN_REGISTRY)
+    plugin_registry = MagicMock()
     plugin_registry.get.return_value = None
 
     logger = MagicMock()

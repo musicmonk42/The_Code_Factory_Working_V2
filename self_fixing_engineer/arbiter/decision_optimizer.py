@@ -207,7 +207,7 @@ def safe_serialize(obj: Any) -> Any:
     """
     if isinstance(obj, (datetime, datetime)):
         return obj.isoformat()
-    if isinstance(obj, (Set, frozenset)):
+    if isinstance(obj, (set, frozenset)):
         return list(obj)
     if isinstance(obj, np.ndarray):
         return obj.tolist()
