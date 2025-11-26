@@ -579,19 +579,29 @@ class ExplainAudit:
         )
 
         self.policy_engine = PolicyEngine(arbiter_instance=None)
-        self.knowledge_graph = KnowledgeGraph()
+        self.knowledge_graph = KnowledgeGraph() if KnowledgeGraph is not None else None
 
         self.plugin_registry = PLUGIN_REGISTRY
         self.system_audit_merkle_tree = system_audit_merkle_tree
 
-        self.performance_tracker = PluginPerformanceTracker(db=self._db_client)
-        self.plugin_version_manager = PluginVersionManager(
-            registry=self.plugin_registry, db=self._db_client
+        self.performance_tracker = (
+            PluginPerformanceTracker(db=self._db_client)
+            if PluginPerformanceTracker is not None
+            else None
         )
-        self.shadow_deploy_manager = ShadowDeployManager(
-            registry=self.plugin_registry,
-            version_manager=self.plugin_version_manager,
-            performance_tracker=self.performance_tracker,
+        self.plugin_version_manager = (
+            PluginVersionManager(registry=self.plugin_registry, db=self._db_client)
+            if PluginVersionManager is not None
+            else None
+        )
+        self.shadow_deploy_manager = (
+            ShadowDeployManager(
+                registry=self.plugin_registry,
+                version_manager=self.plugin_version_manager,
+                performance_tracker=self.performance_tracker,
+            )
+            if ShadowDeployManager is not None
+            else None
         )
         self.hook_manager = AuditHookManager(
             db=self._db_client,

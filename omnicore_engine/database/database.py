@@ -267,6 +267,13 @@ class Database:
         # EnterpriseSecurityUtils uses keyword-only args with defaults
         self.security_utils = EnterpriseSecurityUtils()
 
+        # Ensure async driver is used for SQLite
+        if db_path.startswith("sqlite:///") and not db_path.startswith(
+            "sqlite+aiosqlite://"
+        ):
+            db_path = db_path.replace("sqlite:///", "sqlite+aiosqlite:///")
+            logger.info(f"Converted SQLite URL to use aiosqlite async driver")
+
         self.db_path = db_path
 
         db_echo = settings.LOG_LEVEL.upper() == "DEBUG"
@@ -509,7 +516,12 @@ class Database:
         try:
             # Run DDL operations first (Issue #9 fix - run migrations separately)
             async with self.engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
+                # Use checkfirst=True to avoid "already exists" errors
+                await conn.run_sync(
+                    lambda sync_conn: Base.metadata.create_all(
+                        sync_conn, checkfirst=True
+                    )
+                )
 
             # Run migrations separately outside DDL transaction
             try:

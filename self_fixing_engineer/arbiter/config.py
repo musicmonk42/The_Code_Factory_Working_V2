@@ -213,8 +213,9 @@ class ArbiterConfig(BaseSettings):
         env="ENCRYPTION_PASSWORD",
         description="Password for API encryption (default: 'darshan')",
     )
+    # Default Fernet key for development/testing. MUST be overridden in production via ENCRYPTION_KEY env var.
     ENCRYPTION_KEY: Optional[SecretStr] = Field(
-        default=SecretStr("default-encryption-key-for-tests-only-must-be-32-bytes"),
+        default=SecretStr("0mRtqFHlMkj0xTZO14sBFr1H6jkmmI0LWyK97sGyGew="),
         env="ENCRYPTION_KEY",
     )
     ENCRYPTION_KEY_BYTES: bytes = b""
@@ -475,6 +476,20 @@ class ArbiterConfig(BaseSettings):
         default="./models/ppo_model.zip", description="Path to save/load RL model"
     )
     SLACK_AUTH_TOKEN: Optional[SecretStr] = Field(default=None, env="SLACK_AUTH_TOKEN")
+
+    # --- MetaSupervisor Threshold Settings ---
+    PLUGIN_ERROR_THRESHOLD: float = Field(
+        default=0.1, description="Threshold for plugin error rate (0-1)"
+    )
+    TEST_FAILURE_THRESHOLD: float = Field(
+        default=0.1, description="Threshold for test failure rate (0-1)"
+    )
+    ETHICS_DRIFT_THRESHOLD: float = Field(
+        default=0.1, description="Threshold for ethics drift detection (0-1)"
+    )
+    MODEL_RETRAIN_EPOCHS: int = Field(
+        default=10, description="Number of epochs for model retraining"
+    )
 
     _singleton_lock: ClassVar[threading.Lock] = threading.Lock()
     _instance: ClassVar[Optional["ArbiterConfig"]] = None
