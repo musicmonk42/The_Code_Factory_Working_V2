@@ -46,7 +46,13 @@ class PluginEventHandler(FileSystemEventHandler):
         # Use the plugin_dir from settings as a fallback
         self.plugin_dir = plugin_dir or settings.plugin_dir
         self.last_modified_times = {}
-        self._loop = asyncio.get_event_loop_policy().get_event_loop()
+        # Fix: Ensure an event loop exists before using it
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running event loop, create a new one
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
 
     def _schedule_async_task(self, coro):
         """

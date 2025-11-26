@@ -50,6 +50,12 @@ from omnicore_engine.plugin_registry import (
     PluginMarketplace,
 )
 
+# Import ExplainAudit for audit functionality
+try:
+    from omnicore_engine.audit import ExplainAudit
+except ImportError:
+    ExplainAudit = None
+
 try:
     from simulations.simulation_module import UnifiedSimulationModule
 except ImportError:

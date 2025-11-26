@@ -714,14 +714,26 @@ class ExplainAudit:
 
     def safe_create_task(self, coro: Coroutine):
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
+            # Fix: Use get_running_loop with fallback for thread safety
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # No running event loop in this thread
+                loop = None
+            
+            if loop is not None and loop.is_running():
                 asyncio.create_task(coro)
             else:
                 logger.warning(
                     "Event loop not running, attempting to run coroutine directly. This might block."
                 )
                 try:
+                    # Try to get or create an event loop
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
                     loop.run_until_complete(coro)
                 except RuntimeError:
                     asyncio.run(coro)
@@ -774,9 +786,16 @@ class ExplainAudit:
         try:
             current_loop = None
             try:
-                current_loop = asyncio.get_event_loop()
-                if current_loop.is_running():
-                    allowed, reason = current_loop.run_until_complete(
+                # Fix: Use get_running_loop with proper fallback
+                try:
+                    current_loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    current_loop = None
+                
+                if current_loop is not None and current_loop.is_running():
+                    # Cannot use run_until_complete in a running loop, schedule it
+                    # This is a sync function, so we'll just use the fallback
+                    allowed, reason = asyncio.run(
                         self.policy_engine.should_auto_learn(
                             user_id_for_policy, action_for_policy, metadata_for_policy
                         )
@@ -1503,8 +1522,13 @@ class ExplainAudit:
                     )
 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
+            # Fix: Use get_running_loop with fallback
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            
+            if loop is not None and loop.is_running():
                 asyncio.create_task(periodic_flush_coro())
                 logger.info("Periodic audit flush task created.")
             else:

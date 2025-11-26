@@ -497,24 +497,6 @@ class ArrayBackend:
     Unified array backend class with support for multiple backends.
     """
 
-    def __init__(self, mode: str = "auto", enable_benchmarking: bool = False):
-        self.mode = mode
-        self.enable_benchmarking = enable_benchmarking
-        self.benchmarker = Benchmarker() if enable_benchmarking else None
-        self.xp = xp  # Use the global xp
-
-        if self.mode == "auto":
-            if CUPY_AVAILABLE:
-                self.mode = "cupy"
-            elif DASK_AVAILABLE:
-                self.mode = "dask"
-            elif TORCH_AVAILABLE:
-                self.mode = "torch"
-            else:
-                self.mode = "numpy"
-
-        get_logger().info(f"ArrayBackend initialized in {self.mode} mode.")
-
     def array(self, data: Any, dtype: Optional[Any] = None) -> Any:
         """
         Creates an array from input data using the current backend.
@@ -1184,6 +1166,7 @@ class ArrayBackend:
         use_quantum=False,
         use_neuromorphic=False,
         logger: Optional[logging.Logger] = None,
+        enable_benchmarking: bool = False,
     ):
         """
         Initialize the ArrayBackend with the specified mode and hardware preferences.
@@ -1195,6 +1178,7 @@ class ArrayBackend:
             use_quantum (bool): Whether to use Qiskit for quantum computing.
             use_neuromorphic (bool): Whether to use NengoLoihi for neuromorphic computing.
             logger (Optional[logging.Logger]): Logger instance to use. If None, a new one is created.
+            enable_benchmarking (bool): Whether to enable benchmarking for array operations.
         """
         self.logger = logger if logger else logging.getLogger(__name__)
         self.mode = mode
@@ -1204,8 +1188,8 @@ class ArrayBackend:
         self.use_neuromorphic = use_neuromorphic and HAS_NENGO_LOIHI
         self.xp = self._init_backend()
         self.benchmarker = BackendBenchmarker()
-        # Control benchmarking overhead with a setting
-        self.enable_benchmarking = getattr(
+        # Control benchmarking overhead with a setting - use parameter if provided, else check settings
+        self.enable_benchmarking = enable_benchmarking or getattr(
             settings(), "enable_array_backend_benchmarking", False
         )
         if self.enable_benchmarking:
