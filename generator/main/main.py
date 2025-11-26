@@ -92,9 +92,11 @@ class _DummyMagicMock:
         pass
 
     def record_exception(self, *args, **kwargs):
+        """Support tracing span record_exception method."""
         pass
 
     def set_attribute(self, *args, **kwargs):
+        """Support tracing span set_attribute method."""
         pass
 
     def add_event(self, *args, **kwargs):
@@ -102,9 +104,11 @@ class _DummyMagicMock:
         pass
 
     def labels(self, *args, **kwargs):
+        """Support Prometheus metric labels method."""
         return self
 
     def set(self, *args, **kwargs):
+        """Support Prometheus gauge set method."""
         pass
 
     def observe(self, *args, **kwargs):
@@ -931,7 +935,7 @@ def main(
         instance_id=os.getenv("HOSTNAME", "unknown"),
     ).set(1)
 
-    # FIX: Use new_event_loop() for Python 3.12+ compatibility
+    # Create event loop if one is not already running (handles Python 3.12+ deprecation of get_event_loop)
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
