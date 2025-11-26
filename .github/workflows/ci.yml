@@ -177,15 +177,15 @@ jobs:
         run: |
           # Wait loop to ensure Redis service is fully available before running tests
           for i in $(seq 1 30); do
-            if redis-cli -h localhost ping 2>/dev/null | grep -q PONG; then
+            if redis-cli -h localhost --raw incr ping_test >/dev/null 2>&1; then
               echo "Redis is up and responding"
               break
             fi
             echo "Waiting for Redis... attempt $i/30"
             sleep 1
           done
-          # Final check
-          redis-cli -h localhost ping || echo "WARNING: Redis may not be ready"
+          # Final check - fail early if Redis is not available
+          redis-cli -h localhost ping || (echo "ERROR: Redis is not available" && exit 1)
           
       - name: Install unified platform dependencies (OmniCore & SFE)
         env:
@@ -252,7 +252,9 @@ jobs:
               echo "==> Testing $f"
               /usr/bin/time -v pytest -q "$f" --maxfail=1 --timeout=120 || {
                 echo "Problem detected in $f — re-running with full verbosity to capture traceback"
-                pytest "$f" -vv -s --timeout=180 || true
+                pytest "$f" -vv -s --timeout=180
+                VERBOSE_EXIT_CODE=$?
+                echo "Verbose re-run completed with exit code $VERBOSE_EXIT_CODE"
                 DIAGNOSTIC_FAILED=1
                 FAILED_FILE="$f"
                 break
@@ -321,15 +323,15 @@ jobs:
         run: |
           # Wait loop to ensure Redis service is fully available before running tests
           for i in $(seq 1 30); do
-            if redis-cli -h localhost ping 2>/dev/null | grep -q PONG; then
+            if redis-cli -h localhost --raw incr ping_test >/dev/null 2>&1; then
               echo "Redis is up and responding"
               break
             fi
             echo "Waiting for Redis... attempt $i/30"
             sleep 1
           done
-          # Final check
-          redis-cli -h localhost ping || echo "WARNING: Redis may not be ready"
+          # Final check - fail early if Redis is not available
+          redis-cli -h localhost ping || (echo "ERROR: Redis is not available" && exit 1)
           
       - name: Install all platform dependencies
         env:
