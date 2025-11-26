@@ -344,7 +344,11 @@ if TRACING_AVAILABLE:
 
     # Guard against re-initializing the provider, which logs a warning.
     current_provider = trace.get_tracer_provider()
-    if not isinstance(current_provider, TracerProvider):
+    try:
+        if TracerProvider is not None and not isinstance(current_provider, TracerProvider):
+            trace.set_tracer_provider(provider)
+    except TypeError:
+        # Handle case where TracerProvider is not a valid type for isinstance
         trace.set_tracer_provider(provider)
 
     tracer = trace.get_tracer(__name__, __version__)
