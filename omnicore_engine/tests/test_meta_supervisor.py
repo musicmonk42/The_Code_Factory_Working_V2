@@ -12,7 +12,14 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import numpy as np
 import pytest
-import torch
+
+# Handle torch import error gracefully
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except (ImportError, OSError):
+    torch = None
+    TORCH_AVAILABLE = False
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
