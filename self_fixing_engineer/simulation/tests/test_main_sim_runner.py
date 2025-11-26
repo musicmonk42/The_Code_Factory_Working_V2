@@ -41,19 +41,24 @@ test_env_vars = {
 for key, value in test_env_vars.items():
     os.environ.setdefault(key, value)
 
+# Save original modules for modules we need to mock
+_ORIGINAL_MODULES = {}
+_MODULES_TO_MOCK = [
+    "prometheus_client", "kubernetes", "kubernetes.client", "kubernetes.config",
+    "boto3", "requests",
+]
+for _mod in _MODULES_TO_MOCK:
+    if _mod in sys.modules:
+        _ORIGINAL_MODULES[_mod] = sys.modules[_mod]
+
 # Mock all external dependencies BEFORE importing the module under test
+# NOTE: Do NOT mock cryptography - other tests need the real module
 sys.modules["prometheus_client"] = MagicMock()
 sys.modules["kubernetes"] = MagicMock()
 sys.modules["kubernetes.client"] = MagicMock()
 sys.modules["kubernetes.config"] = MagicMock()
 sys.modules["boto3"] = MagicMock()
 sys.modules["requests"] = MagicMock()
-sys.modules["cryptography"] = MagicMock()
-sys.modules["cryptography.hazmat"] = MagicMock()
-sys.modules["cryptography.hazmat.backends"] = MagicMock()
-sys.modules["cryptography.hazmat.primitives"] = MagicMock()
-sys.modules["cryptography.hazmat.primitives.asymmetric"] = MagicMock()
-sys.modules["cryptography.exceptions"] = MagicMock()
 
 # Mock the otel_config module that's causing the import error
 mock_otel = MagicMock()
