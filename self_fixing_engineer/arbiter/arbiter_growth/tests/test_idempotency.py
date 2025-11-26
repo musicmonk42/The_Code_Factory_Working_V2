@@ -209,12 +209,6 @@ async def test_start_idempotent(set_env_redis_url):
         return_value=mock_redis_client,
     ) as mock_from_url:
         await store.start()
-        await store.start()
-
-    with patch(
-        "redis.asyncio.from_url", return_value=mock_redis_client
-    ) as mock_from_url:
-        await store.start()
         await store.start()  # Second call should do nothing
 
         # from_url should only be called once
@@ -374,9 +368,6 @@ async def test_cluster_mode_initialization(set_env_redis_url):
         "arbiter.arbiter_growth.idempotency.RedisCluster.from_url",
         return_value=mock_cluster,
     ) as mock_from_url:
-        with patch(
-            "redis.asyncio.cluster.RedisCluster.from_url", return_value=mock_cluster
-        ):
-            await store.start()
-            mock_from_url.assert_called_once()
-            assert store.redis is mock_cluster
+        await store.start()
+        mock_from_url.assert_called_once()
+        assert store.redis is mock_cluster
