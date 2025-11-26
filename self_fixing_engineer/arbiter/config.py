@@ -490,6 +490,21 @@ class ArbiterConfig(BaseSettings):
     MODEL_RETRAIN_EPOCHS: int = Field(
         default=10, description="Number of epochs for model retraining"
     )
+    SUPERVISOR_RATE_LIMIT_OPS: int = Field(
+        default=10, description="Rate limit for supervisor operations per time period"
+    )
+    SUPERVISOR_RATE_LIMIT_PERIOD: float = Field(
+        default=1.0, description="Time period in seconds for rate limiting"
+    )
+    PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD: float = Field(
+        default=0.8, description="Threshold for proactive hot-swap predictions"
+    )
+    SUPERVISOR_PERFORMANCE_THRESHOLD: float = Field(
+        default=0.5, description="Threshold for supervisor self-performance"
+    )
+    AUDIT_LOG_RETENTION_DAYS: int = Field(
+        default=30, description="Number of days to retain audit logs"
+    )
 
     _singleton_lock: ClassVar[threading.Lock] = threading.Lock()
     _instance: ClassVar[Optional["ArbiterConfig"]] = None
