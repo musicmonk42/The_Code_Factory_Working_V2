@@ -290,7 +290,7 @@ async def test_generate_explanation_kg_insights(mock_learner):
 
 
 @pytest.mark.asyncio
-async def test_generate_explanation_kg_error(mock_learner, caplog):
+async def test_generate_explanation_kg_error(mock_learner, capsys):
     """Test explanation when KG fails."""
     ensure_templates_loaded()
     mock_learner.redis.get.return_value = None  # No cache
@@ -300,11 +300,12 @@ async def test_generate_explanation_kg_error(mock_learner, caplog):
     mock_learner.llm_explanation_client.generate_text.return_value = (
         "Generated explanation"
     )
-    with caplog.at_level(logging.WARNING):
-        explanation = await generate_explanation(
-            mock_learner, "TestDomain", "test_key", {"new": "value"}, None, None
-        )
-    assert "Error interacting with KnowledgeGraph" in caplog.text
+    explanation = await generate_explanation(
+        mock_learner, "TestDomain", "test_key", {"new": "value"}, None, None
+    )
+    # Check stdout since structlog outputs JSON there
+    captured = capsys.readouterr()
+    assert "Error interacting with KnowledgeGraph" in captured.out
     assert "Generated explanation" in explanation
 
 

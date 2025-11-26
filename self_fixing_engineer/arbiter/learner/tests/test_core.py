@@ -492,7 +492,7 @@ class TestLearner:
             mock_verify.return_value = True
 
             # Start self-audit
-            learner.start_self_audit()
+            await learner.start_self_audit()
             assert learner._self_audit_task is not None
             assert not learner._self_audit_task.done()
 
