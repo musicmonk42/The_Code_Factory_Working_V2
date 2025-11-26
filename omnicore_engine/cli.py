@@ -1416,7 +1416,7 @@ def main():
         CLI_COMMANDS.labels(command="serve").inc()
         logger.info(f"Starting Uvicorn server on http://{args.host}:{args.port}")
         uvicorn.run(
-            "app.fastapi_app:app",
+            "omnicore_engine.fastapi_app:app",
             host=args.host,
             port=args.port,
             reload=args.reload,

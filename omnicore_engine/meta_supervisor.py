@@ -10,7 +10,14 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError:
+    torch = None
+    logging.getLogger(__name__).warning(
+        "torch not available. ML-based optimization features will be disabled."
+    )
 
 try:
     import sqlalchemy
@@ -374,12 +381,15 @@ class MetaSupervisor:
         """Helper method to record audit events with the supervisor's database."""
         await record_meta_audit_event(kind, name, details, db=self.db)
 
-    def _init_rl_model(self) -> Optional[torch.nn.Module]:
+    def _init_rl_model(self) -> Optional[Any]:
         """
         Initializes the Reinforcement Learning (RL) model for threshold optimization.
-        Uses PyTorch if backend mode is 'torch', otherwise returns None.
+        Uses PyTorch if backend mode is 'torch' and torch is available, otherwise returns None.
         The model is a simple feed-forward neural network.
         """
+        if torch is None:
+            self.logger.info("RL model not initialized: torch is not available.")
+            return None
         if self.backend.mode == "torch":
             self.logger.debug("Initializing RL model for PyTorch backend.")
             return torch.nn.Sequential(
@@ -394,12 +404,15 @@ class MetaSupervisor:
         self.logger.info("RL model not initialized: backend mode is not 'torch'.")
         return None
 
-    def _init_prediction_model(self) -> Optional[Union[torch.nn.Module, Callable]]:
+    def _init_prediction_model(self) -> Optional[Union[Any, Callable]]:
         """
         Initializes the predictive model for failure forecasting.
-        Uses PyTorch if backend mode is 'torch', otherwise returns a simple random predictor.
+        Uses PyTorch if backend mode is 'torch' and torch is available, otherwise returns a simple random predictor.
         The model predicts a probability of failure.
         """
+        if torch is None:
+            self.logger.info("Prediction model not initialized: torch is not available. Using random predictor.")
+            return lambda x: np.random.random()  # Fallback to a random predictor
         if self.backend.mode == "torch":
             self.logger.debug("Initializing prediction model for PyTorch backend.")
             return torch.nn.Sequential(
@@ -576,7 +589,7 @@ class MetaSupervisor:
             failure_probs = None
             if self.prediction_model:
                 try:
-                    if self.backend.mode == "torch":
+                    if torch is not None and self.backend.mode == "torch":
                         failure_probs = (
                             self.prediction_model(features_tensor)
                             .detach()
@@ -890,7 +903,7 @@ class MetaSupervisor:
 
             # RL model predicts optimal adjustments (actions)
             # Assuming RL model outputs adjustments directly or logits to be converted
-            if self.backend.mode == "torch":
+            if torch is not None and self.backend.mode == "torch":
                 adjustments = (
                     self.rl_model(state_tensor).detach().cpu().numpy().flatten()
                 )
@@ -956,7 +969,7 @@ class MetaSupervisor:
                     )
                     continue
 
-                if self.backend.mode == "torch":
+                if torch is not None and self.backend.mode == "torch":
                     features_tensor = self.backend.array(features.astype(np.float32))
                     targets_tensor = self.backend.array(
                         targets.astype(np.float32)
@@ -1005,7 +1018,7 @@ class MetaSupervisor:
                     )  # Save models after successful retraining
                 else:
                     self.logger.info(
-                        "Skipping model retraining: backend is not 'torch'."
+                        "Skipping model retraining: backend is not 'torch' or torch is not available."
                     )
 
                 explanation = await self.explainer.explain(
@@ -1034,7 +1047,7 @@ class MetaSupervisor:
         """
         self.logger.info("Attempting to save RL and prediction model states.")
         try:
-            if self.backend.mode == "torch" and self.rl_model and self.prediction_model:
+            if torch is not None and self.backend.mode == "torch" and self.rl_model and self.prediction_model:
                 import io
 
                 version = str(uuid.uuid4())
@@ -1058,7 +1071,7 @@ class MetaSupervisor:
                 self.logger.info(f"Saved model states with version {version}.")
             else:
                 self.logger.info(
-                    "Skipping model saving: backend is not 'torch' or models not initialized."
+                    "Skipping model saving: backend is not 'torch', torch is not available, or models not initialized."
                 )
         except Exception as e:
             self.logger.error(f"Model saving failed: {e}", exc_info=True)
@@ -1075,7 +1088,7 @@ class MetaSupervisor:
             f"Attempting to load RL and prediction model states (version: {version if version else 'latest'})."
         )
         try:
-            if self.backend.mode == "torch" and self.rl_model and self.prediction_model:
+            if torch is not None and self.backend.mode == "torch" and self.rl_model and self.prediction_model:
                 model_data = None
                 if version:
                     model_data = await self._rate_limited_operation(
@@ -1117,7 +1130,7 @@ class MetaSupervisor:
                     self.logger.info("No saved model states found to load.")
             else:
                 self.logger.info(
-                    "Skipping model loading: backend is not 'torch' or models not initialized."
+                    "Skipping model loading: backend is not 'torch', torch is not available, or models not initialized."
                 )
         except Exception as e:
             self.logger.error(f"Model loading failed: {e}", exc_info=True)
@@ -1777,18 +1790,18 @@ class MetaSupervisor:
         return np.array(features, dtype=np.float32), np.array(targets, dtype=np.float32)
 
     def _compute_rl_reward(
-        self, actions_tensor: torch.Tensor, test_metrics: Dict
-    ) -> torch.Tensor:
+        self, actions_tensor: Any, test_metrics: Dict
+    ) -> Any:
         """
         Computes the reward signal for the Reinforcement Learning (RL) model based on system performance
         and how well the taken actions (threshold adjustments) align with meta-policies.
 
         Args:
-            actions_tensor (torch.Tensor): The output actions (threshold adjustments) from the RL model.
+            actions_tensor: The output actions (threshold adjustments) from the RL model.
             test_metrics (Dict): Current test metrics (e.g., 'failures', 'total').
 
         Returns:
-            torch.Tensor: A tensor representing the reward.
+            A tensor representing the reward (torch.Tensor if torch available, otherwise np.array).
         """
         self.logger.debug("Computing RL reward.")
         # Base reward: positive if tests are passing, negative if failing badly
@@ -1811,7 +1824,9 @@ class MetaSupervisor:
             # Add more sophisticated reward components based on `actions_tensor`
 
         reward = base_reward + policy_bonus
-        return torch.tensor([reward], dtype=torch.float32)
+        if torch is not None:
+            return torch.tensor([reward], dtype=torch.float32)
+        return np.array([reward], dtype=np.float32)
 
     async def _evaluate_self_performance(self) -> float:
         """
