@@ -94,65 +94,59 @@ class TestRateLimiter:
     @pytest.mark.asyncio
     async def test_allows_calls_below_limit(self):
         settings = Settings(RATE_LIMIT_MAX_REPORTS=3, RATE_LIMIT_WINDOW_SECONDS=10)
-        with patch(
-            "arbiter.bug_manager.bug_manager.rate_limiter", RateLimiter(settings)
-        ):
-            call_count = 0
+        rate_limiter = RateLimiter(settings)
+        call_count = 0
 
-            @bug_manager.rate_limiter.rate_limit
-            async def limited_func(instance, error_data, **kwargs):
-                nonlocal call_count
-                call_count += 1
+        @rate_limiter.rate_limit
+        async def limited_func(instance, error_data, **kwargs):
+            nonlocal call_count
+            call_count += 1
 
-            mock_instance = MagicMock()
+        mock_instance = MagicMock()
 
-            await limited_func(mock_instance, "error1")
-            await limited_func(mock_instance, "error1")
-            await limited_func(mock_instance, "error1")
+        await limited_func(mock_instance, "error1")
+        await limited_func(mock_instance, "error1")
+        await limited_func(mock_instance, "error1")
 
-            assert call_count == 3
+        assert call_count == 3
 
     @pytest.mark.asyncio
     async def test_raises_when_exceeded(self):
         settings = Settings(RATE_LIMIT_MAX_REPORTS=2, RATE_LIMIT_WINDOW_SECONDS=10)
-        with patch(
-            "arbiter.bug_manager.bug_manager.rate_limiter", RateLimiter(settings)
-        ):
+        rate_limiter = RateLimiter(settings)
 
-            @bug_manager.rate_limiter.rate_limit
-            async def limited_func(instance, error_data, **kwargs):
-                pass
+        @rate_limiter.rate_limit
+        async def limited_func(instance, error_data, **kwargs):
+            pass
 
-            mock_instance = MagicMock()
+        mock_instance = MagicMock()
 
+        await limited_func(mock_instance, "error1")
+        await limited_func(mock_instance, "error1")
+
+        with pytest.raises(RateLimitExceededError):
             await limited_func(mock_instance, "error1")
-            await limited_func(mock_instance, "error1")
-
-            with pytest.raises(RateLimitExceededError):
-                await limited_func(mock_instance, "error1")
 
     @pytest.mark.asyncio
     async def test_time_window_resets_limit(self):
         settings = Settings(
             RATE_LIMIT_MAX_REPORTS=1, RATE_LIMIT_WINDOW_SECONDS=1
         )  # Changed to integer
-        with patch(
-            "arbiter.bug_manager.bug_manager.rate_limiter", RateLimiter(settings)
-        ):
+        rate_limiter = RateLimiter(settings)
 
-            @bug_manager.rate_limiter.rate_limit
-            async def limited_func(instance, error_data, **kwargs):
-                pass
+        @rate_limiter.rate_limit
+        async def limited_func(instance, error_data, **kwargs):
+            pass
 
-            mock_instance = MagicMock()
+        mock_instance = MagicMock()
 
+        await limited_func(mock_instance, "error1")
+        with pytest.raises(RateLimitExceededError):
             await limited_func(mock_instance, "error1")
-            with pytest.raises(RateLimitExceededError):
-                await limited_func(mock_instance, "error1")
 
-            await asyncio.sleep(1.1)  # Adjusted sleep time
+        await asyncio.sleep(1.1)  # Adjusted sleep time
 
-            await limited_func(mock_instance, "error1")
+        await limited_func(mock_instance, "error1")
 
 
 class TestBugManager:
@@ -266,15 +260,11 @@ class TestBugManager:
         # Patch the instance's rate limiting
         error = "Repeated error"
 
-        # Make two successful calls
+        # Make two successful calls (mock_settings has RATE_LIMIT_MAX_REPORTS=2)
         await manager.report(error, location="rate_test")
         await manager.report(error, location="rate_test")
 
-        # Third call should fail - directly test the rate limiter
-        from arbiter.bug_manager.bug_manager import rate_limiter
-
-        rate_limiter._settings.RATE_LIMIT_MAX_REPORTS = 2
-
+        # Third call should fail based on the rate limiter settings
         with pytest.raises(RateLimitExceededError):
             await manager.report(error, location="rate_test")
 
