@@ -47,10 +47,13 @@ class PluginEventHandler(FileSystemEventHandler):
         self.plugin_dir = plugin_dir or settings.plugin_dir
         self.last_modified_times = {}
         # Fix: Ensure an event loop exists before using it
+        # Note: This handler is designed to work with the watchdog file system observer
+        # which runs in a separate thread. We set the event loop for this thread to
+        # ensure async operations can be scheduled properly.
         try:
             self._loop = asyncio.get_running_loop()
         except RuntimeError:
-            # No running event loop, create a new one
+            # No running event loop in this thread, create and set one
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
 
