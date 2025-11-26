@@ -5,6 +5,7 @@ import logging
 import os
 import re
 from collections import deque
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 
 from prometheus_client import REGISTRY, Counter
@@ -14,6 +15,26 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+class Severity(str, Enum):
+    """Enum representing severity levels for bug reports."""
+
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+    @classmethod
+    def from_string(cls, value: str) -> "Severity":
+        """Convert a string to a Severity enum, defaulting to MEDIUM if invalid."""
+        try:
+            return cls(value.lower())
+        except ValueError:
+            logger.warning(
+                f"Invalid severity string '{value}', defaulting to MEDIUM."
+            )
+            return cls.MEDIUM
 
 
 def get_or_create_metric(metric_class, name, documentation, labelnames=None):

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 # Import from the correct module
-from multi_modal_schemas import (
+from arbiter.models.multi_modal_schemas import (
     AudioAnalysisResult,
     AudioTranscriptionResult,
     BaseConfig,

@@ -14,32 +14,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .metrics import learn_error_counter
 
-# Structured logging setup
-structlog.configure(
-    processors=[
-        structlog.processors.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.stdlib.add_log_level_number,
-        structlog.stdlib.add_logger_name,
-        # FIXED: Lambda now accepts all 3 required arguments
-        lambda logger, method_name, event_dict: {
-            **event_dict,
-            "trace_id": (
-                f"{trace.get_current_span().get_span_context().trace_id:x}"
-                if trace.get_current_span().is_recording()
-                else "none"
-            ),
-            "method": method_name,  # Now using method_name parameter
-            "logger_name": (
-                logger.name if hasattr(logger, "name") else str(logger)
-            ),  # Now using logger parameter
-        },
-        structlog.processors.JSONRenderer(),
-    ],
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    wrapper_class=structlog.stdlib.BoundLogger,
-    cache_logger_on_first_use=True,
-)
+# Use logger without reconfiguring structlog (configured in __init__.py)
 logger = structlog.get_logger(__name__)
 
 # OpenTelemetry tracer

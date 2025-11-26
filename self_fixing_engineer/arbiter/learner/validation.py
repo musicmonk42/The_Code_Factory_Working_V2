@@ -16,27 +16,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .encryption import ArbiterConfig
 
-# Structured logging setup
-structlog.configure(
-    processors=[
-        structlog.processors.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.stdlib.add_log_level_number,
-        structlog.stdlib.add_logger_name,
-        lambda record, _: {
-            **record,
-            "trace_id": (
-                f"{trace.get_current_span().get_span_context().trace_id:x}"
-                if trace.get_current_span().is_recording()
-                else "none"
-            ),
-        },
-        structlog.processors.JSONRenderer(),
-    ],
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    wrapper_class=structlog.stdlib.BoundLogger,
-    cache_logger_on_first_use=True,
-)
+# Use logger without reconfiguring structlog (configured in __init__.py)
 logger = structlog.get_logger(__name__)
 
 # OpenTelemetry tracer

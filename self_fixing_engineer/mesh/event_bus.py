@@ -128,6 +128,9 @@ try:
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
+    redis = None  # type: ignore
+    ConnectionPool = None  # type: ignore
+    ClusterConnectionPool = None  # type: ignore
 
 try:
     from cryptography.fernet import Fernet, MultiFernet

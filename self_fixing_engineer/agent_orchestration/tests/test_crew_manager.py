@@ -10,7 +10,7 @@ from agent_orchestration.crew_manager import (
     MAX_CONFIG_SIZE,
     CrewAgentBase,
     CrewManager,
-    PermissionError,
+    CrewPermissionError as PermissionError,
     ResourceError,
     sanitize_dict,
     structured_log,
