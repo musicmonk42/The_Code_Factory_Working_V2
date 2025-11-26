@@ -152,9 +152,13 @@ class TestPlugin:
     @pytest.fixture
     def plugin_instance(self):
         """Create a test plugin instance"""
-        # Use safe=False to avoid sandbox execution in tests
+        # Use safe=False to avoid sandbox execution in tests.
+        # When safe=True (default), the Plugin.execute method uses asyncio.to_thread
+        # with process sandboxing which doesn't work well with Mock objects.
         meta = PluginMeta(name="test", kind="execution", safe=False)
-        # Use a real function instead of Mock to avoid the execute attribute issue
+        # Use a real function instead of Mock to avoid the execute attribute issue.
+        # Mock auto-creates any attribute on access, so self.fn.execute exists
+        # and the Plugin class incorrectly calls fn.execute instead of fn.
         def fn(*args, **kwargs):
             return "test_result"
         tracker = Mock()
