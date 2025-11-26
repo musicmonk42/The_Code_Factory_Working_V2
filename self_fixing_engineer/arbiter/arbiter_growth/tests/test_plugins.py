@@ -113,7 +113,7 @@ def test_plugin_hook_must_implement_on_growth_event():
 
     with pytest.raises(
         TypeError,
-        match="Can't instantiate abstract class InvalidPlugin with abstract method on_growth_event",
+        match=r"Can't instantiate abstract class InvalidPlugin (with abstract method|without an implementation for abstract method)",
     ):
         InvalidPlugin()
 
