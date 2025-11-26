@@ -118,61 +118,11 @@ create_module_stub(
     },
 )
 
-create_module_stub(
-    "tenacity",
-    {
-        "retry": lambda **kwargs: lambda f: f,
-        "stop_after_attempt": lambda n: None,
-        "wait_exponential": lambda **kwargs: None,
-        "retry_if_exception_type": lambda exc: None,
-    },
-)
+# NOTE: tenacity stub removed - use the real module since tenacity is installed
 
-create_module_stub(
-    "cryptography.fernet",
-    {
-        "Fernet": type(
-            "Fernet",
-            (),
-            {
-                "__init__": lambda self, key: None,
-                "encrypt": lambda self, data: b"encrypted_" + data,
-                "decrypt": lambda self, data: data.replace(b"encrypted_", b""),
-            },
-        )
-    },
-)
+# NOTE: cryptography.fernet stub removed - use the real module since cryptography is installed
 
-create_module_stub(
-    "sqlalchemy",
-    {
-        "Column": MagicMock,
-        "Integer": MagicMock,
-        "String": MagicMock,
-        "Float": MagicMock,
-        "Text": MagicMock,
-        "JSON": MagicMock,
-    },
-)
-
-create_module_stub(
-    "sqlalchemy.ext.asyncio",
-    {
-        "AsyncSession": MagicMock,
-        "create_async_engine": MagicMock,
-        "async_sessionmaker": MagicMock,
-    },
-)
-
-create_module_stub("sqlalchemy.ext.mutable", {"MutableDict": dict})
-
-create_module_stub("sqlalchemy.future", {"select": MagicMock})
-
-create_module_stub("sqlalchemy.dialects.sqlite", {"JSON": MagicMock})
-
-create_module_stub("sqlalchemy.exc", {"SQLAlchemyError": Exception})
-
-create_module_stub("sqlalchemy.orm", {"declarative_base": lambda: type("Base", (), {})})
+# NOTE: sqlalchemy stubs removed - use the real module since sqlalchemy is installed
 
 create_module_stub("aiofiles", {"open": MagicMock})
 
