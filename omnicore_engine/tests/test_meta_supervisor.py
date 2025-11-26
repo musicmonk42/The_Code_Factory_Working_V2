@@ -17,6 +17,7 @@ import pytest
 # Handle torch import error gracefully
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except (ImportError, OSError):
     torch = None
@@ -153,7 +154,7 @@ class TestMetaSupervisorInitialization:
         # So after __init__, they are None until initialize() is called
         assert supervisor.rl_model is None
         assert supervisor.prediction_model is None
-        
+
         # Verify that _init_rl_model would work with torch backend
         model = supervisor._init_rl_model()
         assert model is not None
@@ -393,9 +394,7 @@ class TestConfigInspection:
         supervisor.policy_engine.should_auto_learn = Mock(
             return_value=(True, "Allowed")
         )
-        supervisor.knowledge_graph.add_fact = Mock(
-            return_value={"ethical_impact": 0.8}
-        )
+        supervisor.knowledge_graph.add_fact = Mock(return_value={"ethical_impact": 0.8})
         supervisor.thresholds["ethics_drift"] = 0.05
 
         change = {"user_id": "user1", "new_value": {"setting": "questionable"}}
@@ -621,14 +620,14 @@ class TestSupervisorLifecycle:
             mock_task = Mock()
             mock_task.done.return_value = False
             mock_task.cancel.return_value = None
-            
+
             # Create an async coroutine for when the task is awaited after cancellation
             async def cancelled_task():
                 raise asyncio.CancelledError()
-            
+
             # Mock __await__ to make it awaitable
             mock_task.__await__ = lambda self: cancelled_task().__await__()
-            
+
             supervisor.sub_supervisors["sub_test"] = mock_task
 
             await supervisor.stop()
@@ -737,7 +736,7 @@ class TestMainLoop:
             supervisor.publish_meta_status = AsyncMock()
             # Mock _rate_limited_operation to return a dict with "changes" key
             supervisor._rate_limited_operation = AsyncMock(return_value={"changes": []})
-            
+
             # Run with max iterations of 1 to verify focus works
             with patch("omnicore_engine.meta_supervisor.MAX_ITERATIONS", 1):
                 await supervisor.run()

@@ -156,11 +156,13 @@ class TestPlugin:
         # When safe=True (default), the Plugin.execute method uses asyncio.to_thread
         # with process sandboxing which doesn't work well with Mock objects.
         meta = PluginMeta(name="test", kind="execution", safe=False)
+
         # Use a real function instead of Mock to avoid the execute attribute issue.
         # Mock auto-creates any attribute on access, so self.fn.execute exists
         # and the Plugin class incorrectly calls fn.execute instead of fn.
         def fn(*args, **kwargs):
             return "test_result"
+
         tracker = Mock()
         tracker.record_performance = AsyncMock()
         return Plugin(meta, fn, tracker)
@@ -176,9 +178,11 @@ class TestPlugin:
     async def test_execute_async_function(self):
         """Test executing asynchronous plugin function"""
         meta = PluginMeta(name="async_test", kind="execution", safe=False)
+
         # Use a real async function
         async def async_fn(*args, **kwargs):
             return "async_result"
+
         tracker = Mock()
         tracker.record_performance = AsyncMock()
         plugin = Plugin(meta, async_fn, tracker)
@@ -210,9 +214,11 @@ class TestPlugin:
     async def test_execute_with_error(self):
         """Test plugin execution error handling"""
         meta = PluginMeta(name="error_test", kind="execution", safe=False)
+
         # Use a function that raises an error
         def error_fn(*args, **kwargs):
             raise Exception("Test error")
+
         tracker = Mock()
         tracker.record_performance = AsyncMock()
         plugin = Plugin(meta, error_fn, tracker)
@@ -238,7 +244,7 @@ class TestPluginRegistry:
         """Test registering a plugin"""
         plugin = Mock()
         plugin.meta = Mock(name="test", kind="execution")
-        
+
         # Mock the audit_client to be None to avoid async task creation issues
         registry.audit_client = None
 
@@ -309,7 +315,7 @@ def test_function():
             # Test that load_from_directory doesn't raise an error
             # and can process a plugin file
             await registry.load_from_directory(tmpdir)
-            
+
             # The plugin loading mechanism processes the file, but the registration
             # depends on the @plugin decorator which registers to the global registry.
             # For this test, we verify that the method completes without error.

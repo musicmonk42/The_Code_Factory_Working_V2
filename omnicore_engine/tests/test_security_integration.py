@@ -197,11 +197,13 @@ class TestSecurityIntegrationManager:
         request.client.host = "192.168.1.1"
         # Set up headers as a mock that returns string values for .get() calls
         request.headers = Mock()
-        request.headers.get = Mock(side_effect=lambda key, default="": {
-            "user-agent": "TestAgent/1.0",
-            "accept-language": "en-US",
-            "accept-encoding": "gzip",
-        }.get(key, default))
+        request.headers.get = Mock(
+            side_effect=lambda key, default="": {
+                "user-agent": "TestAgent/1.0",
+                "accept-language": "en-US",
+                "accept-encoding": "gzip",
+            }.get(key, default)
+        )
 
         session = await manager.authenticate(
             username="testuser",
