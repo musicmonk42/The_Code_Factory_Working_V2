@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import inspect
 import logging
 from abc import ABC, abstractmethod
 from datetime import date, datetime
@@ -347,9 +348,10 @@ class OmniCoreEngine:
                 self.logger.info(f"Initializing component: {name}...")
                 instance = component_class(*args, **kwargs)
                 if hasattr(instance, "initialize") and callable(instance.initialize):
-                    result = instance.initialize()
-                    if asyncio.iscoroutine(result):
-                        await result
+                    if inspect.iscoroutinefunction(instance.initialize):
+                        await instance.initialize()
+                    else:
+                        instance.initialize()
                 self.components[name] = instance
                 self.logger.info(f"Component '{name}' initialized successfully.")
             except Exception as e:
