@@ -621,7 +621,6 @@ async def explain_simulation(request: Request):
 @router.post("/notify")
 async def notify(request: Request):
     API_REQUESTS.labels(endpoint="/notify", method="POST").inc()
-    start_time = time.time()
     try:
         data = await request.json()
         logger.info(
@@ -639,7 +638,6 @@ async def notify(request: Request):
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_bot(chat_request: ChatRequest):
     API_REQUESTS.labels(endpoint="/chat", method="POST").inc()
-    start_time = time.time()
     if not ARBITER_AVAILABLE:
         return ChatResponse(
             response="Chatbot unavailable.",
