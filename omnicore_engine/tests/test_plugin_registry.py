@@ -152,7 +152,8 @@ class TestPlugin:
     @pytest.fixture
     def plugin_instance(self):
         """Create a test plugin instance"""
-        meta = PluginMeta(name="test", kind="execution")
+        # Use safe=False to avoid sandbox execution in tests
+        meta = PluginMeta(name="test", kind="execution", safe=False)
         fn = Mock(return_value="test_result")
         tracker = Mock()
         return Plugin(meta, fn, tracker)
@@ -168,7 +169,7 @@ class TestPlugin:
     @pytest.mark.asyncio
     async def test_execute_async_function(self):
         """Test executing asynchronous plugin function"""
-        meta = PluginMeta(name="async_test", kind="execution")
+        meta = PluginMeta(name="async_test", kind="execution", safe=False)
         async_fn = AsyncMock(return_value="async_result")
         plugin = Plugin(meta, async_fn)
 
@@ -180,7 +181,7 @@ class TestPlugin:
     @pytest.mark.asyncio
     async def test_execute_with_performance_tracking(self):
         """Test plugin execution with performance tracking"""
-        meta = PluginMeta(name="tracked", kind="execution")
+        meta = PluginMeta(name="tracked", kind="execution", safe=False)
         fn = Mock(return_value="result")
         tracker = Mock()
         tracker.record_performance = AsyncMock()
@@ -499,6 +500,7 @@ class TestPluginMarketplace:
         db.save_preferences = AsyncMock()
         redis = Mock()
         audit = Mock()
+        audit.add_entry_async = AsyncMock()
         return PluginMarketplace(db, redis, audit)
 
     @pytest.mark.asyncio
