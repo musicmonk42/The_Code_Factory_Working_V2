@@ -269,6 +269,7 @@ SAFE_BUILTINS = {
     "zip": zip,
     "isinstance": isinstance,
     "callable": callable,
+    "__import__": __import__,  # Required for allowed imports to work
 }
 
 

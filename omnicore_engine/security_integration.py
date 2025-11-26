@@ -917,8 +917,8 @@ def validate_input(schema: BaseModel):
         async def wrapper(*args, **kwargs):
             # Validate input against schema
             try:
-                # Extract data from kwargs
-                data = kwargs.get("data") or args[0] if args else {}
+                # Extract data from kwargs or args with proper precedence
+                data = kwargs.get("data") or (args[0] if args else {})
                 validated = schema(**data)
 
                 # Replace with validated data
