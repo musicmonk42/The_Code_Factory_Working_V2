@@ -326,6 +326,7 @@ class TamperEvidentLogger:
             context = span.get_span_context()
             if context.is_valid:
                 return f"{context.trace_id:x}", f"{context.span_id:x}"
+            return None, None
         except Exception:
             return None, None
 
