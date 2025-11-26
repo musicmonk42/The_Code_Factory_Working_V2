@@ -836,6 +836,12 @@ async def fix_imports(file: UploadFile = Depends(validate_upload)):
     Exposes the AI-powered import fixer via an HTTP endpoint.
     """
     try:
+        if AIManager is None:
+            raise HTTPException(
+                status_code=503,
+                detail={"message": "AI Import Fixer is not available. Required module not installed."}
+            )
+
         ai_manager = AIManager()
 
         code = await file.read()
@@ -843,6 +849,8 @@ async def fix_imports(file: UploadFile = Depends(validate_upload)):
         suggestion = ai_manager.get_refactoring_suggestion(code.decode())
 
         return {"suggestion": suggestion}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error during import fixing: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"message": str(e)})
