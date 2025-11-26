@@ -1594,3 +1594,42 @@ class ExplainAudit:
                     },
                 )
             )
+
+    def get_merkle_root(self) -> Optional[str]:
+        """
+        Get the current Merkle root hash.
+        
+        Returns:
+            The Merkle root hash or None if merkle tree is not available.
+        """
+        if self.system_audit_merkle_tree:
+            return self.system_audit_merkle_tree.get_merkle_root()
+        return None
+
+    async def get_records(self, kind: str) -> List[Dict]:
+        """
+        Get audit records filtered by kind.
+        
+        Args:
+            kind: The kind/type of audit records to retrieve.
+            
+        Returns:
+            List of audit records matching the kind.
+        """
+        filters = {"kind": kind}
+        return await self.query_audit_records(filters=filters)
+
+    async def export_proof_bundle(
+        self, user_id: str, tenant_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Export a proof bundle for the audit trail.
+        
+        Args:
+            user_id: The user requesting the export.
+            tenant_id: Optional tenant ID for multi-tenancy.
+            
+        Returns:
+            A dictionary containing the proof bundle.
+        """
+        return await self.proof_exporter.export_proof_bundle(user_id, tenant_id)

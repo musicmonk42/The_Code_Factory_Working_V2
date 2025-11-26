@@ -270,6 +270,13 @@ class Database:
         # EnterpriseSecurityUtils uses keyword-only args with defaults
         self.security_utils = EnterpriseSecurityUtils()
 
+        # Fix: Handle raw file paths by converting to SQLite URL
+        # If the path doesn't start with a known URL scheme, assume it's a SQLite file path
+        if not db_path.startswith(("sqlite://", "sqlite+aiosqlite://", "postgresql://", "mysql://", "mssql://")):
+            # Treat as a raw file path - convert to SQLite URL
+            db_path = f"sqlite+aiosqlite:///{db_path}"
+            logger.info(f"Converted raw path to SQLite URL: {db_path}")
+
         # Ensure async driver is used for SQLite
         if db_path.startswith("sqlite:///") and not db_path.startswith(
             "sqlite+aiosqlite://"
@@ -477,6 +484,16 @@ class Database:
 
         # Lock for key rotation to prevent race conditions (Issue #8 fix)
         self._rotation_lock = asyncio.Lock()
+
+    async def close(self) -> None:
+        """
+        Close the database connection and clean up resources.
+        """
+        try:
+            await self.engine.dispose()
+            logger.info("Database connection closed successfully.")
+        except Exception as e:
+            logger.error(f"Error closing database connection: {e}", exc_info=True)
 
     async def initialize(self) -> None:
         """
