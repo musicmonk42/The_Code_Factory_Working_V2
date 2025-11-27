@@ -77,7 +77,7 @@ from logging.handlers import (
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from core_secrets import (
+from .core_secrets import (
     SecretsManager,
 )  # Assumes core_secrets.py is in the same directory
 

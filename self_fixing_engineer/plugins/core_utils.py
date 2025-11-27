@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import requests
-from core_audit import AuditLogger
-from core_secrets import SecretsManager
+from .core_audit import AuditLogger
+from .core_secrets import SecretsManager
 
 # --- Helper Functions ---
 _SENSITIVE_KV = re.compile(

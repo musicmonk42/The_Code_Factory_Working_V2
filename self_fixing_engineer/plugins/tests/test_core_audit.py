@@ -9,7 +9,7 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
-import core_audit
+from plugins import core_audit
 import pytest
 
 # --- Utility and Fixtures ---

@@ -321,17 +321,22 @@ try:
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.trace import Status, StatusCode
 
+    # Use OTLP exporter instead of deprecated Jaeger exporter
+    # (Since v1.35, Jaeger supports OTLP natively. JaegerExporter support ended July 2023.)
     try:
-        from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-
-        exporter = JaegerExporter(agent_host_name="localhost", agent_port=6831)
-    except ImportError:
-        # Jaeger exporter not available, use OTLP as fallback
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
             OTLPSpanExporter,
         )
 
         exporter = OTLPSpanExporter(endpoint="localhost:4317", insecure=True)
+    except ImportError:
+        # OTLP exporter not available, try Console exporter as fallback
+        from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
+        exporter = ConsoleSpanExporter()
+        _base_logger.warning(
+            "OTLP exporter not available. Using ConsoleSpanExporter for tracing."
+        )
 
     _otel_resource = Resource.create({"service.name": "dlt-client-plugin"})
     _otel_tracer_provider = TracerProvider(resource=_otel_resource)
