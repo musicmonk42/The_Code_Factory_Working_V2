@@ -957,8 +957,6 @@ async def run_arena_async(settings=None):
     Args:
         settings: Optional ArbiterConfig instance. If None, will be initialized.
     """
-    import sys
-
     from arbiter.config import ArbiterConfig as Settings
 
     if settings is None:
@@ -1009,24 +1007,26 @@ async def run_arena_async(settings=None):
 def run_arena():
     """
     Synchronous entry point for run_arena. Detects if an event loop is already
-    running and handles both scenarios appropriately.
+    running and raises an error directing users to use the async version.
     """
     import sys
 
     # Check if we're being called from within an existing event loop
+    # asyncio.get_running_loop() raises RuntimeError when there's no running loop
+    # and returns the loop when there is one
+    has_running_loop = False
     try:
-        loop = asyncio.get_running_loop()
-        # If we get here, there's already a running event loop
-        # This shouldn't happen as this is a sync function, but handle it gracefully
-        logger.warning(
-            "run_arena() called from within an existing event loop. "
+        asyncio.get_running_loop()
+        has_running_loop = True
+    except RuntimeError:
+        # No running event loop, proceed normally with synchronous execution
+        pass
+
+    if has_running_loop:
+        raise RuntimeError(
+            "run_arena() cannot be called from within a running event loop. "
             "Use 'await run_arena_async()' instead."
         )
-        # Schedule the async version to run
-        return loop.create_task(run_arena_async())
-    except RuntimeError:
-        # No running event loop, proceed normally
-        pass
 
     from arbiter.config import ArbiterConfig as Settings
 
