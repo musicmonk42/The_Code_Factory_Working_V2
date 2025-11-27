@@ -85,7 +85,6 @@ _ORIGINAL_MODULES = {}
 
 # Setup mocks for dependencies EXCEPT Prometheus metrics
 def setup_mocks():
-    global _ORIGINAL_MODULES
 
     # Save original modules before mocking
     modules_to_mock = [
