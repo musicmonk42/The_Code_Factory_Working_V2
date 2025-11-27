@@ -25,6 +25,11 @@ USAGE:
     data = await backend.get()
 """
 
+# Suppress gym deprecation warning from stable_baselines3 BEFORE any imports
+import warnings
+
+warnings.filterwarnings("ignore", message="Gym has been unmaintained since 2022")
+
 import asyncio
 import json
 import logging
@@ -108,11 +113,6 @@ except Exception:
     class gym:  # noqa: N801
         pass
 
-
-# Suppress gym deprecation warning before importing stable_baselines3
-import warnings
-
-warnings.filterwarnings("ignore", message="Gym has been unmaintained since 2022")
 
 try:
     import stable_baselines3  # type: ignore
