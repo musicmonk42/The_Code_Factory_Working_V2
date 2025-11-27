@@ -46,11 +46,17 @@ class WasmExecutionError(WasmRunnerError):
 class AnalyzerCriticalError(Exception):
     """
     Custom exception for critical errors that should halt execution and alert ops.
+    Note: alert_operator is called lazily to avoid circular import issues.
     """
 
     def __init__(self, message: str, alert_level: str = "CRITICAL"):
         super().__init__(message)
-        alert_operator(message, alert_level)
+        # Call alert_operator lazily to ensure it's defined
+        try:
+            alert_operator(message, alert_level)
+        except NameError:
+            # Fallback if alert_operator is not yet defined
+            logger.critical(f"[ALERT] {message}")
 
 
 class NonCriticalError(Exception):
