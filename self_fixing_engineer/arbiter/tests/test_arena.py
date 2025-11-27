@@ -203,3 +203,70 @@ class TestArbiterArena:
                     assert "/version" in routes
                     assert "/status" in routes
                     assert "/arbiters" in routes
+
+
+class TestExtractSqliteDbFile:
+    """Test the _extract_sqlite_db_file helper function."""
+
+    def test_relative_path_with_dot_slash(self):
+        """Test extracting path from relative URL with ./"""
+        from arbiter.arena import _extract_sqlite_db_file
+
+        result = _extract_sqlite_db_file("sqlite:///./omnicore.db")
+        assert result == "./omnicore.db"
+
+    def test_relative_path_without_dot_slash(self):
+        """Test extracting path from relative URL without ./"""
+        from arbiter.arena import _extract_sqlite_db_file
+
+        result = _extract_sqlite_db_file("sqlite:///omnicore.db")
+        assert result == "omnicore.db"
+
+    def test_absolute_path(self):
+        """Test extracting path from absolute URL."""
+        from arbiter.arena import _extract_sqlite_db_file
+
+        result = _extract_sqlite_db_file("sqlite:////tmp/omnicore.db")
+        assert result == "/tmp/omnicore.db"
+
+    def test_absolute_path_nested(self):
+        """Test extracting nested absolute path."""
+        from arbiter.arena import _extract_sqlite_db_file
+
+        result = _extract_sqlite_db_file("sqlite:////var/data/db/omnicore.db")
+        assert result == "/var/data/db/omnicore.db"
+
+    def test_sqlite_aiosqlite_dialect(self):
+        """Test extracting path from sqlite+aiosqlite URL."""
+        from arbiter.arena import _extract_sqlite_db_file
+
+        result = _extract_sqlite_db_file("sqlite+aiosqlite:///./test.db")
+        assert result == "./test.db"
+
+    def test_non_sqlite_url_unchanged(self):
+        """Test that non-SQLite URLs are returned unchanged."""
+        from arbiter.arena import _extract_sqlite_db_file
+
+        result = _extract_sqlite_db_file("postgresql://user:pass@localhost/db")
+        assert result == "postgresql://user:pass@localhost/db"
+
+    def test_mysql_url_unchanged(self):
+        """Test that MySQL URLs are returned unchanged."""
+        from arbiter.arena import _extract_sqlite_db_file
+
+        result = _extract_sqlite_db_file("mysql://user:pass@localhost/db")
+        assert result == "mysql://user:pass@localhost/db"
+
+    def test_relative_path_in_subdirectory(self):
+        """Test extracting relative path in a subdirectory."""
+        from arbiter.arena import _extract_sqlite_db_file
+
+        result = _extract_sqlite_db_file("sqlite:///./data/omnicore.db")
+        assert result == "./data/omnicore.db"
+
+    def test_simple_filename(self):
+        """Test extracting a simple filename without path."""
+        from arbiter.arena import _extract_sqlite_db_file
+
+        result = _extract_sqlite_db_file("sqlite:///mydb.db")
+        assert result == "mydb.db"

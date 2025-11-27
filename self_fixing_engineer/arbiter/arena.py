@@ -950,6 +950,43 @@ def _handle_shutdown(loop: asyncio.AbstractEventLoop, arena: ArbiterArena):
     asyncio.ensure_future(shutdown_coroutine(), loop=loop)
 
 
+def _extract_sqlite_db_file(db_url: str) -> str:
+    """
+    Extract the database file path from a SQLite URL.
+
+    Handles both relative and absolute paths correctly.
+    For example:
+    - 'sqlite:///./omnicore.db' -> './omnicore.db'
+    - 'sqlite:///omnicore.db' -> 'omnicore.db'
+    - 'sqlite:////tmp/omnicore.db' -> '/tmp/omnicore.db'
+
+    Args:
+        db_url: SQLite database URL
+
+    Returns:
+        The file path portion of the URL
+    """
+    if not db_url.startswith("sqlite"):
+        return db_url
+
+    parsed_path = urlparse(db_url).path
+
+    # urlparse adds a leading '/' to the path. We need to handle this:
+    # - For relative paths like './file.db', path becomes '/./file.db'
+    # - For absolute paths like '/tmp/file.db', path becomes '//tmp/file.db'
+    if parsed_path.startswith("/./"):
+        # Relative path with explicit './'
+        return parsed_path[1:]  # Remove leading '/', keep './'
+    elif parsed_path.startswith("//"):
+        # Absolute path (had 4 slashes in URL)
+        return parsed_path[1:]  # Remove one leading '/', keep the absolute path
+    elif parsed_path.startswith("/"):
+        # Simple filename without directory, or relative path without './'
+        return parsed_path[1:]  # Remove leading '/'
+    else:
+        return parsed_path
+
+
 async def run_arena_async(settings=None):
     """
     Async version of run_arena that can be awaited from an existing event loop.
@@ -967,7 +1004,12 @@ async def run_arena_async(settings=None):
             raise
 
     db_path = settings.DB_PATH
-    db_file = urlparse(db_path).path if db_path.startswith("sqlite") else db_path
+    db_file = _extract_sqlite_db_file(db_path)
+
+    # Ensure the database directory exists
+    db_dir = os.path.dirname(db_file)
+    if db_dir and db_dir != ".":
+        os.makedirs(db_dir, exist_ok=True)
 
     logger.info("Starting Code Guardian Arena test setup...")
     if os.path.exists(db_file):
@@ -978,7 +1020,17 @@ async def run_arena_async(settings=None):
             logger.warning(f"Could not remove existing DB file {db_file}: {e}")
             arena_errors_total.labels(error_type="db_cleanup_fail").inc()
 
-    engine = create_async_engine(f"sqlite+aiosqlite:///{db_file}", echo=False)
+    # Construct the async engine URL correctly
+    # For relative paths, we need at least 3 slashes after sqlite+aiosqlite:
+    # - sqlite+aiosqlite:///./path for relative paths  
+    # - sqlite+aiosqlite:////abs/path for absolute paths
+    if os.path.isabs(db_file):
+        engine_url = f"sqlite+aiosqlite:///{db_file}"
+    elif db_file.startswith("./"):
+        engine_url = f"sqlite+aiosqlite:///{db_file}"
+    else:
+        engine_url = f"sqlite+aiosqlite:///./{db_file}"
+    engine = create_async_engine(engine_url, echo=False)
 
     try:
         async with engine.begin() as conn:
@@ -1044,7 +1096,12 @@ def run_arena():
         logger.info("Created and set a new event loop for __main__ execution.")
 
     db_path = settings.DB_PATH
-    db_file = urlparse(db_path).path if db_path.startswith("sqlite") else db_path
+    db_file = _extract_sqlite_db_file(db_path)
+
+    # Ensure the database directory exists
+    db_dir = os.path.dirname(db_file)
+    if db_dir and db_dir != ".":
+        os.makedirs(db_dir, exist_ok=True)
 
     logger.info("Starting Code Guardian Arena test setup...")
     if os.path.exists(db_file):
@@ -1055,7 +1112,17 @@ def run_arena():
             logger.warning(f"Could not remove existing DB file {db_file}: {e}")
             arena_errors_total.labels(error_type="db_cleanup_fail").inc()
 
-    engine = create_async_engine(f"sqlite+aiosqlite:///{db_file}", echo=False)
+    # Construct the async engine URL correctly
+    # For relative paths, we need at least 3 slashes after sqlite+aiosqlite:
+    # - sqlite+aiosqlite:///./path for relative paths
+    # - sqlite+aiosqlite:////abs/path for absolute paths
+    if os.path.isabs(db_file):
+        engine_url = f"sqlite+aiosqlite:///{db_file}"
+    elif db_file.startswith("./"):
+        engine_url = f"sqlite+aiosqlite:///{db_file}"
+    else:
+        engine_url = f"sqlite+aiosqlite:///./{db_file}"
+    engine = create_async_engine(engine_url, echo=False)
 
     async def create_tables():
         async with engine.begin() as conn:
