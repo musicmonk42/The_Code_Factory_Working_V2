@@ -4,6 +4,7 @@ import logging
 import random
 import time
 import traceback
+import types
 import uuid
 from collections import defaultdict
 from datetime import datetime
@@ -73,8 +74,6 @@ except ImportError:
 
 def _create_fallback_settings():
     """Create a minimal settings object for when ArbiterConfig is unavailable."""
-    import types
-
     return types.SimpleNamespace(
         log_level="INFO",
         LOG_LEVEL="INFO",

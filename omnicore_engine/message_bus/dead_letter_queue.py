@@ -29,14 +29,15 @@ def _get_settings():
     """Lazy import + defensive instantiation of settings."""
     try:
         from arbiter.config import ArbiterConfig
-
-        return ArbiterConfig()
     except ImportError as e:
         logging.warning(
             "Could not import arbiter.config; using fallback settings. Import error: %s",
             e,
         )
         return _create_fallback_settings()
+
+    try:
+        return ArbiterConfig()
     except Exception as e:
         logging.warning(
             "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
