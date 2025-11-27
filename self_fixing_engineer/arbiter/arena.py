@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 # REMOVED: Direct import from prometheus_client (PromCounter, PromGauge, REGISTRY)
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-__all__ = ["ArbiterArena"]
+__all__ = ["ArbiterArena", "run_arena", "run_arena_async"]
 
 # Configure basic logging for this module
 logger = logging.getLogger(__name__)
@@ -950,8 +950,83 @@ def _handle_shutdown(loop: asyncio.AbstractEventLoop, arena: ArbiterArena):
     asyncio.ensure_future(shutdown_coroutine(), loop=loop)
 
 
-def run_arena():
+async def run_arena_async(settings=None):
+    """
+    Async version of run_arena that can be awaited from an existing event loop.
+
+    Args:
+        settings: Optional ArbiterConfig instance. If None, will be initialized.
+    """
     import sys
+
+    from arbiter.config import ArbiterConfig as Settings
+
+    if settings is None:
+        try:
+            settings = Settings.initialize()
+        except Exception as e:
+            logger.critical(f"Failed to initialize configuration: {e}")
+            raise
+
+    db_path = settings.DB_PATH
+    db_file = urlparse(db_path).path if db_path.startswith("sqlite") else db_path
+
+    logger.info("Starting Code Guardian Arena test setup...")
+    if os.path.exists(db_file):
+        try:
+            os.remove(db_file)
+            logger.info(f"Cleaned up existing DB file: {db_file}")
+        except OSError as e:
+            logger.warning(f"Could not remove existing DB file {db_file}: {e}")
+            arena_errors_total.labels(error_type="db_cleanup_fail").inc()
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_file}", echo=False)
+
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as e:
+        logger.critical(f"Failed to create database tables: {e}")
+        arena_errors_total.labels(error_type="db_table_create_fail").inc()
+        raise
+
+    logger.info("Database initialized for arena arbiters.")
+
+    arena = ArbiterArena(
+        name="MainCodeGuardianArena", num=2, settings=settings, db_engine=engine
+    )
+
+    try:
+        await arena.start_arena_services(http_port=settings.ARENA_PORT)
+    except KeyboardInterrupt:
+        logger.info("Arena interrupted by user.")
+    finally:
+        await arena.stop_all()
+        await engine.dispose()
+        logger.info("Arena shutdown complete.")
+
+
+def run_arena():
+    """
+    Synchronous entry point for run_arena. Detects if an event loop is already
+    running and handles both scenarios appropriately.
+    """
+    import sys
+
+    # Check if we're being called from within an existing event loop
+    try:
+        loop = asyncio.get_running_loop()
+        # If we get here, there's already a running event loop
+        # This shouldn't happen as this is a sync function, but handle it gracefully
+        logger.warning(
+            "run_arena() called from within an existing event loop. "
+            "Use 'await run_arena_async()' instead."
+        )
+        # Schedule the async version to run
+        return loop.create_task(run_arena_async())
+    except RuntimeError:
+        # No running event loop, proceed normally
+        pass
 
     from arbiter.config import ArbiterConfig as Settings
 

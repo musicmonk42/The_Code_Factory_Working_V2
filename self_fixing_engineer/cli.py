@@ -25,7 +25,7 @@ class SFEPlatform:
             config = ArbiterConfig.initialize()
 
             # Start the arena in the main process
-            from arbiter.arena import run_arena
+            from arbiter.arena import run_arena_async
 
             print("✓ Configuration loaded")
             print(f"  - Database: {config.DATABASE_URL}")
@@ -33,8 +33,8 @@ class SFEPlatform:
             print("\nStarting Arena (this will run the API server)...")
             print("Press Ctrl+C to stop\n")
 
-            # Run the arena directly
-            await run_arena()
+            # Run the arena directly using the async version
+            await run_arena_async(settings=config)
 
         except ImportError as e:
             print(f"✗ Failed to import required modules: {e}")
