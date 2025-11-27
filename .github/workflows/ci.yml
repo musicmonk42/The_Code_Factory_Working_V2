@@ -173,6 +173,12 @@ jobs:
         run: |
           sudo sysctl -w vm.overcommit_memory=1
           
+      - name: Install redis-cli on runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-tools
+          redis-cli --version
+          
       - name: Wait for Redis to be ready
         run: |
           # Wait loop to ensure Redis service is fully available before running tests
@@ -318,6 +324,12 @@ jobs:
       - name: Enable memory overcommit for Redis
         run: |
           sudo sysctl -w vm.overcommit_memory=1
+          
+      - name: Install redis-cli on runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-tools
+          redis-cli --version
           
       - name: Wait for Redis to be ready
         run: |
