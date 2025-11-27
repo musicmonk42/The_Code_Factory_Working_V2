@@ -174,8 +174,8 @@ class TestArbiterArena:
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
 
-                    # Mock aiohttp session
-                    with patch("aiohttp.ClientSession") as mock_session:
+                    # Mock aiohttp session - patch in the module where it's used
+                    with patch("arbiter.arena.aiohttp.ClientSession") as mock_session:
                         mock_response = AsyncMock()
                         mock_response.status = 200
                         mock_session.return_value.__aenter__.return_value.post.return_value.__aenter__.return_value = (
