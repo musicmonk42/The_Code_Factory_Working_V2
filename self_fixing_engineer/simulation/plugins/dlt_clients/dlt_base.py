@@ -1440,6 +1440,14 @@ async def initialize_dlt_backend_clients(config: Dict[str, Any]) -> None:
         f"Initializing DLT backend: dlt_type={dlt_type}, off_chain_type={off_chain_type}"
     )
 
+    # Use a registry pattern to track available off-chain client implementations
+    off_chain_registry: Dict[str, Optional[Type[BaseOffChainClient]]] = {
+        "in_memory": None,
+        "s3": None,
+        "gcs": None,
+        "azure_blob": None,
+    }
+
     # Import off-chain client implementations
     try:
         from .dlt_offchain_clients import (
@@ -1448,34 +1456,30 @@ async def initialize_dlt_backend_clients(config: Dict[str, Any]) -> None:
             InMemoryOffChainClient,
             S3OffChainClient,
         )
+
+        off_chain_registry["in_memory"] = InMemoryOffChainClient
+        off_chain_registry["s3"] = S3OffChainClient
+        off_chain_registry["gcs"] = GcsOffChainClient
+        off_chain_registry["azure_blob"] = AzureBlobOffChainClient
     except ImportError as e:
         _base_logger.warning(f"Some off-chain clients unavailable: {e}")
-        InMemoryOffChainClient = None
-        S3OffChainClient = None
-        GcsOffChainClient = None
-        AzureBlobOffChainClient = None
 
     # Create off-chain client based on configuration
     off_chain_client: Optional[BaseOffChainClient] = None
 
-    if off_chain_type == "in_memory" and InMemoryOffChainClient:
-        off_chain_client = InMemoryOffChainClient(config)
-    elif off_chain_type == "s3" and S3OffChainClient:
-        off_chain_client = S3OffChainClient(config)
-        await off_chain_client.initialize()
-    elif off_chain_type == "gcs" and GcsOffChainClient:
-        off_chain_client = GcsOffChainClient(config)
-        await off_chain_client.initialize()
-    elif off_chain_type == "azure_blob" and AzureBlobOffChainClient:
-        off_chain_client = AzureBlobOffChainClient(config)
-        await off_chain_client.initialize()
+    OffChainClientClass = off_chain_registry.get(off_chain_type)
+    if OffChainClientClass:
+        off_chain_client = OffChainClientClass(config)
+        if hasattr(off_chain_client, "initialize") and off_chain_type != "in_memory":
+            await off_chain_client.initialize()
     else:
         # Fallback to in-memory if available
-        if InMemoryOffChainClient:
+        InMemoryClass = off_chain_registry.get("in_memory")
+        if InMemoryClass:
             _base_logger.warning(
                 f"Off-chain type '{off_chain_type}' not available, falling back to in_memory"
             )
-            off_chain_client = InMemoryOffChainClient(config)
+            off_chain_client = InMemoryClass(config)
         else:
             _base_logger.error("No off-chain client available")
             return
@@ -1483,9 +1487,9 @@ async def initialize_dlt_backend_clients(config: Dict[str, Any]) -> None:
     # Create DLT client based on configuration
     if dlt_type == "simple":
         try:
-            from .dlt_simple_clients import SimpleDLTClient
+            from .dlt_simple_clients import SimpleDLTClient as SimpleDLTClientImpl
 
-            _dlt_client_instance = SimpleDLTClient(config, off_chain_client)
+            _dlt_client_instance = SimpleDLTClientImpl(config, off_chain_client)
             await _dlt_client_instance.initialize()
         except ImportError as e:
             _base_logger.error(f"SimpleDLTClient unavailable: {e}")
@@ -1515,9 +1519,9 @@ async def initialize_dlt_backend_clients(config: Dict[str, Any]) -> None:
     else:
         _base_logger.warning(f"Unknown DLT type: {dlt_type}, using SimpleDLTClient")
         try:
-            from .dlt_simple_clients import SimpleDLTClient
+            from .dlt_simple_clients import SimpleDLTClient as SimpleDLTClientFallback
 
-            _dlt_client_instance = SimpleDLTClient(config, off_chain_client)
+            _dlt_client_instance = SimpleDLTClientFallback(config, off_chain_client)
             await _dlt_client_instance.initialize()
         except ImportError as e:
             _base_logger.error(f"SimpleDLTClient unavailable: {e}")
@@ -1531,15 +1535,21 @@ async def initialize_dlt_backend_clients(config: Dict[str, Any]) -> None:
 
 
 # Import and re-export EVM client for backwards compatibility
+# Using Optional pattern to properly handle missing dependencies
+EVMDLTClient: Optional[Type[BaseDLTClient]] = None
 try:
-    from .dlt_evm_clients import EthereumClientWrapper as EVMDLTClient
+    from .dlt_evm_clients import EthereumClientWrapper
+
+    EVMDLTClient = EthereumClientWrapper
 except ImportError:
     _base_logger.debug("EVMDLTClient not available - web3.py may not be installed")
-    EVMDLTClient = None  # type: ignore
 
 # Import and re-export SimpleDLTClient for backwards compatibility
+# Using Optional pattern to properly handle missing dependencies
+SimpleDLTClient: Optional[Type[BaseDLTClient]] = None
 try:
-    from .dlt_simple_clients import SimpleDLTClient
+    from .dlt_simple_clients import SimpleDLTClient as _SimpleDLTClient
+
+    SimpleDLTClient = _SimpleDLTClient
 except ImportError:
     _base_logger.debug("SimpleDLTClient not available")
-    SimpleDLTClient = None  # type: ignore
