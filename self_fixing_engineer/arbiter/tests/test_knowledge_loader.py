@@ -15,6 +15,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, mock_open, patch
 import pytest
 from arbiter.knowledge_loader import (
     KnowledgeLoader,
+    _load_knowledge_sync,
     load_knowledge,
     merge_dict,
     save_knowledge_atomic,
