@@ -128,6 +128,7 @@ def _restore_original_modules():
 
 # Register cleanup to run after all tests in this module
 import atexit
+
 atexit.register(_restore_original_modules)
 
 

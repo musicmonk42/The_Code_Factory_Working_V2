@@ -82,25 +82,34 @@ class MockTracer:
 # Store original modules for restoration
 _ORIGINAL_MODULES = {}
 
+
 # Setup mocks for dependencies EXCEPT Prometheus metrics
 def setup_mocks():
-    global _ORIGINAL_MODULES
-    
     # Save original modules before mocking
     modules_to_mock = [
-        "redis", "redis.asyncio", "redis.exceptions",
+        "redis",
+        "redis.asyncio",
+        "redis.exceptions",
         "aiolimiter",
-        "opentelemetry", "opentelemetry.trace", "opentelemetry.instrumentation",
-        "opentelemetry.instrumentation.asyncio", "opentelemetry.instrumentation.redis",
-        "opentelemetry.sdk", "opentelemetry.sdk.resources", "opentelemetry.sdk.trace",
-        "opentelemetry.sdk.trace.export", "opentelemetry.exporter",
-        "opentelemetry.exporter.otlp", "opentelemetry.exporter.otlp.proto",
-        "opentelemetry.exporter.otlp.proto.http", "opentelemetry.exporter.otlp.proto.http.trace_exporter",
+        "opentelemetry",
+        "opentelemetry.trace",
+        "opentelemetry.instrumentation",
+        "opentelemetry.instrumentation.asyncio",
+        "opentelemetry.instrumentation.redis",
+        "opentelemetry.sdk",
+        "opentelemetry.sdk.resources",
+        "opentelemetry.sdk.trace",
+        "opentelemetry.sdk.trace.export",
+        "opentelemetry.exporter",
+        "opentelemetry.exporter.otlp",
+        "opentelemetry.exporter.otlp.proto",
+        "opentelemetry.exporter.otlp.proto.http",
+        "opentelemetry.exporter.otlp.proto.http.trace_exporter",
     ]
     for mod in modules_to_mock:
         if mod in sys.modules:
             _ORIGINAL_MODULES[mod] = sys.modules[mod]
-    
+
     # Redis mocks with real exceptions
     mock_redis = MagicMock()
     mock_redis_async = MagicMock()

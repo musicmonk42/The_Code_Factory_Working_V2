@@ -55,9 +55,7 @@ class TestThreadingLockFix:
         # Note: threading.RLock is a factory function, the actual type is _thread.RLock
         rlock_type = type(threading.RLock())
         for lock in registry._kind_locks.values():
-            assert isinstance(
-                lock, rlock_type
-            ), f"Expected RLock, got {type(lock)}"
+            assert isinstance(lock, rlock_type), f"Expected RLock, got {type(lock)}"
 
 
 class TestRedisStreamFix:

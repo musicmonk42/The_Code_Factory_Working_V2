@@ -323,7 +323,9 @@ async def test_agent_client_rollback_config_success(agent_client, mock_session):
     assert success
 
 
-@pytest.mark.skip(reason="PIIRedactorFilter mock not being invoked - needs investigation")
+@pytest.mark.skip(
+    reason="PIIRedactorFilter mock not being invoked - needs investigation"
+)
 @pytest.mark.asyncio
 async def test_pii_redaction(ml_client, mocker: MockerFixture):
     """Test PII redaction in request payloads."""

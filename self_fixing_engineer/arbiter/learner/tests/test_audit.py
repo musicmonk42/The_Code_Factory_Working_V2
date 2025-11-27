@@ -205,7 +205,9 @@ class TestPersistKnowledge:
     @pytest.mark.asyncio
     async def test_persist_knowledge_success(self, mock_db, mock_circuit_breaker):
         """Test successful knowledge persistence."""
-        with patch("arbiter.learner.audit.audit_log", new_callable=AsyncMock) as mock_audit_log:
+        with patch(
+            "arbiter.learner.audit.audit_log", new_callable=AsyncMock
+        ) as mock_audit_log:
             value_with_metadata = {
                 "value": "test_value",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -326,7 +328,9 @@ class TestPersistKnowledge:
             side_effect=[Exception("Transient"), Exception("Transient"), None]
         )
 
-        with patch("arbiter.learner.audit.audit_log", new_callable=AsyncMock) as mock_audit_log:
+        with patch(
+            "arbiter.learner.audit.audit_log", new_callable=AsyncMock
+        ) as mock_audit_log:
             value_with_metadata = {
                 "value": "test_value",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -416,7 +420,9 @@ class TestPersistKnowledgeBatch:
         self, mock_db, mock_circuit_breaker, sample_entries
     ):
         """Test successful batch persistence."""
-        with patch("arbiter.learner.audit.audit_log", new_callable=AsyncMock) as mock_audit_log:
+        with patch(
+            "arbiter.learner.audit.audit_log", new_callable=AsyncMock
+        ) as mock_audit_log:
             await persist_knowledge_batch(
                 db=mock_db,
                 circuit_breaker=mock_circuit_breaker,

@@ -31,9 +31,7 @@ class Severity(str, Enum):
         try:
             return cls(value.lower())
         except ValueError:
-            logger.warning(
-                f"Invalid severity string '{value}', defaulting to MEDIUM."
-            )
+            logger.warning(f"Invalid severity string '{value}', defaulting to MEDIUM.")
             return cls.MEDIUM
 
 

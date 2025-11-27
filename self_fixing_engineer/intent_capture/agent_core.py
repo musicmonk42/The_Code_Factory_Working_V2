@@ -91,12 +91,17 @@ except ImportError:
         # Provide a stub class for compatibility
         class VectorStoreRetrieverMemory:
             """Stub for deprecated VectorStoreRetrieverMemory."""
+
             def __init__(self, **kwargs):
                 self.retriever = kwargs.get("retriever")
+
             def load_memory_variables(self, inputs):
                 return {}
+
             def save_context(self, inputs, outputs):
                 pass
+
+
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.messages import (
     AIMessage,

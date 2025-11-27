@@ -44,6 +44,7 @@ class NonCriticalError(Exception):
 # Use try/except with graceful fallbacks to avoid circular import issues
 try:
     from self_healing_import_fixer.import_fixer.cache_layer import get_cache
+
     _HAS_CACHE_LAYER = True
 except ImportError as e:
     _HAS_CACHE_LAYER = False
@@ -57,32 +58,43 @@ try:
         audit_logger,
         scrub_secrets,
     )
+
     _HAS_COMPAT_CORE = True
 except ImportError as e:
     _HAS_COMPAT_CORE = False
     logger.warning(f"compat_core not available: {e}. Using fallbacks.")
-    
+
     # Fallback implementations
     class _FallbackSecretsManager:
         def get_secret(self, key: str, required: bool = False) -> Optional[str]:
             return os.getenv(key)
-    
+
     SECRETS_MANAGER = _FallbackSecretsManager()
-    
+
     def alert_operator(msg: str, level: str = "WARNING") -> None:
         logger.log(getattr(logging, level, logging.WARNING), f"ALERT: {msg}")
-    
+
     class _FallbackAuditLogger:
-        def info(self, msg: str, **kwargs): logger.info(msg)
-        def warning(self, msg: str, **kwargs): logger.warning(msg)
-        def error(self, msg: str, **kwargs): logger.error(msg)
-        def debug(self, msg: str, **kwargs): logger.debug(msg)
-        def log_event(self, event: str, **kwargs): logger.info(f"AUDIT: {event}")
-    
+        def info(self, msg: str, **kwargs):
+            logger.info(msg)
+
+        def warning(self, msg: str, **kwargs):
+            logger.warning(msg)
+
+        def error(self, msg: str, **kwargs):
+            logger.error(msg)
+
+        def debug(self, msg: str, **kwargs):
+            logger.debug(msg)
+
+        def log_event(self, event: str, **kwargs):
+            logger.info(f"AUDIT: {event}")
+
     audit_logger = _FallbackAuditLogger()
-    
+
     def scrub_secrets(data):
         return data
+
 
 # --- Caching: Redis Client Initialization ---
 _redis_failure_count = 0

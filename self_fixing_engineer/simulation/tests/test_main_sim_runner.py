@@ -44,8 +44,12 @@ for key, value in test_env_vars.items():
 # Save original modules for modules we need to mock
 _ORIGINAL_MODULES = {}
 _MODULES_TO_MOCK = [
-    "prometheus_client", "kubernetes", "kubernetes.client", "kubernetes.config",
-    "boto3", "requests",
+    "prometheus_client",
+    "kubernetes",
+    "kubernetes.client",
+    "kubernetes.config",
+    "boto3",
+    "requests",
 ]
 for _mod in _MODULES_TO_MOCK:
     if _mod in sys.modules:

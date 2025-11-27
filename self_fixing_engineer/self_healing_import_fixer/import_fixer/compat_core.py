@@ -78,28 +78,42 @@ except ImportError:
 # to avoid circular import issues with arbiter
 try:
     from arbiter.otel_config import get_tracer
+
     _HAS_ARBITER_OTEL = True
 except (ImportError, ModuleNotFoundError):
     _HAS_ARBITER_OTEL = False
+
     # Fallback: create a simple get_tracer function
     def get_tracer(name: str):
         """Fallback tracer that returns a no-op tracer."""
         try:
             from opentelemetry import trace
+
             return trace.get_tracer(name)
         except ImportError:
             # Return a no-op tracer
             class _NoOpSpan:
-                def __enter__(self): return self
-                def __exit__(self, *args): pass
-                def set_attribute(self, *args, **kwargs): pass
-                def add_event(self, *args, **kwargs): pass
-                def record_exception(self, *args, **kwargs): pass
-            
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    pass
+
+                def set_attribute(self, *args, **kwargs):
+                    pass
+
+                def add_event(self, *args, **kwargs):
+                    pass
+
+                def record_exception(self, *args, **kwargs):
+                    pass
+
             class _NoOpTracer:
                 def start_as_current_span(self, name, **kwargs):
                     return _NoOpSpan()
+
             return _NoOpTracer()
+
 
 # Keep trace import for trace.get_current_span() usage
 try:
@@ -900,6 +914,8 @@ def load_analyzer(module_path: str) -> Any:
         return importlib.import_module(module_path)
     except ImportError:
         return MagicMock()
+
+
 try:
     _NoOpMetric
 except NameError:
