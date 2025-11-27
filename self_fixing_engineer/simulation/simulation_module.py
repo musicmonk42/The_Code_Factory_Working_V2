@@ -629,3 +629,42 @@ async def run_simulation(
         return await module.execute_simulation(config)
     finally:
         await module.shutdown()
+
+
+# ------------------------------ SimulationEngine (Alias) --------------------------
+class SimulationEngine:
+    """
+    A wrapper class providing a simple interface for simulations.
+    This class is used by arena.py and other components that expect a SimulationEngine.
+    """
+
+    def __init__(self):
+        self.name = "SimulationEngine"
+        self._db = Database()
+        self._message_bus = ShardedMessageBus()
+        self._module: Optional[UnifiedSimulationModule] = None
+
+    @staticmethod
+    def get_tools() -> Dict[str, Callable[..., Any]]:
+        """Returns available simulation tools."""
+        return {
+            "run_agent": run_agent,
+            "run_simulation_swarm": run_simulation_swarm,
+            "run_parallel_simulations": run_parallel_simulations,
+        }
+
+    @staticmethod
+    def is_available() -> bool:
+        """Returns True indicating the SimulationEngine is available."""
+        return True
+
+    async def run_simulation(self, *args, **kwargs) -> Dict[str, Any]:
+        """Runs a simulation with the provided configuration."""
+        if self._module is None:
+            self._module = UnifiedSimulationModule(
+                {"SIM_MAX_WORKERS": 4}, self._db, self._message_bus
+            )
+            await self._module.initialize()
+
+        config = args[0] if args else kwargs.get("config", {})
+        return await self._module.execute_simulation(config)

@@ -324,16 +324,16 @@ class FeatureViewModel(BaseModel):
         ..., min_items=1, description="List of entity names."
     )
     ttl: timedelta = PydanticField(..., description="Time-to-live duration.")
-    schema: List[Dict[str, str]] = PydanticField(
+    feature_schema: List[Dict[str, str]] = PydanticField(
         ..., min_items=1, description="Schema fields with name and dtype."
     )
     source: Dict[str, Any] = PydanticField(
         ..., description="Data source configuration."
     )
 
-    @field_validator("schema")
+    @field_validator("feature_schema")
     @classmethod
-    def validate_schema(cls, v):
+    def validate_feature_schema(cls, v):
         for field in v:
             if "name" not in field or "dtype" not in field:
                 raise ValueError("Schema fields must have 'name' and 'dtype'.")
@@ -639,7 +639,7 @@ class FeatureStoreClient:
                             name=defn.name,
                             entities=defn.entities,
                             ttl=defn.ttl,
-                            schema=[
+                            feature_schema=[
                                 {"name": f.name, "dtype": f.dtype.name}
                                 for f in defn.schema
                             ],
