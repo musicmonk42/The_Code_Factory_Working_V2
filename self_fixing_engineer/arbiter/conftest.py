@@ -272,32 +272,22 @@ def mock_plugin_registry(monkeypatch):
 # -----------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
 def reset_prometheus_registry():
-    """Reset Prometheus registry before each test to avoid conflicts."""
+    """Reset Prometheus registry state for test isolation.
+    
+    Note: We don't unregister all collectors as this breaks module-level metrics.
+    Instead, we just yield to allow tests to run with existing metrics.
+    The metrics will accumulate but tests should check relative changes, not absolute values.
+    """
     try:
-        import gc
-
         from prometheus_client import REGISTRY
 
-        # Clear all collectors
-        collectors = list(REGISTRY._collector_to_names.keys())
-        for collector in collectors:
-            try:
-                REGISTRY.unregister(collector)
-            except Exception:
-                pass
-
-        # Force garbage collection
-        gc.collect()
+        # Store initial collector count for debugging
+        initial_collectors = set(REGISTRY._collector_to_names.keys())
 
         yield
 
-        # Clean up after test
-        collectors = list(REGISTRY._collector_to_names.keys())
-        for collector in collectors:
-            try:
-                REGISTRY.unregister(collector)
-            except Exception:
-                pass
+        # We don't aggressively clear metrics anymore as this breaks module-level
+        # metric references that are used across tests
     except ImportError:
         # Prometheus not installed
         yield
