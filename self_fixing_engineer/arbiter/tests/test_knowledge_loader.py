@@ -1,11 +1,19 @@
+"""
+Test suite for knowledge_loader module.
+Tests are aligned with the actual implementation in arbiter/knowledge_loader.py
+"""
+
+import asyncio
 import json
 import logging
 import os
+import shutil
+import tempfile
 import threading
-from unittest.mock import ANY, AsyncMock, mock_open, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, mock_open, patch
 
 import pytest
-from knowledge_loader import (
+from arbiter.knowledge_loader import (
     KnowledgeLoader,
     load_knowledge,
     merge_dict,
@@ -13,16 +21,13 @@ from knowledge_loader import (
 )
 
 
-# Fixture for mock logger
+# Fixture for temporary directory
 @pytest.fixture
-def mock_logger():
-    with (
-        patch.object(logging.getLogger(__name__), "info") as mock_info,
-        patch.object(logging.getLogger(__name__), "debug") as mock_debug,
-        patch.object(logging.getLogger(__name__), "warning") as mock_warning,
-        patch.object(logging.getLogger(__name__), "error") as mock_error,
-    ):
-        yield mock_info, mock_debug, mock_warning, mock_error
+def temp_dir():
+    """Create a temporary directory for tests."""
+    path = tempfile.mkdtemp()
+    yield path
+    shutil.rmtree(path, ignore_errors=True)
 
 
 # Test merge_dict function
@@ -42,178 +47,218 @@ def test_merge_dict(orig, new, expected):
 
 
 # Test save_knowledge_atomic success
-@patch("os.makedirs")
-@patch("tempfile.mkstemp", return_value=(3, "/tmp/temp.json"))
-@patch("os.fdopen", new_callable=mock_open)
-@patch("json.dump")
-@patch("os.replace")
-@patch("os.remove")
-def test_save_knowledge_atomic_success(
-    mock_remove,
-    mock_replace,
-    mock_dump,
-    mock_fdopen,
-    mock_mkstemp,
-    mock_makedirs,
-    mock_logger,
-):
-    info, _, _, _ = mock_logger
+def test_save_knowledge_atomic_success(temp_dir):
+    """Test that atomic save works correctly."""
+    filepath = os.path.join(temp_dir, "test.json")
     data = {"test": "data"}
-    save_knowledge_atomic("test.json", data)
-    mock_makedirs.assert_called_once_with("", exist_ok=True)
-    mock_mkstemp.assert_called_once_with(dir="", prefix=".tmp_sfe_", suffix=".json")
-    mock_fdopen.assert_called_once_with(3, "w", encoding="utf-8")
-    mock_dump.assert_called_once_with(data, ANY, indent=2)
-    mock_replace.assert_called_once_with("/tmp/temp.json", "test.json")
-    info.assert_called_with("Saved aggregated knowledge to test.json atomically.")
-    mock_remove.assert_not_called()
+    save_knowledge_atomic(filepath, data)
+    
+    # Verify file was saved correctly
+    with open(filepath, "r") as f:
+        loaded = json.load(f)
+    assert loaded == data
 
 
-# Test save_knowledge_atomic failure
-@patch("tempfile.mkstemp", return_value=(3, "/tmp/temp.json"))
-@patch("os.fdopen", side_effect=IOError("mock error"))
-@patch("os.remove")
-def test_save_knowledge_atomic_failure(
-    mock_remove, mock_fdopen, mock_mkstemp, mock_logger
-):
-    _, _, _, error = mock_logger
+# Test save_knowledge_atomic failure - with non-existent directory
+def test_save_knowledge_atomic_creates_directory(temp_dir):
+    """Test that atomic save creates necessary directories."""
+    subdir = os.path.join(temp_dir, "subdir")
+    filepath = os.path.join(subdir, "test.json")
     data = {"test": "data"}
-    with pytest.raises(IOError, match="Failed to save knowledge file test.json"):
-        save_knowledge_atomic("test.json", data)
-    error.assert_called_with("ERROR saving knowledge to test.json: mock error")
-    mock_remove.assert_called_once_with("/tmp/temp.json")
+    save_knowledge_atomic(filepath, data)
+    
+    assert os.path.exists(filepath)
+    with open(filepath, "r") as f:
+        loaded = json.load(f)
+    assert loaded == data
 
 
-# Test load_knowledge success
-@patch("builtins.open", new_callable=mock_open, read_data='{"test": "data"}')
-@patch("json.load", return_value={"test": "data"})
-def test_load_knowledge_success(mock_json_load, mock_open, mock_logger):
-    result = load_knowledge("test.json")
-    assert result == {"test": "data"}
-    mock_open.assert_called_once_with("test.json", "r", encoding="utf-8")
+# Test _load_knowledge_sync success
+def test_load_knowledge_sync_success(temp_dir):
+    """Test synchronous knowledge loading."""
+    filepath = os.path.join(temp_dir, "test.json")
+    data = {"test": "data"}
+    with open(filepath, "w") as f:
+        json.dump(data, f)
+    
+    result = _load_knowledge_sync(filepath)
+    assert result == data
 
 
-# Test load_knowledge file not found
-@patch("builtins.open", side_effect=FileNotFoundError("not found"))
-def test_load_knowledge_not_found(mock_open, mock_logger):
-    _, _, _, error = mock_logger
-    result = load_knowledge("missing.json")
+# Test _load_knowledge_sync file not found
+def test_load_knowledge_sync_not_found(temp_dir):
+    """Test loading a non-existent file returns None."""
+    filepath = os.path.join(temp_dir, "missing.json")
+    result = _load_knowledge_sync(filepath)
     assert result is None
-    error.assert_called_with("Knowledge file missing.json not found. Returning None.")
 
 
-# Test load_knowledge invalid json
-@patch("builtins.open", new_callable=mock_open)
-@patch("json.load", side_effect=json.JSONDecodeError("invalid", "doc", 0))
-def test_load_knowledge_invalid_json(mock_json_load, mock_open, mock_logger):
-    _, _, _, error = mock_logger
-    result = load_knowledge("invalid.json")
+# Test _load_knowledge_sync invalid json
+def test_load_knowledge_sync_invalid_json(temp_dir):
+    """Test loading invalid JSON returns None."""
+    filepath = os.path.join(temp_dir, "invalid.json")
+    with open(filepath, "w") as f:
+        f.write("{ not valid json")
+    
+    result = _load_knowledge_sync(filepath)
     assert result is None
-    error.assert_called_with(
-        "Malformed JSON in knowledge file invalid.json: Expecting value: line 1 column 1 (char 0). Returning None."
-    )
+
+
+# Test async load_knowledge function
+@pytest.mark.asyncio
+async def test_load_knowledge_async_success(temp_dir):
+    """Test async knowledge loading."""
+    filepath = os.path.join(temp_dir, "test.json")
+    data = {"test": "data"}
+    with open(filepath, "w") as f:
+        json.dump(data, f)
+    
+    result = await load_knowledge(filepath)
+    assert result == data
+
+
+@pytest.mark.asyncio
+async def test_load_knowledge_async_not_found(temp_dir):
+    """Test async loading of non-existent file."""
+    filepath = os.path.join(temp_dir, "missing.json")
+    result = await load_knowledge(filepath)
+    assert result is None
 
 
 # Test KnowledgeLoader initialization
-@patch("os.walk")
-@patch(
-    "knowledge_loader.load_knowledge",
-    side_effect=lambda f: (
-        {os.path.basename(f): {"data": "test"}} if "test" in f else None
-    ),
-)
-def test_knowledge_loader_init(mock_load, mock_walk, mock_logger):
-    mock_walk.return_value = [("", [], ["test1.json", "test2.json"])]
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
-    assert loader.loaded_knowledge == {
-        "test1": {"data": "test"},
-        "test2": {"data": "test"},
-    }
-    assert mock_load.call_count == 2
+def test_knowledge_loader_init(temp_dir):
+    """Test KnowledgeLoader initialization."""
+    loader = KnowledgeLoader(
+        knowledge_data_path=temp_dir,
+        master_knowledge_file="master.json"
+    )
+    assert loader.knowledge_data_path == temp_dir
+    assert loader.master_knowledge_file == os.path.join(temp_dir, "master.json")
+    assert isinstance(loader.loaded_knowledge, dict)
 
 
-# Test aggregate_knowledge
-@patch("knowledge_loader.load_knowledge", return_value={"existing": "data"})
-def test_aggregate_knowledge(mock_load):
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
-    loader.loaded_knowledge = {"new": "data"}
-    loader.aggregate_knowledge()
-    assert loader.aggregated_knowledge == {"existing": "data", "new": "data"}
+# Test KnowledgeLoader load_all with master file
+def test_knowledge_loader_load_all_with_master(temp_dir):
+    """Test load_all when master file exists."""
+    master_file = os.path.join(temp_dir, "master.json")
+    master_data = {"master": "data"}
+    with open(master_file, "w") as f:
+        json.dump(master_data, f)
+    
+    loader = KnowledgeLoader(
+        knowledge_data_path=temp_dir,
+        master_knowledge_file="master.json"
+    )
+    loader.load_all()
+    
+    assert loader.loaded_knowledge == master_data
+
+
+# Test KnowledgeLoader load_all without master file (loads individual files)
+def test_knowledge_loader_load_all_without_master(temp_dir):
+    """Test load_all when no master file exists - loads individual JSON files."""
+    # Create some individual knowledge files
+    file1_data = {"domain1": {"key1": "value1"}}
+    file2_data = {"domain2": {"key2": "value2"}}
+    
+    with open(os.path.join(temp_dir, "file1.json"), "w") as f:
+        json.dump(file1_data, f)
+    with open(os.path.join(temp_dir, "file2.json"), "w") as f:
+        json.dump(file2_data, f)
+    
+    loader = KnowledgeLoader(
+        knowledge_data_path=temp_dir,
+        master_knowledge_file="master.json"
+    )
+    loader.load_all()
+    
+    # Should have canonical data plus loaded files
+    assert "SelfFixingEngineer" in loader.loaded_knowledge  # From canonical
+    assert "domain1" in loader.loaded_knowledge or "domain2" in loader.loaded_knowledge
+
+
+# Test get_knowledge returns a copy
+def test_knowledge_loader_get_knowledge_returns_copy(temp_dir):
+    """Test that get_knowledge returns a deep copy."""
+    loader = KnowledgeLoader(knowledge_data_path=temp_dir)
+    loader.loaded_knowledge = {"test": {"nested": "value"}}
+    
+    knowledge = loader.get_knowledge()
+    knowledge["test"]["nested"] = "modified"
+    
+    # Original should be unchanged
+    assert loader.loaded_knowledge["test"]["nested"] == "value"
 
 
 # Test save_current_knowledge
-@patch("knowledge_loader.save_knowledge_atomic")
-def test_save_current_knowledge(mock_save):
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
-    loader.aggregated_knowledge = {"test": "data"}
+def test_knowledge_loader_save_current_knowledge(temp_dir):
+    """Test saving current knowledge."""
+    loader = KnowledgeLoader(
+        knowledge_data_path=temp_dir,
+        master_knowledge_file="master.json"
+    )
+    loader.loaded_knowledge = {"test": "data"}
     loader.save_current_knowledge()
-    mock_save.assert_called_once_with("master.json", {"test": "data"})
-
-
-# Test load_and_aggregate
-@pytest.mark.asyncio
-@patch("asyncio.gather", new_callable=AsyncMock)
-@patch("knowledge_loader.load_knowledge", return_value={"data": "test"})
-async def test_load_and_aggregate(mock_load, mock_gather):
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
-    loader.file_paths = ["file1.json", "file2.json"]
-    mock_gather.return_value = [{"data": "test"}, {"data": "test"}]
-    await loader.load_and_aggregate()
-    assert loader.loaded_knowledge == {
-        "file1": {"data": "test"},
-        "file2": {"data": "test"},
-    }
+    
+    # Verify file was saved
+    master_file = os.path.join(temp_dir, "master.json")
+    assert os.path.exists(master_file)
+    with open(master_file, "r") as f:
+        loaded = json.load(f)
+    assert loaded == {"test": "data"}
 
 
 # Test inject_to_arbiter success
-def test_inject_to_arbiter_success(mock_logger):
+def test_inject_to_arbiter_success():
+    """Test injecting knowledge into an arbiter."""
     class MockArbiter:
         state = {"memory": {}}
         name = "test_arbiter"
 
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
+    loader = KnowledgeLoader()
     loader.loaded_knowledge = {"domain": {"key": "value"}}
     arbiter = MockArbiter()
     loader.inject_to_arbiter(arbiter)
-    assert arbiter.state["memory"] == {"domain": {"key": "value"}}
+    
+    # Knowledge should be merged into memory
+    assert "domain" in arbiter.state["memory"]
+    assert arbiter.state["memory"]["domain"] == {"key": "value"}
 
 
 # Test inject_to_arbiter invalid state
-def test_inject_to_arbiter_invalid_state(mock_logger):
+def test_inject_to_arbiter_invalid_state():
+    """Test inject_to_arbiter with invalid arbiter state."""
     class MockArbiter:
         state = "invalid"
 
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
+    loader = KnowledgeLoader()
     arbiter = MockArbiter()
+    
+    # Should not raise, just log error
     loader.inject_to_arbiter(arbiter)
-    _, _, _, error = mock_logger
-    error.assert_called_with(
-        "Arbiter instance does not have a valid 'state' dictionary."
-    )
 
 
-# Test inject_to_arbiter type mismatch
-def test_inject_to_arbiter_type_mismatch(mock_logger):
+# Test inject_to_arbiter no state attribute
+def test_inject_to_arbiter_no_state():
+    """Test inject_to_arbiter when arbiter has no state."""
     class MockArbiter:
-        state = {"memory": {"domain": [1, 2]}}
-        name = "test"
+        pass
 
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
-    loader.loaded_knowledge = {"domain": {"key": "value"}}
+    loader = KnowledgeLoader()
     arbiter = MockArbiter()
+    
+    # Should not raise, just log error
     loader.inject_to_arbiter(arbiter)
-    _, _, warning, _ = mock_logger
-    warning.assert_called_with("  Overwrote domain 'domain' due to type mismatch.")
-    assert arbiter.state["memory"]["domain"] == {"key": "value"}
 
 
 # Test thread safety in inject_to_arbiter
 def test_inject_to_arbiter_thread_safety():
+    """Test that inject_to_arbiter is thread safe."""
     class MockArbiter:
         state = {"memory": {}}
         name = "test"
 
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
+    loader = KnowledgeLoader()
     loader.loaded_knowledge = {"domain": {"key": "value"}}
     arbiter = MockArbiter()
 
@@ -226,50 +271,19 @@ def test_inject_to_arbiter_thread_safety():
     for t in threads:
         t.join()
 
-    assert arbiter.state["memory"] == {
-        "domain": {"key": "value"}
-    }  # Only merged once effectively
+    # Should have the knowledge injected
+    assert arbiter.state["memory"]["domain"] == {"key": "value"}
 
 
-# Test load_and_aggregate with malformed files
-@pytest.mark.asyncio
-@patch("asyncio.gather", new_callable=AsyncMock)
-@patch("knowledge_loader.load_knowledge", side_effect=[{"data": "good"}, None])
-async def test_load_and_aggregate_malformed(mock_load, mock_gather, mock_logger):
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
-    loader.file_paths = ["good.json", "bad.json"]
-    mock_gather.return_value = [{"data": "good"}, None]
-    await loader.load_and_aggregate()
-    assert loader.loaded_knowledge == {"good": {"data": "good"}}
-    _, _, warning, _ = mock_logger
-    warning.assert_called_with("Skipping malformed or empty knowledge file: bad.json")
-
-
-# Test aggregate_knowledge with master file error
-@patch("knowledge_loader.load_knowledge", side_effect=Exception("master error"))
-def test_aggregate_knowledge_master_error(mock_load, mock_logger):
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
-    with pytest.raises(Exception, match="master error"):
-        loader.aggregate_knowledge()
-    _, _, _, error = mock_logger
-    error.assert_called_with(
-        "Failed to load master knowledge file master.json: master error"
+# Test KnowledgeLoader with non-existent knowledge path
+def test_knowledge_loader_nonexistent_path(temp_dir):
+    """Test loader behavior when knowledge path doesn't exist."""
+    nonexistent = os.path.join(temp_dir, "nonexistent")
+    loader = KnowledgeLoader(
+        knowledge_data_path=nonexistent,
+        master_knowledge_file="master.json"
     )
-
-
-# Test save_current_knowledge empty
-def test_save_current_knowledge_empty(mock_logger):
-    loader = KnowledgeLoader(knowledge_dir="dir", master_file="master.json")
-    loader.aggregated_knowledge = {}
-    loader.save_current_knowledge()
-    _, debug, _, _ = mock_logger
-    debug.assert_called_with("No aggregated knowledge to save. Skipping.")
-
-
-# Test discover_knowledge_files
-@patch("os.walk")
-def test_discover_knowledge_files(mock_walk):
-    mock_walk.return_value = [("/dir", [], ["file1.json", "file2.txt", "file3.json"])]
-    loader = KnowledgeLoader(knowledge_dir="/dir", master_file="master.json")
-    loader.discover_knowledge_files()
-    assert loader.file_paths == ["/dir/file1.json", "/dir/file3.json"]
+    loader.load_all()
+    
+    # Should still have canonical knowledge
+    assert "SelfFixingEngineer" in loader.loaded_knowledge

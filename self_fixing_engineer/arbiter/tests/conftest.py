@@ -204,39 +204,12 @@ def isolate_plugin_registry():
 @pytest.fixture(autouse=True)
 def clear_registry_per_test():
     """
-    Clear the plugin registry before each test to ensure isolation.
-    This fixture runs before every test function.
+    Plugin registry fixture. We don't aggressively clear the registry before tests
+    anymore because it breaks modules that register plugins at import time.
+    Instead, we just ensure the test environment is set up properly.
     """
-    try:
-        from arbiter.arbiter_plugin_registry import registry
-
-        # Clear in-memory state
-        with registry._lock:
-            registry._plugins.clear()
-            registry._meta.clear()
-
-        # Also clear the persisted file for this test
-        if os.path.exists(TEST_PLUGIN_FILE):
-            os.remove(TEST_PLUGIN_FILE)
-
-        logger.debug("Plugin registry cleared for test")
-    except ImportError:
-        # Registry not yet imported, that's fine
-        pass
-    except Exception as e:
-        logger.warning(f"Could not clear registry: {e}")
-
     yield
-
-    # Optional: Clear after test too
-    try:
-        from arbiter.arbiter_plugin_registry import registry
-
-        with registry._lock:
-            registry._plugins.clear()
-            registry._meta.clear()
-    except:
-        pass
+    # Minimal cleanup after tests - don't clear the entire registry
 
 
 @pytest.fixture
@@ -272,35 +245,14 @@ def mock_plugin_registry(monkeypatch):
 # -----------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
 def reset_prometheus_registry():
-    """Reset Prometheus registry before each test to avoid conflicts."""
-    try:
-        import gc
-
-        from prometheus_client import REGISTRY
-
-        # Clear all collectors
-        collectors = list(REGISTRY._collector_to_names.keys())
-        for collector in collectors:
-            try:
-                REGISTRY.unregister(collector)
-            except Exception:
-                pass
-
-        # Force garbage collection
-        gc.collect()
-
-        yield
-
-        # Clean up after test
-        collectors = list(REGISTRY._collector_to_names.keys())
-        for collector in collectors:
-            try:
-                REGISTRY.unregister(collector)
-            except Exception:
-                pass
-    except ImportError:
-        # Prometheus not installed
-        yield
+    """
+    Prometheus registry cleanup - but DON'T unregister collectors before tests.
+    This was causing issues because modules register metrics at import time.
+    We only do minimal cleanup after the test.
+    """
+    yield
+    # Only do minimal cleanup after tests, not before
+    # The safe_register in the parent conftest handles duplicates gracefully
 
 
 # -----------------------------------------------------------------------------
