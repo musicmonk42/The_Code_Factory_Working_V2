@@ -207,7 +207,7 @@ async def audit_event(event_type: str, details: Dict[str, Any], critical: bool =
     """
     if AUDIT_LOGGER_AVAILABLE and _real_audit_event is not None:
         await _real_audit_event(event_type, details, critical=critical)
-    elif not AUDIT_LOGGER_AVAILABLE:
+    else:
         # Use fallback logger
         fallback_logger = logging.getLogger("audit_fallback")
         fallback_logger.info({"event": event_type, **details})
@@ -303,9 +303,6 @@ _metrics_singleton = None
 class MetricsClient:
     """Encapsulates Prometheus metrics for dependency injection."""
 
-    _policy_evaluations_total = None
-    _notification_failures_total = None
-
     def __init__(self):
         global _metrics_singleton
         self.enabled = METRICS_AVAILABLE
@@ -318,52 +315,26 @@ class MetricsClient:
 
         if self.enabled:
             try:
-                # Try to get existing metrics or create new ones
-                from prometheus_client import REGISTRY
+                # Try to create the metrics, handling duplicate registration gracefully
+                try:
+                    self.policy_evaluations_total = prometheus_client.Counter(
+                        "atco_policy_evaluations_total",
+                        "Total policy evaluations",
+                        ["result", "rule"],
+                    )
+                except ValueError:
+                    # Already registered - use no-op metric as fallback
+                    self.policy_evaluations_total = _NoOpMetric()
 
                 try:
-                    # Check if metrics already exist in registry
-                    existing_names = {m.describe()[0].name for m in REGISTRY.collect() if hasattr(m, 'describe')}
-                    if "atco_policy_evaluations_total" in existing_names:
-                        # Metrics already registered, find them
-                        for collector in REGISTRY._names_to_collectors.values():
-                            if hasattr(collector, '_name'):
-                                if collector._name == "atco_policy_evaluations":
-                                    self.policy_evaluations_total = collector
-                                elif collector._name == "atco_notification_failures":
-                                    self.notification_failures_total = collector
-                    else:
-                        self.policy_evaluations_total = prometheus_client.Counter(
-                            "atco_policy_evaluations_total",
-                            "Total policy evaluations",
-                            ["result", "rule"],
-                        )
-                        self.notification_failures_total = prometheus_client.Counter(
-                            "atco_notification_failures_total",
-                            "Failed notifications",
-                            ["service", "event_name"],
-                        )
-                except Exception:
-                    # Fallback: just create them, ignore duplicate errors
-                    try:
-                        self.policy_evaluations_total = prometheus_client.Counter(
-                            "atco_policy_evaluations_total",
-                            "Total policy evaluations",
-                            ["result", "rule"],
-                        )
-                    except ValueError:
-                        # Already registered
-                        self.policy_evaluations_total = _NoOpMetric()
-
-                    try:
-                        self.notification_failures_total = prometheus_client.Counter(
-                            "atco_notification_failures_total",
-                            "Failed notifications",
-                            ["service", "event_name"],
-                        )
-                    except ValueError:
-                        # Already registered
-                        self.notification_failures_total = _NoOpMetric()
+                    self.notification_failures_total = prometheus_client.Counter(
+                        "atco_notification_failures_total",
+                        "Failed notifications",
+                        ["service", "event_name"],
+                    )
+                except ValueError:
+                    # Already registered - use no-op metric as fallback
+                    self.notification_failures_total = _NoOpMetric()
             except Exception:
                 self.policy_evaluations_total = _NoOpMetric()
                 self.notification_failures_total = _NoOpMetric()
