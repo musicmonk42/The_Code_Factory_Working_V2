@@ -1,0 +1,11 @@
+plugins.json
+*.pyc
+__pycache__/
+*.db
+*.log
+.pytest_cache/
+dlt_audit_integrity.json
+dlt_audit.jsonl
+test_plugins*.json
+arbiter_config.json
+policies.json

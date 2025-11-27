@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import tempfile
 import threading
 from unittest.mock import ANY, AsyncMock, MagicMock, mock_open, patch
@@ -17,7 +18,6 @@ from arbiter.knowledge_loader import (
     load_knowledge,
     merge_dict,
     save_knowledge_atomic,
-    _load_knowledge_sync,
 )
 
 
@@ -25,7 +25,6 @@ from arbiter.knowledge_loader import (
 @pytest.fixture
 def temp_dir():
     """Create a temporary directory for tests."""
-    import shutil
     path = tempfile.mkdtemp()
     yield path
     shutil.rmtree(path, ignore_errors=True)
