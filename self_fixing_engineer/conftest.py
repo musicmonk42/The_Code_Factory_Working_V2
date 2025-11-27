@@ -3,24 +3,22 @@
 import os
 
 import pytest
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-
-# FIXED: Replaced InMemorySpanExporter with ConsoleSpanExporter
-# This is a stable import path and will fix the 'NoOpSpan' errors.
-from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 
 # Allow duplicate metric registration during tests to prevent collection failures
 os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
-
-# REMOVED: This line was disabling OTEL and causing 'NoOpSpan' errors.
-# os.environ.setdefault("OTEL_SDK_DISABLED", "true")
-# conftest.py (root) — minimal guardrail so collection never dies on dup metrics
-
-import os
-
-os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
 os.environ.setdefault("OTEL_SDK_DISABLED", "true")  # keep OTEL quiet
+
+# Try to import OpenTelemetry SDK - if not available, set a flag to skip setup
+_OTEL_SDK_AVAILABLE = False
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+
+    _OTEL_SDK_AVAILABLE = True
+except ImportError:
+    # OpenTelemetry SDK not installed - OTEL features will be disabled
+    pass
 
 # ---- Prometheus duplicate-metric hardening (runs before any package imports)
 try:
@@ -76,6 +74,11 @@ def setup_otel():
     This prevents 'NoneType' and 'NoOpSpan' AttributeErrors when code
     tries to access or record spans during tests.
     """
+    if not _OTEL_SDK_AVAILABLE:
+        # OpenTelemetry SDK not installed - skip setup
+        yield
+        return
+
     provider = TracerProvider()
     # Using ConsoleSpanExporter as a robust fallback.
     exporter = ConsoleSpanExporter()
