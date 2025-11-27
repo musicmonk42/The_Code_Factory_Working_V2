@@ -1,6 +1,6 @@
 {
   "name": "Code Factory Development",
-  "dockerComposeFile": "../docker-compose.dev.yml",
+  "dockerComposeFile": ["../docker-compose.dev.yml"],
   "service": "dev",
   "workspaceFolder": "/workspace",
   

@@ -1,12 +1,17 @@
 version: '3.8'
 
+# Development Docker Compose for Code Factory Platform
+# This file is referenced by .devcontainer/devcontainer.json for VS Code Dev Containers
+# Usage: docker-compose -f docker-compose.dev.yml up -d
+
 services:
   dev:
     build:
-      context: ..
+      context: .
       dockerfile: .devcontainer/Dockerfile
+    container_name: codefactory-dev
     volumes:
-      - ..:/workspace:cached
+      - .:/workspace:cached
       - /var/run/docker.sock:/var/run/docker.sock
     command: sleep infinity
     network_mode: service:redis
@@ -16,14 +21,21 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: codefactory-dev-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:15-alpine
+    container_name: codefactory-dev-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: codefactory
@@ -33,7 +45,16 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codefactory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   redis-data:
   postgres-data:
+
+networks:
+  default:
+    name: codefactory-dev-network

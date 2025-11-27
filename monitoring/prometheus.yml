@@ -1,3 +1,12 @@
+# Prometheus Configuration for Code Factory Platform
+# Scrape configuration aligned with docker-compose.yml service names
+#
+# Services in docker-compose.yml:
+#   - codefactory (port 8000 API, 8001 metrics)
+#   - redis (port 6379)
+#   - prometheus (port 9090)
+#   - grafana (port 3000)
+
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -6,39 +15,40 @@ global:
     environment: 'production'
 
 scrape_configs:
+  # Prometheus self-monitoring
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'generator'
+  # Unified Code Factory Platform (main application)
+  # Includes generator, omnicore_engine, and self_fixing_engineer modules
+  - job_name: 'codefactory'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['generator:8001']
+      - targets: ['codefactory:8001']
         labels:
-          service: 'generator'
-          component: 'api'
+          service: 'codefactory'
+          component: 'unified-platform'
 
-  - job_name: 'omnicore'
-    metrics_path: '/metrics'
-    static_configs:
-      - targets: ['omnicore:8001']
-        labels:
-          service: 'omnicore'
-          component: 'engine'
-
+  # Redis cache and message bus
+  # Note: Redis Exporter should be deployed separately for metrics
+  # See: https://github.com/oliver006/redis_exporter
   - job_name: 'redis'
     static_configs:
-      - targets: ['redis:6379']
+      - targets: ['redis-exporter:9121']
         labels:
           service: 'redis'
           component: 'cache'
 
-  - job_name: 'postgres'
-    static_configs:
-      - targets: ['postgres:5432']
-        labels:
-          service: 'postgres'
-          component: 'database'
+  # PostgreSQL database (when enabled)
+  # Note: Postgres Exporter should be deployed separately for metrics
+  # See: https://github.com/prometheus-community/postgres_exporter
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #       labels:
+  #         service: 'postgres'
+  #         component: 'database'
 
 alerting:
   alertmanagers:

@@ -412,12 +412,89 @@ test-generator:
 - Check target environment health
 - Review deployment logs
 
+## Docker Infrastructure
+
+The Code Factory Platform uses Docker for consistent development and deployment environments.
+
+### Docker Files Overview
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | Production multi-stage build for unified platform |
+| `generator/Dockerfile` | Generator component (used by CD workflow) |
+| `.devcontainer/Dockerfile` | Development container for VS Code |
+| `docker-compose.yml` | Production-like environment with all services |
+| `docker-compose.dev.yml` | Development environment for VS Code Dev Containers |
+
+### Service Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   docker-compose.yml                        │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────┐  ┌─────────────────┐  ┌────────────┐  │
+│  │   codefactory   │  │      redis      │  │ prometheus │  │
+│  │   (port 8000)   │  │   (port 6379)   │  │(port 9090) │  │
+│  │   (port 8001)   │  │                 │  │            │  │
+│  └─────────────────┘  └─────────────────┘  └────────────┘  │
+│                                                             │
+│  ┌─────────────────┐                                       │
+│  │     grafana     │                                       │
+│  │   (port 3000)   │                                       │
+│  └─────────────────┘                                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Development Container
+
+For VS Code Dev Containers, see `.devcontainer/README.md`.
+
+```bash
+# Quick start with VS Code
+# 1. Open repository in VS Code
+# 2. Click "Reopen in Container" when prompted
+```
+
+### Production Docker Commands
+
+```bash
+# Build unified platform image
+docker build -t code-factory:latest -f Dockerfile .
+
+# Build generator component
+docker build -t code-factory-generator:latest -f generator/Dockerfile ./generator
+
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Monitoring Stack
+
+See `monitoring/README.md` for detailed monitoring configuration.
+
+```bash
+# Start with monitoring
+docker-compose up -d prometheus grafana
+
+# Access dashboards
+# Grafana: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
+```
+
 ## Further Reading
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
 - [QUICKSTART.md](./QUICKSTART.md) - Getting started guide
 - [DEPLOYMENT.md](./DEPLOYMENT.md) - Deployment instructions
 - [README.md](./README.md) - Main documentation
+- [monitoring/README.md](./monitoring/README.md) - Monitoring stack documentation
+- [.devcontainer/README.md](./.devcontainer/README.md) - Development container documentation
 
 ## Support
 
@@ -429,8 +506,23 @@ For issues with CI/CD pipelines:
 
 ---
 
-**Last Updated:** 2025-11-21  
-**Version:** 2.0.0 - Consolidated CI with path-based filtering
+**Last Updated:** 2025-11-27  
+**Version:** 2.1.0 - Docker infrastructure documentation and fixes
+
+## Recent Changes (v2.1.0)
+
+### Docker Infrastructure Improvements
+- **Fixed** `docker-compose.dev.yml` build context to use `.` instead of `..`
+- **Added** container names and healthchecks to development services
+- **Added** network configuration for better service isolation
+- **Updated** Prometheus configuration to match actual service names in docker-compose.yml
+- **Added** `monitoring/README.md` documentation
+- **Added** `.devcontainer/README.md` documentation
+
+### Documentation Updates
+- **Added** Docker Infrastructure section to this guide
+- **Updated** monitoring configuration documentation
+- **Aligned** service names between docker-compose.yml and prometheus.yml
 
 ## Recent Changes (v2.0.0)
 
