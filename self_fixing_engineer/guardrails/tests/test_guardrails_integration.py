@@ -75,7 +75,9 @@ async def test_integration_generate_report_with_gaps(temp_config_and_log, monkey
 
     # Mock audit_log_event_async to avoid actual file writes
     with patch("compliance_mapper.audit_log_event_async") as mock_audit:
-        mock_audit.return_value = asyncio.coroutine(lambda: None)()
+        async def noop():
+            return None
+        mock_audit.return_value = noop()
         gaps, all_enforced = generate_report(config_path)
         assert not all_enforced
         assert "AC-2" in gaps["required_but_not_enforced"]
@@ -121,7 +123,9 @@ async def test_integration_health_check_with_audit(temp_config_and_log, monkeypa
 
         # Mock the audit function to avoid actual file operations
         with patch("compliance_mapper.audit_log_event_async") as mock_audit:
-            mock_audit.return_value = asyncio.coroutine(lambda: None)()
+            async def noop():
+                return None
+            mock_audit.return_value = noop()
             await _log_to_central_audit("health_check_failure", health)
             mock_audit.assert_called_once()
 
@@ -134,7 +138,9 @@ async def test_concurrent_report_generation(temp_config_and_log, monkeypatch):
 
     # Mock audit functions to avoid file I/O
     with patch("compliance_mapper.audit_log_event_async") as mock_audit:
-        mock_audit.return_value = asyncio.coroutine(lambda: None)()
+        async def noop():
+            return None
+        mock_audit.return_value = noop()
 
         async def run_report():
             return generate_report(config_path)
