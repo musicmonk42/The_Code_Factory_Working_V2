@@ -1,8 +1,11 @@
 # conftest.py (root)
 
+import logging
 import os
 
 import pytest
+
+logger = logging.getLogger(__name__)
 
 # Allow duplicate metric registration during tests to prevent collection failures
 os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
@@ -18,7 +21,7 @@ try:
     _OTEL_SDK_AVAILABLE = True
 except ImportError:
     # OpenTelemetry SDK not installed - OTEL features will be disabled
-    pass
+    logger.debug("OpenTelemetry SDK not installed - OTEL test setup will be skipped")
 
 # ---- Prometheus duplicate-metric hardening (runs before any package imports)
 try:
@@ -76,6 +79,7 @@ def setup_otel():
     """
     if not _OTEL_SDK_AVAILABLE:
         # OpenTelemetry SDK not installed - skip setup
+        logger.debug("Skipping OpenTelemetry setup - SDK not available")
         yield
         return
 
