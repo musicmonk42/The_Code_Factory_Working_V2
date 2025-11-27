@@ -555,10 +555,10 @@ def _setup_bus():
 
 def get_redis_client() -> "redis.Redis":
     """Retrieves a securely configured Redis client from the module-level pool.
-    
+
     Returns:
         redis.Redis: A configured Redis client instance.
-        
+
     Raises:
         ImportError: If redis-py is not installed.
     """

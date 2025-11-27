@@ -512,7 +512,9 @@ def test_circular_dependency(reset_registry):
 
 
 # Test reload functionality - FIXED VERSION
-@pytest.mark.skip(reason="Module reloading with mock modules is not reliable in Python 3.12+")
+@pytest.mark.skip(
+    reason="Module reloading with mock modules is not reliable in Python 3.12+"
+)
 @pytest.mark.asyncio
 async def test_reload(reset_registry):
     reg = reset_registry

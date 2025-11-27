@@ -376,7 +376,9 @@ class TestProcessUnstructuredData:
             # and returns early when no facts are found.
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Metrics counter requires global labels (environment, instance) that aren't being passed - production bug")
+    @pytest.mark.skip(
+        reason="Metrics counter requires global labels (environment, instance) that aren't being passed - production bug"
+    )
     async def test_process_learn_batch_failure(self, mock_learner):
         """Test handling of learn_batch failure."""
         parser = MockFuzzyParser(

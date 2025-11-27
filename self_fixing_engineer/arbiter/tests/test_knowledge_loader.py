@@ -52,7 +52,7 @@ def test_save_knowledge_atomic_success(temp_dir):
     filepath = os.path.join(temp_dir, "test.json")
     data = {"test": "data"}
     save_knowledge_atomic(filepath, data)
-    
+
     # Verify file was saved correctly
     with open(filepath, "r") as f:
         loaded = json.load(f)
@@ -66,7 +66,7 @@ def test_save_knowledge_atomic_creates_directory(temp_dir):
     filepath = os.path.join(subdir, "test.json")
     data = {"test": "data"}
     save_knowledge_atomic(filepath, data)
-    
+
     assert os.path.exists(filepath)
     with open(filepath, "r") as f:
         loaded = json.load(f)
@@ -80,7 +80,7 @@ def test_load_knowledge_sync_success(temp_dir):
     data = {"test": "data"}
     with open(filepath, "w") as f:
         json.dump(data, f)
-    
+
     result = _load_knowledge_sync(filepath)
     assert result == data
 
@@ -99,7 +99,7 @@ def test_load_knowledge_sync_invalid_json(temp_dir):
     filepath = os.path.join(temp_dir, "invalid.json")
     with open(filepath, "w") as f:
         f.write("{ not valid json")
-    
+
     result = _load_knowledge_sync(filepath)
     assert result is None
 
@@ -112,7 +112,7 @@ async def test_load_knowledge_async_success(temp_dir):
     data = {"test": "data"}
     with open(filepath, "w") as f:
         json.dump(data, f)
-    
+
     result = await load_knowledge(filepath)
     assert result == data
 
@@ -129,8 +129,7 @@ async def test_load_knowledge_async_not_found(temp_dir):
 def test_knowledge_loader_init(temp_dir):
     """Test KnowledgeLoader initialization."""
     loader = KnowledgeLoader(
-        knowledge_data_path=temp_dir,
-        master_knowledge_file="master.json"
+        knowledge_data_path=temp_dir, master_knowledge_file="master.json"
     )
     assert loader.knowledge_data_path == temp_dir
     assert loader.master_knowledge_file == os.path.join(temp_dir, "master.json")
@@ -144,13 +143,12 @@ def test_knowledge_loader_load_all_with_master(temp_dir):
     master_data = {"master": "data"}
     with open(master_file, "w") as f:
         json.dump(master_data, f)
-    
+
     loader = KnowledgeLoader(
-        knowledge_data_path=temp_dir,
-        master_knowledge_file="master.json"
+        knowledge_data_path=temp_dir, master_knowledge_file="master.json"
     )
     loader.load_all()
-    
+
     assert loader.loaded_knowledge == master_data
 
 
@@ -160,18 +158,17 @@ def test_knowledge_loader_load_all_without_master(temp_dir):
     # Create some individual knowledge files
     file1_data = {"domain1": {"key1": "value1"}}
     file2_data = {"domain2": {"key2": "value2"}}
-    
+
     with open(os.path.join(temp_dir, "file1.json"), "w") as f:
         json.dump(file1_data, f)
     with open(os.path.join(temp_dir, "file2.json"), "w") as f:
         json.dump(file2_data, f)
-    
+
     loader = KnowledgeLoader(
-        knowledge_data_path=temp_dir,
-        master_knowledge_file="master.json"
+        knowledge_data_path=temp_dir, master_knowledge_file="master.json"
     )
     loader.load_all()
-    
+
     # Should have canonical data plus loaded files
     assert "SelfFixingEngineer" in loader.loaded_knowledge  # From canonical
     assert "domain1" in loader.loaded_knowledge or "domain2" in loader.loaded_knowledge
@@ -182,10 +179,10 @@ def test_knowledge_loader_get_knowledge_returns_copy(temp_dir):
     """Test that get_knowledge returns a deep copy."""
     loader = KnowledgeLoader(knowledge_data_path=temp_dir)
     loader.loaded_knowledge = {"test": {"nested": "value"}}
-    
+
     knowledge = loader.get_knowledge()
     knowledge["test"]["nested"] = "modified"
-    
+
     # Original should be unchanged
     assert loader.loaded_knowledge["test"]["nested"] == "value"
 
@@ -194,12 +191,11 @@ def test_knowledge_loader_get_knowledge_returns_copy(temp_dir):
 def test_knowledge_loader_save_current_knowledge(temp_dir):
     """Test saving current knowledge."""
     loader = KnowledgeLoader(
-        knowledge_data_path=temp_dir,
-        master_knowledge_file="master.json"
+        knowledge_data_path=temp_dir, master_knowledge_file="master.json"
     )
     loader.loaded_knowledge = {"test": "data"}
     loader.save_current_knowledge()
-    
+
     # Verify file was saved
     master_file = os.path.join(temp_dir, "master.json")
     assert os.path.exists(master_file)
@@ -211,6 +207,7 @@ def test_knowledge_loader_save_current_knowledge(temp_dir):
 # Test inject_to_arbiter success
 def test_inject_to_arbiter_success():
     """Test injecting knowledge into an arbiter."""
+
     class MockArbiter:
         state = {"memory": {}}
         name = "test_arbiter"
@@ -219,7 +216,7 @@ def test_inject_to_arbiter_success():
     loader.loaded_knowledge = {"domain": {"key": "value"}}
     arbiter = MockArbiter()
     loader.inject_to_arbiter(arbiter)
-    
+
     # Knowledge should be merged into memory
     assert "domain" in arbiter.state["memory"]
     assert arbiter.state["memory"]["domain"] == {"key": "value"}
@@ -228,12 +225,13 @@ def test_inject_to_arbiter_success():
 # Test inject_to_arbiter invalid state
 def test_inject_to_arbiter_invalid_state():
     """Test inject_to_arbiter with invalid arbiter state."""
+
     class MockArbiter:
         state = "invalid"
 
     loader = KnowledgeLoader()
     arbiter = MockArbiter()
-    
+
     # Should not raise, just log error
     loader.inject_to_arbiter(arbiter)
 
@@ -241,12 +239,13 @@ def test_inject_to_arbiter_invalid_state():
 # Test inject_to_arbiter no state attribute
 def test_inject_to_arbiter_no_state():
     """Test inject_to_arbiter when arbiter has no state."""
+
     class MockArbiter:
         pass
 
     loader = KnowledgeLoader()
     arbiter = MockArbiter()
-    
+
     # Should not raise, just log error
     loader.inject_to_arbiter(arbiter)
 
@@ -254,6 +253,7 @@ def test_inject_to_arbiter_no_state():
 # Test thread safety in inject_to_arbiter
 def test_inject_to_arbiter_thread_safety():
     """Test that inject_to_arbiter is thread safe."""
+
     class MockArbiter:
         state = {"memory": {}}
         name = "test"
@@ -280,10 +280,9 @@ def test_knowledge_loader_nonexistent_path(temp_dir):
     """Test loader behavior when knowledge path doesn't exist."""
     nonexistent = os.path.join(temp_dir, "nonexistent")
     loader = KnowledgeLoader(
-        knowledge_data_path=nonexistent,
-        master_knowledge_file="master.json"
+        knowledge_data_path=nonexistent, master_knowledge_file="master.json"
     )
     loader.load_all()
-    
+
     # Should still have canonical knowledge
     assert "SelfFixingEngineer" in loader.loaded_knowledge

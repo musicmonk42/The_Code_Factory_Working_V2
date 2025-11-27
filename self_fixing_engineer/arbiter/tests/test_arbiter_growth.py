@@ -182,7 +182,7 @@ def _restore_original_modules():
         elif mod_name in sys.modules:
             # Only remove if it's a stub we created
             module = sys.modules[mod_name]
-            if isinstance(module, types.ModuleType) and not hasattr(module, '__file__'):
+            if isinstance(module, types.ModuleType) and not hasattr(module, "__file__"):
                 del sys.modules[mod_name]
 
 

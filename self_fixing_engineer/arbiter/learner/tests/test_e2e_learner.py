@@ -171,9 +171,17 @@ class TestEndToEndLearner:
     def setup_learner_environment(self):
         """Set up a complete learner environment with all dependencies."""
         # Save original values for restoration
-        original_encryption_keys = ArbiterConfig.ENCRYPTION_KEYS.copy() if hasattr(ArbiterConfig, 'ENCRYPTION_KEYS') else {}
-        original_encrypted_domains = ArbiterConfig.ENCRYPTED_DOMAINS.copy() if hasattr(ArbiterConfig, 'ENCRYPTED_DOMAINS') else []
-        
+        original_encryption_keys = (
+            ArbiterConfig.ENCRYPTION_KEYS.copy()
+            if hasattr(ArbiterConfig, "ENCRYPTION_KEYS")
+            else {}
+        )
+        original_encrypted_domains = (
+            ArbiterConfig.ENCRYPTED_DOMAINS.copy()
+            if hasattr(ArbiterConfig, "ENCRYPTED_DOMAINS")
+            else []
+        )
+
         # Set up encryption keys - use raw bytes, not Fernet objects
         key1 = Fernet.generate_key()
         key2 = Fernet.generate_key()
@@ -280,7 +288,7 @@ class TestEndToEndLearner:
                             "redis": mock_redis,
                             "db": mock_db,
                         }
-                        
+
                         # Restore original values
                         ArbiterConfig.ENCRYPTION_KEYS = original_encryption_keys
                         ArbiterConfig.ENCRYPTED_DOMAINS = original_encrypted_domains

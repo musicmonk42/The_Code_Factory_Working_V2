@@ -369,15 +369,18 @@ if pydantic_available:
 
     # Add validators conditionally after class definition
     if PYDANTIC_V2 and field_validator is not None:
+
         @field_validator("redis_cache_url")
         @classmethod
         def validate_redis_url(cls, v):
             if v is not None and not v.startswith(("redis://", "rediss://")):
                 raise ValueError("Redis URL must start with redis:// or rediss://")
             return v
+
         EvolutionConfig.validate_redis_url = validate_redis_url
 
         if model_validator is not None:
+
             @model_validator(mode="after")
             def check_retry_settings(self):
                 if self.max_evolution_retries > 0 and not tenacity_available:
@@ -386,13 +389,16 @@ if pydantic_available:
                     )
                     self.max_evolution_retries = 0
                 return self
+
             EvolutionConfig.check_retry_settings = check_retry_settings
     elif not PYDANTIC_V2 and validator is not None:
+
         @validator("redis_cache_url")
         def validate_redis_url(cls, v):
             if v is not None and not v.startswith(("redis://", "rediss://")):
                 raise ValueError("Redis URL must start with redis:// or rediss://")
             return v
+
         EvolutionConfig.validate_redis_url = validate_redis_url
 
 else:

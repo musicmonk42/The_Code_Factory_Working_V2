@@ -463,7 +463,9 @@ class TestLearner:
                 with patch("arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
-                    with patch("arbiter.learner.core.generate_explanation") as mock_explain:
+                    with patch(
+                        "arbiter.learner.core.generate_explanation"
+                    ) as mock_explain:
                         mock_explain.return_value = "Encrypted explanation"
 
                         with patch("arbiter.learner.core.persist_knowledge"):
