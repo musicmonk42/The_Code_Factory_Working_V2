@@ -88,11 +88,11 @@ from omnicore_engine.metrics import (
     AUDIT_RECORDS_PROCESSED_TOTAL,
 )
 
-try:
-    from omnicore_engine.core import KnowledgeGraph, safe_serialize
-except ImportError:
-    from omnicore_engine.core import safe_serialize
+from omnicore_engine.core import safe_serialize
 
+try:
+    from arbiter.knowledge_graph import KnowledgeGraph
+except ImportError:
     KnowledgeGraph = None
 import aiohttp
 
