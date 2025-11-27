@@ -4,6 +4,7 @@ import logging
 import random
 import time
 import traceback
+import types
 import uuid
 from collections import defaultdict
 from datetime import datetime
@@ -69,9 +70,50 @@ try:
     from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
 except ImportError:
     PLUGIN_REGISTRY = None
-from arbiter.config import ArbiterConfig
 
-settings = ArbiterConfig()
+
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        LOG_LEVEL="INFO",
+        database_path="sqlite:///./omnicore.db",
+        DB_PATH="sqlite:///./omnicore.db",
+        PLUGIN_ERROR_THRESHOLD=0.1,
+        TEST_FAILURE_THRESHOLD=0.1,
+        ETHICS_DRIFT_THRESHOLD=0.1,
+        MODEL_RETRAIN_EPOCHS=10,
+        SUPERVISOR_RATE_LIMIT_OPS=10,
+        SUPERVISOR_RATE_LIMIT_PERIOD=1.0,
+        PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD=0.8,
+        SUPERVISOR_PERFORMANCE_THRESHOLD=0.5,
+        AUDIT_LOG_RETENTION_DAYS=30,
+        REDIS_URL="redis://localhost:6379/0",
+    )
+
+
+def _get_settings():
+    """Lazy import + defensive instantiation of settings."""
+    try:
+        from arbiter.config import ArbiterConfig
+    except ImportError as e:
+        logging.warning(
+            "Could not import arbiter.config; using fallback settings. Import error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+    try:
+        return ArbiterConfig()
+    except Exception as e:
+        logging.warning(
+            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+
+settings = _get_settings()
 try:
     from omnicore_engine.database.database import Database
 except ImportError:

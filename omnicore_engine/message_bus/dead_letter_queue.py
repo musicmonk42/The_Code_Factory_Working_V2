@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import types
 from typing import TYPE_CHECKING, Optional
 
 # Conditional imports
@@ -13,7 +14,37 @@ except ImportError:
     KafkaProducer = None
     KAFKA_AVAILABLE = False
 
-from arbiter.config import ArbiterConfig
+
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        LOG_LEVEL="INFO",
+        database_path="sqlite:///./omnicore.db",
+        DB_PATH="sqlite:///./omnicore.db",
+    )
+
+
+def _get_settings():
+    """Lazy import + defensive instantiation of settings."""
+    try:
+        from arbiter.config import ArbiterConfig
+    except ImportError as e:
+        logging.warning(
+            "Could not import arbiter.config; using fallback settings. Import error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+    try:
+        return ArbiterConfig()
+    except Exception as e:
+        logging.warning(
+            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
 
 # External project imports
 from omnicore_engine.core import safe_serialize
@@ -21,7 +52,7 @@ from omnicore_engine.core import safe_serialize
 # Relative imports from the new modular structure
 from .message_types import Message
 
-settings = ArbiterConfig()
+settings = _get_settings()
 
 if TYPE_CHECKING:
     from omnicore_engine.database.database import Database

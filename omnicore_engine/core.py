@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import inspect
 import logging
+import types
 from abc import ABC, abstractmethod
 from datetime import date, datetime
 from decimal import Decimal
@@ -10,11 +11,53 @@ from uuid import UUID
 
 import numpy as np
 import structlog
-from arbiter.config import ArbiterConfig
 from pydantic_settings import BaseSettings
 
-# Initialize the configuration object
-settings = ArbiterConfig()
+
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        LOG_LEVEL="INFO",
+        database_path="sqlite:///./omnicore.db",
+        DB_PATH="sqlite:///./omnicore.db",
+        plugin_dir="./plugins",
+        PLUGIN_DIR="./plugins",
+        array_backend_mode="numpy",
+        use_gpu=False,
+        use_dask=False,
+        use_quantum=False,
+        use_neuromorphic=False,
+        knowledge_graph_config={},
+        decision_optimizer_config={},
+        engine_type="simulation",
+        encryption_key_bytes=b"",
+    )
+
+
+def _get_settings():
+    """Lazy import + defensive instantiation of settings."""
+    try:
+        from arbiter.config import ArbiterConfig
+    except ImportError as e:
+        logging.warning(
+            "Could not import arbiter.config; using fallback settings. Import error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+    try:
+        return ArbiterConfig()
+    except Exception as e:
+        logging.warning(
+            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+
+# Initialize the configuration object with graceful fallback
+settings = _get_settings()
 
 
 # Configure structlog
