@@ -13,6 +13,8 @@ import grpc
 import pytest
 from grpc_health.v1 import health_pb2
 
+# Import the grpc_runner module from plugins
+import grpc_runner
 
 # We are going to assume a file named grpc_runner.py exists
 # and contains the following functions and variables.

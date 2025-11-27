@@ -65,8 +65,12 @@ class NonCriticalError(Exception):
 try:
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
-    from core_utils import alert_operator
+    from core_utils import get_alert_operator
     from core_utils import scrub_secrets as scrub_sensitive_data
+    
+    # Create a callable wrapper for alert_operator
+    def alert_operator(msg, level="INFO"):
+        return get_alert_operator().alert(msg, level)
 except ImportError as e:
     # Library code: do not sys.exit(); raise and let the orchestrator decide.
     raise WasmStartupError(f"Missing core dependency for WASM runner: {e}") from e
