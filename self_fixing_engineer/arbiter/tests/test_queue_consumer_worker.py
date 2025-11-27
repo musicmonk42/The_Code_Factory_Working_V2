@@ -10,6 +10,40 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+# Store original modules for restoration
+_ORIGINAL_MODULES = {}
+_MOCKED_MODULE_NAMES = [
+    "prometheus_client",
+    "tenacity",
+    "aiohttp",
+    "aiohttp.web",
+    "opentelemetry",
+    "opentelemetry.exporter",
+    "opentelemetry.exporter.otlp",
+    "opentelemetry.exporter.otlp.proto",
+    "opentelemetry.exporter.otlp.proto.grpc",
+    "opentelemetry.exporter.otlp.proto.grpc.trace_exporter",
+    "opentelemetry.trace",
+    "opentelemetry.sdk",
+    "opentelemetry.sdk.trace",
+    "opentelemetry.sdk.trace.export",
+    "opentelemetry.sdk.resources",
+    "opentelemetry.instrumentation",
+    "opentelemetry.instrumentation.requests",
+    "opentelemetry.propagate",
+    "opentelemetry.metrics",
+    "arbiter.config",
+    "arbiter.message_queue_service",
+    "arbiter.bug_manager",
+    "arbiter.logging_utils",
+    "arbiter_plugin_registry",
+]
+
+# Save original modules before mocking
+for mod_name in _MOCKED_MODULE_NAMES:
+    if mod_name in sys.modules:
+        _ORIGINAL_MODULES[mod_name] = sys.modules[mod_name]
+
 
 # Setup mock modules BEFORE any imports
 def setup_test_environment():
@@ -40,12 +74,13 @@ def setup_test_environment():
     mock_tenacity.retry = lambda **k: lambda f: f
     mock_tenacity.stop_after_attempt = lambda n: None
     mock_tenacity.wait_exponential = lambda **k: None
+    mock_tenacity.RetryError = Exception  # Add RetryError as a real exception class
     sys.modules["tenacity"] = mock_tenacity
 
     # Mock aiohttp
-    if "aiohttp" not in sys.modules:
+    if "aiohttp" not in sys.modules or isinstance(sys.modules.get("aiohttp"), MagicMock):
         sys.modules["aiohttp"] = MagicMock()
-    if "aiohttp.web" not in sys.modules:
+    if "aiohttp.web" not in sys.modules or isinstance(sys.modules.get("aiohttp.web"), MagicMock):
         sys.modules["aiohttp.web"] = MagicMock()
 
     # Mock OpenTelemetry modules with proper __path__ attribute
@@ -189,6 +224,25 @@ import arbiter.queue_consumer_worker as queue_consumer_worker
 # After import, we need to ensure the module state is correct
 # Since SFE_CORE_AVAILABLE will be True (imports succeeded), we need to mock accordingly
 queue_consumer_worker.SFE_CORE_AVAILABLE = False  # Force it to use mock mode for tests
+
+
+def _restore_original_modules():
+    """Restore original modules that were patched during test import."""
+    for mod_name in _MOCKED_MODULE_NAMES:
+        if mod_name in _ORIGINAL_MODULES:
+            sys.modules[mod_name] = _ORIGINAL_MODULES[mod_name]
+        elif mod_name in sys.modules:
+            # Check if it's our mock (MagicMock or ModuleType we created)
+            module = sys.modules[mod_name]
+            if isinstance(module, MagicMock) or (isinstance(module, ModuleType) and hasattr(module, '__file__') and module.__file__ and '<mock' in str(module.__file__)):
+                del sys.modules[mod_name]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_mocked_modules():
+    """Restore original modules when this test module finishes."""
+    yield
+    _restore_original_modules()
 
 
 @pytest.fixture(autouse=True)

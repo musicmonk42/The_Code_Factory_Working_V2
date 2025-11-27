@@ -20,6 +20,10 @@ for path in [parent_dir, arbiter_dir]:
     if path not in sys.path:
         sys.path.insert(0, path)
 
+# Store original modules for restoration
+_ORIGINAL_MODULES = {}
+_MOCKED_MODULE_NAMES = []
+
 
 # Create a more comprehensive mock for numpy
 class MockNdarray:
@@ -31,6 +35,11 @@ class MockNdarray:
     def all(self):
         return True
 
+
+# Save numpy if already imported
+if "numpy" in sys.modules:
+    _ORIGINAL_MODULES["numpy"] = sys.modules["numpy"]
+_MOCKED_MODULE_NAMES.append("numpy")
 
 mock_np = MagicMock()
 mock_np.array = lambda x, dtype=None: MockNdarray(x, dtype=dtype)
@@ -88,6 +97,7 @@ def setup_mocks():
     mocks["tenacity"].retry = lambda *args, **kwargs: lambda f: f
     mocks["tenacity"].stop_after_attempt = MagicMock()
     mocks["tenacity"].wait_exponential = MagicMock()
+    mocks["tenacity"].RetryError = Exception  # Add RetryError as a real exception class
 
     # NOTE: prometheus_client mocks removed to avoid conflicts with other tests
 
@@ -107,59 +117,32 @@ def setup_mocks():
     mocks["gymnasium"].Env = object
     mocks["gymnasium"].spaces = MockSpaces()
 
-    # Apply all mocks
+    # Apply all mocks - save originals first
     for name, mock_obj in mocks.items():
+        if name in sys.modules and name not in _ORIGINAL_MODULES:
+            _ORIGINAL_MODULES[name] = sys.modules[name]
+        if name not in _MOCKED_MODULE_NAMES:
+            _MOCKED_MODULE_NAMES.append(name)
         sys.modules[name] = mock_obj
 
-    # Mock arbiter submodules
+    # Mock arbiter submodules (NOTE: DON'T mock modules that other tests need)
     arbiter_mocks = {
         "arbiter.feedback": MagicMock(),
         "arbiter.agent_state": MagicMock(),
-        "arbiter.monitoring": MagicMock(),
+        # "arbiter.monitoring" removed - other tests need the real module
         "arbiter.human_loop": MagicMock(),
         "arbiter.config": MagicMock(),
-        "arbiter.utils": MagicMock(),
+        # "arbiter.utils" removed - other tests need the real module
         "arbiter.arbiter_plugin_registry": MagicMock(),
         "arbiter.models.postgres_client": MagicMock(),
         "arbiter.models.knowledge_graph_db": MagicMock(),
         "arbiter.plugins.multi_modal_plugin": MagicMock(),
         "arbiter.codebase_analyzer": MagicMock(),
-        "arbiter.metrics": MagicMock(),
+        # "arbiter.metrics" removed - other tests need the real module
         "simulation.simulation_module": MagicMock(),
         "envs.code_health_env": MagicMock(),
         "envs.evolution": MagicMock(),
     }
-
-    # Setup metrics module
-    def mock_get_or_create_counter(name, desc, labels=None):
-        counter = MagicMock()
-        counter.labels = MagicMock(return_value=MagicMock())
-        return counter
-
-    def mock_get_or_create_gauge(name, desc, labels=None):
-        gauge = MagicMock()
-        gauge.labels = MagicMock(return_value=MagicMock())
-        gauge.set = MagicMock()
-        return gauge
-
-    def mock_get_or_create_summary(name, desc, labels=None):
-        summary = MagicMock()
-        summary.labels = MagicMock(return_value=MagicMock())
-        summary.observe = MagicMock()
-        return summary
-
-    def mock_get_or_create_histogram(name, desc, labels=None, buckets=None):
-        histogram = MagicMock()
-        histogram.labels = MagicMock(return_value=MagicMock())
-        histogram.observe = MagicMock()
-        return histogram
-
-    arbiter_mocks["arbiter.metrics"].get_or_create_counter = mock_get_or_create_counter
-    arbiter_mocks["arbiter.metrics"].get_or_create_gauge = mock_get_or_create_gauge
-    arbiter_mocks["arbiter.metrics"].get_or_create_summary = mock_get_or_create_summary
-    arbiter_mocks["arbiter.metrics"].get_or_create_histogram = (
-        mock_get_or_create_histogram
-    )
 
     # Setup arbiter specific mocks
     arbiter_mocks["arbiter.agent_state"].Base = Base
@@ -189,6 +172,10 @@ def setup_mocks():
     )
 
     for name, mock_obj in arbiter_mocks.items():
+        if name in sys.modules and name not in _ORIGINAL_MODULES:
+            _ORIGINAL_MODULES[name] = sys.modules[name]
+        if name not in _MOCKED_MODULE_NAMES:
+            _MOCKED_MODULE_NAMES.append(name)
         sys.modules[name] = mock_obj
 
     return mocks, arbiter_mocks
@@ -199,6 +186,23 @@ mocks, arbiter_mocks = setup_mocks()
 
 # Now import arbiter module specifically
 from arbiter import arbiter
+
+
+def _restore_original_modules():
+    """Restore original modules that were patched during test import."""
+    for mod_name in _MOCKED_MODULE_NAMES:
+        if mod_name in _ORIGINAL_MODULES:
+            sys.modules[mod_name] = _ORIGINAL_MODULES[mod_name]
+        elif mod_name in sys.modules and isinstance(sys.modules[mod_name], MagicMock):
+            del sys.modules[mod_name]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_mocked_modules():
+    """Restore original modules when this test module finishes."""
+    yield
+    _restore_original_modules()
+
 
 # ===== TEST FIXTURES =====
 

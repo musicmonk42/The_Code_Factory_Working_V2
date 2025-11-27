@@ -44,6 +44,22 @@ from arbiter.audit_log import (
 )
 
 
+def _restore_original_modules():
+    """Restore original modules that were patched during test import."""
+    for mod_name in _MODULES_TO_MOCK:
+        if mod_name in _ORIGINAL_MODULES:
+            sys.modules[mod_name] = _ORIGINAL_MODULES[mod_name]
+        elif mod_name in sys.modules and isinstance(sys.modules[mod_name], MagicMock):
+            del sys.modules[mod_name]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_mocked_modules():
+    """Restore original modules when this test module finishes."""
+    yield
+    _restore_original_modules()
+
+
 # Fixtures
 @pytest.fixture
 def temp_log_dir():
