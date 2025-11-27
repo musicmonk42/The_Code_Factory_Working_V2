@@ -1247,6 +1247,11 @@ class AuditLogger:
         logger.info(f"Health check: {health}", extra=log_context)
         return health
 
+    def log(self, message: str, level: str = "INFO", **kwargs):
+        """Simple logging method for compatibility with simulation.audit_log.AuditLogger."""
+        log_level = getattr(logging, level.upper(), logging.INFO)
+        logger.log(log_level, f"AUDIT: {message}", extra=kwargs)
+
     async def close(self):
         """Closes resources used by the AuditLogger."""
         log_context = {"context": "cleanup"}

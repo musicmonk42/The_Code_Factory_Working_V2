@@ -66,8 +66,9 @@ try:
     # Version-specific imports
     if PYDANTIC_V2:
         try:
-            from pydantic import model_validator
+            from pydantic import field_validator, model_validator
         except ImportError:
+            field_validator = None
             model_validator = None
         validator = None  # v1 validator not available in v2
     else:
@@ -75,6 +76,7 @@ try:
             from pydantic import validator
         except ImportError:
             validator = None
+        field_validator = None
         model_validator = None  # v2 model_validator not available in v1
 
     pydantic_available = True
@@ -82,6 +84,7 @@ except ImportError:
     pydantic_available = False
     PYDANTIC_V2 = False
     validator = None
+    field_validator = None
     model_validator = None
     logger.warning("Pydantic not found. Using simplified configuration model.")
 
@@ -364,20 +367,33 @@ if pydantic_available:
             default=True, description="Enable content safety checks for LLM outputs"
         )
 
+    # Add validators conditionally after class definition
+    if PYDANTIC_V2 and field_validator is not None:
+        @field_validator("redis_cache_url")
+        @classmethod
+        def validate_redis_url(cls, v):
+            if v is not None and not v.startswith(("redis://", "rediss://")):
+                raise ValueError("Redis URL must start with redis:// or rediss://")
+            return v
+        EvolutionConfig.validate_redis_url = validate_redis_url
+
+        if model_validator is not None:
+            @model_validator(mode="after")
+            def check_retry_settings(self):
+                if self.max_evolution_retries > 0 and not tenacity_available:
+                    logger.warning(
+                        "Tenacity not available but retries configured. Retries will be disabled."
+                    )
+                    self.max_evolution_retries = 0
+                return self
+            EvolutionConfig.check_retry_settings = check_retry_settings
+    elif not PYDANTIC_V2 and validator is not None:
         @validator("redis_cache_url")
         def validate_redis_url(cls, v):
             if v is not None and not v.startswith(("redis://", "rediss://")):
                 raise ValueError("Redis URL must start with redis:// or rediss://")
             return v
-
-        @model_validator(mode="after")
-        def check_retry_settings(cls, values):
-            if values.max_evolution_retries > 0 and not tenacity_available:
-                logger.warning(
-                    "Tenacity not available but retries configured. Retries will be disabled."
-                )
-                values.max_evolution_retries = 0
-            return values
+        EvolutionConfig.validate_redis_url = validate_redis_url
 
 else:
 
