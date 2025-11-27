@@ -73,14 +73,14 @@ def mock_policy_file(temp_project_root):
 @pytest.mark.parametrize(
     "input_data, expected_output",
     [
-        ({"key": "value"}, {"key": "value"}),  # No sensitive keys
-        ({"password": "secret123"}, {"password": "[REDACTED]"}),  # Sensitive key
+        ({"key": "value"}, ({"key": "value"}, 0)),  # No sensitive keys
+        ({"password": "secret123"}, ({"password": "[REDACTED]"}, 1)),  # Sensitive key
         (
             {"api_key": "abc123", "nested": {"secret": "hidden"}},
-            {"api_key": "[REDACTED]", "nested": {"secret": "[REDACTED]"}},
+            ({"api_key": "[REDACTED]", "nested": {"secret": "[REDACTED]"}}, 2),
         ),  # Nested
-        ([{"token": "tok123"}, "normal"], [{"token": "[REDACTED]"}, "normal"]),  # List
-        ("non-dict", "non-dict"),  # Non-dict/list
+        ([{"token": "tok123"}, "normal"], ([{"token": "[REDACTED]"}, "normal"], 1)),  # List
+        ("non-dict", ("non-dict", 0)),  # Non-dict/list
     ],
 )
 def test_redact_sensitive(input_data, expected_output):
@@ -148,7 +148,8 @@ async def test_policy_engine_should_generate_tests_opa_enabled(
 ):
     """Test OPA-enabled policy evaluation."""
     engine = PolicyEngine("atco_policies.json", temp_project_root)
-    engine.policies["opa_integration_enabled"] = True
+    engine.config.opa_integration_enabled = True
+    engine.policy_client.enabled = True
 
     with patch(
         "test_generation.policy_and_audit.aiohttp.ClientSession.post"
@@ -169,7 +170,8 @@ async def test_policy_engine_should_generate_tests_opa_failure(
 ):
     """Test OPA failure defaults to deny."""
     engine = PolicyEngine("atco_policies.json", temp_project_root)
-    engine.policies["opa_integration_enabled"] = True
+    engine.config.opa_integration_enabled = True
+    engine.policy_client.enabled = True
 
     with patch(
         "test_generation.policy_and_audit.aiohttp.ClientSession.post",
@@ -235,12 +237,10 @@ async def test_policy_engine_requires_pr_for_integration_local_not_required(
 @pytest.mark.asyncio
 async def test_policy_engine_metrics(mock_policy_file, temp_project_root):
     """Test Prometheus metrics for policy evaluations."""
-    # Fix: Import metric inside the function to avoid circular dependency
-
     engine = PolicyEngine("atco_policies.json", temp_project_root)
 
-    with patch(
-        "test_generation.policy_and_audit.policy_evaluations_total"
+    with patch.object(
+        engine.metrics_client, "policy_evaluations_total"
     ) as mock_counter:
         await engine.should_generate_tests("module.py", "python")
         mock_counter.labels.assert_called_with(
@@ -305,13 +305,13 @@ async def test_audit_logger_log_event_redaction(temp_project_root):
 def test_event_bus_init_with_mq(mock_config):
     """Test initialization with MessageQueueService."""
     mock_mq = MagicMock()
-    bus = EventBus(mock_config, mock_mq)
+    bus = EventBus(config=mock_config, message_queue_service=mock_mq)
     assert bus.message_queue_service == mock_mq
 
 
 def test_event_bus_init_no_mq(mock_config):
     """Test initialization without MessageQueueService."""
-    bus = EventBus(mock_config)
+    bus = EventBus(config=mock_config)
     assert bus.message_queue_service is None
 
 
@@ -319,8 +319,8 @@ def test_event_bus_init_no_mq(mock_config):
 async def test_event_bus_publish_critical_with_mq(mock_config):
     """Test publishing critical event with MQ."""
     mock_mq = AsyncMock()
-    bus = EventBus(mock_config, mock_mq)
-    mock_config["critical_events_for_mq"] = ["critical_event"]
+    bus = EventBus(config=mock_config, message_queue_service=mock_mq)
+    bus.config.critical_events_for_mq = ["critical_event"]
 
     await bus.publish("critical_event", {"key": "value"})
     mock_mq.publish.assert_called_once()
@@ -330,7 +330,7 @@ async def test_event_bus_publish_critical_with_mq(mock_config):
 async def test_event_bus_publish_non_critical_no_aiohttp(mock_config, monkeypatch):
     """Test publishing non-critical event without AIOHTTP."""
     monkeypatch.setattr("test_generation.policy_and_audit.AIOHTTP_AVAILABLE", False)
-    bus = EventBus(mock_config)
+    bus = EventBus(config=mock_config)
     await bus.publish("non_critical", {"key": "value"})
     # No exception, just warning logged
 
@@ -338,38 +338,46 @@ async def test_event_bus_publish_non_critical_no_aiohttp(mock_config, monkeypatc
 @pytest.mark.asyncio
 async def test_event_bus_publish_webhook(mock_config):
     """Test publishing to webhook."""
+    mock_config["webhook_hooks"] = {"test_event": "https://mock-webhook.example.com"}  # Use event name as key
     mock_config["webhook_events"] = ["test_event"]
-    bus = EventBus(mock_config)
+    bus = EventBus(config=mock_config)
+    bus.config.webhook_hooks = {"test_event": "https://mock-webhook.example.com"}
+    bus.config.webhook_events = ["test_event"]
+    bus.http_notifications_enabled = True
 
-    with patch(
-        "test_generation.policy_and_audit.aiohttp.ClientSession.post"
-    ) as mock_post:
+    with patch.object(bus, "session_factory") as mock_factory:
+        mock_session = MagicMock()
         mock_response = AsyncMock()
         mock_response.raise_for_status.return_value = None
-        mock_post.return_value.__aenter__.return_value = mock_response
+        mock_session.post.return_value.__aenter__.return_value = mock_response
+        mock_factory.return_value.__aenter__.return_value = mock_session
 
         await bus.publish("test_event", {"key": "value"})
-        mock_post.assert_called_once()
+        mock_session.post.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_event_bus_publish_slack(mock_config):
     """Test publishing to Slack."""
+    mock_config["slack_webhook_url"] = "https://hooks.slack.com/services/test"
     mock_config["slack_events"] = ["test_event"]
-    bus = EventBus(mock_config)
+    bus = EventBus(config=mock_config)
+    bus.config.slack_webhook_url = "https://hooks.slack.com/services/test"
+    bus.config.slack_events = ["test_event"]
+    bus.http_notifications_enabled = True
 
-    with patch(
-        "test_generation.policy_and_audit.aiohttp.ClientSession.post"
-    ) as mock_post:
+    with patch.object(bus, "session_factory") as mock_factory:
+        mock_session = MagicMock()
         mock_response = AsyncMock()
         mock_response.raise_for_status.return_value = None
-        mock_post.return_value.__aenter__.return_value = mock_response
+        mock_session.post.return_value.__aenter__.return_value = mock_response
+        mock_factory.return_value.__aenter__.return_value = mock_session
 
         await bus.publish(
             "test_event", {"module": "test_module", "reason": "test_reason"}
         )
-        mock_post.assert_called_once()
-        call_args = mock_post.call_args[1]["json"]
+        mock_session.post.assert_called_once()
+        call_args = mock_session.post.call_args[1]["json"]
         assert "ATCO Alert: *test_event*" in call_args["text"]
 
 
@@ -379,15 +387,16 @@ async def test_event_bus_publish_metrics_failure(mock_config):
     # Fix: Import metric inside the function to avoid circular dependency
 
     mock_config["slack_events"] = ["test_event"]
-    bus = EventBus(mock_config)
+    bus = EventBus(config=mock_config)
+    bus.config.slack_events = ["test_event"]
 
     with (
         patch(
             "test_generation.policy_and_audit.aiohttp.ClientSession.post",
             side_effect=Exception("Network error"),
         ),
-        patch(
-            "test_generation.policy_and_audit.notification_failures_total"
+        patch.object(
+            bus.metrics_client, "notification_failures_total"
         ) as mock_counter,
     ):
         await bus.publish("test_event", {"key": "value"})
@@ -399,21 +408,25 @@ async def test_event_bus_publish_metrics_failure(mock_config):
 @pytest.mark.asyncio
 async def test_event_bus_publish_redaction(mock_config):
     """Test sensitive data redaction in published events."""
+    mock_config["slack_webhook_url"] = "https://hooks.slack.com/services/test"
     mock_config["slack_events"] = ["test_event"]
-    bus = EventBus(mock_config)
+    bus = EventBus(config=mock_config)
+    bus.config.slack_webhook_url = "https://hooks.slack.com/services/test"
+    bus.config.slack_events = ["test_event"]
+    bus.http_notifications_enabled = True
 
-    with patch(
-        "test_generation.policy_and_audit.aiohttp.ClientSession.post"
-    ) as mock_post:
+    with patch.object(bus, "session_factory") as mock_factory:
+        mock_session = MagicMock()
         mock_response = AsyncMock()
         mock_response.raise_for_status.return_value = None
-        mock_post.return_value.__aenter__.return_value = mock_response
+        mock_session.post.return_value.__aenter__.return_value = mock_response
+        mock_factory.return_value.__aenter__.return_value = mock_session
 
         await bus.publish(
             "test_event",
             {"password": "secret", "module": "test_module", "reason": "test_reason"},
         )
-        call_args = mock_post.call_args[1]["json"]
+        call_args = mock_session.post.call_args[1]["json"]
         assert "[REDACTED]" in call_args["text"]
 
 
