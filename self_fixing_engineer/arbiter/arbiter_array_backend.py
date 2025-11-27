@@ -109,6 +109,11 @@ except Exception:
         pass
 
 
+# Suppress gym deprecation warning before importing stable_baselines3
+import warnings
+
+warnings.filterwarnings("ignore", message="Gym has been unmaintained since 2022")
+
 try:
     import stable_baselines3  # type: ignore
 except Exception:
