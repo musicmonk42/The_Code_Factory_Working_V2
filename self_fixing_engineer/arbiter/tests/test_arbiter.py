@@ -125,55 +125,24 @@ def setup_mocks():
             _MOCKED_MODULE_NAMES.append(name)
         sys.modules[name] = mock_obj
 
-    # Mock arbiter submodules
+    # Mock arbiter submodules (NOTE: DON'T mock modules that other tests need)
     arbiter_mocks = {
         "arbiter.feedback": MagicMock(),
         "arbiter.agent_state": MagicMock(),
-        "arbiter.monitoring": MagicMock(),
+        # "arbiter.monitoring" removed - other tests need the real module
         "arbiter.human_loop": MagicMock(),
         "arbiter.config": MagicMock(),
-        "arbiter.utils": MagicMock(),
+        # "arbiter.utils" removed - other tests need the real module
         "arbiter.arbiter_plugin_registry": MagicMock(),
         "arbiter.models.postgres_client": MagicMock(),
         "arbiter.models.knowledge_graph_db": MagicMock(),
         "arbiter.plugins.multi_modal_plugin": MagicMock(),
         "arbiter.codebase_analyzer": MagicMock(),
-        "arbiter.metrics": MagicMock(),
+        # "arbiter.metrics" removed - other tests need the real module
         "simulation.simulation_module": MagicMock(),
         "envs.code_health_env": MagicMock(),
         "envs.evolution": MagicMock(),
     }
-
-    # Setup metrics module
-    def mock_get_or_create_counter(name, desc, labels=None):
-        counter = MagicMock()
-        counter.labels = MagicMock(return_value=MagicMock())
-        return counter
-
-    def mock_get_or_create_gauge(name, desc, labels=None):
-        gauge = MagicMock()
-        gauge.labels = MagicMock(return_value=MagicMock())
-        gauge.set = MagicMock()
-        return gauge
-
-    def mock_get_or_create_summary(name, desc, labels=None):
-        summary = MagicMock()
-        summary.labels = MagicMock(return_value=MagicMock())
-        summary.observe = MagicMock()
-        return summary
-
-    def mock_get_or_create_histogram(name, desc, labels=None, buckets=None):
-        histogram = MagicMock()
-        histogram.labels = MagicMock(return_value=MagicMock())
-        histogram.observe = MagicMock()
-        return histogram
-
-    arbiter_mocks["arbiter.metrics"].get_or_create_counter = mock_get_or_create_counter
-    arbiter_mocks["arbiter.metrics"].get_or_create_gauge = mock_get_or_create_gauge
-    arbiter_mocks["arbiter.metrics"].get_or_create_summary = mock_get_or_create_summary
-    arbiter_mocks["arbiter.metrics"].get_or_create_histogram = (
-        mock_get_or_create_histogram
-    )
 
     # Setup arbiter specific mocks
     arbiter_mocks["arbiter.agent_state"].Base = Base
