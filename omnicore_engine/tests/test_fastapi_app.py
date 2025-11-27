@@ -5,7 +5,6 @@ Tests FastAPI endpoints, middleware, and startup/shutdown events.
 
 import asyncio
 import os
-import secrets
 import sys
 import tempfile
 from datetime import datetime, timedelta
@@ -20,29 +19,6 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.fastapi_app import app
-
-
-def get_jwt_secret_for_tests(settings):
-    """Helper function to get JWT secret from settings in a backward-compatible way.
-    
-    Handles both SecretStr (from ArbiterConfig) and fallback settings.
-    """
-    jwt_secret = getattr(settings, "JWT_SECRET_KEY", None)
-    if jwt_secret is not None and hasattr(jwt_secret, "get_secret_value"):
-        return jwt_secret.get_secret_value()
-    elif jwt_secret is not None:
-        return str(jwt_secret)
-    else:
-        # Return a test secret for fallback settings
-        return "test-jwt-secret-key-for-testing-only"
-
-
-def get_experimental_features_enabled(settings):
-    """Helper function to get EXPERIMENTAL_FEATURES_ENABLED from settings.
-    
-    Returns False if the attribute doesn't exist (fallback settings case).
-    """
-    return getattr(settings, "EXPERIMENTAL_FEATURES_ENABLED", False)
 
 
 class TestStartupShutdown:
@@ -130,17 +106,6 @@ class TestSecurityMiddleware:
 
     def test_jwt_authentication(self):
         """Test JWT token validation"""
-        from omnicore_engine.fastapi_app import get_user_id, settings
-
-        # Get the actual JWT secret from settings using helper function
-        jwt_secret = get_jwt_secret_for_tests(settings)
-        
-        # Mock the settings.JWT_SECRET_KEY for the test to work with fallback settings
-        with patch.object(settings, "JWT_SECRET_KEY", None, create=True):
-            # Since JWT_SECRET_KEY is None, get_user_id will raise HTTPException
-            # We need to mock it to return a valid secret for testing
-            pass
-        
         # For this test, we'll use a patched settings with a known secret
         test_secret = "test-jwt-secret-key-for-testing"
         

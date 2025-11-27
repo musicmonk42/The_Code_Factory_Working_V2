@@ -1,6 +1,7 @@
 # File: omnicore_engine/fastapi_app.py
 import ast
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -270,8 +271,6 @@ def get_csrf_config():
         secret_key_value = str(jwt_secret)
     else:
         # Generate a fallback secret key for development/testing only
-        import secrets
-
         secret_key_value = secrets.token_urlsafe(32)
         logger.warning(
             "JWT_SECRET_KEY not configured. Using a randomly generated key. "
