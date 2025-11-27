@@ -2,8 +2,10 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
+import types
 import uuid
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -24,7 +26,6 @@ from typing import (
 import structlog
 
 # External project imports
-from arbiter.config import ArbiterConfig
 from pydantic import ValidationError
 
 from .backpressure import BackpressureManager
@@ -40,7 +41,45 @@ from .integrations.redis_bridge import RedisBridge
 from .message_types import Message, MessageSchema
 from .resilience import CircuitBreaker, RetryPolicy
 
-settings = ArbiterConfig()
+
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        LOG_LEVEL="INFO",
+        database_path="sqlite:///./omnicore.db",
+        DB_PATH="sqlite:///./omnicore.db",
+        MESSAGE_BUS_SHARD_COUNT=4,
+        MESSAGE_BUS_MAX_QUEUE_SIZE=10000,
+        MESSAGE_BUS_WORKERS_PER_SHARD=2,
+        ENCRYPTION_KEY=None,
+        ENCRYPTION_KEY_BYTES=b"",
+        REDIS_URL="redis://localhost:6379/0",
+        KAFKA_BOOTSTRAP_SERVERS="localhost:9092",
+    )
+
+
+def _get_settings():
+    """Lazy import + defensive instantiation of settings."""
+    try:
+        from arbiter.config import ArbiterConfig
+
+        return ArbiterConfig()
+    except ImportError as e:
+        logging.warning(
+            "Could not import arbiter.config; using fallback settings. Import error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+    except Exception as e:
+        logging.warning(
+            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+
+settings = _get_settings()
 
 import aiohttp
 
@@ -233,12 +272,12 @@ class PluginMessageBusAdapter:
 class ShardedMessageBus:
     def __init__(
         self,
-        config: ArbiterConfig = None,
+        config: Any = None,
         db: Optional["Database"] = None,
         audit_client: Optional[Any] = None,
     ):
         self.security_utils = get_security_utils()
-        self.config = config or ArbiterConfig()
+        self.config = config or settings
         self.db = db
         self.audit_client = audit_client
         self.running = True
