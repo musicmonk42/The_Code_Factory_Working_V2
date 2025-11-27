@@ -145,7 +145,8 @@ except ImportError:
         def filter(self, record):
             return True
 
-    from sqlalchemy.ext.declarative import declarative_base
+    # Use SQLAlchemy 2.0 style declarative_base
+    from sqlalchemy.orm import declarative_base
 
     Base = declarative_base()
 

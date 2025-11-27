@@ -243,7 +243,7 @@ def retry_decorator(exc_type):
 
 # --- Dynamic Handler Wrappers ---
 try:
-    from plugins.wasm_runner import WasmRunner, WasmRuntimeError
+    from plugins.wasm_runner import WasmRunner, WasmRunnerError
 
     class WasmPluginWrapper:
         """
@@ -258,12 +258,12 @@ try:
             self._initialize_runner()
             plugin_logger.info(f"[{self.name}] Initialized WASM plugin wrapper.")
 
-        @retry_decorator(WasmRuntimeError)
+        @retry_decorator(WasmRunnerError)
         def _initialize_runner(self):
             """Initializes the WasmRunner with retries on failure."""
             try:
                 self.runner = WasmRunner(self.name, self.manifest, self.plugins_dir)
-            except (WasmRuntimeError, FileNotFoundError) as e:
+            except (WasmRunnerError, FileNotFoundError) as e:
                 plugin_logger.error(
                     f"[{self.name}] Failed to initialize WasmRunner: {e}"
                 )

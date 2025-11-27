@@ -31,7 +31,7 @@ from arbiter.metrics import (
 from cryptography.fernet import Fernet
 from dotenv import dotenv_values, load_dotenv
 from prometheus_client import REGISTRY, push_to_gateway
-from pydantic import BaseModel, Field, HttpUrl, SecretStr, validator
+from pydantic import BaseModel, Field, HttpUrl, SecretStr, field_validator
 from pydantic_settings import BaseSettings
 from sqlalchemy import BigInteger, Column, DateTime, String, Text, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -177,49 +177,42 @@ class MyArbiterConfig(BaseSettings):
                 file_secret_settings,
             )
 
-    @classmethod
-    def _ensure_https_in_prod_logic(cls, v, values):
-        if (
-            v
-            and "://localhost" not in v
-            and os.getenv("ENV") == "production"
-            and not v.startswith("https://")
-        ):
-            raise ValueError(f"{v} must use HTTPS in production")
-        return v
-
-    ensure_https_in_prod: ClassVar = validator(
+    @field_validator(
         "OMNICORE_URL",
         "SLACK_WEBHOOK_URL",
         "ALERT_WEBHOOK_URL",
         "PROMETHEUS_GATEWAY",
-        pre=True,
-        allow_reuse=True,
-    )(_ensure_https_in_prod_logic)
-
+        mode="before",
+    )
     @classmethod
-    def _validate_api_key_logic(cls, v):
+    def ensure_https_in_prod(cls, v):
+        if (
+            v
+            and "://localhost" not in str(v)
+            and os.getenv("ENV") == "production"
+            and not str(v).startswith("https://")
+        ):
+            raise ValueError(f"{v} must use HTTPS in production")
+        return v
+
+    @field_validator("ALPHA_VANTAGE_API_KEY")
+    @classmethod
+    def validate_api_key(cls, v):
         if v and len(v) < 10:
             raise ValueError("ALPHA_VANTAGE_API_KEY must be at least 10 characters")
         return v
 
-    validate_api_key: ClassVar = validator("ALPHA_VANTAGE_API_KEY", allow_reuse=True)(
-        _validate_api_key_logic
-    )
-
-    @classmethod
-    def _handle_none_or_empty_logic(cls, v):
-        if v == "":
-            return None
-        return v
-
-    handle_none_or_empty: ClassVar = validator(
+    @field_validator(
         "SLACK_WEBHOOK_URL",
         "ALERT_WEBHOOK_URL",
         "PROMETHEUS_GATEWAY",
-        pre=True,
-        allow_reuse=True,
-    )(_handle_none_or_empty_logic)
+        mode="before",
+    )
+    @classmethod
+    def handle_none_or_empty(cls, v):
+        if v == "":
+            return None
+        return v
 
 
 # --- Sentry Integration ---
