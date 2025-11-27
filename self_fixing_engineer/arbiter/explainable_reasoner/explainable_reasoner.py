@@ -171,7 +171,7 @@ try:
     )
 
     TRANSFORMERS_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
     torch = None
     pipeline = None
     AutoModelForCausalLM = None
