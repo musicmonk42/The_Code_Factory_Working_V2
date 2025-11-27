@@ -243,7 +243,7 @@ def retry_decorator(exc_type):
 
 # --- Dynamic Handler Wrappers ---
 try:
-    from wasm_runner import WasmRunner, WasmRuntimeError
+    from plugins.wasm_runner import WasmRunner, WasmRuntimeError
 
     class WasmPluginWrapper:
         """
@@ -307,7 +307,7 @@ except ImportError as e:
     )
 
 try:
-    from grpc_runner import GrpcRunner, GrpcRuntimeError
+    from plugins.grpc_runner import GrpcRunner, GrpcRuntimeError
 
     class GrpcPluginWrapper:
         """

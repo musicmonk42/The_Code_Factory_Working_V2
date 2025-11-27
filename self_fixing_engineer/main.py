@@ -39,6 +39,12 @@ Flags:
 """
 from __future__ import annotations
 
+# Suppress known deprecation warnings from third-party libraries before any imports
+import warnings
+
+# Suppress gym deprecation warning from stable_baselines3 (using deprecated gym instead of gymnasium)
+warnings.filterwarnings("ignore", message="Gym has been unmaintained since 2022")
+
 import argparse
 import asyncio
 import json
