@@ -204,39 +204,12 @@ def isolate_plugin_registry():
 @pytest.fixture(autouse=True)
 def clear_registry_per_test():
     """
-    Clear the plugin registry before each test to ensure isolation.
-    This fixture runs before every test function.
+    Plugin registry fixture. We don't aggressively clear the registry before tests
+    anymore because it breaks modules that register plugins at import time.
+    Instead, we just ensure the test environment is set up properly.
     """
-    try:
-        from arbiter.arbiter_plugin_registry import registry
-
-        # Clear in-memory state
-        with registry._lock:
-            registry._plugins.clear()
-            registry._meta.clear()
-
-        # Also clear the persisted file for this test
-        if os.path.exists(TEST_PLUGIN_FILE):
-            os.remove(TEST_PLUGIN_FILE)
-
-        logger.debug("Plugin registry cleared for test")
-    except ImportError:
-        # Registry not yet imported, that's fine
-        pass
-    except Exception as e:
-        logger.warning(f"Could not clear registry: {e}")
-
     yield
-
-    # Optional: Clear after test too
-    try:
-        from arbiter.arbiter_plugin_registry import registry
-
-        with registry._lock:
-            registry._plugins.clear()
-            registry._meta.clear()
-    except:
-        pass
+    # Minimal cleanup after tests - don't clear the entire registry
 
 
 @pytest.fixture
