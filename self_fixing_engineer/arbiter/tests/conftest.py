@@ -272,35 +272,14 @@ def mock_plugin_registry(monkeypatch):
 # -----------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
 def reset_prometheus_registry():
-    """Reset Prometheus registry before each test to avoid conflicts."""
-    try:
-        import gc
-
-        from prometheus_client import REGISTRY
-
-        # Clear all collectors
-        collectors = list(REGISTRY._collector_to_names.keys())
-        for collector in collectors:
-            try:
-                REGISTRY.unregister(collector)
-            except Exception:
-                pass
-
-        # Force garbage collection
-        gc.collect()
-
-        yield
-
-        # Clean up after test
-        collectors = list(REGISTRY._collector_to_names.keys())
-        for collector in collectors:
-            try:
-                REGISTRY.unregister(collector)
-            except Exception:
-                pass
-    except ImportError:
-        # Prometheus not installed
-        yield
+    """
+    Prometheus registry cleanup - but DON'T unregister collectors before tests.
+    This was causing issues because modules register metrics at import time.
+    We only do minimal cleanup after the test.
+    """
+    yield
+    # Only do minimal cleanup after tests, not before
+    # The safe_register in the parent conftest handles duplicates gracefully
 
 
 # -----------------------------------------------------------------------------

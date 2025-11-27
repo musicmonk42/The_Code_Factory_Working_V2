@@ -5,7 +5,7 @@ import threading
 from unittest.mock import ANY, AsyncMock, mock_open, patch
 
 import pytest
-from knowledge_loader import (
+from arbiter.knowledge_loader import (
     KnowledgeLoader,
     load_knowledge,
     merge_dict,
