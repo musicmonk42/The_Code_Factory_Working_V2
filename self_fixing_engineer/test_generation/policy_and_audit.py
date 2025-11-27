@@ -165,6 +165,7 @@ try:
     AUDIT_LOGGER_AVAILABLE = True
 except Exception:  # <-- FIX: Broadened exception handling
     AUDIT_LOGGER_AVAILABLE = False
+    _real_audit_event = None
 
 if os.getenv("AUDIT_ENABLED", "true").lower() == "false":
     logger.info("Audit logging is disabled by environment configuration.")
@@ -196,6 +197,20 @@ else:
                 self._logger.info({"event": event_type, **details})
 
         _module_audit_logger = _FallbackAuditLogger()
+
+
+# --- audit_event wrapper function ---
+async def audit_event(event_type: str, details: Dict[str, Any], critical: bool = False):
+    """
+    Wrapper function to log an audit event.
+    Uses the real audit_event if available, otherwise uses fallback.
+    """
+    if AUDIT_LOGGER_AVAILABLE and _real_audit_event is not None:
+        await _real_audit_event(event_type, details, critical=critical)
+    else:
+        # Use fallback logger
+        fallback_logger = logging.getLogger("audit_fallback")
+        fallback_logger.info({"event": event_type, **details})
 
 
 # --- Secure Redaction Helper ---
@@ -281,27 +296,54 @@ except Exception as e:
     )
 
 
+# Singleton metrics storage to avoid duplicate registration
+_metrics_singleton = None
+
+
 class MetricsClient:
     """Encapsulates Prometheus metrics for dependency injection."""
 
     def __init__(self):
+        global _metrics_singleton
         self.enabled = METRICS_AVAILABLE
-        self.policy_evaluations_total = None
-        self.notification_failures_total = None
+
+        # Return singleton metrics if available
+        if _metrics_singleton is not None:
+            self.policy_evaluations_total = _metrics_singleton.policy_evaluations_total
+            self.notification_failures_total = _metrics_singleton.notification_failures_total
+            return
+
         if self.enabled:
-            self.policy_evaluations_total = prometheus_client.Counter(
-                "atco_policy_evaluations_total",
-                "Total policy evaluations",
-                ["result", "rule"],
-            )
-            self.notification_failures_total = prometheus_client.Counter(
-                "atco_notification_failures_total",
-                "Failed notifications",
-                ["service", "event_name"],
-            )
+            try:
+                # Try to create the metrics, handling duplicate registration gracefully
+                try:
+                    self.policy_evaluations_total = prometheus_client.Counter(
+                        "atco_policy_evaluations_total",
+                        "Total policy evaluations",
+                        ["result", "rule"],
+                    )
+                except ValueError:
+                    # Already registered - use no-op metric as fallback
+                    self.policy_evaluations_total = _NoOpMetric()
+
+                try:
+                    self.notification_failures_total = prometheus_client.Counter(
+                        "atco_notification_failures_total",
+                        "Failed notifications",
+                        ["service", "event_name"],
+                    )
+                except ValueError:
+                    # Already registered - use no-op metric as fallback
+                    self.notification_failures_total = _NoOpMetric()
+            except Exception:
+                self.policy_evaluations_total = _NoOpMetric()
+                self.notification_failures_total = _NoOpMetric()
         else:
             self.policy_evaluations_total = _NoOpMetric()
             self.notification_failures_total = _NoOpMetric()
+
+        # Set singleton
+        _metrics_singleton = self
 
 
 metrics_client = MetricsClient()
@@ -608,28 +650,71 @@ class OPAPolicyClient(PolicyClient):
 class PolicyEngine:
     """
     Centralized Policy Engine for ATCO operations.
+
+    Supports two initialization modes:
+    1. Simple mode (backward compatible): PolicyEngine(policy_config_path, project_root)
+    2. Full dependency injection mode: PolicyEngine(policy_config_path, config, audit_logger, ...)
     """
 
     def __init__(
         self,
         policy_config_path: Optional[str],
-        config: Configuration,
-        audit_logger: Any,
-        metrics_client: MetricsClient,
-        filesystem: FileSystem,
-        policy_client: PolicyClient,
+        config_or_project_root: Any = None,
+        audit_logger: Any = None,
+        metrics_client: Optional[MetricsClient] = None,
+        filesystem: Optional[FileSystem] = None,
+        policy_client: Optional[PolicyClient] = None,
+        *,
+        project_root: Optional[str] = None,
     ):
         """
         Initializes the PolicyEngine with dependencies.
+
+        Args:
+            policy_config_path: Path to policy JSON file (relative to project root)
+            config_or_project_root: Either a Configuration object or project_root string (for backward compatibility)
+            audit_logger: Optional audit logger instance
+            metrics_client: Optional metrics client instance
+            filesystem: Optional filesystem abstraction
+            policy_client: Optional policy client (e.g., OPA client)
+            project_root: Alternative way to specify project root (keyword-only, for backward compatibility)
         """
-        self.config = config
-        self.audit_logger = audit_logger
-        self.metrics_client = metrics_client
-        self.filesystem = filesystem
+        # Handle backward compatibility: detect if called with simple signature
+        # PolicyEngine("config.json", "/path/to/project") or PolicyEngine("config.json", project_root="/path")
+        if isinstance(config_or_project_root, str) or project_root is not None:
+            # Simple/backward-compatible mode
+            actual_project_root = project_root if project_root is not None else config_or_project_root
+            self.config = Configuration.from_env(project_root=actual_project_root)
+            self.audit_logger = None  # Will use fallback
+            self.metrics_client = MetricsClient()
+            self.filesystem = LocalFileSystem()
+            self.policy_client = OPAPolicyClient(self.config, None, self.metrics_client)
+        elif config_or_project_root is None:
+            # No config provided, use defaults
+            self.config = Configuration.from_env()
+            self.audit_logger = audit_logger
+            self.metrics_client = metrics_client or MetricsClient()
+            self.filesystem = filesystem or LocalFileSystem()
+            self.policy_client = policy_client or OPAPolicyClient(self.config, audit_logger, self.metrics_client)
+        elif isinstance(config_or_project_root, Configuration):
+            # Full dependency injection mode
+            self.config = config_or_project_root
+            self.audit_logger = audit_logger
+            self.metrics_client = metrics_client or MetricsClient()
+            self.filesystem = filesystem or LocalFileSystem()
+            self.policy_client = policy_client or OPAPolicyClient(self.config, audit_logger, self.metrics_client)
+        else:
+            # Assume it's a dict-like config object (from orchestrator)
+            actual_project_root = project_root or os.getcwd()
+            self.config = Configuration.from_env(project_root=actual_project_root)
+            self.audit_logger = audit_logger
+            self.metrics_client = metrics_client or MetricsClient()
+            self.filesystem = filesystem or LocalFileSystem()
+            self.policy_client = policy_client or OPAPolicyClient(self.config, audit_logger, self.metrics_client)
+
         self.policy_config_path = policy_config_path
         self.policies: Dict[str, Any] = {}
         self.policy_hash = "NO_POLICY_FILE"
-        self.policy_client = policy_client
 
         self._gen_cache = {}
         self._gen_lock = Lock()
@@ -638,6 +723,9 @@ class PolicyEngine:
         self._pr_cache = {}
         self._pr_lock = Lock()
         self._warned_severities = set()
+
+        # Synchronously load policies for backward compatibility
+        self._load_policies_sync()
 
     @classmethod
     async def create(
@@ -649,6 +737,7 @@ class PolicyEngine:
         filesystem: FileSystem,
         policy_client: PolicyClient,
     ):
+        """Async factory method for creating a PolicyEngine with async audit logging."""
         self = cls(
             policy_config_path,
             config,
@@ -657,8 +746,58 @@ class PolicyEngine:
             filesystem,
             policy_client,
         )
-        await self._load_policies()
+        # Policies are already loaded in __init__ via _load_policies_sync,
+        # but we may want to do async audit logging
+        if audit_logger:
+            await audit_logger.log_event(
+                Constants.AUDIT_EVENT_TYPES["policy_reloaded"],
+                {"path": policy_config_path or "default", "new_hash": self.policy_hash},
+            )
         return self
+
+    def _load_policies_sync(self):
+        """Synchronous version of policy loading for backward compatibility."""
+        if self.policy_config_path and (
+            ".." in self.policy_config_path
+            or not self.policy_config_path.endswith(".json")
+        ):
+            raise ValueError("Invalid policy_config_path")
+
+        if not self.policy_config_path:
+            logger.info(
+                "PolicyEngine initialized without a valid config file path. Using built-in defaults."
+            )
+            self.policies = Constants.DEFAULT_POLICIES.copy()
+            self.policy_hash = "NO_POLICY_FILE"
+            return
+
+        full_policy_config_path = os.path.join(
+            self.config.project_root, self.policy_config_path
+        )
+
+        if not self.filesystem.file_exists(full_policy_config_path):
+            logger.warning(
+                f"PolicyEngine: Policy file not found at {full_policy_config_path}. Using hardcoded defaults."
+            )
+            self.policies = Constants.DEFAULT_POLICIES.copy()
+            self.policy_hash = "NO_POLICY_FILE"
+        else:
+            try:
+                self.policies = self.filesystem.read_json(full_policy_config_path)
+                self._validate_policy_schema(self.policies)
+                self.policy_hash = self.filesystem.generate_file_hash(
+                    full_policy_config_path, self.config.project_root
+                )
+                logger.info(
+                    f"PolicyEngine loaded policies from: {full_policy_config_path} (Hash: {self.policy_hash})"
+                )
+            except (IOError, json.JSONDecodeError, ValueError) as e:
+                logger.error(
+                    f"Error loading policies from {full_policy_config_path}: {e}. Using defaults.",
+                    exc_info=True,
+                )
+                self.policies = Constants.DEFAULT_POLICIES.copy()
+                self.policy_hash = "NO_POLICY_FILE"
 
     async def _load_policies(self):
         """Loads and validates policies from the configuration file."""
@@ -1265,22 +1404,52 @@ class PolicyEngine:
 class EventBus:
     """
     Centralized Event Bus for ATCO notifications with real webhook/Slack hooks.
+
+    Supports two initialization modes:
+    1. Simple mode (backward compatible): EventBus(config=dict_config) or EventBus(config=None)
+    2. Full dependency injection mode: EventBus(config, audit_logger, metrics_client, ...)
     """
 
     def __init__(
         self,
-        config: Configuration,
-        audit_logger: Any,
-        metrics_client: MetricsClient,
+        config: Any = None,
+        audit_logger: Any = None,
+        metrics_client: Optional[MetricsClient] = None,
         message_queue_service=None,
         session_factory: Optional[Callable[[], aiohttp.ClientSession]] = None,
     ):
         """
         Initializes the EventBus.
+
+        Args:
+            config: Either a Configuration object, a dict, or None
+            audit_logger: Optional audit logger instance
+            metrics_client: Optional metrics client instance
+            message_queue_service: Optional message queue service
+            session_factory: Optional aiohttp session factory
         """
-        self.config = config
+        # Handle backward compatibility
+        if config is None or isinstance(config, dict):
+            # Simple/backward-compatible mode
+            self.config = Configuration.from_env()
+            # Apply dict config overrides if provided
+            if isinstance(config, dict):
+                if config.get("slack_webhook_url"):
+                    self.config.slack_webhook_url = config["slack_webhook_url"]
+                if config.get("slack_events"):
+                    self.config.slack_events = config["slack_events"]
+                if config.get("webhook_hooks"):
+                    self.config.webhook_hooks = config["webhook_hooks"]
+                if config.get("webhook_events"):
+                    self.config.webhook_events = config["webhook_events"]
+        elif isinstance(config, Configuration):
+            self.config = config
+        else:
+            # Unknown config type, use defaults
+            self.config = Configuration.from_env()
+
         self.audit_logger = audit_logger
-        self.metrics_client = metrics_client
+        self.metrics_client = metrics_client or MetricsClient()
         self.message_queue_service = message_queue_service
 
         have_external = bool(self.config.slack_webhook_url or self.config.webhook_hooks)
@@ -1299,7 +1468,7 @@ class EventBus:
         self._correlation_id_fn = lambda: os.urandom(8).hex()
 
         if self.disabled:
-            logger.warning("EventBus is disabled as no destinations are configured.")
+            logger.debug("EventBus initialized in disabled mode (no destinations configured).")
         else:
             logger.info("EventBus initialized with destinations.")
             logger.info(
@@ -1514,6 +1683,7 @@ __all__ = [
     "LocalFileSystem",
     "OPAPolicyClient",
     "PolicyClient",
+    "audit_event",
 ]
 
 # --- Self-Test Mode ---
