@@ -218,13 +218,6 @@ async def test_e2e_rate_limiting(tmp_path):
     """
     Tests that the rate limiter correctly blocks repeated bug reports.
     """
-    # Clear all metrics at test start
-    for collector in list(REGISTRY._collector_to_names.keys()):
-        try:
-            REGISTRY.unregister(collector)
-        except Exception:
-            pass
-
     # 1. Setup
     settings = Settings(
         AUDIT_LOG_FILE_PATH=str(tmp_path / "audit.log"),

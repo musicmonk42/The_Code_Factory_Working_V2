@@ -32,24 +32,30 @@ def clean_action_registry():
 @pytest.fixture
 def mock_aiohttp_session():
     """Mocks aiohttp.ClientSession to control API responses for the ML model."""
-    with patch("aiohttp.ClientSession") as mock_session_class:
-        mock_session = MagicMock()
-
-        # Create a proper async context manager mock
-        mock_response = MagicMock()
-        mock_response.status = 200
-        mock_response.json = AsyncMock(
-            return_value={"playbook_name": "ML_Playbook", "confidence": 0.9}
-        )
-        mock_response.raise_for_status = MagicMock()
-
-        # Setup context manager
-        mock_context = MagicMock()
-        mock_context.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_context.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session.post.return_value = mock_context
-        mock_session_class.return_value = mock_session
+    # Create a proper mock response
+    mock_response = AsyncMock()
+    mock_response.status = 200
+    mock_response.json = AsyncMock(
+        return_value={"playbook_name": "ML_Playbook", "confidence": 0.9}
+    )
+    mock_response.raise_for_status = MagicMock()
+    
+    # Create a proper async context manager for the post call
+    mock_post_context = AsyncMock()
+    mock_post_context.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_post_context.__aexit__ = AsyncMock(return_value=None)
+    
+    # Create the session mock
+    mock_session = AsyncMock()
+    mock_session.post = MagicMock(return_value=mock_post_context)
+    mock_session.closed = False
+    mock_session.close = AsyncMock()
+    
+    # Patch _get_session to return our mock
+    with patch.object(
+        MLRemediationModel, '_get_session', 
+        new=AsyncMock(return_value=mock_session)
+    ):
         yield mock_session
 
 
