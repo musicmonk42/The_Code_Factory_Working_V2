@@ -109,7 +109,9 @@ def _setup_opentelemetry_context():
             def set_status(self, status, description=None):
                 pass
 
-            def record_exception(self, exception, attributes=None, timestamp=None, escaped=None):
+            def record_exception(
+                self, exception, attributes=None, timestamp=None, escaped=None
+            ):
                 pass
 
             def add_event(self, name, attributes=None, timestamp=None):
@@ -446,9 +448,12 @@ def _install_inmemory_exporter():
 _USING_SHIM = False
 try:
     # Try to import the real InMemorySpanExporter
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter as _RealExporter
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter as _RealExporter,
+    )
+
     # Verify it has the methods we need
-    if not hasattr(_RealExporter, 'clear'):
+    if not hasattr(_RealExporter, "clear"):
         _install_inmemory_exporter()
         _USING_SHIM = True
 except ImportError:

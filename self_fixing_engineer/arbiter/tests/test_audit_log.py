@@ -14,8 +14,11 @@ import pytest
 # Save original modules before mocking
 _ORIGINAL_MODULES = {}
 _MODULES_TO_MOCK = [
-    "opentelemetry", "opentelemetry.trace", "opentelemetry.metrics",
-    "plugins.dlt_backend", "syslog",
+    "opentelemetry",
+    "opentelemetry.trace",
+    "opentelemetry.metrics",
+    "plugins.dlt_backend",
+    "syslog",
 ]
 for _mod in _MODULES_TO_MOCK:
     if _mod in sys.modules:

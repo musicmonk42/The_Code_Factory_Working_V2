@@ -78,9 +78,13 @@ def setup_test_environment():
     sys.modules["tenacity"] = mock_tenacity
 
     # Mock aiohttp
-    if "aiohttp" not in sys.modules or isinstance(sys.modules.get("aiohttp"), MagicMock):
+    if "aiohttp" not in sys.modules or isinstance(
+        sys.modules.get("aiohttp"), MagicMock
+    ):
         sys.modules["aiohttp"] = MagicMock()
-    if "aiohttp.web" not in sys.modules or isinstance(sys.modules.get("aiohttp.web"), MagicMock):
+    if "aiohttp.web" not in sys.modules or isinstance(
+        sys.modules.get("aiohttp.web"), MagicMock
+    ):
         sys.modules["aiohttp.web"] = MagicMock()
 
     # Mock OpenTelemetry modules with proper __path__ attribute
@@ -234,7 +238,12 @@ def _restore_original_modules():
         elif mod_name in sys.modules:
             # Check if it's our mock (MagicMock or ModuleType we created)
             module = sys.modules[mod_name]
-            if isinstance(module, MagicMock) or (isinstance(module, ModuleType) and hasattr(module, '__file__') and module.__file__ and '<mock' in str(module.__file__)):
+            if isinstance(module, MagicMock) or (
+                isinstance(module, ModuleType)
+                and hasattr(module, "__file__")
+                and module.__file__
+                and "<mock" in str(module.__file__)
+            ):
                 del sys.modules[mod_name]
 
 

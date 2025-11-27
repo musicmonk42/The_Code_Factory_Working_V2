@@ -347,7 +347,9 @@ if TRACING_AVAILABLE:
     try:
         # TracerProvider may not be a valid type for isinstance if another module
         # has replaced it with a proxy or mock during testing
-        if TracerProvider is not None and not isinstance(current_provider, TracerProvider):
+        if TracerProvider is not None and not isinstance(
+            current_provider, TracerProvider
+        ):
             trace.set_tracer_provider(provider)
     except TypeError:
         # Handle case where TracerProvider is a proxy/mock that doesn't support isinstance
