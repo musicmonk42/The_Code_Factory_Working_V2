@@ -1403,3 +1403,153 @@ try:
         _register_with_plugin_manager()
 except ImportError:
     _base_logger.debug("Plugin manager not available, skipping auto-registration.")
+
+
+# --- Exports for backwards compatibility with guardrails.audit_log ---
+# These aliases and utility functions provide compatibility with existing code
+# that expects specific names from this module.
+
+# Type aliases for production use
+ProductionDLTClient = BaseDLTClient
+ProductionOffChainClient = BaseOffChainClient
+
+# Global DLT client instance placeholder for singleton pattern
+_dlt_client_instance: Optional[BaseDLTClient] = None
+
+
+async def initialize_dlt_backend_clients(config: Dict[str, Any]) -> None:
+    """
+    Initialize the DLT backend clients based on the provided configuration.
+
+    This function sets up the global _dlt_client_instance with the appropriate
+    DLT client (Simple, EVM, Fabric, etc.) based on configuration.
+
+    Args:
+        config: Configuration dictionary containing DLT backend settings.
+            Expected keys:
+            - dlt_type: Type of DLT client ('simple', 'evm', 'fabric', 'corda')
+            - off_chain_storage_type: Type of off-chain storage ('in_memory', 's3', 'gcs', 'azure_blob')
+            - Additional client-specific configuration
+    """
+    global _dlt_client_instance
+
+    dlt_type = config.get("dlt_type", "simple").lower()
+    off_chain_type = config.get("off_chain_storage_type", "in_memory").lower()
+
+    _base_logger.info(
+        f"Initializing DLT backend: dlt_type={dlt_type}, off_chain_type={off_chain_type}"
+    )
+
+    # Use a registry pattern to track available off-chain client implementations
+    off_chain_registry: Dict[str, Optional[Type[BaseOffChainClient]]] = {
+        "in_memory": None,
+        "s3": None,
+        "gcs": None,
+        "azure_blob": None,
+    }
+
+    # Import off-chain client implementations
+    try:
+        from .dlt_offchain_clients import (
+            AzureBlobOffChainClient,
+            GcsOffChainClient,
+            InMemoryOffChainClient,
+            S3OffChainClient,
+        )
+
+        off_chain_registry["in_memory"] = InMemoryOffChainClient
+        off_chain_registry["s3"] = S3OffChainClient
+        off_chain_registry["gcs"] = GcsOffChainClient
+        off_chain_registry["azure_blob"] = AzureBlobOffChainClient
+    except ImportError as e:
+        _base_logger.warning(f"Some off-chain clients unavailable: {e}")
+
+    # Create off-chain client based on configuration
+    off_chain_client: Optional[BaseOffChainClient] = None
+
+    OffChainClientClass = off_chain_registry.get(off_chain_type)
+    if OffChainClientClass:
+        off_chain_client = OffChainClientClass(config)
+        if hasattr(off_chain_client, "initialize") and off_chain_type != "in_memory":
+            await off_chain_client.initialize()
+    else:
+        # Fallback to in-memory if available
+        InMemoryClass = off_chain_registry.get("in_memory")
+        if InMemoryClass:
+            _base_logger.warning(
+                f"Off-chain type '{off_chain_type}' not available, falling back to in_memory"
+            )
+            off_chain_client = InMemoryClass(config)
+        else:
+            _base_logger.error("No off-chain client available")
+            return
+
+    # Create DLT client based on configuration
+    if dlt_type == "simple":
+        try:
+            from .dlt_simple_clients import SimpleDLTClient as SimpleDLTClientImpl
+
+            _dlt_client_instance = SimpleDLTClientImpl(config, off_chain_client)
+            await _dlt_client_instance.initialize()
+        except ImportError as e:
+            _base_logger.error(f"SimpleDLTClient unavailable: {e}")
+    elif dlt_type == "evm":
+        try:
+            from .dlt_evm_clients import EthereumClientWrapper
+
+            _dlt_client_instance = EthereumClientWrapper(config, off_chain_client)
+        except ImportError as e:
+            _base_logger.error(f"EVMDLTClient unavailable: {e}")
+    elif dlt_type == "fabric":
+        try:
+            from .dlt_fabric_clients import FabricDLTClient
+
+            _dlt_client_instance = FabricDLTClient(config, off_chain_client)
+            await _dlt_client_instance.initialize()
+        except ImportError as e:
+            _base_logger.error(f"FabricDLTClient unavailable: {e}")
+    elif dlt_type == "corda":
+        try:
+            from .dlt_corda_clients import CordaDLTClient
+
+            _dlt_client_instance = CordaDLTClient(config, off_chain_client)
+            await _dlt_client_instance.initialize()
+        except ImportError as e:
+            _base_logger.error(f"CordaDLTClient unavailable: {e}")
+    else:
+        _base_logger.warning(f"Unknown DLT type: {dlt_type}, using SimpleDLTClient")
+        try:
+            from .dlt_simple_clients import SimpleDLTClient as SimpleDLTClientFallback
+
+            _dlt_client_instance = SimpleDLTClientFallback(config, off_chain_client)
+            await _dlt_client_instance.initialize()
+        except ImportError as e:
+            _base_logger.error(f"SimpleDLTClient unavailable: {e}")
+
+    if _dlt_client_instance:
+        _base_logger.info(
+            f"DLT backend initialized: {_dlt_client_instance.__class__.__name__}"
+        )
+    else:
+        _base_logger.warning("DLT backend initialization failed - no client available")
+
+
+# Import and re-export EVM client for backwards compatibility
+# Using Optional pattern to properly handle missing dependencies
+EVMDLTClient: Optional[Type[BaseDLTClient]] = None
+try:
+    from .dlt_evm_clients import EthereumClientWrapper
+
+    EVMDLTClient = EthereumClientWrapper
+except ImportError:
+    _base_logger.debug("EVMDLTClient not available - web3.py may not be installed")
+
+# Import and re-export SimpleDLTClient for backwards compatibility
+# Using Optional pattern to properly handle missing dependencies
+SimpleDLTClient: Optional[Type[BaseDLTClient]] = None
+try:
+    from .dlt_simple_clients import SimpleDLTClient as _SimpleDLTClient
+
+    SimpleDLTClient = _SimpleDLTClient
+except ImportError:
+    _base_logger.debug("SimpleDLTClient not available")
