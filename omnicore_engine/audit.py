@@ -4,18 +4,56 @@ import json
 import logging
 import threading
 import time
+import types
 import uuid
 from datetime import datetime
 from typing import Any, Coroutine, Dict, List, Optional, Union
 
-from arbiter.config import ArbiterConfig
 from circuitbreaker import circuit
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, Field, SecretStr, ValidationError
 
 from omnicore_engine.retry_compat import retry
 
-settings = ArbiterConfig()
+
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        LOG_LEVEL="INFO",
+        database_path="sqlite:///./omnicore.db",
+        DB_PATH="sqlite:///./omnicore.db",
+        ENCRYPTION_KEY=SecretStr("0mRtqFHlMkj0xTZO14sBFr1H6jkmmI0LWyK97sGyGew="),
+        ENCRYPTION_KEY_BYTES=b"",
+        AUDIT_BUFFER_SIZE=100,
+        AUDIT_FLUSH_INTERVAL=1.0,
+        AUDIT_BLOCKCHAIN_ENABLED=False,
+        WEB3_PROVIDER_URL=None,
+    )
+
+
+def _get_settings():
+    """Lazy import + defensive instantiation of settings."""
+    try:
+        from arbiter.config import ArbiterConfig
+    except ImportError as e:
+        logging.warning(
+            "Could not import arbiter.config; using fallback settings. Import error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+    try:
+        return ArbiterConfig()
+    except Exception as e:
+        logging.warning(
+            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+
+settings = _get_settings()
 try:
     from omnicore_engine.plugin_registry import (
         PLUGIN_REGISTRY,

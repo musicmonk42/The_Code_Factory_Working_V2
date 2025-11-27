@@ -1,9 +1,9 @@
 import asyncio
 import logging
+import types
 from typing import Any, Dict, List, Optional
 
 import yaml
-from arbiter.config import ArbiterConfig
 from fastapi import FastAPI  # Needed for type hinting
 
 from omnicore_engine.database import Database
@@ -23,10 +23,33 @@ except Exception:
             return None
 
 
-from arbiter import Arbiter
-from arbiter.utils import (
-    get_system_metrics_async,
-)  # New import needed for helper function
+try:
+    from arbiter import Arbiter
+except ImportError:
+    # Minimal stub when arbiter isn't installed
+    class Arbiter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def start_async_services(self):
+            pass
+
+        async def stop_async_services(self):
+            pass
+
+        async def respond(self, *args, **kwargs):
+            return "Arbiter unavailable"
+
+
+try:
+    from arbiter.utils import (
+        get_system_metrics_async,
+    )  # New import needed for helper function
+except ImportError:
+
+    async def get_system_metrics_async():
+        """Fallback system metrics function."""
+        return {"status": "unavailable", "message": "arbiter.utils not available"}
 
 # Optional imports that may not be available in all environments
 try:
@@ -87,8 +110,40 @@ def get_engine(engine_name: str) -> Optional[Dict[str, Any]]:
     return ENGINE_REGISTRY.get(engine_name)
 
 
-# Initialize the configuration object
-settings = ArbiterConfig()
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        LOG_LEVEL="INFO",
+        database_path="sqlite:///./omnicore.db",
+        DB_PATH="sqlite:///./omnicore.db",
+        plugin_dir="./plugins",
+        PLUGIN_DIR="./plugins",
+    )
+
+
+def _get_settings():
+    """Lazy import + defensive instantiation of settings."""
+    try:
+        from arbiter.config import ArbiterConfig
+
+        return ArbiterConfig()
+    except ImportError as e:
+        logging.warning(
+            "Could not import arbiter.config; using fallback settings. Import error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+    except Exception as e:
+        logging.warning(
+            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+
+# Initialize the configuration object with graceful fallback
+settings = _get_settings()
 logger = logging.getLogger(__name__)
 
 
@@ -96,7 +151,7 @@ class PluginService:
     def __init__(self, plugin_registry):
         self.plugin_registry = plugin_registry
         self.message_bus = ShardedMessageBus(
-            config=ArbiterConfig(), db=Database(ArbiterConfig().DB_PATH)
+            config=settings, db=Database(settings.DB_PATH)
         )
 
         # Subscribe to a channel for a bug detected by the Arbiter

@@ -3,17 +3,49 @@ import inspect
 import logging
 import os
 import sys
+import types
 import uuid
 from pathlib import Path
 
-from arbiter.config import ArbiterConfig
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from .plugin_registry import PluginRegistry
 
-# Initialize the configuration object
-settings = ArbiterConfig()
+
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        LOG_LEVEL="INFO",
+        plugin_dir="./plugins",
+        PLUGIN_DIR="./plugins",
+    )
+
+
+def _get_settings():
+    """Lazy import + defensive instantiation of settings."""
+    try:
+        from arbiter.config import ArbiterConfig
+    except ImportError as e:
+        logging.warning(
+            "Could not import arbiter.config; using fallback settings. Import error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+    try:
+        return ArbiterConfig()
+    except Exception as e:
+        logging.warning(
+            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+
+# Initialize the configuration object with graceful fallback
+settings = _get_settings()
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

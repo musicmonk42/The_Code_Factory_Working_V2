@@ -1,16 +1,50 @@
 import asyncio
 import logging
+import types
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, Optional, Type
 
-from arbiter.config import ArbiterConfig
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
 
-# Initialize the configuration object from arbiter.config
-settings = ArbiterConfig()
+
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        LOG_LEVEL="INFO",
+        database_path="sqlite:///./omnicore.db",
+        DB_PATH="sqlite:///./omnicore.db",
+        plugin_dir="./plugins",
+        PLUGIN_DIR="./plugins",
+    )
+
+
+def _get_settings():
+    """Lazy import + defensive instantiation of settings."""
+    try:
+        from arbiter.config import ArbiterConfig
+    except ImportError as e:
+        logging.warning(
+            "Could not import arbiter.config; using fallback settings. Import error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+    try:
+        return ArbiterConfig()
+    except Exception as e:
+        logging.warning(
+            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
+
+# Initialize the configuration object with graceful fallback
+settings = _get_settings()
 
 
 # SECURITY: Lazy import to avoid side effects at module load time

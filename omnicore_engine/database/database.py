@@ -36,7 +36,49 @@ from omnicore_engine.retry_compat import retry
 logger = logging.getLogger(__name__)
 
 # Corrected imports using the new arbiter package and centralized settings
-from arbiter.config import ArbiterConfig
+import types
+
+
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        LOG_LEVEL="INFO",
+        database_path="sqlite:///./omnicore.db",
+        DB_PATH="sqlite:///./omnicore.db",
+        plugin_dir="./plugins",
+        PLUGIN_DIR="./plugins",
+        ENCRYPTION_KEY=None,
+        ENCRYPTION_KEY_BYTES=b"",
+        DB_POOL_SIZE=50,
+        DB_POOL_MAX_OVERFLOW=20,
+        DB_RETRY_ATTEMPTS=3,
+        DB_RETRY_DELAY=1.0,
+        DB_CIRCUIT_THRESHOLD=3,
+        DB_CIRCUIT_TIMEOUT=60,
+        DB_BATCH_SIZE=100,
+    )
+
+
+def _get_settings():
+    """Lazy import + defensive instantiation of settings."""
+    try:
+        from arbiter.config import ArbiterConfig
+
+        return ArbiterConfig()
+    except ImportError as e:
+        logging.warning(
+            "Could not import arbiter.config; using fallback settings. Import error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+    except Exception as e:
+        logging.warning(
+            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
+            e,
+        )
+        return _create_fallback_settings()
+
 
 from omnicore_engine.message_bus.encryption import FernetEncryption
 
@@ -83,7 +125,7 @@ else:
     FeedbackManager = _FeedbackManagerClass
 
 
-settings = ArbiterConfig()
+settings = _get_settings()
 
 try:
     from arbiter.policy.core import PolicyEngine
