@@ -1021,10 +1021,13 @@ async def run_arena_async(settings=None):
             arena_errors_total.labels(error_type="db_cleanup_fail").inc()
 
     # Construct the async engine URL correctly
-    # For relative paths, we need at least 3 slashes after sqlite+aiosqlite:
-    # - sqlite+aiosqlite:///./path for relative paths  
-    # - sqlite+aiosqlite:////abs/path for absolute paths
+    # SQLite URL format uses 3 slashes after the scheme for relative paths:
+    # - For absolute paths like /tmp/db.db: sqlite+aiosqlite:////tmp/db.db
+    #   (3 slashes from scheme + 1 from path = 4 total slashes)
+    # - For relative paths with ./: sqlite+aiosqlite:///./db.db
+    # - For relative paths without ./: sqlite+aiosqlite:///./db.db (we add ./)
     if os.path.isabs(db_file):
+        # Absolute path: db_file starts with /, so ///+/ = 4 slashes
         engine_url = f"sqlite+aiosqlite:///{db_file}"
     elif db_file.startswith("./"):
         engine_url = f"sqlite+aiosqlite:///{db_file}"
@@ -1113,10 +1116,13 @@ def run_arena():
             arena_errors_total.labels(error_type="db_cleanup_fail").inc()
 
     # Construct the async engine URL correctly
-    # For relative paths, we need at least 3 slashes after sqlite+aiosqlite:
-    # - sqlite+aiosqlite:///./path for relative paths
-    # - sqlite+aiosqlite:////abs/path for absolute paths
+    # SQLite URL format uses 3 slashes after the scheme for relative paths:
+    # - For absolute paths like /tmp/db.db: sqlite+aiosqlite:////tmp/db.db
+    #   (3 slashes from scheme + 1 from path = 4 total slashes)
+    # - For relative paths with ./: sqlite+aiosqlite:///./db.db
+    # - For relative paths without ./: sqlite+aiosqlite:///./db.db (we add ./)
     if os.path.isabs(db_file):
+        # Absolute path: db_file starts with /, so ///+/ = 4 slashes
         engine_url = f"sqlite+aiosqlite:///{db_file}"
     elif db_file.startswith("./"):
         engine_url = f"sqlite+aiosqlite:///{db_file}"
