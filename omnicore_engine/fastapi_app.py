@@ -1,6 +1,7 @@
 # File: omnicore_engine/fastapi_app.py
 import ast
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -262,17 +263,41 @@ def get_csrf_config():
     """Return CSRF configuration as a Pydantic BaseSettings compatible class"""
     from pydantic_settings import BaseSettings
 
+    # Handle both SecretStr (from ArbiterConfig) and fallback settings
+    jwt_secret = getattr(settings, "JWT_SECRET_KEY", None)
+    if jwt_secret is not None and hasattr(jwt_secret, "get_secret_value"):
+        secret_key_value = jwt_secret.get_secret_value()
+    elif jwt_secret is not None:
+        secret_key_value = str(jwt_secret)
+    else:
+        # Generate a fallback secret key for development/testing only
+        secret_key_value = secrets.token_urlsafe(32)
+        logger.warning(
+            "JWT_SECRET_KEY not configured. Using a randomly generated key. "
+            "This is NOT suitable for production."
+        )
+
     class CsrfSettings(BaseSettings):
-        secret_key: str = settings.JWT_SECRET_KEY.get_secret_value()
+        secret_key: str = secret_key_value
 
     return CsrfSettings()
 
 
 async def get_user_id(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(
-            token, settings.JWT_SECRET_KEY.get_secret_value(), algorithms=["HS256"]
+    # Handle both SecretStr (from ArbiterConfig) and fallback settings
+    jwt_secret = getattr(settings, "JWT_SECRET_KEY", None)
+    if jwt_secret is not None and hasattr(jwt_secret, "get_secret_value"):
+        secret_key_value = jwt_secret.get_secret_value()
+    elif jwt_secret is not None:
+        secret_key_value = str(jwt_secret)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="JWT secret key not configured",
         )
+
+    try:
+        payload = jwt.decode(token, secret_key_value, algorithms=["HS256"])
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(
