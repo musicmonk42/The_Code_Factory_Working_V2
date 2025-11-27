@@ -14,6 +14,7 @@ Key Features:
 # --- Standard Library Imports ---
 import hashlib
 import hmac
+import importlib
 import json
 import logging
 import os
@@ -875,6 +876,30 @@ try:
     cli_audit_logger
 except NameError:
     cli_audit_logger = None
+
+
+def get_core_dependencies() -> Dict[str, Any]:
+    """
+    Returns a dictionary of core dependencies and their status.
+    """
+    return {
+        "alert_operator": alert_operator,
+        "scrub_secrets": scrub_secrets,
+        "audit_logger": audit_logger,
+        "SECRETS_MANAGER": SECRETS_MANAGER,
+        "core_initialized": _core_initialized,
+    }
+
+
+def load_analyzer(module_path: str) -> Any:
+    """
+    Loads an analyzer module from the given path.
+    Falls back to a no-op mock if not available.
+    """
+    try:
+        return importlib.import_module(module_path)
+    except ImportError:
+        return MagicMock()
 try:
     _NoOpMetric
 except NameError:

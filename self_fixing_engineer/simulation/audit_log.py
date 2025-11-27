@@ -27,6 +27,11 @@ except ImportError:
         def __init__(self, *args, **kwargs):
             self.logger = logging.getLogger("simulation.audit")
 
+        @classmethod
+        def from_environment(cls):
+            """Create an AuditLogger from environment variables."""
+            return cls()
+
         def log(self, message: str, level: str = "INFO", **kwargs):
             """Log an audit message."""
             log_level = getattr(logging, level.upper(), logging.INFO)

@@ -212,7 +212,7 @@ class TestLoggerInitialization:
             handler.close()
             logger._logger.removeHandler(handler)
 
-    @patch("audit_log.SizedTimedRotatingFileHandler")
+    @patch("arbiter.audit_log.SizedTimedRotatingFileHandler")
     def test_file_handler_setup(self, mock_handler, basic_config):
         """Test that file handler is set up correctly."""
         TamperEvidentLogger._instance = None

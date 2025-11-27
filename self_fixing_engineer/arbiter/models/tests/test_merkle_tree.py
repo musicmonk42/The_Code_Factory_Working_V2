@@ -13,7 +13,7 @@ import pytest_asyncio
 from arbiter.otel_config import get_tracer
 
 # Import the MerkleTree client and its exceptions from the correct module
-from merkle_tree import (
+from arbiter.models.merkle_tree import (
     MERKLE_OPS_TOTAL,
     MERKLE_TREE_DEPTH,
     MERKLE_TREE_SIZE,

@@ -205,9 +205,7 @@ class TestPersistKnowledge:
     @pytest.mark.asyncio
     async def test_persist_knowledge_success(self, mock_db, mock_circuit_breaker):
         """Test successful knowledge persistence."""
-        with patch("arbiter.learner.audit.audit_log") as mock_audit_log:
-            mock_audit_log.log_event = AsyncMock()
-
+        with patch("arbiter.learner.audit.audit_log", new_callable=AsyncMock) as mock_audit_log:
             value_with_metadata = {
                 "value": "test_value",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -236,9 +234,9 @@ class TestPersistKnowledge:
                 value_with_metadata["timestamp"],
             )
 
-            # Verify audit log was called
-            mock_audit_log.log_event.assert_called_once()
-            call_args = mock_audit_log.log_event.call_args
+            # Verify audit log was called (audit_log is the function itself, not log_event attribute)
+            mock_audit_log.assert_called_once()
+            call_args = mock_audit_log.call_args
             assert call_args[0][0] == "knowledge_learning"
 
             # Verify circuit breaker success was recorded
@@ -328,9 +326,7 @@ class TestPersistKnowledge:
             side_effect=[Exception("Transient"), Exception("Transient"), None]
         )
 
-        with patch("arbiter.learner.audit.audit_log") as mock_audit_log:
-            mock_audit_log.log_event = AsyncMock()
-
+        with patch("arbiter.learner.audit.audit_log", new_callable=AsyncMock) as mock_audit_log:
             value_with_metadata = {
                 "value": "test_value",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -367,7 +363,7 @@ class TestPersistKnowledge:
             mock_circuit_breaker.record_success.assert_called_once()
 
             # Audit log should be called once (on success)
-            mock_audit_log.log_event.assert_called_once()
+            mock_audit_log.assert_called_once()
 
 
 class TestPersistKnowledgeBatch:
@@ -420,9 +416,7 @@ class TestPersistKnowledgeBatch:
         self, mock_db, mock_circuit_breaker, sample_entries
     ):
         """Test successful batch persistence."""
-        with patch("arbiter.learner.audit.audit_log") as mock_audit_log:
-            mock_audit_log.log_event = AsyncMock()
-
+        with patch("arbiter.learner.audit.audit_log", new_callable=AsyncMock) as mock_audit_log:
             await persist_knowledge_batch(
                 db=mock_db,
                 circuit_breaker=mock_circuit_breaker,
@@ -434,8 +428,8 @@ class TestPersistKnowledgeBatch:
             mock_db.save_agent_knowledge_batch.assert_called_once()
 
             # Verify audit log was called
-            mock_audit_log.log_event.assert_called_once()
-            call_args = mock_audit_log.log_event.call_args
+            mock_audit_log.assert_called_once()
+            call_args = mock_audit_log.call_args
             assert call_args[0][0] == "knowledge_learning_batch"
 
             # Verify circuit breaker success was recorded
