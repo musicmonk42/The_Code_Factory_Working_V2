@@ -5,6 +5,7 @@ Tests FastAPI endpoints, middleware, and startup/shutdown events.
 
 import asyncio
 import os
+import secrets
 import sys
 import tempfile
 from datetime import datetime, timedelta
@@ -19,6 +20,29 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.fastapi_app import app
+
+
+def get_jwt_secret_for_tests(settings):
+    """Helper function to get JWT secret from settings in a backward-compatible way.
+    
+    Handles both SecretStr (from ArbiterConfig) and fallback settings.
+    """
+    jwt_secret = getattr(settings, "JWT_SECRET_KEY", None)
+    if jwt_secret is not None and hasattr(jwt_secret, "get_secret_value"):
+        return jwt_secret.get_secret_value()
+    elif jwt_secret is not None:
+        return str(jwt_secret)
+    else:
+        # Return a test secret for fallback settings
+        return "test-jwt-secret-key-for-testing-only"
+
+
+def get_experimental_features_enabled(settings):
+    """Helper function to get EXPERIMENTAL_FEATURES_ENABLED from settings.
+    
+    Returns False if the attribute doesn't exist (fallback settings case).
+    """
+    return getattr(settings, "EXPERIMENTAL_FEATURES_ENABLED", False)
 
 
 class TestStartupShutdown:
@@ -108,36 +132,56 @@ class TestSecurityMiddleware:
         """Test JWT token validation"""
         from omnicore_engine.fastapi_app import get_user_id, settings
 
-        # Get the actual JWT secret from settings
-        jwt_secret = settings.JWT_SECRET_KEY.get_secret_value()
+        # Get the actual JWT secret from settings using helper function
+        jwt_secret = get_jwt_secret_for_tests(settings)
+        
+        # Mock the settings.JWT_SECRET_KEY for the test to work with fallback settings
+        with patch.object(settings, "JWT_SECRET_KEY", None, create=True):
+            # Since JWT_SECRET_KEY is None, get_user_id will raise HTTPException
+            # We need to mock it to return a valid secret for testing
+            pass
+        
+        # For this test, we'll use a patched settings with a known secret
+        test_secret = "test-jwt-secret-key-for-testing"
+        
+        # Create a mock settings object with JWT_SECRET_KEY
+        class MockSecretStr:
+            def get_secret_value(self):
+                return test_secret
+        
+        mock_settings = Mock()
+        mock_settings.JWT_SECRET_KEY = MockSecretStr()
+        
+        with patch("omnicore_engine.fastapi_app.settings", mock_settings):
+            from omnicore_engine.fastapi_app import get_user_id as get_user_id_patched
+            
+            # Valid token
+            valid_token = jwt.encode(
+                {"sub": "user123", "exp": datetime.utcnow() + timedelta(hours=1)},
+                test_secret,
+                algorithm="HS256",
+            )
 
-        # Valid token
-        valid_token = jwt.encode(
-            {"sub": "user123", "exp": datetime.utcnow() + timedelta(hours=1)},
-            jwt_secret,
-            algorithm="HS256",
-        )
+            # Should work with valid token
+            user_id = asyncio.run(get_user_id_patched(valid_token))
+            assert user_id == "user123"
 
-        # Should work with valid token
-        user_id = asyncio.run(get_user_id(valid_token))
-        assert user_id == "user123"
+            # Expired token
+            expired_token = jwt.encode(
+                {"sub": "user123", "exp": datetime.utcnow() - timedelta(hours=1)},
+                test_secret,
+                algorithm="HS256",
+            )
 
-        # Expired token
-        expired_token = jwt.encode(
-            {"sub": "user123", "exp": datetime.utcnow() - timedelta(hours=1)},
-            jwt_secret,
-            algorithm="HS256",
-        )
+            with pytest.raises(HTTPException) as exc:
+                asyncio.run(get_user_id_patched(expired_token))
+            assert exc.value.status_code == 401
+            assert "expired" in exc.value.detail.lower()
 
-        with pytest.raises(HTTPException) as exc:
-            asyncio.run(get_user_id(expired_token))
-        assert exc.value.status_code == 401
-        assert "expired" in exc.value.detail.lower()
-
-        # Invalid token
-        with pytest.raises(HTTPException) as exc:
-            asyncio.run(get_user_id("invalid_token"))
-        assert exc.value.status_code == 401
+            # Invalid token
+            with pytest.raises(HTTPException) as exc:
+                asyncio.run(get_user_id_patched("invalid_token"))
+            assert exc.value.status_code == 401
 
 
 class TestHealthEndpoint:
@@ -279,14 +323,14 @@ class TestTestGenerationEndpoints:
 class TestAdminEndpoints:
     """Test admin endpoints"""
 
+    # Test JWT secret for admin endpoints
+    TEST_JWT_SECRET = "test-jwt-secret-for-admin-tests"
+
     def create_auth_token(self):
         """Helper to create valid auth token"""
-        from omnicore_engine.fastapi_app import settings
-
-        jwt_secret = settings.JWT_SECRET_KEY.get_secret_value()
         return jwt.encode(
             {"sub": "admin_user", "exp": datetime.utcnow() + timedelta(hours=1)},
-            jwt_secret,
+            self.TEST_JWT_SECRET,
             algorithm="HS256",
         )
 
@@ -294,8 +338,8 @@ class TestAdminEndpoints:
         """Test admin API when disabled"""
         from omnicore_engine.fastapi_app import settings
 
-        # Save original value
-        original_value = settings.EXPERIMENTAL_FEATURES_ENABLED
+        # Save original value (use getattr with default for fallback settings)
+        original_value = getattr(settings, "EXPERIMENTAL_FEATURES_ENABLED", False)
 
         try:
             # Disable experimental features
@@ -311,136 +355,132 @@ class TestAdminEndpoints:
 
     @patch("omnicore_engine.fastapi_app.omnicore_engine")
     @patch("omnicore_engine.fastapi_app.PluginMarketplace")
-    def test_install_plugin(self, mock_marketplace_class, mock_engine):
+    @patch("omnicore_engine.fastapi_app.settings")
+    def test_install_plugin(self, mock_settings, mock_marketplace_class, mock_engine):
         """Test plugin installation"""
-        from omnicore_engine.fastapi_app import settings
+        # Set up mock settings with required attributes
+        mock_settings.EXPERIMENTAL_FEATURES_ENABLED = True
+        mock_settings.JWT_SECRET_KEY = Mock()
+        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = self.TEST_JWT_SECRET
 
-        # Enable experimental features for this test
-        original_value = settings.EXPERIMENTAL_FEATURES_ENABLED
-        settings.EXPERIMENTAL_FEATURES_ENABLED = True
+        mock_marketplace = Mock()
+        mock_marketplace.install_plugin = AsyncMock()
+        mock_marketplace_class.return_value = mock_marketplace
+        mock_engine.database = Mock()
 
-        try:
-            mock_marketplace = Mock()
-            mock_marketplace.install_plugin = AsyncMock()
-            mock_marketplace_class.return_value = mock_marketplace
-            mock_engine.database = Mock()
+        client = TestClient(app)
+        token = self.create_auth_token()
 
-            client = TestClient(app)
-            token = self.create_auth_token()
+        response = client.post(
+            "/admin/plugins/install",
+            json={"kind": "execution", "name": "test_plugin", "version": "1.0.0"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
-            response = client.post(
-                "/admin/plugins/install",
-                json={"kind": "execution", "name": "test_plugin", "version": "1.0.0"},
-                headers={"Authorization": f"Bearer {token}"},
-            )
-
-            assert response.status_code == 200
-            assert "installed" in response.json()["message"]
-        finally:
-            settings.EXPERIMENTAL_FEATURES_ENABLED = original_value
+        assert response.status_code == 200
+        assert "installed" in response.json()["message"]
 
     @patch("omnicore_engine.fastapi_app.omnicore_engine")
     @patch("omnicore_engine.fastapi_app.PluginMarketplace")
-    def test_rate_plugin(self, mock_marketplace_class, mock_engine):
+    @patch("omnicore_engine.fastapi_app.settings")
+    def test_rate_plugin(self, mock_settings, mock_marketplace_class, mock_engine):
         """Test plugin rating"""
-        from omnicore_engine.fastapi_app import settings
+        # Set up mock settings with required attributes
+        mock_settings.EXPERIMENTAL_FEATURES_ENABLED = True
+        mock_settings.JWT_SECRET_KEY = Mock()
+        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = self.TEST_JWT_SECRET
 
-        original_value = settings.EXPERIMENTAL_FEATURES_ENABLED
-        settings.EXPERIMENTAL_FEATURES_ENABLED = True
+        mock_marketplace = Mock()
+        mock_marketplace.rate_plugin = AsyncMock()
+        mock_marketplace_class.return_value = mock_marketplace
+        mock_engine.database = Mock()
 
-        try:
-            mock_marketplace = Mock()
-            mock_marketplace.rate_plugin = AsyncMock()
-            mock_marketplace_class.return_value = mock_marketplace
-            mock_engine.database = Mock()
+        client = TestClient(app)
+        token = self.create_auth_token()
 
-            client = TestClient(app)
-            token = self.create_auth_token()
+        response = client.post(
+            "/admin/plugins/rate",
+            json={
+                "kind": "execution",
+                "name": "test_plugin",
+                "version": "1.0.0",
+                "rating": 5,
+                "comment": "Great plugin!",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
-            response = client.post(
-                "/admin/plugins/rate",
-                json={
-                    "kind": "execution",
-                    "name": "test_plugin",
-                    "version": "1.0.0",
-                    "rating": 5,
-                    "comment": "Great plugin!",
-                },
-                headers={"Authorization": f"Bearer {token}"},
-            )
-
-            assert response.status_code == 200
-            assert "rated" in response.json()["message"]
-        finally:
-            settings.EXPERIMENTAL_FEATURES_ENABLED = original_value
+        assert response.status_code == 200
+        assert "rated" in response.json()["message"]
 
     @patch("omnicore_engine.fastapi_app.omnicore_engine")
-    def test_export_audit_proof_bundle(self, mock_engine):
+    @patch("omnicore_engine.fastapi_app.settings")
+    def test_export_audit_proof_bundle(self, mock_settings, mock_engine):
         """Test audit proof bundle export"""
-        from omnicore_engine.fastapi_app import settings
+        # Set up mock settings with required attributes
+        mock_settings.EXPERIMENTAL_FEATURES_ENABLED = True
+        mock_settings.JWT_SECRET_KEY = Mock()
+        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = self.TEST_JWT_SECRET
 
-        original_value = settings.EXPERIMENTAL_FEATURES_ENABLED
-        settings.EXPERIMENTAL_FEATURES_ENABLED = True
+        mock_audit = Mock()
+        mock_proof_exporter = Mock()
+        mock_proof_exporter.export_proof_bundle = AsyncMock(
+            return_value={"merkle_root": "abc123", "records": []}
+        )
+        mock_audit.proof_exporter = mock_proof_exporter
+        mock_engine.audit = mock_audit
 
-        try:
-            mock_audit = Mock()
-            mock_proof_exporter = Mock()
-            mock_proof_exporter.export_proof_bundle = AsyncMock(
-                return_value={"merkle_root": "abc123", "records": []}
-            )
-            mock_audit.proof_exporter = mock_proof_exporter
-            mock_engine.audit = mock_audit
+        client = TestClient(app)
+        token = self.create_auth_token()
 
-            client = TestClient(app)
-            token = self.create_auth_token()
+        response = client.get(
+            "/admin/audit/export-proof-bundle",
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
-            response = client.get(
-                "/admin/audit/export-proof-bundle",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-
-            assert response.status_code == 200
-            assert response.json()["status"] == "success"
-            assert "merkle_root" in response.json()["data"]
-        finally:
-            settings.EXPERIMENTAL_FEATURES_ENABLED = original_value
+        assert response.status_code == 200
+        assert response.json()["status"] == "success"
+        assert "merkle_root" in response.json()["data"]
 
     @patch("omnicore_engine.fastapi_app.meta_supervisor_instance")
-    def test_generate_test_cases(self, mock_meta):
+    @patch("omnicore_engine.fastapi_app.settings")
+    def test_generate_test_cases(self, mock_settings, mock_meta):
         """Test test case generation via meta supervisor"""
-        from omnicore_engine.fastapi_app import settings
+        # Set up mock settings with required attributes
+        mock_settings.EXPERIMENTAL_FEATURES_ENABLED = True
+        mock_settings.JWT_SECRET_KEY = Mock()
+        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = self.TEST_JWT_SECRET
 
-        original_value = settings.EXPERIMENTAL_FEATURES_ENABLED
-        settings.EXPERIMENTAL_FEATURES_ENABLED = True
+        mock_meta.generate_test_cases = AsyncMock(
+            return_value={"test_cases": ["test1", "test2"]}
+        )
 
-        try:
-            mock_meta.generate_test_cases = AsyncMock(
-                return_value={"test_cases": ["test1", "test2"]}
-            )
+        client = TestClient(app)
+        token = self.create_auth_token()
 
-            client = TestClient(app)
-            token = self.create_auth_token()
+        response = client.get(
+            "/admin/generate-test-cases",
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
-            response = client.get(
-                "/admin/generate-test-cases",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-
-            assert response.status_code == 200
-            assert response.json()["status"] == "success"
-        finally:
-            settings.EXPERIMENTAL_FEATURES_ENABLED = original_value
+        assert response.status_code == 200
+        assert response.json()["status"] == "success"
 
 
 class TestWorkflowEndpoints:
     """Test workflow endpoints"""
 
-    @patch("omnicore_engine.fastapi_app.omnicore_engine")
-    def test_code_factory_workflow(self, mock_engine):
-        """Test code factory workflow endpoint"""
-        from omnicore_engine.fastapi_app import settings
+    # Test JWT secret for workflow tests
+    TEST_JWT_SECRET = "test-jwt-secret-for-workflow-tests"
 
-        jwt_secret = settings.JWT_SECRET_KEY.get_secret_value()
+    @patch("omnicore_engine.fastapi_app.omnicore_engine")
+    @patch("omnicore_engine.fastapi_app.settings")
+    def test_code_factory_workflow(self, mock_settings, mock_engine):
+        """Test code factory workflow endpoint"""
+        # Set up mock settings with required attributes
+        mock_settings.JWT_SECRET_KEY = Mock()
+        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = self.TEST_JWT_SECRET
+
         mock_bus = Mock()
         mock_bus.publish = AsyncMock()
         mock_engine.message_bus = mock_bus
@@ -448,7 +488,7 @@ class TestWorkflowEndpoints:
         client = TestClient(app)
         token = jwt.encode(
             {"sub": "user123", "exp": datetime.utcnow() + timedelta(hours=1)},
-            jwt_secret,
+            self.TEST_JWT_SECRET,
             algorithm="HS256",
         )
 
