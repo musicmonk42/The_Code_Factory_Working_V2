@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, List, Optional
 class Settings:
     SIM_RETRY_ATTEMPTS: int = 3
     SIM_BACKOFF_FACTOR: float = 1.0
+    SIM_MAX_WORKERS: int = 4
     LOG_LEVEL: str = "INFO"
 
 
@@ -662,7 +663,9 @@ class SimulationEngine:
         """Runs a simulation with the provided configuration."""
         if self._module is None:
             self._module = UnifiedSimulationModule(
-                {"SIM_MAX_WORKERS": 4}, self._db, self._message_bus
+                {"SIM_MAX_WORKERS": settings.SIM_MAX_WORKERS},
+                self._db,
+                self._message_bus,
             )
             await self._module.initialize()
 
