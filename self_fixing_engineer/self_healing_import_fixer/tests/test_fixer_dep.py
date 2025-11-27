@@ -60,7 +60,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # ---------------------------------------------------------------------------
 # Import the module under test (correct package path)
 # ---------------------------------------------------------------------------
-from import_fixer.fixer_dep import AnalyzerCriticalError  # alias exported by fixer_dep
+from import_fixer.fixer_dep import HealerError  # base error class for healer errors
 from import_fixer.fixer_dep import (
     _get_all_imports_async,
     _get_py_files,
@@ -229,7 +229,7 @@ def test_get_py_files_unwhitelisted_path_raises_error(tmp_path):
 
     init_dependency_healing_module(whitelisted_paths=[str(tmp_path / "whitelisted")])
 
-    with pytest.raises(AnalyzerCriticalError):
+    with pytest.raises(HealerError):
         _get_py_files([unwhitelisted_path])
 
 
@@ -266,7 +266,7 @@ async def test_heal_dependencies_no_write_access_raises_error(setup_teardown_env
         new=lambda ver: ["os", "sys", "json", "asyncio"],
     ):
         os.chmod(pyproject_path, 0o400)  # read-only
-        with pytest.raises(AnalyzerCriticalError):
+        with pytest.raises(HealerError):
             await heal_dependencies(
                 project_roots=[project_root],
                 dry_run=False,
