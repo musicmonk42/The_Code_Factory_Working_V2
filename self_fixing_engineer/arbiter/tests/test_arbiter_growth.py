@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
+# Store original modules for restoration
+_ORIGINAL_MODULES = {}
+_MOCKED_MODULE_NAMES = []
+
 
 def create_module_stub(name, attributes=None):
     """Helper to create a stub module with given attributes"""
@@ -17,7 +21,14 @@ def create_module_stub(name, attributes=None):
     for i in range(len(parts)):
         module_name = ".".join(parts[: i + 1])
         if module_name not in sys.modules:
+            # Track modules we're creating
+            if module_name not in _MOCKED_MODULE_NAMES:
+                _MOCKED_MODULE_NAMES.append(module_name)
             sys.modules[module_name] = types.ModuleType(module_name)
+        elif module_name not in _ORIGINAL_MODULES:
+            # Save original if we're overwriting
+            _ORIGINAL_MODULES[module_name] = sys.modules[module_name]
+            _MOCKED_MODULE_NAMES.append(module_name)
 
     module = sys.modules[name]
     if attributes:
@@ -161,6 +172,25 @@ IdempotencyStore = arbiter_growth.IdempotencyStore
 TokenBucketRateLimiter = arbiter_growth.TokenBucketRateLimiter
 GrowthEvent = arbiter_growth.GrowthEvent
 ArbiterState = arbiter_growth.ArbiterState
+
+
+def _restore_original_modules():
+    """Restore original modules that were patched during test import."""
+    for mod_name in _MOCKED_MODULE_NAMES:
+        if mod_name in _ORIGINAL_MODULES:
+            sys.modules[mod_name] = _ORIGINAL_MODULES[mod_name]
+        elif mod_name in sys.modules:
+            # Only remove if it's a stub we created
+            module = sys.modules[mod_name]
+            if isinstance(module, types.ModuleType) and not hasattr(module, '__file__'):
+                del sys.modules[mod_name]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_mocked_modules():
+    """Restore original modules when this test module finishes."""
+    yield
+    _restore_original_modules()
 
 
 # ------------------------------------------------------------

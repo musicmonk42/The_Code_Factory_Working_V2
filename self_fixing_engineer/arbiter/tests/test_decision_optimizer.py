@@ -8,6 +8,19 @@ import numpy as np
 import pytest
 from cryptography.fernet import Fernet
 
+# Store original modules for restoration
+_ORIGINAL_MODULES = {}
+_MOCKED_MODULE_NAMES = [
+    "envs",
+    "envs.evolution",
+    "arbiter.arbiter_array_backend",
+]
+
+# Save original modules before mocking
+for _mod in _MOCKED_MODULE_NAMES:
+    if _mod in sys.modules:
+        _ORIGINAL_MODULES[_mod] = sys.modules[_mod]
+
 # Mock modules before imports
 sys.modules["envs"] = MagicMock()
 sys.modules["envs.evolution"] = MagicMock()
@@ -30,6 +43,22 @@ from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
 # Mock all dependencies
 from arbiter.config import ArbiterConfig
 from arbiter.decision_optimizer import Agent, DecisionOptimizer, Task, safe_serialize
+
+
+def _restore_original_modules():
+    """Restore original modules that were patched during test import."""
+    for mod_name in _MOCKED_MODULE_NAMES:
+        if mod_name in _ORIGINAL_MODULES:
+            sys.modules[mod_name] = _ORIGINAL_MODULES[mod_name]
+        elif mod_name in sys.modules and isinstance(sys.modules[mod_name], MagicMock):
+            del sys.modules[mod_name]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_mocked_modules():
+    """Restore original modules when this test module finishes."""
+    yield
+    _restore_original_modules()
 
 
 @pytest.fixture

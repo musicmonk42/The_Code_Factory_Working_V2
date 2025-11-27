@@ -8,6 +8,32 @@ from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
+# Store original modules for later restoration
+_ORIGINAL_MODULES = {}
+_MOCKED_MODULE_NAMES = [
+    "arbiter.config",
+    "arbiter.arena",
+    "arbiter.arbiter",
+    "arbiter_plugin_registry",
+    "arbiter.logging_utils",
+    "sqlalchemy.ext.asyncio",
+    "opentelemetry",
+    "opentelemetry.sdk.trace",
+    "opentelemetry.sdk.trace.export",
+    "opentelemetry.exporter.otlp.proto.http.trace_exporter",
+    "aiohttp",
+    "prometheus_client",
+    "tenacity",
+    "fastapi.security",
+    "fastapi",
+    "aiofiles",
+]
+
+# Save original modules
+for mod_name in _MOCKED_MODULE_NAMES:
+    if mod_name in sys.modules:
+        _ORIGINAL_MODULES[mod_name] = sys.modules[mod_name]
+
 # We need to patch imports before importing the module under test
 sys.modules["arbiter.config"] = MagicMock()
 sys.modules["arbiter.arena"] = MagicMock()
@@ -38,6 +64,7 @@ tenacity_mock.retry = MockRetry
 tenacity_mock.stop_after_attempt = lambda x: None
 tenacity_mock.wait_exponential = lambda **kw: None
 tenacity_mock.retry_if_exception_type = lambda x: None
+tenacity_mock.RetryError = Exception  # Add RetryError as a real exception class
 sys.modules["tenacity"] = tenacity_mock
 
 sys.modules["fastapi.security"] = MagicMock()
@@ -87,6 +114,28 @@ from arbiter.run_exploration import (
     run_agentic_workflow,
     setup_logging,
 )
+
+
+def _restore_original_modules():
+    """Restore original modules that were patched during test import."""
+    for mod_name in _MOCKED_MODULE_NAMES:
+        if mod_name in _ORIGINAL_MODULES:
+            sys.modules[mod_name] = _ORIGINAL_MODULES[mod_name]
+        elif mod_name in sys.modules and isinstance(sys.modules[mod_name], MagicMock):
+            # Only remove if it's our mock
+            del sys.modules[mod_name]
+
+
+# Register cleanup to run after all tests in this module
+import atexit
+atexit.register(_restore_original_modules)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_mocked_modules():
+    """Restore original modules when this test module finishes."""
+    yield
+    _restore_original_modules()
 
 
 @pytest.fixture

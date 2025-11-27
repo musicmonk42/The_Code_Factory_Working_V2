@@ -66,11 +66,13 @@ def get_or_create_counter(name: str, description: str, labels: List[str]) -> Cou
 
 
 def get_or_create_histogram(
-    name: str, description: str, labels: List[str]
+    name: str, description: str, labels: List[str], buckets: Optional[tuple] = None
 ) -> Histogram:
     """Get or create a Prometheus histogram metric."""
     if Histogram is None:
         return None
+    if buckets is not None:
+        return Histogram(name, description, labels, buckets=buckets)
     return Histogram(name, description, labels)
 
 
