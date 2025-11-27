@@ -14,6 +14,8 @@ used across the ATCO pipeline. Its production-ready posture is built upon:
   tracebacks, and escalated to abort the pipeline, preventing silent failures.
 """
 
+__version__ = "3.0.0"
+
 import asyncio
 import functools
 import hashlib

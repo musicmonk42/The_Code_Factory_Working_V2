@@ -25,6 +25,11 @@ USAGE:
     data = await backend.get()
 """
 
+# Suppress gym deprecation warning from stable_baselines3 BEFORE any imports
+import warnings
+
+warnings.filterwarnings("ignore", message="Gym has been unmaintained since 2022")
+
 import asyncio
 import json
 import logging

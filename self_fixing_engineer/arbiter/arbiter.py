@@ -1,3 +1,8 @@
+# Suppress gym deprecation warning from stable_baselines3 BEFORE any imports
+import warnings
+
+warnings.filterwarnings("ignore", message="Gym has been unmaintained since 2022")
+
 import asyncio
 import collections
 import hashlib
@@ -7,7 +12,6 @@ import os
 import random
 import sys
 import time
-import warnings
 from collections import deque
 from datetime import datetime, timezone
 from functools import wraps
@@ -42,9 +46,6 @@ try:
 except ImportError as e:
     GYM_AVAILABLE = False
     logging.warning(f"Optional dependency missing: {e} (gymnasium)")
-
-# Suppress gym deprecation warning from stable_baselines3
-warnings.filterwarnings("ignore", message="Gym has been unmaintained since 2022")
 try:
     from stable_baselines3 import PPO
     from stable_baselines3.common.env_util import make_vec_env
