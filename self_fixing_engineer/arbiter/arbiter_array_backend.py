@@ -100,9 +100,9 @@ except Exception:
     RedisError = aioredis.RedisError
 
 
-# gym / stable_baselines3 are optional; silence import errors if they're referenced
+# gymnasium / stable_baselines3 are optional; silence import errors if they're referenced
 try:
-    import gym  # type: ignore
+    import gymnasium as gym  # type: ignore
 except Exception:
 
     class gym:  # noqa: N801
