@@ -62,13 +62,13 @@ except ImportError:
 
 # --- Corrected models.db_clients import block ---
 try:
-    from models.db_clients import DummyDBClient, PostgresClient, SQLiteClient
+    from arbiter.models.db_clients import DummyDBClient, PostgresClient, SQLiteClient
 
     DB_CLIENTS_AVAILABLE = True
 except ImportError:
     DB_CLIENTS_AVAILABLE = False
     logging.getLogger(__name__).warning(
-        "Warning: models.db_clients not found. DummyDBClient will be used as a fallback."
+        "Warning: arbiter.models.db_clients not found. DummyDBClient will be used as a fallback."
     )
 
     class PostgresClient:

@@ -253,24 +253,31 @@ class NodeNotFoundError(QueryError):
 logger = logging.getLogger("neo4j_kg")
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
-# OpenTelemetry setup
-trace.set_tracer_provider(
-    TracerProvider(resource=Resource.create({"service.name": "sfe-knowledge-graph-db"}))
+# OpenTelemetry setup - only set tracer provider if not already configured
+_existing_provider = trace.get_tracer_provider()
+_provider_needs_setup = (
+    _existing_provider is None
+    or not hasattr(_existing_provider, "add_span_processor")
+    or type(_existing_provider).__name__ == "ProxyTracerProvider"
 )
-tracer = trace.get_tracer(__name__)
 
-# Configurable OpenTelemetry Exporter via environment variable
-exporter_type = os.getenv("SFE_OTEL_EXPORTER_TYPE", "console").lower()
-if exporter_type == "otlp":
-    exporter = OTLPSpanExporter()
-    logger.info("Using OTLPSpanExporter for OpenTelemetry traces.")
-else:
-    exporter = ConsoleSpanExporter()
-    logger.info(
-        "Using ConsoleSpanExporter for OpenTelemetry traces (default). Set SFE_OTEL_EXPORTER_TYPE=otlp for OTLP."
+if _provider_needs_setup:
+    trace.set_tracer_provider(
+        TracerProvider(resource=Resource.create({"service.name": "sfe-knowledge-graph-db"}))
     )
+    # Configurable OpenTelemetry Exporter via environment variable
+    exporter_type = os.getenv("SFE_OTEL_EXPORTER_TYPE", "console").lower()
+    if exporter_type == "otlp":
+        exporter = OTLPSpanExporter()
+        logger.info("Using OTLPSpanExporter for OpenTelemetry traces.")
+    else:
+        exporter = ConsoleSpanExporter()
+        logger.info(
+            "Using ConsoleSpanExporter for OpenTelemetry traces (default). Set SFE_OTEL_EXPORTER_TYPE=otlp for OTLP."
+        )
+    trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(exporter))
 
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(exporter))
+tracer = trace.get_tracer(__name__)
 
 # Unregister default collectors for clean testing environment
 try:
