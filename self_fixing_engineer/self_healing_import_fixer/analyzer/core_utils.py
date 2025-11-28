@@ -43,7 +43,7 @@ except ImportError:
     ClientError = Exception
 
 try:
-    from prometheus_client import Counter, Gauge, Histogram, Summary
+    from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -155,22 +155,101 @@ class AlertConfig:
     )
 
 
+def _get_or_create_metric(metric_class, name, description, labelnames=None, **kwargs):
+    """
+    Safely get or create a Prometheus metric, handling duplicate registration.
+    
+    Args:
+        metric_class: The metric class (Counter, Gauge, Histogram, Summary)
+        name: Metric name
+        description: Metric description
+        labelnames: List of label names
+        **kwargs: Additional metric-specific kwargs
+    
+    Returns:
+        The metric instance (new or existing)
+    """
+    try:
+        # Try to create the metric
+        if labelnames:
+            return metric_class(name, description, labelnames, **kwargs)
+        else:
+            return metric_class(name, description, **kwargs)
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            # Metric already exists, retrieve it from the registry
+            for collector in list(REGISTRY._collector_to_names.keys()):
+                if hasattr(collector, '_name') and collector._name == name:
+                    logger.debug(f"Metric '{name}' already registered, reusing existing instance")
+                    return collector
+            # If we can't find it, create a dummy
+            logger.warning(f"Metric '{name}' registered but couldn't retrieve, using dummy")
+            return _create_dummy_metric()
+        else:
+            raise
+
+
+def _create_dummy_metric():
+    """Create a dummy metric that does nothing."""
+    class DummyMetric:
+        DEFAULT_BUCKETS = (
+            0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0,
+            2.5, 5.0, 7.5, 10.0, float("inf"),
+        )
+
+        def labels(self, **kwargs):
+            return self
+
+        def inc(self, amount=1):
+            pass
+
+        def dec(self, amount=1):
+            pass
+
+        def observe(self, amount):
+            pass
+
+        def set(self, value):
+            pass
+
+    return DummyMetric()
+
+
 # Metrics collectors (if Prometheus is available)
 if PROMETHEUS_AVAILABLE:
-    alert_counter = Counter(
-        "analyzer_alerts_total", "Total number of alerts", ["level", "channel"]
+    alert_counter = _get_or_create_metric(
+        Counter,
+        "analyzer_alerts_total",
+        "Total number of alerts",
+        ["level", "channel"]
     )
-    operation_histogram = Histogram(
-        "analyzer_operation_duration_seconds", "Operation duration", ["operation"]
+    operation_histogram = _get_or_create_metric(
+        Histogram,
+        "analyzer_operation_duration_seconds",
+        "Operation duration",
+        ["operation"]
     )
-    error_counter = Counter(
-        "analyzer_errors_total", "Total number of errors", ["error_type"]
+    error_counter = _get_or_create_metric(
+        Counter,
+        "analyzer_errors_total",
+        "Total number of errors",
+        ["error_type"]
     )
-    active_operations = Gauge(
-        "analyzer_active_operations", "Number of active operations"
+    active_operations = _get_or_create_metric(
+        Gauge,
+        "analyzer_active_operations",
+        "Number of active operations"
     )
-    cache_hits = Counter("analyzer_cache_hits_total", "Cache hit count")
-    cache_misses = Counter("analyzer_cache_misses_total", "Cache miss count")
+    cache_hits = _get_or_create_metric(
+        Counter,
+        "analyzer_cache_hits_total",
+        "Cache hit count"
+    )
+    cache_misses = _get_or_create_metric(
+        Counter,
+        "analyzer_cache_misses_total",
+        "Cache miss count"
+    )
 else:
     # Dummy metrics for when Prometheus is not available
     class DummyMetric:
@@ -277,15 +356,11 @@ class CircuitBreaker:
 
 
 class RateLimiter:
-    """Token bucket rate limiter for API calls."""
+    """Token bucket rate limiter implementation."""
 
-    def __init__(
-        self,
-        max_calls: int = RATE_LIMIT_MAX_CALLS,
-        window_seconds: int = RATE_LIMIT_WINDOW,
-    ):
+    def __init__(self, max_calls: int = RATE_LIMIT_MAX_CALLS, window: int = RATE_LIMIT_WINDOW):
         self.max_calls = max_calls
-        self.window_seconds = window_seconds
+        self.window = window
         self.calls = deque()
         self._lock = threading.Lock()
 
@@ -293,7 +368,7 @@ class RateLimiter:
         with self._lock:
             now = time.time()
             # Remove old calls outside the window
-            while self.calls and self.calls[0] < now - self.window_seconds:
+            while self.calls and self.calls[0] <= now - self.window:
                 self.calls.popleft()
 
             if len(self.calls) < self.max_calls:
@@ -307,39 +382,38 @@ class RateLimiter:
             time.sleep(0.1)
 
 
-# Global instances
+# Global circuit breakers and rate limiters
 _circuit_breakers: Dict[str, CircuitBreaker] = {}
 _rate_limiters: Dict[str, RateLimiter] = {}
-_cache: Dict[str, Tuple[Any, float]] = {}
-_cache_lock = threading.Lock()
 
 
-def get_circuit_breaker(name: str) -> CircuitBreaker:
-    """Get or create a circuit breaker for a service."""
+def get_circuit_breaker(name: str, **kwargs) -> CircuitBreaker:
+    """Get or create a circuit breaker."""
     if name not in _circuit_breakers:
-        _circuit_breakers[name] = CircuitBreaker(name)
+        _circuit_breakers[name] = CircuitBreaker(name, **kwargs)
     return _circuit_breakers[name]
 
 
-def get_rate_limiter(name: str) -> RateLimiter:
-    """Get or create a rate limiter for a service."""
+def get_rate_limiter(name: str, **kwargs) -> RateLimiter:
+    """Get or create a rate limiter."""
     if name not in _rate_limiters:
-        _rate_limiters[name] = RateLimiter()
+        _rate_limiters[name] = RateLimiter(**kwargs)
     return _rate_limiters[name]
 
 
 @contextmanager
-def timing_context(operation_name: str):
-    """Context manager for timing operations."""
+def timing_context(operation: str):
+    """Context manager for timing operations and recording metrics."""
     start_time = time.time()
     active_operations.inc()
+
     try:
         yield
     finally:
         duration = time.time() - start_time
-        operation_histogram.labels(operation=operation_name).observe(duration)
+        operation_histogram.labels(operation=operation).observe(duration)
         active_operations.dec()
-        logger.debug(f"Operation {operation_name} took {duration:.3f} seconds")
+        logger.debug(f"Operation '{operation}' took {duration:.3f}s")
 
 
 def retry_with_backoff(
@@ -349,7 +423,16 @@ def retry_with_backoff(
     backoff_multiplier: float = BACKOFF_MULTIPLIER,
     exceptions: Tuple[type, ...] = (Exception,),
 ):
-    """Decorator for retrying functions with exponential backoff."""
+    """
+    Decorator for retrying functions with exponential backoff.
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        initial_backoff: Initial backoff delay in seconds
+        max_backoff: Maximum backoff delay in seconds
+        backoff_multiplier: Multiplier for exponential backoff
+        exceptions: Tuple of exceptions to catch and retry
+    """
 
     def decorator(func):
         @functools.wraps(func)
@@ -357,78 +440,64 @@ def retry_with_backoff(
             backoff = initial_backoff
             last_exception = None
 
-            for attempt in range(max_retries):
+            for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
                 except exceptions as e:
                     last_exception = e
-                    if attempt < max_retries - 1:
-                        sleep_time = min(backoff, max_backoff)
+                    if attempt < max_retries:
                         logger.warning(
-                            f"Attempt {attempt + 1} failed for {func.__name__}: {e}. "
-                            f"Retrying in {sleep_time:.1f} seconds..."
+                            f"Attempt {attempt + 1}/{max_retries + 1} failed for {func.__name__}: {e}. "
+                            f"Retrying in {backoff:.1f}s..."
                         )
-                        time.sleep(sleep_time)
-                        backoff *= backoff_multiplier
+                        time.sleep(backoff)
+                        backoff = min(backoff * backoff_multiplier, max_backoff)
                     else:
                         logger.error(
-                            f"All {max_retries} attempts failed for {func.__name__}"
+                            f"All {max_retries + 1} attempts failed for {func.__name__}"
                         )
 
             raise last_exception
 
-        @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            backoff = initial_backoff
-            last_exception = None
-
-            for attempt in range(max_retries):
-                try:
-                    return await func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    if attempt < max_retries - 1:
-                        sleep_time = min(backoff, max_backoff)
-                        logger.warning(
-                            f"Attempt {attempt + 1} failed for {func.__name__}: {e}. "
-                            f"Retrying in {sleep_time:.1f} seconds..."
-                        )
-                        await asyncio.sleep(sleep_time)
-                        backoff *= backoff_multiplier
-                    else:
-                        logger.error(
-                            f"All {max_retries} attempts failed for {func.__name__}"
-                        )
-
-            raise last_exception
-
-        return async_wrapper if asyncio.iscoroutinefunction(func) else wrapper
+        return wrapper
 
     return decorator
 
 
-def cached(ttl_seconds: int = 300):
-    """Decorator for caching function results."""
+def cached(ttl: int = 300):
+    """
+    Simple in-memory cache decorator with TTL.
+
+    Args:
+        ttl: Time-to-live in seconds
+    """
+    cache = {}
+    cache_lock = threading.Lock()
 
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            cache_key = f"{func.__name__}:{str(args)}:{str(kwargs)}"
+            # Create cache key from function name and arguments
+            key = f"{func.__name__}:{str(args)}:{str(kwargs)}"
 
-            with _cache_lock:
-                if cache_key in _cache:
-                    value, timestamp = _cache[cache_key]
-                    if time.time() - timestamp < ttl_seconds:
+            with cache_lock:
+                # Check if cached and not expired
+                if key in cache:
+                    value, timestamp = cache[key]
+                    if time.time() - timestamp < ttl:
                         cache_hits.inc()
+                        logger.debug(f"Cache hit for {func.__name__}")
                         return value
                     else:
-                        del _cache[cache_key]
+                        del cache[key]
 
-            cache_misses.inc()
+                cache_misses.inc()
+
+            # Call function and cache result
             result = func(*args, **kwargs)
 
-            with _cache_lock:
-                _cache[cache_key] = (result, time.time())
+            with cache_lock:
+                cache[key] = (result, time.time())
 
             return result
 
@@ -437,332 +506,330 @@ def cached(ttl_seconds: int = 300):
     return decorator
 
 
-def alert_operator(
+async def alert_operator_async(
     message: str,
-    level: Union[str, AlertLevel] = AlertLevel.ERROR,
-    details: Optional[Dict[str, Any]] = None,
+    level: AlertLevel = AlertLevel.INFO,
     channels: Optional[List[AlertChannel]] = None,
-    dedupe_key: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ):
     """
-    Send alerts to configured channels with deduplication and rate limiting.
+    Send alerts to operators through configured channels (async version).
 
     Args:
         message: Alert message
         level: Alert severity level
-        details: Additional context
-        channels: Specific channels to use (defaults to configured channels)
-        dedupe_key: Key for deduplication (prevents duplicate alerts)
+        channels: List of channels to use (defaults to configured channels)
+        metadata: Additional metadata to include with the alert
     """
-    if isinstance(level, str):
-        level = AlertLevel(level.upper())
+    if channels is None:
+        channels = _alert_config.enabled_channels
 
-    channels = channels or _alert_config.enabled_channels
+    metadata = metadata or {}
+    metadata.update(
+        {
+            "timestamp": datetime.utcnow().isoformat(),
+            "service": SERVICE_NAME,
+            "environment": ENVIRONMENT,
+            "hostname": HOSTNAME,
+            "instance_id": INSTANCE_ID,
+        }
+    )
 
-    # Rate limiting for non-critical alerts
-    if level not in [AlertLevel.CRITICAL, AlertLevel.EMERGENCY]:
-        limiter = get_rate_limiter("alerts")
-        if not limiter.is_allowed():
-            logger.warning(f"Alert rate limited: {message}")
-            return
-
-    # Deduplication
-    if dedupe_key:
-        cache_key = f"alert_dedupe:{dedupe_key}"
-        with _cache_lock:
-            if cache_key in _cache:
-                _, timestamp = _cache[cache_key]
-                if time.time() - timestamp < 300:  # 5 minute deduplication window
-                    return
-            _cache[cache_key] = (True, time.time())
-
-    # Prepare alert data
-    alert_data = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "level": level.value,
+    alert_payload = {
         "message": message,
-        "service": SERVICE_NAME,
-        "environment": ENVIRONMENT,
-        "hostname": HOSTNAME,
-        "instance_id": INSTANCE_ID,
-        "details": details or {},
+        "level": level.value,
+        "metadata": metadata,
     }
 
-    # Add stack trace for errors
-    if level in [AlertLevel.ERROR, AlertLevel.CRITICAL, AlertLevel.EMERGENCY]:
-        alert_data["stack_trace"] = traceback.format_exc()
-
-    # Send to each channel
+    tasks = []
     for channel in channels:
-        try:
-            _send_alert_to_channel(channel, alert_data)
-            alert_counter.labels(level=level.value, channel=channel.value).inc()
-        except Exception as e:
-            logger.error(f"Failed to send alert to {channel.value}: {e}")
-            error_counter.labels(error_type="alert_failure").inc()
+        alert_counter.labels(level=level.value, channel=channel.value).inc()
+
+        if channel == AlertChannel.LOG:
+            log_level = getattr(logging, level.value)
+            logger.log(log_level, f"ALERT: {message}", extra=metadata)
+
+        elif channel == AlertChannel.SLACK and _alert_config.slack_webhook_url:
+            if AIOHTTP_AVAILABLE:
+                tasks.append(_send_slack_alert_async(message, level, metadata))
+
+        elif channel == AlertChannel.PAGERDUTY and _alert_config.pagerduty_routing_key:
+            if AIOHTTP_AVAILABLE:
+                tasks.append(_send_pagerduty_alert_async(message, level, metadata))
+
+        elif channel == AlertChannel.EMAIL and _alert_config.email_smtp_host:
+            # Email sending is typically synchronous, skip for async
+            logger.info(f"Email alerts not supported in async mode")
+
+        elif channel == AlertChannel.SNS and _alert_config.sns_topic_arn and AWS_AVAILABLE:
+            tasks.append(_send_sns_alert_async(message, level, metadata))
+
+        elif channel == AlertChannel.DATADOG and _alert_config.datadog_api_key:
+            if AIOHTTP_AVAILABLE:
+                tasks.append(_send_datadog_alert_async(message, level, metadata))
+
+        elif channel == AlertChannel.OPSGENIE and _alert_config.opsgenie_api_key:
+            if AIOHTTP_AVAILABLE:
+                tasks.append(_send_opsgenie_alert_async(message, level, metadata))
+
+        elif channel == AlertChannel.WEBHOOK and _alert_config.webhook_urls:
+            if AIOHTTP_AVAILABLE:
+                for url in _alert_config.webhook_urls:
+                    if url:
+                        tasks.append(_send_webhook_alert_async(url, alert_payload))
+
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
-def _send_alert_to_channel(channel: AlertChannel, alert_data: Dict[str, Any]):
-    """Send alert to specific channel."""
-
-    if channel == AlertChannel.LOG:
-        level = alert_data["level"]
-        log_level = getattr(logging, level, logging.ERROR)
-
-        # Create a copy of alert_data without 'message' to avoid LogRecord conflict
-        extra_data = {k: v for k, v in alert_data.items() if k != "message"}
-
-        # Log with the message as the main argument and other data as extra
-        logger.log(log_level, f"ALERT: {alert_data['message']}", extra=extra_data)
-
-    elif channel == AlertChannel.SLACK and _alert_config.slack_webhook_url:
-        _send_slack_alert(alert_data)
-
-    elif channel == AlertChannel.PAGERDUTY and _alert_config.pagerduty_routing_key:
-        _send_pagerduty_alert(alert_data)
-
-    elif channel == AlertChannel.EMAIL and _alert_config.email_smtp_host:
-        _send_email_alert(alert_data)
-
-    elif channel == AlertChannel.SNS and _alert_config.sns_topic_arn and AWS_AVAILABLE:
-        _send_sns_alert(alert_data)
-
-    elif channel == AlertChannel.DATADOG and _alert_config.datadog_api_key:
-        _send_datadog_alert(alert_data)
-
-    elif channel == AlertChannel.OPSGENIE and _alert_config.opsgenie_api_key:
-        _send_opsgenie_alert(alert_data)
-
-    elif channel == AlertChannel.WEBHOOK and _alert_config.webhook_urls:
-        _send_webhook_alerts(alert_data)
-
-
-@retry_with_backoff(exceptions=(Exception,))
-def _send_slack_alert(alert_data: Dict[str, Any]):
+async def _send_slack_alert_async(
+    message: str, level: AlertLevel, metadata: Dict[str, Any]
+):
     """Send alert to Slack."""
     if not AIOHTTP_AVAILABLE:
         return
 
     color_map = {
-        "DEBUG": "#808080",
-        "INFO": "#36a64f",
-        "WARNING": "#ff9900",
-        "ERROR": "#ff0000",
-        "CRITICAL": "#8b0000",
-        "EMERGENCY": "#000000",
+        AlertLevel.DEBUG: "#808080",
+        AlertLevel.INFO: "#36a64f",
+        AlertLevel.WARNING: "#ff9900",
+        AlertLevel.ERROR: "#ff0000",
+        AlertLevel.CRITICAL: "#8B0000",
+        AlertLevel.EMERGENCY: "#000000",
     }
 
     payload = {
         "attachments": [
             {
-                "color": color_map.get(alert_data["level"], "#ff0000"),
-                "title": f"{alert_data['level']}: {alert_data['message']}",
+                "color": color_map.get(level, "#808080"),
+                "title": f"{level.value} Alert",
+                "text": message,
                 "fields": [
-                    {"title": "Service", "value": alert_data["service"], "short": True},
-                    {
-                        "title": "Environment",
-                        "value": alert_data["environment"],
-                        "short": True,
-                    },
-                    {
-                        "title": "Hostname",
-                        "value": alert_data["hostname"],
-                        "short": True,
-                    },
-                    {
-                        "title": "Timestamp",
-                        "value": alert_data["timestamp"],
-                        "short": True,
-                    },
+                    {"title": k, "value": str(v), "short": True}
+                    for k, v in metadata.items()
                 ],
-                "footer": f"Instance: {alert_data['instance_id']}",
+                "footer": SERVICE_NAME,
+                "ts": int(time.time()),
             }
         ]
     }
 
-    if alert_data.get("stack_trace"):
-        payload["attachments"][0]["text"] = f"```{alert_data['stack_trace'][:1000]}```"
-
-    # Synchronous HTTP request (use aiohttp in async context)
-    import urllib.error
-    import urllib.request
-
-    req = urllib.request.Request(
-        _alert_config.slack_webhook_url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-    )
-
-    urllib.request.urlopen(req, timeout=5)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                _alert_config.slack_webhook_url, json=payload
+            ) as response:
+                if response.status != 200:
+                    logger.error(
+                        f"Failed to send Slack alert: {response.status} {await response.text()}"
+                    )
+    except Exception as e:
+        logger.error(f"Error sending Slack alert: {e}")
 
 
-def _send_pagerduty_alert(alert_data: Dict[str, Any]):
+async def _send_pagerduty_alert_async(
+    message: str, level: AlertLevel, metadata: Dict[str, Any]
+):
     """Send alert to PagerDuty."""
+    if not AIOHTTP_AVAILABLE:
+        return
+
     severity_map = {
-        "DEBUG": "info",
-        "INFO": "info",
-        "WARNING": "warning",
-        "ERROR": "error",
-        "CRITICAL": "critical",
-        "EMERGENCY": "critical",
+        AlertLevel.DEBUG: "info",
+        AlertLevel.INFO: "info",
+        AlertLevel.WARNING: "warning",
+        AlertLevel.ERROR: "error",
+        AlertLevel.CRITICAL: "critical",
+        AlertLevel.EMERGENCY: "critical",
     }
 
     payload = {
         "routing_key": _alert_config.pagerduty_routing_key,
         "event_action": "trigger",
         "payload": {
-            "summary": alert_data["message"],
-            "severity": severity_map.get(alert_data["level"], "error"),
-            "source": alert_data["hostname"],
-            "component": alert_data["service"],
-            "group": alert_data["environment"],
-            "custom_details": alert_data["details"],
+            "summary": message,
+            "severity": severity_map.get(level, "info"),
+            "source": HOSTNAME,
+            "custom_details": metadata,
         },
     }
 
-    # Implementation would send to PagerDuty Events API v2
-    logger.info(f"Would send PagerDuty alert: {payload}")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://events.pagerduty.com/v2/enqueue", json=payload
+            ) as response:
+                if response.status != 202:
+                    logger.error(
+                        f"Failed to send PagerDuty alert: {response.status} {await response.text()}"
+                    )
+    except Exception as e:
+        logger.error(f"Error sending PagerDuty alert: {e}")
 
 
-def _send_email_alert(alert_data: Dict[str, Any]):
-    """Send alert via email."""
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-
-    msg = MIMEMultipart()
-    msg["From"] = _alert_config.email_from
-    msg["To"] = ", ".join(_alert_config.email_to)
-    msg["Subject"] = f"[{alert_data['level']}] {alert_data['message']}"
-
-    body = json.dumps(alert_data, indent=2)
-    msg.attach(MIMEText(body, "plain"))
-
-    with smtplib.SMTP(
-        _alert_config.email_smtp_host, _alert_config.email_smtp_port
-    ) as server:
-        server.starttls()
-        # Add authentication if needed
-        server.send_message(msg)
-
-
-def _send_sns_alert(alert_data: Dict[str, Any]):
-    """Send alert to AWS SNS."""
+async def _send_sns_alert_async(
+    message: str, level: AlertLevel, metadata: Dict[str, Any]
+):
+    """Send alert via AWS SNS."""
     if not AWS_AVAILABLE:
         return
 
-    sns = boto3.client("sns", region_name=REGION)
+    try:
+        # SNS client operations are synchronous, run in executor
+        loop = asyncio.get_event_loop()
+        sns = boto3.client("sns")
 
-    sns.publish(
-        TopicArn=_alert_config.sns_topic_arn,
-        Subject=f"[{alert_data['level']}] {alert_data['service']} Alert",
-        Message=json.dumps(alert_data, indent=2),
-    )
+        subject = f"{level.value} Alert from {SERVICE_NAME}"
+        full_message = f"{message}\n\nMetadata:\n{json.dumps(metadata, indent=2)}"
+
+        await loop.run_in_executor(
+            None,
+            lambda: sns.publish(
+                TopicArn=_alert_config.sns_topic_arn,
+                Subject=subject,
+                Message=full_message,
+            ),
+        )
+    except Exception as e:
+        logger.error(f"Error sending SNS alert: {e}")
 
 
-def _send_datadog_alert(alert_data: Dict[str, Any]):
+async def _send_datadog_alert_async(
+    message: str, level: AlertLevel, metadata: Dict[str, Any]
+):
     """Send alert to Datadog."""
-    # Implementation would use Datadog API
-    logger.info(f"Would send Datadog alert: {alert_data}")
+    if not AIOHTTP_AVAILABLE:
+        return
+
+    alert_type_map = {
+        AlertLevel.DEBUG: "info",
+        AlertLevel.INFO: "info",
+        AlertLevel.WARNING: "warning",
+        AlertLevel.ERROR: "error",
+        AlertLevel.CRITICAL: "error",
+        AlertLevel.EMERGENCY: "error",
+    }
+
+    payload = {
+        "title": f"{level.value} Alert",
+        "text": message,
+        "alert_type": alert_type_map.get(level, "info"),
+        "tags": [f"{k}:{v}" for k, v in metadata.items()],
+    }
+
+    headers = {"DD-API-KEY": _alert_config.datadog_api_key}
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://api.datadoghq.com/api/v1/events",
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status != 202:
+                    logger.error(
+                        f"Failed to send Datadog alert: {response.status} {await response.text()}"
+                    )
+    except Exception as e:
+        logger.error(f"Error sending Datadog alert: {e}")
 
 
-def _send_opsgenie_alert(alert_data: Dict[str, Any]):
-    """Send alert to OpsGenie."""
-    # Implementation would use OpsGenie API
-    logger.info(f"Would send OpsGenie alert: {alert_data}")
+async def _send_opsgenie_alert_async(
+    message: str, level: AlertLevel, metadata: Dict[str, Any]
+):
+    """Send alert to Opsgenie."""
+    if not AIOHTTP_AVAILABLE:
+        return
+
+    priority_map = {
+        AlertLevel.DEBUG: "P5",
+        AlertLevel.INFO: "P4",
+        AlertLevel.WARNING: "P3",
+        AlertLevel.ERROR: "P2",
+        AlertLevel.CRITICAL: "P1",
+        AlertLevel.EMERGENCY: "P1",
+    }
+
+    payload = {
+        "message": message,
+        "priority": priority_map.get(level, "P3"),
+        "details": metadata,
+    }
+
+    headers = {"Authorization": f"GenieKey {_alert_config.opsgenie_api_key}"}
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://api.opsgenie.com/v2/alerts",
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status != 202:
+                    logger.error(
+                        f"Failed to send Opsgenie alert: {response.status} {await response.text()}"
+                    )
+    except Exception as e:
+        logger.error(f"Error sending Opsgenie alert: {e}")
 
 
-def _send_webhook_alerts(alert_data: Dict[str, Any]):
-    """Send alerts to configured webhooks."""
-    for url in _alert_config.webhook_urls:
-        if url:
-            try:
-                import urllib.request
+async def _send_webhook_alert_async(url: str, payload: Dict[str, Any]):
+    """Send alert to a webhook."""
+    if not AIOHTTP_AVAILABLE:
+        return
 
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(alert_data).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                )
-                urllib.request.urlopen(req, timeout=5)
-            except Exception as e:
-                logger.error(f"Failed to send webhook to {url}: {e}")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as response:
+                if response.status not in (200, 201, 202, 204):
+                    logger.error(
+                        f"Failed to send webhook alert to {url}: {response.status} {await response.text()}"
+                    )
+    except Exception as e:
+        logger.error(f"Error sending webhook alert to {url}: {e}")
 
 
-def scrub_secrets(data: Any, max_depth: int = 10) -> Any:
+def scrub_secrets(data: Any) -> Any:
     """
-    Recursively scrub sensitive information from data structures.
+    Scrub sensitive information from data before logging or transmission.
 
     Args:
-        data: Data to scrub (dict, list, or primitive)
-        max_depth: Maximum recursion depth to prevent infinite loops
+        data: Data to scrub (can be string, dict, list, etc.)
 
     Returns:
-        Scrubbed copy of the data
+        Scrubbed data with sensitive information masked
     """
-    if max_depth <= 0:
-        return "***MAX_DEPTH_EXCEEDED***"
-
-    # Patterns for sensitive data
-    sensitive_patterns = [
-        r"(?i)(password|passwd|pwd|pass)[\s]*[=:]\s*[\S]+",
-        r"(?i)(token|api[_-]?key|secret|auth)[\s]*[=:]\s*[\S]+",
-        r"(?i)(aws[_-]?access[_-]?key[_-]?id|aws[_-]?secret[_-]?access[_-]?key)[\s]*[=:]\s*[\S]+",
-        r"(?i)bearer\s+[\S]+",
-        r"(?i)basic\s+[\S]+",
-        r"[a-zA-Z0-9+/]{40,}={0,2}",  # Base64 encoded strings
-        r"(?:\d{4}[-\s]?){3}\d{4}",  # Credit card numbers
-        r"\b\d{3}-\d{2}-\d{4}\b",  # SSN
+    # Patterns for common secrets
+    secret_patterns = [
+        (r"password['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)", "password"),
+        (r"api[_-]?key['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)", "api_key"),
+        (r"secret['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)", "secret"),
+        (r"token['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)", "token"),
+        (r"authorization['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)", "authorization"),
+        (r"bearer\s+([a-zA-Z0-9\-._~+/]+=*)", "bearer_token"),
+        (r"['\"]?private[_-]?key['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)", "private_key"),
+        (r"aws[_-]?secret[_-]?access[_-]?key['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)", "aws_secret"),
     ]
-
-    sensitive_keys = {
-        "password",
-        "passwd",
-        "pwd",
-        "pass",
-        "secret",
-        "token",
-        "api_key",
-        "apikey",
-        "auth",
-        "authorization",
-        "credential",
-        "private_key",
-        "privatekey",
-        "client_secret",
-        "access_token",
-        "refresh_token",
-        "bearer",
-        "session",
-        "cookie",
-        "jwt",
-        "aws_access_key_id",
-        "aws_secret_access_key",
-        "database_url",
-        "connection_string",
-        "dsn",
-        "encryption_key",
-        "salt",
-        "hash",
-    }
 
     if isinstance(data, dict):
         scrubbed = {}
         for key, value in data.items():
-            # Check if key contains sensitive terms
-            if any(term in key.lower() for term in sensitive_keys):
+            # Check if key itself indicates sensitive data
+            if any(
+                sensitive in key.lower()
+                for sensitive in ["password", "secret", "token", "key", "auth"]
+            ):
                 scrubbed[key] = "***REDACTED***"
             else:
-                scrubbed[key] = scrub_secrets(value, max_depth - 1)
+                scrubbed[key] = scrub_secrets(value)
         return scrubbed
 
     elif isinstance(data, list):
-        return [scrub_secrets(item, max_depth - 1) for item in data]
+        return [scrub_secrets(item) for item in data]
 
     elif isinstance(data, str):
-        # Check for sensitive patterns in strings
         scrubbed_str = data
-        for pattern in sensitive_patterns:
+        for pattern, name in secret_patterns:
             if re.search(pattern, scrubbed_str):
                 scrubbed_str = re.sub(pattern, "***REDACTED***", scrubbed_str)
         return scrubbed_str
