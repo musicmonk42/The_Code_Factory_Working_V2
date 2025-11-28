@@ -25,7 +25,34 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from omnicore_engine.plugin_registry import PlugInKind, plugin
+# Lazy import to avoid circular import with omnicore_engine.plugin_registry
+# The plugin decorator and PlugInKind enum are imported lazily below
+PlugInKind = None
+plugin = None
+
+try:
+    from omnicore_engine.plugin_registry import PlugInKind, plugin
+except ImportError as e:
+    logging.getLogger(__name__).warning(
+        f"Could not import plugin registry components: {e}. "
+        "Plugin registration will be skipped."
+    )
+
+
+# Create a fallback decorator if plugin import fails
+def _noop_plugin(**kwargs):
+    """No-op plugin decorator for when plugin registry is unavailable."""
+    def decorator(fn):
+        return fn
+    return decorator
+
+
+def _get_plugin_decorator():
+    """Get the plugin decorator, returning a no-op if unavailable."""
+    if plugin is not None:
+        return plugin
+    return _noop_plugin
+
 
 # --- Global Production Mode Flag ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
@@ -504,8 +531,8 @@ async def connect(
 
 
 # --- Plugin method runner ---
-@plugin(
-    kind=PlugInKind.EXECUTION,
+@_get_plugin_decorator()(
+    kind=PlugInKind.EXECUTION if PlugInKind else "execution",
     name="grpc_runner_method",
     description="Run a method on a gRPC stub with a timeout.",
 )
