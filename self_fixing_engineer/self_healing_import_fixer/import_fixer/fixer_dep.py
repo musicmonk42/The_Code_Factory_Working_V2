@@ -64,7 +64,7 @@ try:
     )
 
     _core_utils_loaded = True
-except ImportError as e:
+except ImportError:
     # Fallback to relative import for when running within the package
     try:
         from self_healing_import_fixer.analyzer.core_audit import audit_logger
@@ -74,8 +74,8 @@ except ImportError as e:
         )
 
         _core_utils_loaded = True
-    except ImportError:
-        logger.warning(f"Core utilities not loaded (optional): {e}.")
+    except ImportError as inner_e:
+        logger.warning(f"Core utilities not loaded (optional): {inner_e}.")
         _core_utils_loaded = False
 
 
