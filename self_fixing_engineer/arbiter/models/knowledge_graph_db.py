@@ -527,10 +527,17 @@ class Neo4jKnowledgeGraph:
                 "Using NEO4J_PASSWORD env var in production; prefer Secrets Manager for security."
             )
 
-        if self.password is None or self.password == "password":
-            raise ConnectionError(
-                "A secure password must be provided via environment variable (NEO4J_PASSWORD) or a secrets manager."
-            )
+        is_dev_mode = os.getenv("ENV", "dev") == "dev"
+        if not self.password or self.password == "password":
+            if is_dev_mode:
+                logger.warning(
+                    "Neo4jKnowledgeGraph: Running in development mode without a secure password. "
+                    "Set NEO4J_PASSWORD environment variable for production use."
+                )
+            else:
+                raise ConnectionError(
+                    "A secure password must be provided via environment variable (NEO4J_PASSWORD) or a secrets manager."
+                )
 
         logger.info(f"Neo4jKnowledgeGraph initialized for URL: {self.url}.")
 
