@@ -241,6 +241,14 @@ jobs:
           rm -rf /home/runner/.cache/pip/* /tmp/* || true
           df -h
           
+      - name: Create audit log dir for analyzer
+        run: |
+          sudo mkdir -p /var/log/analyzer_audit
+          # Make runner the owner so tests can write there
+          sudo chown $(id -u):$(id -g) /var/log/analyzer_audit || true
+          sudo chmod 0755 /var/log/analyzer_audit || true
+          ls -ld /var/log/analyzer_audit
+          
       - name: Run OmniCore tests
         env:
           REDIS_URL: redis://localhost:6379
@@ -375,6 +383,14 @@ jobs:
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
+          
+      - name: Create audit log dir for analyzer
+        run: |
+          sudo mkdir -p /var/log/analyzer_audit
+          # Make runner the owner so tests can write there
+          sudo chown $(id -u):$(id -g) /var/log/analyzer_audit || true
+          sudo chmod 0755 /var/log/analyzer_audit || true
+          ls -ld /var/log/analyzer_audit
           
       - name: Run integration tests
         env:
