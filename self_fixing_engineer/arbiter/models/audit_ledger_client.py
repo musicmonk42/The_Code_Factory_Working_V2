@@ -49,8 +49,16 @@ try:
         TimeExhausted,
         TransactionNotFound,
     )
-    from web3.middleware import geth_poa_middleware
-    from web3.providers.async_websocket import AsyncWebsocketProvider
+    # In web3 v7+, geth_poa_middleware was renamed to ExtraDataToPOAMiddleware
+    try:
+        from web3.middleware import ExtraDataToPOAMiddleware as geth_poa_middleware
+    except ImportError:
+        from web3.middleware import geth_poa_middleware
+    # In web3 v7+, AsyncWebsocketProvider was renamed/moved to WebSocketProvider
+    try:
+        from web3.providers import WebSocketProvider as AsyncWebsocketProvider
+    except ImportError:
+        from web3.providers.async_websocket import AsyncWebsocketProvider
 
     ETHEREUM_AVAILABLE: Final[bool] = True
     Account.enable_unaudited_hdwallet_features()

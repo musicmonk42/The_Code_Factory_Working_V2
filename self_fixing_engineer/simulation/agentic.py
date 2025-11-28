@@ -1106,7 +1106,7 @@ if PYDANTIC_AVAILABLE:
         )
         agents: List[Dict[str, Any]] = Field(
             ...,
-            min_items=1,
+            min_length=1,
             description="List of configurations for each agent in the swarm.",
         )
         max_concurrency: int = Field(

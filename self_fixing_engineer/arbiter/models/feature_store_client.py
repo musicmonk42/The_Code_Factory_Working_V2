@@ -321,11 +321,11 @@ class FeatureViewModel(BaseModel):
         ..., min_length=1, max_length=100, description="Unique feature view name."
     )
     entities: List[str] = PydanticField(
-        ..., min_items=1, description="List of entity names."
+        ..., min_length=1, description="List of entity names."
     )
     ttl: timedelta = PydanticField(..., description="Time-to-live duration.")
     feature_schema: List[Dict[str, str]] = PydanticField(
-        ..., min_items=1, description="Schema fields with name and dtype."
+        ..., min_length=1, description="Schema fields with name and dtype."
     )
     source: Dict[str, Any] = PydanticField(
         ..., description="Data source configuration."

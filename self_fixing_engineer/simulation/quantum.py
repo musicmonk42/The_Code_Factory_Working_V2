@@ -41,7 +41,7 @@ except ImportError:
 # --- Pydantic for input validation ---
 PYDANTIC_AVAILABLE = False
 try:
-    from pydantic import BaseModel, Field, ValidationError, validator
+    from pydantic import BaseModel, Field, ValidationError, field_validator
 
     PYDANTIC_AVAILABLE = True
 except ImportError:
@@ -747,17 +747,19 @@ if PYDANTIC_AVAILABLE:
             description="Configuration specific to the chosen backend.",
         )
 
-        @validator("code_file")
-        def validate_secure_path(cls, v):
+        @field_validator("code_file")
+        @classmethod
+        def validate_secure_path(cls, v: str) -> str:
             return _validate_secure_path_logic(v)
 
     class ForecastFailureTrendParams(BaseModel):
         trend_data: List[float] = Field(
-            ..., min_items=2, description="List of historical trend data points."
+            ..., min_length=2, description="List of historical trend data points."
         )
 
-        @validator("trend_data")
-        def check_trend_data_values(cls, v):
+        @field_validator("trend_data")
+        @classmethod
+        def check_trend_data_values(cls, v: List[float]) -> List[float]:
             if not all(isinstance(x, (int, float)) for x in v):
                 raise ValueError("All trend_data elements must be numbers.")
             return v

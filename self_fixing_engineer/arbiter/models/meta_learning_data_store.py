@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 # Import centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, field_serializer
 
 # Import tenacity for retries with exponential backoff
 from tenacity import (
@@ -198,24 +198,34 @@ class MetaLearningRecord(BaseModel):
         default_factory=list, description="User-defined tags/annotations."
     )
 
-    @validator("tags", pre=True, each_item=True)
-    def validate_tags(cls, tag):
-        if not isinstance(tag, str):
-            raise ValueError("Tag must be a string.")
-        if len(tag) > 50:
-            raise ValueError("Tag length cannot exceed 50 characters.")
-        if (
-            not tag.replace("-", "").replace("_", "").isalnum()
-        ):  # Allow alphanumeric, hyphens, underscores
-            raise ValueError(
-                "Tag can only contain alphanumeric characters, hyphens, and underscores."
-            )
-        return tag
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+    )
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
-        arbitrary_types_allowed = True
-        extra = "forbid"
+    @field_validator("tags", mode="before")
+    @classmethod
+    def validate_tags(cls, v):
+        if v is None:
+            return []
+        validated_tags = []
+        for tag in v:
+            if not isinstance(tag, str):
+                raise ValueError("Tag must be a string.")
+            if len(tag) > 50:
+                raise ValueError("Tag length cannot exceed 50 characters.")
+            if (
+                not tag.replace("-", "").replace("_", "").isalnum()
+            ):  # Allow alphanumeric, hyphens, underscores
+                raise ValueError(
+                    "Tag can only contain alphanumeric characters, hyphens, and underscores."
+                )
+            validated_tags.append(tag)
+        return validated_tags
+
+    @field_serializer("timestamp")
+    def serialize_timestamp(self, v: datetime) -> str:
+        return v.isoformat()
 
 
 # --- Exceptions ---

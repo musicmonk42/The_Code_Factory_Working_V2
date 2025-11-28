@@ -127,7 +127,7 @@ except ImportError as e:
 
 PYDANTIC_AVAILABLE = True
 try:
-    from pydantic import BaseModel, Field, ValidationError, validator
+    from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 except ImportError as e:
     PYDANTIC_AVAILABLE = False
     logger.warning(f"pydantic is not installed: {e}. WASM runner will be disabled.")
@@ -182,8 +182,11 @@ class WasmManifestModel(BaseModel):
 
     signature: Optional[str] = None
 
-    @validator("name", "entrypoint", "health_check", "api_version")
-    def check_no_dummy_fields(cls, v):
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("name", "entrypoint", "health_check", "api_version")
+    @classmethod
+    def check_no_dummy_fields(cls, v: str) -> str:
         if PRODUCTION_MODE and (
             "dummy" in v.lower() or "test" in v.lower() or "mock" in v.lower()
         ):
@@ -192,8 +195,9 @@ class WasmManifestModel(BaseModel):
             )
         return v
 
-    @validator("sandbox")
-    def validate_sandbox_config(cls, v):
+    @field_validator("sandbox")
+    @classmethod
+    def validate_sandbox_config(cls, v: Dict[str, Any]) -> Dict[str, Any]:
         if not v.get("enabled", True):
             if PRODUCTION_MODE:
                 raise ValueError("Sandbox must be enabled in PRODUCTION_MODE.")
@@ -213,9 +217,6 @@ class WasmManifestModel(BaseModel):
         ):
             raise ValueError("Runtime limit must be a positive number in seconds.")
         return v
-
-    class Config:
-        extra = "forbid"
 
 
 # --- WASM Host Functions Security: Only expose host functions that are explicitly whitelisted ---

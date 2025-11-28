@@ -10,7 +10,7 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Dict, Final, List, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .dlt_base import (
     AUDIT,
@@ -69,8 +69,9 @@ class SimpleDLTConfig(BaseModel):
     cleanup_interval: float = Field(300.0, ge=30.0)
     chain_state_path: Optional[str] = None  # Path for chain state persistence
 
-    @validator("chain_state_path", always=True)
-    def enforce_chain_state_path_in_prod(cls, v):
+    @field_validator("chain_state_path")
+    @classmethod
+    def enforce_chain_state_path_in_prod(cls, v: Optional[str]) -> Optional[str]:
         if PRODUCTION_MODE and not v:
             raise ValueError(
                 "In PRODUCTION_MODE, 'chain_state_path' must be provided for state persistence."
