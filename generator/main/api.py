@@ -137,6 +137,17 @@ except ImportError as e:
     class WebSocketDisconnect(Exception):
         pass
 
+    # Dummy UploadFile class for when FastAPI is not available
+    class UploadFile:
+        """Dummy UploadFile class for function annotations when FastAPI is unavailable."""
+        def __init__(self, *args, **kwargs):
+            self.filename = kwargs.get('filename', '')
+            self.file = None
+            self.content_type = kwargs.get('content_type', '')
+
+        async def read(self):
+            return b''
+
     # Dummy Classes
     class _DummyState:
         """Dummy state object that allows setting arbitrary attributes."""
