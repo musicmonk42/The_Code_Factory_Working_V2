@@ -753,7 +753,7 @@ if PYDANTIC_AVAILABLE:
 
     class ForecastFailureTrendParams(BaseModel):
         trend_data: List[float] = Field(
-            ..., min_items=2, description="List of historical trend data points."
+            ..., min_length=2, description="List of historical trend data points."
         )
 
         @validator("trend_data")
