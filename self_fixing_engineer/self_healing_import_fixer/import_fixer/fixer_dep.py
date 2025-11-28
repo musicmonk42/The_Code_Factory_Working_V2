@@ -55,13 +55,28 @@ logger = logging.getLogger(__name__)
 # --- Centralized Utilities (replacing placeholders) ---
 _core_utils_loaded = False
 try:
-    from core_audit import audit_logger
-    from core_utils import alert_operator, scrub_secrets
+    from self_fixing_engineer.self_healing_import_fixer.analyzer.core_audit import (
+        audit_logger,
+    )
+    from self_fixing_engineer.self_healing_import_fixer.analyzer.core_utils import (
+        alert_operator,
+        scrub_secrets,
+    )
 
     _core_utils_loaded = True
 except ImportError as e:
-    logger.critical(f"CRITICAL: Missing core dependency for fixer_dep: {e}.")
-    _core_utils_loaded = False
+    # Fallback to relative import for when running within the package
+    try:
+        from self_healing_import_fixer.analyzer.core_audit import audit_logger
+        from self_healing_import_fixer.analyzer.core_utils import (
+            alert_operator,
+            scrub_secrets,
+        )
+
+        _core_utils_loaded = True
+    except ImportError:
+        logger.warning(f"Core utilities not loaded (optional): {e}.")
+        _core_utils_loaded = False
 
 
 def _alert_operator_or_log(message: str, level: str = "CRITICAL"):

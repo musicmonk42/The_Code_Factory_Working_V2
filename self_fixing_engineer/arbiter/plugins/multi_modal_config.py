@@ -5,7 +5,7 @@ import re
 from typing import Any, Dict, List
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # --- New Configuration Models ---
 
@@ -69,8 +69,9 @@ class SecurityConfig(BaseModel):
         description="A dictionary of custom regex patterns for PII.",
     )
 
-    @validator("input_validation_rules", "output_validation_rules")
-    def validate_validation_rules(cls, v):
+    @field_validator("input_validation_rules", "output_validation_rules")
+    @classmethod
+    def validate_validation_rules(cls, v: Dict[str, Any]) -> Dict[str, Any]:
         """Validate that validation rules have expected keys and valid values."""
         for key, value in v.items():
             if key in ["max_size", "max_length"]:
@@ -82,8 +83,9 @@ class SecurityConfig(BaseModel):
             # Add more specific rule checks as needed
         return v
 
-    @validator("pii_patterns")
-    def validate_pii_patterns(cls, v):
+    @field_validator("pii_patterns")
+    @classmethod
+    def validate_pii_patterns(cls, v: Dict[str, str]) -> Dict[str, str]:
         """Ensure PII patterns are valid regex."""
         for name, pattern in v.items():
             try:

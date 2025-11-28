@@ -165,6 +165,7 @@ itsdangerous==2.2.0
 Jinja2==3.1.6
 jiter==0.10.0
 jmespath==1.0.1
+jschema-to-python==1.2.3  # Required by stevedore/bandit for SARIF format
 joblib==1.5.2
 jsonpatch==1.33
 jsonpointer==3.0.0
@@ -368,6 +369,7 @@ watchdog==6.0.0
 watchfiles==1.1.1
 wcwidth==0.2.14
 weasel==0.4.1
+web3==7.14.0  # Required for Ethereum DLT integration
 webencodings==0.5.1
 websocket-client==1.9.0
 websockets==15.0.1
