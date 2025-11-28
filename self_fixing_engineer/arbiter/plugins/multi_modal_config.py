@@ -105,8 +105,9 @@ class AuditLogConfig(BaseModel):
         description="The destination for audit logs ('console', 'file', or 'kafka').",
     )
 
-    @validator("log_level")
-    def validate_log_level(cls, v):
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
         """Validate that the log level is a valid Python logging level."""
         if logging.getLevelName(v.upper()) == f"Level {v.upper()}":
             raise ValueError(
@@ -114,8 +115,9 @@ class AuditLogConfig(BaseModel):
             )
         return v.upper()
 
-    @validator("destination")
-    def validate_destination(cls, v):
+    @field_validator("destination")
+    @classmethod
+    def validate_destination(cls, v: str) -> str:
         """Validate that the log destination is one of the allowed options."""
         allowed_destinations = ["console", "file", "kafka"]
         if v not in allowed_destinations:
@@ -156,8 +158,9 @@ class ComplianceConfig(BaseModel):
         description="A mapping of modalities to a list of compliance controls.",
     )
 
-    @validator("mapping")
-    def validate_compliance_mapping(cls, v):
+    @field_validator("mapping")
+    @classmethod
+    def validate_compliance_mapping(cls, v: Dict[str, List[str]]) -> Dict[str, List[str]]:
         """Ensure all compliance control IDs in the mapping are valid."""
         # This regex pattern is a placeholder; it should be refined based on actual control IDs.
         control_id_pattern = re.compile(r"^(NIST|ISO27001)-[A-Za-z0-9.-]+$")
