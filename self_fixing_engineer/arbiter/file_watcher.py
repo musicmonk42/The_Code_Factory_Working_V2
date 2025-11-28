@@ -57,13 +57,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# Helper function for idempotent metric creation
+def _get_or_create_metric(
+    metric_class: type, name: str, doc: str, labelnames: list = None, buckets: tuple = None
+):
+    """Idempotently create or retrieve a Prometheus metric."""
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    if metric_class == Histogram and buckets is not None:
+        if labelnames:
+            return metric_class(name, doc, labelnames=labelnames, buckets=buckets)
+        return metric_class(name, doc, buckets=buckets)
+    if labelnames:
+        return metric_class(name, doc, labelnames=labelnames)
+    return metric_class(name, doc)
+
+
 # Prometheus metrics
-processed_files = Counter("file_watcher_processed_files", "Number of files processed")
-errors = Counter("file_watcher_errors", "Number of errors encountered")
-deployments = Gauge("file_watcher_deployments", "Number of active deployments")
-notifications = Counter("file_watcher_notifications", "Number of notifications sent")
-emails_sent = Counter("file_watcher_emails_sent", "Number of emails sent")
-SUMMARY_LATENCY = Histogram(
+processed_files = _get_or_create_metric(
+    Counter, "file_watcher_processed_files", "Number of files processed"
+)
+errors = _get_or_create_metric(
+    Counter, "file_watcher_errors", "Number of errors encountered"
+)
+deployments = _get_or_create_metric(
+    Gauge, "file_watcher_deployments", "Number of active deployments"
+)
+notifications = _get_or_create_metric(
+    Counter, "file_watcher_notifications", "Number of notifications sent"
+)
+emails_sent = _get_or_create_metric(
+    Counter, "file_watcher_emails_sent", "Number of emails sent"
+)
+SUMMARY_LATENCY = _get_or_create_metric(
+    Histogram,
     "llm_summary_latency_seconds",
     "Latency of LLM calls for file summaries",
     buckets=(0.1, 0.5, 1, 2, 5, 10, 30),

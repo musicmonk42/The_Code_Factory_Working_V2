@@ -152,7 +152,7 @@ from botocore.exceptions import ClientError
 from opentelemetry.trace import Status, StatusCode
 
 # Prometheus Metrics
-from prometheus_client import Counter, Gauge, Histogram
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 # Pydantic for input validation
 from pydantic import (
@@ -169,42 +169,63 @@ logger = logging.getLogger(__name__)
 # Get tracer from centralized configuration
 tracer = get_tracer(__name__)
 
-# Private constant to prevent re-registration of metrics
-_METRICS_INIT: bool = False
+# Helper function to get or create a metric (idempotent)
+def _get_or_create_metric(
+    metric_class: type[Counter] | type[Gauge] | type[Histogram],
+    name: str,
+    documentation: str,
+    labelnames: list[str],
+) -> Counter | Gauge | Histogram:
+    """Idempotently create or retrieve a Prometheus metric."""
+    if name in REGISTRY._names_to_collectors:
+        existing_metric = REGISTRY._names_to_collectors[name]
+        if not isinstance(existing_metric, metric_class):
+            logger.warning(
+                f"Metric '{name}' already registered with type "
+                f"{type(existing_metric).__name__}, but requested as "
+                f"{metric_class.__name__}. Reusing existing."
+            )
+        return existing_metric
+    return metric_class(name, documentation, labelnames)
 
-# Ensure metrics are registered only once
-if not _METRICS_INIT:
-    DLT_CALLS_TOTAL: Final[Counter] = Counter(
-        "dlt_calls_total",
-        "Total DLT API calls",
-        ["dlt_type", "operation", "status", "env", "cluster"],
-    )
-    DLT_CALLS_ERRORS: Final[Counter] = Counter(
-        "dlt_calls_errors",
-        "DLT API call errors",
-        ["dlt_type", "operation", "error_type", "env", "cluster"],
-    )
-    DLT_CALL_LATENCY_SECONDS: Final[Histogram] = Histogram(
-        "dlt_call_latency_seconds",
-        "DLT API call latency in seconds",
-        ["dlt_type", "operation", "env", "cluster"],
-    )
-    DLT_TRANSACTIONS_PENDING: Final[Gauge] = Gauge(
-        "dlt_transactions_pending",
-        "Number of DLT transactions pending confirmation",
-        ["dlt_type", "env", "cluster"],
-    )
-    DLT_GAS_USED: Final[Histogram] = Histogram(
-        "dlt_gas_used",
-        "Gas used per successful transaction",
-        ["dlt_type", "operation", "env", "cluster"],
-    )
-    DLT_REVERT_REASON: Final[Counter] = Counter(
-        "dlt_revert_reason",
-        "Transaction revert reasons",
-        ["dlt_type", "reason", "env", "cluster"],
-    )
-    _METRICS_INIT = True
+
+# Ensure metrics are registered only once using REGISTRY check
+DLT_CALLS_TOTAL: Final[Counter] = _get_or_create_metric(
+    Counter,
+    "dlt_calls_total",
+    "Total DLT API calls",
+    ["dlt_type", "operation", "status", "env", "cluster"],
+)
+DLT_CALLS_ERRORS: Final[Counter] = _get_or_create_metric(
+    Counter,
+    "dlt_calls_errors",
+    "DLT API call errors",
+    ["dlt_type", "operation", "error_type", "env", "cluster"],
+)
+DLT_CALL_LATENCY_SECONDS: Final[Histogram] = _get_or_create_metric(
+    Histogram,
+    "dlt_call_latency_seconds",
+    "DLT API call latency in seconds",
+    ["dlt_type", "operation", "env", "cluster"],
+)
+DLT_TRANSACTIONS_PENDING: Final[Gauge] = _get_or_create_metric(
+    Gauge,
+    "dlt_transactions_pending",
+    "Number of DLT transactions pending confirmation",
+    ["dlt_type", "env", "cluster"],
+)
+DLT_GAS_USED: Final[Histogram] = _get_or_create_metric(
+    Histogram,
+    "dlt_gas_used",
+    "Gas used per successful transaction",
+    ["dlt_type", "operation", "env", "cluster"],
+)
+DLT_REVERT_REASON: Final[Counter] = _get_or_create_metric(
+    Counter,
+    "dlt_revert_reason",
+    "Transaction revert reasons",
+    ["dlt_type", "reason", "env", "cluster"],
+)
 
 
 # Richer Exception Types

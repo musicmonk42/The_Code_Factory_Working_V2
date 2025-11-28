@@ -65,21 +65,48 @@ if "PROMETHEUS_MULTIPROC_DIR" in os.environ:
 # Lock to prevent race conditions during metric registration
 _METRICS_LOCK = threading.Lock()
 
+
+# Helper function for idempotent metric creation (used by bootstrap metrics)
+def _idempotent_metric(
+    metric_class: type,
+    name: str,
+    documentation: str,
+    labelnames: tuple = (),
+    buckets: tuple | None = None,
+):
+    """Idempotently create or retrieve a Prometheus metric."""
+    if name in REGISTRY._names_to_collectors:
+        existing = REGISTRY._names_to_collectors[name]
+        if not isinstance(existing, metric_class):
+            _metrics_logger.warning(
+                f"Metric '{name}' already registered with type "
+                f"{type(existing).__name__}, but requested as "
+                f"{metric_class.__name__}. Reusing existing."
+            )
+        return existing
+    if buckets is not None and metric_class == Histogram:
+        return metric_class(name, documentation, labelnames=labelnames, buckets=buckets)
+    return metric_class(name, documentation, labelnames=labelnames)
+
+
 # --- Standard Metrics (defined early to avoid circular dependencies) ---
-METRIC_REGISTRATIONS_TOTAL = Counter(
+METRIC_REGISTRATIONS_TOTAL = _idempotent_metric(
+    Counter,
     "arbiter_metric_registrations_total",
     "Total number of metric registrations",
     labelnames=("metric_type",),
 )
 
-METRIC_REGISTRATION_ERRORS = Counter(
+METRIC_REGISTRATION_ERRORS = _idempotent_metric(
+    Counter,
     "arbiter_metric_registration_errors_total",
     "Total errors during metric registration",
     labelnames=("metric_type", "error_type"),
 )
 
 # Add the missing METRIC_REGISTRATION_TIME histogram
-METRIC_REGISTRATION_TIME = Histogram(
+METRIC_REGISTRATION_TIME = _idempotent_metric(
+    Histogram,
     "arbiter_metric_registration_time_seconds",
     "Time taken to register a metric",
     labelnames=("metric_name", "metric_type"),
@@ -291,20 +318,23 @@ def get_or_create_summary(
 
 
 # --- Additional Standard Metrics ---
-HTTP_REQUESTS_TOTAL = Counter(
+HTTP_REQUESTS_TOTAL = _idempotent_metric(
+    Counter,
     "arbiter_http_requests_total",
     "Total HTTP requests handled by Arbiter API.",
     labelnames=("method", "endpoint"),
 )
 
-HTTP_REQUESTS_LATENCY_SECONDS = Histogram(
+HTTP_REQUESTS_LATENCY_SECONDS = _idempotent_metric(
+    Histogram,
     "arbiter_http_requests_latency_seconds",
     "HTTP request latency (seconds) for Arbiter API.",
     labelnames=("endpoint",),
     buckets=(0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, float("inf")),
 )
 
-ERRORS_TOTAL = Counter(
+ERRORS_TOTAL = _idempotent_metric(
+    Counter,
     "arbiter_errors_total",
     "Total errors encountered by Arbiter system.",
     labelnames=("module", "error_type"),
@@ -527,15 +557,11 @@ registry.register(
 )(MetricsService)
 
 # Additional metrics for arbiter_growth
-try:
-    CONFIG_FALLBACK_USED = Counter(
-        "arbiter_config_fallback_used_total", "Config fallback usage counter"
-    )
-except ValueError:
-    # Metric already registered, get existing one
-    CONFIG_FALLBACK_USED = REGISTRY._names_to_collectors.get(
-        "arbiter_config_fallback_used_total"
-    )
+CONFIG_FALLBACK_USED = _idempotent_metric(
+    Counter,
+    "arbiter_config_fallback_used_total",
+    "Config fallback usage counter",
+)
 
 # Export all public metrics and functions
 __all__ = [

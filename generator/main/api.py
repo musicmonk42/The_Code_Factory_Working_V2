@@ -423,12 +423,16 @@ try:
 except ImportError:
     # Dummy implementations for testing if custom modules are not present
     class DummyRunner:
+        def __init__(self, config=None):
+            self.config = config
+
         async def run(self, payload: Dict):
             logging.warning("DummyRunner: Running payload.")
             return {"status": "dummy_run_success", "payload": payload}
 
     class DummyIntentParser:
-        def __init__(self):
+        def __init__(self, config_path: str = None):
+            self.config_path = config_path
             self.feedback = DummyFeedback()
 
         async def parse(self, content: str, **kwargs):
@@ -1024,11 +1028,14 @@ else:
 
 # --- Singleton Instances ---
 # FIX: Wrap global config loading in try/except to prevent FileNotFoundError during test collection
+# Use path relative to generator package root
+_generator_root = Path(__file__).parent.parent
+_config_path = _generator_root / "config.yaml"
 try:
-    _global_config_instance = load_config("config.yaml")  # Load global configuration
+    _global_config_instance = load_config(str(_config_path))  # Load global configuration
 except FileNotFoundError as e:
     logger.critical(
-        f"FATAL: Required configuration file 'config.yaml' not found during API import time: {e}. Using minimal dummy config.",
+        f"FATAL: Required configuration file '{_config_path}' not found during API import time: {e}. Using minimal dummy config.",
         exc_info=True,
     )
     # Provide a minimal, safe dictionary that satisfies Pydantic checks and prevents crashes
@@ -1073,7 +1080,9 @@ def get_parser_instance() -> IntentParser:
     # FIX: Corrected the typo in the global variable name
     global _global_parser_instance
     if _global_parser_instance is None:
-        _global_parser_instance = IntentParser()
+        # Use path relative to generator package root
+        _intent_parser_config_path = _generator_root / "intent_parser" / "intent_parser.yaml"
+        _global_parser_instance = IntentParser(str(_intent_parser_config_path))
     return _global_parser_instance
 
 
