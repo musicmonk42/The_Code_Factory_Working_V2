@@ -20,7 +20,7 @@ _is_generator_import = __name__ == "generator.runner"
 if "runner" not in sys.modules:
     sys.modules["runner"] = sys.modules[__name__]
 # If we're being imported as generator.runner, ensure consistency
-elif _is_generator_import and sys.modules.get("runner") is not sys.modules.get(__name__):
+elif _is_generator_import and sys.modules.get("runner") is not sys.modules[__name__]:
     # Make runner point to generator.runner
     sys.modules["runner"] = sys.modules[__name__]
 

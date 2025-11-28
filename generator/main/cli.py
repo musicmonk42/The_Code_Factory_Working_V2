@@ -50,9 +50,9 @@ try:
         search_logs,
     )  # Using runner's logger
     from generator.runner.runner_metrics import get_metrics_dict
-    from generator.runner.runner_utils import (
+    from generator.runner.runner_security_utils import (
         redact_secrets,
-    )  # Assuming redact_secrets is available
+    )
 except ImportError as e:
     # Fallback to dummy implementations if modules aren't found, for easier CLI development
     # In production, these should ideally be resolved.
