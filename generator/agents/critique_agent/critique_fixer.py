@@ -46,9 +46,9 @@ try:
     try:
         from runner.summarize_utils import check_owasp_compliance
     except ImportError:
-        def check_owasp_compliance(code: str) -> dict:
+        def check_owasp_compliance(code: str) -> list:
             """Stub for OWASP compliance check when not available."""
-            return {"compliant": True, "issues": []}
+            return []
 
     # Placeholder for configuration and mock external tools (these should ideally be passed in or removed)
     # NOTE: The CritiqueConfig and get_plugin are remnants of a V0 system. Removing local defs.

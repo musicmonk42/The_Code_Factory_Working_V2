@@ -10,10 +10,6 @@ import sys
 # Many internal modules use relative imports like 'from simulation.xyz import ...'
 # or 'from arbiter.xyz import ...', which need to resolve to the full package path.
 
-# Set up 'self_fixing_engineer' alias if needed
-if "self_fixing_engineer" not in sys.modules:
-    sys.modules["self_fixing_engineer"] = sys.modules[__name__]
-
 # Set up 'simulation' as an alias to self_fixing_engineer.simulation
 try:
     from . import simulation as _simulation

@@ -13,63 +13,84 @@ Each agent integrates with the runner foundation for LLM calls, metrics, and log
 """
 
 import logging
-import warnings
 
 logger = logging.getLogger(__name__)
 
 # Track which agents are available
 _AVAILABLE_AGENTS = {}
 
+# Initialize placeholders for exports
+CodeGenConfig = None
+SecurityUtils = None
+CritiqueConfig = None
+orchestrate_critique_pipeline = None
+TestGenAgent = None
+Policy = None
+DeployAgent = None
+DeployConfig = None
+DocgenAgent = None
+DocgenConfig = None
+
 # Try to import each agent with proper error handling
 # codegen_agent
 try:
-    from .codegen_agent import CodeGenConfig, SecurityUtils
+    _codegen_module = __import__('generator.agents.codegen_agent', fromlist=['CodeGenConfig', 'SecurityUtils'])
+    if hasattr(_codegen_module, 'CodeGenConfig'):
+        CodeGenConfig = _codegen_module.CodeGenConfig
+    if hasattr(_codegen_module, 'SecurityUtils'):
+        SecurityUtils = _codegen_module.SecurityUtils
     _AVAILABLE_AGENTS['codegen'] = True
-except ImportError as e:
+except (ImportError, AttributeError) as e:
     logger.debug(f"codegen_agent not available: {e}")
     _AVAILABLE_AGENTS['codegen'] = False
-    CodeGenConfig = None
-    SecurityUtils = None
 
 # critique_agent
 try:
-    from .critique_agent import CritiqueConfig, orchestrate_critique_pipeline
+    _critique_module = __import__('generator.agents.critique_agent', fromlist=['CritiqueConfig', 'orchestrate_critique_pipeline'])
+    if hasattr(_critique_module, 'CritiqueConfig'):
+        CritiqueConfig = _critique_module.CritiqueConfig
+    if hasattr(_critique_module, 'orchestrate_critique_pipeline'):
+        orchestrate_critique_pipeline = _critique_module.orchestrate_critique_pipeline
     _AVAILABLE_AGENTS['critique'] = True
-except ImportError as e:
+except (ImportError, AttributeError) as e:
     logger.debug(f"critique_agent not available: {e}")
     _AVAILABLE_AGENTS['critique'] = False
-    CritiqueConfig = None
-    orchestrate_critique_pipeline = None
 
 # testgen_agent - has heavy dependencies (presidio, spacy, torch)
 try:
-    from .testgen_agent import TestGenAgent, Policy
+    _testgen_module = __import__('generator.agents.testgen_agent', fromlist=['TestGenAgent', 'Policy'])
+    if hasattr(_testgen_module, 'TestGenAgent'):
+        TestGenAgent = _testgen_module.TestGenAgent
+    if hasattr(_testgen_module, 'Policy'):
+        Policy = _testgen_module.Policy
     _AVAILABLE_AGENTS['testgen'] = True
-except ImportError as e:
+except (ImportError, AttributeError) as e:
     logger.debug(f"testgen_agent not available: {e}")
     _AVAILABLE_AGENTS['testgen'] = False
-    TestGenAgent = None
-    Policy = None
 
 # deploy_agent
 try:
-    from .deploy_agent import DeployAgent, DeployConfig
+    _deploy_module = __import__('generator.agents.deploy_agent', fromlist=['DeployAgent', 'DeployConfig'])
+    if hasattr(_deploy_module, 'DeployAgent'):
+        DeployAgent = _deploy_module.DeployAgent
+    if hasattr(_deploy_module, 'DeployConfig'):
+        DeployConfig = _deploy_module.DeployConfig
     _AVAILABLE_AGENTS['deploy'] = True
-except ImportError as e:
+except (ImportError, AttributeError) as e:
     logger.debug(f"deploy_agent not available: {e}")
     _AVAILABLE_AGENTS['deploy'] = False
-    DeployAgent = None
-    DeployConfig = None
 
 # docgen_agent
 try:
-    from .docgen_agent import DocgenAgent, DocgenConfig
+    _docgen_module = __import__('generator.agents.docgen_agent', fromlist=['DocgenAgent', 'DocgenConfig'])
+    if hasattr(_docgen_module, 'DocgenAgent'):
+        DocgenAgent = _docgen_module.DocgenAgent
+    if hasattr(_docgen_module, 'DocgenConfig'):
+        DocgenConfig = _docgen_module.DocgenConfig
     _AVAILABLE_AGENTS['docgen'] = True
-except ImportError as e:
+except (ImportError, AttributeError) as e:
     logger.debug(f"docgen_agent not available: {e}")
     _AVAILABLE_AGENTS['docgen'] = False
-    DocgenAgent = None
-    DocgenConfig = None
 
 
 def get_available_agents():
