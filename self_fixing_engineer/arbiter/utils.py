@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import random
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import aiohttp
 import psutil
@@ -85,6 +85,70 @@ _HEALTH_SESSION_LOCK = asyncio.Lock()
 _HEALTH_CHECK_LIMITER = AsyncLimiter(
     HEALTH_CHECK_RATE_LIMIT_MAX_RATE, HEALTH_CHECK_RATE_LIMIT_TIME_PERIOD
 )
+
+
+def is_valid_directory_path(path: str) -> bool:
+    """
+    Check if a path is a valid directory path that can be created.
+
+    Args:
+        path: The path to validate.
+
+    Returns:
+        True if the path is valid, False otherwise.
+    """
+    if not path:
+        return False
+
+    normalized = os.path.normpath(path)
+
+    # Check for empty result or current directory marker (which happens with empty input)
+    if normalized == ".":
+        return False
+
+    # Check for paths that are only separators (e.g., '/', '\\')
+    if normalized.strip("\\/ ") == "":
+        return False
+
+    # Check for Windows root drive paths (e.g., 'D:', 'D:\', 'C:\')
+    # These are valid paths but not valid directories to create
+    if len(normalized) <= 3:
+        # Match patterns like 'D:', 'D:\', 'D:/', etc.
+        if len(normalized) >= 2 and normalized[1] == ":":
+            return False
+
+    return True
+
+
+def safe_makedirs(path: str, fallback: str = "./reports") -> Tuple[str, bool]:
+    """
+    Safely create a directory with path validation and fallback.
+
+    Args:
+        path: The path to create.
+        fallback: The fallback path if the primary path is invalid or fails.
+
+    Returns:
+        A tuple of (actual_path_used, success). The actual_path_used is the
+        normalized path that was successfully created (either the original
+        path or the fallback).
+    """
+    normalized_path = os.path.normpath(path) if path else fallback
+
+    if not is_valid_directory_path(path):
+        normalized_path = fallback
+
+    try:
+        os.makedirs(normalized_path, exist_ok=True)
+        return normalized_path, True
+    except OSError:
+        # Fall back to the fallback path if the primary path fails
+        fallback_normalized = os.path.normpath(fallback)
+        try:
+            os.makedirs(fallback_normalized, exist_ok=True)
+            return fallback_normalized, True
+        except OSError:
+            return fallback_normalized, False
 
 
 def random_chance(probability: float) -> bool:
