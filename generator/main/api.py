@@ -431,7 +431,8 @@ except ImportError:
             return {"status": "dummy_run_success", "payload": payload}
 
     class DummyIntentParser:
-        def __init__(self):
+        def __init__(self, config_path: str = None):
+            self.config_path = config_path
             self.feedback = DummyFeedback()
 
         async def parse(self, content: str, **kwargs):
