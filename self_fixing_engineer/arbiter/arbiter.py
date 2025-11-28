@@ -980,7 +980,25 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     log_dir = os.getenv("REPORTS_DIRECTORY", "./reports")
-    os.makedirs(log_dir, exist_ok=True)
+    # Normalize the path to handle extra backslashes and invalid paths
+    log_dir = os.path.normpath(log_dir)
+    # Validate the path - check if it's just a drive letter, empty, or malformed
+    # A path like 'D:\\' normalizes to 'D:\' which is a root drive, not a valid directory
+    # Also check for paths with only backslashes (malformed Windows paths on any OS)
+    is_invalid = (
+        not log_dir
+        or log_dir in (".", "")
+        or (len(log_dir) <= 3 and (log_dir.endswith(":") or log_dir.endswith(os.sep) or log_dir.endswith(":\\")))
+        or log_dir.strip("\\/ ") == ""  # Path is only separators
+    )
+    if is_invalid:
+        log_dir = "./reports"
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+    except OSError:
+        # Fall back to relative path if the specified path fails
+        log_dir = "./reports"
+        os.makedirs(log_dir, exist_ok=True)
     handler = RotatingFileHandler(
         os.path.join(log_dir, "arbiter.log"),
         maxBytes=50 * 1024 * 1024,  # 50MB
