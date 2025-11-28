@@ -21,9 +21,16 @@ from typing import Any, Callable, Dict, Optional
 import aiohttp  # For sending feedback to API
 import click
 import yaml  # Added for config editing
-from prompt_toolkit import (
-    prompt as pt_prompt,
-)  # Renamed to avoid conflict with rich.prompt.Prompt
+
+# prompt_toolkit is optional - only needed for interactive CLI features
+try:
+    from prompt_toolkit import (
+        prompt as pt_prompt,
+    )  # Renamed to avoid conflict with rich.prompt.Prompt
+except ImportError:
+    # Fallback if prompt_toolkit is not installed
+    pt_prompt = None
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress
@@ -1307,9 +1314,13 @@ def shell_mode():
     # This uses prompt_toolkit for a richer interactive experience
     while True:
         try:
-            command_line = pt_prompt(
-                "> "
-            ).strip()  # Use pt_prompt for interactive input
+            # Use pt_prompt if available, otherwise fall back to standard input
+            if pt_prompt is not None:
+                command_line = pt_prompt(
+                    "> "
+                ).strip()  # Use pt_prompt for interactive input
+            else:
+                command_line = input("> ").strip()  # Fallback to standard input
             if command_line.lower() in ["exit", "quit"]:
                 console.print("[bold blue]Exiting shell mode.[/bold blue]")
                 break

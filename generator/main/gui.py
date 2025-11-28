@@ -235,7 +235,10 @@ except ImportError:
             pass
 
     class Button:
-        pass
+        # Nested Pressed event class for @on(Button.Pressed, ...) decorators
+        class Pressed:
+            def __init__(self, button=None, *args, **kwargs):
+                self.button = button
 
     class Input:
         def __init__(self, *args, **kwargs):
@@ -251,6 +254,12 @@ except ImportError:
 
         def focus(self, *args, **kwargs):
             pass
+
+        # Nested Submitted event class for @on(Input.Submitted, ...) decorators
+        class Submitted:
+            def __init__(self, input=None, value="", *args, **kwargs):
+                self.value = value
+                self.input = input
 
     class TextArea:
         def __init__(self, *args, **kwargs):
@@ -323,6 +332,12 @@ except ImportError:
     class Select:
         def __init__(self, *args, **kwargs):
             pass
+
+        # Nested Changed event class for @on(Select.Changed, ...) decorators
+        class Changed:
+            def __init__(self, select=None, value=None, *args, **kwargs):
+                self.value = value
+                self.select = select
 
     class Mount:
         pass
