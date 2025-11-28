@@ -12,7 +12,7 @@ import threading
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 from xml.sax.saxutils import escape
 
 import aiofiles
@@ -703,14 +703,35 @@ class CodebaseAnalyzer:
             return {"error": str(e)}
 
     async def scan_codebase(
-        self, path: Optional[str] = None, use_baseline: bool = False
+        self, path: Optional[Union[str, List[str]]] = None, use_baseline: bool = False
     ) -> FileSummary:
         """
         Scans the codebase for defects, complexity, and dependencies.
+
+        Args:
+            path: A single path string, a list of path strings, or None (uses root_dir).
+            use_baseline: Whether to save results as a baseline for future comparisons.
+
+        Returns:
+            FileSummary containing scan results.
         """
-        path = Path(path or self.root_dir).resolve()
-        logger.info(f"Scanning codebase at: {path}")
-        py_files = await self._collect_py_files(path)
+        # Handle path being a list, string, or None
+        if isinstance(path, list):
+            # If a list of paths is provided, use the first one as the primary scan path
+            # and collect files from all paths
+            paths_to_scan = [Path(p).resolve() for p in path if p]
+            if not paths_to_scan:
+                paths_to_scan = [Path(self.root_dir).resolve()]
+            primary_path = paths_to_scan[0]
+            logger.info(f"Scanning codebase at multiple paths: {[str(p) for p in paths_to_scan]}")
+            # Collect Python files from all provided paths
+            py_files = []
+            for scan_path in paths_to_scan:
+                py_files.extend(await self._collect_py_files(scan_path))
+        else:
+            primary_path = Path(path or self.root_dir).resolve()
+            logger.info(f"Scanning codebase at: {primary_path}")
+            py_files = await self._collect_py_files(primary_path)
 
         # Initialize semaphore if not already done
         if self.semaphore is None:
@@ -753,10 +774,10 @@ class CodebaseAnalyzer:
         coverage_summary = None
         if any(t["name"] == "Coverage" and t["available"] for t in self._tool_cache):
             coverage_summary = await asyncio.to_thread(
-                self._analyze_coverage_sync, path
+                self._analyze_coverage_sync, primary_path
             )
 
-        deps = await self.map_dependencies(path)
+        deps = await self.map_dependencies(primary_path)
 
         results: FileSummary = {
             "files": len(py_files),

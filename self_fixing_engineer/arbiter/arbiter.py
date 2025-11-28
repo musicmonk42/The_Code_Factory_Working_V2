@@ -1665,14 +1665,13 @@ class Arbiter:
 
     def log_event(self, event_description: str, event_type: str = "general"):
         """Logs an event to the monitor and the logger."""
-        asyncio.create_task(
-            self.monitor.log_action(
-                {
-                    "type": event_type,
-                    "agent": self.name,
-                    "description": event_description,
-                }
-            )
+        # log_action is synchronous, so call it directly without asyncio.create_task
+        self.monitor.log_action(
+            {
+                "type": event_type,
+                "agent": self.name,
+                "description": event_description,
+            }
         )
         logging.getLogger(__name__).debug(
             f"[{self.name}] Event Logged: {event_description}"
