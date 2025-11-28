@@ -51,10 +51,10 @@ from .multimodal.providers.default_multimodal_providers import PluginRegistry
 
 try:
     import redis.asyncio as redis
-    from prometheus_client import Counter, Histogram
+    from prometheus_client import REGISTRY, Counter, Histogram
 except ImportError:
     # Prometheus and Redis are optional dependencies
-    Counter, Histogram, redis = None, None, None
+    Counter, Histogram, redis, REGISTRY = None, None, None, None
 
 
 # Helper functions for metrics
@@ -62,7 +62,21 @@ def get_or_create_counter(name: str, description: str, labels: List[str]) -> Cou
     """Get or create a Prometheus counter metric."""
     if Counter is None:
         return None
-    return Counter(name, description, labels)
+    try:
+        return Counter(name, description, labels)
+    except ValueError as e:
+        # Metric already exists - try to retrieve it from registry
+        if "Duplicated timeseries" in str(e):
+            if REGISTRY is not None:
+                for collector in list(REGISTRY._collector_to_names.keys()):
+                    try:
+                        if hasattr(collector, "_name") and collector._name == name:
+                            return collector
+                    except AttributeError:
+                        continue
+            logger.debug(f"Counter {name} already registered, returning None")
+            return None
+        raise
 
 
 def get_or_create_histogram(
@@ -71,9 +85,23 @@ def get_or_create_histogram(
     """Get or create a Prometheus histogram metric."""
     if Histogram is None:
         return None
-    if buckets is not None:
-        return Histogram(name, description, labels, buckets=buckets)
-    return Histogram(name, description, labels)
+    try:
+        if buckets is not None:
+            return Histogram(name, description, labels, buckets=buckets)
+        return Histogram(name, description, labels)
+    except ValueError as e:
+        # Metric already exists - try to retrieve it from registry
+        if "Duplicated timeseries" in str(e):
+            if REGISTRY is not None:
+                for collector in list(REGISTRY._collector_to_names.keys()):
+                    try:
+                        if hasattr(collector, "_name") and collector._name == name:
+                            return collector
+                    except AttributeError:
+                        continue
+            logger.debug(f"Histogram {name} already registered, returning None")
+            return None
+        raise
 
 
 # --- Standalone Components for Clarity ---
