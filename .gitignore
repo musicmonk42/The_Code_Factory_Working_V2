@@ -242,3 +242,5 @@ reasoner.log.*
 !*.example.key
 agentic_audit_integrity.json
 integration_test_report.json
+feedback_log.json
+pytest_report.xml
