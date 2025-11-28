@@ -25,7 +25,72 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from omnicore_engine.plugin_registry import PlugInKind, plugin
+# --- Plugin Registry Import ---
+# Lazy import to avoid circular import with omnicore_engine.plugin_registry.
+# When this module is loaded as part of the import chain triggered by
+# omnicore_engine.plugin_registry, the registry module is not fully
+# initialized yet, causing a circular import error.
+# We handle this gracefully by:
+# 1. Setting a flag to track successful import
+# 2. Providing a no-op fallback decorator
+# 3. Logging a warning when plugin registration is skipped
+
+_PLUGIN_REGISTRY_AVAILABLE = False
+PlugInKind = None
+plugin = None
+
+try:
+    from omnicore_engine.plugin_registry import PlugInKind, plugin
+    _PLUGIN_REGISTRY_AVAILABLE = True
+except ImportError as e:
+    logging.getLogger(__name__).warning(
+        f"Could not import plugin registry components: {e}. "
+        "Plugin registration will be skipped."
+    )
+
+
+def _noop_plugin(**kwargs):
+    """
+    No-op plugin decorator for when plugin registry is unavailable.
+    
+    This fallback allows the module to load and function normally
+    even when the plugin registry import fails due to circular imports.
+    Functions decorated with this will not be registered as plugins.
+    """
+    def decorator(fn):
+        return fn
+    return decorator
+
+
+def _get_plugin_decorator():
+    """
+    Get the plugin decorator, returning a no-op if unavailable.
+    
+    Returns:
+        The real plugin decorator if the plugin registry was imported
+        successfully, otherwise returns a no-op decorator that simply
+        passes through the decorated function unchanged.
+    """
+    if _PLUGIN_REGISTRY_AVAILABLE and plugin is not None:
+        return plugin
+    return _noop_plugin
+
+
+def _get_plugin_kind(kind_name: str):
+    """
+    Get a PlugInKind enum value safely.
+    
+    Args:
+        kind_name: The name of the plugin kind (e.g., 'EXECUTION')
+    
+    Returns:
+        The PlugInKind enum value if available, otherwise the kind_name
+        as a string (which the no-op decorator will ignore anyway).
+    """
+    if _PLUGIN_REGISTRY_AVAILABLE and PlugInKind is not None:
+        return getattr(PlugInKind, kind_name, kind_name)
+    return kind_name
+
 
 # --- Global Production Mode Flag ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
@@ -504,8 +569,8 @@ async def connect(
 
 
 # --- Plugin method runner ---
-@plugin(
-    kind=PlugInKind.EXECUTION,
+@_get_plugin_decorator()(
+    kind=_get_plugin_kind("EXECUTION"),
     name="grpc_runner_method",
     description="Run a method on a gRPC stub with a timeout.",
 )
