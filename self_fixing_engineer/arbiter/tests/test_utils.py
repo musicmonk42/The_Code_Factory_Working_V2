@@ -201,3 +201,53 @@ async def test_check_service_health_invalid_url(mock_get_session):
     # InvalidURL is a ClientError, so it retries 3 times then raises RetryError
     with pytest.raises(RetryError):
         await check_service_health("http://invalid_url")
+
+
+# Tests for path validation utilities
+from arbiter.utils import is_valid_directory_path, safe_makedirs
+
+
+@pytest.mark.parametrize(
+    "path, expected",
+    [
+        ("", False),  # Empty string
+        (".", False),  # Current directory marker
+        ("/", False),  # Root path
+        ("D:", False),  # Windows drive letter only
+        ("D:\\", False),  # Windows root drive
+        ("C:\\", False),  # Windows root drive
+        ("C:/", False),  # Windows root drive with forward slash
+        ("\\\\", False),  # Only backslashes
+        ("./reports", True),  # Valid relative path
+        ("/tmp/logs", True),  # Valid absolute path
+        ("reports/logs", True),  # Valid subdirectory
+        ("D:\\logs", True),  # Valid Windows path with subdirectory
+    ],
+)
+def test_is_valid_directory_path(path, expected):
+    result = is_valid_directory_path(path)
+    assert result == expected, f"Expected is_valid_directory_path({repr(path)}) to be {expected}, got {result}"
+
+
+def test_safe_makedirs_with_valid_path(tmp_path):
+    test_dir = str(tmp_path / "test_dir")
+    result_path, success = safe_makedirs(test_dir)
+    assert success is True
+    assert result_path == test_dir
+    assert (tmp_path / "test_dir").is_dir()
+
+
+def test_safe_makedirs_with_invalid_path_uses_fallback(tmp_path):
+    fallback = str(tmp_path / "fallback")
+    result_path, success = safe_makedirs("D:", fallback)
+    assert success is True
+    assert result_path == fallback
+    assert (tmp_path / "fallback").is_dir()
+
+
+def test_safe_makedirs_with_empty_path_uses_fallback(tmp_path):
+    fallback = str(tmp_path / "fallback")
+    result_path, success = safe_makedirs("", fallback)
+    assert success is True
+    assert result_path == fallback
+    assert (tmp_path / "fallback").is_dir()

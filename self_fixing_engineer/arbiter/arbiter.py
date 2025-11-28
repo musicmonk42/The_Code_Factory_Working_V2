@@ -979,8 +979,11 @@ class SimulationEngine:
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
+    # Import safe_makedirs from utils to handle malformed paths
+    from arbiter.utils import safe_makedirs
+
     log_dir = os.getenv("REPORTS_DIRECTORY", "./reports")
-    os.makedirs(log_dir, exist_ok=True)
+    log_dir, _ = safe_makedirs(log_dir, "./reports")
     handler = RotatingFileHandler(
         os.path.join(log_dir, "arbiter.log"),
         maxBytes=50 * 1024 * 1024,  # 50MB

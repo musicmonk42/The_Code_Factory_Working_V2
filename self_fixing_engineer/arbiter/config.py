@@ -603,15 +603,18 @@ class ArbiterConfig(BaseSettings):
 
                 instance._validate_custom_settings()
 
-                # Create directories
+                # Create directories with path validation
                 if instance.DB_PATH.startswith("sqlite:///"):
                     db_file_path = instance.DB_PATH.replace("sqlite:///", "")
                     db_dir = os.path.dirname(db_file_path)
                     if db_dir:
                         os.makedirs(db_dir, exist_ok=True)
 
-                os.makedirs(instance.PLUGIN_DIR, exist_ok=True)
-                os.makedirs(instance.REPORTS_DIRECTORY, exist_ok=True)
+                # Import safe_makedirs from utils to handle malformed paths
+                from arbiter.utils import safe_makedirs
+
+                instance.PLUGIN_DIR, _ = safe_makedirs(instance.PLUGIN_DIR, "./plugins")
+                instance.REPORTS_DIRECTORY, _ = safe_makedirs(instance.REPORTS_DIRECTORY, "./reports")
 
                 instance._is_initialized = True
                 instance._loaded_at = datetime.now().isoformat()
