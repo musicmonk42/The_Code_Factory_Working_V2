@@ -412,15 +412,14 @@ except ImportError as e:
 # --- Custom Module Imports (assuming these are available) ---
 # In a real project, these would be separate files/packages
 try:
-    from intent_parser.intent_parser import IntentParser
-    from runner.runner_config import ConfigWatcher, load_config
-    from runner.runner_core import Runner
-    from runner.runner_logging import (
+    from generator.intent_parser.intent_parser import IntentParser
+    from generator.runner.runner_config import ConfigWatcher, load_config
+    from generator.runner.runner_core import Runner
+    from generator.runner.runner_logging import (
         logger as runner_logger,
     )  # Use alias to avoid name clash
-    from runner.runner_logging import search_logs
-    from runner.runner_metrics import get_metrics_dict
-    from runner.runner_utils import encrypt_log
+    from generator.runner.runner_logging import search_logs
+    from generator.runner.runner_metrics import get_metrics_dict
 except ImportError:
     # Dummy implementations for testing if custom modules are not present
     class DummyRunner:

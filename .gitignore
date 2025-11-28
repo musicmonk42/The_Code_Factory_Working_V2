@@ -231,6 +231,13 @@ test_log.txt
 exceptions.log.*
 reasoner.log.*
 
+# Runtime artifacts - these are generated during execution and should not be committed
+dlt_audit_integrity.json
+plugins.json
+generator/dlt_audit_integrity.json
+generator/plugins.json
+generator/intent_parser.yaml
+
 # Security - Private keys and certificates
 *.pem
 *.key

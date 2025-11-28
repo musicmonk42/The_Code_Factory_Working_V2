@@ -7,6 +7,38 @@ Centralises registries, OTEL tracer, and re-exports public symbols.
 import os
 import sys
 
+# --- Module Aliasing for Backwards Compatibility ---
+# This must be done BEFORE any submodule imports to prevent duplicate module loading.
+# When this package is imported as 'generator.runner', we need to ensure that
+# any internal imports like 'from runner.runner_config import ...' resolve to
+# the same module objects.
+
+# Determine if we're being imported as 'generator.runner' or just 'runner'
+_is_generator_import = __name__ == "generator.runner"
+
+# Set up 'runner' as an alias to this module
+if "runner" not in sys.modules:
+    sys.modules["runner"] = sys.modules[__name__]
+# If we're being imported as generator.runner, ensure consistency
+elif _is_generator_import and sys.modules.get("runner") is not sys.modules[__name__]:
+    # Make runner point to generator.runner
+    sys.modules["runner"] = sys.modules[__name__]
+
+
+def _ensure_submodule_alias(submodule_name: str):
+    """
+    Ensure that runner.{submodule} and generator.runner.{submodule}
+    point to the same module object.
+    """
+    gen_key = f"generator.runner.{submodule_name}"
+    run_key = f"runner.{submodule_name}"
+
+    if gen_key in sys.modules and run_key not in sys.modules:
+        sys.modules[run_key] = sys.modules[gen_key]
+    elif run_key in sys.modules and gen_key not in sys.modules:
+        sys.modules[gen_key] = sys.modules[run_key]
+
+
 # FIX: Added missing typing imports
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -193,13 +225,23 @@ _runner_metrics = None
 try:
     # Import order: alphabetical by module name for consistency
     from . import alerting as _runner_alerting
+    _ensure_submodule_alias("alerting")
     from . import feedback_handlers as _runner_feedback_handlers
+    _ensure_submodule_alias("feedback_handlers")
     from . import runner_config as _runner_config
+    _ensure_submodule_alias("runner_config")
     from . import runner_contracts as _runner_contracts
+    _ensure_submodule_alias("runner_contracts")
     from . import runner_core as _runner_core
+    _ensure_submodule_alias("runner_core")
     from . import runner_errors as _runner_errors
+    _ensure_submodule_alias("runner_errors")
     from . import runner_logging as _runner_logging
+    _ensure_submodule_alias("runner_logging")
     from . import runner_metrics as _runner_metrics
+    _ensure_submodule_alias("runner_metrics")
+    from . import runner_security_utils as _runner_security_utils
+    _ensure_submodule_alias("runner_security_utils")
 except ImportError:
     # Circular import during initial load - modules will be available later
     # when accessed directly (e.g., from runner.alerting import send_alert)

@@ -42,17 +42,17 @@ from rich.traceback import install as rich_traceback_install  # For better error
 # Assuming 'engine' provides WorkflowEngine, AGENT_REGISTRY, etc.
 try:
     from engine import AGENT_REGISTRY, WorkflowEngine, hot_swap_agent, register_agent
-    from runner.alerting import send_alert  # FIX: Standardized import
-    from runner.runner_config import ConfigWatcher, load_config
-    from runner.runner_logging import (
+    from generator.runner.alerting import send_alert  # FIX: Standardized import
+    from generator.runner.runner_config import ConfigWatcher, load_config
+    from generator.runner.runner_logging import (
         log_action,
         logger,
         search_logs,
     )  # Using runner's logger
-    from runner.runner_metrics import get_metrics_dict
-    from runner.runner_utils import (
+    from generator.runner.runner_metrics import get_metrics_dict
+    from generator.runner.runner_security_utils import (
         redact_secrets,
-    )  # Assuming redact_secrets is available
+    )
 except ImportError as e:
     # Fallback to dummy implementations if modules aren't found, for easier CLI development
     # In production, these should ideally be resolved.

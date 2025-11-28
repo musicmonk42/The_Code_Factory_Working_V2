@@ -354,11 +354,11 @@ except ImportError:
 
 # --- Custom Module Imports (Guarded for Test Safety) ---
 try:
-    from intent_parser.intent_parser import IntentParser
-    from runner.runner_config import ConfigWatcher, load_config
-    from runner.runner_core import Runner
-    from runner.runner_logging import logger as runner_logger_instance  # Use alias
-    from runner.runner_metrics import (
+    from generator.intent_parser.intent_parser import IntentParser
+    from generator.runner.runner_config import ConfigWatcher, load_config
+    from generator.runner.runner_core import Runner
+    from generator.runner.runner_logging import logger as runner_logger_instance  # Use alias
+    from generator.runner.runner_metrics import (
         HEALTH_STATUS,
         RUN_PASS_RATE,
         RUN_QUEUE,
@@ -655,7 +655,7 @@ class MainApp(App):
             app_logger.addHandler(self.tui_log_handler)
 
         self.runner = Runner(load_config(RUNNER_CONFIG_PATH))
-        from intent_parser.intent_parser import IntentParser
+        from generator.intent_parser.intent_parser import IntentParser
 
         self.intent_parser = IntentParser()
         self.clarifier_table.add_columns("ID", "Question", "Status")
