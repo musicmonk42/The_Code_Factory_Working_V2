@@ -65,10 +65,12 @@ def _get_or_create_metric(
     """Idempotently create or retrieve a Prometheus metric."""
     if name in REGISTRY._names_to_collectors:
         return REGISTRY._names_to_collectors[name]
-    if buckets is not None and metric_class == Histogram:
+    if metric_class == Histogram and buckets is not None:
+        if labelnames:
+            return metric_class(name, doc, labelnames=labelnames, buckets=buckets)
         return metric_class(name, doc, buckets=buckets)
     if labelnames:
-        return metric_class(name, doc, labelnames)
+        return metric_class(name, doc, labelnames=labelnames)
     return metric_class(name, doc)
 
 
