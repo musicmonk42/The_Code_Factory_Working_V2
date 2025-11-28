@@ -225,22 +225,31 @@ _runner_metrics = None
 try:
     # Import order: alphabetical by module name for consistency
     from . import alerting as _runner_alerting
+
     _ensure_submodule_alias("alerting")
     from . import feedback_handlers as _runner_feedback_handlers
+
     _ensure_submodule_alias("feedback_handlers")
     from . import runner_config as _runner_config
+
     _ensure_submodule_alias("runner_config")
     from . import runner_contracts as _runner_contracts
+
     _ensure_submodule_alias("runner_contracts")
     from . import runner_core as _runner_core
+
     _ensure_submodule_alias("runner_core")
     from . import runner_errors as _runner_errors
+
     _ensure_submodule_alias("runner_errors")
     from . import runner_logging as _runner_logging
+
     _ensure_submodule_alias("runner_logging")
     from . import runner_metrics as _runner_metrics
+
     _ensure_submodule_alias("runner_metrics")
     from . import runner_security_utils as _runner_security_utils
+
     _ensure_submodule_alias("runner_security_utils")
 except ImportError:
     # Circular import during initial load - modules will be available later

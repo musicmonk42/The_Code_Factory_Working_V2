@@ -49,6 +49,7 @@ try:
         TimeExhausted,
         TransactionNotFound,
     )
+
     # In web3 v7+, geth_poa_middleware was renamed to ExtraDataToPOAMiddleware
     try:
         from web3.middleware import ExtraDataToPOAMiddleware as geth_poa_middleware
@@ -176,6 +177,7 @@ logger = logging.getLogger(__name__)
 
 # Get tracer from centralized configuration
 tracer = get_tracer(__name__)
+
 
 # Helper function to get or create a metric (idempotent)
 def _get_or_create_metric(

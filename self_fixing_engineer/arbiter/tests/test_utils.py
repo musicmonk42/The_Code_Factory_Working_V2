@@ -226,7 +226,9 @@ from arbiter.utils import is_valid_directory_path, safe_makedirs
 )
 def test_is_valid_directory_path(path, expected):
     result = is_valid_directory_path(path)
-    assert result == expected, f"Expected is_valid_directory_path({repr(path)}) to be {expected}, got {result}"
+    assert (
+        result == expected
+    ), f"Expected is_valid_directory_path({repr(path)}) to be {expected}, got {result}"
 
 
 def test_safe_makedirs_with_valid_path(tmp_path):

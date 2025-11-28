@@ -263,7 +263,9 @@ _provider_needs_setup = (
 
 if _provider_needs_setup:
     trace.set_tracer_provider(
-        TracerProvider(resource=Resource.create({"service.name": "sfe-knowledge-graph-db"}))
+        TracerProvider(
+            resource=Resource.create({"service.name": "sfe-knowledge-graph-db"})
+        )
     )
     # Configurable OpenTelemetry Exporter via environment variable
     exporter_type = os.getenv("SFE_OTEL_EXPORTER_TYPE", "console").lower()

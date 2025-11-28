@@ -140,13 +140,14 @@ except ImportError as e:
     # Dummy UploadFile class for when FastAPI is not available
     class UploadFile:
         """Dummy UploadFile class for function annotations when FastAPI is unavailable."""
+
         def __init__(self, *args, **kwargs):
-            self.filename = kwargs.get('filename', '')
+            self.filename = kwargs.get("filename", "")
             self.file = None
-            self.content_type = kwargs.get('content_type', '')
+            self.content_type = kwargs.get("content_type", "")
 
         async def read(self):
-            return b''
+            return b""
 
     # Dummy Classes
     class _DummyState:
@@ -1032,7 +1033,9 @@ else:
 _generator_root = Path(__file__).parent.parent
 _config_path = _generator_root / "config.yaml"
 try:
-    _global_config_instance = load_config(str(_config_path))  # Load global configuration
+    _global_config_instance = load_config(
+        str(_config_path)
+    )  # Load global configuration
 except FileNotFoundError as e:
     logger.critical(
         f"FATAL: Required configuration file '{_config_path}' not found during API import time: {e}. Using minimal dummy config.",
@@ -1081,7 +1084,9 @@ def get_parser_instance() -> IntentParser:
     global _global_parser_instance
     if _global_parser_instance is None:
         # Use path relative to generator package root
-        _intent_parser_config_path = _generator_root / "intent_parser" / "intent_parser.yaml"
+        _intent_parser_config_path = (
+            _generator_root / "intent_parser" / "intent_parser.yaml"
+        )
         _global_parser_instance = IntentParser(str(_intent_parser_config_path))
     return _global_parser_instance
 

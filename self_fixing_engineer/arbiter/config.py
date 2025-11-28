@@ -614,7 +614,9 @@ class ArbiterConfig(BaseSettings):
                 from arbiter.utils import safe_makedirs
 
                 instance.PLUGIN_DIR, _ = safe_makedirs(instance.PLUGIN_DIR, "./plugins")
-                instance.REPORTS_DIRECTORY, _ = safe_makedirs(instance.REPORTS_DIRECTORY, "./reports")
+                instance.REPORTS_DIRECTORY, _ = safe_makedirs(
+                    instance.REPORTS_DIRECTORY, "./reports"
+                )
 
                 instance._is_initialized = True
                 instance._loaded_at = datetime.now().isoformat()

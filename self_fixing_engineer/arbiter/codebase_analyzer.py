@@ -723,7 +723,9 @@ class CodebaseAnalyzer:
             if not paths_to_scan:
                 paths_to_scan = [Path(self.root_dir).resolve()]
             primary_path = paths_to_scan[0]
-            logger.info(f"Scanning codebase at multiple paths: {[str(p) for p in paths_to_scan]}")
+            logger.info(
+                f"Scanning codebase at multiple paths: {[str(p) for p in paths_to_scan]}"
+            )
             # Collect Python files from all provided paths
             py_files = []
             for scan_path in paths_to_scan:

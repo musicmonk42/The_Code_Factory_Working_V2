@@ -41,6 +41,7 @@ plugin = None
 
 try:
     from omnicore_engine.plugin_registry import PlugInKind, plugin
+
     _PLUGIN_REGISTRY_AVAILABLE = True
 except ImportError as e:
     logging.getLogger(__name__).warning(
@@ -52,20 +53,22 @@ except ImportError as e:
 def _noop_plugin(**kwargs):
     """
     No-op plugin decorator for when plugin registry is unavailable.
-    
+
     This fallback allows the module to load and function normally
     even when the plugin registry import fails due to circular imports.
     Functions decorated with this will not be registered as plugins.
     """
+
     def decorator(fn):
         return fn
+
     return decorator
 
 
 def _get_plugin_decorator():
     """
     Get the plugin decorator, returning a no-op if unavailable.
-    
+
     Returns:
         The real plugin decorator if the plugin registry was imported
         successfully, otherwise returns a no-op decorator that simply
@@ -79,10 +82,10 @@ def _get_plugin_decorator():
 def _get_plugin_kind(kind_name: str):
     """
     Get a PlugInKind enum value safely.
-    
+
     Args:
         kind_name: The name of the plugin kind (e.g., 'EXECUTION')
-    
+
     Returns:
         The PlugInKind enum value if available, otherwise the kind_name
         as a string (which the no-op decorator will ignore anyway).

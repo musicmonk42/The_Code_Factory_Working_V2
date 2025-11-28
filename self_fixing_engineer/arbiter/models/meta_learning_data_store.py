@@ -27,7 +27,14 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 # Import centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, field_serializer
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    field_serializer,
+)
 
 # Import tenacity for retries with exponential backoff
 from tenacity import (

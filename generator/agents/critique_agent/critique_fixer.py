@@ -41,11 +41,12 @@ try:
         scan_for_vulnerabilities,
         redact_secrets as scrub_pii_and_secrets,
     )
-    
+
     # check_owasp_compliance may not exist yet - provide a stub if not available
     try:
         from runner.summarize_utils import check_owasp_compliance
     except ImportError:
+
         def check_owasp_compliance(code: str) -> list:
             """Stub for OWASP compliance check when not available."""
             return []

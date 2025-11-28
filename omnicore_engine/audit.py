@@ -587,7 +587,7 @@ class AuditHookManager:
 
 class ExplainAudit:
     def __init__(self, system_audit_merkle_tree: Optional[Any] = None):
-        self.config = ArbiterConfig()
+        self.config = _get_settings()
         self.entries: List[ExplainRecord] = []
         self.lock = threading.Lock()
         self.buffer: List[ExplainRecord] = []

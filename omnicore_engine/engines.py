@@ -51,6 +51,7 @@ except ImportError:
         """Fallback system metrics function."""
         return {"status": "unavailable", "message": "arbiter.utils not available"}
 
+
 # Optional imports that may not be available in all environments
 try:
     from envs.code_health_env import CodeHealthEnv
