@@ -14,9 +14,9 @@ try:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 
-    OTEL_AVAILABLE = True
+    HAS_OPENTELEMETRY = True
 except ImportError:
-    OTEL_AVAILABLE = False
+    HAS_OPENTELEMETRY = False
     trace = None
     TracerProvider = None
     ConsoleSpanExporter = None
@@ -76,7 +76,7 @@ def setup_otel():
     This prevents 'NoneType' and 'NoOpSpan' AttributeErrors when code
     tries to access or record spans during tests.
     """
-    if not OTEL_AVAILABLE:
+    if not HAS_OPENTELEMETRY:
         yield
         return
 
