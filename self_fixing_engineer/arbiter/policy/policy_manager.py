@@ -55,7 +55,7 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 from cryptography.fernet import Fernet, InvalidToken
-from prometheus_client import Counter, Histogram
+from prometheus_client import REGISTRY, Counter, Histogram
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 # OpenTelemetry: only acquire tracer; assume provider is set elsewhere
@@ -96,7 +96,17 @@ if not logger.handlers:
     logger.addHandler(_h)
 logger.setLevel(logging.INFO)
 
+
 # --- Metric helpers ---
+def _get_or_create_metric(
+    metric_class: type, name: str, doc: str, labelnames: list, buckets: tuple = None
+):
+    """Idempotently create or retrieve a Prometheus metric."""
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    if buckets is not None and metric_class == Histogram:
+        return metric_class(name, doc, labelnames, buckets=buckets)
+    return metric_class(name, doc, labelnames)
 
 
 def _sanitize_label(value: Any) -> str:
@@ -104,23 +114,28 @@ def _sanitize_label(value: Any) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", s)[:50]
 
 
-policy_ops_total = Counter("policy_ops_total", "Total policy operations", ["operation"])
-policy_errors_total = Counter(
-    "policy_errors_total", "Total policy errors", ["operation"]
+policy_ops_total = _get_or_create_metric(
+    Counter, "policy_ops_total", "Total policy operations", ["operation"]
 )
-policy_file_read_latency = Histogram(
+policy_errors_total = _get_or_create_metric(
+    Counter, "policy_errors_total", "Total policy errors", ["operation"]
+)
+policy_file_read_latency = _get_or_create_metric(
+    Histogram,
     "policy_file_read_latency_seconds",
     "Latency of policy file reads",
     ["operation"],
     buckets=(0.001, 0.01, 0.1, 0.5, 1, 2, 5),
 )
-policy_file_write_latency = Histogram(
+policy_file_write_latency = _get_or_create_metric(
+    Histogram,
     "policy_file_write_latency_seconds",
     "Latency of policy file writes",
     ["operation"],
     buckets=(0.001, 0.01, 0.1, 0.5, 1, 2, 5),
 )
-policy_db_upsert_latency = Histogram(
+policy_db_upsert_latency = _get_or_create_metric(
+    Histogram,
     "policy_db_upsert_latency_seconds",
     "Latency of policy DB upserts",
     ["operation"],

@@ -10,7 +10,7 @@ from aiolimiter import AsyncLimiter
 
 # Import centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -62,9 +62,22 @@ if not logger.handlers:
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
+
+# Helper function for idempotent metric creation
+def _get_or_create_metric(metric_class: type, name: str, doc: str, labelnames: list):
+    """Idempotently create or retrieve a Prometheus metric."""
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return metric_class(name, doc, labelnames)
+
+
 # Prometheus Metrics
-utils_ops_total = Counter("utils_ops_total", "Total utils operations", ["operation"])
-utils_errors_total = Counter("utils_errors_total", "Total utils errors", ["operation"])
+utils_ops_total = _get_or_create_metric(
+    Counter, "utils_ops_total", "Total utils operations", ["operation"]
+)
+utils_errors_total = _get_or_create_metric(
+    Counter, "utils_errors_total", "Total utils errors", ["operation"]
+)
 
 # Global state for session pooling and rate limiting
 _HEALTH_SESSION = None

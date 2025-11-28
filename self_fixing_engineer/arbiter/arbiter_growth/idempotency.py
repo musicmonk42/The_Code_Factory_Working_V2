@@ -4,7 +4,7 @@ from typing import Optional, Union
 
 import redis.asyncio as redis
 from opentelemetry import trace
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 from redis.asyncio.cluster import RedisCluster
 from redis.exceptions import RedisError
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -13,9 +13,19 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
+
+# Helper function for idempotent metric creation
+def _get_or_create_metric(metric_class: type, name: str, doc: str, labelnames: list):
+    """Idempotently create or retrieve a Prometheus metric."""
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return metric_class(name, doc, labelnames)
+
+
 # Prometheus metric to track idempotency cache hits and misses.
 # 'arbiter' label can be used to distinguish between different services using the store.
-IDEMPOTENCY_HITS_TOTAL = Counter(
+IDEMPOTENCY_HITS_TOTAL = _get_or_create_metric(
+    Counter,
     "idempotency_hits_total",
     "Total number of idempotency check hits and misses.",
     ["arbiter", "hit"],
