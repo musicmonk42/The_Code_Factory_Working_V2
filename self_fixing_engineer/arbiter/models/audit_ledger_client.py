@@ -171,14 +171,21 @@ tracer = get_tracer(__name__)
 
 # Helper function to get or create a metric (idempotent)
 def _get_or_create_metric(
-    metric_class: type,
+    metric_class: type[Counter] | type[Gauge] | type[Histogram],
     name: str,
     documentation: str,
-    labelnames: list,
+    labelnames: list[str],
 ) -> Counter | Gauge | Histogram:
     """Idempotently create or retrieve a Prometheus metric."""
     if name in REGISTRY._names_to_collectors:
-        return REGISTRY._names_to_collectors[name]
+        existing_metric = REGISTRY._names_to_collectors[name]
+        if not isinstance(existing_metric, metric_class):
+            logger.warning(
+                f"Metric '{name}' already registered with type "
+                f"{type(existing_metric).__name__}, but requested as "
+                f"{metric_class.__name__}. Reusing existing."
+            )
+        return existing_metric
     return metric_class(name, documentation, labelnames)
 
 
