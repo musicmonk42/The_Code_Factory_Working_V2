@@ -719,7 +719,7 @@ class CodebaseAnalyzer:
         if isinstance(path, list):
             # If a list of paths is provided, use the first one as the primary scan path
             # and collect files from all paths
-            paths_to_scan = [Path(p).resolve() for p in path if p]
+            paths_to_scan = [Path(p).resolve() for p in path if p is not None]
             if not paths_to_scan:
                 paths_to_scan = [Path(self.root_dir).resolve()]
             primary_path = paths_to_scan[0]

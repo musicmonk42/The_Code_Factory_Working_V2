@@ -1665,14 +1665,28 @@ class Arbiter:
 
     def log_event(self, event_description: str, event_type: str = "general"):
         """Logs an event to the monitor and the logger."""
-        # log_action is synchronous, so call it directly without asyncio.create_task
-        self.monitor.log_action(
-            {
-                "type": event_type,
-                "agent": self.name,
-                "description": event_description,
-            }
-        )
+        # The Monitor.log_action may be async (if using the internal Monitor class)
+        # or sync (if using arbiter.monitoring.Monitor). Handle both cases.
+        action_data = {
+            "type": event_type,
+            "agent": self.name,
+            "description": event_description,
+        }
+
+        result = self.monitor.log_action(action_data)
+
+        # If log_action returned a coroutine, schedule it if there's a running loop
+        if asyncio.iscoroutine(result):
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(result)
+            except RuntimeError:
+                # No running event loop - this can happen during initialization
+                logging.getLogger(__name__).debug(
+                    f"[{self.name}] No event loop for async log_action, event discarded"
+                )
+                result.close()
+
         logging.getLogger(__name__).debug(
             f"[{self.name}] Event Logged: {event_description}"
         )

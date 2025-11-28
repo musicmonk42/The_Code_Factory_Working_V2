@@ -237,8 +237,8 @@ except ImportError:
     class Button:
         # Nested Pressed event class for @on(Button.Pressed, ...) decorators
         class Pressed:
-            def __init__(self, *args, **kwargs):
-                self.button = None
+            def __init__(self, button=None, *args, **kwargs):
+                self.button = button
 
     class Input:
         def __init__(self, *args, **kwargs):
@@ -257,9 +257,9 @@ except ImportError:
 
         # Nested Submitted event class for @on(Input.Submitted, ...) decorators
         class Submitted:
-            def __init__(self, *args, **kwargs):
-                self.value = ""
-                self.input = None
+            def __init__(self, input=None, value="", *args, **kwargs):
+                self.value = value
+                self.input = input
 
     class TextArea:
         def __init__(self, *args, **kwargs):
@@ -335,9 +335,9 @@ except ImportError:
 
         # Nested Changed event class for @on(Select.Changed, ...) decorators
         class Changed:
-            def __init__(self, *args, **kwargs):
-                self.value = None
-                self.select = None
+            def __init__(self, select=None, value=None, *args, **kwargs):
+                self.value = value
+                self.select = select
 
     class Mount:
         pass
