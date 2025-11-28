@@ -174,6 +174,38 @@ async def test_initialization_default_password_error(mocker: MockerFixture):
 
 
 @pytest.mark.asyncio
+async def test_initialization_dev_mode_no_password_warning(mocker: MockerFixture, caplog):
+    """Test initialization succeeds in dev mode without a password, but logs a warning."""
+    mocker.patch.dict(os.environ, {"NEO4J_PASSWORD": "", "ENV": "dev"}, clear=False)
+
+    with caplog.at_level(logging.WARNING):
+        client = Neo4jKnowledgeGraph()
+    # Should not raise an error in dev mode
+    assert client.url == "bolt://localhost:7687"
+    # Should log a warning about missing password
+    assert any(
+        "Running in development mode without a secure password" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_initialization_dev_mode_default_password_warning(mocker: MockerFixture, caplog):
+    """Test initialization succeeds in dev mode with default password, but logs a warning."""
+    mocker.patch.dict(os.environ, {"NEO4J_PASSWORD": "password", "ENV": "dev"}, clear=False)
+
+    with caplog.at_level(logging.WARNING):
+        client = Neo4jKnowledgeGraph()
+    # Should not raise an error in dev mode
+    assert client.url == "bolt://localhost:7687"
+    # Should log a warning about default password
+    assert any(
+        "Running in development mode without a secure password" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
 async def test_connect_success(kg_client):
     """Test successful connection to Neo4j."""
     await kg_client.connect()
