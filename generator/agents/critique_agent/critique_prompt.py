@@ -137,15 +137,22 @@ except ImportError as e:
         return None
 
     # Local metrics; label style must be compatible with production & Dummy use
-    PROMPT_BUILDS = Counter(
-        "critique_prompt_builds_total",
-        "Total prompt builds",
-        ["status"],
-    )
-    PROMPT_LATENCY = Histogram(
-        "critique_prompt_build_latency_seconds",
-        "Prompt build latency",
-    )
+    # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
+    try:
+        PROMPT_BUILDS = Counter(
+            "critique_prompt_builds_total",
+            "Total prompt builds",
+            ["status"],
+        )
+        PROMPT_LATENCY = Histogram(
+            "critique_prompt_build_latency_seconds",
+            "Prompt build latency",
+        )
+    except ValueError:
+        # Metrics already registered (happens during pytest collection)
+        from prometheus_client import REGISTRY
+        PROMPT_BUILDS = REGISTRY._names_to_collectors.get("critique_prompt_builds_total")
+        PROMPT_LATENCY = REGISTRY._names_to_collectors.get("critique_prompt_build_latency_seconds")
 
 # Constants
 MAX_PROMPT_TOKENS = 8000
