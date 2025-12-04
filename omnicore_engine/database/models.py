@@ -24,6 +24,15 @@ class AgentState(ArbiterAgentState):
     Omnicore extension of ArbiterAgentState.
     Uses joined-table inheritance to add Omnicore-specific fields.
     
+    Inheritance chain:
+    - ArbiterAgentState (parent, table: agent_state)
+      └─ AgentState (this class, table: omnicore_agent_state)
+         ├─ GeneratorAgentState (table: generator_agent_state)
+         └─ SFEAgentState (table: sfe_agent_state)
+    
+    The ForeignKey to agent_state.id establishes the join relationship with the parent table.
+    Child classes (GeneratorAgentState, SFEAgentState) reference omnicore_agent_state.id.
+    
     Note: The parent ArbiterAgentState uses 'agent_type' as a regular column.
     For proper polymorphic inheritance, GeneratorAgentState and SFEAgentState
     should set agent_type appropriately in their values.
@@ -31,6 +40,9 @@ class AgentState(ArbiterAgentState):
 
     __tablename__ = "omnicore_agent_state"
 
+    # In SQLAlchemy 2.0+ joined-table inheritance, the id column MUST be explicitly
+    # redeclared with a ForeignKey to establish the join relationship.
+    # This is the standard pattern per SQLAlchemy documentation.
     id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("agent_state.id"),
