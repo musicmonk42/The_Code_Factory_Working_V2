@@ -22,18 +22,20 @@ from sqlalchemy.orm import Mapped, mapped_column
 class AgentState(ArbiterAgentState):
     """
     Omnicore extension of ArbiterAgentState.
-    DO NOT set __tablename__.
-    DO NOT redeclare id, name, x, y, energy, world_size, agent_type, etc.
-    Only add NEW columns that do NOT exist in the parent.
-
+    Uses joined-table inheritance to add Omnicore-specific fields.
+    
     Note: The parent ArbiterAgentState uses 'agent_type' as a regular column.
     For proper polymorphic inheritance, GeneratorAgentState and SFEAgentState
     should set agent_type appropriately in their values.
     """
 
-    # --- NO __tablename__ ---
-    # --- NO id column ---
-    # --- NO world_size, agent_type, etc. if already in parent ---
+    __tablename__ = "omnicore_agent_state"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("agent_state.id"),
+        primary_key=True,
+    )
 
     # --- NEW Omnicore v2 encrypted fields ---
     inventory_v2: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -90,7 +92,7 @@ class GeneratorAgentState(AgentState):
 
     id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("agent_state.id"),
+        ForeignKey("omnicore_agent_state.id"),
         primary_key=True,
     )
 
@@ -120,7 +122,7 @@ class SFEAgentState(AgentState):
 
     id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("agent_state.id"),
+        ForeignKey("omnicore_agent_state.id"),
         primary_key=True,
     )
 

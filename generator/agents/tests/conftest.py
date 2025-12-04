@@ -239,3 +239,23 @@ def mock_llm():
     ) as m:
         m.return_value = {"content": '{"files": {"main.py": "def fib(n): return n"}}'}
         yield m
+
+
+@pytest.fixture(autouse=True)
+def cleanup_chromadb():
+    """
+    Clean up ChromaDB singleton instances between tests to prevent
+    'An instance of Chroma already exists' errors.
+    """
+    yield
+    # Clean up after each test
+    try:
+        import chromadb
+        from chromadb.api.shared_system_client import SharedSystemClient
+        
+        # Clear the singleton registry
+        if hasattr(SharedSystemClient, '_identifier_to_system'):
+            SharedSystemClient._identifier_to_system.clear()
+    except (ImportError, AttributeError):
+        # ChromaDB not installed or API changed, skip cleanup
+        pass
