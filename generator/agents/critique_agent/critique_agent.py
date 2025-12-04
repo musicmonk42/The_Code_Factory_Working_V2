@@ -129,30 +129,40 @@ setup_tracing()
 tracer = trace.get_tracer(__name__)
 meter = metrics.get_meter(__name__)
 
-CRITIQUE_STEPS = Counter(
-    "critique_steps_total",
-    "Total critique steps",
-    ["step"],
-)
-CRITIQUE_LATENCY = Histogram(
-    "critique_latency_seconds",
-    "Critique step latency",
-    ["step"],
-)
-CRITIQUE_ERRORS = Counter(
-    "critique_errors_total",
-    "Critique errors",
-    ["step", "error_type", "tool"],
-)
-CRITIQUE_COVERAGE = Gauge(
-    "critique_coverage",
-    "Test coverage percentage",
-)
-CRITIQUE_VULNERABILITIES_FOUND = Counter(
-    "critique_vulnerabilities_found_total",
-    "Total vulnerabilities found",
-    ["tool", "severity"],
-)
+# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
+try:
+    CRITIQUE_STEPS = Counter(
+        "critique_steps_total",
+        "Total critique steps",
+        ["step"],
+    )
+    CRITIQUE_LATENCY = Histogram(
+        "critique_latency_seconds",
+        "Critique step latency",
+        ["step"],
+    )
+    CRITIQUE_ERRORS = Counter(
+        "critique_errors_total",
+        "Critique errors",
+        ["step", "error_type", "tool"],
+    )
+    CRITIQUE_COVERAGE = Gauge(
+        "critique_coverage",
+        "Test coverage percentage",
+    )
+    CRITIQUE_VULNERABILITIES_FOUND = Counter(
+        "critique_vulnerabilities_found_total",
+        "Total vulnerabilities found",
+        ["tool", "severity"],
+    )
+except ValueError:
+    # Metrics already registered (happens during pytest collection)
+    from prometheus_client import REGISTRY
+    CRITIQUE_STEPS = REGISTRY._names_to_collectors.get("critique_steps_total")
+    CRITIQUE_LATENCY = REGISTRY._names_to_collectors.get("critique_latency_seconds")
+    CRITIQUE_ERRORS = REGISTRY._names_to_collectors.get("critique_errors_total")
+    CRITIQUE_COVERAGE = REGISTRY._names_to_collectors.get("critique_coverage")
+    CRITIQUE_VULNERABILITIES_FOUND = REGISTRY._names_to_collectors.get("critique_vulnerabilities_found_total")
 
 
 # Audit Logger wrapper
