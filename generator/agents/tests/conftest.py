@@ -239,3 +239,32 @@ def mock_llm():
     ) as m:
         m.return_value = {"content": '{"files": {"main.py": "def fib(n): return n"}}'}
         yield m
+
+
+@pytest.fixture(autouse=True)
+def cleanup_chromadb():
+    """
+    Clean up ChromaDB singleton instances between tests to prevent
+    'An instance of Chroma already exists' errors.
+    
+    Note: This fixture accesses ChromaDB's internal _identifier_to_system registry
+    because ChromaDB maintains singleton instances based on settings and doesn't
+    provide a public API to clear them. Without this cleanup, tests that create
+    ChromaDB clients with the same path but different settings will fail.
+    
+    Tested with ChromaDB 1.3.x. If ChromaDB's internal API changes in future versions,
+    this cleanup will gracefully skip via the try-except block.
+    """
+    yield
+    # Clean up after each test
+    try:
+        import chromadb
+        from chromadb.api.shared_system_client import SharedSystemClient
+        
+        # Clear the singleton registry (internal API, but necessary for test isolation)
+        # ChromaDB 1.x stores client instances in _identifier_to_system class variable
+        if hasattr(SharedSystemClient, '_identifier_to_system'):
+            SharedSystemClient._identifier_to_system.clear()
+    except (ImportError, AttributeError):
+        # ChromaDB not installed or API changed, skip cleanup
+        pass

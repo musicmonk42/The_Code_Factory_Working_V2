@@ -22,18 +22,32 @@ from sqlalchemy.orm import Mapped, mapped_column
 class AgentState(ArbiterAgentState):
     """
     Omnicore extension of ArbiterAgentState.
-    DO NOT set __tablename__.
-    DO NOT redeclare id, name, x, y, energy, world_size, agent_type, etc.
-    Only add NEW columns that do NOT exist in the parent.
-
+    Uses joined-table inheritance to add Omnicore-specific fields.
+    
+    Inheritance chain:
+    - ArbiterAgentState (parent, table: agent_state)
+      └─ AgentState (this class, table: omnicore_agent_state)
+         ├─ GeneratorAgentState (table: generator_agent_state)
+         └─ SFEAgentState (table: sfe_agent_state)
+    
+    The ForeignKey to agent_state.id establishes the join relationship with the parent table.
+    Child classes (GeneratorAgentState, SFEAgentState) reference omnicore_agent_state.id.
+    
     Note: The parent ArbiterAgentState uses 'agent_type' as a regular column.
     For proper polymorphic inheritance, GeneratorAgentState and SFEAgentState
     should set agent_type appropriately in their values.
     """
 
-    # --- NO __tablename__ ---
-    # --- NO id column ---
-    # --- NO world_size, agent_type, etc. if already in parent ---
+    __tablename__ = "omnicore_agent_state"
+
+    # In SQLAlchemy 2.0+ joined-table inheritance, the id column MUST be explicitly
+    # redeclared with a ForeignKey to establish the join relationship.
+    # This is the standard pattern per SQLAlchemy documentation.
+    id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("agent_state.id"),
+        primary_key=True,
+    )
 
     # --- NEW Omnicore v2 encrypted fields ---
     inventory_v2: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -90,7 +104,7 @@ class GeneratorAgentState(AgentState):
 
     id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("agent_state.id"),
+        ForeignKey("omnicore_agent_state.id"),
         primary_key=True,
     )
 
@@ -120,7 +134,7 @@ class SFEAgentState(AgentState):
 
     id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("agent_state.id"),
+        ForeignKey("omnicore_agent_state.id"),
         primary_key=True,
     )
 
