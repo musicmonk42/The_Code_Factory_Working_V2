@@ -1539,22 +1539,33 @@ async def initialize_dlt_backend_clients(config: Dict[str, Any]) -> None:
         _base_logger.warning("DLT backend initialization failed - no client available")
 
 
-# Import and re-export EVM client for backwards compatibility
-# Using Optional pattern to properly handle missing dependencies
-EVMDLTClient: Optional[Type[BaseDLTClient]] = None
-try:
-    from .dlt_evm_clients import EthereumClientWrapper
+# Lazy imports to avoid circular import issues
+# EVMDLTClient and SimpleDLTClient are loaded on-demand via __getattr__
+_lazy_imports = {
+    "EVMDLTClient": (".dlt_evm_clients", "EthereumClientWrapper"),
+    "SimpleDLTClient": (".dlt_simple_clients", "SimpleDLTClient"),
+}
 
-    EVMDLTClient = EthereumClientWrapper
-except ImportError:
-    _base_logger.debug("EVMDLTClient not available - web3.py may not be installed")
 
-# Import and re-export SimpleDLTClient for backwards compatibility
-# Using Optional pattern to properly handle missing dependencies
-SimpleDLTClient: Optional[Type[BaseDLTClient]] = None
-try:
-    from .dlt_simple_clients import SimpleDLTClient as _SimpleDLTClient
-
-    SimpleDLTClient = _SimpleDLTClient
-except ImportError:
-    _base_logger.debug("SimpleDLTClient not available")
+def __getattr__(name: str):
+    """
+    Lazy module attribute loader to avoid circular imports.
+    
+    This allows EVMDLTClient and SimpleDLTClient to be imported from this module
+    without causing circular import issues, as the actual import only happens
+    when the attribute is accessed, not at module load time.
+    """
+    if name in _lazy_imports:
+        module_path, class_name = _lazy_imports[name]
+        try:
+            from importlib import import_module
+            module = import_module(module_path, package=__package__)
+            value = getattr(module, class_name)
+            # Cache the value for future access
+            globals()[name] = value
+            return value
+        except ImportError:
+            _base_logger.debug(f"{name} not available - dependencies may not be installed")
+            # Return None for missing optional dependencies
+            return None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
