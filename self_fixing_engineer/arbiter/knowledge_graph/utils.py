@@ -300,17 +300,43 @@ async def async_with_retry(
 
 
 # --- PII Redaction ---
-PII_SENSITIVE_KEYS = [k.lower() for k in Config.PII_SENSITIVE_KEYS]
-PII_SENSITIVE_PATTERNS = [
-    re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),  # Email
-    re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b"),  # Phone number
-    re.compile(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b"),  # Credit card
-]
+# Lazy initialization to avoid issues during test collection
+_PII_SENSITIVE_KEYS = None
+_PII_SENSITIVE_PATTERNS = None
+
+
+def _get_pii_sensitive_keys():
+    """Get PII sensitive keys with lazy initialization."""
+    global _PII_SENSITIVE_KEYS
+    if _PII_SENSITIVE_KEYS is None:
+        try:
+            _PII_SENSITIVE_KEYS = [k.lower() for k in Config.PII_SENSITIVE_KEYS]
+        except (AttributeError, TypeError):
+            # Fallback if Config is not properly initialized (e.g., during tests)
+            _PII_SENSITIVE_KEYS = ["email", "password", "name", "ssn", "credit_card", "api_key"]
+    return _PII_SENSITIVE_KEYS
+
+
+def _get_pii_sensitive_patterns():
+    """Get PII sensitive patterns with lazy initialization."""
+    global _PII_SENSITIVE_PATTERNS
+    if _PII_SENSITIVE_PATTERNS is None:
+        try:
+            _PII_SENSITIVE_PATTERNS = [
+                re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),  # Email
+                re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b"),  # Phone number
+                re.compile(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b"),  # Credit card
+            ]
+        except Exception:
+            # Fallback if re.compile fails
+            _PII_SENSITIVE_PATTERNS = []
+    return _PII_SENSITIVE_PATTERNS
 
 
 def _redact_sensitive_pii(key: str, value: Any) -> Any:
     key_lower = key.lower()
-    if key_lower in PII_SENSITIVE_KEYS:
+    pii_keys = _get_pii_sensitive_keys()
+    if key_lower in pii_keys:
         AGENT_METRICS["sensitive_data_redaction_total"].labels(
             redaction_type="key"
         ).inc()
@@ -319,7 +345,8 @@ def _redact_sensitive_pii(key: str, value: Any) -> Any:
         )
         return "[PII_REDACTED_KEY]"
     if isinstance(value, str):
-        for pattern in PII_SENSITIVE_PATTERNS:
+        pii_patterns = _get_pii_sensitive_patterns()
+        for pattern in pii_patterns:
             if pattern.search(value):
                 AGENT_METRICS["sensitive_data_redaction_total"].labels(
                     redaction_type="pattern"
