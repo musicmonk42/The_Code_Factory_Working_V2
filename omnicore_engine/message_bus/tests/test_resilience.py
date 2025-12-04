@@ -10,7 +10,7 @@ from unittest.mock import patch
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from message_bus.resilience import CircuitBreaker, RetryPolicy
+from omnicore_engine.message_bus.resilience import CircuitBreaker, RetryPolicy
 
 
 class TestRetryPolicy(unittest.TestCase):

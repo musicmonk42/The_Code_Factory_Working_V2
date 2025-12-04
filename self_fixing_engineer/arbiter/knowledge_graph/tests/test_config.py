@@ -7,7 +7,7 @@ from unittest.mock import mock_open, patch
 import pytest
 
 # Import the module components
-from arbiter.knowledge_graph.config import (
+from self_fixing_engineer.arbiter.knowledge_graph.config import (
     MetaLearningConfig,
     MultiModalData,
     SensitiveValue,

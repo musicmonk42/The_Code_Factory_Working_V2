@@ -23,7 +23,12 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    import grpc as grpc_types
+else:
+    grpc_types = Any
 
 # --- Plugin Registry Import ---
 # Lazy import to avoid circular import with omnicore_engine.plugin_registry.
@@ -184,21 +189,32 @@ try:
     import grpc
     import prometheus_client
     from grpc_health.v1 import health_pb2, health_pb2_grpc
-    from pydantic import BaseModel, Extra, Field, ValidationError, validator
+    # FIX: Pydantic V2 compatibility - Extra is now ConfigDict
+    try:
+        from pydantic import BaseModel, Field, ValidationError, validator, ConfigDict
+        # Pydantic V2
+        PYDANTIC_V2 = True
+    except ImportError:
+        from pydantic import BaseModel, Extra, Field, ValidationError, validator
+        # Pydantic V1
+        PYDANTIC_V2 = False
 except ImportError as e:
     logger.critical(
         f"CRITICAL: Missing core dependency for gRPC runner: {e}. Aborting startup."
     )
     MISSING_DEPS = True
+    PYDANTIC_V2 = False  # FIX: Define PYDANTIC_V2 in error case
     grpc = None
     prometheus_client = None
 
     # Pydantic fallbacks
     class BaseModel:
-        pass
-
+        def __init_subclass__(cls, **kwargs):
+            # Ignore all keyword arguments (like extra=...)
+            super().__init_subclass__()
+    
     class Extra:
-        pass
+        forbid = "forbid"  # Mock attribute for Pydantic V1 compatibility
 
     class ValidationError(Exception):
         pass
@@ -245,19 +261,35 @@ PLUGIN_OPERATION_COUNTER = (
 
 
 # --- Manifest Model ---
-class PluginManifest(BaseModel, extra=Extra.forbid):
-    """Strict validation of plugin manifest."""
+if PYDANTIC_V2:
+    class PluginManifest(BaseModel):
+        """Strict validation of plugin manifest."""
+        model_config = ConfigDict(extra='forbid')
 
-    name: str = Field(..., min_length=1)
-    version: str = Field(..., pattern=r"^\d+\.\d+\.\d+$")
-    entrypoint: str = Field(..., min_length=1)
-    description: str = "No description provided."
-    author: str = "Unknown"
-    capabilities: List[str] = Field(default_factory=list)
-    permissions: List[str] = Field(default_factory=list)
-    dependencies: List[str] = Field(default_factory=list)
-    min_core_version: str = Field("1.0.0", pattern=r"^\d+\.\d+\.\d+$")
-    max_core_version: str = Field("999.0.0", pattern=r"^\d+\.\d+\.\d+$")
+        name: str = Field(..., min_length=1)
+        version: str = Field(..., pattern=r"^\d+\.\d+\.\d+$")
+        entrypoint: str = Field(..., min_length=1)
+        description: str = "No description provided."
+        author: str = "Unknown"
+        capabilities: List[str] = Field(default_factory=list)
+        permissions: List[str] = Field(default_factory=list)
+        dependencies: List[str] = Field(default_factory=list)
+        min_core_version: str = Field("1.0.0", pattern=r"^\d+\.\d+\.\d+$")
+        max_core_version: str = Field("999.0.0", pattern=r"^\d+\.\d+\.\d+$")
+else:
+    class PluginManifest(BaseModel, extra=Extra.forbid):
+        """Strict validation of plugin manifest."""
+
+        name: str = Field(..., min_length=1)
+        version: str = Field(..., pattern=r"^\d+\.\d+\.\d+$")
+        entrypoint: str = Field(..., min_length=1)
+        description: str = "No description provided."
+        author: str = "Unknown"
+        capabilities: List[str] = Field(default_factory=list)
+        permissions: List[str] = Field(default_factory=list)
+        dependencies: List[str] = Field(default_factory=list)
+        min_core_version: str = Field("1.0.0", pattern=r"^\d+\.\d+\.\d+$")
+        max_core_version: str = Field("999.0.0", pattern=r"^\d+\.\d+\.\d+$")
     health_check: str = Field("plugin_health", min_length=1)
     api_version: str = Field("v1", min_length=1)
     license: str = "Proprietary"
@@ -285,7 +317,7 @@ GRPC_ENDPOINT_ALLOWLIST_SECRET = (
 )
 
 
-def _get_tls_credentials() -> Optional[grpc.ChannelCredentials]:
+def _get_tls_credentials() -> Optional["grpc_types.ChannelCredentials"]:
     """Load TLS credentials from secrets manager."""
     try:
         cert_path = SECRETS_MANAGER.get_secret(
@@ -378,7 +410,7 @@ def _is_endpoint_allowed(address: str) -> bool:
 
 # --- Health ---
 async def plugin_health(
-    channel: grpc.aio.Channel, plugin_name: str, health_check_method_name: str = "Check"
+    channel: "grpc_types.aio.Channel", plugin_name: str, health_check_method_name: str = "Check"
 ) -> str:
     """
     Check the health of a gRPC service via standard Health service.

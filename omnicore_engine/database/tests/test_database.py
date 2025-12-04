@@ -19,7 +19,7 @@ from cryptography.fernet import Fernet
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database import Database, safe_serialize, validate_fernet_key, validate_user_id
+from omnicore_engine.database import Database, safe_serialize, validate_fernet_key, validate_user_id
 
 
 @pytest.fixture

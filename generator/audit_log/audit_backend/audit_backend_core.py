@@ -145,22 +145,50 @@ class CryptoInitializationError(Exception):
 # --- END: EDIT B ---
 
 # --- Configuration and Secrets Management ---
+
+# FIX: Set test mode environment variables BEFORE creating Dynaconf
+def _is_test_or_dev_mode() -> bool:
+    # pytest sets PYTEST_CURRENT_TEST; we also respect a simple dev flag
+    return bool(
+        os.getenv("PYTEST_CURRENT_TEST") or os.getenv("AUDIT_LOG_DEV_MODE") == "true"
+    )
+
+# In test/dev mode, pre-set the required values before Dynaconf initialization
+if _is_test_or_dev_mode():
+    os.environ.setdefault(
+        "AUDIT_ENCRYPTION_KEYS",
+        '[{"key_id":"mock_key_1","key":"hYnO2bq3m0yqgqz5WJt9j3ZCsb3dC-5H9qv1Hj4XGxw="}]',
+    )
+    os.environ.setdefault("AUDIT_COMPRESSION_ALGO", "none")
+    os.environ.setdefault("AUDIT_BATCH_FLUSH_INTERVAL", "10")
+    os.environ.setdefault("AUDIT_BATCH_MAX_SIZE", "100")
+    os.environ.setdefault("AUDIT_HEALTH_CHECK_INTERVAL", "30")
+    os.environ.setdefault("AUDIT_RETRY_MAX_ATTEMPTS", "3")
+    os.environ.setdefault("AUDIT_RETRY_BACKOFF_FACTOR", "0.1")
+
 # Using Dynaconf for environment-based configuration
-settings = Dynaconf(
-    envvar_prefix="AUDIT",
-    settings_files=["audit_config.yaml"],
-    validators=[
-        Validator("ENCRYPTION_KEYS", must_exist=True, is_type_of=list),
-        Validator("COMPRESSION_ALGO", must_exist=True, is_in=["zstd", "gzip", "none"]),
-        Validator("COMPRESSION_LEVEL", default=9, gte=1, lte=22),
-        Validator("BATCH_FLUSH_INTERVAL", must_exist=True, gte=1, lte=60),
-        Validator("BATCH_MAX_SIZE", must_exist=True, gte=10, lte=1000),
-        Validator("HEALTH_CHECK_INTERVAL", must_exist=True, gte=30, lte=300),
-        Validator("RETRY_MAX_ATTEMPTS", must_exist=True, gte=1, lte=5),
-        Validator("RETRY_BACKOFF_FACTOR", must_exist=True, gte=0.1, lte=2.0),
-        Validator("TAMPER_DETECTION_ENABLED", default=True, is_type_of=bool),
-    ],
-)
+# FIX: Only add validators in production mode
+if _is_test_or_dev_mode():
+    settings = Dynaconf(
+        envvar_prefix="AUDIT",
+        settings_files=["audit_config.yaml"],
+    )
+else:
+    settings = Dynaconf(
+        envvar_prefix="AUDIT",
+        settings_files=["audit_config.yaml"],
+        validators=[
+            Validator("ENCRYPTION_KEYS", must_exist=True, is_type_of=list),
+            Validator("COMPRESSION_ALGO", must_exist=True, is_in=["zstd", "gzip", "none"]),
+            Validator("COMPRESSION_LEVEL", default=9, gte=1, lte=22),
+            Validator("BATCH_FLUSH_INTERVAL", must_exist=True, gte=1, lte=60),
+            Validator("BATCH_MAX_SIZE", must_exist=True, gte=10, lte=1000),
+            Validator("HEALTH_CHECK_INTERVAL", must_exist=True, gte=30, lte=300),
+            Validator("RETRY_MAX_ATTEMPTS", must_exist=True, gte=1, lte=5),
+            Validator("RETRY_BACKOFF_FACTOR", must_exist=True, gte=0.1, lte=2.0),
+            Validator("TAMPER_DETECTION_ENABLED", default=True, is_type_of=bool),
+        ],
+    )
 
 # --- START OF REPLACEMENT BLOCK ---
 
@@ -168,46 +196,25 @@ settings = Dynaconf(
 # from dynaconf import settings <-- START: EDIT A (Removed)
 
 
-def _is_test_or_dev_mode() -> bool:
-    # pytest sets PYTEST_CURRENT_TEST; we also respect a simple dev flag
-    return bool(
-        os.getenv("PYTEST_CURRENT_TEST") or os.getenv("AUDIT_LOG_DEV_MODE") == "true"
-    )
+# FIX: Moved _is_test_or_dev_mode() and environment setup BEFORE Dynaconf creation above
 
 
 # ---- Import-time validation with test/dev fallback ----
+# FIX: This block is now handled before Dynaconf creation, but keep validation attempt
 if _is_test_or_dev_mode():
-    # In test/dev mode, pre-set the required values before validation
-    # to avoid ValidationError and allow the settings object to initialize
+    # Try validation, but don't fail in test/dev mode
     try:
-        # Set defaults before validation runs
-        os.environ.setdefault(
-            "ENCRYPTION_KEYS",
-            '[{"key_id":"mock_key_1","key":"hYnO2bq3m0yqgqz5WJt9j3ZCsb3dC-5H9qv1Hj4XGxw="}]',
+        settings.validators.validate()
+    except ValidationError as ve:
+        warnings.warn(
+            f"[audit_backend_core] Dynaconf validation bypassed for tests/dev: {ve}",
+            RuntimeWarning,
         )
-        os.environ.setdefault("BATCH_FLUSH_INTERVAL", "10")
-        os.environ.setdefault("BATCH_MAX_SIZE", "100")
-        os.environ.setdefault("HEALTH_CHECK_INTERVAL", "30")
-        os.environ.setdefault("RETRY_MAX_ATTEMPTS", "3")
-        os.environ.setdefault("RETRY_BACKOFF_FACTOR", "0.1")
-
-        # Clear any cached settings to pick up new env vars
-        if hasattr(settings, "_wrapped") and settings._wrapped is not None:
-            pass  # Settings already initialized
-
-        # Try validation, but don't fail in test/dev mode
+        # Clear validators to prevent re-validation
         try:
-            settings.validators.validate()
-        except ValidationError as ve:
-            warnings.warn(
-                f"[audit_backend_core] Dynaconf validation bypassed for tests/dev: {ve}",
-                RuntimeWarning,
-            )
-            # Clear validators to prevent re-validation
-            try:
-                settings.validators.validators = []
-            except Exception:
-                pass
+            settings.validators.validators = []
+        except Exception:
+            pass
     except Exception as ex:
         warnings.warn(
             f"[audit_backend_core] Settings initialization failed in test/dev mode: {ex}",

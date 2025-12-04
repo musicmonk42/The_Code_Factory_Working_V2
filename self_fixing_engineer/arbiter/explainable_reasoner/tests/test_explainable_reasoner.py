@@ -10,13 +10,13 @@ from pydantic import ValidationError
 # Add project root to sys.path to resolve imports correctly
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from arbiter.explainable_reasoner.explainable_reasoner import (
+from self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner import (
     ExplainableReasoner,
     ExplainableReasonerPlugin,
     ReasonerConfig,
     SensitiveValue,
 )
-from arbiter.explainable_reasoner.reasoner_errors import (
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors import (
     ReasonerError,
     ReasonerErrorCode,
 )

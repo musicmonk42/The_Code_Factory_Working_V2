@@ -7,7 +7,13 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import aiofiles
-import etcd3
+try:
+    import etcd3
+    ETCD3_AVAILABLE = True
+except (ImportError, TypeError):
+    # TypeError can occur with protobuf version conflicts
+    ETCD3_AVAILABLE = False
+    etcd3 = None
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -76,11 +82,16 @@ class ConfigStore:
         }
 
         try:
-            self.client = etcd3.client(**etcd_kwargs)
+            if ETCD3_AVAILABLE and etcd3:
+                self.client = etcd3.client(**etcd_kwargs)
+            else:
+                logger.warning("etcd3 is not available. Will rely on fallback mechanisms.")
+                self.client = None
         except Exception as e:
             logger.error(
                 f"Failed to initialize etcd client: {e}. Will rely on fallback mechanisms."
             )
+            self.client = None
 
         self.fallback_path = fallback_path
         self.cache_ttl = cache_ttl_seconds

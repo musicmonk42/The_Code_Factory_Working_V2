@@ -96,7 +96,12 @@ patcher_log_action = patch(
 patcher_send_alert = patch(
     "generator.clarifier.clarifier_prompt.send_alert", new_callable=AsyncMock
 )
-patcher_translator = patch("googletrans.Translator")
+# FIX: Handle missing googletrans module gracefully
+try:
+    patcher_translator = patch("googletrans.Translator")
+except ImportError:
+    # googletrans not available, patch the one in clarifier_user_prompt
+    patcher_translator = patch("generator.clarifier.clarifier_user_prompt.Translator")
 
 patcher_get_config.start()
 patcher_get_fernet.start()
@@ -105,10 +110,17 @@ patcher_get_tracer.start()
 patcher_get_circuit_breaker.start()
 MockLogAction = patcher_log_action.start()
 MockSendAlert = patcher_send_alert.start()
-MockTranslatorCls = patcher_translator.start()
+# FIX: Handle case where Translator might not exist
+try:
+    MockTranslatorCls = patcher_translator.start()
+    MockTranslatorInstance = MockTranslatorCls.return_value
+    MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(text=text)
+except (ImportError, AttributeError):
+    # Translator not available, create a mock directly
+    MockTranslatorCls = MagicMock()
+    MockTranslatorInstance = MagicMock()
+    MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(text=text)
 
-MockTranslatorInstance = MockTranslatorCls.return_value
-MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(text=text)
 
 # Mock the core Clarifier class
 patcher_clarifier_class = patch("generator.clarifier.clarifier_prompt.Clarifier")

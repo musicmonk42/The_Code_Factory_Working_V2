@@ -248,7 +248,7 @@ def mock_lazy_imports():
 
 
 @pytest.fixture
-@pytest.mark.asyncio
+# FIX: Remove @pytest.mark.asyncio from fixture - marks on fixtures have no effect
 async def started_metrics_exporter(
     mock_config, mock_external_sdks, mock_lazy_imports, clean_prometheus_registry
 ):

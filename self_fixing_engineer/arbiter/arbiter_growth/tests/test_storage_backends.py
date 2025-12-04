@@ -19,12 +19,12 @@ os.environ["ARBITER_ENCRYPTION_KEY"] = base64.urlsafe_b64encode(os.urandom(32)).
     "utf-8"
 )
 
-from arbiter.arbiter_growth.exceptions import (
+from self_fixing_engineer.arbiter.arbiter_growth.exceptions import (
     ArbiterGrowthError,
     AuditChainTamperedError,
 )
-from arbiter.arbiter_growth.models import ArbiterState, Base, GrowthEvent
-from arbiter.arbiter_growth.storage_backends import (
+from self_fixing_engineer.arbiter.arbiter_growth.models import ArbiterState, Base, GrowthEvent
+from self_fixing_engineer.arbiter.arbiter_growth.storage_backends import (
     REDIS_BREAKER,
     KafkaStorageBackend,
     RedisStreamsStorageBackend,

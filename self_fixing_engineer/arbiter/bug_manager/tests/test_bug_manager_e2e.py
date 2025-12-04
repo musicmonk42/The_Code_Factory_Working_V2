@@ -6,7 +6,7 @@ import aioresponses
 import pytest
 
 # Import all necessary components from the application modules
-from arbiter.bug_manager.bug_manager import (
+from self_fixing_engineer.arbiter.bug_manager.bug_manager import (
     BUG_AUTO_FIX_ATTEMPT,
     BUG_AUTO_FIX_SUCCESS,
     BugManager,
@@ -14,13 +14,13 @@ from arbiter.bug_manager.bug_manager import (
     Settings,
     Severity,
 )
-from arbiter.bug_manager.notifications import NotificationService
-from arbiter.bug_manager.remediations import (
+from self_fixing_engineer.arbiter.bug_manager.notifications import NotificationService
+from self_fixing_engineer.arbiter.bug_manager.remediations import (
     BugFixerRegistry,
     RemediationPlaybook,
     RemediationStep,
 )
-from arbiter.bug_manager.utils import SecretStr
+from self_fixing_engineer.arbiter.bug_manager.utils import SecretStr
 from prometheus_client import REGISTRY
 
 # --- Fixtures ---

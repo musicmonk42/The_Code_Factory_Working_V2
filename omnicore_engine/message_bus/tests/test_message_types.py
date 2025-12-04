@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from message_bus.message_types import Message, MessageSchema
+from omnicore_engine.message_bus.message_types import Message, MessageSchema
 from pydantic import ValidationError
 
 

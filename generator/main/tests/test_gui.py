@@ -202,7 +202,7 @@ class TestMainAppCompose:
 class TestAPIInteraction:
     """Tests for API interaction methods."""
 
-    @pytest.mark.asyncio
+    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -300,7 +300,7 @@ class TestAPIInteraction:
 class TestRunnerTab:
     """Tests for Runner tab functionality."""
 
-    @pytest.mark.asyncio
+    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -350,7 +350,7 @@ class TestRunnerTab:
 class TestParserTab:
     """Tests for Intent Parser tab functionality."""
 
-    @pytest.mark.asyncio
+    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -420,7 +420,7 @@ class TestParserTab:
 class TestClarifierTab:
     """Tests for Clarifier tab functionality."""
 
-    @pytest.mark.asyncio
+    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -456,7 +456,7 @@ class TestClarifierTab:
 class TestMetricsTab:
     """Tests for Metrics tab functionality."""
 
-    @pytest.mark.asyncio
+    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -549,7 +549,7 @@ class TestMetricsTab:
 class TestConfigReload:
     """Tests for configuration reload functionality."""
 
-    @pytest.mark.asyncio
+    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -602,7 +602,7 @@ class TestConfigReload:
 
 
 class TestKeyBindings:
-    @pytest.mark.asyncio
+    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -690,7 +690,7 @@ class TestHelpScreen:
 class TestErrorHandling:
     """Tests for error handling in GUI."""
 
-    @pytest.mark.asyncio
+    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -728,7 +728,7 @@ class TestErrorHandling:
 class TestConfigWatchers:
     """Tests for configuration watchers."""
 
-    @pytest.mark.asyncio
+    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -789,7 +789,7 @@ class TestAsyncFileOperations:
 class TestUIMessageHelpers:
     """Tests for UI message helper methods."""
 
-    @pytest.mark.asyncio
+    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""

@@ -123,24 +123,33 @@ except Exception:  # pragma: no cover
 
 # --- Prometheus Metrics (Local for prompt generation statistics) ---
 # NOTE: Replaced original prompt_gen_calls/errors/latency with central LLM metrics where applicable
-prompt_feedback_score = Gauge(
-    "deploy_prompt_feedback_score",
-    "Latest feedback score for generated prompts",
-    ["target", "variant"],
-)
-prompt_tokens_generated = Histogram(
-    "deploy_prompt_tokens_generated",
-    "Number of tokens in generated prompts",
-    ["target", "variant"],
-)
-FEW_SHOT_USAGE = Counter(
-    "deploy_prompt_few_shot_usage",
-    "Number of few-shot examples used",
-    ["target", "variant"],
-)
-TEMPLATE_LOADS = Counter(
-    "deploy_prompt_template_loads", "Number of template loads", ["target", "variant"]
-)
+# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
+try:
+    prompt_feedback_score = Gauge(
+        "deploy_prompt_feedback_score",
+        "Latest feedback score for generated prompts",
+        ["target", "variant"],
+    )
+    prompt_tokens_generated = Histogram(
+        "deploy_prompt_tokens_generated",
+        "Number of tokens in generated prompts",
+        ["target", "variant"],
+    )
+    FEW_SHOT_USAGE = Counter(
+        "deploy_prompt_few_shot_usage",
+        "Number of few-shot examples used",
+        ["target", "variant"],
+    )
+    TEMPLATE_LOADS = Counter(
+        "deploy_prompt_template_loads", "Number of template loads", ["target", "variant"]
+    )
+except ValueError:
+    # Metrics already registered (happens during pytest collection)
+    from prometheus_client import REGISTRY
+    prompt_feedback_score = REGISTRY._names_to_collectors.get("deploy_prompt_feedback_score")
+    prompt_tokens_generated = REGISTRY._names_to_collectors.get("deploy_prompt_tokens_generated")
+    FEW_SHOT_USAGE = REGISTRY._names_to_collectors.get("deploy_prompt_few_shot_usage")
+    TEMPLATE_LOADS = REGISTRY._names_to_collectors.get("deploy_prompt_template_loads")
 
 # --- Security: Sensitive Data Scrubbing ---
 # Define common sensitive patterns for regex fallback if Presidio is not available or fails.
