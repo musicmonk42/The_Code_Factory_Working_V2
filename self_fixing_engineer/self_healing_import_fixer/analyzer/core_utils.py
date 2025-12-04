@@ -382,9 +382,10 @@ class RateLimiter:
             time.sleep(0.1)
 
 
-# Global circuit breakers and rate limiters
+# Global circuit breakers, rate limiters, and cache
 _circuit_breakers: Dict[str, CircuitBreaker] = {}
 _rate_limiters: Dict[str, RateLimiter] = {}
+_cache: Dict[str, Tuple[Any, float]] = {}
 
 
 def get_circuit_breaker(name: str, **kwargs) -> CircuitBreaker:

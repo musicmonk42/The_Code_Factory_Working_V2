@@ -142,6 +142,10 @@ class HealerNonCriticalError(HealerError):
     pass
 
 
+# Alias for backwards compatibility with tests
+AnalyzerCriticalError = ConfigError
+
+
 # --- Atomic Write Helper ---
 def _atomic_write_text(path: Path, data: str) -> None:
     """Writes text data to a file atomically."""
