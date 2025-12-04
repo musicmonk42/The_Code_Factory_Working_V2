@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, Mock
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from message_bus.context import ContextPropagationMiddleware, ExecutionContext
-from message_bus.message_types import Message
+from omnicore_engine.message_bus.context import ContextPropagationMiddleware, ExecutionContext
+from omnicore_engine.message_bus.message_types import Message
 
 
 class TestExecutionContext(unittest.TestCase):

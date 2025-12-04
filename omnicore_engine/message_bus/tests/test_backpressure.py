@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from message_bus.backpressure import BackpressureManager
+from omnicore_engine.message_bus.backpressure import BackpressureManager
 
 
 class TestBackpressureManager(unittest.TestCase):

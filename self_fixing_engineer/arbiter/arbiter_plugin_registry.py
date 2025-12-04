@@ -180,34 +180,53 @@ class PluginBase(ABC):
 try:
     from prometheus_client import REGISTRY, CollectorRegistry, Counter, Histogram
 
-    # Clear existing metrics to avoid duplicates
-    for metric in list(REGISTRY._names_to_collectors.keys()):
-        if metric.startswith("arbiter_plugin"):
-            if metric in REGISTRY._names_to_collectors:
-                REGISTRY.unregister(REGISTRY._names_to_collectors[metric])
-
-    plugin_loads = Counter(
-        "arbiter_plugin_loads_total", "Total plugin loads", ["kind", "name"]
-    )
-    plugin_unloads = Counter(
-        "arbiter_plugin_unloads_total", "Total plugin unloads", ["kind", "name"]
-    )
-    plugin_health_checks = Counter(
-        "arbiter_plugin_health_checks_total",
-        "Total plugin health checks",
-        ["kind", "name", "status"],
-    )
-    plugin_load_time = Histogram(
-        "arbiter_plugin_load_time_seconds", "Plugin load time", ["kind", "name"]
-    )
-    plugin_ops_total = Counter(
-        "plugin_ops_total", "Total plugin registry operations", ["operation"]
-    )
-    plugin_errors_total = Counter(
-        "plugin_errors_total",
-        "Total plugin registry errors",
-        ["kind", "name", "error_type"],
-    )
+    # FIX: Handle duplicate registration during pytest collection
+    # Wrap each metric creation in try-except to reuse existing metrics
+    try:
+        plugin_loads = Counter(
+            "arbiter_plugin_loads_total", "Total plugin loads", ["kind", "name"]
+        )
+    except ValueError:
+        plugin_loads = REGISTRY._names_to_collectors.get("arbiter_plugin_loads_total")
+    
+    try:
+        plugin_unloads = Counter(
+            "arbiter_plugin_unloads_total", "Total plugin unloads", ["kind", "name"]
+        )
+    except ValueError:
+        plugin_unloads = REGISTRY._names_to_collectors.get("arbiter_plugin_unloads_total")
+    
+    try:
+        plugin_health_checks = Counter(
+            "arbiter_plugin_health_checks_total",
+            "Total plugin health checks",
+            ["kind", "name", "status"],
+        )
+    except ValueError:
+        plugin_health_checks = REGISTRY._names_to_collectors.get("arbiter_plugin_health_checks_total")
+    
+    try:
+        plugin_load_time = Histogram(
+            "arbiter_plugin_load_time_seconds", "Plugin load time", ["kind", "name"]
+        )
+    except ValueError:
+        plugin_load_time = REGISTRY._names_to_collectors.get("arbiter_plugin_load_time_seconds")
+    
+    try:
+        plugin_ops_total = Counter(
+            "plugin_ops_total", "Total plugin registry operations", ["operation"]
+        )
+    except ValueError:
+        plugin_ops_total = REGISTRY._names_to_collectors.get("plugin_ops_total")
+    
+    try:
+        plugin_errors_total = Counter(
+            "plugin_errors_total",
+            "Total plugin registry errors",
+            ["kind", "name", "error_type"],
+        )
+    except ValueError:
+        plugin_errors_total = REGISTRY._names_to_collectors.get("plugin_errors_total")
 except ImportError:
     logger.warning("prometheus_client not available. Metrics disabled.")
 
