@@ -19,7 +19,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import from the analyzer module
-from self_healing_import_fixer.analyzer.core_utils import (
+from analyzer.core_utils import (
     SERVICE_NAME,
     AlertChannel,
     AlertLevel,

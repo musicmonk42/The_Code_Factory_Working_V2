@@ -31,25 +31,35 @@ logger = logging.getLogger(__name__)
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from self_healing_import_fixer.import_fixer.cache_layer import get_cache
-    from self_healing_import_fixer.import_fixer.compat_core import (
+    from .cache_layer import get_cache
+    from .compat_core import (
         SECRETS_MANAGER,
         alert_operator,
         audit_logger,
         scrub_secrets,
     )
 except ImportError as e:
-    logger.critical(
-        f"CRITICAL: Missing core dependency for fixer_ast: {e}. Aborting startup."
-    )
+    # Try absolute import as fallback
     try:
-        alert_operator(
-            f"CRITICAL: AST healing missing core dependency: {e}. Aborting.",
-            level="CRITICAL",
+        from self_healing_import_fixer.import_fixer.cache_layer import get_cache
+        from self_healing_import_fixer.import_fixer.compat_core import (
+            SECRETS_MANAGER,
+            alert_operator,
+            audit_logger,
+            scrub_secrets,
         )
-    except Exception:
-        pass
-    raise RuntimeError(f"[CRITICAL][AST] Missing core dependency: {e}")
+    except ImportError:
+        logger.critical(
+            f"CRITICAL: Missing core dependency for fixer_ast: {e}. Aborting startup."
+        )
+        try:
+            alert_operator(
+                f"CRITICAL: AST healing missing core dependency: {e}. Aborting.",
+                level="CRITICAL",
+            )
+        except Exception:
+            pass
+        raise RuntimeError(f"[CRITICAL][AST] Missing core dependency: {e}")
 
 # --- Optional redis import (for caching) ---
 try:
