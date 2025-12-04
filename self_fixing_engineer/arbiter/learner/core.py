@@ -21,17 +21,17 @@ try:
 except ImportError:
     asyncpg = None
 
-from arbiter.bug_manager import BugManager
-from arbiter.models.knowledge_graph_db import Neo4jKnowledgeGraph
-from arbiter.models.meta_learning_data_store import (
+from self_fixing_engineer.arbiter.bug_manager import BugManager
+from self_fixing_engineer.arbiter.models.knowledge_graph_db import Neo4jKnowledgeGraph
+from self_fixing_engineer.arbiter.models.meta_learning_data_store import (
     MetaLearningDataStoreConfig,
     get_meta_learning_data_store,
 )
-from arbiter.models.postgres_client import PostgresClient
+from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient
 
 # Corrected relative imports to be absolute imports from the project root
-from arbiter.plugins.llm_client import LLMClient
-from arbiter.policy.core import should_auto_learn
+from self_fixing_engineer.arbiter.plugins.llm_client import LLMClient
+from self_fixing_engineer.arbiter.policy.core import should_auto_learn
 from pydantic import BaseModel
 
 from .audit import (
