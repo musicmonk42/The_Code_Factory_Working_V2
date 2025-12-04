@@ -48,18 +48,18 @@ except ImportError as e:
             audit_logger,
             scrub_secrets,
         )
-    except ImportError:
+    except ImportError as fallback_error:
         logger.critical(
-            f"CRITICAL: Missing core dependency for fixer_ast: {e}. Aborting startup."
+            f"CRITICAL: Missing core dependency for fixer_ast: {fallback_error}. Aborting startup."
         )
         try:
             alert_operator(
-                f"CRITICAL: AST healing missing core dependency: {e}. Aborting.",
+                f"CRITICAL: AST healing missing core dependency: {fallback_error}. Aborting.",
                 level="CRITICAL",
             )
         except Exception:
             pass
-        raise RuntimeError(f"[CRITICAL][AST] Missing core dependency: {e}")
+        raise RuntimeError(f"[CRITICAL][AST] Missing core dependency: {fallback_error}")
 
 # --- Optional redis import (for caching) ---
 try:
