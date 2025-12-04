@@ -48,7 +48,9 @@ try:
         with _metrics_lock:
             try:
                 existing_metric = _metrics_registry._names_to_collectors[name]
-                if isinstance(existing_metric, metric_type):
+                # Check if the existing metric is of the same type
+                # Use type() comparison to avoid isinstance() issues with ABCMeta
+                if type(existing_metric).__name__ == metric_type.__name__:
                     return existing_metric
                 else:
                     runners_logger.warning(
