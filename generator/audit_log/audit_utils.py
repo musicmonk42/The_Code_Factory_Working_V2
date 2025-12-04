@@ -178,22 +178,33 @@ REDACTION_PATTERNS = [
 ]
 
 # --- Metrics ---
-HASH_OPERATIONS = Counter(
-    "audit_utils_hash_ops_total", "Hash computations", ["algo", "mode"]
-)
-HASH_LATENCY = Histogram(
-    "audit_utils_hash_latency_seconds", "Hash time", ["algo", "mode"]
-)
-REDACTION_COUNTS = Counter(
-    "audit_utils_redactions_total", "Total redacted items", ["pattern_type"]
-)
-PROVENANCE_CHAINS = Gauge(
-    "audit_utils_provenance_length", "Current cryptographic chain length"
-)
-SELF_TEST_RESULTS = Gauge("audit_utils_self_test_pass", "Self-test status", ["test"])
-LANG_TAGGED_LOGS = Counter(
-    "audit_utils_lang_tagged_logs_total", "Logs tagged with language", ["language"]
-)
+# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
+try:
+    HASH_OPERATIONS = Counter(
+        "audit_utils_hash_ops_total", "Hash computations", ["algo", "mode"]
+    )
+    HASH_LATENCY = Histogram(
+        "audit_utils_hash_latency_seconds", "Hash time", ["algo", "mode"]
+    )
+    REDACTION_COUNTS = Counter(
+        "audit_utils_redactions_total", "Total redacted items", ["pattern_type"]
+    )
+    PROVENANCE_CHAINS = Gauge(
+        "audit_utils_provenance_length", "Current cryptographic chain length"
+    )
+    SELF_TEST_RESULTS = Gauge("audit_utils_self_test_pass", "Self-test status", ["test"])
+    LANG_TAGGED_LOGS = Counter(
+        "audit_utils_lang_tagged_logs_total", "Logs tagged with language", ["language"]
+    )
+except ValueError:
+    # Metrics already registered (happens during pytest collection)
+    from prometheus_client import REGISTRY
+    HASH_OPERATIONS = REGISTRY._names_to_collectors.get("audit_utils_hash_ops_total")
+    HASH_LATENCY = REGISTRY._names_to_collectors.get("audit_utils_hash_latency_seconds")
+    REDACTION_COUNTS = REGISTRY._names_to_collectors.get("audit_utils_redactions_total")
+    PROVENANCE_CHAINS = REGISTRY._names_to_collectors.get("audit_utils_provenance_length")
+    SELF_TEST_RESULTS = REGISTRY._names_to_collectors.get("audit_utils_self_test_pass")
+    LANG_TAGGED_LOGS = REGISTRY._names_to_collectors.get("audit_utils_lang_tagged_logs_total")
 
 # --- Extensible Registries ---
 hash_registry: Dict[str, Callable[[bytes, str], str]] = {}

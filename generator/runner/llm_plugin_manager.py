@@ -146,16 +146,23 @@ if TEST_METRICS:
     )
 else:
     # In non-test mode, use real Prometheus counters/gauges.
-    PLUGIN_LOADS = Counter(
-        "llm_plugin_loads_total",
-        "Plugin load attempts",
-        ["plugin"],
-    )
-    PLUGIN_ERRORS = Counter(
-        "llm_plugin_errors_total",
-        "Plugin load failures",
-        ["plugin", "error_type"],
-    )
+    # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
+    try:
+        PLUGIN_LOADS = Counter(
+            "llm_plugin_loads_total",
+            "Plugin load attempts",
+            ["plugin"],
+        )
+        PLUGIN_ERRORS = Counter(
+            "llm_plugin_errors_total",
+            "Plugin load failures",
+            ["plugin", "error_type"],
+        )
+    except ValueError:
+        # Metrics already registered (happens during pytest collection)
+        from prometheus_client import REGISTRY
+        PLUGIN_LOADS = REGISTRY._names_to_collectors.get("llm_plugin_loads_total")
+        PLUGIN_ERRORS = REGISTRY._names_to_collectors.get("llm_plugin_errors_total")
 
     # Use the real or dummy LLM_PROVIDER_HEALTH we resolved above.
     LLM_PROVIDER_HEALTH = BASE_LLM_PROVIDER_HEALTH

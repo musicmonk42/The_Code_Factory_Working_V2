@@ -219,33 +219,45 @@ COMPLIANCE_QUESTIONS = [
 ]
 
 # Metrics
-PROMPT_CYCLES = Counter(
-    "clarifier_user_prompt_cycles_total", "Total user prompt cycles", ["channel"]
-)
-PROMPT_LATENCY = Histogram(
-    "clarifier_user_prompt_latency_seconds", "User prompt latency", ["channel"]
-)
-PROMPT_ERRORS = Counter(
-    "clarifier_user_prompt_errors_total",
-    "Errors in user prompting",
-    ["channel", "type"],
-)
-USER_ENGAGEMENT = Gauge(
-    "clarifier_user_engagement_score", "Engagement score (0-1) per user", ["user_id"]
-)
-FEEDBACK_RATINGS = Histogram(
-    "clarifier_feedback_ratings", "User feedback ratings (0-1)"
-)
-COMPLIANCE_QUESTIONS_ASKED = Counter(
-    "clarifier_compliance_questions_asked_total",
-    "Total compliance questions asked",
-    ["question_id"],
-)
-COMPLIANCE_ANSWERS_RECEIVED = Counter(
-    "clarifier_compliance_answers_received_total",
-    "Total compliance answers received",
-    ["question_id", "answer_value"],
-)
+# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
+try:
+    PROMPT_CYCLES = Counter(
+        "clarifier_user_prompt_cycles_total", "Total user prompt cycles", ["channel"]
+    )
+    PROMPT_LATENCY = Histogram(
+        "clarifier_user_prompt_latency_seconds", "User prompt latency", ["channel"]
+    )
+    PROMPT_ERRORS = Counter(
+        "clarifier_user_prompt_errors_total",
+        "Errors in user prompting",
+        ["channel", "type"],
+    )
+    USER_ENGAGEMENT = Gauge(
+        "clarifier_user_engagement_score", "Engagement score (0-1) per user", ["user_id"]
+    )
+    FEEDBACK_RATINGS = Histogram(
+        "clarifier_feedback_ratings", "User feedback ratings (0-1)"
+    )
+    COMPLIANCE_QUESTIONS_ASKED = Counter(
+        "clarifier_compliance_questions_asked_total",
+        "Total compliance questions asked",
+        ["question_id"],
+    )
+    COMPLIANCE_ANSWERS_RECEIVED = Counter(
+        "clarifier_compliance_answers_received_total",
+        "Total compliance answers received",
+        ["question_id", "answer_value"],
+    )
+except ValueError:
+    # Metrics already registered (happens during pytest collection)
+    from prometheus_client import REGISTRY
+    PROMPT_CYCLES = REGISTRY._names_to_collectors.get("clarifier_user_prompt_cycles_total")
+    PROMPT_LATENCY = REGISTRY._names_to_collectors.get("clarifier_user_prompt_latency_seconds")
+    PROMPT_ERRORS = REGISTRY._names_to_collectors.get("clarifier_user_prompt_errors_total")
+    USER_ENGAGEMENT = REGISTRY._names_to_collectors.get("clarifier_user_engagement_score")
+    FEEDBACK_RATINGS = REGISTRY._names_to_collectors.get("clarifier_feedback_ratings")
+    COMPLIANCE_QUESTIONS_ASKED = REGISTRY._names_to_collectors.get("clarifier_compliance_questions_asked_total")
+    COMPLIANCE_ANSWERS_RECEIVED = REGISTRY._names_to_collectors.get("clarifier_compliance_answers_received_total")
 
 
 # User Profile

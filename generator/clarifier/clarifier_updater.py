@@ -158,31 +158,45 @@ except ImportError:
 
 
 # --- Metrics ---
-UPDATE_CYCLES = Counter("clarifier_updates_total", "Requirement updates")
-UPDATE_ERRORS = Counter(
-    "clarifier_update_errors", "Update errors", ["type", "component"]
-)
-UPDATE_CONFLICTS = Gauge("clarifier_conflicts", "Conflicts detected", ["conflict_type"])
-REDACTION_EVENTS = Counter(
-    "clarifier_redaction_events_total", "PII/Secret redactions", ["pattern_type"]
-)
-SCHEMA_MIGRATIONS = Counter(
-    "clarifier_schema_migrations_total",
-    "Schema migrations",
-    ["from_version", "to_version"],
-)
-INFERENCE_LATENCY = Histogram(
-    "clarifier_inference_latency_seconds", "LLM inference latency", ["model_name"]
-)
-SELF_TEST_PASS = Gauge(
-    "clarifier_updater_self_test", "Self-test status (1=pass, 0=fail)"
-)
-HISTORY_STORAGE_LATENCY = Histogram(
-    "clarifier_history_storage_seconds", "History storage latency", ["operation"]
-)
-ALERT_SEND_EVENTS = Counter(
-    "clarifier_alert_send_total", "Total alerts sent", ["severity"]
-)
+# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
+try:
+    UPDATE_CYCLES = Counter("clarifier_updates_total", "Requirement updates")
+    UPDATE_ERRORS = Counter(
+        "clarifier_update_errors", "Update errors", ["type", "component"]
+    )
+    UPDATE_CONFLICTS = Gauge("clarifier_conflicts", "Conflicts detected", ["conflict_type"])
+    REDACTION_EVENTS = Counter(
+        "clarifier_redaction_events_total", "PII/Secret redactions", ["pattern_type"]
+    )
+    SCHEMA_MIGRATIONS = Counter(
+        "clarifier_schema_migrations_total",
+        "Schema migrations",
+        ["from_version", "to_version"],
+    )
+    INFERENCE_LATENCY = Histogram(
+        "clarifier_inference_latency_seconds", "LLM inference latency", ["model_name"]
+    )
+    SELF_TEST_PASS = Gauge(
+        "clarifier_updater_self_test", "Self-test status (1=pass, 0=fail)"
+    )
+    HISTORY_STORAGE_LATENCY = Histogram(
+        "clarifier_history_storage_seconds", "History storage latency", ["operation"]
+    )
+    ALERT_SEND_EVENTS = Counter(
+        "clarifier_alert_send_total", "Total alerts sent", ["severity"]
+    )
+except ValueError:
+    # Metrics already registered (happens during pytest collection)
+    from prometheus_client import REGISTRY
+    UPDATE_CYCLES = REGISTRY._names_to_collectors.get("clarifier_updates_total")
+    UPDATE_ERRORS = REGISTRY._names_to_collectors.get("clarifier_update_errors")
+    UPDATE_CONFLICTS = REGISTRY._names_to_collectors.get("clarifier_conflicts")
+    REDACTION_EVENTS = REGISTRY._names_to_collectors.get("clarifier_redaction_events_total")
+    SCHEMA_MIGRATIONS = REGISTRY._names_to_collectors.get("clarifier_schema_migrations_total")
+    INFERENCE_LATENCY = REGISTRY._names_to_collectors.get("clarifier_inference_latency_seconds")
+    SELF_TEST_PASS = REGISTRY._names_to_collectors.get("clarifier_updater_self_test")
+    HISTORY_STORAGE_LATENCY = REGISTRY._names_to_collectors.get("clarifier_history_storage_seconds")
+    ALERT_SEND_EVENTS = REGISTRY._names_to_collectors.get("clarifier_alert_send_total")
 
 # --- Schema Definitions ---
 SCHEMAS = {

@@ -317,22 +317,33 @@ def get_tracer() -> Tuple[Optional[Any], Optional[Any], Optional[Any]]:
 
 
 # --- Metrics (defined globally for easy access) ---
-CLARIFIER_CYCLES = Counter(
-    "clarifier_cycles_total", "Total clarification cycles", ["status"]
-)
-CLARIFIER_LATENCY = Histogram(
-    "clarifier_latency_seconds", "Clarification cycle latency", ["status"]
-)
-CLARIFIER_ERRORS = Counter("clarifier_errors_total", "Clarifier errors", ["error_type"])
-CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = Histogram(
-    "clarifier_context_retrieval_seconds", "Context retrieval latency", ["manager_type"]
-)
-CLARIFIER_QUESTION_PROMPT_LATENCY = Histogram(
-    "clarifier_question_prompt_seconds", "Question prompt latency", ["interaction_mode"]
-)
-CLARIFIER_PRIORITIZATION_LATENCY = Histogram(
-    "clarifier_prioritization_seconds", "Prioritization latency", ["strategy"]
-)
+# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
+try:
+    CLARIFIER_CYCLES = Counter(
+        "clarifier_cycles_total", "Total clarification cycles", ["status"]
+    )
+    CLARIFIER_LATENCY = Histogram(
+        "clarifier_latency_seconds", "Clarification cycle latency", ["status"]
+    )
+    CLARIFIER_ERRORS = Counter("clarifier_errors_total", "Clarifier errors", ["error_type"])
+    CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = Histogram(
+        "clarifier_context_retrieval_seconds", "Context retrieval latency", ["manager_type"]
+    )
+    CLARIFIER_QUESTION_PROMPT_LATENCY = Histogram(
+        "clarifier_question_prompt_seconds", "Question prompt latency", ["interaction_mode"]
+    )
+    CLARIFIER_PRIORITIZATION_LATENCY = Histogram(
+        "clarifier_prioritization_seconds", "Prioritization latency", ["strategy"]
+    )
+except ValueError:
+    # Metrics already registered (happens during pytest collection)
+    from prometheus_client import REGISTRY
+    CLARIFIER_CYCLES = REGISTRY._names_to_collectors.get("clarifier_cycles_total")
+    CLARIFIER_LATENCY = REGISTRY._names_to_collectors.get("clarifier_latency_seconds")
+    CLARIFIER_ERRORS = REGISTRY._names_to_collectors.get("clarifier_errors_total")
+    CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = REGISTRY._names_to_collectors.get("clarifier_context_retrieval_seconds")
+    CLARIFIER_QUESTION_PROMPT_LATENCY = REGISTRY._names_to_collectors.get("clarifier_question_prompt_seconds")
+    CLARIFIER_PRIORITIZATION_LATENCY = REGISTRY._names_to_collectors.get("clarifier_prioritization_seconds")
 
 
 # --- Circuit Breaker ---

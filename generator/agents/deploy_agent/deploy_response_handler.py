@@ -118,12 +118,18 @@ except ImportError:  # Fallback for environments without LLM_SUMMARY_CALLS_TOTAL
     # Always define a concrete Counter for summary calls in this module so the
     # summarize_section path can record usage without depending on runner changes.
     from prometheus_client import Counter as _Counter
-
-    LLM_SUMMARY_CALLS_TOTAL = _Counter(
-        "llm_summary_calls_total",
-        "Total number of LLM summary calls made by deploy_response_handler.",
-        ["provider", "model"],
-    )
+    
+    # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
+    try:
+        LLM_SUMMARY_CALLS_TOTAL = _Counter(
+            "llm_summary_calls_total",
+            "Total number of LLM summary calls made by deploy_response_handler.",
+            ["provider", "model"],
+        )
+    except ValueError:
+        # Metric already registered (happens during pytest collection)
+        from prometheus_client import REGISTRY
+        LLM_SUMMARY_CALLS_TOTAL = REGISTRY._names_to_collectors.get("llm_summary_calls_total")
 # -----------------------------------------------------------------------------
 from runner.runner_errors import LLMError
 from runner.runner_file_utils import get_commits  # Needed for enrichment
@@ -143,31 +149,41 @@ from runner.runner_security_utils import redact_secrets, scan_for_secrets
 
 # --- Prometheus Metrics (Local) ---
 # NOTE: Retaining local metrics for internal process statistics only, distinct from LLM metrics
-handler_calls = Counter(
-    "deploy_response_handler_calls_total",
-    "Total handler calls",
-    ["format", "operation"],
-)
-handler_errors = Counter(
-    "deploy_response_handler_errors_total",
-    "Total handler errors",
-    ["format", "operation", "error_type"],
-)
-handler_latency = Histogram(
-    "deploy_response_handler_latency_seconds",
-    "Handler latency",
-    ["format", "operation"],
-)
-scan_findings_gauge = Gauge(
-    "deploy_scan_findings_count",
-    "Number of security findings in configs",
-    ["format", "finding_type"],
-)
-scan_total_findings = Counter(
-    "deploy_scan_total_findings",
-    "Total security findings detected",
-    ["format", "finding_type"],
-)
+# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
+try:
+    handler_calls = Counter(
+        "deploy_response_handler_calls_total",
+        "Total handler calls",
+        ["format", "operation"],
+    )
+    handler_errors = Counter(
+        "deploy_response_handler_errors_total",
+        "Total handler errors",
+        ["format", "operation", "error_type"],
+    )
+    handler_latency = Histogram(
+        "deploy_response_handler_latency_seconds",
+        "Handler latency",
+        ["format", "operation"],
+    )
+    scan_findings_gauge = Gauge(
+        "deploy_scan_findings_count",
+        "Number of security findings in configs",
+        ["format", "finding_type"],
+    )
+    scan_total_findings = Counter(
+        "deploy_scan_total_findings",
+        "Total security findings detected",
+        ["format", "finding_type"],
+    )
+except ValueError:
+    # Metrics already registered (happens during pytest collection)
+    from prometheus_client import REGISTRY
+    handler_calls = REGISTRY._names_to_collectors.get("deploy_response_handler_calls_total")
+    handler_errors = REGISTRY._names_to_collectors.get("deploy_response_handler_errors_total")
+    handler_latency = REGISTRY._names_to_collectors.get("deploy_response_handler_latency_seconds")
+    scan_findings_gauge = REGISTRY._names_to_collectors.get("deploy_scan_findings_count")
+    scan_total_findings = REGISTRY._names_to_collectors.get("deploy_scan_total_findings")
 
 # --- ADDED: Constants and Functions for Test Fixes ---
 ERROR_FILENAME = "error.txt"
