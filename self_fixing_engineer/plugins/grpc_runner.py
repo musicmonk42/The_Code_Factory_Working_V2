@@ -198,6 +198,7 @@ except ImportError as e:
         f"CRITICAL: Missing core dependency for gRPC runner: {e}. Aborting startup."
     )
     MISSING_DEPS = True
+    PYDANTIC_V2 = False  # FIX: Define PYDANTIC_V2 in error case
     grpc = None
     prometheus_client = None
 
