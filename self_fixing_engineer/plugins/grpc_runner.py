@@ -23,7 +23,12 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    import grpc as grpc_types
+else:
+    grpc_types = Any
 
 # --- Plugin Registry Import ---
 # Lazy import to avoid circular import with omnicore_engine.plugin_registry.
@@ -204,10 +209,12 @@ except ImportError as e:
 
     # Pydantic fallbacks
     class BaseModel:
-        pass
-
+        def __init_subclass__(cls, **kwargs):
+            # Ignore all keyword arguments (like extra=...)
+            super().__init_subclass__()
+    
     class Extra:
-        pass
+        forbid = "forbid"  # Mock attribute for Pydantic V1 compatibility
 
     class ValidationError(Exception):
         pass
@@ -310,7 +317,7 @@ GRPC_ENDPOINT_ALLOWLIST_SECRET = (
 )
 
 
-def _get_tls_credentials() -> Optional[grpc.ChannelCredentials]:
+def _get_tls_credentials() -> Optional["grpc_types.ChannelCredentials"]:
     """Load TLS credentials from secrets manager."""
     try:
         cert_path = SECRETS_MANAGER.get_secret(
@@ -403,7 +410,7 @@ def _is_endpoint_allowed(address: str) -> bool:
 
 # --- Health ---
 async def plugin_health(
-    channel: grpc.aio.Channel, plugin_name: str, health_check_method_name: str = "Check"
+    channel: "grpc_types.aio.Channel", plugin_name: str, health_check_method_name: str = "Check"
 ) -> str:
     """
     Check the health of a gRPC service via standard Health service.
