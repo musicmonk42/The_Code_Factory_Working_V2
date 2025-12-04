@@ -184,7 +184,15 @@ try:
     import grpc
     import prometheus_client
     from grpc_health.v1 import health_pb2, health_pb2_grpc
-    from pydantic import BaseModel, Extra, Field, ValidationError, validator
+    # FIX: Pydantic V2 compatibility - Extra is now ConfigDict
+    try:
+        from pydantic import BaseModel, Field, ValidationError, validator, ConfigDict
+        # Pydantic V2
+        PYDANTIC_V2 = True
+    except ImportError:
+        from pydantic import BaseModel, Extra, Field, ValidationError, validator
+        # Pydantic V1
+        PYDANTIC_V2 = False
 except ImportError as e:
     logger.critical(
         f"CRITICAL: Missing core dependency for gRPC runner: {e}. Aborting startup."
@@ -245,19 +253,35 @@ PLUGIN_OPERATION_COUNTER = (
 
 
 # --- Manifest Model ---
-class PluginManifest(BaseModel, extra=Extra.forbid):
-    """Strict validation of plugin manifest."""
+if PYDANTIC_V2:
+    class PluginManifest(BaseModel):
+        """Strict validation of plugin manifest."""
+        model_config = ConfigDict(extra='forbid')
 
-    name: str = Field(..., min_length=1)
-    version: str = Field(..., pattern=r"^\d+\.\d+\.\d+$")
-    entrypoint: str = Field(..., min_length=1)
-    description: str = "No description provided."
-    author: str = "Unknown"
-    capabilities: List[str] = Field(default_factory=list)
-    permissions: List[str] = Field(default_factory=list)
-    dependencies: List[str] = Field(default_factory=list)
-    min_core_version: str = Field("1.0.0", pattern=r"^\d+\.\d+\.\d+$")
-    max_core_version: str = Field("999.0.0", pattern=r"^\d+\.\d+\.\d+$")
+        name: str = Field(..., min_length=1)
+        version: str = Field(..., pattern=r"^\d+\.\d+\.\d+$")
+        entrypoint: str = Field(..., min_length=1)
+        description: str = "No description provided."
+        author: str = "Unknown"
+        capabilities: List[str] = Field(default_factory=list)
+        permissions: List[str] = Field(default_factory=list)
+        dependencies: List[str] = Field(default_factory=list)
+        min_core_version: str = Field("1.0.0", pattern=r"^\d+\.\d+\.\d+$")
+        max_core_version: str = Field("999.0.0", pattern=r"^\d+\.\d+\.\d+$")
+else:
+    class PluginManifest(BaseModel, extra=Extra.forbid):
+        """Strict validation of plugin manifest."""
+
+        name: str = Field(..., min_length=1)
+        version: str = Field(..., pattern=r"^\d+\.\d+\.\d+$")
+        entrypoint: str = Field(..., min_length=1)
+        description: str = "No description provided."
+        author: str = "Unknown"
+        capabilities: List[str] = Field(default_factory=list)
+        permissions: List[str] = Field(default_factory=list)
+        dependencies: List[str] = Field(default_factory=list)
+        min_core_version: str = Field("1.0.0", pattern=r"^\d+\.\d+\.\d+$")
+        max_core_version: str = Field("999.0.0", pattern=r"^\d+\.\d+\.\d+$")
     health_check: str = Field("plugin_health", min_length=1)
     api_version: str = Field("v1", min_length=1)
     license: str = "Proprietary"

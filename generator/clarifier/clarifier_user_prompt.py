@@ -45,7 +45,17 @@ except ImportError:
 
 
 from cryptography.fernet import InvalidToken  # Encrypt (cryptography req)
-from googletrans import Translator  # Translation (googletrans req)
+# FIX: Make googletrans optional since it has dependency conflicts
+try:
+    from googletrans import Translator  # Translation (googletrans req)
+    HAS_GOOGLETRANS = True
+except ImportError:
+    try:
+        from deep_translator import GoogleTranslator as Translator  # Alternative translator
+        HAS_GOOGLETRANS = "deep"
+    except ImportError:
+        Translator = None
+        HAS_GOOGLETRANS = False
 from prometheus_client import Counter, Gauge, Histogram  # Metrics (prometheus req)
 from pydantic import BaseModel  # Config (pydantic req)
 
@@ -319,14 +329,27 @@ class UserPromptChannel(ABC):
     """Abstract base class for different user interaction channels."""
 
     def __init__(self, target_language: str = "en"):
-        self.translator = Translator()
+        # FIX: Handle missing translator gracefully
+        if HAS_GOOGLETRANS:
+            self.translator = Translator() if Translator else None
+        else:
+            self.translator = None
+            logger.warning("Translation library not available. Translation will be disabled.")
         self.target_language = target_language
 
     def _translate_text(self, text: str, dest: str) -> str:
         """Translates text if dest language is different from source (assumed 'en')."""
+        if not self.translator:
+            # Translation not available, return original text
+            return text
         if self.target_language != dest:
             try:
-                translated = self.translator.translate(text, dest=dest).text
+                if HAS_GOOGLETRANS == "deep":
+                    # deep-translator API
+                    translated = self.translator.translate(text, target=dest)
+                else:
+                    # googletrans API
+                    translated = self.translator.translate(text, dest=dest).text
                 logger.debug(
                     f"Translated '{text[:30]}...' to '{dest}': '{translated[:30]}...'"
                 )
