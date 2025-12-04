@@ -10,6 +10,21 @@ from omnicore_engine.database import Database
 from omnicore_engine.message_bus import ShardedMessageBus
 from omnicore_engine.plugin_registry import PLUGIN_REGISTRY as global_plugin_registry
 
+# Try to import ArbiterConfig at module level for use in tests
+try:
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+except ImportError:
+    # If import fails, create a fallback class
+    class ArbiterConfig:
+        """Fallback ArbiterConfig when arbiter module is not available."""
+        def __init__(self):
+            self.log_level = "INFO"
+            self.LOG_LEVEL = "INFO"
+            self.database_path = "sqlite:///./omnicore.db"
+            self.DB_PATH = "sqlite:///./omnicore.db"
+            self.API_HOST = "0.0.0.0"
+            self.API_PORT = 8000
+
 try:
     from arbiter.bug_manager import BugManager
 except Exception:

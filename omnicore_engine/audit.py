@@ -15,6 +15,25 @@ from pydantic import BaseModel, Field, SecretStr, ValidationError
 
 from omnicore_engine.retry_compat import retry
 
+# Try to import ArbiterConfig at module level for direct use
+try:
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+except ImportError:
+    # If import fails, create a fallback class
+    class ArbiterConfig:
+        """Fallback ArbiterConfig when arbiter module is not available."""
+        def __init__(self):
+            self.log_level = "INFO"
+            self.LOG_LEVEL = "INFO"
+            self.database_path = "sqlite:///./omnicore.db"
+            self.DB_PATH = "sqlite:///./omnicore.db"
+            self.ENCRYPTION_KEY = SecretStr(Fernet.generate_key().decode("utf-8"))
+            self.ENCRYPTION_KEY_BYTES = Fernet.generate_key()
+            self.AUDIT_BUFFER_SIZE = 100
+            self.AUDIT_FLUSH_INTERVAL = 1.0
+            self.AUDIT_BLOCKCHAIN_ENABLED = False
+            self.WEB3_PROVIDER_URL = None
+
 
 def _create_fallback_settings():
     """Create a minimal settings object for when ArbiterConfig is unavailable."""
@@ -40,6 +59,8 @@ def _create_fallback_settings():
         AUDIT_FLUSH_INTERVAL=1.0,
         AUDIT_BLOCKCHAIN_ENABLED=False,
         WEB3_PROVIDER_URL=None,
+        API_HOST="0.0.0.0",
+        API_PORT=8000,
     )
 
 

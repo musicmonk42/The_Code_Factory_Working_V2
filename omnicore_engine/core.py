@@ -32,6 +32,8 @@ def _create_fallback_settings():
         decision_optimizer_config={},
         engine_type="simulation",
         encryption_key_bytes=b"",
+        API_HOST="0.0.0.0",
+        API_PORT=8000,
     )
 
 
