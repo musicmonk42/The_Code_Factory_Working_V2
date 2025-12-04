@@ -40,8 +40,26 @@ minversion = "7.4"
 addopts = "-ra -q --tb=short"
 testpaths = [
     "generator/tests",
+    "generator/agents/tests",
+    "generator/audit_log/tests",
+    "generator/clarifier/tests",
+    "generator/intent_parser/tests",
+    "generator/main/tests",
+    "generator/runner/tests",
     "omnicore_engine/tests",
-    "self_fixing_engineer/tests"
+    "omnicore_engine/database/tests",
+    "omnicore_engine/message_bus/tests",
+    "self_fixing_engineer/tests",
+    "self_fixing_engineer/arbiter/tests",
+    "self_fixing_engineer/arbiter/arbiter_growth/tests",
+    "self_fixing_engineer/arbiter/bug_manager/tests",
+    "self_fixing_engineer/arbiter/explainable_reasoner/tests",
+    "self_fixing_engineer/arbiter/knowledge_graph/tests",
+    "self_fixing_engineer/arbiter/learner/tests",
+    "self_fixing_engineer/arbiter/meta_learning_orchestrator/tests",
+    "self_fixing_engineer/arbiter/models/tests",
+    "self_fixing_engineer/arbiter/plugins/tests",
+    "self_fixing_engineer/arbiter/policy/tests"
 ]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
