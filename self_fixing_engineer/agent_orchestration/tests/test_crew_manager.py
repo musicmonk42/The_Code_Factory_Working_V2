@@ -6,7 +6,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
-from agent_orchestration.crew_manager import (
+from self_fixing_engineer.agent_orchestration.crew_manager import (
     MAX_CONFIG_SIZE,
     CrewAgentBase,
     CrewManager,

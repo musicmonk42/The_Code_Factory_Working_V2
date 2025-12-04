@@ -87,7 +87,7 @@ import pickle
 import pytest
 
 # Now import the module components to test - this should work because all mocks are in place
-from arbiter.knowledge_graph.core import (
+from self_fixing_engineer.arbiter.knowledge_graph.core import (
     AgentCoreException,
     AgentErrorCode,
     AgentTeam,
