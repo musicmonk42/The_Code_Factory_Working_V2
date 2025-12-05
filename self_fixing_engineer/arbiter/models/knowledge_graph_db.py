@@ -17,12 +17,25 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
 
 # OpenTelemetry tracing
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-from opentelemetry.trace import Status, StatusCode
+try:
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+    from opentelemetry.trace import Status, StatusCode
+    HAS_OPENTELEMETRY = True
+except (ImportError, ModuleNotFoundError):
+    # Fallback when OpenTelemetry is not fully installed
+    HAS_OPENTELEMETRY = False
+    trace = None  # type: ignore
+    Resource = None  # type: ignore
+    TracerProvider = None  # type: ignore
+    BatchSpanProcessor = None  # type: ignore
+    ConsoleSpanExporter = None  # type: ignore
+    OTLPSpanExporter = None  # type: ignore
+    Status = None  # type: ignore
+    StatusCode = None  # type: ignore
 
 # Prometheus metrics
 from prometheus_client import (
@@ -254,48 +267,56 @@ logger = logging.getLogger("neo4j_kg")
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
 # OpenTelemetry setup - only set tracer provider if not already configured
-_existing_provider = trace.get_tracer_provider()
-_provider_needs_setup = (
-    _existing_provider is None
-    or not hasattr(_existing_provider, "add_span_processor")
-    or type(_existing_provider).__name__ == "ProxyTracerProvider"
-)
-
-if _provider_needs_setup:
-    trace.set_tracer_provider(
-        TracerProvider(resource=Resource.create({"service.name": "sfe-knowledge-graph-db"}))
+if HAS_OPENTELEMETRY:
+    _existing_provider = trace.get_tracer_provider()
+    _provider_needs_setup = (
+        _existing_provider is None
+        or not hasattr(_existing_provider, "add_span_processor")
+        or type(_existing_provider).__name__ == "ProxyTracerProvider"
     )
-    # Configurable OpenTelemetry Exporter via environment variable
-    exporter_type = os.getenv("SFE_OTEL_EXPORTER_TYPE", "console").lower()
-    if exporter_type == "otlp":
-        exporter = OTLPSpanExporter()
-        logger.info("Using OTLPSpanExporter for OpenTelemetry traces.")
-    else:
-        exporter = ConsoleSpanExporter()
-        logger.info(
-            "Using ConsoleSpanExporter for OpenTelemetry traces (default). Set SFE_OTEL_EXPORTER_TYPE=otlp for OTLP."
+    
+    if _provider_needs_setup:
+        trace.set_tracer_provider(
+            TracerProvider(resource=Resource.create({"service.name": "sfe-knowledge-graph-db"}))
         )
-    trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(exporter))
-
-# Get tracer with version compatibility handling
-try:
-    tracer = trace.get_tracer(__name__)
-except TypeError:
-    # Fallback for older OpenTelemetry versions that don't support all parameters
-    # This can happen if opentelemetry-sdk version is older than opentelemetry-api
+        # Configurable OpenTelemetry Exporter via environment variable
+        exporter_type = os.getenv("SFE_OTEL_EXPORTER_TYPE", "console").lower()
+        if exporter_type == "otlp":
+            exporter = OTLPSpanExporter()
+            logger.info("Using OTLPSpanExporter for OpenTelemetry traces.")
+        else:
+            exporter = ConsoleSpanExporter()
+            logger.info(
+                "Using ConsoleSpanExporter for OpenTelemetry traces (default). Set SFE_OTEL_EXPORTER_TYPE=otlp for OTLP."
+            )
+        trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(exporter))
+    
+    # Get tracer with version compatibility handling
     try:
-        tracer = trace.get_tracer(__name__, None)
+        tracer = trace.get_tracer(__name__)
     except TypeError:
-        # If still failing, create a no-op tracer
-        from contextlib import nullcontext
-        class _NoOpTracer:
-            def start_as_current_span(self, name, **kwargs):
-                return nullcontext()
-        tracer = _NoOpTracer()
-        logger.warning(
-            "Failed to initialize OpenTelemetry tracer due to version compatibility issues. "
-            "Using no-op tracer. Please ensure opentelemetry-api and opentelemetry-sdk versions match."
-        )
+        # Fallback for older OpenTelemetry versions that don't support all parameters
+        # This can happen if opentelemetry-sdk version is older than opentelemetry-api
+        try:
+            tracer = trace.get_tracer(__name__, None)
+        except TypeError:
+            # If still failing, create a no-op tracer
+            from contextlib import nullcontext
+            class _NoOpTracer:
+                def start_as_current_span(self, name, **kwargs):
+                    return nullcontext()
+            tracer = _NoOpTracer()
+            logger.warning(
+                "Failed to initialize OpenTelemetry tracer due to version compatibility issues. "
+                "Using no-op tracer. Please ensure opentelemetry-api and opentelemetry-sdk versions match."
+            )
+else:
+    # OpenTelemetry not available, use no-op tracer
+    from contextlib import nullcontext
+    class _NoOpTracer:
+        def start_as_current_span(self, name, **kwargs):
+            return nullcontext()
+    tracer = _NoOpTracer()
 
 # Unregister default collectors for clean testing environment
 try:
