@@ -46,7 +46,11 @@ from runner.runner_logging import log_audit_event as log_action
 # --- END FIX ---
 
 logger = logging.getLogger(__name__)
-tracer = trace.get_tracer(__name__)
+try:
+    tracer = trace.get_tracer(__name__)
+except TypeError:
+    # Fallback for older OpenTelemetry versions
+    tracer = None
 
 # Metrics
 # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest

@@ -55,12 +55,13 @@ from .metrics import (
     retrieve_hit_miss,
 )
 from .validation import validate_data
+from arbiter.otel_config import get_tracer_safe
 
 # Use structlog for structured logging
 logger = structlog.get_logger(__name__)
 
 # OpenTelemetry tracer and meter
-tracer = trace.get_tracer(__name__)
+tracer = get_tracer_safe(__name__)
 meter = metrics.get_meter(__name__)
 
 # Handle the missing 'arbiter.audit_log' dependency gracefully.

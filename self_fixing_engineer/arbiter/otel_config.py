@@ -182,7 +182,43 @@ except ImportError:
             return None
 
 
+
 logger = logging.getLogger(__name__)
+
+
+def get_tracer_safe(name: str, version: Optional[str] = None) -> Any:
+    """
+    Safely get an OpenTelemetry tracer with version compatibility handling.
+    
+    This function wraps trace.get_tracer() to handle version incompatibilities
+    between opentelemetry-api and opentelemetry-sdk. If the underlying TracerProvider
+    doesn't support all the parameters that trace.get_tracer() tries to pass,
+    this function will retry with fewer parameters or return a no-op tracer.
+    
+    Args:
+        name: The name of the tracer (usually __name__)
+        version: Optional version string for the tracer
+        
+    Returns:
+        A Tracer instance, or a no-op tracer if initialization fails
+    """
+    if not OTEL_AVAILABLE:
+        return _NoOpTracerStub()
+    
+    try:
+        # Try normal call first
+        if version:
+            return trace.get_tracer(name, version)
+        else:
+            return trace.get_tracer(name)
+    except TypeError as e:
+        # Handle version compatibility issues
+        logger.warning(
+            f"Failed to initialize OpenTelemetry tracer due to version compatibility: {e}. "
+            "This usually means opentelemetry-api and opentelemetry-sdk versions don't match. "
+            "Falling back to no-op tracer. Please ensure both packages are at version 1.38.0 or compatible."
+        )
+        return _NoOpTracerStub()
 
 
 # Environment detection

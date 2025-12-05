@@ -25,7 +25,11 @@ from opentelemetry import trace
 from prometheus_client import Counter, Histogram
 
 logger = logging.getLogger(__name__)
-tracer = trace.get_tracer(__name__)
+try:
+    tracer = trace.get_tracer(__name__)
+except TypeError:
+    # Fallback for older OpenTelemetry versions
+    tracer = None
 
 # --- RUNNER UTILITY IMPORTS (ENFORCED) ---
 TESTING = os.getenv("TESTING") == "1"

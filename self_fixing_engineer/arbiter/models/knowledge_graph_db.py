@@ -277,7 +277,25 @@ if _provider_needs_setup:
         )
     trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(exporter))
 
-tracer = trace.get_tracer(__name__)
+# Get tracer with version compatibility handling
+try:
+    tracer = trace.get_tracer(__name__)
+except TypeError:
+    # Fallback for older OpenTelemetry versions that don't support all parameters
+    # This can happen if opentelemetry-sdk version is older than opentelemetry-api
+    try:
+        tracer = trace.get_tracer(__name__, None)
+    except TypeError:
+        # If still failing, create a no-op tracer
+        from contextlib import nullcontext
+        class _NoOpTracer:
+            def start_as_current_span(self, name, **kwargs):
+                return nullcontext()
+        tracer = _NoOpTracer()
+        logger.warning(
+            "Failed to initialize OpenTelemetry tracer due to version compatibility issues. "
+            "Using no-op tracer. Please ensure opentelemetry-api and opentelemetry-sdk versions match."
+        )
 
 # Unregister default collectors for clean testing environment
 try:

@@ -18,7 +18,11 @@ from opentelemetry import trace
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
-tracer = trace.get_tracer(__name__)
+try:
+    tracer = trace.get_tracer(__name__)
+except TypeError:
+    # Fallback for older OpenTelemetry versions
+    tracer = None
 
 TESTING = os.getenv("TESTING") == "1"
 

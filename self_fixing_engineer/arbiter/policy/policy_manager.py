@@ -61,6 +61,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 # OpenTelemetry: only acquire tracer; assume provider is set elsewhere
 try:
     from opentelemetry import trace
+from arbiter.otel_config import get_tracer_safe
 except Exception:  # pragma: no cover - tracing optional
 
     class _NoOpTracer:  # minimal no-op
@@ -86,7 +87,7 @@ except Exception:  # pragma: no cover - tracing optional
 
     trace = _NoOp()  # type: ignore
 
-tracer = trace.get_tracer(__name__)
+tracer = get_tracer_safe(__name__)
 
 # --- Logging ---
 logger = logging.getLogger(__name__)

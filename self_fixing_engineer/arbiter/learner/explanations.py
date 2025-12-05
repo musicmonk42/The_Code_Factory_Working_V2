@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import structlog
 from opentelemetry import trace
+from arbiter.otel_config import get_tracer_safe
 from prometheus_client import Counter, Histogram
 from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
@@ -16,7 +17,7 @@ from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 logger = structlog.get_logger(__name__)
 
 # OpenTelemetry tracer
-tracer = trace.get_tracer(__name__)
+tracer = get_tracer_safe(__name__)
 
 # Metrics for LLM operations
 explanation_llm_latency_seconds = Histogram(

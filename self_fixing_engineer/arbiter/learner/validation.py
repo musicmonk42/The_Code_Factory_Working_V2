@@ -11,6 +11,7 @@ import structlog
 from jsonschema.exceptions import SchemaError
 from jsonschema.exceptions import ValidationError as JsonValidationError
 from opentelemetry import trace
+from arbiter.otel_config import get_tracer_safe
 from prometheus_client import Counter, Histogram
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -20,7 +21,7 @@ from .encryption import ArbiterConfig
 logger = structlog.get_logger(__name__)
 
 # OpenTelemetry tracer
-tracer = trace.get_tracer(__name__)
+tracer = get_tracer_safe(__name__)
 
 # Metrics
 validation_success_total = Counter(

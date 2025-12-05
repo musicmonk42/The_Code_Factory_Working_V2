@@ -32,6 +32,7 @@ from knowledge_graph_db import (
 
 # Import OpenTelemetry directly
 from opentelemetry import trace
+from arbiter.otel_config import get_tracer_safe
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # Configure logging for tests
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 in_memory_exporter = InMemorySpanExporter()
 
 # Get tracer directly
-tracer = trace.get_tracer(__name__)
+tracer = get_tracer_safe(__name__)
 
 # Sample environment variables for tests
 SAMPLE_ENV = {

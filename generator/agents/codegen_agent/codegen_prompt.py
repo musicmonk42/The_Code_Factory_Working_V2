@@ -110,7 +110,11 @@ logger = logging.getLogger(__name__)
 # OpenTelemetry Setup
 # Use the default/configured tracer provider instead of manually creating one
 # This avoids version compatibility issues and respects OTEL_* environment variables
-tracer = trace.get_tracer(__name__)
+try:
+    tracer = trace.get_tracer(__name__)
+except TypeError:
+    # Fallback for older OpenTelemetry versions
+    tracer = None
 
 # ==============================================================================
 # --- Prometheus Metrics Access Helpers ---
