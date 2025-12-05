@@ -31,10 +31,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List  # <-- FIX: Moved 'List' here
 
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from prometheus_client import Counter, Histogram
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic import ValidationError as PydanticValidationError
@@ -64,15 +60,9 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 # OpenTelemetry setup
-trace.set_tracer_provider(
-    TracerProvider(
-        resource=Resource.create({"service.name": "generator-plugin-wrapper"})
-    )
-)
+# Use the default/configured tracer provider instead of manually creating one
+# This avoids version compatibility issues and respects OTEL_* environment variables
 tracer = trace.get_tracer(__name__)
-exporter_type = os.getenv("SFE_OTEL_EXPORTER_TYPE", "console").lower()
-exporter = OTLPSpanExporter() if exporter_type == "otlp" else ConsoleSpanExporter()
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(exporter))
 
 # Prometheus metrics
 _metrics_lock = threading.Lock()

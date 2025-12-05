@@ -22,9 +22,6 @@ from jinja2 import TemplateNotFound
 
 # Observability libraries
 from opentelemetry import trace
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 from prometheus_client import (
     REGISTRY,
     Counter,
@@ -313,20 +310,8 @@ class RedisFeedbackStore(FeedbackStore):
 # --- Agent Configuration & Setup ---
 # ==============================================================================
 # OpenTelemetry Setup
-resource = Resource(attributes={"service.name": "codegen-agent"})
-provider = TracerProvider(resource=resource)
-# Use Jaeger if available, otherwise fall back to console
-if JaegerExporter:
-    provider.add_span_processor(
-        SimpleSpanProcessor(
-            JaegerExporter(
-                agent_host_name=os.getenv("OTEL_EXPORTER_JAEGER_ENDPOINT", "localhost")
-            )
-        )
-    )
-else:
-    provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
-trace.set_tracer_provider(provider)
+# Use the default/configured tracer provider instead of manually creating one
+# This avoids version compatibility issues and respects OTEL_* environment variables
 tracer = trace.get_tracer(__name__)
 
 

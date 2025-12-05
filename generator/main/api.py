@@ -41,8 +41,6 @@ try:
     )
     from opentelemetry import trace
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.trace import Status, StatusCode  # Import Status and StatusCode
 
     # Password hashing
@@ -506,12 +504,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- OpenTelemetry Tracer Configuration ---
-# Configure Tracer
-trace.set_tracer_provider(TracerProvider())
-span_exporter = ConsoleSpanExporter()
-trace.get_tracer_provider().add_span_processor(
-    BatchSpanProcessor(span_exporter)
-)  # Use ConsoleExporter for local dev
+# Use the default/configured tracer provider instead of manually creating one
+# This avoids version compatibility issues and respects OTEL_* environment variables
 tracer = trace.get_tracer(__name__)
 
 

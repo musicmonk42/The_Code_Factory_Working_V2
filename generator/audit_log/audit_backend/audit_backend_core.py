@@ -29,8 +29,6 @@ from prometheus_client import Counter, Gauge, Histogram
 # OpenTelemetry imports (guarded)
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
     from opentelemetry.trace import StatusCode
 
     HAS_OPENTELEMETRY = True
@@ -469,14 +467,13 @@ BACKEND_TAMPER_DETECTION_FAILURES = safe_counter(
 
 # --- OpenTelemetry Setup ---
 if HAS_OPENTELEMETRY:
-    provider = TracerProvider()
-    processor = SimpleSpanProcessor(ConsoleSpanExporter())
-    provider.add_span_processor(processor)
-    trace.set_tracer_provider(provider)
+    # Use the default/configured tracer provider instead of manually creating one
+    # This avoids version compatibility issues and respects OTEL_* environment variables
     tracer = trace.get_tracer(__name__)
     _STATUS_OK = StatusCode.OK
     _STATUS_ERROR = StatusCode.ERROR
 else:
+    tracer = None
     _STATUS_OK = True
     _STATUS_ERROR = False
 
