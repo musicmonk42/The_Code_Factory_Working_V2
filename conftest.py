@@ -128,33 +128,60 @@ if 'opentelemetry' not in sys.modules:
         instrumentation_module = types.ModuleType('opentelemetry.instrumentation')
         instrumentation_module.__file__ = '<mocked opentelemetry.instrumentation>'
         instrumentation_module.__path__ = []  # This is required for submodule imports
+        otel_module.instrumentation = instrumentation_module
+        
+        # Create common instrumentation submodules
+        instrumentation_fastapi = types.ModuleType('opentelemetry.instrumentation.fastapi')
+        instrumentation_fastapi.__file__ = '<mocked opentelemetry.instrumentation.fastapi>'
+        instrumentation_fastapi.FastAPIInstrumentor = lambda *args, **kwargs: None
+        
+        instrumentation_logging = types.ModuleType('opentelemetry.instrumentation.logging')
+        instrumentation_logging.__file__ = '<mocked opentelemetry.instrumentation.logging>'
+        instrumentation_logging.LoggingInstrumentor = lambda *args, **kwargs: None
+        
+        instrumentation_requests = types.ModuleType('opentelemetry.instrumentation.requests')
+        instrumentation_requests.__file__ = '<mocked opentelemetry.instrumentation.requests>'
+        instrumentation_requests.RequestsInstrumentor = lambda *args, **kwargs: None
+        
+        instrumentation_system_metrics = types.ModuleType('opentelemetry.instrumentation.system_metrics')
+        instrumentation_system_metrics.__file__ = '<mocked opentelemetry.instrumentation.system_metrics>'
+        instrumentation_system_metrics.SystemMetricsInstrumentor = lambda *args, **kwargs: None
         
         # Create sdk modules
         sdk_module = types.ModuleType('opentelemetry.sdk')
         sdk_module.__file__ = '<mocked opentelemetry.sdk>'
+        otel_module.sdk = sdk_module
         
         sdk_trace_module = types.ModuleType('opentelemetry.sdk.trace')
         sdk_trace_module.__file__ = '<mocked opentelemetry.sdk.trace>'
+        sdk_module.trace = sdk_trace_module
         
         sdk_trace_export_module = types.ModuleType('opentelemetry.sdk.trace.export')
         sdk_trace_export_module.__file__ = '<mocked opentelemetry.sdk.trace.export>'
         sdk_trace_export_module.ConsoleSpanExporter = lambda *args, **kwargs: None
         sdk_trace_export_module.SimpleSpanProcessor = lambda *args, **kwargs: None
         sdk_trace_export_module.BatchSpanProcessor = lambda *args, **kwargs: None
+        sdk_trace_module.export = sdk_trace_export_module
         
         # Create in_memory_span_exporter submodule
         in_memory_exporter = types.ModuleType('opentelemetry.sdk.trace.export.in_memory_span_exporter')
         in_memory_exporter.__file__ = '<mocked opentelemetry.sdk.trace.export.in_memory_span_exporter>'
         in_memory_exporter.InMemorySpanExporter = lambda *args, **kwargs: None
+        sdk_trace_export_module.in_memory_span_exporter = in_memory_exporter
         
         sdk_resources_module = types.ModuleType('opentelemetry.sdk.resources')
         sdk_resources_module.__file__ = '<mocked opentelemetry.sdk.resources>'
         sdk_resources_module.Resource = lambda **kwargs: None
+        sdk_module.resources = sdk_resources_module
         
         # Register all modules in sys.modules
         sys.modules['opentelemetry'] = otel_module
         sys.modules['opentelemetry.trace'] = trace_module
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
+        sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
+        sys.modules['opentelemetry.instrumentation.logging'] = instrumentation_logging
+        sys.modules['opentelemetry.instrumentation.requests'] = instrumentation_requests
+        sys.modules['opentelemetry.instrumentation.system_metrics'] = instrumentation_system_metrics
         sys.modules['opentelemetry.sdk'] = sdk_module
         sys.modules['opentelemetry.sdk.trace'] = sdk_trace_module
         sys.modules['opentelemetry.sdk.trace.export'] = sdk_trace_export_module
