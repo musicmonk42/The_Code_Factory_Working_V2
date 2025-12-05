@@ -34,6 +34,24 @@ def _create_mock_module(name):
 # Only mock if genuinely missing (not if already imported)
 _OPTIONAL_DEPENDENCIES = [
     'tiktoken',  # Often missing, used by LLM clients
+    'aiofiles',  # Required by generator.main.api
+    'backoff',  # Required by generator.main.api
+    'fastapi',  # Required by generator.main.api
+    'fastapi.security',  # Required by generator.main.api
+    'uvicorn',  # Required by generator.main
+    'jwt',  # Required by generator.main.api
+    'sqlalchemy',  # Required by many modules
+    'redis',  # Required by various modules
+    'redis.asyncio',  # Required by generator.main.api
+    'dotenv',  # Required by many modules
+    'prometheus_client',  # Required by many modules
+    'aiohttp',  # Required by many modules
+    'opentelemetry',  # Required by many modules
+    'opentelemetry.trace',  # Required by many modules
+    'opentelemetry.sdk',  # Required by many modules
+    'opentelemetry.sdk.trace',  # Required by many modules
+    'opentelemetry.sdk.trace.export',  # Required by many modules
+    'tenacity',  # Required by many modules
 ]
 
 for dep in _OPTIONAL_DEPENDENCIES:
@@ -41,7 +59,17 @@ for dep in _OPTIONAL_DEPENDENCIES:
         try:
             __import__(dep)
         except ImportError:
-            sys.modules[dep] = _create_mock_module(dep)
+            # Create a more sophisticated mock that handles submodule access
+            mock_module = _create_mock_module(dep)
+            sys.modules[dep] = mock_module
+            
+            # For packages that are commonly accessed as submodules, create parent stubs
+            if '.' in dep:
+                parts = dep.split('.')
+                for i in range(1, len(parts)):
+                    parent_name = '.'.join(parts[:i])
+                    if parent_name not in sys.modules:
+                        sys.modules[parent_name] = _create_mock_module(parent_name)
 
 # ---- Pydantic decorator safety shim ----
 # Prevents test collection-time errors when pydantic decorators are replaced with non-callables

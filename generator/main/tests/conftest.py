@@ -12,7 +12,7 @@ os.environ["TESTING"] = "1"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
-# Dynaconf “main” environment (the one that crashes)
+# Dynaconf "main" environment (the one that crashes)
 os.environ["AUDIT_CRYPTO_MAIN_PROVIDER_TYPE"] = "software"
 os.environ["AUDIT_CRYPTO_MAIN_DEFAULT_ALGO"] = "hmac"
 os.environ["AUDIT_CRYPTO_MAIN_KEY_ROTATION_INTERVAL_SECONDS"] = "86400"
@@ -36,11 +36,11 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # -------------------------------------------------
-# 3. Mock EVERYTHING that would otherwise import
+# 3. Early module mocking (before test collection)
+#    These must be mocked BEFORE any test files try to import them
 # -------------------------------------------------
-MOCK = MagicMock()
 
-# Full package paths (generator. prefix is mandatory)
+# List of modules that need to be mocked for tests
 MOCKED_MODULES = [
     "generator.runner.runner_config",
     "generator.runner.runner_core",
@@ -54,12 +54,13 @@ MOCKED_MODULES = [
     "generator.audit_log.audit_crypto.audit_crypto_provider",
     "generator.audit_log.audit_crypto.audit_keystore",
     "generator.audit_log.audit_crypto.secrets",
-    "generator.engine",  # fixes “No module named 'engine'”
-    # "generator.main.gui",  # <-- FIX: DO NOT MOCK THE FILE UNDER TEST
+    "generator.engine",  # fixes "No module named 'engine'"
     "generator.main.api",
     "generator.main.cli",
+    "generator.main.gui",
     # External libs used inside the code under test
     "uvicorn",
+    "aiofiles",  # Required by generator.main.api
     "opentelemetry",
     "opentelemetry.sdk",
     "opentelemetry.trace",
@@ -77,9 +78,14 @@ MOCKED_MODULES = [
     "intent_parser.intent_parser",
 ]
 
-for name in MOCKED_MODULES:
-    if name not in sys.modules:  # Only mock if not already imported
-        sys.modules[name] = MOCK
+# Mock modules ONLY if they're not already imported AND we're in test mode
+# This needs to happen at conftest import time to prevent import errors
+if os.environ.get("TESTING") == "1":
+    from unittest.mock import MagicMock
+    for name in MOCKED_MODULES:
+        if name not in sys.modules:
+            # Use a dedicated mock for each module to avoid shared state
+            sys.modules[name] = MagicMock(name=f"mock_{name}")
 
 # -------------------------------------------------
 # 4. Pytest fixtures

@@ -28,44 +28,8 @@ def pytest_configure(config):
     logging.getLogger("grpc").setLevel(logging.ERROR)
     logging.getLogger("urllib3").setLevel(logging.ERROR)
 
-    # Mock external dependencies that aren't available in test environment
-    if "arbiter.policy.guardrails.audit_log" not in sys.modules:
-        sys.modules["arbiter.policy.guardrails.audit_log"] = MagicMock()
-
-    if "arbiter.policy.guardrails.compliance_mapper" not in sys.modules:
-        mock_compliance = MagicMock()
-        mock_compliance.load_compliance_map = lambda config_path=None: {
-            "FAKE-1": {"name": "FakeControl", "status": "enforced", "required": True},
-            "FAKE-2": {"name": "FakeOptional", "status": "logged", "required": False},
-            "PC-1": {"name": "PolicyControl", "status": "enforced", "required": True},
-            "NIST_AC-1": {
-                "name": "Access Control Policy",
-                "status": "enforced",
-                "required": True,
-            },
-            "NIST_AC-2": {
-                "name": "Account Management",
-                "status": "enforced",
-                "required": True,
-            },
-            "NIST_AC-3": {
-                "name": "Access Enforcement",
-                "status": "enforced",
-                "required": True,
-            },
-            "NIST_AC-6": {
-                "name": "Least Privilege",
-                "status": "enforced",
-                "required": True,
-            },
-        }
-        sys.modules["arbiter.policy.guardrails.compliance_mapper"] = mock_compliance
-
-    if "arbiter.policy.plugins.llm_client" not in sys.modules:
-        sys.modules["arbiter.policy.plugins.llm_client"] = MagicMock()
-
-    # Note: OpenTelemetry mocking removed - now handled by centralized otel_config
-    # The centralized configuration will automatically use NoOpTracer in test environment
+    # NOTE: Module mocking moved to fixtures to avoid pollution during test collection
+    # See mock_arbiter_dependencies fixture below
 
 
 def pytest_sessionstart(session):
@@ -110,6 +74,57 @@ def reset_singletons():
         config._instance = None
     if hasattr(circuit_breaker, "_breaker_states"):
         circuit_breaker._breaker_states.clear()
+
+
+@pytest.fixture(autouse=True)
+def mock_arbiter_dependencies(monkeypatch):
+    """Mock external dependencies that aren't available in test environment.
+    
+    Using autouse=True fixture instead of pytest_configure to avoid module pollution
+    during test collection phase.
+    """
+    # Create mock modules
+    mock_audit_log = MagicMock()
+    
+    mock_compliance = MagicMock()
+    mock_compliance.load_compliance_map = lambda config_path=None: {
+        "FAKE-1": {"name": "FakeControl", "status": "enforced", "required": True},
+        "FAKE-2": {"name": "FakeOptional", "status": "logged", "required": False},
+        "PC-1": {"name": "PolicyControl", "status": "enforced", "required": True},
+        "NIST_AC-1": {
+            "name": "Access Control Policy",
+            "status": "enforced",
+            "required": True,
+        },
+        "NIST_AC-2": {
+            "name": "Account Management",
+            "status": "enforced",
+            "required": True,
+        },
+        "NIST_AC-3": {
+            "name": "Access Enforcement",
+            "status": "enforced",
+            "required": True,
+        },
+        "NIST_AC-6": {
+            "name": "Least Privilege",
+            "status": "enforced",
+            "required": True,
+        },
+    }
+    
+    mock_llm_client = MagicMock()
+    
+    # Use monkeypatch.setitem to mock sys.modules temporarily
+    monkeypatch.setitem(sys.modules, "arbiter.policy.guardrails.audit_log", mock_audit_log)
+    monkeypatch.setitem(sys.modules, "arbiter.policy.guardrails.compliance_mapper", mock_compliance)
+    monkeypatch.setitem(sys.modules, "arbiter.policy.plugins.llm_client", mock_llm_client)
+    
+    return {
+        "audit_log": mock_audit_log,
+        "compliance_mapper": mock_compliance,
+        "llm_client": mock_llm_client,
+    }
 
 
 @pytest.fixture

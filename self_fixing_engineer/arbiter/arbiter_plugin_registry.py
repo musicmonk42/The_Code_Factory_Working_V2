@@ -690,12 +690,19 @@ class PluginRegistry:
                 )
 
             existing_meta = self.get_metadata(kind, name)
-            if existing_meta and version_parse(version) <= version_parse(
+            if existing_meta and version_parse(version) < version_parse(
                 existing_meta.version
             ):
                 raise ValueError(
                     f"Plugin [{kind.value}:{name}] version {version} is not newer than existing version {existing_meta.version}."
                 )
+            
+            # Allow re-registration of same version (useful for tests)
+            if existing_meta and version_parse(version) == version_parse(existing_meta.version):
+                logger.debug(
+                    f"Plugin [{kind.value}:{name}] version {version} already registered. Skipping re-registration."
+                )
+                return
 
             self._plugins.setdefault(kind, {})[name] = instance
             self._meta.setdefault(kind, {})[name] = meta
