@@ -29,6 +29,27 @@ def _create_mock_module(name):
     import types
     mock_module = types.ModuleType(name)
     mock_module.__file__ = f"<mocked {name}>"
+    
+    # Add common attributes for specific modules
+    if name == 'dotenv':
+        # dotenv needs load_dotenv and find_dotenv functions
+        mock_module.load_dotenv = lambda *args, **kwargs: None
+        mock_module.find_dotenv = lambda *args, **kwargs: None
+    elif name == 'dynaconf':
+        # dynaconf needs Dynaconf class and Validator
+        class MockDynaconf:
+            def __init__(self, *args, **kwargs):
+                pass
+            def get(self, key, default=None):
+                return default
+            def __getattr__(self, name):
+                return None
+        class MockValidator:
+            def __init__(self, *args, **kwargs):
+                pass
+        mock_module.Dynaconf = MockDynaconf
+        mock_module.Validator = MockValidator
+    
     return mock_module
 
 # Only mock if genuinely missing (not if already imported)
@@ -44,13 +65,9 @@ _OPTIONAL_DEPENDENCIES = [
     'redis',  # Required by various modules
     'redis.asyncio',  # Required by generator.main.api
     'dotenv',  # Required by many modules
+    'dynaconf',  # Required by runner modules
     # Note: prometheus_client, aiohttp, pydantic, and tenacity should be installed
     # and should NOT be mocked as they are critical for proper type checking
-    'opentelemetry',  # Required by many modules
-    'opentelemetry.trace',  # Required by many modules
-    'opentelemetry.sdk',  # Required by many modules
-    'opentelemetry.sdk.trace',  # Required by many modules
-    'opentelemetry.sdk.trace.export',  # Required by many modules
 ]
 
 for dep in _OPTIONAL_DEPENDENCIES:
@@ -69,6 +86,80 @@ for dep in _OPTIONAL_DEPENDENCIES:
                     parent_name = '.'.join(parts[:i])
                     if parent_name not in sys.modules:
                         sys.modules[parent_name] = _create_mock_module(parent_name)
+
+# ---- OpenTelemetry stub setup ----
+# OpenTelemetry requires special handling because it has specific methods that must exist
+# and be callable, not just module stubs
+if 'opentelemetry' not in sys.modules:
+    try:
+        __import__('opentelemetry')
+    except ImportError:
+        # Create a complete OpenTelemetry stub with all required attributes
+        import types
+        
+        # Create a no-op tracer
+        class _NoOpTracer:
+            def start_as_current_span(self, name, **kwargs):
+                from contextlib import nullcontext
+                return nullcontext()
+        
+        # Create a no-op span
+        class _NoOpSpan:
+            def set_attribute(self, *args, **kwargs):
+                pass
+            def add_event(self, *args, **kwargs):
+                pass
+            def set_status(self, *args, **kwargs):
+                pass
+        
+        # Create trace module with all required methods
+        trace_module = types.ModuleType('opentelemetry.trace')
+        trace_module.__file__ = '<mocked opentelemetry.trace>'
+        trace_module.get_tracer = lambda *args, **kwargs: _NoOpTracer()
+        trace_module.get_current_span = lambda: _NoOpSpan()
+        trace_module.get_tracer_provider = lambda: None
+        
+        # Create main opentelemetry module
+        otel_module = types.ModuleType('opentelemetry')
+        otel_module.__file__ = '<mocked opentelemetry>'
+        otel_module.trace = trace_module
+        
+        # Create instrumentation module
+        instrumentation_module = types.ModuleType('opentelemetry.instrumentation')
+        instrumentation_module.__file__ = '<mocked opentelemetry.instrumentation>'
+        instrumentation_module.__path__ = []  # This is required for submodule imports
+        
+        # Create sdk modules
+        sdk_module = types.ModuleType('opentelemetry.sdk')
+        sdk_module.__file__ = '<mocked opentelemetry.sdk>'
+        
+        sdk_trace_module = types.ModuleType('opentelemetry.sdk.trace')
+        sdk_trace_module.__file__ = '<mocked opentelemetry.sdk.trace>'
+        
+        sdk_trace_export_module = types.ModuleType('opentelemetry.sdk.trace.export')
+        sdk_trace_export_module.__file__ = '<mocked opentelemetry.sdk.trace.export>'
+        sdk_trace_export_module.ConsoleSpanExporter = lambda *args, **kwargs: None
+        sdk_trace_export_module.SimpleSpanProcessor = lambda *args, **kwargs: None
+        sdk_trace_export_module.BatchSpanProcessor = lambda *args, **kwargs: None
+        
+        # Create in_memory_span_exporter submodule
+        in_memory_exporter = types.ModuleType('opentelemetry.sdk.trace.export.in_memory_span_exporter')
+        in_memory_exporter.__file__ = '<mocked opentelemetry.sdk.trace.export.in_memory_span_exporter>'
+        in_memory_exporter.InMemorySpanExporter = lambda *args, **kwargs: None
+        
+        sdk_resources_module = types.ModuleType('opentelemetry.sdk.resources')
+        sdk_resources_module.__file__ = '<mocked opentelemetry.sdk.resources>'
+        sdk_resources_module.Resource = lambda **kwargs: None
+        
+        # Register all modules in sys.modules
+        sys.modules['opentelemetry'] = otel_module
+        sys.modules['opentelemetry.trace'] = trace_module
+        sys.modules['opentelemetry.instrumentation'] = instrumentation_module
+        sys.modules['opentelemetry.sdk'] = sdk_module
+        sys.modules['opentelemetry.sdk.trace'] = sdk_trace_module
+        sys.modules['opentelemetry.sdk.trace.export'] = sdk_trace_export_module
+        sys.modules['opentelemetry.sdk.trace.export.in_memory_span_exporter'] = in_memory_exporter
+        sys.modules['opentelemetry.sdk.resources'] = sdk_resources_module
 
 # ---- Pydantic decorator safety shim ----
 # Prevents test collection-time errors when pydantic decorators are replaced with non-callables
