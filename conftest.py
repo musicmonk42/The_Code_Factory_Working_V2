@@ -17,6 +17,31 @@ sys.path.insert(0, os.path.join(project_root, "generator"))
 # ---- Set TESTING environment variable early ----
 # This should be set before any module imports to prevent side effects
 os.environ["TESTING"] = "1"
+os.environ.setdefault("OTEL_SDK_DISABLED", "1")
+os.environ.setdefault("PYTEST_CURRENT_TEST", "true")
+
+# ---- Import error handling ----
+# Provide graceful fallbacks for common missing dependencies during test collection
+# This allows pytest to collect tests even when optional dependencies are missing
+
+def _create_mock_module(name):
+    """Create a minimal mock module for missing dependencies."""
+    import types
+    mock_module = types.ModuleType(name)
+    mock_module.__file__ = f"<mocked {name}>"
+    return mock_module
+
+# Only mock if genuinely missing (not if already imported)
+_OPTIONAL_DEPENDENCIES = [
+    'tiktoken',  # Often missing, used by LLM clients
+]
+
+for dep in _OPTIONAL_DEPENDENCIES:
+    if dep not in sys.modules:
+        try:
+            __import__(dep)
+        except ImportError:
+            sys.modules[dep] = _create_mock_module(dep)
 
 # ---- Pydantic decorator safety shim ----
 # Prevents test collection-time errors when pydantic decorators are replaced with non-callables
