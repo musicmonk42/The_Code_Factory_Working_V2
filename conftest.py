@@ -101,6 +101,17 @@ except ImportError:
     _ORIGINAL_AIOHTTP_TYPES = {}
 
 
+# ---- Protect common exception types from being mocked ----
+# Store references to common exception types before they can be mocked
+try:
+    import cryptography.fernet
+    _ORIGINAL_CRYPTO_EXCEPTIONS = {
+        'InvalidToken': getattr(cryptography.fernet, 'InvalidToken', Exception),
+    }
+except ImportError:
+    _ORIGINAL_CRYPTO_EXCEPTIONS = {}
+
+
 # ---- ChromaDB singleton cleanup ----
 # Global cleanup of ChromaDB singleton between test sessions
 def _cleanup_chromadb_singleton():
@@ -181,3 +192,33 @@ def cleanup_sqlalchemy():
     # Cleanup after test - don't cleanup before as it breaks table definitions
     # The metadata.clear() is intentionally not called to avoid breaking
     # tests that rely on table definitions persisting within a session
+
+
+@pytest.fixture(scope="function", autouse=True)
+def protect_sys_modules():
+    """
+    Protect sys.modules from being permanently modified by test-level mocks.
+    Saves a snapshot before the test and restores critical modules after.
+    """
+    # Save references to critical modules that should not be mocked permanently
+    critical_modules = [
+        'runner', 'runner.runner_core', 'runner.runner_config', 
+        'runner.runner_logging', 'runner.runner_metrics', 'runner.runner_utils',
+        'generator.runner', 'intent_parser', 'intent_parser.intent_parser',
+        'tenacity', 'aiohttp', 'pydantic'
+    ]
+    saved_modules = {}
+    for mod_name in critical_modules:
+        if mod_name in sys.modules:
+            saved_modules[mod_name] = sys.modules[mod_name]
+    
+    yield
+    
+    # Restore critical modules if they were replaced with mocks
+    for mod_name, original_module in saved_modules.items():
+        if mod_name in sys.modules:
+            current_module = sys.modules[mod_name]
+            # Check if it was replaced with a Mock
+            if hasattr(current_module, '_mock_name') or str(type(current_module).__name__) == 'MagicMock':
+                # Restore the original
+                sys.modules[mod_name] = original_module
