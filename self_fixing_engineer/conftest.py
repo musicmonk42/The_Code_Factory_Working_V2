@@ -23,15 +23,6 @@ except ImportError:
 # Allow duplicate metric registration during tests to prevent collection failures
 os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
 
-# REMOVED: This line was disabling OTEL and causing 'NoOpSpan' errors.
-# os.environ.setdefault("OTEL_SDK_DISABLED", "true")
-# conftest.py (root) — minimal guardrail so collection never dies on dup metrics
-
-import os
-
-os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
-os.environ.setdefault("OTEL_SDK_DISABLED", "true")  # keep OTEL quiet
-
 # ---- Prometheus duplicate-metric hardening (runs before any package imports)
 try:
     from prometheus_client import REGISTRY
@@ -86,7 +77,7 @@ def setup_otel():
     This prevents 'NoneType' and 'NoOpSpan' AttributeErrors when code
     tries to access or record spans during tests.
     """
-    if _OTEL_AVAILABLE and TracerProvider is not None:
+    if _OTEL_AVAILABLE:
         provider = TracerProvider()
         # Using ConsoleSpanExporter as a robust fallback.
         exporter = ConsoleSpanExporter()

@@ -30,6 +30,13 @@ def _create_mock_module(name):
     
     # Create a mock class that can be used as decorator or callable
     class MockCallable:
+        """
+        A versatile mock object that supports multiple usage patterns:
+        - As a decorator: @mock.method(args)
+        - As a callable: mock.function()
+        - As an attribute chain: mock.sub.module.attr
+        - As a context manager: with mock.context():
+        """
         def __call__(self, *args, **kwargs):
             # When called directly, return self to support chaining
             return self
