@@ -78,6 +78,7 @@ docker==7.1.0
 docutils==0.19
 durationpy==0.10
 dynaconf==3.2.12
+elasticsearch==9.2.0
 ecdsa==0.19.1
 environs==14.3.0
 etcd3-py==0.1.6
