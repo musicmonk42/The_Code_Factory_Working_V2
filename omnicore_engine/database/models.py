@@ -70,6 +70,7 @@ class ExplainAuditRecord(Base):
     """
 
     __tablename__ = "explain_audit"
+    __table_args__ = {'extend_existing': True}
 
     uuid: Mapped[str] = mapped_column(String, primary_key=True)
     kind: Mapped[str] = mapped_column(String, nullable=False)
