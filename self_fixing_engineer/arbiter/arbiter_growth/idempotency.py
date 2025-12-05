@@ -4,6 +4,7 @@ from typing import Optional, Union
 
 import redis.asyncio as redis
 from opentelemetry import trace
+from arbiter.otel_config import get_tracer_safe
 from prometheus_client import REGISTRY, Counter
 from redis.asyncio.cluster import RedisCluster
 from redis.exceptions import RedisError
@@ -11,7 +12,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Configure logging
 logger = logging.getLogger(__name__)
-tracer = trace.get_tracer(__name__)
+tracer = get_tracer_safe(__name__)
 
 
 # Helper function for idempotent metric creation

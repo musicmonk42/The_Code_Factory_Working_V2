@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from opentelemetry import trace
+from arbiter.otel_config import get_tracer_safe
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 from .config import Config, MultiModalData, SensitiveValue
@@ -22,7 +23,7 @@ except ImportError:
     ValidationError = None
     PydanticBaseModel = None
 
-tracer = trace.get_tracer(__name__)
+tracer = get_tracer_safe(__name__)
 trace_id_var = contextvars.ContextVar("trace_id", default=None)
 
 

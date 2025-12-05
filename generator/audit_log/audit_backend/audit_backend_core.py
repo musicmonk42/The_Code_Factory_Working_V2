@@ -469,7 +469,20 @@ BACKEND_TAMPER_DETECTION_FAILURES = safe_counter(
 if HAS_OPENTELEMETRY:
     # Use the default/configured tracer provider instead of manually creating one
     # This avoids version compatibility issues and respects OTEL_* environment variables
-    tracer = trace.get_tracer(__name__)
+    try:
+        tracer = trace.get_tracer(__name__)
+    except TypeError:
+        # Fallback for older OpenTelemetry versions that don't support all parameters
+        # This can happen if opentelemetry-sdk version is older than opentelemetry-api
+        try:
+            tracer = trace.get_tracer(__name__, None)
+        except TypeError:
+            # If still failing, use None as tracer
+            tracer = None
+            logger.warning(
+                "Failed to initialize OpenTelemetry tracer due to version compatibility issues. "
+                "Tracing disabled. Please ensure opentelemetry-api and opentelemetry-sdk versions match."
+            )
     _STATUS_OK = StatusCode.OK
     _STATUS_ERROR = StatusCode.ERROR
 else:

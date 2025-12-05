@@ -30,6 +30,7 @@ import openai
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 from opentelemetry import trace
+from arbiter.otel_config import get_tracer_safe
 from prometheus_client import (
     REGISTRY,
     Counter,
@@ -59,7 +60,7 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 # OpenTelemetry tracer
-tracer = trace.get_tracer(__name__)
+tracer = get_tracer_safe(__name__)
 
 
 # Custom exceptions for the LLM client to provide a consistent error type.

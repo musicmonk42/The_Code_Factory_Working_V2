@@ -162,8 +162,9 @@ except ImportError:
     AuditLedgerClient = DummyAuditLedgerClient
 
 from opentelemetry import trace
+from arbiter.otel_config import get_tracer_safe
 
-tracer = trace.get_tracer(__name__)
+tracer = get_tracer_safe(__name__)
 
 
 class StateBackend(ABC):

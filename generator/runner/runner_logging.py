@@ -34,7 +34,11 @@ from opentelemetry import trace
 # --- Global OpenTelemetry tracer for external callers (e.g., agents, testgen) ---
 # This provides a stable symbol that other modules can import as:
 #   from runner.runner_logging import tracer
-tracer = trace.get_tracer(__name__)
+try:
+    tracer = trace.get_tracer(__name__)
+except TypeError:
+    # Fallback for older OpenTelemetry versions
+    tracer = None
 
 SIGNING_ENABLED = (
     os.getenv("DEV_MODE", "0") != "1"

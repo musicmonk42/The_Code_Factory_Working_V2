@@ -14,6 +14,7 @@ from aiokafka.errors import KafkaError
 from aiokafka.structs import TopicPartition
 from cryptography.fernet import Fernet, InvalidToken
 from opentelemetry import trace
+from arbiter.otel_config import get_tracer_safe
 from prometheus_client import REGISTRY, Histogram
 from pybreaker import CircuitBreaker, CircuitBreakerError
 from redis.exceptions import RedisError
@@ -36,7 +37,7 @@ from .models import AuditLog, Base, GrowthEventRecord, GrowthSnapshot
 
 # --- Configuration ---
 logger = logging.getLogger(__name__)
-tracer = trace.get_tracer(__name__)
+tracer = get_tracer_safe(__name__)
 
 # --- Observability ---
 # Clear any existing metric with this name

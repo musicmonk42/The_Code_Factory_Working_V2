@@ -142,7 +142,11 @@ except ImportError:
 
 # --- FIX: Define module-level tracer ---
 # This was the source of the NameError: 'tracer' is not defined
-tracer = trace.get_tracer(__name__)
+try:
+    tracer = trace.get_tracer(__name__)
+except TypeError:
+    # Fallback for older OpenTelemetry versions
+    tracer = None
 
 try:
     from jsonschema import Draft7Validator, ValidationError
