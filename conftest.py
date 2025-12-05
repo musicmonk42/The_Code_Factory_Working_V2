@@ -150,14 +150,17 @@ if 'opentelemetry' not in sys.modules:
         # Create sdk modules
         sdk_module = types.ModuleType('opentelemetry.sdk')
         sdk_module.__file__ = '<mocked opentelemetry.sdk>'
+        sdk_module.__path__ = []  # Parent module for submodules
         otel_module.sdk = sdk_module
         
         sdk_trace_module = types.ModuleType('opentelemetry.sdk.trace')
         sdk_trace_module.__file__ = '<mocked opentelemetry.sdk.trace>'
+        sdk_trace_module.__path__ = []  # Parent module for submodules
         sdk_module.trace = sdk_trace_module
         
         sdk_trace_export_module = types.ModuleType('opentelemetry.sdk.trace.export')
         sdk_trace_export_module.__file__ = '<mocked opentelemetry.sdk.trace.export>'
+        sdk_trace_export_module.__path__ = []  # Parent module for submodules
         sdk_trace_export_module.ConsoleSpanExporter = lambda *args, **kwargs: None
         sdk_trace_export_module.SimpleSpanProcessor = lambda *args, **kwargs: None
         sdk_trace_export_module.BatchSpanProcessor = lambda *args, **kwargs: None
@@ -174,9 +177,86 @@ if 'opentelemetry' not in sys.modules:
         sdk_resources_module.Resource = lambda **kwargs: None
         sdk_module.resources = sdk_resources_module
         
+        # Create additional OpenTelemetry modules used in the codebase
+        
+        # trace.status module
+        trace_status_module = types.ModuleType('opentelemetry.trace.status')
+        trace_status_module.__file__ = '<mocked opentelemetry.trace.status>'
+        trace_status_module.Status = lambda *args, **kwargs: None
+        trace_status_module.StatusCode = lambda *args, **kwargs: None
+        trace_module.status = trace_status_module
+        
+        # trace.propagation module
+        trace_propagation_module = types.ModuleType('opentelemetry.trace.propagation')
+        trace_propagation_module.__file__ = '<mocked opentelemetry.trace.propagation>'
+        trace_propagation_module.__path__ = []
+        trace_module.propagation = trace_propagation_module
+        
+        trace_propagation_tracecontext = types.ModuleType('opentelemetry.trace.propagation.tracecontext')
+        trace_propagation_tracecontext.__file__ = '<mocked opentelemetry.trace.propagation.tracecontext>'
+        trace_propagation_tracecontext.TraceContextTextMapPropagator = lambda *args, **kwargs: None
+        trace_propagation_module.tracecontext = trace_propagation_tracecontext
+        
+        # sdk.trace.sampling module
+        sdk_trace_sampling_module = types.ModuleType('opentelemetry.sdk.trace.sampling')
+        sdk_trace_sampling_module.__file__ = '<mocked opentelemetry.sdk.trace.sampling>'
+        sdk_trace_sampling_module.ParentBased = lambda *args, **kwargs: None
+        sdk_trace_sampling_module.TraceIdRatioBased = lambda *args, **kwargs: None
+        sdk_trace_module.sampling = sdk_trace_sampling_module
+        
+        # exporter modules
+        exporter_module = types.ModuleType('opentelemetry.exporter')
+        exporter_module.__file__ = '<mocked opentelemetry.exporter>'
+        exporter_module.__path__ = []
+        otel_module.exporter = exporter_module
+        
+        exporter_jaeger_module = types.ModuleType('opentelemetry.exporter.jaeger')
+        exporter_jaeger_module.__file__ = '<mocked opentelemetry.exporter.jaeger>'
+        exporter_jaeger_module.__path__ = []
+        exporter_module.jaeger = exporter_jaeger_module
+        
+        exporter_jaeger_thrift_module = types.ModuleType('opentelemetry.exporter.jaeger.thrift')
+        exporter_jaeger_thrift_module.__file__ = '<mocked opentelemetry.exporter.jaeger.thrift>'
+        exporter_jaeger_thrift_module.JaegerExporter = lambda *args, **kwargs: None
+        exporter_jaeger_module.thrift = exporter_jaeger_thrift_module
+        
+        exporter_otlp_module = types.ModuleType('opentelemetry.exporter.otlp')
+        exporter_otlp_module.__file__ = '<mocked opentelemetry.exporter.otlp>'
+        exporter_otlp_module.__path__ = []
+        exporter_module.otlp = exporter_otlp_module
+        
+        exporter_otlp_proto_module = types.ModuleType('opentelemetry.exporter.otlp.proto')
+        exporter_otlp_proto_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto>'
+        exporter_otlp_proto_module.__path__ = []
+        exporter_otlp_module.proto = exporter_otlp_proto_module
+        
+        exporter_otlp_proto_grpc_module = types.ModuleType('opentelemetry.exporter.otlp.proto.grpc')
+        exporter_otlp_proto_grpc_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto.grpc>'
+        exporter_otlp_proto_grpc_module.__path__ = []
+        exporter_otlp_proto_module.grpc = exporter_otlp_proto_grpc_module
+        
+        exporter_otlp_proto_grpc_trace_exporter_module = types.ModuleType('opentelemetry.exporter.otlp.proto.grpc.trace_exporter')
+        exporter_otlp_proto_grpc_trace_exporter_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto.grpc.trace_exporter>'
+        exporter_otlp_proto_grpc_trace_exporter_module.OTLPSpanExporter = lambda *args, **kwargs: None
+        exporter_otlp_proto_grpc_module.trace_exporter = exporter_otlp_proto_grpc_trace_exporter_module
+        
+        # semconv module
+        semconv_module = types.ModuleType('opentelemetry.semconv')
+        semconv_module.__file__ = '<mocked opentelemetry.semconv>'
+        semconv_module.__path__ = []
+        otel_module.semconv = semconv_module
+        
+        semconv_trace_module = types.ModuleType('opentelemetry.semconv.trace')
+        semconv_trace_module.__file__ = '<mocked opentelemetry.semconv.trace>'
+        semconv_trace_module.SpanAttributes = lambda *args, **kwargs: None
+        semconv_module.trace = semconv_trace_module
+        
         # Register all modules in sys.modules
         sys.modules['opentelemetry'] = otel_module
         sys.modules['opentelemetry.trace'] = trace_module
+        sys.modules['opentelemetry.trace.status'] = trace_status_module
+        sys.modules['opentelemetry.trace.propagation'] = trace_propagation_module
+        sys.modules['opentelemetry.trace.propagation.tracecontext'] = trace_propagation_tracecontext
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
         sys.modules['opentelemetry.instrumentation.logging'] = instrumentation_logging
@@ -184,9 +264,19 @@ if 'opentelemetry' not in sys.modules:
         sys.modules['opentelemetry.instrumentation.system_metrics'] = instrumentation_system_metrics
         sys.modules['opentelemetry.sdk'] = sdk_module
         sys.modules['opentelemetry.sdk.trace'] = sdk_trace_module
+        sys.modules['opentelemetry.sdk.trace.sampling'] = sdk_trace_sampling_module
         sys.modules['opentelemetry.sdk.trace.export'] = sdk_trace_export_module
         sys.modules['opentelemetry.sdk.trace.export.in_memory_span_exporter'] = in_memory_exporter
         sys.modules['opentelemetry.sdk.resources'] = sdk_resources_module
+        sys.modules['opentelemetry.exporter'] = exporter_module
+        sys.modules['opentelemetry.exporter.jaeger'] = exporter_jaeger_module
+        sys.modules['opentelemetry.exporter.jaeger.thrift'] = exporter_jaeger_thrift_module
+        sys.modules['opentelemetry.exporter.otlp'] = exporter_otlp_module
+        sys.modules['opentelemetry.exporter.otlp.proto'] = exporter_otlp_proto_module
+        sys.modules['opentelemetry.exporter.otlp.proto.grpc'] = exporter_otlp_proto_grpc_module
+        sys.modules['opentelemetry.exporter.otlp.proto.grpc.trace_exporter'] = exporter_otlp_proto_grpc_trace_exporter_module
+        sys.modules['opentelemetry.semconv'] = semconv_module
+        sys.modules['opentelemetry.semconv.trace'] = semconv_trace_module
 
 # ---- Pydantic decorator safety shim ----
 # Prevents test collection-time errors when pydantic decorators are replaced with non-callables
