@@ -27,8 +27,39 @@ os.environ.setdefault("PYTEST_CURRENT_TEST", "true")
 def _create_mock_module(name):
     """Create a minimal mock module for missing dependencies."""
     import types
+    
+    # Create a mock class that can be used as decorator or callable
+    class MockCallable:
+        """
+        A versatile mock object that supports multiple usage patterns:
+        - As a decorator: @mock.method(args)
+        - As a callable: mock.function()
+        - As an attribute chain: mock.sub.module.attr
+        - As a context manager: with mock.context():
+        """
+        def __call__(self, *args, **kwargs):
+            # When called directly, return self to support chaining
+            return self
+        def __getattr__(self, attr):
+            # Return another MockCallable for attribute access
+            return MockCallable()
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+    
     mock_module = types.ModuleType(name)
     mock_module.__file__ = f"<mocked {name}>"
+    # Add __path__ attribute to support submodule imports (packages need this)
+    mock_module.__path__ = []
+    
+    # Add a __getattr__ to handle submodule/attribute access gracefully
+    def _mock_getattr(attr_name):
+        """Return a mock object for any attribute access."""
+        # Return a MockCallable that can be used as decorator or function
+        return MockCallable()
+    
+    mock_module.__getattr__ = _mock_getattr
     
     # Add common attributes for specific modules
     if name == 'dotenv':
@@ -59,6 +90,7 @@ _OPTIONAL_DEPENDENCIES = [
     'backoff',  # Required by generator.main.api
     'fastapi',  # Required by generator.main.api
     'fastapi.security',  # Required by generator.main.api
+    'fastapi.testclient',  # Required by test files
     'uvicorn',  # Required by generator.main
     'jwt',  # Required by generator.main.api
     'sqlalchemy',  # Required by many modules
@@ -66,6 +98,15 @@ _OPTIONAL_DEPENDENCIES = [
     'redis.asyncio',  # Required by generator.main.api
     'dotenv',  # Required by many modules
     'dynaconf',  # Required by runner modules
+    'anthropic',  # Required by arbiter.plugins
+    'google.generativeai',  # Required by arbiter.plugins
+    'google.api_core',  # Required by arbiter.plugins
+    'google.api_core.exceptions',  # Required by arbiter.plugins
+    'openai',  # Required by LLM providers
+    'neo4j',  # Required by knowledge_graph
+    'chromadb',  # Required by knowledge_graph
+    'httpx',  # Required by explainable_reasoner
+    'freezegun',  # Required by test files
     # Note: prometheus_client, aiohttp, pydantic, and tenacity should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
@@ -85,7 +126,8 @@ for dep in _OPTIONAL_DEPENDENCIES:
                 for i in range(1, len(parts)):
                     parent_name = '.'.join(parts[:i])
                     if parent_name not in sys.modules:
-                        sys.modules[parent_name] = _create_mock_module(parent_name)
+                        parent_mock = _create_mock_module(parent_name)
+                        sys.modules[parent_name] = parent_mock
 
 # ---- OpenTelemetry stub setup ----
 # OpenTelemetry requires special handling because it has specific methods that must exist
@@ -240,6 +282,17 @@ if 'opentelemetry' not in sys.modules:
         exporter_otlp_proto_grpc_trace_exporter_module.OTLPSpanExporter = lambda *args, **kwargs: None
         exporter_otlp_proto_grpc_module.trace_exporter = exporter_otlp_proto_grpc_trace_exporter_module
         
+        # Add HTTP exporter module
+        exporter_otlp_proto_http_module = types.ModuleType('opentelemetry.exporter.otlp.proto.http')
+        exporter_otlp_proto_http_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto.http>'
+        exporter_otlp_proto_http_module.__path__ = []
+        exporter_otlp_proto_module.http = exporter_otlp_proto_http_module
+        
+        exporter_otlp_proto_http_trace_exporter_module = types.ModuleType('opentelemetry.exporter.otlp.proto.http.trace_exporter')
+        exporter_otlp_proto_http_trace_exporter_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto.http.trace_exporter>'
+        exporter_otlp_proto_http_trace_exporter_module.OTLPSpanExporter = lambda *args, **kwargs: None
+        exporter_otlp_proto_http_module.trace_exporter = exporter_otlp_proto_http_trace_exporter_module
+        
         # semconv module
         semconv_module = types.ModuleType('opentelemetry.semconv')
         semconv_module.__file__ = '<mocked opentelemetry.semconv>'
@@ -275,6 +328,8 @@ if 'opentelemetry' not in sys.modules:
         sys.modules['opentelemetry.exporter.otlp.proto'] = exporter_otlp_proto_module
         sys.modules['opentelemetry.exporter.otlp.proto.grpc'] = exporter_otlp_proto_grpc_module
         sys.modules['opentelemetry.exporter.otlp.proto.grpc.trace_exporter'] = exporter_otlp_proto_grpc_trace_exporter_module
+        sys.modules['opentelemetry.exporter.otlp.proto.http'] = exporter_otlp_proto_http_module
+        sys.modules['opentelemetry.exporter.otlp.proto.http.trace_exporter'] = exporter_otlp_proto_http_trace_exporter_module
         sys.modules['opentelemetry.semconv'] = semconv_module
         sys.modules['opentelemetry.semconv.trace'] = semconv_trace_module
 

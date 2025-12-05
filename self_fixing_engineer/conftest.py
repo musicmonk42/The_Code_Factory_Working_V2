@@ -3,24 +3,25 @@
 import os
 
 import pytest
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
 
-# FIXED: Replaced InMemorySpanExporter with ConsoleSpanExporter
-# This is a stable import path and will fix the 'NoOpSpan' errors.
-from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+# Import OpenTelemetry components with fallback to avoid collection failures
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    # FIXED: Replaced InMemorySpanExporter with ConsoleSpanExporter
+    # This is a stable import path and will fix the 'NoOpSpan' errors.
+    from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+    _OTEL_AVAILABLE = True
+except ImportError:
+    # OpenTelemetry not available, use stub
+    _OTEL_AVAILABLE = False
+    trace = None
+    TracerProvider = None
+    ConsoleSpanExporter = None
+    SimpleSpanProcessor = None
 
 # Allow duplicate metric registration during tests to prevent collection failures
 os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
-
-# REMOVED: This line was disabling OTEL and causing 'NoOpSpan' errors.
-# os.environ.setdefault("OTEL_SDK_DISABLED", "true")
-# conftest.py (root) — minimal guardrail so collection never dies on dup metrics
-
-import os
-
-os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
-os.environ.setdefault("OTEL_SDK_DISABLED", "true")  # keep OTEL quiet
 
 # ---- Prometheus duplicate-metric hardening (runs before any package imports)
 try:
@@ -76,13 +77,14 @@ def setup_otel():
     This prevents 'NoneType' and 'NoOpSpan' AttributeErrors when code
     tries to access or record spans during tests.
     """
-    provider = TracerProvider()
-    # Using ConsoleSpanExporter as a robust fallback.
-    exporter = ConsoleSpanExporter()
-    processor = SimpleSpanProcessor(exporter)
-    provider.add_span_processor(processor)
+    if _OTEL_AVAILABLE:
+        provider = TracerProvider()
+        # Using ConsoleSpanExporter as a robust fallback.
+        exporter = ConsoleSpanExporter()
+        processor = SimpleSpanProcessor(exporter)
+        provider.add_span_processor(processor)
 
-    # Sets the global tracer provider
-    trace.set_tracer_provider(provider)
+        # Sets the global tracer provider
+        trace.set_tracer_provider(provider)
 
     yield
