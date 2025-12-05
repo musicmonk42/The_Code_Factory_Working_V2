@@ -989,11 +989,47 @@ class DefaultPromptBuilder(AgenticPromptBuilder):
         return prompt
 
 
-# Public API
-multi_vdb = MultiVectorDBManager()
-tracker = AdvancedTemplateTracker()
-director = AdaptivePromptDirector(multi_vdb, tracker)
-agentic_builder = DefaultPromptBuilder(director)
+# Global instances (lazy initialization to avoid ChromaDB singleton issues)
+_multi_vdb = None
+_tracker = None
+_director = None
+_agentic_builder = None
+
+
+def _get_multi_vdb():
+    """Lazy initialization of MultiVectorDBManager."""
+    global _multi_vdb
+    if _multi_vdb is None:
+        # Skip initialization during testing to avoid ChromaDB singleton errors
+        if os.environ.get("TESTING") == "1":
+            logger.debug("Skipping ChromaDB initialization in test environment")
+            return None
+        _multi_vdb = MultiVectorDBManager()
+    return _multi_vdb
+
+
+def _get_tracker():
+    """Lazy initialization of AdvancedTemplateTracker."""
+    global _tracker
+    if _tracker is None:
+        _tracker = AdvancedTemplateTracker()
+    return _tracker
+
+
+def _get_director():
+    """Lazy initialization of AdaptivePromptDirector."""
+    global _director
+    if _director is None:
+        _director = AdaptivePromptDirector(_get_multi_vdb(), _get_tracker())
+    return _director
+
+
+def _get_agentic_builder():
+    """Lazy initialization of DefaultPromptBuilder."""
+    global _agentic_builder
+    if _agentic_builder is None:
+        _agentic_builder = DefaultPromptBuilder(_get_director())
+    return _agentic_builder
 
 
 def build_agentic_prompt(prompt_type: str, builder_name: str = "test", **kwargs) -> str:
@@ -1007,7 +1043,7 @@ def build_agentic_prompt(prompt_type: str, builder_name: str = "test", **kwargs)
     if not builder_class:
         raise ValueError(f"Prompt builder '{builder_name}' not registered.")
 
-    builder = builder_class(director)
+    builder = builder_class(_get_director())
     return asyncio.run(builder.build(prompt_type, **kwargs))
 
 

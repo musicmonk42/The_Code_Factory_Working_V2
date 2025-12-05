@@ -12,7 +12,7 @@ os.environ["TESTING"] = "1"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
-# Dynaconf “main” environment (the one that crashes)
+# Dynaconf "main" environment (the one that crashes)
 os.environ["AUDIT_CRYPTO_MAIN_PROVIDER_TYPE"] = "software"
 os.environ["AUDIT_CRYPTO_MAIN_DEFAULT_ALGO"] = "hmac"
 os.environ["AUDIT_CRYPTO_MAIN_KEY_ROTATION_INTERVAL_SECONDS"] = "86400"
@@ -36,11 +36,11 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # -------------------------------------------------
-# 3. Mock EVERYTHING that would otherwise import
+# 3. Mock modules list (mocking moved to fixture below)
+#    DO NOT mock sys.modules at import time - causes test collection pollution
 # -------------------------------------------------
-MOCK = MagicMock()
 
-# Full package paths (generator. prefix is mandatory)
+# List of modules that need to be mocked for tests
 MOCKED_MODULES = [
     "generator.runner.runner_config",
     "generator.runner.runner_core",
@@ -54,7 +54,7 @@ MOCKED_MODULES = [
     "generator.audit_log.audit_crypto.audit_crypto_provider",
     "generator.audit_log.audit_crypto.audit_keystore",
     "generator.audit_log.audit_crypto.secrets",
-    "generator.engine",  # fixes “No module named 'engine'”
+    "generator.engine",  # fixes "No module named 'engine'"
     # "generator.main.gui",  # <-- FIX: DO NOT MOCK THE FILE UNDER TEST
     "generator.main.api",
     "generator.main.cli",
@@ -77,15 +77,26 @@ MOCKED_MODULES = [
     "intent_parser.intent_parser",
 ]
 
-for name in MOCKED_MODULES:
-    if name not in sys.modules:  # Only mock if not already imported
-        sys.modules[name] = MOCK
-
 # -------------------------------------------------
 # 4. Pytest fixtures
 # -------------------------------------------------
 import pytest
 from prometheus_client import REGISTRY
+
+
+@pytest.fixture(autouse=True)
+def mock_generator_modules(monkeypatch):
+    """Mock modules that would otherwise import heavy dependencies.
+    
+    Using autouse=True fixture instead of import-time mocking to avoid
+    sys.modules pollution during test collection phase.
+    """
+    # Create separate mock for each module to avoid shared state issues
+    for name in MOCKED_MODULES:
+        if name not in sys.modules:
+            # Each module gets its own MagicMock instance
+            mock = MagicMock()
+            monkeypatch.setitem(sys.modules, name, mock)
 
 
 @pytest.fixture(autouse=True)

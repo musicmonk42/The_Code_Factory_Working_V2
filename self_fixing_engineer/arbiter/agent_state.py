@@ -131,6 +131,7 @@ class AgentState(Base):
     __table_args__ = (
         CheckConstraint("energy >= 0.0 AND energy <= 100.0", name="check_energy_range"),
         CheckConstraint("world_size > 0", name="check_world_size_positive"),
+        {'extend_existing': True}  # Allow table redefinition in tests
     )
 
     id = Column(Integer, primary_key=True)
@@ -430,6 +431,7 @@ class AgentMetadata(Base):
     """
 
     __tablename__ = "agent_metadata"
+    __table_args__ = {'extend_existing': True}  # Allow table redefinition in tests
 
     id = Column(Integer, primary_key=True)
     key = Column(String, unique=True, nullable=False, index=True)
