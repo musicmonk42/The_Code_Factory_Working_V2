@@ -45,6 +45,13 @@ _OPTIONAL_DEPENDENCIES = [
     'redis.asyncio',  # Required by generator.main.api
     'dotenv',  # Required by many modules
     'prometheus_client',  # Required by many modules
+    'aiohttp',  # Required by many modules
+    'opentelemetry',  # Required by many modules
+    'opentelemetry.trace',  # Required by many modules
+    'opentelemetry.sdk',  # Required by many modules
+    'opentelemetry.sdk.trace',  # Required by many modules
+    'opentelemetry.sdk.trace.export',  # Required by many modules
+    'tenacity',  # Required by many modules
 ]
 
 for dep in _OPTIONAL_DEPENDENCIES:
