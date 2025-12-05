@@ -37,6 +37,16 @@ except (ImportError, ModuleNotFoundError):
     Status = None  # type: ignore
     StatusCode = None  # type: ignore
 
+# Import the no-op tracer for fallback
+try:
+    from arbiter.otel_config import NoOpTracer
+except ImportError:
+    # Define locally if otel_config is not available
+    from contextlib import nullcontext
+    class NoOpTracer:
+        def start_as_current_span(self, name, **kwargs):
+            return nullcontext()
+
 # Prometheus metrics
 from prometheus_client import (
     PLATFORM_COLLECTOR,
@@ -300,23 +310,15 @@ if HAS_OPENTELEMETRY:
         try:
             tracer = trace.get_tracer(__name__, None)
         except TypeError:
-            # If still failing, create a no-op tracer
-            from contextlib import nullcontext
-            class _NoOpTracer:
-                def start_as_current_span(self, name, **kwargs):
-                    return nullcontext()
-            tracer = _NoOpTracer()
+            # If still failing, use no-op tracer
+            tracer = NoOpTracer()
             logger.warning(
                 "Failed to initialize OpenTelemetry tracer due to version compatibility issues. "
                 "Using no-op tracer. Please ensure opentelemetry-api and opentelemetry-sdk versions match."
             )
 else:
     # OpenTelemetry not available, use no-op tracer
-    from contextlib import nullcontext
-    class _NoOpTracer:
-        def start_as_current_span(self, name, **kwargs):
-            return nullcontext()
-    tracer = _NoOpTracer()
+    tracer = NoOpTracer()
 
 # Unregister default collectors for clean testing environment
 try:
