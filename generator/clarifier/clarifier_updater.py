@@ -133,22 +133,10 @@ def _load_redaction_patterns() -> List[re.Pattern]:
 # OpenTelemetry tracing
 try:
     from opentelemetry import trace
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.propagate import get_global_textmap, set_global_textmap
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.sdk.trace.sampling import ALWAYS_ON
     from opentelemetry.trace import Status, StatusCode
 
-    resource = Resource.create({"service.name": "clarifier-updater"})
-    provider = TracerProvider(resource=resource, sampler=ALWAYS_ON)
-    processor = BatchSpanProcessor(
-        OTLPSpanExporter(endpoint="http://otel-collector:4317")
-    )
-    provider.add_span_processor(processor)
-    trace.set_tracer_provider(provider)
-
+    # Use the default/configured tracer provider instead of manually creating one
+    # This avoids version compatibility issues and respects OTEL_* environment variables
     tracer = trace.get_tracer(__name__)
     HAS_OPENTELEMETRY = True
 except ImportError:

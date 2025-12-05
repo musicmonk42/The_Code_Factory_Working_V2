@@ -63,17 +63,10 @@ except ImportError:
 # OpenTelemetry for tracing
 try:
     from opentelemetry import trace
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
     HAS_OPENTELEMETRY = True
-    _span_processor = BatchSpanProcessor(
-        OTLPSpanExporter(endpoint="http://otel-collector:4317")
-    )
-    _tracer_provider = TracerProvider()
-    _tracer_provider.add_span_processor(_span_processor)
-    trace.set_tracer_provider(_tracer_provider)
+    # Use the default/configured tracer provider instead of manually creating one
+    # This avoids version compatibility issues and respects OTEL_* environment variables
     tracer = trace.get_tracer(__name__)
 except ImportError:
     tracer = None

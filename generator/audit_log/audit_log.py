@@ -67,13 +67,9 @@ try:
     from opentelemetry import trace
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.instrumentation.grpc import GrpcAioInstrumentor
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 
-    provider = TracerProvider()
-    processor = SimpleSpanProcessor(ConsoleSpanExporter())
-    provider.add_span_processor(processor)
-    trace.set_tracer_provider(provider)
+    # Use the default/configured tracer provider instead of manually creating one
+    # This avoids version compatibility issues and respects OTEL_* environment variables
     tracer = trace.get_tracer(__name__)
     HAS_OPENTELEMETRY = True
 except ImportError:

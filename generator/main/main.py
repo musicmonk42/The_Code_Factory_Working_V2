@@ -120,12 +120,8 @@ MagicMock = _DummyMagicMock()
 
 try:
     from opentelemetry import trace
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.instrumentation.logging import LoggingInstrumentor
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.semconv.trace import SpanAttributes
     from opentelemetry.trace import StatusCode
 
@@ -137,13 +133,8 @@ except ImportError:
         "OpenTelemetry packages not found. Tracing will be disabled."
     )
     trace = MagicMock()
-    TracerProvider = object
-    BatchSpanProcessor = object
-    ConsoleSpanExporter = object
-    Resource = MagicMock()
     FastAPIInstrumentor = MagicMock()
     LoggingInstrumentor = MagicMock
-    OTLPSpanExporter = object
     SpanAttributes = MagicMock()
     StatusCode = MagicMock()
     StatusCode.OK = "OK"
@@ -358,36 +349,10 @@ def setup_observability(log_level: str):
 
     # --- OpenTelemetry Tracing Configuration ---
     if _HAS_OTEL:
-        resource = Resource.create(
-            {"service.name": "ai-generator", "service.version": __version__}
-        )
-        tracer_provider = TracerProvider(resource=resource)
-        OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-
-        if OTEL_EXPORTER_OTLP_ENDPOINT:
-            try:
-                tracer_provider.add_span_processor(
-                    BatchSpanProcessor(
-                        OTLPSpanExporter(
-                            endpoint=OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True
-                        )
-                    )
-                )
-                logger.info(
-                    f"OpenTelemetry traces configured to export to OTLP endpoint: {OTEL_EXPORTER_OTLP_ENDPOINT}"
-                )
-            except Exception as e:
-                logger.error(f"Failed to configure OTLP exporter: {e}", exc_info=True)
-        else:
-            tracer_provider.add_span_processor(
-                BatchSpanProcessor(ConsoleSpanExporter())
-            )
-            logger.info(
-                "OpenTelemetry traces configured for Console export (no OTEL_EXPORTER_OTLP_ENDPOINT specified)."
-            )
-
-        trace.set_tracer_provider(tracer_provider)
+        # Use the default/configured tracer provider instead of manually creating one
+        # This avoids version compatibility issues and respects OTEL_* environment variables
         LoggingInstrumentor().instrument(set_logging_format=True)
+        logger.info("OpenTelemetry tracing initialized using default/configured provider.")
 
     # --- Prometheus Metrics Setup (from Runner) ---
     try:

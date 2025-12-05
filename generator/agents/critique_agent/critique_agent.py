@@ -17,8 +17,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 from dotenv import load_dotenv
 from opentelemetry import metrics, trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from prometheus_client import Counter, Gauge, Histogram
 from pydantic import BaseModel, Field, ValidationError, root_validator
 
@@ -113,19 +111,9 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
-# --- FIX: Setup OpenTelemetry tracing ---
-def setup_tracing():
-    tracer_provider = TracerProvider()
-    # Check if an exporter is already configured, if not, add console exporter
-    if not getattr(tracer_provider, "_span_processors", []):
-        tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
-    trace.set_tracer_provider(tracer_provider)
-
-
-setup_tracing()
-# --- END FIX ---
-
-# OpenTelemetry and Prometheus Metrics Setup
+# --- OpenTelemetry and Prometheus Metrics Setup ---
+# Use the default/configured tracer provider instead of manually creating one
+# This avoids version compatibility issues and respects OTEL_* environment variables
 tracer = trace.get_tracer(__name__)
 meter = metrics.get_meter(__name__)
 
