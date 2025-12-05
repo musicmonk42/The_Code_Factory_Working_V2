@@ -14,8 +14,9 @@ if str(ROOT) not in sys.path:
 # --------------------------------------------------------------
 os.environ["TESTING"] = "1"
 
-# Note: OpenTelemetry, Prometheus, and other optional dependencies are now
-# handled by the root conftest.py. This avoids module pollution issues.
+# Note: OpenTelemetry and other optional dependencies are now handled by the
+# root conftest.py. This avoids module pollution issues. Prometheus is expected
+# to be installed and is not mocked.
 
 # --------------------------------------------------------------
 # 3. IMPORT LIGHTWEIGHT PIECES
