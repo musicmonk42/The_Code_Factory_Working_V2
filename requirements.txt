@@ -229,20 +229,22 @@ oauthlib==3.3.1
 onnxruntime==1.23.2
 openai==1.107.1
 opencv-python-headless==4.12.0.88  # Headless version is smaller for server deployments
-# OpenTelemetry API must be >=1.27.0 for compatibility with elasticsearch 9.x
-# Version 1.27.0 added the 'attributes' parameter to TracerProvider.get_tracer()
+# OpenTelemetry packages must be coordinated for compatibility
+# - API/SDK >=1.27.0 required for elasticsearch 9.x (attributes parameter in TracerProvider.get_tracer)
+# - Instrumentation packages (0.59b0) are compatible with API/SDK 1.27.0+
+# - Proto/exporter packages should match the SDK version
 opentelemetry-api>=1.27.0,<2.0.0
-opentelemetry-exporter-otlp-proto-common==1.38.0
-opentelemetry-exporter-otlp-proto-grpc==1.38.0
-opentelemetry-exporter-otlp-proto-http==1.38.0
-opentelemetry-instrumentation==0.59b0
-opentelemetry-instrumentation-asgi==0.59b0
-opentelemetry-instrumentation-fastapi==0.59b0
-opentelemetry-instrumentation-logging==0.59b0
-opentelemetry-proto==1.38.0
+opentelemetry-exporter-otlp-proto-common>=1.27.0,<2.0.0
+opentelemetry-exporter-otlp-proto-grpc>=1.27.0,<2.0.0
+opentelemetry-exporter-otlp-proto-http>=1.27.0,<2.0.0
+opentelemetry-instrumentation>=0.47b0,<1.0.0
+opentelemetry-instrumentation-asgi>=0.47b0,<1.0.0
+opentelemetry-instrumentation-fastapi>=0.47b0,<1.0.0
+opentelemetry-instrumentation-logging>=0.47b0,<1.0.0
+opentelemetry-proto>=1.27.0,<2.0.0
 opentelemetry-sdk>=1.27.0,<2.0.0
-opentelemetry-semantic-conventions==0.59b0
-opentelemetry-util-http==0.59b0
+opentelemetry-semantic-conventions>=0.47b0,<1.0.0
+opentelemetry-util-http>=0.47b0,<1.0.0
 ordered-set==4.1.0
 orderly-set==5.5.0
 orjson==3.11.4
