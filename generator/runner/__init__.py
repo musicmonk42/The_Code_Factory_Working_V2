@@ -17,12 +17,15 @@ import sys
 _is_generator_import = __name__ == "generator.runner"
 
 # Set up 'runner' as an alias to this module
+# Skip aliasing if the target is a Mock (happens during tests)
 if "runner" not in sys.modules:
     sys.modules["runner"] = sys.modules[__name__]
-# If we're being imported as generator.runner, ensure consistency
 elif _is_generator_import and sys.modules.get("runner") is not sys.modules[__name__]:
-    # Make runner point to generator.runner
-    sys.modules["runner"] = sys.modules[__name__]
+    # Check if 'runner' is a Mock before overriding
+    runner_module = sys.modules.get("runner")
+    if not (hasattr(runner_module, '_mock_name') or str(type(runner_module).__name__) == 'MagicMock'):
+        # Make runner point to generator.runner only if it's not a mock
+        sys.modules["runner"] = sys.modules[__name__]
 
 
 def _ensure_submodule_alias(submodule_name: str):
@@ -32,6 +35,16 @@ def _ensure_submodule_alias(submodule_name: str):
     """
     gen_key = f"generator.runner.{submodule_name}"
     run_key = f"runner.{submodule_name}"
+
+    # Skip aliasing if either module is a Mock (happens during tests)
+    gen_module = sys.modules.get(gen_key)
+    run_module = sys.modules.get(run_key)
+    
+    # Check if either is a Mock object
+    if gen_module is not None and hasattr(gen_module, '_mock_name'):
+        return  # Skip aliasing for mocked modules
+    if run_module is not None and hasattr(run_module, '_mock_name'):
+        return  # Skip aliasing for mocked modules
 
     if gen_key in sys.modules and run_key not in sys.modules:
         sys.modules[run_key] = sys.modules[gen_key]

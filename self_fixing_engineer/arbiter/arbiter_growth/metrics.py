@@ -84,7 +84,9 @@ def get_or_create_metric(
     if metric_class == Histogram and custom_buckets:
         kwargs["buckets"] = custom_buckets
 
-    logger.debug(f"Creating new metric '{name}' of type {metric_class.__name__}.")
+    # Get metric class name safely (handles Mocks during test collection)
+    class_name = getattr(metric_class, '__name__', str(metric_class))
+    logger.debug(f"Creating new metric '{name}' of type {class_name}.")
     return metric_class(name, documentation, **kwargs, registry=registry)
 
 
