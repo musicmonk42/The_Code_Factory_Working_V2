@@ -70,6 +70,9 @@ class ExplainAuditRecord(Base):
     """
 
     __tablename__ = "explain_audit"
+    # Allow table redefinition during test collection to prevent
+    # "Table 'explain_audit' is already defined" errors when modules are imported multiple times
+    __table_args__ = {'extend_existing': True}
 
     uuid: Mapped[str] = mapped_column(String, primary_key=True)
     kind: Mapped[str] = mapped_column(String, nullable=False)

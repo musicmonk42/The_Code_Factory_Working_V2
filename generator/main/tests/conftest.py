@@ -36,56 +36,13 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # -------------------------------------------------
-# 3. Early module mocking (before test collection)
-#    These must be mocked BEFORE any test files try to import them
+# 3. Module mocking is now handled via pytest fixtures
+#    DO NOT mock modules at import time with MagicMock as this causes
+#    mypy/compile errors when MagicMock pollutes type annotations
 # -------------------------------------------------
 
-# List of modules that need to be mocked for tests
-MOCKED_MODULES = [
-    "generator.runner.runner_config",
-    "generator.runner.runner_core",
-    "generator.runner.runner_logging",
-    "generator.runner.runner_metrics",
-    "generator.runner.alerting",
-    "generator.runner.llm_plugin_manager",
-    "generator.audit_log.audit_log",
-    "generator.audit_log.audit_crypto.audit_crypto_factory",
-    "generator.audit_log.audit_crypto.audit_crypto_ops",
-    "generator.audit_log.audit_crypto.audit_crypto_provider",
-    "generator.audit_log.audit_crypto.audit_keystore",
-    "generator.audit_log.audit_crypto.secrets",
-    "generator.engine",  # fixes "No module named 'engine'"
-    "generator.main.api",
-    "generator.main.cli",
-    "generator.main.gui",
-    # External libs used inside the code under test
-    "uvicorn",
-    "aiofiles",  # Required by generator.main.api
-    "opentelemetry",
-    "opentelemetry.sdk",
-    "opentelemetry.trace",
-    "opentelemetry.sdk.trace",
-    "opentelemetry.sdk.trace.export",
-    "opentelemetry.exporter.otlp.proto.grpc",
-    "opentelemetry.semconv.trace",
-    "boto3",
-    # Additional mocks needed by test_api.py (without generator. prefix)
-    "runner.runner_core",
-    "runner.runner_config",
-    "runner.runner_logging",
-    "runner.runner_metrics",
-    "runner.runner_utils",
-    "intent_parser.intent_parser",
-]
-
-# Mock modules ONLY if they're not already imported AND we're in test mode
-# This needs to happen at conftest import time to prevent import errors
-if os.environ.get("TESTING") == "1":
-    from unittest.mock import MagicMock
-    for name in MOCKED_MODULES:
-        if name not in sys.modules:
-            # Use a dedicated mock for each module to avoid shared state
-            sys.modules[name] = MagicMock(name=f"mock_{name}")
+# Modules that may need to be mocked in individual tests can use fixtures
+# See the mock_modules fixture below
 
 # -------------------------------------------------
 # 4. Pytest fixtures
@@ -120,6 +77,27 @@ def reset_test_env():
     }.items():
         os.environ[k] = v
     yield
+
+
+@pytest.fixture
+def mock_modules(monkeypatch):
+    """
+    Fixture to mock modules needed by tests.
+    Use this in tests that need specific modules mocked, for example:
+    
+    def test_something(mock_modules):
+        # Mock specific modules for this test
+        mock_modules(['runner.runner_core', 'intent_parser.intent_parser'])
+        # ... test code that imports those modules
+    
+    Note: This fixture uses MagicMock to create module mocks, so tests using this
+    fixture should only be run with pytest, not with static type checkers.
+    """
+    def _mock_modules(module_names):
+        from unittest.mock import MagicMock
+        for name in module_names:
+            monkeypatch.setitem(sys.modules, name, MagicMock(name=f"mock_{name}"))
+    return _mock_modules
 
 
 def pytest_configure(config):
