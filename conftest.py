@@ -27,6 +27,20 @@ os.environ.setdefault("PYTEST_CURRENT_TEST", "true")
 def _create_mock_module(name):
     """Create a minimal mock module for missing dependencies."""
     import types
+    
+    # Create a mock class that can be used as decorator or callable
+    class MockCallable:
+        def __call__(self, *args, **kwargs):
+            # When called directly, return self to support chaining
+            return self
+        def __getattr__(self, attr):
+            # Return another MockCallable for attribute access
+            return MockCallable()
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+    
     mock_module = types.ModuleType(name)
     mock_module.__file__ = f"<mocked {name}>"
     # Add __path__ attribute to support submodule imports (packages need this)
@@ -35,8 +49,8 @@ def _create_mock_module(name):
     # Add a __getattr__ to handle submodule/attribute access gracefully
     def _mock_getattr(attr_name):
         """Return a mock object for any attribute access."""
-        # Return a callable mock that returns None
-        return lambda *args, **kwargs: None
+        # Return a MockCallable that can be used as decorator or function
+        return MockCallable()
     
     mock_module.__getattr__ = _mock_getattr
     
@@ -79,6 +93,8 @@ _OPTIONAL_DEPENDENCIES = [
     'dynaconf',  # Required by runner modules
     'anthropic',  # Required by arbiter.plugins
     'google.generativeai',  # Required by arbiter.plugins
+    'google.api_core',  # Required by arbiter.plugins
+    'google.api_core.exceptions',  # Required by arbiter.plugins
     'openai',  # Required by LLM providers
     'neo4j',  # Required by knowledge_graph
     'chromadb',  # Required by knowledge_graph
