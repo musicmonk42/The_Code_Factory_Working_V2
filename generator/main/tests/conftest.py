@@ -68,6 +68,13 @@ MOCKED_MODULES = [
     "opentelemetry.exporter.otlp.proto.grpc",
     "opentelemetry.semconv.trace",
     "boto3",
+    # Additional mocks needed by test_api.py (without generator. prefix)
+    "runner.runner_core",
+    "runner.runner_config",
+    "runner.runner_logging",
+    "runner.runner_metrics",
+    "runner.runner_utils",
+    "intent_parser.intent_parser",
 ]
 
 for name in MOCKED_MODULES:

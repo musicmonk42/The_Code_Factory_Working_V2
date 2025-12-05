@@ -20,13 +20,11 @@ os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-testing-only"
 # Use an in-memory sqlite DB for testing
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
-# Mock dependencies before importing api
-sys.modules["runner.runner_core"] = MagicMock()
-sys.modules["runner.runner_config"] = MagicMock()
-sys.modules["runner.runner_logging"] = MagicMock()
-sys.modules["runner.runner_metrics"] = MagicMock()
-sys.modules["runner.runner_utils"] = MagicMock()
-sys.modules["intent_parser.intent_parser"] = MagicMock()
+# NOTE: Module-level sys.modules mocking has been moved to conftest.py
+# to avoid interfering with pytest test collection across other test files.
+# The conftest.py already mocks: runner.runner_core, runner.runner_config,
+# runner.runner_logging, runner.runner_metrics, runner.runner_utils, and
+# intent_parser.intent_parser
 
 from fastapi import (  # ADDED WebSocketDisconnect, Request as per Steps 4 & 5
     Request,
