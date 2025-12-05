@@ -36,7 +36,7 @@ from fastapi.security import (
 )
 
 # Pydantic imports
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # Security imports
 from security_config import EnterpriseSecurityConfig, SecurityLevel, get_security_config
@@ -128,7 +128,7 @@ class SessionContext(BaseModel):
     """Session context model"""
 
     # allow arbitrary types (e.g., MagicMock replacing SecurityLevel in tests)
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     user_id: str
     username: str

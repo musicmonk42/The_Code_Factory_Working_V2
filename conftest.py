@@ -51,6 +51,56 @@ except ImportError:
     # pydantic not installed, skip shim
     pass
 
+# ---- Tenacity exception safety ----
+# Ensure tenacity exceptions are proper Exception classes
+try:
+    from tenacity import RetryError, TryAgain
+    # Verify these are actual exception classes
+    if not issubclass(RetryError, BaseException):
+        # If somehow mocked, restore proper exception behavior
+        class RetryError(Exception):
+            """Raised when all retry attempts have failed."""
+            pass
+        import tenacity
+        tenacity.RetryError = RetryError
+    if not issubclass(TryAgain, BaseException):
+        class TryAgain(Exception):
+            """Signal to retry the operation."""
+            pass
+        import tenacity
+        tenacity.TryAgain = TryAgain
+except ImportError:
+    # tenacity not installed, skip
+    pass
+except TypeError:
+    # If issubclass check fails, create proper exceptions
+    try:
+        import tenacity
+        class RetryError(Exception):
+            """Raised when all retry attempts have failed."""
+            pass
+        class TryAgain(Exception):
+            """Signal to retry the operation."""
+            pass
+        tenacity.RetryError = RetryError
+        tenacity.TryAgain = TryAgain
+    except:
+        pass
+
+
+# ---- Protect aiohttp types from being mocked ----
+# Ensure aiohttp types remain as proper classes for type annotations
+try:
+    import aiohttp
+    # Store original types before any mocking can happen
+    _ORIGINAL_AIOHTTP_TYPES = {
+        'ClientResponse': getattr(aiohttp, 'ClientResponse', None),
+        'ClientSession': getattr(aiohttp, 'ClientSession', None),
+    }
+except ImportError:
+    _ORIGINAL_AIOHTTP_TYPES = {}
+
+
 # ---- ChromaDB singleton cleanup ----
 # Global cleanup of ChromaDB singleton between test sessions
 def _cleanup_chromadb_singleton():
