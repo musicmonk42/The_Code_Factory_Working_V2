@@ -32,6 +32,14 @@ def _create_mock_module(name):
     # Add __path__ attribute to support submodule imports (packages need this)
     mock_module.__path__ = []
     
+    # Add a __getattr__ to handle submodule/attribute access gracefully
+    def _mock_getattr(attr_name):
+        """Return a mock object for any attribute access."""
+        # Return a callable mock that returns None
+        return lambda *args, **kwargs: None
+    
+    mock_module.__getattr__ = _mock_getattr
+    
     # Add common attributes for specific modules
     if name == 'dotenv':
         # dotenv needs load_dotenv and find_dotenv functions
@@ -61,6 +69,7 @@ _OPTIONAL_DEPENDENCIES = [
     'backoff',  # Required by generator.main.api
     'fastapi',  # Required by generator.main.api
     'fastapi.security',  # Required by generator.main.api
+    'fastapi.testclient',  # Required by test files
     'uvicorn',  # Required by generator.main
     'jwt',  # Required by generator.main.api
     'sqlalchemy',  # Required by many modules
@@ -68,6 +77,13 @@ _OPTIONAL_DEPENDENCIES = [
     'redis.asyncio',  # Required by generator.main.api
     'dotenv',  # Required by many modules
     'dynaconf',  # Required by runner modules
+    'anthropic',  # Required by arbiter.plugins
+    'google.generativeai',  # Required by arbiter.plugins
+    'openai',  # Required by LLM providers
+    'neo4j',  # Required by knowledge_graph
+    'chromadb',  # Required by knowledge_graph
+    'httpx',  # Required by explainable_reasoner
+    'freezegun',  # Required by test files
     # Note: prometheus_client, aiohttp, pydantic, and tenacity should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
