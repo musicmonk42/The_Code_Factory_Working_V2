@@ -10,7 +10,8 @@ from pathlib import Path
 generator_root = Path(__file__).parent.resolve()
 generator_root_str = str(generator_root)
 
-# Always insert at the beginning to ensure imports work correctly
-if generator_root_str in sys.path:
-    sys.path.remove(generator_root_str)
-sys.path.insert(0, generator_root_str)
+# Insert at the beginning only if not already there
+if not sys.path or sys.path[0] != generator_root_str:
+    if generator_root_str in sys.path:
+        sys.path.remove(generator_root_str)
+    sys.path.insert(0, generator_root_str)
