@@ -962,6 +962,21 @@ if 'opentelemetry' not in sys.modules:
         
         instrumentation_grpc.GrpcAioInstrumentor = GrpcAioInstrumentor
         
+        # Create instrumentation.utils module (required by instrumentation._semconv)
+        instrumentation_utils = ModuleType('opentelemetry.instrumentation.utils')
+        instrumentation_utils.__file__ = '<mocked opentelemetry.instrumentation.utils>'
+        instrumentation_utils.__path__ = []
+        instrumentation_utils.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation.utils', loader=None)
+        instrumentation_utils.http_status_to_status_code = lambda *args, **kwargs: None
+        instrumentation_utils.__getattr__ = _mock_getattr
+        
+        # Create instrumentation._semconv module (required by instrumentation.fastapi)
+        instrumentation_semconv = ModuleType('opentelemetry.instrumentation._semconv')
+        instrumentation_semconv.__file__ = '<mocked opentelemetry.instrumentation._semconv>'
+        instrumentation_semconv.__path__ = []
+        instrumentation_semconv.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation._semconv', loader=None)
+        instrumentation_semconv.__getattr__ = _mock_getattr
+        
         # Create sdk modules
         sdk_module = ModuleType('opentelemetry.sdk')
         sdk_module.__file__ = '<mocked opentelemetry.sdk>'
@@ -1062,6 +1077,8 @@ if 'opentelemetry' not in sys.modules:
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
         sys.modules['opentelemetry.instrumentation.grpc'] = instrumentation_grpc
+        sys.modules['opentelemetry.instrumentation.utils'] = instrumentation_utils
+        sys.modules['opentelemetry.instrumentation._semconv'] = instrumentation_semconv
         sys.modules['opentelemetry.sdk'] = sdk_module
         sys.modules['opentelemetry.sdk.trace'] = sdk_trace_module
         sys.modules['opentelemetry.sdk.trace.sampling'] = sdk_trace_sampling_module

@@ -228,6 +228,28 @@ if 'opentelemetry' not in sys.modules:
         
         instrumentation_grpc.GrpcAioInstrumentor = GrpcAioInstrumentor
         
+        # Create instrumentation.utils module (required by instrumentation._semconv)
+        class _MockCallable:
+            """Mock callable for module attributes."""
+            def __call__(self, *args, **kwargs):
+                return self
+            def __getattr__(self, attr):
+                return _MockCallable()
+        
+        instrumentation_utils = types.ModuleType('opentelemetry.instrumentation.utils')
+        instrumentation_utils.__file__ = '<mocked opentelemetry.instrumentation.utils>'
+        instrumentation_utils.__path__ = []
+        instrumentation_utils.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation.utils', loader=None)
+        instrumentation_utils.http_status_to_status_code = lambda *args, **kwargs: None
+        instrumentation_utils.__getattr__ = lambda attr: _MockCallable()
+        
+        # Create instrumentation._semconv module (required by instrumentation.fastapi)
+        instrumentation_semconv = types.ModuleType('opentelemetry.instrumentation._semconv')
+        instrumentation_semconv.__file__ = '<mocked opentelemetry.instrumentation._semconv>'
+        instrumentation_semconv.__path__ = []
+        instrumentation_semconv.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation._semconv', loader=None)
+        instrumentation_semconv.__getattr__ = lambda attr: _MockCallable()
+        
         instrumentation_logging = types.ModuleType('opentelemetry.instrumentation.logging')
         instrumentation_logging.__file__ = '<mocked opentelemetry.instrumentation.logging>'
         instrumentation_logging.__path__ = []
@@ -295,6 +317,17 @@ if 'opentelemetry' not in sys.modules:
         trace_propagation_tracecontext.__file__ = '<mocked opentelemetry.trace.propagation.tracecontext>'
         trace_propagation_tracecontext.TraceContextTextMapPropagator = lambda *args, **kwargs: None
         trace_propagation_module.tracecontext = trace_propagation_tracecontext
+        
+        # Create propagate module (required by instrumentation.utils)
+        propagate_module = types.ModuleType('opentelemetry.propagate')
+        propagate_module.__file__ = '<mocked opentelemetry.propagate>'
+        propagate_module.__path__ = []
+        propagate_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.propagate', loader=None)
+        propagate_module.extract = lambda *args, **kwargs: {}
+        propagate_module.inject = lambda *args, **kwargs: None
+        propagate_module.get_global_textmap = lambda *args, **kwargs: None
+        propagate_module.set_global_textmap = lambda *args, **kwargs: None
+        otel_module.propagate = propagate_module
         
         # sdk.trace.sampling module
         sdk_trace_sampling_module = types.ModuleType('opentelemetry.sdk.trace.sampling')
@@ -367,9 +400,12 @@ if 'opentelemetry' not in sys.modules:
         sys.modules['opentelemetry.trace.status'] = trace_status_module
         sys.modules['opentelemetry.trace.propagation'] = trace_propagation_module
         sys.modules['opentelemetry.trace.propagation.tracecontext'] = trace_propagation_tracecontext
+        sys.modules['opentelemetry.propagate'] = propagate_module
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
         sys.modules['opentelemetry.instrumentation.grpc'] = instrumentation_grpc
+        sys.modules['opentelemetry.instrumentation.utils'] = instrumentation_utils
+        sys.modules['opentelemetry.instrumentation._semconv'] = instrumentation_semconv
         sys.modules['opentelemetry.instrumentation.logging'] = instrumentation_logging
         sys.modules['opentelemetry.instrumentation.requests'] = instrumentation_requests
         sys.modules['opentelemetry.instrumentation.system_metrics'] = instrumentation_system_metrics
