@@ -129,81 +129,119 @@ def start_prometheus_server_once(port: int = METRICS_PORT):
 
 # --- Core Prometheus Metrics Initialization (FIXED ORDER) ---
 # FIX: Changed LLM_CALLS_TOTAL to LLM_REQUESTS_TOTAL as per requirement
-LLM_REQUESTS_TOTAL = prom.Counter(
+# FIX: Wrap metrics creation to avoid duplication errors in test collection
+def _get_or_create_counter(name, documentation, labelnames):
+    """Get existing counter or create new one."""
+    try:
+        return prom.Counter(name, documentation, labelnames)
+    except ValueError:
+        # Metric already exists, get it from registry
+        from prometheus_client import REGISTRY
+        for collector in REGISTRY._collector_to_names.keys():
+            if hasattr(collector, '_name') and collector._name == name:
+                return collector
+        raise
+
+def _get_or_create_histogram(name, documentation, labelnames):
+    """Get existing histogram or create new one."""
+    try:
+        return prom.Histogram(name, documentation, labelnames)
+    except ValueError:
+        # Metric already exists, get it from registry
+        from prometheus_client import REGISTRY
+        for collector in REGISTRY._collector_to_names.keys():
+            if hasattr(collector, '_name') and collector._name == name:
+                return collector
+        raise
+
+LLM_REQUESTS_TOTAL = _get_or_create_counter(
     "llm_requests_total", "Total number of LLM API calls", ["provider", "model"]
 )
-LLM_ERRORS_TOTAL = prom.Counter(
+LLM_ERRORS_TOTAL = _get_or_create_counter(
     "llm_errors_total", "Total number of LLM API errors", ["provider", "model"]
 )
-LLM_LATENCY_SECONDS = prom.Histogram(
+LLM_LATENCY_SECONDS = _get_or_create_histogram(
     "llm_latency_seconds", "LLM API response latency", ["provider", "model"]
 )
-LLM_TOKENS_INPUT = prom.Counter(
+LLM_TOKENS_INPUT = _get_or_create_counter(
     "llm_tokens_input_total",
     "Total input tokens processed by LLM",
     ["provider", "model"],
 )
-LLM_TOKENS_OUTPUT = prom.Counter(
+LLM_TOKENS_OUTPUT = _get_or_create_counter(
     "llm_tokens_output_total",
     "Total output tokens processed by LLM",
     ["provider", "model"],
 )
-LLM_COST_TOTAL = prom.Counter(
+LLM_COST_TOTAL = _get_or_create_counter(
     "llm_cost_total", "Total estimated LLM cost", ["provider", "model"]
 )
-LLM_PROVIDER_HEALTH = prom.Gauge(
+
+def _get_or_create_gauge(name, documentation, labelnames):
+    """Get existing gauge or create new one."""
+    try:
+        return prom.Gauge(name, documentation, labelnames)
+    except ValueError:
+        # Metric already exists, get it from registry
+        from prometheus_client import REGISTRY
+        for collector in REGISTRY._collector_to_names.keys():
+            if hasattr(collector, '_name') and collector._name == name:
+                return collector
+        raise
+
+LLM_PROVIDER_HEALTH = _get_or_create_gauge(
     "llm_provider_health_status",
     "Health status of LLM provider (1=healthy, 0=unhealthy)",
     ["provider"],
 )
-LLM_RATE_LIMIT_EXCEEDED = prom.Counter(
+LLM_RATE_LIMIT_EXCEEDED = _get_or_create_counter(
     "llm_rate_limit_exceeded_total", "Total times rate limit was exceeded", ["provider"]
 )
-LLM_CIRCUIT_STATE = prom.Gauge(
+LLM_CIRCUIT_STATE = _get_or_create_gauge(
     "llm_circuit_breaker_state",
     "State of the LLM circuit breaker (1=open, 0.5=half, 0=closed)",
     ["provider"],
 )
 
 # Other Runner Metrics
-RUN_LATENCY = prom.Histogram(
+RUN_LATENCY = _get_or_create_histogram(
     "runner_latency_seconds",
     "Run latency of test executions",
     ["backend", "framework", "instance_id"],
 )
-RUN_ERRORS = prom.Counter(
+RUN_ERRORS = _get_or_create_counter(
     "runner_errors_total",
     "Total count of internal runner errors",
     ["error_type", "backend", "instance_id"],
 )
-RUN_SUCCESS = prom.Counter(
+RUN_SUCCESS = _get_or_create_counter(
     "runner_successful_runs_total",
     "Total count of successful test runs",
     ["backend", "framework", "instance_id"],
 )
-RUN_FAILURE = prom.Counter(
+RUN_FAILURE = _get_or_create_counter(
     "runner_failed_runs_total",
     "Total count of failed test runs",
     ["backend", "framework", "instance_id"],
 )
 
 # --- FIX: ADD LABELS TO GAUGES AS EXPECTED BY test_runner_app.py ---
-RUN_PASS_RATE = prom.Gauge(
+RUN_PASS_RATE = _get_or_create_gauge(
     "runner_overall_test_pass_rate",
     "Overall Test pass rate (0-1) across all runs",
-    # No labels for this one, as per test
+    [],  # No labels for this one, as per test
 )
-RUN_RESOURCE_USAGE = prom.Gauge(
+RUN_RESOURCE_USAGE = _get_or_create_gauge(
     "runner_resource_usage_percent",
     "Percentage of resource usage",
     ["resource_type", "instance_id"],
 )
-RUN_QUEUE = prom.Gauge(
+RUN_QUEUE = _get_or_create_gauge(
     "runner_queue_length",
     "Current length of pending tasks in the queue",
     ["framework", "instance_id"],  # Added labels
 )
-HEALTH_STATUS = prom.Gauge(
+HEALTH_STATUS = _get_or_create_gauge(
     "runner_component_health_status",
     "Health status of a component (1=healthy, 0=unhealthy)",
     ["component_name", "instance_id"],
@@ -211,23 +249,24 @@ HEALTH_STATUS = prom.Gauge(
 # --- END FIX ---
 
 # --- App-level Metrics (used by main.py) ---
-APP_RUNNING_STATUS = prom.Gauge(
+APP_RUNNING_STATUS = _get_or_create_gauge(
     "app_running_status",
     "Application running status (1=running, 0=stopped)",
     ["app_name", "instance_id"],
 )
-APP_STARTUP_DURATION = prom.Histogram(
+APP_STARTUP_DURATION = _get_or_create_histogram(
     "app_startup_duration_seconds",
     "Application startup duration in seconds",
     ["app_name", "instance_id"],
 )
 # --- END App-level Metrics ---
 
-DISTRIBUTED_NODES_ACTIVE = prom.Gauge(
+DISTRIBUTED_NODES_ACTIVE = _get_or_create_gauge(
     "runner_distributed_nodes_active",
     "Number of active distributed nodes in the cluster",
+    [],
 )
-DISTRIBUTED_LATENCY = prom.Histogram(
+DISTRIBUTED_LATENCY = _get_or_create_histogram(
     "runner_distributed_latency_seconds",
     "Latency of distributed task submissions",
     ["instance_id"],
@@ -236,111 +275,113 @@ DISTRIBUTED_LATENCY = prom.Histogram(
 # --- FIX: ADDED MISSING UTILITY METRIC DEFINITIONS ---
 # These metrics were being redefined in runner_logging.py, causing the error.
 # They are now defined here as the single source of truth.
-UTIL_LATENCY = prom.Histogram(
+UTIL_LATENCY = _get_or_create_histogram(
     "util_latency_seconds", "Util function latency", ["func", "status"]
 )
-UTIL_ERRORS = prom.Counter("util_errors", "Util errors", ["func", "type"])
-UTIL_SELF_HEAL = prom.Counter("util_self_heal", "Self-healed operations", ["func"])
-PROVENANCE_LOG_ENTRIES = prom.Counter(
+UTIL_ERRORS = _get_or_create_counter("util_errors", "Util errors", ["func", "type"])
+UTIL_SELF_HEAL = _get_or_create_counter("util_self_heal", "Self-healed operations", ["func"])
+PROVENANCE_LOG_ENTRIES = _get_or_create_counter(
     "provenance_log_entries_total", "Total provenance log entries", ["action"]
 )
-DASHBOARD_QUEUE_SIZE = prom.Gauge(
-    "dashboard_log_queue_size", "Current size of the dashboard log queue"
+DASHBOARD_QUEUE_SIZE = _get_or_create_gauge(
+    "dashboard_log_queue_size", "Current size of the dashboard log queue", []
 )
-ANOMALY_DETECTED_TOTAL = prom.Counter(
+ANOMALY_DETECTED_TOTAL = _get_or_create_counter(
     "anomaly_detected_total", "Total anomalies detected", ["type", "severity"]
 )
 # --- END FIX ---
 
 # --- Dependability & Quality Metrics ---
-RUN_COVERAGE_PERCENT = prom.Gauge(
-    "runner_overall_coverage_percent", "Overall code coverage percentage (0-1)"
+RUN_COVERAGE_PERCENT = _get_or_create_gauge(
+    "runner_overall_coverage_percent", "Overall code coverage percentage (0-1)", []
 )
-RUN_VULNERABILITY_SCORE = prom.Gauge(
+RUN_VULNERABILITY_SCORE = _get_or_create_gauge(
     "runner_overall_vulnerability_score",
     "Overall vulnerability score (lower is better, e.g., CVSS base score)",
+    [],
 )
-RUN_AVG_TEST_LATENCY_HIST = prom.Histogram(
+RUN_AVG_TEST_LATENCY_HIST = _get_or_create_histogram(
     "runner_individual_test_latency_seconds",
     "Distribution of individual test case latencies",
     ["framework", "instance_id"],
 )
-DOC_VALIDATION_STATUS = prom.Gauge(
+DOC_VALIDATION_STATUS = _get_or_create_gauge(
     "runner_doc_validation_status",
     "Documentation validation status (1=pass, 0=fail)",
     ["doc_framework_name", "instance_id"],
 )
-DOC_GENERATION_ERRORS = prom.Counter(
+DOC_GENERATION_ERRORS = _get_or_create_counter(
     "runner_doc_generation_errors_total",
     "Total count of documentation generation errors",
     ["error_type", "doc_framework_name", "instance_id"],
 )
 
 # --- Mutation & Fuzzing Metrics ---
-MUTATION_TOTAL = prom.Counter(
+MUTATION_TOTAL = _get_or_create_counter(
     "runner_mutation_total",
     "Total mutations generated",
     ["language", "strategy", "tool_name", "instance_id"],
 )
-MUTATION_KILLED = prom.Counter(
+MUTATION_KILLED = _get_or_create_counter(
     "runner_mutation_killed_total",
     "Total mutations killed by tests",
     ["language", "strategy", "tool_name", "instance_id"],
 )
-MUTATION_SURVIVED = prom.Counter(
+MUTATION_SURVIVED = _get_or_create_counter(
     "runner_mutation_survived_total",
     "Total mutations that survived tests",
     ["language", "strategy", "tool_name", "instance_id"],
 )
-MUTATION_TIMEOUT = prom.Counter(
+MUTATION_TIMEOUT = _get_or_create_counter(
     "runner_mutation_timeout_total",
     "Total mutations that timed out",
     ["language", "strategy", "tool_name", "instance_id"],
 )
-MUTATION_ERROR = prom.Counter(
+MUTATION_ERROR = _get_or_create_counter(
     "runner_mutation_error_total",
     "Total mutations that caused an error",
     ["language", "strategy", "tool_name", "instance_id"],
 )
 # This is the one runner_mutation.py wants to import as MUTATION_SURVIVAL_RATE
-RUN_MUTATION_SURVIVAL = prom.Gauge(
+RUN_MUTATION_SURVIVAL = _get_or_create_gauge(
     "runner_mutation_survival_rate",
     "Latest mutation survival rate (0-1)",
     ["language", "strategy", "tool_name", "instance_id"],
 )
 # This is the one runner_mutation.py wants to import as FUZZ_DISCOVERIES
-RUN_FUZZ_DISCOVERIES = prom.Counter(
+RUN_FUZZ_DISCOVERIES = _get_or_create_counter(
     "runner_fuzz_discoveries_total",
     "Total count of issues discovered by fuzzing",
     ["language", "strategy", "instance_id"],
 )
-COVERAGE_GAPS = prom.Counter(
+COVERAGE_GAPS = _get_or_create_counter(
     "runner_mutation_coverage_gaps_total",
     "Total coverage gaps found during mutation",
     ["language", "instance_id"],
 )
 
 # --- Resilient Queuing Metrics ---
-FAILED_EXPORT_QUEUE_SIZE = prom.Gauge(
-    "runner_failed_export_queue_size", "Current size of failed export retry queue"
+FAILED_EXPORT_QUEUE_SIZE = _get_or_create_gauge(
+    "runner_failed_export_queue_size", "Current size of failed export retry queue", []
 )
-EXPORT_RETRY_ATTEMPTS = prom.Counter(
+EXPORT_RETRY_ATTEMPTS = _get_or_create_counter(
     "runner_export_retry_attempts_total",
     "Total number of export retry attempts",
     ["exporter", "success"],
 )
 
 # --- New Observability Metrics for Configuration and Task Lifecycle ---
-RUNNER_CONFIG_RELOADS = prom.Counter(
+RUNNER_CONFIG_RELOADS = _get_or_create_counter(
     "runner_config_reloads_total",
     "Total count of times configuration has been reloaded",
+    [],
 )
-RUNNER_CONFIG_VERSION = prom.Gauge(
+RUNNER_CONFIG_VERSION = _get_or_create_gauge(
     "runner_active_config_version",
     "Current active configuration schema version",
     ["version"],
 )
-RUNNER_TASK_STATUS = prom.Gauge(
+RUNNER_TASK_STATUS = _get_or_create_gauge(
     "runner_task_status_count", "Count of tasks by their current status", ["status"]
 )
 
@@ -1599,10 +1640,10 @@ def _get_canonical_metric_key(metric_name: str, labels: Dict[str, str]) -> str:
 
 # --- Metrics for Provider-Specific Streaming ---
 # These are used by local_provider, grok_provider, gemini_provider
-stream_chunks_total = prom.Counter(
+stream_chunks_total = _get_or_create_counter(
     "llm_stream_chunks_total", "Total number of stream chunks", ["model"]
 )
-stream_chunk_latency = prom.Histogram(
+stream_chunk_latency = _get_or_create_histogram(
     "llm_stream_chunk_latency_seconds", "Latency per stream chunk in seconds", ["model"]
 )
 

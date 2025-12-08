@@ -287,6 +287,8 @@ if 'opentelemetry' not in sys.modules:
                 pass
             def set_status(self, *args, **kwargs):
                 pass
+            def record_exception(self, *args, **kwargs):
+                pass
         
         # Create Status and StatusCode classes
         class Status:
@@ -305,6 +307,7 @@ if 'opentelemetry' not in sys.modules:
         trace_module.get_tracer = lambda *args, **kwargs: _NoOpTracer()
         trace_module.get_current_span = lambda: _NoOpSpan()
         trace_module.get_tracer_provider = lambda: None
+        trace_module.set_tracer_provider = lambda *args, **kwargs: None
         trace_module.Status = Status
         trace_module.StatusCode = StatusCode
         
@@ -331,8 +334,88 @@ if 'opentelemetry' not in sys.modules:
         
         instrumentation_fastapi.FastAPIInstrumentor = FastAPIInstrumentor
         
+        # Create sdk modules
+        sdk_module = ModuleType('opentelemetry.sdk')
+        sdk_module.__file__ = '<mocked opentelemetry.sdk>'
+        sdk_module.__path__ = []  # Parent module for submodules
+        otel_module.sdk = sdk_module
+        
+        sdk_trace_module = ModuleType('opentelemetry.sdk.trace')
+        sdk_trace_module.__file__ = '<mocked opentelemetry.sdk.trace>'
+        sdk_trace_module.__path__ = []  # Parent module for submodules
+        sdk_trace_module.TracerProvider = lambda *args, **kwargs: None
+        sdk_module.trace = sdk_trace_module
+        
+        sdk_trace_export_module = ModuleType('opentelemetry.sdk.trace.export')
+        sdk_trace_export_module.__file__ = '<mocked opentelemetry.sdk.trace.export>'
+        sdk_trace_export_module.__path__ = []
+        sdk_trace_export_module.ConsoleSpanExporter = lambda *args, **kwargs: None
+        sdk_trace_export_module.SimpleSpanProcessor = lambda *args, **kwargs: None
+        sdk_trace_export_module.BatchSpanProcessor = lambda *args, **kwargs: None
+        sdk_trace_module.export = sdk_trace_export_module
+        
+        sdk_resources_module = ModuleType('opentelemetry.sdk.resources')
+        sdk_resources_module.__file__ = '<mocked opentelemetry.sdk.resources>'
+        sdk_resources_module.Resource = lambda **kwargs: None
+        sdk_module.resources = sdk_resources_module
+        
+        # Create exporter modules
+        exporter_module = ModuleType('opentelemetry.exporter')
+        exporter_module.__file__ = '<mocked opentelemetry.exporter>'
+        exporter_module.__path__ = []
+        otel_module.exporter = exporter_module
+        
+        exporter_jaeger_module = ModuleType('opentelemetry.exporter.jaeger')
+        exporter_jaeger_module.__file__ = '<mocked opentelemetry.exporter.jaeger>'
+        exporter_jaeger_module.__path__ = []
+        exporter_module.jaeger = exporter_jaeger_module
+        
+        exporter_jaeger_thrift_module = ModuleType('opentelemetry.exporter.jaeger.thrift')
+        exporter_jaeger_thrift_module.__file__ = '<mocked opentelemetry.exporter.jaeger.thrift>'
+        exporter_jaeger_thrift_module.JaegerExporter = lambda *args, **kwargs: None
+        exporter_jaeger_module.thrift = exporter_jaeger_thrift_module
+        
+        exporter_otlp_module = ModuleType('opentelemetry.exporter.otlp')
+        exporter_otlp_module.__file__ = '<mocked opentelemetry.exporter.otlp>'
+        exporter_otlp_module.__path__ = []
+        exporter_module.otlp = exporter_otlp_module
+        
+        exporter_otlp_proto_module = ModuleType('opentelemetry.exporter.otlp.proto')
+        exporter_otlp_proto_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto>'
+        exporter_otlp_proto_module.__path__ = []
+        exporter_otlp_module.proto = exporter_otlp_proto_module
+        
+        exporter_otlp_proto_grpc_module = ModuleType('opentelemetry.exporter.otlp.proto.grpc')
+        exporter_otlp_proto_grpc_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto.grpc>'
+        exporter_otlp_proto_grpc_module.__path__ = []
+        exporter_otlp_proto_module.grpc = exporter_otlp_proto_grpc_module
+        
+        exporter_otlp_proto_grpc_trace_exporter_module = ModuleType('opentelemetry.exporter.otlp.proto.grpc.trace_exporter')
+        exporter_otlp_proto_grpc_trace_exporter_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto.grpc.trace_exporter>'
+        exporter_otlp_proto_grpc_trace_exporter_module.OTLPSpanExporter = lambda *args, **kwargs: None
+        exporter_otlp_proto_grpc_module.trace_exporter = exporter_otlp_proto_grpc_trace_exporter_module
+        
+        sdk_trace_sampling_module = ModuleType('opentelemetry.sdk.trace.sampling')
+        sdk_trace_sampling_module.__file__ = '<mocked opentelemetry.sdk.trace.sampling>'
+        sdk_trace_sampling_module.ParentBased = lambda *args, **kwargs: None
+        sdk_trace_sampling_module.TraceIdRatioBased = lambda *args, **kwargs: None
+        sdk_trace_sampling_module.ALWAYS_ON = lambda *args, **kwargs: None
+        sdk_trace_module.sampling = sdk_trace_sampling_module
+        
         # Register modules
         sys.modules['opentelemetry'] = otel_module
         sys.modules['opentelemetry.trace'] = trace_module
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
+        sys.modules['opentelemetry.sdk'] = sdk_module
+        sys.modules['opentelemetry.sdk.trace'] = sdk_trace_module
+        sys.modules['opentelemetry.sdk.trace.sampling'] = sdk_trace_sampling_module
+        sys.modules['opentelemetry.sdk.trace.export'] = sdk_trace_export_module
+        sys.modules['opentelemetry.sdk.resources'] = sdk_resources_module
+        sys.modules['opentelemetry.exporter'] = exporter_module
+        sys.modules['opentelemetry.exporter.jaeger'] = exporter_jaeger_module
+        sys.modules['opentelemetry.exporter.jaeger.thrift'] = exporter_jaeger_thrift_module
+        sys.modules['opentelemetry.exporter.otlp'] = exporter_otlp_module
+        sys.modules['opentelemetry.exporter.otlp.proto'] = exporter_otlp_proto_module
+        sys.modules['opentelemetry.exporter.otlp.proto.grpc'] = exporter_otlp_proto_grpc_module
+        sys.modules['opentelemetry.exporter.otlp.proto.grpc.trace_exporter'] = exporter_otlp_proto_grpc_trace_exporter_module
