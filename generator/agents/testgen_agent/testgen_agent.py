@@ -47,8 +47,19 @@ import tiktoken
 from opentelemetry.trace import Status, StatusCode  # For OpenTelemetry tracing
 
 # Presidio: REQUIRED for PII/secret scrubbing.
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine
+try:
+    from presidio_analyzer import AnalyzerEngine
+    from presidio_anonymizer import AnonymizerEngine
+    HAS_PRESIDIO = True
+    # Initialize at module level for efficiency
+    _presidio_analyzer = AnalyzerEngine()
+    _presidio_anonymizer = AnonymizerEngine()
+except (ImportError, OSError):
+    HAS_PRESIDIO = False
+    AnalyzerEngine = None
+    AnonymizerEngine = None
+    _presidio_analyzer = None
+    _presidio_anonymizer = None
 from runner.llm_client import call_ensemble_api
 from runner.runner_errors import LLMError
 
@@ -138,10 +149,14 @@ def scrub_text(text: str) -> str:
     if not text:
         return ""
 
-    try:
-        analyzer = AnalyzerEngine()
-        anonymizer = AnonymizerEngine()
+    if not HAS_PRESIDIO:
+        # If Presidio is not available, raise an error as this is required functionality
+        raise RuntimeError(
+            "Presidio is not available but is required for PII/secret scrubbing. "
+            "Please install presidio-analyzer and presidio-anonymizer."
+        )
 
+    try:
         entities = [
             "PERSON",
             "EMAIL_ADDRESS",
@@ -155,8 +170,8 @@ def scrub_text(text: str) -> str:
             "API_KEY",
         ]
 
-        results = analyzer.analyze(text=text, entities=entities, language="en")
-        scrubbed_content = anonymizer.anonymize(
+        results = _presidio_analyzer.analyze(text=text, entities=entities, language="en")
+        scrubbed_content = _presidio_anonymizer.anonymize(
             text=text,
             analyzer_results=results,
             anonymizers={"DEFAULT": {"type": "replace", "new_value": "[REDACTED]"}},

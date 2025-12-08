@@ -32,6 +32,7 @@ TESTING = os.getenv("TESTING") == "1"
 AnalyzerEngine = None
 AnonymizerEngine = None
 PlantUML = None
+HAS_PRESIDIO = False
 
 # Presidio + spaCy stack (PII/PHI utilities)
 try:
@@ -41,6 +42,7 @@ try:
 
         AnalyzerEngine = _AnalyzerEngine
         AnonymizerEngine = _AnonymizerEngine
+        HAS_PRESIDIO = True
     else:
         # In TESTING, we deliberately skip heavy NLP stack to avoid torch / DLL issues.
         logger.info(
@@ -53,6 +55,7 @@ except (ImportError, OSError, RuntimeError, Exception) as e:  # ultra-defensive
     )
     AnalyzerEngine = None
     AnonymizerEngine = None
+    HAS_PRESIDIO = False
 
 # PlantUML (for optional UML diagrams)
 try:
