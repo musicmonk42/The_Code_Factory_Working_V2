@@ -842,6 +842,33 @@ if not sys.path or sys.path[0] != generator_root_str:
         sys.path.remove(generator_root_str)
     sys.path.insert(0, generator_root_str)
 
+# ---- Runner module aliasing setup ----
+# Import generator.runner to trigger the module aliasing that makes 'runner' importable
+# This must happen early, before any test files try to import from 'runner.*'
+try:
+    import generator.runner as _runner_alias
+    # The import above sets up sys.modules['runner'] = sys.modules['generator.runner']
+except ImportError:
+    pass  # Runner module not available in this context
+
+# ---- Main module aliasing setup ----
+# Similarly, ensure 'main' can be imported as both 'main' and 'generator.main'
+try:
+    import generator.main as _main_alias
+    if 'main' not in sys.modules:
+        sys.modules['main'] = sys.modules['generator.main']
+except ImportError:
+    pass  # Main module not available in this context
+
+# ---- Agents module aliasing setup ----
+# Similarly, ensure 'agents' can be imported as both 'agents' and 'generator.agents'
+try:
+    import generator.agents as _agents_alias
+    if 'agents' not in sys.modules:
+        sys.modules['agents'] = sys.modules['generator.agents']
+except ImportError:
+    pass  # Agents module not available in this context
+
 # ---- OpenTelemetry stub setup ----
 # OpenTelemetry requires special handling because it has specific methods that must exist
 # and be callable, not just module stubs
@@ -962,20 +989,32 @@ if 'opentelemetry' not in sys.modules:
         
         instrumentation_grpc.GrpcAioInstrumentor = GrpcAioInstrumentor
         
+        # Create a local mock getattr function
+        class _MockCallable:
+            """Mock callable for module attributes."""
+            def __call__(self, *args, **kwargs):
+                return self
+            def __getattr__(self, attr):
+                return _MockCallable()
+        
+        def _local_mock_getattr(attr_name):
+            """Return a mock object for any attribute access."""
+            return _MockCallable()
+        
         # Create instrumentation.utils module (required by instrumentation._semconv)
         instrumentation_utils = ModuleType('opentelemetry.instrumentation.utils')
         instrumentation_utils.__file__ = '<mocked opentelemetry.instrumentation.utils>'
         instrumentation_utils.__path__ = []
         instrumentation_utils.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation.utils', loader=None)
         instrumentation_utils.http_status_to_status_code = lambda *args, **kwargs: None
-        instrumentation_utils.__getattr__ = _mock_getattr
+        instrumentation_utils.__getattr__ = _local_mock_getattr
         
         # Create instrumentation._semconv module (required by instrumentation.fastapi)
         instrumentation_semconv = ModuleType('opentelemetry.instrumentation._semconv')
         instrumentation_semconv.__file__ = '<mocked opentelemetry.instrumentation._semconv>'
         instrumentation_semconv.__path__ = []
         instrumentation_semconv.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation._semconv', loader=None)
-        instrumentation_semconv.__getattr__ = _mock_getattr
+        instrumentation_semconv.__getattr__ = _local_mock_getattr
         
         # Create sdk modules
         sdk_module = ModuleType('opentelemetry.sdk')
