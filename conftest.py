@@ -186,20 +186,43 @@ if 'opentelemetry' not in sys.modules:
         trace_module.get_tracer_provider = lambda: None
         
         # Create main opentelemetry module
+        import importlib.util
         otel_module = types.ModuleType('opentelemetry')
         otel_module.__file__ = '<mocked opentelemetry>'
+        otel_module.__path__ = []  # Make it a package
+        otel_module.__spec__ = importlib.util.spec_from_loader('opentelemetry', loader=None)
         otel_module.trace = trace_module
         
         # Create instrumentation module
         instrumentation_module = types.ModuleType('opentelemetry.instrumentation')
         instrumentation_module.__file__ = '<mocked opentelemetry.instrumentation>'
         instrumentation_module.__path__ = []  # This is required for submodule imports
+        instrumentation_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation', loader=None)
         otel_module.instrumentation = instrumentation_module
         
         # Create common instrumentation submodules
         instrumentation_fastapi = types.ModuleType('opentelemetry.instrumentation.fastapi')
         instrumentation_fastapi.__file__ = '<mocked opentelemetry.instrumentation.fastapi>'
-        instrumentation_fastapi.FastAPIInstrumentor = lambda *args, **kwargs: None
+        
+        # FastAPIInstrumentor must be a proper class with instrument_app method
+        class FastAPIInstrumentor:
+            @classmethod
+            def instrument_app(cls, *args, **kwargs):
+                pass
+        
+        instrumentation_fastapi.FastAPIInstrumentor = FastAPIInstrumentor
+        
+        # Create grpc instrumentation module
+        instrumentation_grpc = types.ModuleType('opentelemetry.instrumentation.grpc')
+        instrumentation_grpc.__file__ = '<mocked opentelemetry.instrumentation.grpc>'
+        
+        # GrpcAioInstrumentor must be a proper class
+        class GrpcAioInstrumentor:
+            @classmethod
+            def instrument(cls, *args, **kwargs):
+                pass
+        
+        instrumentation_grpc.GrpcAioInstrumentor = GrpcAioInstrumentor
         
         instrumentation_logging = types.ModuleType('opentelemetry.instrumentation.logging')
         instrumentation_logging.__file__ = '<mocked opentelemetry.instrumentation.logging>'
@@ -336,6 +359,7 @@ if 'opentelemetry' not in sys.modules:
         sys.modules['opentelemetry.trace.propagation.tracecontext'] = trace_propagation_tracecontext
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
+        sys.modules['opentelemetry.instrumentation.grpc'] = instrumentation_grpc
         sys.modules['opentelemetry.instrumentation.logging'] = instrumentation_logging
         sys.modules['opentelemetry.instrumentation.requests'] = instrumentation_requests
         sys.modules['opentelemetry.instrumentation.system_metrics'] = instrumentation_system_metrics
@@ -466,25 +490,59 @@ if 'prometheus_client' not in sys.modules:
     except ImportError:
         # Create prometheus_client package stub
         import types
+        import importlib.util
         prom_module = types.ModuleType('prometheus_client')
         prom_module.__file__ = '<mocked prometheus_client>'
         prom_module.__path__ = []  # Make it a package
+        prom_module.__spec__ = importlib.util.spec_from_loader('prometheus_client', loader=None)
         
         # Create core submodule
         prom_core = types.ModuleType('prometheus_client.core')
         prom_core.__file__ = '<mocked prometheus_client.core>'
         prom_module.core = prom_core
         
-        # Add common classes/functions
+        # Create registry submodule
+        prom_registry = types.ModuleType('prometheus_client.registry')
+        prom_registry.__file__ = '<mocked prometheus_client.registry>'
+        prom_module.registry = prom_registry
+        
+        # Add common classes/functions to core
         class _MockHistogramMetricFamily:
             def __init__(self, *args, **kwargs):
                 pass
         
         prom_core.HistogramMetricFamily = _MockHistogramMetricFamily
         
+        # Add common classes/functions to main module
+        class _MockCollectorRegistry:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        class _MockCounter:
+            def __init__(self, *args, **kwargs):
+                pass
+            def labels(self, *args, **kwargs):
+                return self
+            def inc(self, *args, **kwargs):
+                pass
+        
+        class _MockHistogram:
+            def __init__(self, *args, **kwargs):
+                pass
+            def labels(self, *args, **kwargs):
+                return self
+            def observe(self, *args, **kwargs):
+                pass
+        
+        prom_module.CollectorRegistry = _MockCollectorRegistry
+        prom_module.Counter = _MockCounter
+        prom_module.Histogram = _MockHistogram
+        prom_module.start_http_server = lambda *args, **kwargs: None
+        
         # Register modules
         sys.modules['prometheus_client'] = prom_module
         sys.modules['prometheus_client.core'] = prom_core
+        sys.modules['prometheus_client.registry'] = prom_registry
 
 
 # ---- ChromaDB singleton cleanup ----
