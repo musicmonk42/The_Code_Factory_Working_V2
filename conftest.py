@@ -107,7 +107,17 @@ _OPTIONAL_DEPENDENCIES = [
     'chromadb',  # Required by knowledge_graph
     'httpx',  # Required by explainable_reasoner
     'freezegun',  # Required by test files
-    # Note: prometheus_client, aiohttp, pydantic, and tenacity should be installed
+    'torch',  # PyTorch - causes DLL errors on Windows
+    'sentence_transformers',  # Uses torch, causes DLL errors
+    'transformers',  # Uses torch, causes DLL errors
+    'spacy',  # Uses torch via thinc, causes DLL errors
+    'presidio_analyzer',  # Uses spacy, causes DLL errors
+    'presidio_anonymizer',  # Uses spacy, causes DLL errors
+    'networkx',  # Graph library
+    'defusedxml',  # XML parsing
+    'beautifulsoup4',  # HTML parsing
+    'bs4',  # BeautifulSoup alias
+    # Note: prometheus_client, aiohttp, pydantic, tenacity, and aiosqlite should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
 
@@ -425,6 +435,42 @@ try:
     }
 except ImportError:
     _ORIGINAL_CRYPTO_EXCEPTIONS = {}
+
+
+# ---- Runner module stub setup ----
+# NOTE: Do NOT create a runner stub here. The generator/conftest.py adds generator/
+# to sys.path which makes generator/runner importable as 'runner'. Creating a stub
+# here would shadow the real module and cause import errors.
+# If runner tests fail, the generator/conftest.py will handle the path setup.
+
+
+# ---- Prometheus Client stub setup ----
+# prometheus_client needs special handling for its .core submodule
+if 'prometheus_client' not in sys.modules:
+    try:
+        import prometheus_client
+    except ImportError:
+        # Create prometheus_client package stub
+        import types
+        prom_module = types.ModuleType('prometheus_client')
+        prom_module.__file__ = '<mocked prometheus_client>'
+        prom_module.__path__ = []  # Make it a package
+        
+        # Create core submodule
+        prom_core = types.ModuleType('prometheus_client.core')
+        prom_core.__file__ = '<mocked prometheus_client.core>'
+        prom_module.core = prom_core
+        
+        # Add common classes/functions
+        class _MockHistogramMetricFamily:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        prom_core.HistogramMetricFamily = _MockHistogramMetricFamily
+        
+        # Register modules
+        sys.modules['prometheus_client'] = prom_module
+        sys.modules['prometheus_client.core'] = prom_core
 
 
 # ---- ChromaDB singleton cleanup ----
