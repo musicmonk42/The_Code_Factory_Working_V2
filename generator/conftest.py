@@ -14,6 +14,7 @@ from types import ModuleType
 
 def _create_mock_module(name):
     """Create a minimal mock module for missing dependencies."""
+    import importlib.util
     
     # Create a mock class that can be used as decorator or callable
     class MockCallable:
@@ -39,6 +40,9 @@ def _create_mock_module(name):
     mock_module.__file__ = f"<mocked {name}>"
     # Add __path__ attribute to support submodule imports (packages need this)
     mock_module.__path__ = []
+    # Add __spec__ attribute to satisfy importlib.util.find_spec checks
+    # This prevents "ValueError: torch.__spec__ is None" errors
+    mock_module.__spec__ = importlib.util.spec_from_loader(name, loader=None)
     
     # Add a __getattr__ to handle submodule/attribute access gracefully
     def _mock_getattr(attr_name):
