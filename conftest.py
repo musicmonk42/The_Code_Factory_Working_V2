@@ -434,41 +434,10 @@ except ImportError:
 
 
 # ---- Runner module stub setup ----
-# The runner module needs to be available as a package for test imports
-if 'runner' not in sys.modules:
-    try:
-        # Try to import the real runner module
-        import runner
-    except ImportError:
-        # Create a runner package stub
-        import types
-        runner_module = types.ModuleType('runner')
-        runner_module.__file__ = '<mocked runner>'
-        runner_module.__path__ = []  # Make it a package
-        
-        # Add common submodules
-        runner_providers = types.ModuleType('runner.providers')
-        runner_providers.__file__ = '<mocked runner.providers>'
-        runner_providers.__path__ = []
-        runner_module.providers = runner_providers
-        
-        # Create mock provider modules
-        for provider_name in ['ai_provider', 'claude_provider', 'gemini_provider', 'grok_provider', 'local_provider']:
-            provider_module = types.ModuleType(f'runner.providers.{provider_name}')
-            provider_module.__file__ = f'<mocked runner.providers.{provider_name}>'
-            setattr(runner_providers, provider_name, provider_module)
-            sys.modules[f'runner.providers.{provider_name}'] = provider_module
-        
-        # Create other runner submodules
-        for submodule in ['llm_provider_base', 'runner_app', 'runner_core', 'runner_config']:
-            sub = types.ModuleType(f'runner.{submodule}')
-            sub.__file__ = f'<mocked runner.{submodule}>'
-            setattr(runner_module, submodule, sub)
-            sys.modules[f'runner.{submodule}'] = sub
-        
-        # Register modules
-        sys.modules['runner'] = runner_module
-        sys.modules['runner.providers'] = runner_providers
+# NOTE: Do NOT create a runner stub here. The generator/conftest.py adds generator/
+# to sys.path which makes generator/runner importable as 'runner'. Creating a stub
+# here would shadow the real module and cause import errors.
+# If runner tests fail, the generator/conftest.py will handle the path setup.
 
 
 # ---- Prometheus Client stub setup ----
