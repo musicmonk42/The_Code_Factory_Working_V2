@@ -64,7 +64,7 @@ try:
     if hasattr(_testgen_module, 'Policy'):
         Policy = _testgen_module.Policy
     _AVAILABLE_AGENTS['testgen'] = True
-except (ImportError, AttributeError) as e:
+except (ImportError, AttributeError, OSError) as e:
     logger.debug(f"testgen_agent not available: {e}")
     _AVAILABLE_AGENTS['testgen'] = False
 
@@ -76,7 +76,7 @@ try:
     if hasattr(_deploy_module, 'DeployConfig'):
         DeployConfig = _deploy_module.DeployConfig
     _AVAILABLE_AGENTS['deploy'] = True
-except (ImportError, AttributeError) as e:
+except (ImportError, AttributeError, OSError) as e:
     logger.debug(f"deploy_agent not available: {e}")
     _AVAILABLE_AGENTS['deploy'] = False
 
