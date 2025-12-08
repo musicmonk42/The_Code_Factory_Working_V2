@@ -633,6 +633,43 @@ def _create_mock_module(name):
         core_module.__getattr__ = _mock_getattr
         mock_module.core = core_module
         sys.modules['docutils.core'] = core_module
+    elif name == 'nltk':
+        # nltk needs sentiment submodule
+        # Create sentiment submodule
+        sentiment_module = ModuleType('nltk.sentiment')
+        sentiment_module.__file__ = '<mocked nltk.sentiment>'
+        sentiment_module.__path__ = []
+        sentiment_module.__spec__ = importlib.util.spec_from_loader('nltk.sentiment', loader=None)
+        
+        # Create vader_lexicon submodule
+        vader_module = ModuleType('nltk.sentiment.vader')
+        vader_module.__file__ = '<mocked nltk.sentiment.vader>'
+        vader_module.__spec__ = importlib.util.spec_from_loader('nltk.sentiment.vader', loader=None)
+        
+        class SentimentIntensityAnalyzer(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            def polarity_scores(self, text):
+                return {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0}
+        
+        vader_module.SentimentIntensityAnalyzer = SentimentIntensityAnalyzer
+        vader_module.__getattr__ = _mock_getattr
+        sentiment_module.vader = vader_module
+        sentiment_module.__getattr__ = _mock_getattr
+        mock_module.sentiment = sentiment_module
+        sys.modules['nltk.sentiment'] = sentiment_module
+        sys.modules['nltk.sentiment.vader'] = vader_module
+        
+        # Create tokenize submodule
+        tokenize_module = ModuleType('nltk.tokenize')
+        tokenize_module.__file__ = '<mocked nltk.tokenize>'
+        tokenize_module.__path__ = []
+        tokenize_module.__spec__ = importlib.util.spec_from_loader('nltk.tokenize', loader=None)
+        tokenize_module.word_tokenize = lambda text: text.split()
+        tokenize_module.sent_tokenize = lambda text: [text]
+        tokenize_module.__getattr__ = _mock_getattr
+        mock_module.tokenize = tokenize_module
+        sys.modules['nltk.tokenize'] = tokenize_module
     
     return mock_module
 
@@ -690,6 +727,9 @@ _OPTIONAL_DEPENDENCIES = [
     'bs4',  # BeautifulSoup alias
     'git',  # GitPython
     'gitpython',  # GitPython alternate name
+    'filelock',  # File locking
+    'sphinx',  # Documentation generator
+    'lxml',  # XML/HTML parser
     # Cloud SDK packages
     'google.cloud.storage',  # Google Cloud Storage
     'google.cloud',  # Google Cloud base
