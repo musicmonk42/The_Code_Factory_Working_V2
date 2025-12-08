@@ -12,6 +12,7 @@ ValidatorRegistry = None
 DockerValidator = None
 HelmValidator = None
 
+# Availability flags for checking which components loaded successfully
 _DEPLOY_AGENT_AVAILABLE = False
 _DEPLOY_PROMPT_AVAILABLE = False
 _DEPLOY_RESPONSE_HANDLER_AVAILABLE = False
@@ -21,7 +22,8 @@ _DEPLOY_VALIDATOR_AVAILABLE = False
 try:
     from .deploy_validator import DockerValidator, HelmValidator, ValidatorRegistry
     _DEPLOY_VALIDATOR_AVAILABLE = True
-except (ImportError, OSError) as e:
+except (ImportError, OSError):
+    # OSError catches DLL initialization failures on Windows
     pass
 
 # Try to import deploy_response_handler
@@ -32,14 +34,15 @@ try:
         parse_llm_response,
     )
     _DEPLOY_RESPONSE_HANDLER_AVAILABLE = True
-except (ImportError, OSError) as e:
+except (ImportError, OSError):
+    # OSError catches DLL initialization failures on Windows
     pass
 
 # Try to import deploy_prompt (has heavy dependencies: torch, transformers)
 try:
     from .deploy_prompt import DeployPromptAgent
     _DEPLOY_PROMPT_AVAILABLE = True
-except (ImportError, OSError) as e:
+except (ImportError, OSError):
     # OSError catches DLL initialization failures on Windows
     pass
 
@@ -47,7 +50,7 @@ except (ImportError, OSError) as e:
 try:
     from .deploy_agent import DeployAgent
     _DEPLOY_AGENT_AVAILABLE = True
-except (ImportError, OSError) as e:
+except (ImportError, OSError):
     # OSError catches DLL initialization failures on Windows
     pass
 
