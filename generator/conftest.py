@@ -9,6 +9,13 @@ import os
 from pathlib import Path
 from types import ModuleType
 
+# Set testing environment variables EARLY
+os.environ.setdefault("TESTING", "1")
+os.environ.setdefault("PYTEST_CURRENT_TEST", "true")
+os.environ.setdefault("OTEL_SDK_DISABLED", "1")
+os.environ.setdefault("AWS_REGION", "us-east-1")
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
 # CRITICAL: Set up mocks BEFORE any imports that might trigger DLL errors
 # This prevents torch DLL initialization errors on Windows
 
@@ -59,9 +66,16 @@ def _create_mock_module(name):
         mock_module.find_dotenv = lambda *args, **kwargs: None
     elif name == 'dynaconf':
         # dynaconf needs Dynaconf class and Validator
+        class MockValidators:
+            def __init__(self):
+                self.validators = []
+            def validate(self):
+                pass  # No-op in test mode
+        
         class MockDynaconf:
             def __init__(self, *args, **kwargs):
                 self._data = {}
+                self.validators = MockValidators()
             def get(self, key, default=None):
                 return self._data.get(key, default)
             def set(self, key, value):
@@ -71,8 +85,20 @@ def _create_mock_module(name):
         class MockValidator:
             def __init__(self, *args, **kwargs):
                 pass
+        class ValidationError(Exception):
+            pass
         mock_module.Dynaconf = MockDynaconf
         mock_module.Validator = MockValidator
+        mock_module.ValidationError = ValidationError
+        # Create validator submodule
+        validator_module = ModuleType('dynaconf.validator')
+        validator_module.__file__ = f"<mocked dynaconf.validator>"
+        validator_module.__path__ = []
+        validator_module.Validator = MockValidator
+        validator_module.ValidationError = ValidationError
+        mock_module.validator = validator_module
+        # Register the validator submodule
+        sys.modules['dynaconf.validator'] = validator_module
     elif name == 'torch':
         # torch needs __version__ as a string (not MockCallable) to prevent errors
         # in packaging.version.Version() calls (e.g., from safetensors.torch)
@@ -83,6 +109,33 @@ def _create_mock_module(name):
     elif name == 'sentence_transformers':
         # sentence_transformers also needs __version__ as a string
         mock_module.__version__ = "2.2.0"
+    elif name == 'google.protobuf':
+        # google.protobuf needs special descriptors for generated protobuf files
+        mock_module.descriptor = MockCallable()
+        mock_module.descriptor_pool = MockCallable()
+        mock_module.symbol_database = MockCallable()
+        class InternalModule:
+            builder = MockCallable()
+        mock_module.internal = InternalModule()
+    elif name == 'azure.core.exceptions':
+        # Azure exceptions need to be proper exception classes
+        class AzureError(Exception):
+            pass
+        class ResourceExistsError(AzureError):
+            pass
+        class ResourceNotFoundError(AzureError):
+            pass
+        mock_module.AzureError = AzureError
+        mock_module.ResourceExistsError = ResourceExistsError
+        mock_module.ResourceNotFoundError = ResourceNotFoundError
+    elif name == 'botocore.exceptions':
+        # Botocore exceptions need to be proper exception classes
+        class BotoCoreError(Exception):
+            pass
+        class ClientError(BotoCoreError):
+            pass
+        mock_module.BotoCoreError = BotoCoreError
+        mock_module.ClientError = ClientError
     
     return mock_module
 
@@ -111,6 +164,16 @@ _OPTIONAL_DEPENDENCIES = [
     'faiss',  # Vector search
     'dynaconf',  # Configuration management
     'watchdog',  # File system events
+    'aiofiles',  # Async file operations
+    # Cloud SDK packages
+    'google.cloud.storage',  # Google Cloud Storage
+    'google.cloud',  # Google Cloud base
+    'google.protobuf',  # Protocol Buffers
+    'azure.storage.blob',  # Azure Blob Storage
+    'azure.storage.blob.aio',  # Azure Blob Storage async
+    'azure.core.exceptions',  # Azure exceptions
+    'boto3',  # AWS SDK
+    'botocore.exceptions',  # AWS SDK exceptions
 ]
 
 for dep in _OPTIONAL_DEPENDENCIES:
@@ -124,6 +187,18 @@ for dep in _OPTIONAL_DEPENDENCIES:
             sys.modules[dep] = mock_module
             
             # For packages that are commonly accessed as submodules, create parent stubs
+            if '.' in dep:
+                parts = dep.split('.')
+                for i in range(1, len(parts)):
+                    parent_name = '.'.join(parts[:i])
+                    if parent_name not in sys.modules:
+                        parent_mock = _create_mock_module(parent_name)
+                        sys.modules[parent_name] = parent_mock
+        except Exception:
+            # Catch any other errors and create a mock
+            mock_module = _create_mock_module(dep)
+            sys.modules[dep] = mock_module
+            
             if '.' in dep:
                 parts = dep.split('.')
                 for i in range(1, len(parts)):
