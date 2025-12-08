@@ -27,10 +27,10 @@ import yaml  # FIX: Added missing import
 from _pytest.logging import LogCaptureFixture
 from tenacity import RetryError
 
-# Make the *runner* package importable from the repo root
-REPO_ROOT = Path(__file__).resolve().parents[3]  # …/The_Code_Factory-master
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# Make the *runner* package importable by adding generator/ to sys.path
+GENERATOR_ROOT = Path(__file__).resolve().parents[2]  # generator/runner/tests -> generator/
+if str(GENERATOR_ROOT) not in sys.path:
+    sys.path.insert(0, str(GENERATOR_ROOT))
 
 # Imports corrected to use providers/ instead of llm_client_providers/
 from runner.providers.local_provider import (  # type: ignore

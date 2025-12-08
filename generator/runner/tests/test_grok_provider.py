@@ -17,9 +17,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+GENERATOR_ROOT = Path(__file__).resolve().parents[2]  # generator/runner/tests -> generator/
+if str(GENERATOR_ROOT) not in sys.path:
+    sys.path.insert(0, str(GENERATOR_ROOT))
 
 from runner.providers.grok_provider import GrokProvider, get_provider  # type: ignore
 from runner.runner_config import RunnerConfig  # type: ignore

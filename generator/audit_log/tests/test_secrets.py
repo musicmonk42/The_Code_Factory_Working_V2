@@ -21,11 +21,7 @@ import pytest
 # We set a DEV mode so the production guardrail doesn't fire on import
 os.environ["AUDIT_LOG_DEV_MODE"] = "true"
 os.environ["PYTHON_ENV"] = "development"
-# We must patch prometheus before it's imported by other modules
-prometheus_patcher = patch("prometheus_client.Counter", MagicMock())
-prometheus_patcher.start()
-patch("prometheus_client.Gauge", MagicMock()).start()
-patch("prometheus_client.Histogram", MagicMock()).start()
+# Note: Prometheus mocking is handled by conftest.py, no need to patch here
 
 
 # --- Module Imports ---
