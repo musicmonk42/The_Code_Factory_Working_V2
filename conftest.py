@@ -107,6 +107,12 @@ _OPTIONAL_DEPENDENCIES = [
     'chromadb',  # Required by knowledge_graph
     'httpx',  # Required by explainable_reasoner
     'freezegun',  # Required by test files
+    'torch',  # PyTorch - causes DLL errors on Windows
+    'sentence_transformers',  # Uses torch, causes DLL errors
+    'transformers',  # Uses torch, causes DLL errors
+    'spacy',  # Uses torch via thinc, causes DLL errors
+    'presidio_analyzer',  # Uses spacy, causes DLL errors
+    'presidio_anonymizer',  # Uses spacy, causes DLL errors
     # Note: prometheus_client, aiohttp, pydantic, and tenacity should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
@@ -425,6 +431,73 @@ try:
     }
 except ImportError:
     _ORIGINAL_CRYPTO_EXCEPTIONS = {}
+
+
+# ---- Runner module stub setup ----
+# The runner module needs to be available as a package for test imports
+if 'runner' not in sys.modules:
+    try:
+        # Try to import the real runner module
+        import runner
+    except ImportError:
+        # Create a runner package stub
+        import types
+        runner_module = types.ModuleType('runner')
+        runner_module.__file__ = '<mocked runner>'
+        runner_module.__path__ = []  # Make it a package
+        
+        # Add common submodules
+        runner_providers = types.ModuleType('runner.providers')
+        runner_providers.__file__ = '<mocked runner.providers>'
+        runner_providers.__path__ = []
+        runner_module.providers = runner_providers
+        
+        # Create mock provider modules
+        for provider_name in ['ai_provider', 'claude_provider', 'gemini_provider', 'grok_provider', 'local_provider']:
+            provider_module = types.ModuleType(f'runner.providers.{provider_name}')
+            provider_module.__file__ = f'<mocked runner.providers.{provider_name}>'
+            setattr(runner_providers, provider_name, provider_module)
+            sys.modules[f'runner.providers.{provider_name}'] = provider_module
+        
+        # Create other runner submodules
+        for submodule in ['llm_provider_base', 'runner_app', 'runner_core', 'runner_config']:
+            sub = types.ModuleType(f'runner.{submodule}')
+            sub.__file__ = f'<mocked runner.{submodule}>'
+            setattr(runner_module, submodule, sub)
+            sys.modules[f'runner.{submodule}'] = sub
+        
+        # Register modules
+        sys.modules['runner'] = runner_module
+        sys.modules['runner.providers'] = runner_providers
+
+
+# ---- Prometheus Client stub setup ----
+# prometheus_client needs special handling for its .core submodule
+if 'prometheus_client' not in sys.modules:
+    try:
+        import prometheus_client
+    except ImportError:
+        # Create prometheus_client package stub
+        import types
+        prom_module = types.ModuleType('prometheus_client')
+        prom_module.__file__ = '<mocked prometheus_client>'
+        prom_module.__path__ = []  # Make it a package
+        
+        # Create core submodule
+        prom_core = types.ModuleType('prometheus_client.core')
+        prom_core.__file__ = '<mocked prometheus_client.core>'
+        prom_module.core = prom_core
+        
+        # Add common classes/functions
+        class _MockHistogramMetricFamily:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        prom_core.HistogramMetricFamily = _MockHistogramMetricFamily
+        
+        # Register modules
+        sys.modules['prometheus_client'] = prom_module
+        sys.modules['prometheus_client.core'] = prom_core
 
 
 # ---- ChromaDB singleton cleanup ----
