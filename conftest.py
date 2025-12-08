@@ -84,6 +84,16 @@ def _create_mock_module(name):
                 pass
         mock_module.Dynaconf = MockDynaconf
         mock_module.Validator = MockValidator
+    elif name == 'torch':
+        # torch needs __version__ as a string (not MockCallable) to prevent errors
+        # in packaging.version.Version() calls (e.g., from safetensors.torch)
+        mock_module.__version__ = "2.9.1"
+    elif name == 'transformers':
+        # transformers also needs __version__ as a string
+        mock_module.__version__ = "4.30.0"
+    elif name == 'sentence_transformers':
+        # sentence_transformers also needs __version__ as a string
+        mock_module.__version__ = "2.2.0"
     
     return mock_module
 
