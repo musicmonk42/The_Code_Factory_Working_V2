@@ -260,9 +260,50 @@ def _create_mock_module(name):
             def __init__(self, *args, **kwargs):
                 pass
         
+        class Request(MockCallable):
+            """Mock aiohttp Request for web server routes"""
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+        
+        class Response(MockCallable):
+            """Mock aiohttp Response for web server routes"""
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+        
         mock_module.ClientSession = ClientSession
         mock_module.ClientTimeout = ClientTimeout
         mock_module.ClientError = type('ClientError', (Exception,), {})
+        
+        # Create web_request submodule
+        web_request_module = ModuleType('aiohttp.web_request')
+        web_request_module.__file__ = '<mocked aiohttp.web_request>'
+        web_request_module.__path__ = []
+        web_request_module.__spec__ = importlib.util.spec_from_loader('aiohttp.web_request', loader=None)
+        web_request_module.Request = Request
+        web_request_module.__getattr__ = _mock_getattr
+        mock_module.web_request = web_request_module
+        sys.modules['aiohttp.web_request'] = web_request_module
+        
+        # Create web_response submodule
+        web_response_module = ModuleType('aiohttp.web_response')
+        web_response_module.__file__ = '<mocked aiohttp.web_response>'
+        web_response_module.__path__ = []
+        web_response_module.__spec__ = importlib.util.spec_from_loader('aiohttp.web_response', loader=None)
+        web_response_module.Response = Response
+        web_response_module.__getattr__ = _mock_getattr
+        mock_module.web_response = web_response_module
+        sys.modules['aiohttp.web_response'] = web_response_module
+        
+        # Create web module (parent of web_request and web_response)
+        web_module = ModuleType('aiohttp.web')
+        web_module.__file__ = '<mocked aiohttp.web>'
+        web_module.__path__ = []
+        web_module.__spec__ = importlib.util.spec_from_loader('aiohttp.web', loader=None)
+        web_module.Request = Request
+        web_module.Response = Response
+        web_module.__getattr__ = _mock_getattr
+        mock_module.web = web_module
+        sys.modules['aiohttp.web'] = web_module
     elif name == 'redis':
         # redis needs Redis class and asyncio submodule
         class Redis(MockCallable):
@@ -454,14 +495,34 @@ def _create_mock_module(name):
         mock_module.Faker = Faker
     elif name == 'tenacity':
         # tenacity needs retry decorator and related functions
+        # Create a mock retry condition that supports the | operator
+        class MockRetryCondition:
+            def __init__(self, *args, **kwargs):
+                pass
+            def __or__(self, other):
+                return MockRetryCondition()
+            def __call__(self, *args, **kwargs):
+                return False
+        
         def retry(*args, **kwargs):
             return lambda f: f
         
         mock_module.retry = retry
         mock_module.stop_after_attempt = lambda *args, **kwargs: None
         mock_module.wait_exponential = lambda *args, **kwargs: None
-        mock_module.retry_if_exception_type = lambda *args, **kwargs: None
+        mock_module.retry_if_exception_type = lambda *args, **kwargs: MockRetryCondition()
         mock_module.before_sleep_log = lambda *args, **kwargs: None
+        mock_module.after_log = lambda *args, **kwargs: None
+        
+        # Add exception classes that should be proper exceptions
+        class RetryError(Exception):
+            """Raised when all retry attempts have failed."""
+            pass
+        class TryAgain(Exception):
+            """Signal to retry the operation."""
+            pass
+        mock_module.RetryError = RetryError
+        mock_module.TryAgain = TryAgain
     elif name == 'httpx':
         # httpx needs AsyncClient and related classes
         class AsyncClient(MockCallable):
@@ -559,6 +620,67 @@ def _create_mock_module(name):
         # Add common hypothesis decorators
         mock_module.given = lambda *args, **kwargs: lambda f: f
         mock_module.settings = lambda *args, **kwargs: lambda f: f
+    elif name == 'docutils':
+        # docutils needs core submodule
+        # Create core submodule
+        core_module = ModuleType('docutils.core')
+        core_module.__file__ = '<mocked docutils.core>'
+        core_module.__path__ = []
+        core_module.__spec__ = importlib.util.spec_from_loader('docutils.core', loader=None)
+        core_module.publish_doctree = lambda *args, **kwargs: None
+        core_module.publish_string = lambda *args, **kwargs: b''
+        core_module.publish_parts = lambda *args, **kwargs: {}
+        core_module.__getattr__ = _mock_getattr
+        mock_module.core = core_module
+        sys.modules['docutils.core'] = core_module
+    elif name == 'nltk':
+        # nltk needs sentiment submodule
+        # Create sentiment submodule
+        sentiment_module = ModuleType('nltk.sentiment')
+        sentiment_module.__file__ = '<mocked nltk.sentiment>'
+        sentiment_module.__path__ = []
+        sentiment_module.__spec__ = importlib.util.spec_from_loader('nltk.sentiment', loader=None)
+        
+        # Create vader submodule
+        vader_module = ModuleType('nltk.sentiment.vader')
+        vader_module.__file__ = '<mocked nltk.sentiment.vader>'
+        vader_module.__path__ = []
+        vader_module.__spec__ = importlib.util.spec_from_loader('nltk.sentiment.vader', loader=None)
+        
+        class SentimentIntensityAnalyzer(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            def polarity_scores(self, text):
+                return {'neg': 0.0, 'neu': 1.0, 'pos': 0.0, 'compound': 0.0}
+        
+        vader_module.SentimentIntensityAnalyzer = SentimentIntensityAnalyzer
+        vader_module.__getattr__ = _mock_getattr
+        sentiment_module.vader = vader_module
+        sentiment_module.__getattr__ = _mock_getattr
+        mock_module.sentiment = sentiment_module
+        sys.modules['nltk.sentiment'] = sentiment_module
+        sys.modules['nltk.sentiment.vader'] = vader_module
+        
+        # Create tokenize submodule
+        tokenize_module = ModuleType('nltk.tokenize')
+        tokenize_module.__file__ = '<mocked nltk.tokenize>'
+        tokenize_module.__path__ = []
+        tokenize_module.__spec__ = importlib.util.spec_from_loader('nltk.tokenize', loader=None)
+        tokenize_module.word_tokenize = lambda text: text.split()
+        tokenize_module.sent_tokenize = lambda text: [text]
+        tokenize_module.__getattr__ = _mock_getattr
+        mock_module.tokenize = tokenize_module
+        sys.modules['nltk.tokenize'] = tokenize_module
+    elif name == 'chromadb':
+        # chromadb needs utils submodule
+        utils_module = ModuleType('chromadb.utils')
+        utils_module.__file__ = '<mocked chromadb.utils>'
+        utils_module.__path__ = []
+        utils_module.__spec__ = importlib.util.spec_from_loader('chromadb.utils', loader=None)
+        utils_module.embedding_functions = MockCallable()
+        utils_module.__getattr__ = _mock_getattr
+        mock_module.utils = utils_module
+        sys.modules['chromadb.utils'] = utils_module
     
     return mock_module
 
@@ -610,6 +732,17 @@ _OPTIONAL_DEPENDENCIES = [
     'freezegun',  # Time mocking library
     'typer',  # CLI library
     'numpy',  # Numerical computing
+    'docutils',  # Documentation utilities (RST parsing)
+    'nltk',  # Natural Language Toolkit
+    'beautifulsoup4',  # HTML parsing
+    'bs4',  # BeautifulSoup alias
+    'git',  # GitPython
+    'gitpython',  # GitPython alternate name
+    'filelock',  # File locking
+    'sphinx',  # Documentation generator
+    'lxml',  # XML/HTML parser
+    'langchain',  # LangChain framework
+    'aiosqlite',  # Async SQLite
     # Cloud SDK packages
     'google.cloud.storage',  # Google Cloud Storage
     'google.cloud',  # Google Cloud base
@@ -750,6 +883,8 @@ if 'opentelemetry' not in sys.modules:
         # Create trace module with all required methods
         trace_module = ModuleType('opentelemetry.trace')
         trace_module.__file__ = '<mocked opentelemetry.trace>'
+        trace_module.__path__ = []
+        trace_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.trace', loader=None)
         trace_module.get_tracer = lambda *args, **kwargs: _NoOpTracer()
         trace_module.get_current_span = lambda: _NoOpSpan()
         trace_module.get_tracer_provider = lambda: None
@@ -757,21 +892,55 @@ if 'opentelemetry' not in sys.modules:
         trace_module.Status = Status
         trace_module.StatusCode = StatusCode
         
+        # Create trace.status submodule
+        trace_status_module = ModuleType('opentelemetry.trace.status')
+        trace_status_module.__file__ = '<mocked opentelemetry.trace.status>'
+        trace_status_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.trace.status', loader=None)
+        trace_status_module.Status = Status
+        trace_status_module.StatusCode = StatusCode
+        trace_module.status = trace_status_module
+        
+        # Create metrics module
+        class _NoOpMeter:
+            def create_counter(self, *args, **kwargs):
+                class _NoOpCounter:
+                    def add(self, *args, **kwargs):
+                        pass
+                return _NoOpCounter()
+            def create_histogram(self, *args, **kwargs):
+                class _NoOpHistogram:
+                    def record(self, *args, **kwargs):
+                        pass
+                return _NoOpHistogram()
+        
+        metrics_module = ModuleType('opentelemetry.metrics')
+        metrics_module.__file__ = '<mocked opentelemetry.metrics>'
+        metrics_module.__path__ = []
+        metrics_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.metrics', loader=None)
+        metrics_module.get_meter = lambda *args, **kwargs: _NoOpMeter()
+        metrics_module.get_meter_provider = lambda: None
+        metrics_module.set_meter_provider = lambda *args, **kwargs: None
+        
         # Create main opentelemetry module
         otel_module = ModuleType('opentelemetry')
         otel_module.__file__ = '<mocked opentelemetry>'
         otel_module.__path__ = []
+        otel_module.__spec__ = importlib.util.spec_from_loader('opentelemetry', loader=None)
         otel_module.trace = trace_module
+        otel_module.metrics = metrics_module
         
         # Create instrumentation module
         instrumentation_module = ModuleType('opentelemetry.instrumentation')
         instrumentation_module.__file__ = '<mocked opentelemetry.instrumentation>'
         instrumentation_module.__path__ = []  # This is required for submodule imports
+        instrumentation_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation', loader=None)
         otel_module.instrumentation = instrumentation_module
         
         # Create common instrumentation submodules
         instrumentation_fastapi = ModuleType('opentelemetry.instrumentation.fastapi')
         instrumentation_fastapi.__file__ = '<mocked opentelemetry.instrumentation.fastapi>'
+        instrumentation_fastapi.__path__ = []
+        instrumentation_fastapi.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation.fastapi', loader=None)
         
         class FastAPIInstrumentor:
             @classmethod
@@ -783,6 +952,8 @@ if 'opentelemetry' not in sys.modules:
         # Create grpc instrumentation module
         instrumentation_grpc = ModuleType('opentelemetry.instrumentation.grpc')
         instrumentation_grpc.__file__ = '<mocked opentelemetry.instrumentation.grpc>'
+        instrumentation_grpc.__path__ = []
+        instrumentation_grpc.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation.grpc', loader=None)
         
         class GrpcAioInstrumentor:
             @classmethod
@@ -795,17 +966,20 @@ if 'opentelemetry' not in sys.modules:
         sdk_module = ModuleType('opentelemetry.sdk')
         sdk_module.__file__ = '<mocked opentelemetry.sdk>'
         sdk_module.__path__ = []  # Parent module for submodules
+        sdk_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.sdk', loader=None)
         otel_module.sdk = sdk_module
         
         sdk_trace_module = ModuleType('opentelemetry.sdk.trace')
         sdk_trace_module.__file__ = '<mocked opentelemetry.sdk.trace>'
         sdk_trace_module.__path__ = []  # Parent module for submodules
+        sdk_trace_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.sdk.trace', loader=None)
         sdk_trace_module.TracerProvider = lambda *args, **kwargs: None
         sdk_module.trace = sdk_trace_module
         
         sdk_trace_export_module = ModuleType('opentelemetry.sdk.trace.export')
         sdk_trace_export_module.__file__ = '<mocked opentelemetry.sdk.trace.export>'
         sdk_trace_export_module.__path__ = []
+        sdk_trace_export_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.sdk.trace.export', loader=None)
         sdk_trace_export_module.ConsoleSpanExporter = lambda *args, **kwargs: None
         sdk_trace_export_module.SimpleSpanProcessor = lambda *args, **kwargs: None
         sdk_trace_export_module.BatchSpanProcessor = lambda *args, **kwargs: None
@@ -813,6 +987,7 @@ if 'opentelemetry' not in sys.modules:
         
         sdk_resources_module = ModuleType('opentelemetry.sdk.resources')
         sdk_resources_module.__file__ = '<mocked opentelemetry.sdk.resources>'
+        sdk_resources_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.sdk.resources', loader=None)
         sdk_resources_module.Resource = lambda **kwargs: None
         sdk_module.resources = sdk_resources_module
         
@@ -820,40 +995,48 @@ if 'opentelemetry' not in sys.modules:
         exporter_module = ModuleType('opentelemetry.exporter')
         exporter_module.__file__ = '<mocked opentelemetry.exporter>'
         exporter_module.__path__ = []
+        exporter_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.exporter', loader=None)
         otel_module.exporter = exporter_module
         
         exporter_jaeger_module = ModuleType('opentelemetry.exporter.jaeger')
         exporter_jaeger_module.__file__ = '<mocked opentelemetry.exporter.jaeger>'
         exporter_jaeger_module.__path__ = []
+        exporter_jaeger_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.exporter.jaeger', loader=None)
         exporter_module.jaeger = exporter_jaeger_module
         
         exporter_jaeger_thrift_module = ModuleType('opentelemetry.exporter.jaeger.thrift')
         exporter_jaeger_thrift_module.__file__ = '<mocked opentelemetry.exporter.jaeger.thrift>'
+        exporter_jaeger_thrift_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.exporter.jaeger.thrift', loader=None)
         exporter_jaeger_thrift_module.JaegerExporter = lambda *args, **kwargs: None
         exporter_jaeger_module.thrift = exporter_jaeger_thrift_module
         
         exporter_otlp_module = ModuleType('opentelemetry.exporter.otlp')
         exporter_otlp_module.__file__ = '<mocked opentelemetry.exporter.otlp>'
         exporter_otlp_module.__path__ = []
+        exporter_otlp_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.exporter.otlp', loader=None)
         exporter_module.otlp = exporter_otlp_module
         
         exporter_otlp_proto_module = ModuleType('opentelemetry.exporter.otlp.proto')
         exporter_otlp_proto_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto>'
         exporter_otlp_proto_module.__path__ = []
+        exporter_otlp_proto_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.exporter.otlp.proto', loader=None)
         exporter_otlp_module.proto = exporter_otlp_proto_module
         
         exporter_otlp_proto_grpc_module = ModuleType('opentelemetry.exporter.otlp.proto.grpc')
         exporter_otlp_proto_grpc_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto.grpc>'
         exporter_otlp_proto_grpc_module.__path__ = []
+        exporter_otlp_proto_grpc_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.exporter.otlp.proto.grpc', loader=None)
         exporter_otlp_proto_module.grpc = exporter_otlp_proto_grpc_module
         
         exporter_otlp_proto_grpc_trace_exporter_module = ModuleType('opentelemetry.exporter.otlp.proto.grpc.trace_exporter')
         exporter_otlp_proto_grpc_trace_exporter_module.__file__ = '<mocked opentelemetry.exporter.otlp.proto.grpc.trace_exporter>'
+        exporter_otlp_proto_grpc_trace_exporter_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.exporter.otlp.proto.grpc.trace_exporter', loader=None)
         exporter_otlp_proto_grpc_trace_exporter_module.OTLPSpanExporter = lambda *args, **kwargs: None
         exporter_otlp_proto_grpc_module.trace_exporter = exporter_otlp_proto_grpc_trace_exporter_module
         
         sdk_trace_sampling_module = ModuleType('opentelemetry.sdk.trace.sampling')
         sdk_trace_sampling_module.__file__ = '<mocked opentelemetry.sdk.trace.sampling>'
+        sdk_trace_sampling_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.sdk.trace.sampling', loader=None)
         sdk_trace_sampling_module.ParentBased = lambda *args, **kwargs: None
         sdk_trace_sampling_module.TraceIdRatioBased = lambda *args, **kwargs: None
         sdk_trace_sampling_module.ALWAYS_ON = lambda *args, **kwargs: None
@@ -873,6 +1056,8 @@ if 'opentelemetry' not in sys.modules:
         # Register modules
         sys.modules['opentelemetry'] = otel_module
         sys.modules['opentelemetry.trace'] = trace_module
+        sys.modules['opentelemetry.trace.status'] = trace_status_module
+        sys.modules['opentelemetry.metrics'] = metrics_module
         sys.modules['opentelemetry.propagate'] = propagate_module
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
