@@ -6,13 +6,7 @@ os.environ.setdefault("AUDIT_CRYPTO_DEFAULT_ALGO", "ed25519")
 os.environ.setdefault("AUDIT_CRYPTO_KEY_ROTATION_INTERVAL_SECONDS", "86400")
 os.environ.setdefault("AUDIT_LOG_DEV_MODE", "true")
 
-# --- FIX: Patch Prometheus *before* any project imports ---
-from unittest.mock import MagicMock, patch
-
-# This patch starts NOW and will be active when audit_crypto_factory is imported
-prometheus_patcher = patch("prometheus_client.CollectorRegistry.register", MagicMock())
-prometheus_patcher.start()
-# -------------------------------------------------
+# Note: Prometheus mocking is handled by conftest.py, no need to patch here
 
 
 # test_audit_keystore.py
