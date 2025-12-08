@@ -4,9 +4,19 @@ import logging
 import os
 import sys
 from logging.handlers import RotatingFileHandler
+from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
+
+# Helper function to create a proper package mock with __path__
+def _create_package_mock(name):
+    """Create a mock module that can act as a package (has __path__)."""
+    mock = MagicMock()
+    mock.__path__ = []  # Required for packages
+    mock.__name__ = name
+    mock.__file__ = f"<mocked {name}>"
+    return mock
 
 # Store original modules for later restoration
 _ORIGINAL_MODULES = {}
@@ -41,12 +51,12 @@ sys.modules["arbiter.arbiter"] = MagicMock()
 sys.modules["arbiter_plugin_registry"] = MagicMock()
 sys.modules["arbiter.logging_utils"] = MagicMock()
 sys.modules["sqlalchemy.ext.asyncio"] = MagicMock()
-sys.modules["opentelemetry"] = MagicMock()
-sys.modules["opentelemetry.sdk.trace"] = MagicMock()
+sys.modules["opentelemetry"] = _create_package_mock("opentelemetry")
+sys.modules["opentelemetry.sdk.trace"] = _create_package_mock("opentelemetry.sdk.trace")
 sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
 sys.modules["opentelemetry.exporter.otlp.proto.http.trace_exporter"] = MagicMock()
 sys.modules["aiohttp"] = MagicMock()
-sys.modules["prometheus_client"] = MagicMock()
+sys.modules["prometheus_client"] = _create_package_mock("prometheus_client")
 
 
 # Mock tenacity properly to preserve async functions
