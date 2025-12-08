@@ -27,10 +27,16 @@ sys.modules["runner.runner_security_utils"] = mock_runner_security
 
 # 3. Mock Prometheus metrics
 mock_prometheus = MagicMock()
+mock_prometheus.__path__ = []  # Required for package imports
+mock_prometheus.__name__ = "prometheus_client"
+mock_prometheus.__file__ = "<mocked prometheus_client>"
 sys.modules["prometheus_client"] = mock_prometheus
 
 # 4. Mock OpenTelemetry
 mock_otel = MagicMock()
+mock_otel.__path__ = []  # Required for package imports
+mock_otel.__name__ = "opentelemetry"
+mock_otel.__file__ = "<mocked opentelemetry>"
 mock_otel.trace.get_tracer.return_value.start_as_current_span = MagicMock(
     return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock())
 )

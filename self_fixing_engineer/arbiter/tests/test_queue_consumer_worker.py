@@ -61,6 +61,9 @@ def setup_test_environment():
             return self.labels_mock(*args, **kwargs)
 
     mock_prometheus = MagicMock()
+    mock_prometheus.__path__ = []  # Required for package imports
+    mock_prometheus.__name__ = "prometheus_client"
+    mock_prometheus.__file__ = "<mocked prometheus_client>"
     mock_prometheus.Counter = MockMetric
     mock_prometheus.Histogram = MockMetric
     mock_prometheus.Gauge = MockMetric

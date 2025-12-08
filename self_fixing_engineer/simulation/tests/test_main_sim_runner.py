@@ -55,10 +55,19 @@ for _mod in _MODULES_TO_MOCK:
     if _mod in sys.modules:
         _ORIGINAL_MODULES[_mod] = sys.modules[_mod]
 
+# Helper function to create a proper package mock with __path__
+def _create_package_mock(name):
+    """Create a mock module that can act as a package (has __path__)."""
+    mock = MagicMock()
+    mock.__path__ = []  # Required for packages
+    mock.__name__ = name
+    mock.__file__ = f"<mocked {name}>"
+    return mock
+
 # Mock all external dependencies BEFORE importing the module under test
 # NOTE: Do NOT mock cryptography - other tests need the real module
-sys.modules["prometheus_client"] = MagicMock()
-sys.modules["kubernetes"] = MagicMock()
+sys.modules["prometheus_client"] = _create_package_mock("prometheus_client")
+sys.modules["kubernetes"] = _create_package_mock("kubernetes")
 sys.modules["kubernetes.client"] = MagicMock()
 sys.modules["kubernetes.config"] = MagicMock()
 sys.modules["boto3"] = MagicMock()
