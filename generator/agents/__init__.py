@@ -88,7 +88,7 @@ try:
     if hasattr(_docgen_module, 'DocgenConfig'):
         DocgenConfig = _docgen_module.DocgenConfig
     _AVAILABLE_AGENTS['docgen'] = True
-except (ImportError, AttributeError) as e:
+except (ImportError, AttributeError, OSError) as e:
     logger.debug(f"docgen_agent not available: {e}")
     _AVAILABLE_AGENTS['docgen'] = False
 
