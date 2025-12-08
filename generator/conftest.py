@@ -53,6 +53,20 @@ def _create_mock_module(name):
         # dotenv needs load_dotenv and find_dotenv functions
         mock_module.load_dotenv = lambda *args, **kwargs: None
         mock_module.find_dotenv = lambda *args, **kwargs: None
+    elif name == 'dynaconf':
+        # dynaconf needs Dynaconf class and Validator
+        class MockDynaconf:
+            def __init__(self, *args, **kwargs):
+                pass
+            def get(self, key, default=None):
+                return default
+            def __getattr__(self, name):
+                return None
+        class MockValidator:
+            def __init__(self, *args, **kwargs):
+                pass
+        mock_module.Dynaconf = MockDynaconf
+        mock_module.Validator = MockValidator
     
     return mock_module
 
@@ -72,6 +86,15 @@ _OPTIONAL_DEPENDENCIES = [
     'anthropic',  # Anthropic API
     'dotenv',  # Environment variables
     'backoff',  # Retry library
+    'hypothesis',  # Property-based testing
+    'psutil',  # System utilities
+    'xattr',  # Extended attributes
+    'hvac',  # Hashicorp Vault
+    'pkcs11',  # HSM integration
+    'python-pkcs11',  # HSM integration
+    'faiss',  # Vector search
+    'dynaconf',  # Configuration management
+    'watchdog',  # File system events
 ]
 
 for dep in _OPTIONAL_DEPENDENCIES:
