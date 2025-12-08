@@ -334,6 +334,17 @@ if 'opentelemetry' not in sys.modules:
         
         instrumentation_fastapi.FastAPIInstrumentor = FastAPIInstrumentor
         
+        # Create grpc instrumentation module
+        instrumentation_grpc = ModuleType('opentelemetry.instrumentation.grpc')
+        instrumentation_grpc.__file__ = '<mocked opentelemetry.instrumentation.grpc>'
+        
+        class GrpcAioInstrumentor:
+            @classmethod
+            def instrument(cls, *args, **kwargs):
+                pass
+        
+        instrumentation_grpc.GrpcAioInstrumentor = GrpcAioInstrumentor
+        
         # Create sdk modules
         sdk_module = ModuleType('opentelemetry.sdk')
         sdk_module.__file__ = '<mocked opentelemetry.sdk>'
@@ -407,6 +418,7 @@ if 'opentelemetry' not in sys.modules:
         sys.modules['opentelemetry.trace'] = trace_module
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
+        sys.modules['opentelemetry.instrumentation.grpc'] = instrumentation_grpc
         sys.modules['opentelemetry.sdk'] = sdk_module
         sys.modules['opentelemetry.sdk.trace'] = sdk_trace_module
         sys.modules['opentelemetry.sdk.trace.sampling'] = sdk_trace_sampling_module
