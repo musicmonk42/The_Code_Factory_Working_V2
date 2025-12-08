@@ -626,6 +626,3 @@ class TestKeyStore(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-# --- FIX: Stop the patcher at the end of the module ---
-prometheus_patcher.stop()
