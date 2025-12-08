@@ -688,6 +688,8 @@ _OPTIONAL_DEPENDENCIES = [
     'nltk',  # Natural Language Toolkit
     'beautifulsoup4',  # HTML parsing
     'bs4',  # BeautifulSoup alias
+    'git',  # GitPython
+    'gitpython',  # GitPython alternate name
     # Cloud SDK packages
     'google.cloud.storage',  # Google Cloud Storage
     'google.cloud',  # Google Cloud base
@@ -845,12 +847,34 @@ if 'opentelemetry' not in sys.modules:
         trace_status_module.StatusCode = StatusCode
         trace_module.status = trace_status_module
         
+        # Create metrics module
+        class _NoOpMeter:
+            def create_counter(self, *args, **kwargs):
+                class _NoOpCounter:
+                    def add(self, *args, **kwargs):
+                        pass
+                return _NoOpCounter()
+            def create_histogram(self, *args, **kwargs):
+                class _NoOpHistogram:
+                    def record(self, *args, **kwargs):
+                        pass
+                return _NoOpHistogram()
+        
+        metrics_module = ModuleType('opentelemetry.metrics')
+        metrics_module.__file__ = '<mocked opentelemetry.metrics>'
+        metrics_module.__path__ = []
+        metrics_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.metrics', loader=None)
+        metrics_module.get_meter = lambda *args, **kwargs: _NoOpMeter()
+        metrics_module.get_meter_provider = lambda: None
+        metrics_module.set_meter_provider = lambda *args, **kwargs: None
+        
         # Create main opentelemetry module
         otel_module = ModuleType('opentelemetry')
         otel_module.__file__ = '<mocked opentelemetry>'
         otel_module.__path__ = []
         otel_module.__spec__ = importlib.util.spec_from_loader('opentelemetry', loader=None)
         otel_module.trace = trace_module
+        otel_module.metrics = metrics_module
         
         # Create instrumentation module
         instrumentation_module = ModuleType('opentelemetry.instrumentation')
@@ -980,6 +1004,7 @@ if 'opentelemetry' not in sys.modules:
         sys.modules['opentelemetry'] = otel_module
         sys.modules['opentelemetry.trace'] = trace_module
         sys.modules['opentelemetry.trace.status'] = trace_status_module
+        sys.modules['opentelemetry.metrics'] = metrics_module
         sys.modules['opentelemetry.propagate'] = propagate_module
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
