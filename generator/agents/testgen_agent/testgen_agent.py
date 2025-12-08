@@ -47,8 +47,14 @@ import tiktoken
 from opentelemetry.trace import Status, StatusCode  # For OpenTelemetry tracing
 
 # Presidio: REQUIRED for PII/secret scrubbing.
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine
+try:
+    from presidio_analyzer import AnalyzerEngine
+    from presidio_anonymizer import AnonymizerEngine
+    HAS_PRESIDIO = True
+except (ImportError, OSError):
+    HAS_PRESIDIO = False
+    AnalyzerEngine = None
+    AnonymizerEngine = None
 from runner.llm_client import call_ensemble_api
 from runner.runner_errors import LLMError
 
@@ -137,6 +143,13 @@ def scrub_text(text: str) -> str:
     """
     if not text:
         return ""
+
+    if not HAS_PRESIDIO:
+        # If Presidio is not available, raise an error as this is required functionality
+        raise RuntimeError(
+            "Presidio is not available but is required for PII/secret scrubbing. "
+            "Please install presidio-analyzer and presidio-anonymizer."
+        )
 
     try:
         analyzer = AnalyzerEngine()

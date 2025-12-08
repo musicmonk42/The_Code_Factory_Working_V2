@@ -60,10 +60,14 @@ try:
     from presidio_anonymizer import AnonymizerEngine
 
     PRESIDIO_AVAILABLE = True
+    HAS_PRESIDIO = True
     analyzer = AnalyzerEngine()
     anonymizer = AnonymizerEngine()
-except ImportError:
+except (ImportError, OSError):
     PRESIDIO_AVAILABLE = False
+    HAS_PRESIDIO = False
+    AnalyzerEngine = None
+    AnonymizerEngine = None
     logging.warning("Presidio not found. ML-based redaction will be unavailable.")
 
 # Optional dependency: prometheus_client
