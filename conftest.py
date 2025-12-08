@@ -113,7 +113,11 @@ _OPTIONAL_DEPENDENCIES = [
     'spacy',  # Uses torch via thinc, causes DLL errors
     'presidio_analyzer',  # Uses spacy, causes DLL errors
     'presidio_anonymizer',  # Uses spacy, causes DLL errors
-    # Note: prometheus_client, aiohttp, pydantic, and tenacity should be installed
+    'networkx',  # Graph library
+    'defusedxml',  # XML parsing
+    'beautifulsoup4',  # HTML parsing
+    'bs4',  # BeautifulSoup alias
+    # Note: prometheus_client, aiohttp, pydantic, tenacity, and aiosqlite should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
 
