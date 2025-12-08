@@ -499,11 +499,15 @@ if 'prometheus_client' not in sys.modules:
         # Create core submodule
         prom_core = types.ModuleType('prometheus_client.core')
         prom_core.__file__ = '<mocked prometheus_client.core>'
+        prom_core.__path__ = []  # Make it a package
+        prom_core.__spec__ = importlib.util.spec_from_loader('prometheus_client.core', loader=None)
         prom_module.core = prom_core
         
         # Create registry submodule
         prom_registry = types.ModuleType('prometheus_client.registry')
         prom_registry.__file__ = '<mocked prometheus_client.registry>'
+        prom_registry.__path__ = []  # Make it a package
+        prom_registry.__spec__ = importlib.util.spec_from_loader('prometheus_client.registry', loader=None)
         prom_module.registry = prom_registry
         
         # Add common classes/functions to core
