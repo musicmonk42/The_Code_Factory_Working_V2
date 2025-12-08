@@ -364,9 +364,9 @@ tokenizers==0.22.1
 toml==0.10.2
 tomli==2.3.0
 toolz==1.1.0
-torch==2.9.1+cpu
-torchaudio==2.9.0
-torchvision==0.24.0
+torch==2.9.1
+torchaudio==2.9.1
+torchvision==0.24.1
 tqdm==4.67.1
 transformers==4.57.3
 typeguard==4.4.4
