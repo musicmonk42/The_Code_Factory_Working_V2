@@ -302,3 +302,73 @@ if _runner_metrics is not None and "runner.metrics" not in _sys.modules:
 # NEW: Allows `from runner.providers import ...` to resolve to the providers subpackage
 if _runner_providers is not None and "runner.providers" not in _sys.modules:
     _sys.modules["runner.providers"] = _runner_providers
+
+
+# --- Import hook to support runner.providers imports ---
+# When tests do `from runner.providers import ...`, Python needs to find the providers module.
+# Since runner is an alias to generator.runner, we need to redirect these imports.
+import importlib.abc
+import importlib.machinery
+import importlib.util
+
+class RunnerSubmoduleLoader(importlib.abc.Loader):
+    """Loader that creates an alias after loading the actual module."""
+    
+    def __init__(self, origin_name):
+        self.origin_name = origin_name
+    
+    def exec_module(self, module):
+        # Module is already loaded, just ensure the alias exists
+        pass
+    
+    def create_module(self, spec):
+        # Return the already-loaded generator.runner.* module
+        return _sys.modules.get(self.origin_name)
+
+
+class RunnerSubmoduleFinder(importlib.abc.MetaPathFinder):
+    """
+    Finds runner.providers (and similar) submodules by redirecting to generator.runner.providers.
+    """
+    
+    def find_spec(self, fullname, path, target=None):
+        # Only handle runner.providers and runner.providers.*
+        if fullname == "runner.providers" or fullname.startswith("runner.providers."):
+            # Convert to generator.runner.providers
+            origin_name = fullname.replace("runner.", "generator.runner.", 1)
+            
+            # Check if the origin module exists or can be found
+            if origin_name in _sys.modules:
+                # Module already loaded, just create alias
+                _sys.modules[fullname] = _sys.modules[origin_name]
+                return None  # Signal that we handled it
+            
+            # Try to find the origin spec
+            try:
+                origin_spec = importlib.util.find_spec(origin_name)
+                if origin_spec is not None:
+                    # Import the origin module first
+                    origin_module = importlib.util.module_from_spec(origin_spec)
+                    _sys.modules[origin_name] = origin_module
+                    origin_spec.loader.exec_module(origin_module)
+                    
+                    # Now create the alias
+                    _sys.modules[fullname] = origin_module
+                    
+                    # Ensure submodules are also imported if this is a package
+                    if origin_spec.submodule_search_locations:
+                        # Handle submodule aliasing for packages
+                        _ensure_submodule_alias(fullname.replace("runner.", ""))
+                    
+                    # Return None to indicate the module is now in sys.modules
+                    return None
+            except (ImportError, ValueError, AttributeError, ModuleNotFoundError):
+                pass
+        
+        # Not our concern
+        return None
+
+# Install the finder
+if not any(isinstance(f, RunnerSubmoduleFinder) for f in _sys.meta_path):
+    _sys.meta_path.insert(0, RunnerSubmoduleFinder())
+
