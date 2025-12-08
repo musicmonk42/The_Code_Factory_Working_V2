@@ -641,9 +641,10 @@ def _create_mock_module(name):
         sentiment_module.__path__ = []
         sentiment_module.__spec__ = importlib.util.spec_from_loader('nltk.sentiment', loader=None)
         
-        # Create vader_lexicon submodule
+        # Create vader submodule
         vader_module = ModuleType('nltk.sentiment.vader')
         vader_module.__file__ = '<mocked nltk.sentiment.vader>'
+        vader_module.__path__ = []
         vader_module.__spec__ = importlib.util.spec_from_loader('nltk.sentiment.vader', loader=None)
         
         class SentimentIntensityAnalyzer(MockCallable):
