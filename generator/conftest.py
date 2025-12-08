@@ -194,18 +194,6 @@ for dep in _OPTIONAL_DEPENDENCIES:
                     if parent_name not in sys.modules:
                         parent_mock = _create_mock_module(parent_name)
                         sys.modules[parent_name] = parent_mock
-        except Exception:
-            # Catch any other errors and create a mock
-            mock_module = _create_mock_module(dep)
-            sys.modules[dep] = mock_module
-            
-            if '.' in dep:
-                parts = dep.split('.')
-                for i in range(1, len(parts)):
-                    parent_name = '.'.join(parts[:i])
-                    if parent_name not in sys.modules:
-                        parent_mock = _create_mock_module(parent_name)
-                        sys.modules[parent_name] = parent_mock
             
             # Special handling for packages that need specific submodules
             if dep == 'watchdog':
@@ -244,6 +232,27 @@ for dep in _OPTIONAL_DEPENDENCIES:
                 
                 watchdog_observers.Observer = Observer
                 mock_module.observers = watchdog_observers
+            elif dep == 'defusedxml':
+                # Create defusedxml.ElementTree submodule
+                defusedxml_et = _create_mock_module('defusedxml.ElementTree')
+                sys.modules['defusedxml.ElementTree'] = defusedxml_et
+                mock_module.ElementTree = defusedxml_et
+                # Add common ElementTree functions
+                defusedxml_et.parse = lambda *args, **kwargs: None
+                defusedxml_et.fromstring = lambda *args, **kwargs: None
+                defusedxml_et.XML = lambda *args, **kwargs: None
+        except Exception:
+            # Catch any other errors and create a mock
+            mock_module = _create_mock_module(dep)
+            sys.modules[dep] = mock_module
+            
+            if '.' in dep:
+                parts = dep.split('.')
+                for i in range(1, len(parts)):
+                    parent_name = '.'.join(parts[:i])
+                    if parent_name not in sys.modules:
+                        parent_mock = _create_mock_module(parent_name)
+                        sys.modules[parent_name] = parent_mock
 
 # Add the generator directory to sys.path
 generator_root = Path(__file__).parent.resolve()
