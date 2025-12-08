@@ -309,7 +309,7 @@ python-jose==3.5.0
 python-multipart==0.0.20
 pytz==2025.2
 pyunormalize==17.0.0
-pywin32==311
+pywin32==311; sys_platform == 'win32'
 PyYAML==6.0.3
 reactivex==4.0.4
 redis==7.0.1
