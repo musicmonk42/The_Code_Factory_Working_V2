@@ -136,6 +136,416 @@ def _create_mock_module(name):
             pass
         mock_module.BotoCoreError = BotoCoreError
         mock_module.ClientError = ClientError
+    elif name == 'prometheus_client':
+        # prometheus_client needs specific classes and submodules
+        # Create REGISTRY object
+        class MockRegistry:
+            def __init__(self):
+                self._names_to_collectors = {}
+            def register(self, *args, **kwargs):
+                pass
+            def unregister(self, *args, **kwargs):
+                pass
+            def collect(self):
+                return []
+        
+        mock_module.REGISTRY = MockRegistry()
+        
+        # Create CollectorRegistry class
+        class CollectorRegistry:
+            def __init__(self, *args, **kwargs):
+                self._names_to_collectors = {}
+            def register(self, *args, **kwargs):
+                pass
+            def unregister(self, *args, **kwargs):
+                pass
+            def collect(self):
+                return []
+        
+        mock_module.CollectorRegistry = CollectorRegistry
+        
+        # Create metric classes
+        class Counter(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            def inc(self, *args, **kwargs):
+                pass
+            def labels(self, *args, **kwargs):
+                return self
+        
+        class Gauge(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            def set(self, *args, **kwargs):
+                pass
+            def inc(self, *args, **kwargs):
+                pass
+            def dec(self, *args, **kwargs):
+                pass
+            def labels(self, *args, **kwargs):
+                return self
+        
+        class Histogram(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            def observe(self, *args, **kwargs):
+                pass
+            def labels(self, *args, **kwargs):
+                return self
+            def time(self):
+                from contextlib import nullcontext
+                return nullcontext()
+        
+        class Summary(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            def observe(self, *args, **kwargs):
+                pass
+            def labels(self, *args, **kwargs):
+                return self
+            def time(self):
+                from contextlib import nullcontext
+                return nullcontext()
+        
+        mock_module.Counter = Counter
+        mock_module.Gauge = Gauge
+        mock_module.Histogram = Histogram
+        mock_module.Summary = Summary
+        mock_module.start_http_server = lambda *args, **kwargs: None
+        
+        # Create core submodule
+        core_module = ModuleType('prometheus_client.core')
+        core_module.__file__ = '<mocked prometheus_client.core>'
+        core_module.__path__ = []
+        core_module.__spec__ = importlib.util.spec_from_loader('prometheus_client.core', loader=None)
+        
+        class HistogramMetricFamily(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            def add_metric(self, *args, **kwargs):
+                pass
+        
+        core_module.HistogramMetricFamily = HistogramMetricFamily
+        core_module.__getattr__ = _mock_getattr
+        mock_module.core = core_module
+        sys.modules['prometheus_client.core'] = core_module
+        
+        # Create registry submodule
+        registry_module = ModuleType('prometheus_client.registry')
+        registry_module.__file__ = '<mocked prometheus_client.registry>'
+        registry_module.__path__ = []
+        registry_module.__spec__ = importlib.util.spec_from_loader('prometheus_client.registry', loader=None)
+        registry_module.REGISTRY = MockRegistry()
+        registry_module.CollectorRegistry = CollectorRegistry
+        registry_module.__getattr__ = _mock_getattr
+        mock_module.registry = registry_module
+        sys.modules['prometheus_client.registry'] = registry_module
+    elif name == 'aiohttp':
+        # aiohttp needs ClientSession and related classes
+        class ClientSession(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+            async def get(self, *args, **kwargs):
+                return MockCallable()
+            async def post(self, *args, **kwargs):
+                return MockCallable()
+            async def close(self):
+                pass
+        
+        class ClientTimeout:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        mock_module.ClientSession = ClientSession
+        mock_module.ClientTimeout = ClientTimeout
+        mock_module.ClientError = type('ClientError', (Exception,), {})
+    elif name == 'redis':
+        # redis needs Redis class and asyncio submodule
+        class Redis(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            async def get(self, *args, **kwargs):
+                return None
+            async def set(self, *args, **kwargs):
+                return True
+            async def delete(self, *args, **kwargs):
+                return True
+            async def close(self):
+                pass
+            def pipeline(self, *args, **kwargs):
+                return self
+            async def execute(self):
+                return []
+        
+        mock_module.Redis = Redis
+        mock_module.from_url = lambda *args, **kwargs: Redis()
+        
+        # Create asyncio submodule
+        asyncio_module = ModuleType('redis.asyncio')
+        asyncio_module.__file__ = '<mocked redis.asyncio>'
+        asyncio_module.__path__ = []
+        asyncio_module.__spec__ = importlib.util.spec_from_loader('redis.asyncio', loader=None)
+        asyncio_module.Redis = Redis
+        asyncio_module.from_url = lambda *args, **kwargs: Redis()
+        asyncio_module.__getattr__ = _mock_getattr
+        mock_module.asyncio = asyncio_module
+        sys.modules['redis.asyncio'] = asyncio_module
+    elif name == 'pydantic':
+        # pydantic needs specific classes
+        from typing import Any
+        
+        class BaseModel:
+            def __init__(self, **kwargs):
+                for key, value in kwargs.items():
+                    setattr(self, key, value)
+            def dict(self, *args, **kwargs):
+                return {}
+            def model_dump(self, *args, **kwargs):
+                return {}
+            def model_validate(cls, *args, **kwargs):
+                return cls()
+            @classmethod
+            def parse_obj(cls, obj):
+                return cls()
+        
+        class Field:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        mock_module.BaseModel = BaseModel
+        mock_module.Field = Field
+        mock_module.field_validator = lambda *args, **kwargs: lambda f: f
+        mock_module.model_validator = lambda *args, **kwargs: lambda f: f
+        mock_module.root_validator = lambda *args, **kwargs: lambda f: f
+        mock_module.validator = lambda *args, **kwargs: lambda f: f
+        mock_module.__version__ = "2.10.6"
+    elif name == 'sqlalchemy':
+        # sqlalchemy needs specific classes and orm submodule
+        class Column(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+        
+        class String(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+        
+        class Integer(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+        
+        mock_module.Column = Column
+        mock_module.String = String
+        mock_module.Integer = Integer
+        mock_module.create_engine = lambda *args, **kwargs: MockCallable()
+        mock_module.__version__ = "2.0.0"
+        
+        # Create orm submodule
+        orm_module = ModuleType('sqlalchemy.orm')
+        orm_module.__file__ = '<mocked sqlalchemy.orm>'
+        orm_module.__path__ = []
+        orm_module.__spec__ = importlib.util.spec_from_loader('sqlalchemy.orm', loader=None)
+        orm_module.sessionmaker = lambda *args, **kwargs: MockCallable()
+        orm_module.declarative_base = lambda *args, **kwargs: MockCallable()
+        orm_module.Session = MockCallable
+        orm_module.__getattr__ = _mock_getattr
+        mock_module.orm = orm_module
+        sys.modules['sqlalchemy.orm'] = orm_module
+    elif name == 'fastapi':
+        # fastapi needs FastAPI class and testclient submodule
+        class FastAPI(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            def get(self, *args, **kwargs):
+                return lambda f: f
+            def post(self, *args, **kwargs):
+                return lambda f: f
+            def put(self, *args, **kwargs):
+                return lambda f: f
+            def delete(self, *args, **kwargs):
+                return lambda f: f
+            def add_middleware(self, *args, **kwargs):
+                pass
+        
+        class HTTPException(Exception):
+            def __init__(self, status_code, detail=""):
+                self.status_code = status_code
+                self.detail = detail
+        
+        mock_module.FastAPI = FastAPI
+        mock_module.HTTPException = HTTPException
+        
+        # Create testclient submodule
+        testclient_module = ModuleType('fastapi.testclient')
+        testclient_module.__file__ = '<mocked fastapi.testclient>'
+        testclient_module.__path__ = []
+        testclient_module.__spec__ = importlib.util.spec_from_loader('fastapi.testclient', loader=None)
+        
+        class TestClient(MockCallable):
+            def __init__(self, app, *args, **kwargs):
+                super().__init__()
+                self.app = app
+            def get(self, *args, **kwargs):
+                return MockCallable()
+            def post(self, *args, **kwargs):
+                return MockCallable()
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+        
+        testclient_module.TestClient = TestClient
+        testclient_module.__getattr__ = _mock_getattr
+        mock_module.testclient = testclient_module
+        sys.modules['fastapi.testclient'] = testclient_module
+        
+        # Create security submodule
+        security_module = ModuleType('fastapi.security')
+        security_module.__file__ = '<mocked fastapi.security>'
+        security_module.__path__ = []
+        security_module.__spec__ = importlib.util.spec_from_loader('fastapi.security', loader=None)
+        
+        class HTTPBearer(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+        
+        class HTTPAuthorizationCredentials(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+        
+        security_module.HTTPBearer = HTTPBearer
+        security_module.HTTPAuthorizationCredentials = HTTPAuthorizationCredentials
+        security_module.__getattr__ = _mock_getattr
+        mock_module.security = security_module
+        sys.modules['fastapi.security'] = security_module
+    elif name in ('pytest_asyncio', 'pytest-asyncio'):
+        # pytest_asyncio needs fixture decorator
+        mock_module.fixture = lambda *args, **kwargs: lambda f: f
+    elif name == 'faker':
+        # faker needs Faker class
+        class Faker(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            def name(self):
+                return "John Doe"
+            def email(self):
+                return "john.doe@example.com"
+            def address(self):
+                return "123 Main St"
+            def text(self):
+                return "Lorem ipsum dolor sit amet"
+        
+        mock_module.Faker = Faker
+    elif name == 'tenacity':
+        # tenacity needs retry decorator and related functions
+        def retry(*args, **kwargs):
+            return lambda f: f
+        
+        mock_module.retry = retry
+        mock_module.stop_after_attempt = lambda *args, **kwargs: None
+        mock_module.wait_exponential = lambda *args, **kwargs: None
+        mock_module.retry_if_exception_type = lambda *args, **kwargs: None
+        mock_module.before_sleep_log = lambda *args, **kwargs: None
+    elif name == 'httpx':
+        # httpx needs AsyncClient and related classes
+        class AsyncClient(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+            async def get(self, *args, **kwargs):
+                return MockCallable()
+            async def post(self, *args, **kwargs):
+                return MockCallable()
+            async def close(self):
+                pass
+        
+        mock_module.AsyncClient = AsyncClient
+        mock_module.HTTPStatusError = type('HTTPStatusError', (Exception,), {})
+    elif name == 'freezegun':
+        # freezegun needs freeze_time decorator
+        from contextlib import contextmanager
+        
+        @contextmanager
+        def freeze_time(*args, **kwargs):
+            yield
+        
+        mock_module.freeze_time = freeze_time
+    elif name in ('grpc', 'grpcio'):
+        # grpc needs aio submodule and various classes
+        # Create aio submodule
+        aio_module = ModuleType('grpc.aio')
+        aio_module.__file__ = '<mocked grpc.aio>'
+        aio_module.__path__ = []
+        aio_module.__spec__ = importlib.util.spec_from_loader('grpc.aio', loader=None)
+        
+        class Channel(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+            async def close(self):
+                pass
+        
+        aio_module.insecure_channel = lambda *args, **kwargs: Channel()
+        aio_module.__getattr__ = _mock_getattr
+        mock_module.aio = aio_module
+        sys.modules['grpc.aio'] = aio_module
+    elif name == 'typer':
+        # typer needs Typer class and related functions
+        class Typer(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+            def command(self, *args, **kwargs):
+                return lambda f: f
+        
+        mock_module.Typer = Typer
+        mock_module.Option = lambda *args, **kwargs: None
+        mock_module.Argument = lambda *args, **kwargs: None
+    elif name == 'numpy':
+        # numpy needs array and common functions
+        class ndarray(MockCallable):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+                self.shape = ()
+                self.dtype = None
+            def __array__(self):
+                return self
+        
+        mock_module.array = lambda *args, **kwargs: ndarray()
+        mock_module.zeros = lambda *args, **kwargs: ndarray()
+        mock_module.ones = lambda *args, **kwargs: ndarray()
+        mock_module.ndarray = ndarray
+        mock_module.mean = lambda *args, **kwargs: 0.0
+        mock_module.median = lambda *args, **kwargs: 0.0
+        mock_module.std = lambda *args, **kwargs: 0.0
+        mock_module.percentile = lambda *args, **kwargs: 0.0
+        mock_module.__version__ = "1.26.0"
+    elif name == 'hypothesis':
+        # hypothesis needs strategies submodule
+        # Create strategies submodule
+        strategies_module = ModuleType('hypothesis.strategies')
+        strategies_module.__file__ = '<mocked hypothesis.strategies>'
+        strategies_module.__path__ = []
+        strategies_module.__spec__ = importlib.util.spec_from_loader('hypothesis.strategies', loader=None)
+        strategies_module.text = lambda *args, **kwargs: MockCallable()
+        strategies_module.dictionaries = lambda *args, **kwargs: MockCallable()
+        strategies_module.integers = lambda *args, **kwargs: MockCallable()
+        strategies_module.lists = lambda *args, **kwargs: MockCallable()
+        strategies_module.__getattr__ = _mock_getattr
+        mock_module.strategies = strategies_module
+        sys.modules['hypothesis.strategies'] = strategies_module
+        
+        # Add common hypothesis decorators
+        mock_module.given = lambda *args, **kwargs: lambda f: f
+        mock_module.settings = lambda *args, **kwargs: lambda f: f
     
     return mock_module
 
@@ -165,6 +575,27 @@ _OPTIONAL_DEPENDENCIES = [
     'dynaconf',  # Configuration management
     'watchdog',  # File system events
     'aiofiles',  # Async file operations
+    'aiohttp',  # Async HTTP client
+    'prometheus_client',  # Prometheus metrics
+    'aiokafka',  # Async Kafka client
+    'kafka',  # Kafka client
+    'redis',  # Redis client
+    'sqlalchemy',  # SQL toolkit
+    'pydantic',  # Data validation
+    'pydantic_core',  # Pydantic core
+    'pydantic-settings',  # Pydantic settings
+    'pytest_asyncio',  # Pytest async support
+    'pytest-asyncio',  # Pytest async support (alternate name)
+    'grpc',  # gRPC
+    'grpcio',  # gRPC IO
+    'fastapi',  # FastAPI framework
+    'uvicorn',  # ASGI server
+    'faker',  # Fake data generator
+    'httpx',  # HTTP client
+    'tenacity',  # Retry library
+    'freezegun',  # Time mocking library
+    'typer',  # CLI library
+    'numpy',  # Numerical computing
     # Cloud SDK packages
     'google.cloud.storage',  # Google Cloud Storage
     'google.cloud',  # Google Cloud base
@@ -272,6 +703,7 @@ if 'opentelemetry' not in sys.modules:
         __import__('opentelemetry')
     except ImportError:
         # Create a complete OpenTelemetry stub with all required attributes
+        import importlib.util
         
         # Create a no-op tracer
         class _NoOpTracer:
@@ -413,9 +845,21 @@ if 'opentelemetry' not in sys.modules:
         sdk_trace_sampling_module.ALWAYS_ON = lambda *args, **kwargs: None
         sdk_trace_module.sampling = sdk_trace_sampling_module
         
+        # Create propagate module
+        propagate_module = ModuleType('opentelemetry.propagate')
+        propagate_module.__file__ = '<mocked opentelemetry.propagate>'
+        propagate_module.__path__ = []
+        propagate_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.propagate', loader=None)
+        propagate_module.extract = lambda *args, **kwargs: {}
+        propagate_module.inject = lambda *args, **kwargs: None
+        propagate_module.get_global_textmap = lambda *args, **kwargs: None
+        propagate_module.set_global_textmap = lambda *args, **kwargs: None
+        otel_module.propagate = propagate_module
+        
         # Register modules
         sys.modules['opentelemetry'] = otel_module
         sys.modules['opentelemetry.trace'] = trace_module
+        sys.modules['opentelemetry.propagate'] = propagate_module
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
         sys.modules['opentelemetry.instrumentation.grpc'] = instrumentation_grpc
