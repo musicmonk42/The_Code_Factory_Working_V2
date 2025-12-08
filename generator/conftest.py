@@ -57,11 +57,13 @@ def _create_mock_module(name):
         # dynaconf needs Dynaconf class and Validator
         class MockDynaconf:
             def __init__(self, *args, **kwargs):
-                pass
+                self._data = {}
             def get(self, key, default=None):
-                return default
+                return self._data.get(key, default)
+            def set(self, key, value):
+                self._data[key] = value
             def __getattr__(self, name):
-                return None
+                return self._data.get(name, None)
         class MockValidator:
             def __init__(self, *args, **kwargs):
                 pass
@@ -114,6 +116,44 @@ for dep in _OPTIONAL_DEPENDENCIES:
                     if parent_name not in sys.modules:
                         parent_mock = _create_mock_module(parent_name)
                         sys.modules[parent_name] = parent_mock
+            
+            # Special handling for packages that need specific submodules
+            if dep == 'watchdog':
+                # Create watchdog.events submodule
+                watchdog_events = _create_mock_module('watchdog.events')
+                sys.modules['watchdog.events'] = watchdog_events
+                
+                # Add FileSystemEventHandler class
+                class FileSystemEventHandler:
+                    def on_modified(self, event):
+                        pass
+                    def on_created(self, event):
+                        pass
+                    def on_deleted(self, event):
+                        pass
+                
+                watchdog_events.FileSystemEventHandler = FileSystemEventHandler
+                mock_module.events = watchdog_events
+                
+                # Create watchdog.observers submodule
+                watchdog_observers = _create_mock_module('watchdog.observers')
+                sys.modules['watchdog.observers'] = watchdog_observers
+                
+                # Add Observer class
+                class Observer:
+                    def __init__(self):
+                        pass
+                    def schedule(self, *args, **kwargs):
+                        pass
+                    def start(self):
+                        pass
+                    def stop(self):
+                        pass
+                    def join(self):
+                        pass
+                
+                watchdog_observers.Observer = Observer
+                mock_module.observers = watchdog_observers
 
 # Add the generator directory to sys.path
 generator_root = Path(__file__).parent.resolve()
