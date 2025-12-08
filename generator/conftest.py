@@ -670,6 +670,16 @@ def _create_mock_module(name):
         tokenize_module.__getattr__ = _mock_getattr
         mock_module.tokenize = tokenize_module
         sys.modules['nltk.tokenize'] = tokenize_module
+    elif name == 'chromadb':
+        # chromadb needs utils submodule
+        utils_module = ModuleType('chromadb.utils')
+        utils_module.__file__ = '<mocked chromadb.utils>'
+        utils_module.__path__ = []
+        utils_module.__spec__ = importlib.util.spec_from_loader('chromadb.utils', loader=None)
+        utils_module.embedding_functions = MockCallable()
+        utils_module.__getattr__ = _mock_getattr
+        mock_module.utils = utils_module
+        sys.modules['chromadb.utils'] = utils_module
     
     return mock_module
 
@@ -730,6 +740,8 @@ _OPTIONAL_DEPENDENCIES = [
     'filelock',  # File locking
     'sphinx',  # Documentation generator
     'lxml',  # XML/HTML parser
+    'langchain',  # LangChain framework
+    'aiosqlite',  # Async SQLite
     # Cloud SDK packages
     'google.cloud.storage',  # Google Cloud Storage
     'google.cloud',  # Google Cloud base
