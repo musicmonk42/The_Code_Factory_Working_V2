@@ -323,6 +323,19 @@ def _create_mock_module(name):
         mock_module.root_validator = lambda *args, **kwargs: lambda f: f
         mock_module.validator = lambda *args, **kwargs: lambda f: f
         mock_module.__version__ = "2.10.6"
+        mock_module.VERSION = "2.10.6"  # Some code checks VERSION instead of __version__
+    elif name in ('pydantic_settings', 'pydantic-settings'):
+        # pydantic_settings needs BaseSettings class
+        class BaseSettings:
+            def __init__(self, **kwargs):
+                for key, value in kwargs.items():
+                    setattr(self, key, value)
+            def dict(self, *args, **kwargs):
+                return {}
+            def model_dump(self, *args, **kwargs):
+                return {}
+        
+        mock_module.BaseSettings = BaseSettings
     elif name == 'sqlalchemy':
         # sqlalchemy needs specific classes and orm submodule
         class Column(MockCallable):
@@ -584,6 +597,7 @@ _OPTIONAL_DEPENDENCIES = [
     'pydantic',  # Data validation
     'pydantic_core',  # Pydantic core
     'pydantic-settings',  # Pydantic settings
+    'pydantic_settings',  # Pydantic settings (alternate import name)
     'pytest_asyncio',  # Pytest async support
     'pytest-asyncio',  # Pytest async support (alternate name)
     'grpc',  # gRPC
