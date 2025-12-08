@@ -260,9 +260,50 @@ def _create_mock_module(name):
             def __init__(self, *args, **kwargs):
                 pass
         
+        class Request(MockCallable):
+            """Mock aiohttp Request for web server routes"""
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+        
+        class Response(MockCallable):
+            """Mock aiohttp Response for web server routes"""
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+        
         mock_module.ClientSession = ClientSession
         mock_module.ClientTimeout = ClientTimeout
         mock_module.ClientError = type('ClientError', (Exception,), {})
+        
+        # Create web_request submodule
+        web_request_module = ModuleType('aiohttp.web_request')
+        web_request_module.__file__ = '<mocked aiohttp.web_request>'
+        web_request_module.__path__ = []
+        web_request_module.__spec__ = importlib.util.spec_from_loader('aiohttp.web_request', loader=None)
+        web_request_module.Request = Request
+        web_request_module.__getattr__ = _mock_getattr
+        mock_module.web_request = web_request_module
+        sys.modules['aiohttp.web_request'] = web_request_module
+        
+        # Create web_response submodule
+        web_response_module = ModuleType('aiohttp.web_response')
+        web_response_module.__file__ = '<mocked aiohttp.web_response>'
+        web_response_module.__path__ = []
+        web_response_module.__spec__ = importlib.util.spec_from_loader('aiohttp.web_response', loader=None)
+        web_response_module.Response = Response
+        web_response_module.__getattr__ = _mock_getattr
+        mock_module.web_response = web_response_module
+        sys.modules['aiohttp.web_response'] = web_response_module
+        
+        # Create web module (parent of web_request and web_response)
+        web_module = ModuleType('aiohttp.web')
+        web_module.__file__ = '<mocked aiohttp.web>'
+        web_module.__path__ = []
+        web_module.__spec__ = importlib.util.spec_from_loader('aiohttp.web', loader=None)
+        web_module.Request = Request
+        web_module.Response = Response
+        web_module.__getattr__ = _mock_getattr
+        mock_module.web = web_module
+        sys.modules['aiohttp.web'] = web_module
     elif name == 'redis':
         # redis needs Redis class and asyncio submodule
         class Redis(MockCallable):
@@ -454,14 +495,34 @@ def _create_mock_module(name):
         mock_module.Faker = Faker
     elif name == 'tenacity':
         # tenacity needs retry decorator and related functions
+        # Create a mock retry condition that supports the | operator
+        class MockRetryCondition:
+            def __init__(self, *args, **kwargs):
+                pass
+            def __or__(self, other):
+                return MockRetryCondition()
+            def __call__(self, *args, **kwargs):
+                return False
+        
         def retry(*args, **kwargs):
             return lambda f: f
         
         mock_module.retry = retry
         mock_module.stop_after_attempt = lambda *args, **kwargs: None
         mock_module.wait_exponential = lambda *args, **kwargs: None
-        mock_module.retry_if_exception_type = lambda *args, **kwargs: None
+        mock_module.retry_if_exception_type = lambda *args, **kwargs: MockRetryCondition()
         mock_module.before_sleep_log = lambda *args, **kwargs: None
+        mock_module.after_log = lambda *args, **kwargs: None
+        
+        # Add exception classes that should be proper exceptions
+        class RetryError(Exception):
+            """Raised when all retry attempts have failed."""
+            pass
+        class TryAgain(Exception):
+            """Signal to retry the operation."""
+            pass
+        mock_module.RetryError = RetryError
+        mock_module.TryAgain = TryAgain
     elif name == 'httpx':
         # httpx needs AsyncClient and related classes
         class AsyncClient(MockCallable):
@@ -559,6 +620,19 @@ def _create_mock_module(name):
         # Add common hypothesis decorators
         mock_module.given = lambda *args, **kwargs: lambda f: f
         mock_module.settings = lambda *args, **kwargs: lambda f: f
+    elif name == 'docutils':
+        # docutils needs core submodule
+        # Create core submodule
+        core_module = ModuleType('docutils.core')
+        core_module.__file__ = '<mocked docutils.core>'
+        core_module.__path__ = []
+        core_module.__spec__ = importlib.util.spec_from_loader('docutils.core', loader=None)
+        core_module.publish_doctree = lambda *args, **kwargs: None
+        core_module.publish_string = lambda *args, **kwargs: b''
+        core_module.publish_parts = lambda *args, **kwargs: {}
+        core_module.__getattr__ = _mock_getattr
+        mock_module.core = core_module
+        sys.modules['docutils.core'] = core_module
     
     return mock_module
 
@@ -610,6 +684,10 @@ _OPTIONAL_DEPENDENCIES = [
     'freezegun',  # Time mocking library
     'typer',  # CLI library
     'numpy',  # Numerical computing
+    'docutils',  # Documentation utilities (RST parsing)
+    'nltk',  # Natural Language Toolkit
+    'beautifulsoup4',  # HTML parsing
+    'bs4',  # BeautifulSoup alias
     # Cloud SDK packages
     'google.cloud.storage',  # Google Cloud Storage
     'google.cloud',  # Google Cloud base
@@ -759,6 +837,14 @@ if 'opentelemetry' not in sys.modules:
         trace_module.Status = Status
         trace_module.StatusCode = StatusCode
         
+        # Create trace.status submodule
+        trace_status_module = ModuleType('opentelemetry.trace.status')
+        trace_status_module.__file__ = '<mocked opentelemetry.trace.status>'
+        trace_status_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.trace.status', loader=None)
+        trace_status_module.Status = Status
+        trace_status_module.StatusCode = StatusCode
+        trace_module.status = trace_status_module
+        
         # Create main opentelemetry module
         otel_module = ModuleType('opentelemetry')
         otel_module.__file__ = '<mocked opentelemetry>'
@@ -893,6 +979,7 @@ if 'opentelemetry' not in sys.modules:
         # Register modules
         sys.modules['opentelemetry'] = otel_module
         sys.modules['opentelemetry.trace'] = trace_module
+        sys.modules['opentelemetry.trace.status'] = trace_status_module
         sys.modules['opentelemetry.propagate'] = propagate_module
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
