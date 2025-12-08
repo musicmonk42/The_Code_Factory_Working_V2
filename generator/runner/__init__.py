@@ -234,6 +234,7 @@ _runner_core = None
 _runner_errors = None
 _runner_logging = None
 _runner_metrics = None
+_runner_providers = None
 
 try:
     # Import order: alphabetical by module name for consistency
@@ -241,6 +242,8 @@ try:
     _ensure_submodule_alias("alerting")
     from . import feedback_handlers as _runner_feedback_handlers
     _ensure_submodule_alias("feedback_handlers")
+    from . import providers as _runner_providers
+    _ensure_submodule_alias("providers")
     from . import runner_config as _runner_config
     _ensure_submodule_alias("runner_config")
     from . import runner_contracts as _runner_contracts
@@ -295,3 +298,7 @@ if _runner_alerting is not None and "runner.alerting" not in _sys.modules:
 # NEW: Allows `from runner.metrics import ...` to resolve to `runner.runner_metrics`
 if _runner_metrics is not None and "runner.metrics" not in _sys.modules:
     _sys.modules["runner.metrics"] = _runner_metrics
+
+# NEW: Allows `from runner.providers import ...` to resolve to the providers subpackage
+if _runner_providers is not None and "runner.providers" not in _sys.modules:
+    _sys.modules["runner.providers"] = _runner_providers

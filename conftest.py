@@ -203,6 +203,8 @@ if 'opentelemetry' not in sys.modules:
         # Create common instrumentation submodules
         instrumentation_fastapi = types.ModuleType('opentelemetry.instrumentation.fastapi')
         instrumentation_fastapi.__file__ = '<mocked opentelemetry.instrumentation.fastapi>'
+        instrumentation_fastapi.__path__ = []
+        instrumentation_fastapi.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation.fastapi', loader=None)
         
         # FastAPIInstrumentor must be a proper class with instrument_app method
         class FastAPIInstrumentor:
@@ -215,6 +217,8 @@ if 'opentelemetry' not in sys.modules:
         # Create grpc instrumentation module
         instrumentation_grpc = types.ModuleType('opentelemetry.instrumentation.grpc')
         instrumentation_grpc.__file__ = '<mocked opentelemetry.instrumentation.grpc>'
+        instrumentation_grpc.__path__ = []
+        instrumentation_grpc.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation.grpc', loader=None)
         
         # GrpcAioInstrumentor must be a proper class
         class GrpcAioInstrumentor:
@@ -226,14 +230,20 @@ if 'opentelemetry' not in sys.modules:
         
         instrumentation_logging = types.ModuleType('opentelemetry.instrumentation.logging')
         instrumentation_logging.__file__ = '<mocked opentelemetry.instrumentation.logging>'
+        instrumentation_logging.__path__ = []
+        instrumentation_logging.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation.logging', loader=None)
         instrumentation_logging.LoggingInstrumentor = lambda *args, **kwargs: None
         
         instrumentation_requests = types.ModuleType('opentelemetry.instrumentation.requests')
         instrumentation_requests.__file__ = '<mocked opentelemetry.instrumentation.requests>'
+        instrumentation_requests.__path__ = []
+        instrumentation_requests.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation.requests', loader=None)
         instrumentation_requests.RequestsInstrumentor = lambda *args, **kwargs: None
         
         instrumentation_system_metrics = types.ModuleType('opentelemetry.instrumentation.system_metrics')
         instrumentation_system_metrics.__file__ = '<mocked opentelemetry.instrumentation.system_metrics>'
+        instrumentation_system_metrics.__path__ = []
+        instrumentation_system_metrics.__spec__ = importlib.util.spec_from_loader('opentelemetry.instrumentation.system_metrics', loader=None)
         instrumentation_system_metrics.SystemMetricsInstrumentor = lambda *args, **kwargs: None
         
         # Create sdk modules
