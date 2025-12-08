@@ -156,6 +156,7 @@ except ImportError as e:
     class _DummyFastAPI:
         def __init__(self, *args, **kwargs):
             self.state = _DummyState()
+            self.dependency_overrides = {}
 
         def __call__(self, *args, **kwargs):
             return self

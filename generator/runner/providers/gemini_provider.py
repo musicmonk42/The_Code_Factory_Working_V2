@@ -39,6 +39,9 @@ except ImportError:
     HAS_GEMINI = False
 
     # Define dummy types for the class to load without crashing
+    class GenerativeModel:
+        pass
+
     class GenerateContentResponse:
         pass
 
@@ -61,6 +64,9 @@ except ImportError:
         pass
 
     class ResourceExhausted(Exception):
+        pass
+
+    def configure(*args, **kwargs):
         pass
 
 
