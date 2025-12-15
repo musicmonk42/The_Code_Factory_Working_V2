@@ -644,8 +644,14 @@ if 'prometheus_client' not in sys.modules:
             def observe(self, *args, **kwargs):
                 pass
             def time(self, *args, **kwargs):
+                # Return a decorator/context manager that works for both @decorator and with statement
                 from contextlib import nullcontext
-                return nullcontext()
+                def decorator(func):
+                    return func
+                # Make the decorator also work as a context manager
+                decorator.__enter__ = lambda: None
+                decorator.__exit__ = lambda *args: None
+                return decorator
         
         class _MockGauge:
             def __init__(self, *args, **kwargs):
