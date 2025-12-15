@@ -198,6 +198,8 @@ if 'opentelemetry' not in sys.modules:
                 pass
             def set_status(self, *args, **kwargs):
                 pass
+            def record_exception(self, *args, **kwargs):
+                pass
         
         # Create trace module with all required methods
         trace_module = types.ModuleType('opentelemetry.trace')
@@ -324,8 +326,23 @@ if 'opentelemetry' not in sys.modules:
         # trace.status module
         trace_status_module = types.ModuleType('opentelemetry.trace.status')
         trace_status_module.__file__ = '<mocked opentelemetry.trace.status>'
-        trace_status_module.Status = lambda *args, **kwargs: None
-        trace_status_module.StatusCode = lambda *args, **kwargs: None
+        
+        # Create Status and StatusCode classes that can be used in the codebase
+        class _MockStatus:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        class _MockStatusCode:
+            ERROR = "ERROR"
+            OK = "OK"
+            UNSET = "UNSET"
+        
+        trace_status_module.Status = _MockStatus
+        trace_status_module.StatusCode = _MockStatusCode
+        
+        # Also add Status and StatusCode directly to trace module for imports like: from opentelemetry.trace import Status
+        trace_module.Status = _MockStatus
+        trace_module.StatusCode = _MockStatusCode
         trace_module.status = trace_status_module
         
         # trace.propagation module
