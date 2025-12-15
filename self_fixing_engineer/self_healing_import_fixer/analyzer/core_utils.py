@@ -560,7 +560,7 @@ async def alert_operator_async(
 
         elif channel == AlertChannel.EMAIL and _alert_config.email_smtp_host:
             # Email sending is typically synchronous, skip for async
-            logger.info(f"Email alerts not supported in async mode")
+            logger.info("Email alerts not supported in async mode")
 
         elif channel == AlertChannel.SNS and _alert_config.sns_topic_arn and AWS_AVAILABLE:
             tasks.append(_send_sns_alert_async(message, level, metadata))

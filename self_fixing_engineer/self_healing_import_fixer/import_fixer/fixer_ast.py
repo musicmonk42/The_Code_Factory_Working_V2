@@ -38,7 +38,7 @@ try:
         audit_logger,
         scrub_secrets,
     )
-except ImportError as e:
+except ImportError:
     # Try absolute import as fallback
     try:
         from self_healing_import_fixer.import_fixer.cache_layer import get_cache
