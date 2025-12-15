@@ -300,6 +300,7 @@ if 'opentelemetry' not in sys.modules:
         sdk_trace_module = types.ModuleType('opentelemetry.sdk.trace')
         sdk_trace_module.__file__ = '<mocked opentelemetry.sdk.trace>'
         sdk_trace_module.__path__ = []  # Parent module for submodules
+        sdk_trace_module.TracerProvider = lambda *args, **kwargs: None
         sdk_module.trace = sdk_trace_module
         
         sdk_trace_export_module = types.ModuleType('opentelemetry.sdk.trace.export')
@@ -434,6 +435,16 @@ if 'opentelemetry' not in sys.modules:
         semconv_trace_module.SpanAttributes = lambda *args, **kwargs: None
         semconv_module.trace = semconv_trace_module
         
+        # metrics module
+        metrics_module = types.ModuleType('opentelemetry.metrics')
+        metrics_module.__file__ = '<mocked opentelemetry.metrics>'
+        metrics_module.__path__ = []
+        metrics_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.metrics', loader=None)
+        metrics_module.get_meter_provider = lambda: None
+        metrics_module.get_meter = lambda *args, **kwargs: None
+        metrics_module.set_meter_provider = lambda *args, **kwargs: None
+        otel_module.metrics = metrics_module
+        
         # Register all modules in sys.modules
         sys.modules['opentelemetry'] = otel_module
         sys.modules['opentelemetry.trace'] = trace_module
@@ -441,6 +452,7 @@ if 'opentelemetry' not in sys.modules:
         sys.modules['opentelemetry.trace.propagation'] = trace_propagation_module
         sys.modules['opentelemetry.trace.propagation.tracecontext'] = trace_propagation_tracecontext
         sys.modules['opentelemetry.propagate'] = propagate_module
+        sys.modules['opentelemetry.metrics'] = metrics_module
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
         sys.modules['opentelemetry.instrumentation.grpc'] = instrumentation_grpc
@@ -631,6 +643,9 @@ if 'prometheus_client' not in sys.modules:
                 return self
             def observe(self, *args, **kwargs):
                 pass
+            def time(self, *args, **kwargs):
+                from contextlib import nullcontext
+                return nullcontext()
         
         class _MockGauge:
             def __init__(self, *args, **kwargs):
@@ -644,10 +659,19 @@ if 'prometheus_client' not in sys.modules:
             def dec(self, *args, **kwargs):
                 pass
         
+        class _MockInfo:
+            def __init__(self, *args, **kwargs):
+                pass
+            def labels(self, *args, **kwargs):
+                return self
+            def info(self, *args, **kwargs):
+                pass
+        
         prom_module.CollectorRegistry = _MockCollectorRegistry
         prom_module.Counter = _MockCounter
         prom_module.Histogram = _MockHistogram
         prom_module.Gauge = _MockGauge
+        prom_module.Info = _MockInfo
         prom_module.Summary = _MockHistogram  # Summary is similar to Histogram
         prom_module.ProcessCollector = lambda *args, **kwargs: None
         prom_module.PLATFORM_COLLECTOR = lambda *args, **kwargs: None
