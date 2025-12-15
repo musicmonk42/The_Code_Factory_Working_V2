@@ -23,16 +23,16 @@ class AgentState(ArbiterAgentState):
     """
     Omnicore extension of ArbiterAgentState.
     Uses joined-table inheritance to add Omnicore-specific fields.
-    
+
     Inheritance chain:
     - ArbiterAgentState (parent, table: agent_state)
       └─ AgentState (this class, table: omnicore_agent_state)
          ├─ GeneratorAgentState (table: generator_agent_state)
          └─ SFEAgentState (table: sfe_agent_state)
-    
+
     The ForeignKey to agent_state.id establishes the join relationship with the parent table.
     Child classes (GeneratorAgentState, SFEAgentState) reference omnicore_agent_state.id.
-    
+
     Note: The parent ArbiterAgentState uses 'agent_type' as a regular column.
     For proper polymorphic inheritance, GeneratorAgentState and SFEAgentState
     should set agent_type appropriately in their values.
@@ -72,7 +72,7 @@ class ExplainAuditRecord(Base):
     __tablename__ = "explain_audit"
     # Allow table redefinition during test collection to prevent
     # "Table 'explain_audit' is already defined" errors when modules are imported multiple times
-    __table_args__ = {'extend_existing': True}
+    __table_args__ = {"extend_existing": True}
 
     uuid: Mapped[str] = mapped_column(String, primary_key=True)
     kind: Mapped[str] = mapped_column(String, nullable=False)

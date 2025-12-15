@@ -23,7 +23,10 @@ if "runner" not in sys.modules:
 elif _is_generator_import and sys.modules.get("runner") is not sys.modules[__name__]:
     # Check if 'runner' is a Mock before overriding
     runner_module = sys.modules.get("runner")
-    if not (hasattr(runner_module, '_mock_name') or str(type(runner_module).__name__) == 'MagicMock'):
+    if not (
+        hasattr(runner_module, "_mock_name")
+        or str(type(runner_module).__name__) == "MagicMock"
+    ):
         # Make runner point to generator.runner only if it's not a mock
         sys.modules["runner"] = sys.modules[__name__]
 
@@ -39,11 +42,11 @@ def _ensure_submodule_alias(submodule_name: str):
     # Skip aliasing if either module is a Mock (happens during tests)
     gen_module = sys.modules.get(gen_key)
     run_module = sys.modules.get(run_key)
-    
+
     # Check if either is a Mock object
-    if gen_module is not None and hasattr(gen_module, '_mock_name'):
+    if gen_module is not None and hasattr(gen_module, "_mock_name"):
         return  # Skip aliasing for mocked modules
-    if run_module is not None and hasattr(run_module, '_mock_name'):
+    if run_module is not None and hasattr(run_module, "_mock_name"):
         return  # Skip aliasing for mocked modules
 
     if gen_key in sys.modules and run_key not in sys.modules:
@@ -239,24 +242,34 @@ _runner_providers = None
 try:
     # Import order: alphabetical by module name for consistency
     from . import alerting as _runner_alerting
+
     _ensure_submodule_alias("alerting")
     from . import feedback_handlers as _runner_feedback_handlers
+
     _ensure_submodule_alias("feedback_handlers")
     from . import providers as _runner_providers
+
     _ensure_submodule_alias("providers")
     from . import runner_config as _runner_config
+
     _ensure_submodule_alias("runner_config")
     from . import runner_contracts as _runner_contracts
+
     _ensure_submodule_alias("runner_contracts")
     from . import runner_core as _runner_core
+
     _ensure_submodule_alias("runner_core")
     from . import runner_errors as _runner_errors
+
     _ensure_submodule_alias("runner_errors")
     from . import runner_logging as _runner_logging
+
     _ensure_submodule_alias("runner_logging")
     from . import runner_metrics as _runner_metrics
+
     _ensure_submodule_alias("runner_metrics")
     from . import runner_security_utils as _runner_security_utils
+
     _ensure_submodule_alias("runner_security_utils")
 except ImportError:
     # Circular import during initial load - modules will be available later
@@ -311,16 +324,17 @@ import importlib.abc
 import importlib.machinery
 import importlib.util
 
+
 class RunnerSubmoduleLoader(importlib.abc.Loader):
     """Loader that creates an alias after loading the actual module."""
-    
+
     def __init__(self, origin_name):
         self.origin_name = origin_name
-    
+
     def exec_module(self, module):
         # Module is already loaded, just ensure the alias exists
         pass
-    
+
     def create_module(self, spec):
         # Return the already-loaded generator.runner.* module
         return _sys.modules.get(self.origin_name)
@@ -330,19 +344,19 @@ class RunnerSubmoduleFinder(importlib.abc.MetaPathFinder):
     """
     Finds runner.providers (and similar) submodules by redirecting to generator.runner.providers.
     """
-    
+
     def find_spec(self, fullname, path, target=None):
         # Only handle runner.providers and runner.providers.*
         if fullname == "runner.providers" or fullname.startswith("runner.providers."):
             # Convert to generator.runner.providers
             origin_name = fullname.replace("runner.", "generator.runner.", 1)
-            
+
             # Check if the origin module exists or can be found
             if origin_name in _sys.modules:
                 # Module already loaded, just create alias
                 _sys.modules[fullname] = _sys.modules[origin_name]
                 return None  # Signal that we handled it
-            
+
             # Try to find the origin spec
             try:
                 origin_spec = importlib.util.find_spec(origin_name)
@@ -351,24 +365,24 @@ class RunnerSubmoduleFinder(importlib.abc.MetaPathFinder):
                     origin_module = importlib.util.module_from_spec(origin_spec)
                     _sys.modules[origin_name] = origin_module
                     origin_spec.loader.exec_module(origin_module)
-                    
+
                     # Now create the alias
                     _sys.modules[fullname] = origin_module
-                    
+
                     # Ensure submodules are also imported if this is a package
                     if origin_spec.submodule_search_locations:
                         # Handle submodule aliasing for packages
                         _ensure_submodule_alias(fullname.replace("runner.", ""))
-                    
+
                     # Return None to indicate the module is now in sys.modules
                     return None
             except (ImportError, ValueError, AttributeError, ModuleNotFoundError):
                 pass
-        
+
         # Not our concern
         return None
+
 
 # Install the finder
 if not any(isinstance(f, RunnerSubmoduleFinder) for f in _sys.meta_path):
     _sys.meta_path.insert(0, RunnerSubmoduleFinder())
-

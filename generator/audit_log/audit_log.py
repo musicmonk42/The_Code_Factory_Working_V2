@@ -331,11 +331,14 @@ try:
         ["generator"],
     )
     RBAC_DENIALS = Counter(
-        "audit_rbac_denials_total", "Access denied by RBAC", ["user", "role", "operation"]
+        "audit_rbac_denials_total",
+        "Access denied by RBAC",
+        ["user", "role", "operation"],
     )
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
+
     LOG_WRITES = REGISTRY._names_to_collectors.get("audit_log_writes_total")
     LOG_QUERIES = REGISTRY._names_to_collectors.get("audit_log_queries_total")
     LOG_ERRORS = REGISTRY._names_to_collectors.get("audit_log_errors_total")

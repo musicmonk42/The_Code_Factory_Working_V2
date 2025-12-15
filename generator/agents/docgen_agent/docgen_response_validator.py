@@ -123,13 +123,28 @@ try:
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
-    process_calls_total = REGISTRY._names_to_collectors.get("docgen_validator_calls_total")
-    process_errors_total = REGISTRY._names_to_collectors.get("docgen_validator_errors_total")
-    process_latency_seconds = REGISTRY._names_to_collectors.get("docgen_validator_latency_seconds")
-    docgen_compliance_issues_total = REGISTRY._names_to_collectors.get("docgen_validator_compliance_issues_total")
-    docgen_security_findings_total = REGISTRY._names_to_collectors.get("docgen_validator_security_findings_total")
-    docgen_content_quality_score = REGISTRY._names_to_collectors.get("docgen_validator_content_quality_score")
-    section_status_gauge = REGISTRY._names_to_collectors.get("docgen_response_section_status")
+
+    process_calls_total = REGISTRY._names_to_collectors.get(
+        "docgen_validator_calls_total"
+    )
+    process_errors_total = REGISTRY._names_to_collectors.get(
+        "docgen_validator_errors_total"
+    )
+    process_latency_seconds = REGISTRY._names_to_collectors.get(
+        "docgen_validator_latency_seconds"
+    )
+    docgen_compliance_issues_total = REGISTRY._names_to_collectors.get(
+        "docgen_validator_compliance_issues_total"
+    )
+    docgen_security_findings_total = REGISTRY._names_to_collectors.get(
+        "docgen_validator_security_findings_total"
+    )
+    docgen_content_quality_score = REGISTRY._names_to_collectors.get(
+        "docgen_validator_content_quality_score"
+    )
+    section_status_gauge = REGISTRY._names_to_collectors.get(
+        "docgen_response_section_status"
+    )
 
 
 # --- NLTK Data Download (Strictly required data for NLP features) ---

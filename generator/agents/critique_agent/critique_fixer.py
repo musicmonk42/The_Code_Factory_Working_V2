@@ -45,11 +45,12 @@ try:
         scan_for_vulnerabilities,
         redact_secrets as scrub_pii_and_secrets,
     )
-    
+
     # check_owasp_compliance may not exist yet - provide a stub if not available
     try:
         from runner.summarize_utils import check_owasp_compliance
     except ImportError:
+
         def check_owasp_compliance(code: str) -> list:
             """Stub for OWASP compliance check when not available."""
             return []
@@ -100,10 +101,13 @@ except ImportError as e:
 try:
     FIX_SUCCESS = Counter("fix_success_total", "Successful fixes applied", ["strategy"])
     FIX_FAILURE = Counter("fix_failure_total", "Failed fixes", ["strategy", "reason"])
-    FIX_LATENCY = Histogram("fix_latency_seconds", "Fix application latency", ["strategy"])
+    FIX_LATENCY = Histogram(
+        "fix_latency_seconds", "Fix application latency", ["strategy"]
+    )
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
+
     FIX_SUCCESS = REGISTRY._names_to_collectors.get("fix_success_total")
     FIX_FAILURE = REGISTRY._names_to_collectors.get("fix_failure_total")
     FIX_LATENCY = REGISTRY._names_to_collectors.get("fix_latency_seconds")

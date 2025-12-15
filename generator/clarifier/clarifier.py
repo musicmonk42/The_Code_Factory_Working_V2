@@ -314,12 +314,18 @@ try:
     CLARIFIER_LATENCY = Histogram(
         "clarifier_latency_seconds", "Clarification cycle latency", ["status"]
     )
-    CLARIFIER_ERRORS = Counter("clarifier_errors_total", "Clarifier errors", ["error_type"])
+    CLARIFIER_ERRORS = Counter(
+        "clarifier_errors_total", "Clarifier errors", ["error_type"]
+    )
     CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = Histogram(
-        "clarifier_context_retrieval_seconds", "Context retrieval latency", ["manager_type"]
+        "clarifier_context_retrieval_seconds",
+        "Context retrieval latency",
+        ["manager_type"],
     )
     CLARIFIER_QUESTION_PROMPT_LATENCY = Histogram(
-        "clarifier_question_prompt_seconds", "Question prompt latency", ["interaction_mode"]
+        "clarifier_question_prompt_seconds",
+        "Question prompt latency",
+        ["interaction_mode"],
     )
     CLARIFIER_PRIORITIZATION_LATENCY = Histogram(
         "clarifier_prioritization_seconds", "Prioritization latency", ["strategy"]
@@ -327,12 +333,19 @@ try:
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
+
     CLARIFIER_CYCLES = REGISTRY._names_to_collectors.get("clarifier_cycles_total")
     CLARIFIER_LATENCY = REGISTRY._names_to_collectors.get("clarifier_latency_seconds")
     CLARIFIER_ERRORS = REGISTRY._names_to_collectors.get("clarifier_errors_total")
-    CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = REGISTRY._names_to_collectors.get("clarifier_context_retrieval_seconds")
-    CLARIFIER_QUESTION_PROMPT_LATENCY = REGISTRY._names_to_collectors.get("clarifier_question_prompt_seconds")
-    CLARIFIER_PRIORITIZATION_LATENCY = REGISTRY._names_to_collectors.get("clarifier_prioritization_seconds")
+    CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = REGISTRY._names_to_collectors.get(
+        "clarifier_context_retrieval_seconds"
+    )
+    CLARIFIER_QUESTION_PROMPT_LATENCY = REGISTRY._names_to_collectors.get(
+        "clarifier_question_prompt_seconds"
+    )
+    CLARIFIER_PRIORITIZATION_LATENCY = REGISTRY._names_to_collectors.get(
+        "clarifier_prioritization_seconds"
+    )
 
 
 # --- Circuit Breaker ---

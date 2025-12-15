@@ -108,18 +108,18 @@ class TestSecurityMiddleware:
         """Test JWT token validation"""
         # For this test, we'll use a patched settings with a known secret
         test_secret = "test-jwt-secret-key-for-testing"
-        
+
         # Create a mock settings object with JWT_SECRET_KEY
         class MockSecretStr:
             def get_secret_value(self):
                 return test_secret
-        
+
         mock_settings = Mock()
         mock_settings.JWT_SECRET_KEY = MockSecretStr()
-        
+
         with patch("omnicore_engine.fastapi_app.settings", mock_settings):
             from omnicore_engine.fastapi_app import get_user_id as get_user_id_patched
-            
+
             # Valid token
             valid_token = jwt.encode(
                 {"sub": "user123", "exp": datetime.utcnow() + timedelta(hours=1)},
@@ -326,7 +326,9 @@ class TestAdminEndpoints:
         # Set up mock settings with required attributes
         mock_settings.EXPERIMENTAL_FEATURES_ENABLED = True
         mock_settings.JWT_SECRET_KEY = Mock()
-        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = self.TEST_JWT_SECRET
+        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = (
+            self.TEST_JWT_SECRET
+        )
 
         mock_marketplace = Mock()
         mock_marketplace.install_plugin = AsyncMock()
@@ -353,7 +355,9 @@ class TestAdminEndpoints:
         # Set up mock settings with required attributes
         mock_settings.EXPERIMENTAL_FEATURES_ENABLED = True
         mock_settings.JWT_SECRET_KEY = Mock()
-        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = self.TEST_JWT_SECRET
+        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = (
+            self.TEST_JWT_SECRET
+        )
 
         mock_marketplace = Mock()
         mock_marketplace.rate_plugin = AsyncMock()
@@ -385,7 +389,9 @@ class TestAdminEndpoints:
         # Set up mock settings with required attributes
         mock_settings.EXPERIMENTAL_FEATURES_ENABLED = True
         mock_settings.JWT_SECRET_KEY = Mock()
-        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = self.TEST_JWT_SECRET
+        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = (
+            self.TEST_JWT_SECRET
+        )
 
         mock_audit = Mock()
         mock_proof_exporter = Mock()
@@ -414,7 +420,9 @@ class TestAdminEndpoints:
         # Set up mock settings with required attributes
         mock_settings.EXPERIMENTAL_FEATURES_ENABLED = True
         mock_settings.JWT_SECRET_KEY = Mock()
-        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = self.TEST_JWT_SECRET
+        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = (
+            self.TEST_JWT_SECRET
+        )
 
         mock_meta.generate_test_cases = AsyncMock(
             return_value={"test_cases": ["test1", "test2"]}
@@ -444,7 +452,9 @@ class TestWorkflowEndpoints:
         """Test code factory workflow endpoint"""
         # Set up mock settings with required attributes
         mock_settings.JWT_SECRET_KEY = Mock()
-        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = self.TEST_JWT_SECRET
+        mock_settings.JWT_SECRET_KEY.get_secret_value.return_value = (
+            self.TEST_JWT_SECRET
+        )
 
         mock_bus = Mock()
         mock_bus.publish = AsyncMock()

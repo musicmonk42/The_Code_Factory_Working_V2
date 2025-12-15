@@ -79,7 +79,10 @@ def mock_policy_file(temp_project_root):
             {"api_key": "abc123", "nested": {"secret": "hidden"}},
             ({"api_key": "[REDACTED]", "nested": {"secret": "[REDACTED]"}}, 2),
         ),  # Nested
-        ([{"token": "tok123"}, "normal"], ([{"token": "[REDACTED]"}, "normal"], 1)),  # List
+        (
+            [{"token": "tok123"}, "normal"],
+            ([{"token": "[REDACTED]"}, "normal"], 1),
+        ),  # List
         ("non-dict", ("non-dict", 0)),  # Non-dict/list
     ],
 )
@@ -338,7 +341,9 @@ async def test_event_bus_publish_non_critical_no_aiohttp(mock_config, monkeypatc
 @pytest.mark.asyncio
 async def test_event_bus_publish_webhook(mock_config):
     """Test publishing to webhook."""
-    mock_config["webhook_hooks"] = {"test_event": "https://mock-webhook.example.com"}  # Use event name as key
+    mock_config["webhook_hooks"] = {
+        "test_event": "https://mock-webhook.example.com"
+    }  # Use event name as key
     mock_config["webhook_events"] = ["test_event"]
     bus = EventBus(config=mock_config)
     bus.config.webhook_hooks = {"test_event": "https://mock-webhook.example.com"}
@@ -395,9 +400,7 @@ async def test_event_bus_publish_metrics_failure(mock_config):
             "test_generation.policy_and_audit.aiohttp.ClientSession.post",
             side_effect=Exception("Network error"),
         ),
-        patch.object(
-            bus.metrics_client, "notification_failures_total"
-        ) as mock_counter,
+        patch.object(bus.metrics_client, "notification_failures_total") as mock_counter,
     ):
         await bus.publish("test_event", {"key": "value"})
 

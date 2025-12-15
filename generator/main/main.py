@@ -356,7 +356,9 @@ def setup_observability(log_level: str):
         # Use the default/configured tracer provider instead of manually creating one
         # This avoids version compatibility issues and respects OTEL_* environment variables
         LoggingInstrumentor().instrument(set_logging_format=True)
-        logger.info("OpenTelemetry tracing initialized using default/configured provider.")
+        logger.info(
+            "OpenTelemetry tracing initialized using default/configured provider."
+        )
 
     # --- Prometheus Metrics Setup (from Runner) ---
     try:

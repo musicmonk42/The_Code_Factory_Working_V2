@@ -144,12 +144,14 @@ class CryptoInitializationError(Exception):
 
 # --- Configuration and Secrets Management ---
 
+
 # FIX: Set test mode environment variables BEFORE creating Dynaconf
 def _is_test_or_dev_mode() -> bool:
     # pytest sets PYTEST_CURRENT_TEST; we also respect a simple dev flag
     return bool(
         os.getenv("PYTEST_CURRENT_TEST") or os.getenv("AUDIT_LOG_DEV_MODE") == "true"
     )
+
 
 # In test/dev mode, pre-set the required values before Dynaconf initialization
 if _is_test_or_dev_mode():
@@ -177,7 +179,9 @@ else:
         settings_files=["audit_config.yaml"],
         validators=[
             Validator("ENCRYPTION_KEYS", must_exist=True, is_type_of=list),
-            Validator("COMPRESSION_ALGO", must_exist=True, is_in=["zstd", "gzip", "none"]),
+            Validator(
+                "COMPRESSION_ALGO", must_exist=True, is_in=["zstd", "gzip", "none"]
+            ),
             Validator("COMPRESSION_LEVEL", default=9, gte=1, lte=22),
             Validator("BATCH_FLUSH_INTERVAL", must_exist=True, gte=1, lte=60),
             Validator("BATCH_MAX_SIZE", must_exist=True, gte=10, lte=1000),

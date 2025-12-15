@@ -201,7 +201,9 @@ try:
         "intent_parser_ambiguity_rate", "Ratio of ambiguities to features"
     )
     PARSE_ERRORS = Counter(
-        "intent_parser_errors_total", "Total errors during parsing", ["stage", "error_type"]
+        "intent_parser_errors_total",
+        "Total errors during parsing",
+        ["stage", "error_type"],
     )
     LANG_DETECTION_COUNT = Counter(
         "intent_parser_lang_detection_total", "Language detection calls", ["language"]
@@ -239,18 +241,39 @@ try:
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
-    PARSE_LATENCY = REGISTRY._names_to_collectors.get("intent_parser_parse_latency_seconds")
+
+    PARSE_LATENCY = REGISTRY._names_to_collectors.get(
+        "intent_parser_parse_latency_seconds"
+    )
     AMBIGUITY_RATE = REGISTRY._names_to_collectors.get("intent_parser_ambiguity_rate")
     PARSE_ERRORS = REGISTRY._names_to_collectors.get("intent_parser_errors_total")
-    LANG_DETECTION_COUNT = REGISTRY._names_to_collectors.get("intent_parser_lang_detection_total")
-    FORMAT_DETECTION_COUNT = REGISTRY._names_to_collectors.get("intent_parser_format_detection_total")
-    EXTRACTION_COUNT = REGISTRY._names_to_collectors.get("intent_parser_extraction_total")
-    LLM_CLIENT_CALLS = REGISTRY._names_to_collectors.get("intent_parser_llm_client_calls_total")
-    LLM_CLIENT_CACHE_HITS = REGISTRY._names_to_collectors.get("intent_parser_llm_client_cache_hits_total")
-    LLM_CLIENT_FALLBACKS = REGISTRY._names_to_collectors.get("intent_parser_llm_client_fallbacks_total")
-    REDACTION_COUNT = REGISTRY._names_to_collectors.get("intent_parser_redaction_events_total")
-    FEEDBACK_RECORDED_COUNT = REGISTRY._names_to_collectors.get("intent_parser_feedback_recorded_total")
-    CACHE_CORRUPTION_EVENTS = REGISTRY._names_to_collectors.get("intent_parser_cache_corruption_total")
+    LANG_DETECTION_COUNT = REGISTRY._names_to_collectors.get(
+        "intent_parser_lang_detection_total"
+    )
+    FORMAT_DETECTION_COUNT = REGISTRY._names_to_collectors.get(
+        "intent_parser_format_detection_total"
+    )
+    EXTRACTION_COUNT = REGISTRY._names_to_collectors.get(
+        "intent_parser_extraction_total"
+    )
+    LLM_CLIENT_CALLS = REGISTRY._names_to_collectors.get(
+        "intent_parser_llm_client_calls_total"
+    )
+    LLM_CLIENT_CACHE_HITS = REGISTRY._names_to_collectors.get(
+        "intent_parser_llm_client_cache_hits_total"
+    )
+    LLM_CLIENT_FALLBACKS = REGISTRY._names_to_collectors.get(
+        "intent_parser_llm_client_fallbacks_total"
+    )
+    REDACTION_COUNT = REGISTRY._names_to_collectors.get(
+        "intent_parser_redaction_events_total"
+    )
+    FEEDBACK_RECORDED_COUNT = REGISTRY._names_to_collectors.get(
+        "intent_parser_feedback_recorded_total"
+    )
+    CACHE_CORRUPTION_EVENTS = REGISTRY._names_to_collectors.get(
+        "intent_parser_cache_corruption_total"
+    )
 
 
 # --- Config Schema ---

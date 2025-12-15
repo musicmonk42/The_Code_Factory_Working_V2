@@ -45,13 +45,18 @@ except ImportError:
 
 
 from cryptography.fernet import InvalidToken  # Encrypt (cryptography req)
+
 # FIX: Make googletrans optional since it has dependency conflicts
 try:
     from googletrans import Translator  # Translation (googletrans req)
+
     HAS_GOOGLETRANS = True
 except ImportError:
     try:
-        from deep_translator import GoogleTranslator as Translator  # Alternative translator
+        from deep_translator import (
+            GoogleTranslator as Translator,
+        )  # Alternative translator
+
         HAS_GOOGLETRANS = "deep"
     except ImportError:
         Translator = None
@@ -243,7 +248,9 @@ try:
         ["channel", "type"],
     )
     USER_ENGAGEMENT = Gauge(
-        "clarifier_user_engagement_score", "Engagement score (0-1) per user", ["user_id"]
+        "clarifier_user_engagement_score",
+        "Engagement score (0-1) per user",
+        ["user_id"],
     )
     FEEDBACK_RATINGS = Histogram(
         "clarifier_feedback_ratings", "User feedback ratings (0-1)"
@@ -261,13 +268,26 @@ try:
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
-    PROMPT_CYCLES = REGISTRY._names_to_collectors.get("clarifier_user_prompt_cycles_total")
-    PROMPT_LATENCY = REGISTRY._names_to_collectors.get("clarifier_user_prompt_latency_seconds")
-    PROMPT_ERRORS = REGISTRY._names_to_collectors.get("clarifier_user_prompt_errors_total")
-    USER_ENGAGEMENT = REGISTRY._names_to_collectors.get("clarifier_user_engagement_score")
+
+    PROMPT_CYCLES = REGISTRY._names_to_collectors.get(
+        "clarifier_user_prompt_cycles_total"
+    )
+    PROMPT_LATENCY = REGISTRY._names_to_collectors.get(
+        "clarifier_user_prompt_latency_seconds"
+    )
+    PROMPT_ERRORS = REGISTRY._names_to_collectors.get(
+        "clarifier_user_prompt_errors_total"
+    )
+    USER_ENGAGEMENT = REGISTRY._names_to_collectors.get(
+        "clarifier_user_engagement_score"
+    )
     FEEDBACK_RATINGS = REGISTRY._names_to_collectors.get("clarifier_feedback_ratings")
-    COMPLIANCE_QUESTIONS_ASKED = REGISTRY._names_to_collectors.get("clarifier_compliance_questions_asked_total")
-    COMPLIANCE_ANSWERS_RECEIVED = REGISTRY._names_to_collectors.get("clarifier_compliance_answers_received_total")
+    COMPLIANCE_QUESTIONS_ASKED = REGISTRY._names_to_collectors.get(
+        "clarifier_compliance_questions_asked_total"
+    )
+    COMPLIANCE_ANSWERS_RECEIVED = REGISTRY._names_to_collectors.get(
+        "clarifier_compliance_answers_received_total"
+    )
 
 
 # User Profile
@@ -334,7 +354,9 @@ class UserPromptChannel(ABC):
             self.translator = Translator() if Translator else None
         else:
             self.translator = None
-            logger.warning("Translation library not available. Translation will be disabled.")
+            logger.warning(
+                "Translation library not available. Translation will be disabled."
+            )
         self.target_language = target_language
 
     def _translate_text(self, text: str, dest: str) -> str:

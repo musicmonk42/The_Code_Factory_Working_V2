@@ -68,7 +68,9 @@ class PlatformIntegrationTest:
     def log_test(self, name: str, passed: bool, message: str = "", error: str = None):
         """Record a test result"""
         duration = time.time() - self.start_time
-        result = TestResult(name=name, passed=passed, duration=duration, message=message, error=error)
+        result = TestResult(
+            name=name, passed=passed, duration=duration, message=message, error=error
+        )
         self.results.append(result)
         status = "✅ PASS" if passed else "❌ FAIL"
         logger.info(f"{status} - {name}: {message}")
@@ -125,9 +127,18 @@ class PlatformIntegrationTest:
         for module_name, description in modules_to_test:
             try:
                 __import__(module_name)
-                self.log_test(f"Import {description}", True, f"Successfully imported {module_name}")
+                self.log_test(
+                    f"Import {description}",
+                    True,
+                    f"Successfully imported {module_name}",
+                )
             except Exception as e:
-                self.log_test(f"Import {description}", False, f"Failed to import {module_name}", str(e))
+                self.log_test(
+                    f"Import {description}",
+                    False,
+                    f"Failed to import {module_name}",
+                    str(e),
+                )
                 all_passed = False
 
         return all_passed
@@ -157,17 +168,26 @@ class PlatformIntegrationTest:
             self.log_test("OmniCoreEngine instantiation", True, "Engine object created")
 
             # Test engine has required attributes
-            required_attrs = ["initialize", "shutdown", "health_check", "is_initialized"]
+            required_attrs = [
+                "initialize",
+                "shutdown",
+                "health_check",
+                "is_initialized",
+            ]
             for attr in required_attrs:
                 if not hasattr(engine, attr):
-                    self.log_test(f"Engine attribute: {attr}", False, "Attribute missing")
+                    self.log_test(
+                        f"Engine attribute: {attr}", False, "Attribute missing"
+                    )
                     return False
                 self.log_test(f"Engine attribute: {attr}", True, "Present")
 
             return True
 
         except Exception as e:
-            self.log_test("OmniCore Engine Init", False, "Initialization failed", str(e))
+            self.log_test(
+                "OmniCore Engine Init", False, "Initialization failed", str(e)
+            )
             return False
 
     # =========================================================================
@@ -189,7 +209,11 @@ class PlatformIntegrationTest:
             required_attrs = ["DATABASE_URL", "LOG_LEVEL"]
             for attr in required_attrs:
                 if hasattr(config, attr):
-                    self.log_test(f"Config attribute: {attr}", True, f"Value: {getattr(config, attr, 'N/A')}")
+                    self.log_test(
+                        f"Config attribute: {attr}",
+                        True,
+                        f"Value: {getattr(config, attr, 'N/A')}",
+                    )
                 else:
                     self.log_test(f"Config attribute: {attr}", False, "Missing")
 
@@ -212,7 +236,9 @@ class PlatformIntegrationTest:
             from arbiter.arbiter_plugin_registry import PluginRegistry
 
             registry = PluginRegistry()
-            self.log_test("PluginRegistry instantiation", True, "Registry object created")
+            self.log_test(
+                "PluginRegistry instantiation", True, "Registry object created"
+            )
 
             # Test registry methods
             if hasattr(registry, "_plugins"):
@@ -257,7 +283,9 @@ class PlatformIntegrationTest:
 
             # Initialize the module
             await module.initialize()
-            self.log_test("Simulation Module initialization", True, "Initialized successfully")
+            self.log_test(
+                "Simulation Module initialization", True, "Initialized successfully"
+            )
 
             # Run health check
             health = await module.health_check(fail_on_error=False)
@@ -288,7 +316,9 @@ class PlatformIntegrationTest:
 
             # Test alias
             if SecurityException is SecurityError:
-                self.log_test("SecurityException alias", True, "Backward compatibility OK")
+                self.log_test(
+                    "SecurityException alias", True, "Backward compatibility OK"
+                )
             else:
                 self.log_test("SecurityException alias", False, "Alias not working")
                 return False
@@ -351,7 +381,11 @@ class PlatformIntegrationTest:
                 "storage": "in-memory",
                 "artifacts": ["Dockerfile", "tests", "documentation"],
             }
-            self.log_test("Step 2: Parse requirements", True, f"Extracted {len(requirements)} properties")
+            self.log_test(
+                "Step 2: Parse requirements",
+                True,
+                f"Extracted {len(requirements)} properties",
+            )
 
             # Step 3: Simulate code generation
             logger.info("Step 3: Simulating code generation...")
@@ -404,7 +438,11 @@ EXPOSE 8080
 CMD ["python", "app.py"]
 """,
             }
-            self.log_test("Step 3: Generate code", True, f"Generated {len(generated_artifacts)} artifacts")
+            self.log_test(
+                "Step 3: Generate code",
+                True,
+                f"Generated {len(generated_artifacts)} artifacts",
+            )
 
             # Step 4: Simulate Self-Fixing Engineer analysis
             logger.info("Step 4: Running Self-Fixing Engineer analysis...")
@@ -428,10 +466,18 @@ CMD ["python", "app.py"]
             }
             try:
                 result = await sim_module.execute_simulation(analysis_config)
-                self.log_test("Step 4: SFE analysis", True, f"Analysis result: {result.get('status', 'completed')}")
+                self.log_test(
+                    "Step 4: SFE analysis",
+                    True,
+                    f"Analysis result: {result.get('status', 'completed')}",
+                )
             except Exception as e:
                 # If simulation fails due to config validation, that's expected behavior
-                self.log_test("Step 4: SFE analysis", True, f"Simulation validated config (expected behavior)")
+                self.log_test(
+                    "Step 4: SFE analysis",
+                    True,
+                    f"Simulation validated config (expected behavior)",
+                )
 
             await sim_module.shutdown()
 
@@ -443,7 +489,11 @@ CMD ["python", "app.py"]
                 "port": 8080,
                 "status": "ready_for_deploy",
             }
-            self.log_test("Step 5: Deployment prep", True, f"Config: {deployment_config['status']}")
+            self.log_test(
+                "Step 5: Deployment prep",
+                True,
+                f"Config: {deployment_config['status']}",
+            )
 
             # Step 6: Simulate deployment (mock)
             logger.info("Step 6: Simulating deployment...")
@@ -453,7 +503,11 @@ CMD ["python", "app.py"]
                 "url": "http://localhost:8080",
                 "health_check": "passing",
             }
-            self.log_test("Step 6: Deploy simulation", True, f"Deployed to {deployment_result['url']}")
+            self.log_test(
+                "Step 6: Deploy simulation",
+                True,
+                f"Deployed to {deployment_result['url']}",
+            )
 
             # Cleanup
             os.unlink(readme_path)
@@ -492,7 +546,9 @@ CMD ["python", "app.py"]
 
             # Test health check
             health = await bus.health_check()
-            self.log_test("Message bus health", True, f"Status: {health.get('status', 'ok')}")
+            self.log_test(
+                "Message bus health", True, f"Status: {health.get('status', 'ok')}"
+            )
 
             return True
 
@@ -517,7 +573,9 @@ CMD ["python", "app.py"]
 
             # Check audit methods
             if hasattr(audit, "add_entry_async"):
-                self.log_test("Audit async entry method", True, "add_entry_async available")
+                self.log_test(
+                    "Audit async entry method", True, "add_entry_async available"
+                )
             else:
                 self.log_test("Audit async entry method", False, "Method missing")
 
@@ -550,7 +608,11 @@ CMD ["python", "app.py"]
 
             db = Database()
             health = await db.health_check()
-            self.log_test("Simulation ↔ Database", True, f"DB health: {health.get('status', 'ok')}")
+            self.log_test(
+                "Simulation ↔ Database",
+                True,
+                f"DB health: {health.get('status', 'ok')}",
+            )
 
             # Test 3: Plugin Registry + Arbiter
             from arbiter.arbiter_plugin_registry import PluginRegistry
@@ -566,12 +628,16 @@ CMD ["python", "app.py"]
                 "payload": {"readme": "Test README content"},
             }
             serialized_chain = safe_serialize(chain_test_data)
-            self.log_test("Full Chain Test", True, f"Data flows correctly between components")
+            self.log_test(
+                "Full Chain Test", True, f"Data flows correctly between components"
+            )
 
             return True
 
         except Exception as e:
-            self.log_test("Cross-Component Integration", False, "Integration failed", str(e))
+            self.log_test(
+                "Cross-Component Integration", False, "Integration failed", str(e)
+            )
             return False
 
     # =========================================================================
@@ -592,14 +658,20 @@ CMD ["python", "app.py"]
         self.run_test("Security Features", self.test_security_features)
 
         # Run async tests
-        await self.run_async_test("OmniCore Engine Init", self.test_omnicore_engine_init())
+        await self.run_async_test(
+            "OmniCore Engine Init", self.test_omnicore_engine_init()
+        )
         await self.run_async_test("Simulation Module", self.test_simulation_module())
         await self.run_async_test("Message Bus", self.test_message_bus())
         await self.run_async_test("Audit Logging", self.test_audit_logging())
-        await self.run_async_test("Cross-Component Integration", self.test_cross_component_integration())
+        await self.run_async_test(
+            "Cross-Component Integration", self.test_cross_component_integration()
+        )
 
         # Run full workflow simulation last
-        await self.run_async_test("Full Workflow Simulation", self.test_full_workflow_simulation())
+        await self.run_async_test(
+            "Full Workflow Simulation", self.test_full_workflow_simulation()
+        )
 
         return self.generate_report()
 

@@ -22,6 +22,7 @@ except ImportError:
     # If import fails, create a fallback class
     class ArbiterConfig:
         """Fallback ArbiterConfig when arbiter module is not available."""
+
         def __init__(self):
             self.log_level = "INFO"
             self.LOG_LEVEL = "INFO"

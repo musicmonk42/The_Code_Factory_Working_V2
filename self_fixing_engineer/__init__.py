@@ -13,6 +13,7 @@ import sys
 # Set up 'simulation' as an alias to self_fixing_engineer.simulation
 try:
     from . import simulation as _simulation
+
     if "simulation" not in sys.modules:
         sys.modules["simulation"] = _simulation
 except ImportError:
@@ -21,6 +22,7 @@ except ImportError:
 # Set up 'arbiter' as an alias to self_fixing_engineer.arbiter
 try:
     from . import arbiter as _arbiter
+
     if "arbiter" not in sys.modules:
         sys.modules["arbiter"] = _arbiter
 except ImportError:
@@ -29,6 +31,7 @@ except ImportError:
 # Set up 'guardrails' as an alias to self_fixing_engineer.guardrails
 try:
     from . import guardrails as _guardrails
+
     if "guardrails" not in sys.modules:
         sys.modules["guardrails"] = _guardrails
 except ImportError:
@@ -37,6 +40,7 @@ except ImportError:
 # Set up 'test_generation' as an alias to self_fixing_engineer.test_generation
 try:
     from . import test_generation as _test_generation
+
     if "test_generation" not in sys.modules:
         sys.modules["test_generation"] = _test_generation
 except ImportError:
@@ -45,6 +49,7 @@ except ImportError:
 # Set up 'intent_capture' as an alias to self_fixing_engineer.intent_capture
 try:
     from . import intent_capture as _intent_capture
+
     if "intent_capture" not in sys.modules:
         sys.modules["intent_capture"] = _intent_capture
 except ImportError:

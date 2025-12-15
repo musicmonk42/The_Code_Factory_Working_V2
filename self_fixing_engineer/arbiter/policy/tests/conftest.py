@@ -79,13 +79,13 @@ def reset_singletons():
 @pytest.fixture(autouse=True)
 def mock_arbiter_dependencies(monkeypatch):
     """Mock external dependencies that aren't available in test environment.
-    
+
     Using autouse=True fixture instead of pytest_configure to avoid module pollution
     during test collection phase.
     """
     # Create mock modules
     mock_audit_log = MagicMock()
-    
+
     mock_compliance = MagicMock()
     mock_compliance.load_compliance_map = lambda config_path=None: {
         "FAKE-1": {"name": "FakeControl", "status": "enforced", "required": True},
@@ -112,14 +112,20 @@ def mock_arbiter_dependencies(monkeypatch):
             "required": True,
         },
     }
-    
+
     mock_llm_client = MagicMock()
-    
+
     # Use monkeypatch.setitem to mock sys.modules temporarily
-    monkeypatch.setitem(sys.modules, "arbiter.policy.guardrails.audit_log", mock_audit_log)
-    monkeypatch.setitem(sys.modules, "arbiter.policy.guardrails.compliance_mapper", mock_compliance)
-    monkeypatch.setitem(sys.modules, "arbiter.policy.plugins.llm_client", mock_llm_client)
-    
+    monkeypatch.setitem(
+        sys.modules, "arbiter.policy.guardrails.audit_log", mock_audit_log
+    )
+    monkeypatch.setitem(
+        sys.modules, "arbiter.policy.guardrails.compliance_mapper", mock_compliance
+    )
+    monkeypatch.setitem(
+        sys.modules, "arbiter.policy.plugins.llm_client", mock_llm_client
+    )
+
     return {
         "audit_log": mock_audit_log,
         "compliance_mapper": mock_compliance,

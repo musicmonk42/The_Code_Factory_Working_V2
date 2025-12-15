@@ -218,7 +218,9 @@ def _get_or_create_metric(
 
     try:
         if buckets is not None and metric_class is Histogram:
-            m = metric_class(name, documentation, labelnames=labelnames, buckets=buckets)
+            m = metric_class(
+                name, documentation, labelnames=labelnames, buckets=buckets
+            )
         else:
             m = metric_class(name, documentation, labelnames=labelnames)
     except ValueError:
@@ -380,9 +382,9 @@ class DummyDBClient:
                 raise DBClientQueryError(f"Failed to save entry: {e}") from e
 
             finally:
-                DB_CLIENT_OPS_LATENCY.labels(
-                    client_type="dummy", operation=op
-                ).observe(time.monotonic() - start_time)
+                DB_CLIENT_OPS_LATENCY.labels(client_type="dummy", operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def get_feedback_entries(
         self, query: Optional[Dict[str, Any]] = None
@@ -444,9 +446,9 @@ class DummyDBClient:
                 raise DBClientQueryError(f"Failed to get entries: {e}") from e
 
             finally:
-                DB_CLIENT_OPS_LATENCY.labels(
-                    client_type="dummy", operation=op
-                ).observe(time.monotonic() - start_time)
+                DB_CLIENT_OPS_LATENCY.labels(client_type="dummy", operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def update_feedback_entry(
         self, query: Dict[str, Any], updates: Dict[str, Any]
@@ -509,9 +511,9 @@ class DummyDBClient:
                 raise DBClientQueryError(f"Failed to update entries: {e}") from e
 
             finally:
-                DB_CLIENT_OPS_LATENCY.labels(
-                    client_type="dummy", operation=op
-                ).observe(time.monotonic() - start_time)
+                DB_CLIENT_OPS_LATENCY.labels(client_type="dummy", operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def delete_feedback_entry(self, query: Dict[str, Any]) -> int:
         """
@@ -574,9 +576,9 @@ class DummyDBClient:
                 raise DBClientQueryError(f"Failed to delete entries: {e}") from e
 
             finally:
-                DB_CLIENT_OPS_LATENCY.labels(
-                    client_type="dummy", operation=op
-                ).observe(time.monotonic() - start_time)
+                DB_CLIENT_OPS_LATENCY.labels(client_type="dummy", operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def health_check(self) -> Dict[str, Any]:
         """
@@ -837,9 +839,7 @@ class SQLiteClient:
                 span.set_attribute("db.entry_id", entry_id)
                 span.set_status(Status(StatusCode.OK))
 
-                logger.debug(
-                    f"SQLiteClient[{self._client_id}]: Saved entry {entry_id}"
-                )
+                logger.debug(f"SQLiteClient[{self._client_id}]: Saved entry {entry_id}")
                 return entry_id
 
             except sqlite3.Error as e:

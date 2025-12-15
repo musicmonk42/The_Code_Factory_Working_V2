@@ -23,7 +23,11 @@ from self_fixing_engineer.arbiter.arbiter_growth.exceptions import (
     ArbiterGrowthError,
     AuditChainTamperedError,
 )
-from self_fixing_engineer.arbiter.arbiter_growth.models import ArbiterState, Base, GrowthEvent
+from self_fixing_engineer.arbiter.arbiter_growth.models import (
+    ArbiterState,
+    Base,
+    GrowthEvent,
+)
 from self_fixing_engineer.arbiter.arbiter_growth.storage_backends import (
     REDIS_BREAKER,
     KafkaStorageBackend,

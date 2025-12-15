@@ -17,6 +17,7 @@ except ImportError:
     # If import fails, create a fallback class
     class ArbiterConfig:
         """Fallback ArbiterConfig when arbiter module is not available."""
+
         def __init__(self):
             self.log_level = "INFO"
             self.LOG_LEVEL = "INFO"
@@ -24,6 +25,7 @@ except ImportError:
             self.DB_PATH = "sqlite:///./omnicore.db"
             self.API_HOST = "0.0.0.0"
             self.API_PORT = 8000
+
 
 try:
     from arbiter.bug_manager import BugManager
@@ -65,6 +67,7 @@ except ImportError:
     async def get_system_metrics_async():
         """Fallback system metrics function."""
         return {"status": "unavailable", "message": "arbiter.utils not available"}
+
 
 # Optional imports that may not be available in all environments
 try:

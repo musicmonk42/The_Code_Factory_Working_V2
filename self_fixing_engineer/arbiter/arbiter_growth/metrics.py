@@ -85,7 +85,7 @@ def get_or_create_metric(
         kwargs["buckets"] = custom_buckets
 
     # Get metric class name safely (handles Mocks during test collection)
-    class_name = getattr(metric_class, '__name__', str(metric_class))
+    class_name = getattr(metric_class, "__name__", str(metric_class))
     logger.debug(f"Creating new metric '{name}' of type {class_name}.")
     return metric_class(name, documentation, **kwargs, registry=registry)
 

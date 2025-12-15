@@ -19,7 +19,9 @@ from self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner impo
     ReasonerConfig,
     SensitiveValue,
 )
-from self_fixing_engineer.arbiter.explainable_reasoner.metrics import get_metrics_content
+from self_fixing_engineer.arbiter.explainable_reasoner.metrics import (
+    get_metrics_content,
+)
 from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors import (
     ReasonerError,
     ReasonerErrorCode,

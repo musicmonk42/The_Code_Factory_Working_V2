@@ -314,7 +314,14 @@ def _get_pii_sensitive_keys():
             _PII_SENSITIVE_KEYS = [k.lower() for k in Config.PII_SENSITIVE_KEYS]
         except (AttributeError, TypeError):
             # Fallback if Config is not properly initialized (e.g., during tests)
-            _PII_SENSITIVE_KEYS = ["email", "password", "name", "ssn", "credit_card", "api_key"]
+            _PII_SENSITIVE_KEYS = [
+                "email",
+                "password",
+                "name",
+                "ssn",
+                "credit_card",
+                "api_key",
+            ]
     return _PII_SENSITIVE_KEYS
 
 
@@ -324,7 +331,9 @@ def _get_pii_sensitive_patterns():
     if _PII_SENSITIVE_PATTERNS is None:
         try:
             _PII_SENSITIVE_PATTERNS = [
-                re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),  # Email
+                re.compile(
+                    r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
+                ),  # Email
                 re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b"),  # Phone number
                 re.compile(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b"),  # Credit card
             ]

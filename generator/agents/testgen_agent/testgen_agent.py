@@ -50,6 +50,7 @@ from opentelemetry.trace import Status, StatusCode  # For OpenTelemetry tracing
 try:
     from presidio_analyzer import AnalyzerEngine
     from presidio_anonymizer import AnonymizerEngine
+
     HAS_PRESIDIO = True
     # Initialize at module level for efficiency
     _presidio_analyzer = AnalyzerEngine()
@@ -170,7 +171,9 @@ def scrub_text(text: str) -> str:
             "API_KEY",
         ]
 
-        results = _presidio_analyzer.analyze(text=text, entities=entities, language="en")
+        results = _presidio_analyzer.analyze(
+            text=text, entities=entities, language="en"
+        )
         scrubbed_content = _presidio_anonymizer.anonymize(
             text=text,
             analyzer_results=results,

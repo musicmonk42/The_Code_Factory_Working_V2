@@ -60,7 +60,11 @@ logger = logging.getLogger(__name__)
 
 # Helper function for idempotent metric creation
 def _get_or_create_metric(
-    metric_class: type, name: str, doc: str, labelnames: list = None, buckets: tuple = None
+    metric_class: type,
+    name: str,
+    doc: str,
+    labelnames: list = None,
+    buckets: tuple = None,
 ):
     """Idempotently create or retrieve a Prometheus metric."""
     if name in REGISTRY._names_to_collectors:

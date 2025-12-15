@@ -137,10 +137,12 @@ def _get_or_create_counter(name, documentation, labelnames):
     except ValueError:
         # Metric already exists, get it from registry
         from prometheus_client import REGISTRY
+
         for collector in REGISTRY._collector_to_names.keys():
-            if hasattr(collector, '_name') and collector._name == name:
+            if hasattr(collector, "_name") and collector._name == name:
                 return collector
         raise
+
 
 def _get_or_create_histogram(name, documentation, labelnames):
     """Get existing histogram or create new one."""
@@ -149,10 +151,12 @@ def _get_or_create_histogram(name, documentation, labelnames):
     except ValueError:
         # Metric already exists, get it from registry
         from prometheus_client import REGISTRY
+
         for collector in REGISTRY._collector_to_names.keys():
-            if hasattr(collector, '_name') and collector._name == name:
+            if hasattr(collector, "_name") and collector._name == name:
                 return collector
         raise
+
 
 LLM_REQUESTS_TOTAL = _get_or_create_counter(
     "llm_requests_total", "Total number of LLM API calls", ["provider", "model"]
@@ -177,6 +181,7 @@ LLM_COST_TOTAL = _get_or_create_counter(
     "llm_cost_total", "Total estimated LLM cost", ["provider", "model"]
 )
 
+
 def _get_or_create_gauge(name, documentation, labelnames):
     """Get existing gauge or create new one."""
     try:
@@ -184,10 +189,12 @@ def _get_or_create_gauge(name, documentation, labelnames):
     except ValueError:
         # Metric already exists, get it from registry
         from prometheus_client import REGISTRY
+
         for collector in REGISTRY._collector_to_names.keys():
-            if hasattr(collector, '_name') and collector._name == name:
+            if hasattr(collector, "_name") and collector._name == name:
                 return collector
         raise
+
 
 LLM_PROVIDER_HEALTH = _get_or_create_gauge(
     "llm_provider_health_status",
@@ -279,7 +286,9 @@ UTIL_LATENCY = _get_or_create_histogram(
     "util_latency_seconds", "Util function latency", ["func", "status"]
 )
 UTIL_ERRORS = _get_or_create_counter("util_errors", "Util errors", ["func", "type"])
-UTIL_SELF_HEAL = _get_or_create_counter("util_self_heal", "Self-healed operations", ["func"])
+UTIL_SELF_HEAL = _get_or_create_counter(
+    "util_self_heal", "Self-healed operations", ["func"]
+)
 PROVENANCE_LOG_ENTRIES = _get_or_create_counter(
     "provenance_log_entries_total", "Total provenance log entries", ["action"]
 )

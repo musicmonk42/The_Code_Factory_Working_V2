@@ -141,13 +141,20 @@ try:
         ["target", "variant"],
     )
     TEMPLATE_LOADS = Counter(
-        "deploy_prompt_template_loads", "Number of template loads", ["target", "variant"]
+        "deploy_prompt_template_loads",
+        "Number of template loads",
+        ["target", "variant"],
     )
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
-    prompt_feedback_score = REGISTRY._names_to_collectors.get("deploy_prompt_feedback_score")
-    prompt_tokens_generated = REGISTRY._names_to_collectors.get("deploy_prompt_tokens_generated")
+
+    prompt_feedback_score = REGISTRY._names_to_collectors.get(
+        "deploy_prompt_feedback_score"
+    )
+    prompt_tokens_generated = REGISTRY._names_to_collectors.get(
+        "deploy_prompt_tokens_generated"
+    )
     FEW_SHOT_USAGE = REGISTRY._names_to_collectors.get("deploy_prompt_few_shot_usage")
     TEMPLATE_LOADS = REGISTRY._names_to_collectors.get("deploy_prompt_template_loads")
 

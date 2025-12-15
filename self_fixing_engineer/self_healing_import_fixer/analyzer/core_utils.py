@@ -158,14 +158,14 @@ class AlertConfig:
 def _get_or_create_metric(metric_class, name, description, labelnames=None, **kwargs):
     """
     Safely get or create a Prometheus metric, handling duplicate registration.
-    
+
     Args:
         metric_class: The metric class (Counter, Gauge, Histogram, Summary)
         name: Metric name
         description: Metric description
         labelnames: List of label names
         **kwargs: Additional metric-specific kwargs
-    
+
     Returns:
         The metric instance (new or existing)
     """
@@ -179,11 +179,15 @@ def _get_or_create_metric(metric_class, name, description, labelnames=None, **kw
         if "Duplicated timeseries" in str(e):
             # Metric already exists, retrieve it from the registry
             for collector in list(REGISTRY._collector_to_names.keys()):
-                if hasattr(collector, '_name') and collector._name == name:
-                    logger.debug(f"Metric '{name}' already registered, reusing existing instance")
+                if hasattr(collector, "_name") and collector._name == name:
+                    logger.debug(
+                        f"Metric '{name}' already registered, reusing existing instance"
+                    )
                     return collector
             # If we can't find it, create a dummy
-            logger.warning(f"Metric '{name}' registered but couldn't retrieve, using dummy")
+            logger.warning(
+                f"Metric '{name}' registered but couldn't retrieve, using dummy"
+            )
             return _create_dummy_metric()
         else:
             raise
@@ -191,10 +195,24 @@ def _get_or_create_metric(metric_class, name, description, labelnames=None, **kw
 
 def _create_dummy_metric():
     """Create a dummy metric that does nothing."""
+
     class DummyMetric:
         DEFAULT_BUCKETS = (
-            0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0,
-            2.5, 5.0, 7.5, 10.0, float("inf"),
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.075,
+            0.1,
+            0.25,
+            0.5,
+            0.75,
+            1.0,
+            2.5,
+            5.0,
+            7.5,
+            10.0,
+            float("inf"),
         )
 
         def labels(self, **kwargs):
@@ -218,37 +236,25 @@ def _create_dummy_metric():
 # Metrics collectors (if Prometheus is available)
 if PROMETHEUS_AVAILABLE:
     alert_counter = _get_or_create_metric(
-        Counter,
-        "analyzer_alerts_total",
-        "Total number of alerts",
-        ["level", "channel"]
+        Counter, "analyzer_alerts_total", "Total number of alerts", ["level", "channel"]
     )
     operation_histogram = _get_or_create_metric(
         Histogram,
         "analyzer_operation_duration_seconds",
         "Operation duration",
-        ["operation"]
+        ["operation"],
     )
     error_counter = _get_or_create_metric(
-        Counter,
-        "analyzer_errors_total",
-        "Total number of errors",
-        ["error_type"]
+        Counter, "analyzer_errors_total", "Total number of errors", ["error_type"]
     )
     active_operations = _get_or_create_metric(
-        Gauge,
-        "analyzer_active_operations",
-        "Number of active operations"
+        Gauge, "analyzer_active_operations", "Number of active operations"
     )
     cache_hits = _get_or_create_metric(
-        Counter,
-        "analyzer_cache_hits_total",
-        "Cache hit count"
+        Counter, "analyzer_cache_hits_total", "Cache hit count"
     )
     cache_misses = _get_or_create_metric(
-        Counter,
-        "analyzer_cache_misses_total",
-        "Cache miss count"
+        Counter, "analyzer_cache_misses_total", "Cache miss count"
     )
 else:
     # Dummy metrics for when Prometheus is not available
@@ -358,7 +364,9 @@ class CircuitBreaker:
 class RateLimiter:
     """Token bucket rate limiter implementation."""
 
-    def __init__(self, max_calls: int = RATE_LIMIT_MAX_CALLS, window: int = RATE_LIMIT_WINDOW):
+    def __init__(
+        self, max_calls: int = RATE_LIMIT_MAX_CALLS, window: int = RATE_LIMIT_WINDOW
+    ):
         self.max_calls = max_calls
         self.window = window
         self.calls = deque()
@@ -562,7 +570,11 @@ async def alert_operator_async(
             # Email sending is typically synchronous, skip for async
             logger.info(f"Email alerts not supported in async mode")
 
-        elif channel == AlertChannel.SNS and _alert_config.sns_topic_arn and AWS_AVAILABLE:
+        elif (
+            channel == AlertChannel.SNS
+            and _alert_config.sns_topic_arn
+            and AWS_AVAILABLE
+        ):
             tasks.append(_send_sns_alert_async(message, level, metadata))
 
         elif channel == AlertChannel.DATADOG and _alert_config.datadog_api_key:
@@ -809,7 +821,10 @@ def scrub_secrets(data: Any) -> Any:
         (r"authorization['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)", "authorization"),
         (r"bearer\s+([a-zA-Z0-9\-._~+/]+=*)", "bearer_token"),
         (r"['\"]?private[_-]?key['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)", "private_key"),
-        (r"aws[_-]?secret[_-]?access[_-]?key['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)", "aws_secret"),
+        (
+            r"aws[_-]?secret[_-]?access[_-]?key['\"]?\s*[:=]\s*['\"]?([^'\">\s]+)",
+            "aws_secret",
+        ),
     ]
 
     if isinstance(data, dict):
