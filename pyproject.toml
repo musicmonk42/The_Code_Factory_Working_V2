@@ -63,6 +63,30 @@ testpaths = [
 ]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+# Filter warnings from various modules
+filterwarnings = [
+    # Pydantic V1 -> V2 Deprecation Warnings (from omnicore_engine)
+    "ignore:.*PydanticDeprecatedSince20.*:DeprecationWarning",
+    "ignore:Pydantic V1 style `@validator` validators are deprecated:DeprecationWarning",
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+    # SQLAlchemy warnings (from omnicore_engine)
+    "ignore:The ``declarative_base\\(\\)`` function is now available as sqlalchemy\\.orm\\.declarative_base\\(\\).:DeprecationWarning",
+    # OpenTelemetry warnings (from self_fixing_engineer)
+    "ignore:Overriding of current TracerProvider is not allowed:UserWarning",
+    "ignore:.*OpenTelemetry.*:UserWarning",
+    "ignore:Transient error StatusCode.UNAVAILABLE:UserWarning",
+    # Prometheus warnings (from self_fixing_engineer)
+    "ignore:.*duplicated timeseries.*:UserWarning",
+    "ignore:prometheus_client version.*:UserWarning",
+    "ignore:Duplicated timeseries in CollectorRegistry.*:UserWarning",
+    # Package warnings (from self_fixing_engineer)
+    "ignore:pkg_resources is deprecated:DeprecationWarning",
+    "ignore:Deprecated call to `pkg_resources.declare_namespace.*:DeprecationWarning",
+    # LangChain warnings (from self_fixing_engineer)
+    "ignore:Field \"model_name\" in .*:UserWarning",
+    # General deprecation warnings
+    "ignore::DeprecationWarning",
+]
 
 [tool.black]
 line-length = 88

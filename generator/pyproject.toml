@@ -1,27 +1,3 @@
-[tool.pytest.ini_options]
-pythonpath = [".", "main", "runner", "intent_parser"]
-asyncio_mode = "auto"
-testpaths = [
-    "main/tests", 
-    "runner/tests", 
-    "intent_parser/tests",
-    "generator/audit_log/tests"
-]
-python_files = ["test_*.py"]
-env = [
-    "AUDIT_LOG_DEV_MODE=true",
-    # Copied from pytest.ini
-    'AUDIT_ENCRYPTION_KEYS=@json [{{"key_id":"mock_key_1","key":"hYnO2bq3m0yqgqz5WJt9j3ZCsb3dC-5H9qv1Hj4XGxw="}}]',
-    "AUDIT_COMPRESSION_ALGO=gzip",
-    "AUDIT_COMPRESSION_LEVEL=9",
-    "AUDIT_BATCH_FLUSH_INTERVAL=10",
-    "AUDIT_BATCH_MAX_SIZE=100",
-    "AUDIT_HEALTH_CHECK_INTERVAL=30",
-    "AUDIT_RETRY_MAX_ATTEMPTS=3",
-    "AUDIT_RETRY_BACKOFF_FACTOR=0.1",
-    "AUDIT_TAMPER_DETECTION_ENABLED=true"
-]
-
 [build-system]
 requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"

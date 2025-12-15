@@ -584,10 +584,24 @@ if 'prometheus_client' not in sys.modules:
             def observe(self, *args, **kwargs):
                 pass
         
+        class _MockGauge:
+            def __init__(self, *args, **kwargs):
+                pass
+            def labels(self, *args, **kwargs):
+                return self
+            def set(self, *args, **kwargs):
+                pass
+            def inc(self, *args, **kwargs):
+                pass
+            def dec(self, *args, **kwargs):
+                pass
+        
         prom_module.CollectorRegistry = _MockCollectorRegistry
         prom_module.Counter = _MockCounter
         prom_module.Histogram = _MockHistogram
+        prom_module.Gauge = _MockGauge
         prom_module.start_http_server = lambda *args, **kwargs: None
+        prom_module.REGISTRY = _MockCollectorRegistry()
         
         # Register modules
         sys.modules['prometheus_client'] = prom_module
