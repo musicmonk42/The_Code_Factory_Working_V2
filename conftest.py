@@ -122,6 +122,7 @@ _OPTIONAL_DEPENDENCIES = [
     'openai',  # Required by LLM providers
     'neo4j',  # Required by knowledge_graph
     'chromadb',  # Required by knowledge_graph
+    'chromadb.utils',  # Required by testgen_agent
     'httpx',  # Required by explainable_reasoner
     'freezegun',  # Required by test files
     'torch',  # PyTorch - causes DLL errors on Windows
@@ -354,6 +355,8 @@ if 'opentelemetry' not in sys.modules:
         sdk_trace_sampling_module.__file__ = '<mocked opentelemetry.sdk.trace.sampling>'
         sdk_trace_sampling_module.ParentBased = lambda *args, **kwargs: None
         sdk_trace_sampling_module.TraceIdRatioBased = lambda *args, **kwargs: None
+        sdk_trace_sampling_module.ALWAYS_ON = lambda *args, **kwargs: None
+        sdk_trace_sampling_module.ALWAYS_OFF = lambda *args, **kwargs: None
         sdk_trace_module.sampling = sdk_trace_sampling_module
         
         # exporter modules
