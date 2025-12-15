@@ -74,11 +74,13 @@ def _create_mock_module(name):
         # dynaconf needs Dynaconf class and Validator
         class MockDynaconf:
             def __init__(self, *args, **kwargs):
-                pass
+                self._data = {}
             def get(self, key, default=None):
-                return default
+                return self._data.get(key, default)
+            def set(self, key, value):
+                self._data[key] = value
             def __getattr__(self, name):
-                return None
+                return self._data.get(name)
         class MockValidator:
             def __init__(self, *args, **kwargs):
                 pass
@@ -101,6 +103,7 @@ def _create_mock_module(name):
 _OPTIONAL_DEPENDENCIES = [
     'tiktoken',  # Often missing, used by LLM clients
     'aiofiles',  # Required by generator.main.api
+    'aiofiles.os',  # Required by test_generation modules
     'backoff',  # Required by generator.main.api
     'fastapi',  # Required by generator.main.api
     'fastapi.security',  # Required by generator.main.api
@@ -129,8 +132,25 @@ _OPTIONAL_DEPENDENCIES = [
     'presidio_anonymizer',  # Uses spacy, causes DLL errors
     'networkx',  # Graph library
     'defusedxml',  # XML parsing
+    'defusedxml.ElementTree',  # XML parsing - required by test_generation
     'beautifulsoup4',  # HTML parsing
     'bs4',  # BeautifulSoup alias
+    'portalocker',  # File locking - required by bug_manager
+    'structlog',  # Structured logging - required by explainable_reasoner
+    'circuitbreaker',  # Circuit breaker pattern - required by arbiter modules
+    'gnosis',  # Gnosis safe - required by audit_ledger_client
+    'sentry_sdk',  # Sentry error tracking
+    'asyncpg',  # Async PostgreSQL - required by postgres_client
+    'web3',  # Web3.py - Ethereum library
+    'feast',  # Feature store
+    'ray',  # Distributed computing
+    'scipy',  # Scientific computing
+    'great_expectations',  # Data validation
+    'merklelib',  # Merkle tree library
+    'gymnasium',  # Reinforcement learning environments
+    'deap',  # Evolutionary algorithms
+    'langchain_openai',  # LangChain OpenAI integration
+    'cerberus',  # Schema validation - required by policy module
     # Note: prometheus_client, aiohttp, pydantic, tenacity, and aiosqlite should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
@@ -566,7 +586,14 @@ if 'prometheus_client' not in sys.modules:
         # Add common classes/functions to main module
         class _MockCollectorRegistry:
             def __init__(self, *args, **kwargs):
+                self._names_to_collectors = {}
+                self._collector_to_names = {}
+            def register(self, collector):
                 pass
+            def unregister(self, collector):
+                pass
+            def get_sample_value(self, *args, **kwargs):
+                return None
         
         class _MockCounter:
             def __init__(self, *args, **kwargs):
@@ -577,6 +604,7 @@ if 'prometheus_client' not in sys.modules:
                 pass
         
         class _MockHistogram:
+            DEFAULT_BUCKETS = (.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, float("inf"))
             def __init__(self, *args, **kwargs):
                 pass
             def labels(self, *args, **kwargs):
@@ -600,13 +628,41 @@ if 'prometheus_client' not in sys.modules:
         prom_module.Counter = _MockCounter
         prom_module.Histogram = _MockHistogram
         prom_module.Gauge = _MockGauge
+        prom_module.Summary = _MockHistogram  # Summary is similar to Histogram
+        prom_module.ProcessCollector = lambda *args, **kwargs: None
+        prom_module.PLATFORM_COLLECTOR = lambda *args, **kwargs: None
+        prom_module.generate_latest = lambda *args, **kwargs: b''
         prom_module.start_http_server = lambda *args, **kwargs: None
         prom_module.REGISTRY = _MockCollectorRegistry()
+        
+        # Create multiprocess submodule
+        prom_multiprocess = types.ModuleType('prometheus_client.multiprocess')
+        prom_multiprocess.__file__ = '<mocked prometheus_client.multiprocess>'
+        prom_multiprocess.__path__ = []
+        prom_multiprocess.__spec__ = importlib.util.spec_from_loader('prometheus_client.multiprocess', loader=None)
+        prom_multiprocess.MultiProcessCollector = lambda *args, **kwargs: None
+        prom_module.multiprocess = prom_multiprocess
+        
+        # Create metrics submodule
+        prom_metrics = types.ModuleType('prometheus_client.metrics')
+        prom_metrics.__file__ = '<mocked prometheus_client.metrics>'
+        prom_metrics.__path__ = []  # Make it a package
+        prom_metrics.__spec__ = importlib.util.spec_from_loader('prometheus_client.metrics', loader=None)
+        
+        # Create a base class for metric wrappers
+        class MetricWrapperBase:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        prom_metrics.MetricWrapperBase = MetricWrapperBase
+        prom_module.metrics = prom_metrics
         
         # Register modules
         sys.modules['prometheus_client'] = prom_module
         sys.modules['prometheus_client.core'] = prom_core
         sys.modules['prometheus_client.registry'] = prom_registry
+        sys.modules['prometheus_client.metrics'] = prom_metrics
+        sys.modules['prometheus_client.multiprocess'] = prom_multiprocess
 
 
 # ---- ChromaDB singleton cleanup ----
