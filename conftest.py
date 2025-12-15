@@ -74,11 +74,13 @@ def _create_mock_module(name):
         # dynaconf needs Dynaconf class and Validator
         class MockDynaconf:
             def __init__(self, *args, **kwargs):
-                pass
+                self._data = {}
             def get(self, key, default=None):
-                return default
+                return self._data.get(key, default)
+            def set(self, key, value):
+                self._data[key] = value
             def __getattr__(self, name):
-                return None
+                return self._data.get(name)
         class MockValidator:
             def __init__(self, *args, **kwargs):
                 pass
@@ -101,6 +103,7 @@ def _create_mock_module(name):
 _OPTIONAL_DEPENDENCIES = [
     'tiktoken',  # Often missing, used by LLM clients
     'aiofiles',  # Required by generator.main.api
+    'aiofiles.os',  # Required by test_generation modules
     'backoff',  # Required by generator.main.api
     'fastapi',  # Required by generator.main.api
     'fastapi.security',  # Required by generator.main.api
@@ -119,6 +122,7 @@ _OPTIONAL_DEPENDENCIES = [
     'openai',  # Required by LLM providers
     'neo4j',  # Required by knowledge_graph
     'chromadb',  # Required by knowledge_graph
+    'chromadb.utils',  # Required by testgen_agent
     'httpx',  # Required by explainable_reasoner
     'freezegun',  # Required by test files
     'torch',  # PyTorch - causes DLL errors on Windows
@@ -129,8 +133,25 @@ _OPTIONAL_DEPENDENCIES = [
     'presidio_anonymizer',  # Uses spacy, causes DLL errors
     'networkx',  # Graph library
     'defusedxml',  # XML parsing
+    'defusedxml.ElementTree',  # XML parsing - required by test_generation
     'beautifulsoup4',  # HTML parsing
     'bs4',  # BeautifulSoup alias
+    'portalocker',  # File locking - required by bug_manager
+    'structlog',  # Structured logging - required by explainable_reasoner
+    'circuitbreaker',  # Circuit breaker pattern - required by arbiter modules
+    'gnosis',  # Gnosis safe - required by audit_ledger_client
+    'sentry_sdk',  # Sentry error tracking
+    'asyncpg',  # Async PostgreSQL - required by postgres_client
+    'web3',  # Web3.py - Ethereum library
+    'feast',  # Feature store
+    'ray',  # Distributed computing
+    'scipy',  # Scientific computing
+    'great_expectations',  # Data validation
+    'merklelib',  # Merkle tree library
+    'gymnasium',  # Reinforcement learning environments
+    'deap',  # Evolutionary algorithms
+    'langchain_openai',  # LangChain OpenAI integration
+    'cerberus',  # Schema validation - required by policy module
     # Note: prometheus_client, aiohttp, pydantic, tenacity, and aiosqlite should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
@@ -176,6 +197,8 @@ if 'opentelemetry' not in sys.modules:
             def add_event(self, *args, **kwargs):
                 pass
             def set_status(self, *args, **kwargs):
+                pass
+            def record_exception(self, *args, **kwargs):
                 pass
         
         # Create trace module with all required methods
@@ -277,6 +300,7 @@ if 'opentelemetry' not in sys.modules:
         sdk_trace_module = types.ModuleType('opentelemetry.sdk.trace')
         sdk_trace_module.__file__ = '<mocked opentelemetry.sdk.trace>'
         sdk_trace_module.__path__ = []  # Parent module for submodules
+        sdk_trace_module.TracerProvider = lambda *args, **kwargs: None
         sdk_module.trace = sdk_trace_module
         
         sdk_trace_export_module = types.ModuleType('opentelemetry.sdk.trace.export')
@@ -303,8 +327,23 @@ if 'opentelemetry' not in sys.modules:
         # trace.status module
         trace_status_module = types.ModuleType('opentelemetry.trace.status')
         trace_status_module.__file__ = '<mocked opentelemetry.trace.status>'
-        trace_status_module.Status = lambda *args, **kwargs: None
-        trace_status_module.StatusCode = lambda *args, **kwargs: None
+        
+        # Create Status and StatusCode classes that can be used in the codebase
+        class _MockStatus:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        class _MockStatusCode:
+            ERROR = "ERROR"
+            OK = "OK"
+            UNSET = "UNSET"
+        
+        trace_status_module.Status = _MockStatus
+        trace_status_module.StatusCode = _MockStatusCode
+        
+        # Also add Status and StatusCode directly to trace module for imports like: from opentelemetry.trace import Status
+        trace_module.Status = _MockStatus
+        trace_module.StatusCode = _MockStatusCode
         trace_module.status = trace_status_module
         
         # trace.propagation module
@@ -334,6 +373,8 @@ if 'opentelemetry' not in sys.modules:
         sdk_trace_sampling_module.__file__ = '<mocked opentelemetry.sdk.trace.sampling>'
         sdk_trace_sampling_module.ParentBased = lambda *args, **kwargs: None
         sdk_trace_sampling_module.TraceIdRatioBased = lambda *args, **kwargs: None
+        sdk_trace_sampling_module.ALWAYS_ON = lambda *args, **kwargs: None
+        sdk_trace_sampling_module.ALWAYS_OFF = lambda *args, **kwargs: None
         sdk_trace_module.sampling = sdk_trace_sampling_module
         
         # exporter modules
@@ -394,6 +435,16 @@ if 'opentelemetry' not in sys.modules:
         semconv_trace_module.SpanAttributes = lambda *args, **kwargs: None
         semconv_module.trace = semconv_trace_module
         
+        # metrics module
+        metrics_module = types.ModuleType('opentelemetry.metrics')
+        metrics_module.__file__ = '<mocked opentelemetry.metrics>'
+        metrics_module.__path__ = []
+        metrics_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.metrics', loader=None)
+        metrics_module.get_meter_provider = lambda: None
+        metrics_module.get_meter = lambda *args, **kwargs: None
+        metrics_module.set_meter_provider = lambda *args, **kwargs: None
+        otel_module.metrics = metrics_module
+        
         # Register all modules in sys.modules
         sys.modules['opentelemetry'] = otel_module
         sys.modules['opentelemetry.trace'] = trace_module
@@ -401,6 +452,7 @@ if 'opentelemetry' not in sys.modules:
         sys.modules['opentelemetry.trace.propagation'] = trace_propagation_module
         sys.modules['opentelemetry.trace.propagation.tracecontext'] = trace_propagation_tracecontext
         sys.modules['opentelemetry.propagate'] = propagate_module
+        sys.modules['opentelemetry.metrics'] = metrics_module
         sys.modules['opentelemetry.instrumentation'] = instrumentation_module
         sys.modules['opentelemetry.instrumentation.fastapi'] = instrumentation_fastapi
         sys.modules['opentelemetry.instrumentation.grpc'] = instrumentation_grpc
@@ -566,7 +618,14 @@ if 'prometheus_client' not in sys.modules:
         # Add common classes/functions to main module
         class _MockCollectorRegistry:
             def __init__(self, *args, **kwargs):
+                self._names_to_collectors = {}
+                self._collector_to_names = {}
+            def register(self, collector):
                 pass
+            def unregister(self, collector):
+                pass
+            def get_sample_value(self, *args, **kwargs):
+                return None
         
         class _MockCounter:
             def __init__(self, *args, **kwargs):
@@ -577,22 +636,83 @@ if 'prometheus_client' not in sys.modules:
                 pass
         
         class _MockHistogram:
+            DEFAULT_BUCKETS = (.005, .01, .025, .05, .075, .1, .25, .5, .75, 1.0, 2.5, 5.0, 7.5, 10.0, float("inf"))
             def __init__(self, *args, **kwargs):
                 pass
             def labels(self, *args, **kwargs):
                 return self
             def observe(self, *args, **kwargs):
                 pass
+            def time(self, *args, **kwargs):
+                # Return a decorator/context manager that works for both @decorator and with statement
+                from contextlib import nullcontext
+                def decorator(func):
+                    return func
+                # Make the decorator also work as a context manager
+                decorator.__enter__ = lambda: None
+                decorator.__exit__ = lambda *args: None
+                return decorator
+        
+        class _MockGauge:
+            def __init__(self, *args, **kwargs):
+                pass
+            def labels(self, *args, **kwargs):
+                return self
+            def set(self, *args, **kwargs):
+                pass
+            def inc(self, *args, **kwargs):
+                pass
+            def dec(self, *args, **kwargs):
+                pass
+        
+        class _MockInfo:
+            def __init__(self, *args, **kwargs):
+                pass
+            def labels(self, *args, **kwargs):
+                return self
+            def info(self, *args, **kwargs):
+                pass
         
         prom_module.CollectorRegistry = _MockCollectorRegistry
         prom_module.Counter = _MockCounter
         prom_module.Histogram = _MockHistogram
+        prom_module.Gauge = _MockGauge
+        prom_module.Info = _MockInfo
+        prom_module.Summary = _MockHistogram  # Summary is similar to Histogram
+        prom_module.ProcessCollector = lambda *args, **kwargs: None
+        prom_module.PLATFORM_COLLECTOR = lambda *args, **kwargs: None
+        prom_module.generate_latest = lambda *args, **kwargs: b''
         prom_module.start_http_server = lambda *args, **kwargs: None
+        prom_module.REGISTRY = _MockCollectorRegistry()
+        
+        # Create multiprocess submodule
+        prom_multiprocess = types.ModuleType('prometheus_client.multiprocess')
+        prom_multiprocess.__file__ = '<mocked prometheus_client.multiprocess>'
+        prom_multiprocess.__path__ = []
+        prom_multiprocess.__spec__ = importlib.util.spec_from_loader('prometheus_client.multiprocess', loader=None)
+        prom_multiprocess.MultiProcessCollector = lambda *args, **kwargs: None
+        prom_module.multiprocess = prom_multiprocess
+        
+        # Create metrics submodule
+        prom_metrics = types.ModuleType('prometheus_client.metrics')
+        prom_metrics.__file__ = '<mocked prometheus_client.metrics>'
+        prom_metrics.__path__ = []  # Make it a package
+        prom_metrics.__spec__ = importlib.util.spec_from_loader('prometheus_client.metrics', loader=None)
+        
+        # Create a base class for metric wrappers
+        class MetricWrapperBase:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        prom_metrics.MetricWrapperBase = MetricWrapperBase
+        prom_module.metrics = prom_metrics
         
         # Register modules
         sys.modules['prometheus_client'] = prom_module
         sys.modules['prometheus_client.core'] = prom_core
         sys.modules['prometheus_client.registry'] = prom_registry
+        sys.modules['prometheus_client.metrics'] = prom_metrics
+        sys.modules['prometheus_client.multiprocess'] = prom_multiprocess
 
 
 # ---- ChromaDB singleton cleanup ----

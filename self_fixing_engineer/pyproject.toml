@@ -183,11 +183,3 @@ extend-ignore = [
 python_version = "3.9"
 strict = true
 ignore_missing_imports = true
-
-[tool.pytest.ini_options]
-minversion = "8.0"
-# This now points to the correct test directory
-addopts = "-ra -q --cov=arbiter --cov-report=html"
-testpaths = [
-    "arbiter/bug_manager/tests"
-]
