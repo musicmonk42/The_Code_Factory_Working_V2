@@ -179,10 +179,11 @@ for dep in _OPTIONAL_DEPENDENCIES:
 # ---- OpenTelemetry stub setup ----
 # OpenTelemetry requires special handling because it has specific methods that must exist
 # and be callable, not just module stubs
-if 'opentelemetry' not in sys.modules:
+# Check for opentelemetry.trace specifically, not just opentelemetry (which may be a namespace package)
+if 'opentelemetry.trace' not in sys.modules:
     try:
-        __import__('opentelemetry')
-    except ImportError:
+        from opentelemetry import trace as _test_trace
+    except (ImportError, AttributeError):
         # Create a complete OpenTelemetry stub with all required attributes
         import types
         
