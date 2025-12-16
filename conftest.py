@@ -160,8 +160,9 @@ for dep in _OPTIONAL_DEPENDENCIES:
     if dep not in sys.modules:
         try:
             __import__(dep)
-        except ImportError:
+        except (ImportError, OSError):
             # Create a more sophisticated mock that handles submodule access
+            # OSError is caught to handle DLL initialization failures on Windows (e.g., torch)
             mock_module = _create_mock_module(dep)
             sys.modules[dep] = mock_module
             
