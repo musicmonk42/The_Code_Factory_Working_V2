@@ -160,9 +160,10 @@ for dep in _OPTIONAL_DEPENDENCIES:
     if dep not in sys.modules:
         try:
             __import__(dep)
-        except (ImportError, OSError):
+        except (ImportError, OSError, AttributeError):
             # Create a more sophisticated mock that handles submodule access
             # OSError is caught to handle DLL initialization failures on Windows (e.g., torch)
+            # AttributeError is caught to handle bugs in packages like gnosis-py that use removed Python 2 functions (e.g., string.join() which was removed in Python 3.0)
             mock_module = _create_mock_module(dep)
             sys.modules[dep] = mock_module
             
