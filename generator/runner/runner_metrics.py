@@ -134,7 +134,10 @@ def _get_or_create_counter(name, documentation, labelnames):
     """Get existing counter or create new one, avoiding duplication errors."""
     from prometheus_client import REGISTRY
     
-    # Prometheus strips _total suffix from counter names internally
+    # Prometheus automatically strips _total suffix from counter names internally.
+    # When you create Counter('llm_requests_total', ...), Prometheus stores it as 'llm_requests'
+    # but registers 3 names: 'llm_requests', 'llm_requests_total', 'llm_requests_created'.
+    # We need to search using the internal name to avoid duplication errors during test collection.
     internal_name = name.replace('_total', '') if name.endswith('_total') else name
     
     # First, check if metric already exists in registry
