@@ -124,6 +124,7 @@ def _create_mock_module(name):
         
         mock_module.SecretStr = MockSecretStr
         mock_module.BaseModel = MockBaseModel
+        mock_module.VERSION = "2.0.0"  # VERSION string (not __version__)
         # pydantic also needs __version__ as a string
         mock_module.__version__ = "2.0.0"
     
