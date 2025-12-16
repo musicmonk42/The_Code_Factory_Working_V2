@@ -96,6 +96,37 @@ def _create_mock_module(name):
     elif name == 'sentence_transformers':
         # sentence_transformers also needs __version__ as a string
         mock_module.__version__ = "2.2.0"
+    elif name == 'pydantic':
+        # pydantic needs proper class definitions for inheritance
+        class MockSecretStr:
+            """Mock SecretStr that can be used as a base class."""
+            def __init__(self, value: str):
+                self._value = str(value)
+            def get_secret_value(self) -> str:
+                return self._value
+            def __repr__(self) -> str:
+                return "SecretStr('**********')"
+            def __str__(self) -> str:
+                return "**********"
+        
+        class MockBaseModel:
+            """Mock BaseModel that can be used as a base class."""
+            def __init__(self, **data):
+                for key, value in data.items():
+                    setattr(self, key, value)
+            
+            def model_dump(self, **kwargs):
+                return self.__dict__
+            
+            def model_dump_json(self, **kwargs):
+                import json
+                return json.dumps(self.__dict__)
+        
+        mock_module.SecretStr = MockSecretStr
+        mock_module.BaseModel = MockBaseModel
+        mock_module.VERSION = "2.0.0"  # VERSION string (not __version__)
+        # pydantic also needs __version__ as a string
+        mock_module.__version__ = "2.0.0"
     
     return mock_module
 
@@ -152,7 +183,8 @@ _OPTIONAL_DEPENDENCIES = [
     'deap',  # Evolutionary algorithms
     'langchain_openai',  # LangChain OpenAI integration
     'cerberus',  # Schema validation - required by policy module
-    # Note: prometheus_client, aiohttp, pydantic, tenacity, and aiosqlite should be installed
+    'pydantic',  # Data validation - required by bug_manager and other modules
+    # Note: prometheus_client, aiohttp, and aiosqlite should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
 
@@ -179,10 +211,11 @@ for dep in _OPTIONAL_DEPENDENCIES:
 # ---- OpenTelemetry stub setup ----
 # OpenTelemetry requires special handling because it has specific methods that must exist
 # and be callable, not just module stubs
-if 'opentelemetry' not in sys.modules:
+# Check for opentelemetry.trace specifically, not just opentelemetry (which may be a namespace package)
+if 'opentelemetry.trace' not in sys.modules:
     try:
-        __import__('opentelemetry')
-    except ImportError:
+        from opentelemetry import trace as _test_trace
+    except (ImportError, AttributeError):
         # Create a complete OpenTelemetry stub with all required attributes
         import types
         
@@ -208,7 +241,15 @@ if 'opentelemetry' not in sys.modules:
         trace_module.__file__ = '<mocked opentelemetry.trace>'
         trace_module.get_tracer = lambda *args, **kwargs: _NoOpTracer()
         trace_module.get_current_span = lambda: _NoOpSpan()
-        trace_module.get_tracer_provider = lambda: None
+        
+        # Create a mock tracer provider with add_span_processor method
+        class _MockTracerProvider:
+            def add_span_processor(self, *args, **kwargs):
+                pass
+        
+        _tracer_provider = _MockTracerProvider()
+        trace_module.get_tracer_provider = lambda: _tracer_provider
+        trace_module.set_tracer_provider = lambda *args, **kwargs: None
         
         # Create main opentelemetry module
         import importlib.util
@@ -321,7 +362,16 @@ if 'opentelemetry' not in sys.modules:
         
         sdk_resources_module = types.ModuleType('opentelemetry.sdk.resources')
         sdk_resources_module.__file__ = '<mocked opentelemetry.sdk.resources>'
-        sdk_resources_module.Resource = lambda **kwargs: None
+        
+        # Create Resource class with create() classmethod
+        class _MockResource:
+            def __init__(self, *args, **kwargs):
+                pass
+            @classmethod
+            def create(cls, attributes=None):
+                return cls()
+        
+        sdk_resources_module.Resource = _MockResource
         sdk_module.resources = sdk_resources_module
         
         # Create additional OpenTelemetry modules used in the codebase

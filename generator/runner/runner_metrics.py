@@ -131,27 +131,51 @@ def start_prometheus_server_once(port: int = METRICS_PORT):
 # FIX: Changed LLM_CALLS_TOTAL to LLM_REQUESTS_TOTAL as per requirement
 # FIX: Wrap metrics creation to avoid duplication errors in test collection
 def _get_or_create_counter(name, documentation, labelnames):
-    """Get existing counter or create new one."""
+    """Get existing counter or create new one, avoiding duplication errors."""
+    from prometheus_client import REGISTRY
+    
+    # Prometheus automatically strips _total suffix from counter names internally.
+    # When you create Counter('llm_requests_total', ...), Prometheus stores it as 'llm_requests'
+    # but registers 3 names: 'llm_requests', 'llm_requests_total', 'llm_requests_created'.
+    # We need to search using the internal name to avoid duplication errors during test collection.
+    internal_name = name.replace('_total', '') if name.endswith('_total') else name
+    
+    # First, check if metric already exists in registry
+    for collector in list(REGISTRY._collector_to_names.keys()):
+        if hasattr(collector, '_name') and collector._name == internal_name:
+            return collector
+    
+    # If not found, try to create new one
     try:
         return prom.Counter(name, documentation, labelnames)
-    except ValueError:
-        # Metric already exists, get it from registry
-        from prometheus_client import REGISTRY
-        for collector in REGISTRY._collector_to_names.keys():
-            if hasattr(collector, '_name') and collector._name == name:
+    except ValueError as e:
+        # Duplication error - try to find and return existing
+        for collector in list(REGISTRY._collector_to_names.keys()):
+            if hasattr(collector, '_name') and collector._name == internal_name:
                 return collector
+        # If we still can't find it, log and re-raise
+        logging.getLogger(__name__).warning(f"Failed to get or create counter {name}: {e}")
         raise
 
 def _get_or_create_histogram(name, documentation, labelnames):
-    """Get existing histogram or create new one."""
+    """Get existing histogram or create new one, avoiding duplication errors."""
+    from prometheus_client import REGISTRY
+    
+    # First, check if metric already exists in registry
+    for collector in list(REGISTRY._collector_to_names.keys()):
+        if hasattr(collector, '_name') and collector._name == name:
+            return collector
+    
+    # If not found, try to create new one
     try:
         return prom.Histogram(name, documentation, labelnames)
-    except ValueError:
-        # Metric already exists, get it from registry
-        from prometheus_client import REGISTRY
-        for collector in REGISTRY._collector_to_names.keys():
+    except ValueError as e:
+        # Duplication error - try to find and return existing
+        for collector in list(REGISTRY._collector_to_names.keys()):
             if hasattr(collector, '_name') and collector._name == name:
                 return collector
+        # If we still can't find it, log and re-raise
+        logging.getLogger(__name__).warning(f"Failed to get or create histogram {name}: {e}")
         raise
 
 LLM_REQUESTS_TOTAL = _get_or_create_counter(

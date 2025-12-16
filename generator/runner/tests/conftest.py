@@ -42,6 +42,52 @@ if str(project_root) not in sys.path:
 
 import asyncio
 
+# === 3.5. Setup OpenTelemetry mocks BEFORE importing runner modules ===
+# This prevents ImportError when runner modules try to import opentelemetry.trace
+if 'opentelemetry' not in sys.modules:
+    try:
+        __import__('opentelemetry')
+    except ImportError:
+        # Create minimal OpenTelemetry stubs required by runner modules
+        import types
+        import importlib.util
+        
+        # Create no-op tracer and span classes
+        class _NoOpTracer:
+            def start_as_current_span(self, name, **kwargs):
+                from contextlib import nullcontext
+                return nullcontext()
+        
+        class _NoOpSpan:
+            def set_attribute(self, *args, **kwargs):
+                pass
+            def add_event(self, *args, **kwargs):
+                pass
+            def set_status(self, *args, **kwargs):
+                pass
+            def record_exception(self, *args, **kwargs):
+                pass
+        
+        # Create trace module
+        trace_module = types.ModuleType('opentelemetry.trace')
+        trace_module.__file__ = '<mocked opentelemetry.trace>'
+        trace_module.__path__ = []
+        trace_module.__spec__ = importlib.util.spec_from_loader('opentelemetry.trace', loader=None)
+        trace_module.get_tracer = lambda *args, **kwargs: _NoOpTracer()
+        trace_module.get_current_span = lambda: _NoOpSpan()
+        trace_module.get_tracer_provider = lambda: None
+        
+        # Create main opentelemetry module
+        otel_module = types.ModuleType('opentelemetry')
+        otel_module.__file__ = '<mocked opentelemetry>'
+        otel_module.__path__ = []
+        otel_module.__spec__ = importlib.util.spec_from_loader('opentelemetry', loader=None)
+        otel_module.trace = trace_module
+        
+        # Register modules
+        sys.modules['opentelemetry'] = otel_module
+        sys.modules['opentelemetry.trace'] = trace_module
+
 # === 4. Pytest config & Fixtures ===
 import pytest
 from runner import (
