@@ -103,6 +103,32 @@ try:
 except ImportError:
     UnifiedSimulationModule = None
 
+# Generator component imports (optional, graceful degradation)
+try:
+    from generator.runner.runner_core import Runner as GeneratorRunner
+except ImportError:
+    GeneratorRunner = None
+
+try:
+    from generator.runner.llm_client import call_llm_api, call_ensemble_api
+except ImportError:
+    call_llm_api = None
+    call_ensemble_api = None
+
+try:
+    from generator.agents import get_available_agents, is_agent_available
+except ImportError:
+    def get_available_agents():
+        return {}
+    
+    def is_agent_available(agent_name: str) -> bool:
+        return False
+
+try:
+    from generator.intent_parser.intent_parser import IntentParser
+except ImportError:
+    IntentParser = None
+
 # --- Engine Registry for discoverable components ---
 ENGINE_REGISTRY = {}
 
@@ -182,6 +208,28 @@ class PluginService:
             )
         )
 
+        # Subscribe to generator channels
+        asyncio.create_task(
+            self.message_bus.subscribe(
+                "generator:codegen_request", self.handle_codegen_request
+            )
+        )
+        asyncio.create_task(
+            self.message_bus.subscribe(
+                "generator:testgen_request", self.handle_testgen_request
+            )
+        )
+        asyncio.create_task(
+            self.message_bus.subscribe(
+                "generator:docgen_request", self.handle_docgen_request
+            )
+        )
+        asyncio.create_task(
+            self.message_bus.subscribe(
+                "workflow:sfe_to_generator", self.handle_sfe_to_generator
+            )
+        )
+
         self.logger = logging.getLogger("PluginService")
 
     async def handle_arbiter_bug(self, message):
@@ -218,6 +266,135 @@ class PluginService:
             await self.message_bus.publish(
                 "shif:fix_import_failure", {"error": str(e), "path": path_to_fix}
             )
+
+    async def handle_codegen_request(self, message):
+        """Route code generation requests to generator."""
+        self.logger.info(f"Received CodeGen request: {message.payload}")
+        
+        codegen_engine = get_engine("generator")
+        if not codegen_engine:
+            self.logger.error("Generator engine not registered")
+            await self.message_bus.publish(
+                "generator:codegen_failure",
+                {"error": "Generator engine not available", "request": message.payload},
+            )
+            return
+        
+        try:
+            # Extract request parameters
+            code_spec = message.payload.get("spec", "")
+            language = message.payload.get("language", "python")
+            
+            # Check if codegen agent is available
+            if not is_agent_available("codegen"):
+                raise RuntimeError("CodeGen agent not available")
+            
+            self.logger.info(f"Processing code generation for language: {language}")
+            await self.message_bus.publish(
+                "generator:codegen_success",
+                {"status": "accepted", "request_id": message.payload.get("request_id")},
+            )
+        except Exception as e:
+            self.logger.error(f"CodeGen request failed: {e}")
+            await self.message_bus.publish(
+                "generator:codegen_failure",
+                {"error": str(e), "request": message.payload},
+            )
+
+    async def handle_testgen_request(self, message):
+        """Route test generation requests to generator."""
+        self.logger.info(f"Received TestGen request: {message.payload}")
+        
+        codegen_engine = get_engine("generator")
+        if not codegen_engine:
+            self.logger.error("Generator engine not registered")
+            await self.message_bus.publish(
+                "generator:testgen_failure",
+                {"error": "Generator engine not available", "request": message.payload},
+            )
+            return
+        
+        try:
+            # Check if testgen agent is available
+            if not is_agent_available("testgen"):
+                raise RuntimeError("TestGen agent not available")
+            
+            target_code = message.payload.get("target_code", "")
+            self.logger.info(f"Processing test generation")
+            await self.message_bus.publish(
+                "generator:testgen_success",
+                {"status": "accepted", "request_id": message.payload.get("request_id")},
+            )
+        except Exception as e:
+            self.logger.error(f"TestGen request failed: {e}")
+            await self.message_bus.publish(
+                "generator:testgen_failure",
+                {"error": str(e), "request": message.payload},
+            )
+
+    async def handle_docgen_request(self, message):
+        """Route documentation generation requests to generator."""
+        self.logger.info(f"Received DocGen request: {message.payload}")
+        
+        codegen_engine = get_engine("generator")
+        if not codegen_engine:
+            self.logger.error("Generator engine not registered")
+            await self.message_bus.publish(
+                "generator:docgen_failure",
+                {"error": "Generator engine not available", "request": message.payload},
+            )
+            return
+        
+        try:
+            # Check if docgen agent is available
+            if not is_agent_available("docgen"):
+                raise RuntimeError("DocGen agent not available")
+            
+            code_path = message.payload.get("code_path", "")
+            self.logger.info(f"Processing documentation generation for: {code_path}")
+            await self.message_bus.publish(
+                "generator:docgen_success",
+                {"status": "accepted", "request_id": message.payload.get("request_id")},
+            )
+        except Exception as e:
+            self.logger.error(f"DocGen request failed: {e}")
+            await self.message_bus.publish(
+                "generator:docgen_failure",
+                {"error": str(e), "request": message.payload},
+            )
+
+    async def handle_sfe_to_generator(self, message):
+        """Handle workflow transitions from SFE to generator."""
+        self.logger.info(f"Received SFE to Generator workflow message: {message.payload}")
+        
+        try:
+            workflow_type = message.payload.get("workflow_type", "unknown")
+            
+            if workflow_type == "fix_and_regenerate":
+                # SFE fixed code, now regenerate tests
+                self.logger.info("Triggering test regeneration after SFE fix")
+                await self.message_bus.publish(
+                    "generator:testgen_request",
+                    {
+                        "target_code": message.payload.get("fixed_code"),
+                        "request_id": message.payload.get("request_id"),
+                        "source": "sfe_workflow",
+                    },
+                )
+            elif workflow_type == "generate_and_fix":
+                # Generator created code, send to SFE for validation/fixing
+                self.logger.info("Routing generated code to SFE for validation")
+                await self.message_bus.publish(
+                    "shif:fix_import_request",
+                    {
+                        "code": message.payload.get("generated_code"),
+                        "request_id": message.payload.get("request_id"),
+                    },
+                )
+            else:
+                self.logger.warning(f"Unknown workflow type: {workflow_type}")
+        except Exception as e:
+            self.logger.error(f"SFE to Generator workflow failed: {e}")
 
     async def get_companies(self):
         fetcher = self.plugin_registry.get("company_list")
@@ -268,6 +445,10 @@ class OmniCoreOmega:
         audit_log_manager: Any,
         import_fixer_engine: ImportFixerEngine,
         num_arbiters: int = 5,
+        # Generator components (optional)
+        generator_runner: Optional["GeneratorRunner"] = None,
+        intent_parser: Optional["IntentParser"] = None,
+        llm_client: Optional[Any] = None,
     ):
         self.db = database
         self.message_bus = message_bus
@@ -281,6 +462,41 @@ class OmniCoreOmega:
         self._is_initialized = False
         self.arbiters = []
         self.num = num_arbiters
+        
+        # Store generator components
+        self.generator_runner = generator_runner
+        self.intent_parser = intent_parser
+        self.llm_client = llm_client
+
+    @staticmethod
+    def _find_crew_config() -> Optional[str]:
+        """
+        Search for crew_config.yaml in standard locations.
+        
+        Returns:
+            Path to crew_config.yaml if found, None otherwise.
+        """
+        import os
+        from pathlib import Path
+        
+        # Standard search locations
+        search_paths = [
+            "./crew_config.yaml",
+            "../crew_config.yaml",
+            "../self_fixing_engineer/crew_config.yaml",
+            "../configs/crew_config.yaml",
+            "./self_fixing_engineer/crew_config.yaml",
+            "./configs/crew_config.yaml",
+        ]
+        
+        for path_str in search_paths:
+            path = Path(path_str)
+            if path.exists() and path.is_file():
+                logger.info(f"Found crew_config.yaml at: {path.absolute()}")
+                return str(path)
+        
+        logger.warning("crew_config.yaml not found in any standard location")
+        return None
 
     @classmethod
     def create_and_initialize(cls):
@@ -293,43 +509,72 @@ class OmniCoreOmega:
 
         crew_manager = CrewManager()
 
-        try:
-            with open("crew_config.yaml", "r") as f:
-                crew_config = yaml.safe_load(f)
+        crew_config_path = cls._find_crew_config()
+        if crew_config_path:
+            try:
+                with open(crew_config_path, "r") as f:
+                    crew_config = yaml.safe_load(f)
 
-            for agent in crew_config.get("agents", []):
-                agent_class_name = agent.get("class", "GenericAgent")
-                agent_config = agent.get("config", {})
-                agent_tags = agent.get("tags", [])
-                agent_metadata = agent.get("metadata", {})
+                for agent in crew_config.get("agents", []):
+                    agent_class_name = agent.get("class", "GenericAgent")
+                    agent_config = agent.get("config", {})
+                    agent_tags = agent.get("tags", [])
+                    agent_metadata = agent.get("metadata", {})
 
-                crew_manager.add_agent(
-                    name=agent["name"],
-                    agent_class=agent_class_name,
-                    config=agent_config,
-                    tags=agent_tags,
-                    metadata=agent_metadata,
-                )
-            logger.info("CrewManager agents loaded from crew_config.yaml.")
-        except FileNotFoundError:
-            logger.error(
+                    crew_manager.add_agent(
+                        name=agent["name"],
+                        agent_class=agent_class_name,
+                        config=agent_config,
+                        tags=agent_tags,
+                        metadata=agent_metadata,
+                    )
+                logger.info(f"CrewManager agents loaded from {crew_config_path}.")
+            except Exception as e:
+                logger.error(f"Failed to load agents from crew_config.yaml: {e}")
+        else:
+            logger.warning(
                 "crew_config.yaml not found. No agents will be added to the crew manager."
             )
-        except Exception as e:
-            logger.error(f"Failed to load agents from crew_config.yaml: {e}")
 
         intent_capture_app_instance = intent_capture_api
         test_generation_orchestrator = TestGenerationOrchestrator()
 
-        class MockAuditLogManager:
-            def __init__(self):
-                self.logs = []
+        # Try to use real audit loggers instead of mock
+        audit_log_manager = None
+        
+        # First, try generator's audit log
+        try:
+            from generator.audit_log.audit_log import AUDIT_LOG
+            audit_log_manager = AUDIT_LOG
+            logger.info("Using generator AUDIT_LOG for audit logging")
+        except ImportError:
+            pass
+        
+        # Fall back to SFE's audit logger
+        if audit_log_manager is None:
+            try:
+                from self_fixing_engineer.guardrails.audit_log import AuditLogger
+                audit_log_manager = AuditLogger()
+                logger.info("Using SFE AuditLogger for audit logging")
+            except ImportError:
+                pass
+        
+        # Last resort: use mock
+        if audit_log_manager is None:
+            logger.warning(
+                "Real audit loggers not available; using MockAuditLogManager. "
+                "Install generator or self_fixing_engineer for production audit logging."
+            )
+            
+            class MockAuditLogManager:
+                def __init__(self):
+                    self.logs = []
 
-            async def log_audit(self, entry):
-                self.logs.append(entry)
-                logger.info(f"[MockAuditLogManager] Logged: {entry}")
+                async def log_audit(self, entry):
+                    self.logs.append(entry)
+                    logger.info(f"[MockAuditLogManager] Logged: {entry}")
 
-        audit_log_manager = MockAuditLogManager()
+            audit_log_manager = MockAuditLogManager()
 
         import_fixer_engine = create_import_fixer_engine()
 
@@ -401,6 +646,71 @@ class OmniCoreOmega:
                 "health_check": self.import_fixer_engine.health_check,
             },
         )
+
+        # Register test generation engine
+        if self.test_generation_orchestrator:
+            register_engine(
+                "test_generation",
+                {
+                    "engine": self.test_generation_orchestrator,
+                    "description": "SFE test generation orchestrator",
+                },
+            )
+            logger.info("Registered test_generation engine in ENGINE_REGISTRY")
+
+        # Register simulation engine
+        if self.simulation_engine:
+            register_engine(
+                "simulation",
+                {
+                    "engine": self.simulation_engine,
+                    "description": "Unified simulation module",
+                },
+            )
+            logger.info("Registered simulation engine in ENGINE_REGISTRY")
+
+        # Register crew manager
+        if self.crew_manager:
+            register_engine(
+                "crew_manager",
+                {
+                    "engine": self.crew_manager,
+                    "start_all": self.crew_manager.start_all if hasattr(self.crew_manager, "start_all") else None,
+                    "description": "Agent crew orchestration manager",
+                },
+            )
+            logger.info("Registered crew_manager engine in ENGINE_REGISTRY")
+
+        # Register arbiters
+        register_engine(
+            "arbiters",
+            {
+                "instances": lambda: self.arbiters,
+                "count": self.num,
+                "description": "Bug detection and RL arbiters",
+            },
+        )
+        logger.info("Registered arbiters in ENGINE_REGISTRY")
+
+        # Register generator capabilities (if available)
+        if GeneratorRunner or get_available_agents():
+            generator_entrypoints = {
+                "description": "Generator code/test/doc generation capabilities",
+                "available_agents": get_available_agents(),
+            }
+            
+            if self.generator_runner:
+                generator_entrypoints["runner"] = self.generator_runner
+            
+            if self.intent_parser:
+                generator_entrypoints["intent_parser"] = self.intent_parser
+            
+            if self.llm_client or call_llm_api:
+                generator_entrypoints["llm_client"] = self.llm_client or call_llm_api
+            
+            register_engine("generator", generator_entrypoints)
+            logger.info("Registered generator engine in ENGINE_REGISTRY")
+
 
         for component in [
             self.db,

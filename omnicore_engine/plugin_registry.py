@@ -22,6 +22,11 @@ _project_root = Path(__file__).parent.parent  # This is The_Code_Factory-master
 _arbiter_path = _project_root / "self_fixing_engineer"
 if _arbiter_path.exists() and str(_arbiter_path) not in sys.path:
     sys.path.insert(0, str(_arbiter_path))
+
+# Add generator to sys.path for discoverability
+_generator_path = _project_root / "generator"
+if _generator_path.exists() and str(_generator_path) not in sys.path:
+    sys.path.insert(0, str(_generator_path))
 # --- END SOLUTION ---
 
 import ast
