@@ -9,7 +9,7 @@ import pytest
 from arbiter.learner.audit import CircuitBreaker
 
 # Import all the modules we're testing
-from arbiter.learner.core import Arbiter, Learner
+from arbiter.learner.core import LearnerArbiterHelper, Learner
 from arbiter.learner.encryption import ArbiterConfig
 from cryptography.fernet import Fernet
 
@@ -229,8 +229,8 @@ class TestEndToEndLearner:
                 )  # Fix: Make it AsyncMock
                 mock_bug_manager.return_value = bug_manager_instance
                 mock_neo4j.return_value = Mock()
-                arbiter = Arbiter()
-                arbiter.bug_manager = bug_manager_instance  # Ensure it's set
+                arbiter_helper = LearnerArbiterHelper()
+                arbiter_helper.bug_manager = bug_manager_instance  # Ensure it's set
 
         with patch("arbiter.learner.core.PostgresClient") as mock_postgres:
             mock_postgres.return_value = mock_db
@@ -258,7 +258,7 @@ class TestEndToEndLearner:
                         mock_meta_store.write_batch = AsyncMock()
                         mock_meta.return_value = mock_meta_store
 
-                        learner = Learner(arbiter, mock_redis)
+                        learner = Learner(arbiter_helper, mock_redis)
                         learner.db = mock_db
                         learner.llm_explanation_client = mock_llm_instance
                         learner.audit_logger = mock_audit_instance
@@ -284,7 +284,7 @@ class TestEndToEndLearner:
 
                         yield {
                             "learner": learner,
-                            "arbiter": arbiter,
+                            "arbiter": arbiter_helper,
                             "redis": mock_redis,
                             "db": mock_db,
                         }
