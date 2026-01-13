@@ -1299,6 +1299,7 @@ class Arbiter:
         audit_log_manager: Optional[Any] = None,
         engines: Optional[Dict[str, Any]] = None,
         omnicore_url: str = None,
+        message_queue_service: Optional[Any] = None,
         **kwargs,
     ):
         self.settings = settings
@@ -1324,6 +1325,7 @@ class Arbiter:
 
         self.analyzer = analyzer
         self.decision_optimizer = decision_optimizer
+        self.message_queue_service = message_queue_service
         self.feedback = (
             feedback_manager or FeedbackManager(config=self.settings)
             if ARBITER_PACKAGE_AVAILABLE
@@ -2297,6 +2299,36 @@ class Arbiter:
                 "redis.asyncio not available. Peer-to-peer communication will be disabled."
             )  # Fixed: updated warning message
 
+        # Fix 2: Setup MessageQueueService subscriptions
+        if self.message_queue_service:
+            logging.getLogger(__name__).info(
+                f"[{self.name}] Setting up MessageQueueService subscriptions..."
+            )
+            try:
+                await self.message_queue_service.subscribe("bug_detected", self._on_bug_detected)
+                await self.message_queue_service.subscribe("policy_violation", self._on_policy_violation)
+                await self.message_queue_service.subscribe("code_analysis_complete", self._on_analysis_complete)
+                await self.message_queue_service.subscribe("generator_output", self._on_generator_output)
+                await self.message_queue_service.subscribe("test_results", self._on_test_results)
+                await self.message_queue_service.subscribe("workflow_completed", self._on_workflow_completed)
+                logging.getLogger(__name__).info(
+                    f"[{self.name}] MessageQueueService subscriptions established"
+                )
+            except Exception as e:
+                logging.getLogger(__name__).error(
+                    f"[{self.name}] Failed to setup MessageQueueService subscriptions: {e}",
+                    exc_info=True
+                )
+        else:
+            logging.getLogger(__name__).warning(
+                f"[{self.name}] MessageQueueService not available, skipping event subscriptions"
+            )
+
+        # Fix 1: Setup HTTP /events endpoint
+        if self.port:
+            await self.setup_event_receiver()
+
+
     async def work_cycle(self) -> Dict[str, Any]:
         """A single work cycle for the agent, which calls the evolve method."""
         logging.getLogger(__name__).info(
@@ -2902,6 +2934,284 @@ class Arbiter:
                 f"[{self.name}] Peer listener failed: {e}", exc_info=True
             )
             await self.db_client.log_error(e, {"agent_name": self.name})
+
+    # Fix 1: HTTP /events Endpoint Methods
+    async def setup_event_receiver(self):
+        """Sets up an HTTP endpoint to receive events from OmniCore."""
+        from aiohttp import web
+        
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Setting up HTTP /events endpoint on port {self.port}"
+        )
+        
+        app = web.Application()
+        app.router.add_post('/events', self._handle_incoming_event_http)
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, 'localhost', self.port)
+        
+        try:
+            await site.start()
+            logging.getLogger(__name__).info(
+                f"[{self.name}] HTTP /events endpoint started on port {self.port}"
+            )
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"[{self.name}] Failed to start HTTP endpoint: {e}",
+                exc_info=True
+            )
+
+    async def _handle_incoming_event_http(self, request):
+        """HTTP handler for incoming events."""
+        from aiohttp import web
+        
+        try:
+            data = await request.json()
+            event_type = data.get("event_type")
+            event_data = data.get("data", {})
+            
+            logging.getLogger(__name__).info(
+                f"[{self.name}] Received HTTP event: {event_type}"
+            )
+            
+            # Route to appropriate handler
+            await self._handle_incoming_event(event_type, event_data)
+            
+            return web.json_response({"status": "received", "event_type": event_type})
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"[{self.name}] Error handling HTTP event: {e}",
+                exc_info=True
+            )
+            return web.json_response(
+                {"status": "error", "message": str(e)},
+                status=500
+            )
+
+    async def _handle_incoming_event(self, event_type: str, data: Dict[str, Any]):
+        """Routes incoming events to appropriate handlers."""
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Routing event type: {event_type}"
+        )
+        
+        # Route to handler based on event type
+        handler_map = {
+            "requests.arbiter.bug_detected": self._on_bug_detected,
+            "requests.arbiter.policy_violation": self._on_policy_violation,
+            "requests.arbiter.analysis_complete": self._on_analysis_complete,
+            "requests.arbiter.generator_output": self._on_generator_output,
+            "requests.arbiter.test_results": self._on_test_results,
+            "requests.arbiter.workflow_completed": self._on_workflow_completed,
+            "bug_detected": self._on_bug_detected,
+            "policy_violation": self._on_policy_violation,
+            "code_analysis_complete": self._on_analysis_complete,
+            "generator_output": self._on_generator_output,
+            "test_results": self._on_test_results,
+            "workflow_completed": self._on_workflow_completed,
+        }
+        
+        handler = handler_map.get(event_type)
+        if handler:
+            try:
+                await handler(data)
+            except Exception as e:
+                logging.getLogger(__name__).error(
+                    f"[{self.name}] Handler error for {event_type}: {e}",
+                    exc_info=True
+                )
+        else:
+            logging.getLogger(__name__).warning(
+                f"[{self.name}] No handler found for event type: {event_type}"
+            )
+
+    # Fix 3: Event Handler Methods
+    async def _on_bug_detected(self, data: Dict[str, Any]):
+        """Handler for bug_detected events."""
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Bug detected event received: {data.get('bug_id', 'unknown')}"
+        )
+        try:
+            bug_id = data.get("bug_id")
+            bug_type = data.get("bug_type", "unknown")
+            severity = data.get("severity", "medium")
+            
+            # Log the bug
+            self.log_event(f"Bug detected: {bug_type} (severity: {severity})", "bug_detected")
+            
+            # Coordinate with peers to distribute workload
+            await self.coordinate_with_peers({
+                "action": "bug_detected",
+                "agent": self.name,
+                "bug_id": bug_id,
+                "bug_type": bug_type,
+                "severity": severity
+            })
+            
+            # If decision optimizer is available, create a fix task
+            if self.decision_optimizer and severity in ["high", "critical"]:
+                logging.getLogger(__name__).info(
+                    f"[{self.name}] Creating fix task for bug {bug_id}"
+                )
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"[{self.name}] Error handling bug_detected event: {e}",
+                exc_info=True
+            )
+
+    async def _on_policy_violation(self, data: Dict[str, Any]):
+        """Handler for policy_violation events."""
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Policy violation event received: {data.get('violation_id', 'unknown')}"
+        )
+        try:
+            violation_id = data.get("violation_id")
+            policy_name = data.get("policy_name", "unknown")
+            action = data.get("action", "unknown")
+            
+            # Log the violation
+            self.log_event(
+                f"Policy violation: {policy_name} (action: {action})",
+                "policy_violation"
+            )
+            
+            # Request human approval if human-in-loop is available
+            if self.human_in_loop:
+                await self.human_in_loop.request_approval({
+                    "issue": f"Policy violation: {policy_name}",
+                    "action": action,
+                    "agent": self.name,
+                    "violation_id": violation_id,
+                    "data": data
+                })
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"[{self.name}] Error handling policy_violation event: {e}",
+                exc_info=True
+            )
+
+    async def _on_analysis_complete(self, data: Dict[str, Any]):
+        """Handler for code_analysis_complete events."""
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Analysis complete event received"
+        )
+        try:
+            issues = data.get("issues", [])
+            analysis_id = data.get("analysis_id")
+            
+            # Log completion
+            self.log_event(
+                f"Analysis complete: {len(issues)} issues found",
+                "analysis_complete"
+            )
+            
+            # Trigger fix workflows for detected issues
+            for issue in issues:
+                if issue.get("severity") in ["high", "critical"]:
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] Triggering fix workflow for {issue.get('type')}"
+                    )
+                    # Coordinate with decision optimizer if available
+                    if self.decision_optimizer:
+                        logging.getLogger(__name__).info(
+                            f"[{self.name}] DecisionOptimizer available for fix coordination"
+                        )
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"[{self.name}] Error handling analysis_complete event: {e}",
+                exc_info=True
+            )
+
+    async def _on_generator_output(self, data: Dict[str, Any]):
+        """Handler for generator_output events."""
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Generator output event received"
+        )
+        try:
+            generated_code = data.get("code")
+            language = data.get("language", "python")
+            generator_id = data.get("generator_id")
+            
+            # Log the generation
+            self.log_event(
+                f"Code generated by {generator_id}",
+                "generator_output"
+            )
+            
+            # Route to test generation if available
+            if generated_code:
+                await self.run_test_generation(generated_code, language)
+                logging.getLogger(__name__).info(
+                    f"[{self.name}] Triggered test generation for generated code"
+                )
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"[{self.name}] Error handling generator_output event: {e}",
+                exc_info=True
+            )
+
+    async def _on_test_results(self, data: Dict[str, Any]):
+        """Handler for test_results events."""
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Test results event received"
+        )
+        try:
+            test_id = data.get("test_id")
+            failures = data.get("failures", [])
+            passed = data.get("passed", 0)
+            failed = data.get("failed", 0)
+            
+            # Log results
+            self.log_event(
+                f"Test results: {passed} passed, {failed} failed",
+                "test_results"
+            )
+            
+            # Create fix tasks for test failures
+            if failures and self.decision_optimizer:
+                for failure in failures:
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] Creating fix task for test failure: {failure.get('test_name')}"
+                    )
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"[{self.name}] Error handling test_results event: {e}",
+                exc_info=True
+            )
+
+    async def _on_workflow_completed(self, data: Dict[str, Any]):
+        """Handler for workflow_completed events."""
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Workflow completed event received"
+        )
+        try:
+            workflow_id = data.get("workflow_id")
+            status = data.get("status", "unknown")
+            results = data.get("results", {})
+            
+            # Log completion
+            self.log_event(
+                f"Workflow {workflow_id} completed with status: {status}",
+                "workflow_completed"
+            )
+            
+            # Update knowledge graph if available
+            if hasattr(self, "knowledge_graph") and self.knowledge_graph:
+                await self.knowledge_graph.add_fact(
+                    "WorkflowResults",
+                    workflow_id,
+                    results,
+                    source=self.name,
+                    timestamp=datetime.now(timezone.utc).isoformat()
+                )
+                logging.getLogger(__name__).info(
+                    f"[{self.name}] Updated knowledge graph with workflow results"
+                )
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"[{self.name}] Error handling workflow_completed event: {e}",
+                exc_info=True
+            )
 
 
 # --- Plugin Registration ---
