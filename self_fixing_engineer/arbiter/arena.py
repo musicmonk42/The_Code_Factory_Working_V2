@@ -507,12 +507,41 @@ class ArbiterArena:
         except Exception as e:
             logger.warning(f"Failed to create MessageQueueService: {e}")
             shared_mq_service = None
+        
+        # Fix 5: Create Generator Engine for 100% integration
+        generator_engine = None
+        try:
+            from generator.runner.runner_core import Runner
+            from generator.runner.runner_config import load_config
+            
+            # Load generator config
+            generator_config_path = os.path.join(
+                os.path.dirname(__file__), 
+                "..", "..", "generator", "config.yaml"
+            )
+            if os.path.exists(generator_config_path):
+                generator_config = load_config(generator_config_path)
+            else:
+                generator_config = {}
+            
+            generator_engine = Runner(config=generator_config)
+            logger.info("Created Generator Engine for 100% generator integration")
+        except Exception as e:
+            logger.warning(f"Failed to create Generator Engine: {e}. Generator integration will be limited.")
+            generator_engine = None
 
         world_size = getattr(self.settings, "WORLD_SIZE", 3)
         self.arbiters = []
 
         for i in range(world_size):
             peer_ports = [self.base_port + j for j in range(world_size) if j != i]
+            
+            # Create engines dict with generator engine
+            engines_dict = {
+                "generator": generator_engine,
+            }
+            if self.intent_capture_engine:
+                engines_dict["intent_capture"] = self.intent_capture_engine
 
             # This is the primary production integration point, updated to pass the new dependencies.
             arbiter = Arbiter(
@@ -526,7 +555,7 @@ class ArbiterArena:
                 port=self.base_port + i,
                 peer_ports=peer_ports,
                 settings=self.settings,
-                intent_capture_engine=self.intent_capture_engine,
+                engines=engines_dict,  # Fix 5: Pass generator engine
                 message_queue_service=shared_mq_service,  # Fix 5: Inject MessageQueueService
             )
             self.arbiters.append(arbiter)

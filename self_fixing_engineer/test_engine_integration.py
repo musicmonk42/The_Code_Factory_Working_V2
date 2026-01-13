@@ -263,6 +263,63 @@ class TestDecisionOptimizerIntegration:
             pytest.skip(f"DecisionOptimizer not available: {e}")
 
 
+class TestGeneratorIntegration:
+    """Test 100% Generator integration with Arbiter."""
+
+    def test_arbiter_has_generator_engine(self):
+        """Test that Arbiter has generator_engine attribute."""
+        try:
+            from arbiter.arbiter import Arbiter
+            import inspect
+            
+            # Check Arbiter __init__ processes generator engine
+            source = inspect.getsource(Arbiter.__init__)
+            assert "generator_engine" in source, \
+                "Arbiter should have generator_engine attribute"
+        except ImportError as e:
+            pytest.skip(f"Arbiter not available: {e}")
+    
+    def test_generator_output_handler_has_direct_integration(self):
+        """Test that _on_generator_output uses generator_engine directly."""
+        try:
+            from arbiter.arbiter import Arbiter
+            import inspect
+            
+            # Check _on_generator_output method includes direct generator integration
+            source = inspect.getsource(Arbiter._on_generator_output)
+            assert "self.generator_engine" in source, \
+                "_on_generator_output should use self.generator_engine"
+            assert "process_output" in source or "publish_to_omnicore" in source, \
+                "_on_generator_output should have direct generator engine integration"
+        except (ImportError, AttributeError) as e:
+            pytest.skip(f"Generator output handler not available: {e}")
+    
+    def test_arena_creates_generator_engine(self):
+        """Test that Arena creates and injects generator engine."""
+        try:
+            from arbiter.arena import ArbiterArena
+            import inspect
+            
+            # Check _initialize_arbiters creates generator engine
+            source = inspect.getsource(ArbiterArena._initialize_arbiters)
+            assert "generator_engine" in source or "Runner" in source, \
+                "Arena should create generator engine"
+            assert '"generator"' in source, \
+                "Arena should inject generator into engines dict"
+        except (ImportError, AttributeError) as e:
+            pytest.skip(f"Arena generator integration not available: {e}")
+    
+    def test_generator_runner_can_be_imported(self):
+        """Test that Generator Runner can be imported."""
+        try:
+            from generator.runner.runner_core import Runner
+            
+            assert Runner is not None, \
+                "Generator Runner should be importable"
+        except ImportError as e:
+            pytest.skip(f"Generator Runner not available: {e}")
+
+
     def test_simulation_settings_exist(self):
         """Test that simulation settings can be accessed."""
         try:

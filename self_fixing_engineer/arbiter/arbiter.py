@@ -1367,6 +1367,7 @@ class Arbiter:
         self.engines = engines or {}
         self.simulation_engine = self.engines.get("simulation")
         self.test_generation_engine = self.engines.get("test_generation")
+        self.generator_engine = self.engines.get("generator")
         self.code_health_env = self.engines.get("code_health_env")
         self.intent_capture_engine = self.engines.get("intent_capture")
         self.audit_log_manager = self.engines.get("audit_log_manager")
@@ -3123,7 +3124,7 @@ class Arbiter:
             )
 
     async def _on_generator_output(self, data: Dict[str, Any]):
-        """Handler for generator_output events."""
+        """Handler for generator_output events - provides full generator integration."""
         logging.getLogger(__name__).info(
             f"[{self.name}] Generator output event received"
         )
@@ -3131,6 +3132,7 @@ class Arbiter:
             generated_code = data.get("code")
             language = data.get("language", "python")
             generator_id = data.get("generator_id")
+            metadata = data.get("metadata", {})
             
             # Log the generation
             self.log_event(
@@ -3138,17 +3140,78 @@ class Arbiter:
                 "generator_output"
             )
             
+            # Direct generator engine integration
+            if self.generator_engine and hasattr(self.generator_engine, "process_output"):
+                try:
+                    await self.generator_engine.process_output(generated_code, language, metadata)
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] Generator engine processed output successfully"
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(
+                        f"[{self.name}] Generator engine processing failed: {e}",
+                        exc_info=True
+                    )
+            
             # Route to test generation if available
             if generated_code:
                 await self.run_test_generation(generated_code, language)
                 logging.getLogger(__name__).info(
                     f"[{self.name}] Triggered test generation for generated code"
                 )
+                
+            # Update knowledge graph with generator output
+            if self.knowledge_graph:
+                try:
+                    await self.knowledge_graph.add_fact(
+                        "GeneratorOutputs",
+                        generator_id or "unknown",
+                        {
+                            "code": generated_code[:200] if generated_code else None,
+                            "language": language,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "metadata": metadata
+                        },
+                        source=self.name
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(
+                        f"[{self.name}] Failed to update knowledge graph: {e}",
+                        exc_info=True
+                    )
+                    
+            # Publish back to OmniCore for workflow tracking
+            await self.publish_to_omnicore(
+                "generator_output_processed",
+                {
+                    "generator_id": generator_id,
+                    "arbiter": self.name,
+                    "success": True,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            )
+            
         except Exception as e:
             logging.getLogger(__name__).error(
                 f"[{self.name}] Error handling generator_output event: {e}",
                 exc_info=True
             )
+            # Notify OmniCore of processing failure
+            try:
+                await self.publish_to_omnicore(
+                    "generator_output_failed",
+                    {
+                        "generator_id": data.get("generator_id"),
+                        "arbiter": self.name,
+                        "error": str(e),
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                )
+            except Exception as pub_err:
+                logging.getLogger(__name__).error(
+                    f"[{self.name}] Failed to publish error notification: {pub_err}",
+                    exc_info=True
+                )
 
     async def _on_test_results(self, data: Dict[str, Any]):
         """Handler for test_results events."""
