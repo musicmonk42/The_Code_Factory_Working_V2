@@ -137,11 +137,23 @@ class LearningRecord(BaseModel):
     explanation: Optional[str]
 
 
-class Arbiter:
-    """Arbiter for Learner's use."""
+class LearnerArbiterHelper:
+    """
+    Helper class for Learner's internal use.
+    NOTE: This is NOT the main Arbiter class from arbiter.py.
+    
+    This lightweight helper manages state and dependencies specifically for the Learner module:
+    - Maintains a memory dictionary for knowledge storage
+    - Provides access to BugManager for issue tracking
+    - Interfaces with Neo4j knowledge graph
+    - Tracks self-audit execution state
+    
+    The main Arbiter class (arbiter.py) handles full orchestration, while this helper
+    provides minimal state management for learner-specific operations.
+    """
 
     def __init__(self):
-        self.name = "Arbiter"
+        self.name = "LearnerArbiterHelper"
         self.state = {"memory": {}}
         # Create a simple settings dict for BugManager
         bug_manager_settings = {
@@ -156,7 +168,7 @@ class Arbiter:
             password=ArbiterConfig.NEO4J_PASSWORD,
         )
         self.is_running_self_audit = False
-        logger.debug("Arbiter created for Learner's internal use.", name=self.name)
+        logger.debug("LearnerArbiterHelper created for Learner's internal use.", name=self.name)
 
 
 class Learner:
@@ -164,7 +176,7 @@ class Learner:
 
     def __init__(
         self,
-        arbiter: Arbiter,
+        arbiter: LearnerArbiterHelper,
         redis: Redis,
         db_url: Optional[str] = None,
         merkle_tree_class: Optional[Callable] = None,
@@ -172,7 +184,7 @@ class Learner:
         """
         Initialize the Learner module.
         Args:
-            arbiter: Arbiter instance for state and dependencies.
+            arbiter: LearnerArbiterHelper instance for state and dependencies.
             redis: Redis client for caching.
             db_url: Optional database URL. If None, uses ArbiterConfig.DATABASE_URL.
             merkle_tree_class: Optional MerkleTree class for dependency injection.

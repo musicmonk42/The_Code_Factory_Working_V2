@@ -8,30 +8,30 @@ import pytest
 from arbiter.learner.audit import CircuitBreaker
 
 # Import the classes to test
-from arbiter.learner.core import Arbiter, Learner
+from arbiter.learner.core import LearnerArbiterHelper, Learner
 from arbiter.learner.encryption import ArbiterConfig
 from cryptography.fernet import Fernet
 
 
-class TestArbiter:
-    """Test suite for Arbiter class."""
+class TestLearnerArbiterHelper:
+    """Test suite for LearnerArbiterHelper class."""
 
-    def test_arbiter_initialization(self):
-        """Test Arbiter initialization."""
+    def test_arbiter_helper_initialization(self):
+        """Test LearnerArbiterHelper initialization."""
         # Mock both BugManager and Neo4jKnowledgeGraph
         with patch("arbiter.learner.core.BugManager") as mock_bug_manager:
             with patch("arbiter.learner.core.Neo4jKnowledgeGraph") as mock_neo4j:
                 mock_bug_manager.return_value = Mock()
                 mock_neo4j.return_value = Mock()
 
-                arbiter = Arbiter()
+                arbiter_helper = LearnerArbiterHelper()
 
-                assert arbiter.name == "Arbiter"
-                assert "memory" in arbiter.state
-                assert isinstance(arbiter.state["memory"], dict)
-                assert arbiter.is_running_self_audit is False
-                assert hasattr(arbiter, "bug_manager")
-                assert hasattr(arbiter, "knowledge_graph")
+                assert arbiter_helper.name == "LearnerArbiterHelper"
+                assert "memory" in arbiter_helper.state
+                assert isinstance(arbiter_helper.state["memory"], dict)
+                assert arbiter_helper.is_running_self_audit is False
+                assert hasattr(arbiter_helper, "bug_manager")
+                assert hasattr(arbiter_helper, "knowledge_graph")
 
 
 class TestLearner:
@@ -56,13 +56,13 @@ class TestLearner:
 
     @pytest.fixture
     def mock_arbiter(self):
-        """Create a mock Arbiter."""
-        arbiter = Mock(spec=Arbiter)
-        arbiter.state = {"memory": {}}
-        arbiter.is_running_self_audit = False
-        arbiter.bug_manager = AsyncMock()
-        arbiter.knowledge_graph = AsyncMock()
-        return arbiter
+        """Create a mock LearnerArbiterHelper."""
+        arbiter_helper = Mock(spec=LearnerArbiterHelper)
+        arbiter_helper.state = {"memory": {}}
+        arbiter_helper.is_running_self_audit = False
+        arbiter_helper.bug_manager = AsyncMock()
+        arbiter_helper.knowledge_graph = AsyncMock()
+        return arbiter_helper
 
     @pytest.fixture
     def mock_db(self):
