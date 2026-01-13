@@ -1,5 +1,14 @@
 """
 Arbiter package - Core components for the Self-Fixing Engineer platform.
+
+This package provides:
+- Arbiter: Main orchestrator for self-fixing engineering workflows
+- ArbiterArena: Multi-agent collaboration environment
+- FeedbackManager: Feedback collection and metrics management
+- HumanInLoop: Human-in-the-loop approval workflows
+- HumanInLoopConfig: Configuration for human-in-the-loop features
+- ArbiterConfig: Core configuration management
+- Database: Database abstraction layer
 """
 
 # Import and expose main components that tests and other modules expect
@@ -53,14 +62,35 @@ except ImportError:
     FeedbackManager = None
 
 try:
-    from .human_loop import HumanInLoop
+    from .human_loop import HumanInLoop, HumanInLoopConfig
 except ImportError:
     HumanInLoop = None
+    HumanInLoopConfig = None
 
 try:
     from .config import ArbiterConfig
 except ImportError:
     ArbiterConfig = None
+
+
+def get_component_status():
+    """
+    Returns the availability status of key arbiter components.
+    Useful for debugging import issues and checking component availability.
+    
+    Returns:
+        dict: Component names mapped to their availability status (bool or class reference)
+    """
+    return {
+        "Arbiter": Arbiter is not None,
+        "ArbiterArena": ArbiterArena is not None,
+        "FeedbackManager": FeedbackManager is not None,
+        "HumanInLoop": HumanInLoop is not None,
+        "HumanInLoopConfig": HumanInLoopConfig is not None,
+        "ArbiterConfig": ArbiterConfig is not None,
+        "Database": Database is not None,
+    }
+
 
 # Version info
 __version__ = "1.0.0"
@@ -73,5 +103,7 @@ __all__ = [
     "ArbiterArena",
     "FeedbackManager",
     "HumanInLoop",
+    "HumanInLoopConfig",
     "ArbiterConfig",
+    "get_component_status",
 ]

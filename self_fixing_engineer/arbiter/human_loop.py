@@ -116,6 +116,98 @@ except ImportError:
     # as the fallback class for internal use to avoid confusion.
 
 
+# --- Import FeedbackManager from arbiter.feedback ---
+try:
+    from arbiter.feedback import FeedbackManager
+    
+    FEEDBACK_MANAGER_AVAILABLE = True
+except ImportError:
+    FEEDBACK_MANAGER_AVAILABLE = False
+    logging.getLogger(__name__).warning(
+        "Warning: arbiter.feedback.FeedbackManager not found. Using fallback implementation."
+    )
+    
+    # Fallback FeedbackManager for cases where arbiter.feedback is not available
+    class FeedbackManager:
+        def __init__(
+            self, db_client: Union[DummyDBClient, PostgresClient, SQLiteClient]
+        ) -> None:
+            self.db_client = db_client
+            logger.info(f"FeedbackManager (fallback) initialized with {type(db_client).__name__}.")
+
+        async def log_approval_request(
+            self, decision_id: str, decision_context: Dict[str, Any]
+        ) -> None:
+            log_entry = {
+                "type": "approval_request",
+                "decision_id": decision_id,
+                "context": decision_context,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "status": "pending",
+                "request_start_time_utc": datetime.now(timezone.utc).isoformat(),
+            }
+            await self.db_client.save_feedback_entry(log_entry)
+            logger.info(
+                f"Logged approval request for decision_id: {decision_id}. Status: pending."
+            )
+
+        async def log_approval_response(
+            self, decision_id: str, response: Dict[str, Any]
+        ) -> None:
+            ts = datetime.now(timezone.utc).isoformat()
+            await self.db_client.save_feedback_entry(
+                {
+                    "type": "approval_response",
+                    "decision_id": decision_id,
+                    "response": response,
+                    "timestamp": ts,
+                    "status": "resolved",
+                }
+            )
+            await self.db_client.update_feedback_entry(
+                {
+                    "type": "approval_request",
+                    "decision_id": decision_id,
+                    "status": "pending",
+                },
+                {
+                    "status": "resolved",
+                    "resolution_timestamp": ts,
+                    "response_details": response,
+                },
+            )
+            logger.info(
+                f"Logged approval response for decision_id: {decision_id}. Status: resolved."
+            )
+
+        async def record_metric(
+            self,
+            metric_name: str,
+            value: Union[int, float],
+            tags: Optional[Dict[str, str]] = None,
+        ) -> None:
+            await self.db_client.save_feedback_entry(
+                {
+                    "type": "metric",
+                    "name": metric_name,
+                    "value": value,
+                    "tags": tags or {},
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            logger.debug(f"Recorded metric {metric_name} with value {value}.")
+
+        async def log_error(self, error_details: Dict[str, Any]) -> None:
+            await self.db_client.save_feedback_entry(
+                {
+                    **error_details,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "type": "error_log",
+                }
+            )
+            logger.error(f"Logged error: {error_details.get('message', 'No message')}")
+
+
 # --- Secure Configuration ---
 SECRET_SALT = os.environ.get("HITL_SECRET_SALT", "default-dev-salt-is-not-secure")
 
@@ -280,87 +372,6 @@ class WebSocketManager:
             f"WebSocketManager: Sending JSON to UI: {json.dumps(data)[:150]}..."
         )
         await asyncio.sleep(0.05)
-
-
-# --- FeedbackManager ---
-class FeedbackManager:
-    def __init__(
-        self, db_client: Union[DummyDBClient, PostgresClient, SQLiteClient]
-    ) -> None:
-        self.db_client = db_client
-        logger.info(f"FeedbackManager initialized with {type(db_client).__name__}.")
-
-    async def log_approval_request(
-        self, decision_id: str, decision_context: Dict[str, Any]
-    ) -> None:
-        log_entry = {
-            "type": "approval_request",
-            "decision_id": decision_id,
-            "context": decision_context,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "status": "pending",
-            "request_start_time_utc": datetime.now(timezone.utc).isoformat(),
-        }
-        await self.db_client.save_feedback_entry(log_entry)
-        logger.info(
-            f"Logged approval request for decision_id: {decision_id}. Status: pending."
-        )
-
-    async def log_approval_response(
-        self, decision_id: str, response: Dict[str, Any]
-    ) -> None:
-        ts = datetime.now(timezone.utc).isoformat()
-        await self.db_client.save_feedback_entry(
-            {
-                "type": "approval_response",
-                "decision_id": decision_id,
-                "response": response,
-                "timestamp": ts,
-                "status": "resolved",
-            }
-        )
-        await self.db_client.update_feedback_entry(
-            {
-                "type": "approval_request",
-                "decision_id": decision_id,
-                "status": "pending",
-            },
-            {
-                "status": "resolved",
-                "resolution_timestamp": ts,
-                "response_details": response,
-            },
-        )
-        logger.info(
-            f"Logged approval response for decision_id: {decision_id}. Status: resolved."
-        )
-
-    async def record_metric(
-        self,
-        metric_name: str,
-        value: Union[int, float],
-        tags: Optional[Dict[str, str]] = None,
-    ) -> None:
-        await self.db_client.save_feedback_entry(
-            {
-                "type": "metric",
-                "name": metric_name,
-                "value": value,
-                "tags": tags or {},
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-        logger.debug(f"Recorded metric {metric_name} with value {value}.")
-
-    async def log_error(self, error_details: Dict[str, Any]) -> None:
-        await self.db_client.save_feedback_entry(
-            {
-                **error_details,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "type": "error_log",
-            }
-        )
-        logger.error(f"Logged error: {error_details.get('message', 'No message')}")
 
 
 # --- HumanInLoop ---

@@ -229,7 +229,7 @@ try:
     from arbiter.agent_state import Base
     from arbiter.config import ArbiterConfig
     from arbiter.feedback import FeedbackManager
-    from arbiter.human_loop import HumanInLoop
+    from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
     from arbiter.monitoring import Monitor as BaseMonitor
     from arbiter.utils import get_system_metrics_async
 
@@ -245,6 +245,7 @@ except ImportError as e:
     AgentStateModel = object
     BaseMonitor = object
     HumanInLoop = object
+    HumanInLoopConfig = None
     ArbiterConfig = object
     get_system_metrics_async = None
 
@@ -639,52 +640,6 @@ else:
 
         def step(self, action: int):
             return np.zeros(2), 0, True, False, {}
-
-
-# --- Production-Ready HumanInLoop ---
-class HumanInLoop:
-    """
-    Manages human-in-the-loop approvals via a Slack webhook.
-    """
-
-    def __init__(self, feedback, settings: MyArbiterConfig):
-        self.feedback = feedback
-        self.settings = settings
-
-    async def request_approval(self, issue_data: Dict[str, Any]):
-        """Sends a Slack notification for human approval."""
-        if not self.settings.SLACK_WEBHOOK_URL:
-            logging.getLogger(__name__).warning(
-                "SLACK_WEBHOOK_URL is not configured. Skipping approval request."
-            )
-            return {"status": "skipped", "details": "No webhook URL configured"}
-
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                message = {
-                    "text": f"Approval Request for {issue_data['agent']}:\nIssue: {issue_data['issue']}\nAction: {issue_data['action']}"
-                }
-                headers = (
-                    {
-                        "Authorization": f"Bearer {self.settings.SLACK_AUTH_TOKEN.get_secret_value()}"
-                    }
-                    if self.settings.SLACK_AUTH_TOKEN
-                    else {}
-                )
-                resp = await client.post(
-                    str(self.settings.SLACK_WEBHOOK_URL), json=message, headers=headers
-                )
-                resp.raise_for_status()
-                logging.getLogger(__name__).info(
-                    f"[{issue_data['agent']}] Approval request sent to Slack."
-                )
-                return {"status": "approval_requested", "details": "Sent to Slack"}
-        except httpx.HTTPError as e:
-            logging.getLogger(__name__).error(
-                f"[{issue_data['agent']}] Failed to send approval request: {e}",
-                exc_info=True,
-            )
-            return {"status": "error", "error": str(e)}
 
 
 # --- Production-Ready IntentCaptureEngine ---
@@ -1380,11 +1335,32 @@ class Arbiter:
             ),
             db_client=self.db_client,
         )
-        self.human_in_loop = (
-            human_in_loop or HumanInLoop(self.feedback, self.settings)
-            if ARBITER_PACKAGE_AVAILABLE
-            else None
-        )
+        
+        # Fixed HumanInLoop initialization with proper config
+        if ARBITER_PACKAGE_AVAILABLE and HumanInLoop is not None and HumanInLoopConfig is not None:
+            if human_in_loop:
+                self.human_in_loop = human_in_loop
+            else:
+                # Create proper HumanInLoopConfig from MyArbiterConfig
+                hitl_config = HumanInLoopConfig(
+                    DATABASE_URL=self.settings.DATABASE_URL,
+                    EMAIL_ENABLED=bool(self.settings.EMAIL_SMTP_SERVER),
+                    EMAIL_SMTP_SERVER=self.settings.EMAIL_SMTP_SERVER,
+                    EMAIL_SMTP_PORT=self.settings.EMAIL_SMTP_PORT or 587,
+                    EMAIL_SMTP_USER=self.settings.EMAIL_SMTP_USERNAME,
+                    EMAIL_SMTP_PASSWORD=self.settings.EMAIL_SMTP_PASSWORD,
+                    EMAIL_SENDER=self.settings.EMAIL_SENDER or "no-reply@arbiter.local",
+                    EMAIL_USE_TLS=self.settings.EMAIL_USE_TLS,
+                    EMAIL_RECIPIENTS=self.settings.EMAIL_RECIPIENTS or {},
+                    SLACK_WEBHOOK_URL=str(self.settings.SLACK_WEBHOOK_URL) if self.settings.SLACK_WEBHOOK_URL else None,
+                    IS_PRODUCTION=os.getenv("APP_ENV") == "production",
+                )
+                self.human_in_loop = HumanInLoop(
+                    config=hitl_config,
+                    feedback_manager=self.feedback
+                )
+        else:
+            self.human_in_loop = None
 
         self.engines = engines or {}
         self.simulation_engine = self.engines.get("simulation")
