@@ -119,10 +119,7 @@ except ImportError:
 # --- Import FeedbackManager from arbiter.feedback ---
 try:
     from arbiter.feedback import FeedbackManager
-    
-    FEEDBACK_MANAGER_AVAILABLE = True
 except ImportError:
-    FEEDBACK_MANAGER_AVAILABLE = False
     logging.getLogger(__name__).warning(
         "Warning: arbiter.feedback.FeedbackManager not found. Using fallback implementation."
     )

@@ -79,7 +79,9 @@ def get_component_status():
     Useful for debugging import issues and checking component availability.
     
     Returns:
-        dict: Component names mapped to their availability status (bool or class reference)
+        dict: Component names mapped to their availability status (bool).
+              True indicates the component was successfully imported and is available.
+              False indicates the component import failed or is not available.
     """
     return {
         "Arbiter": Arbiter is not None,

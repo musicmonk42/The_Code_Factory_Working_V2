@@ -141,7 +141,15 @@ class LearnerArbiterHelper:
     """
     Helper class for Learner's internal use.
     NOTE: This is NOT the main Arbiter class from arbiter.py.
-    This is a lightweight helper for managing state and dependencies within the Learner module.
+    
+    This lightweight helper manages state and dependencies specifically for the Learner module:
+    - Maintains a memory dictionary for knowledge storage
+    - Provides access to BugManager for issue tracking
+    - Interfaces with Neo4j knowledge graph
+    - Tracks self-audit execution state
+    
+    The main Arbiter class (arbiter.py) handles full orchestration, while this helper
+    provides minimal state management for learner-specific operations.
     """
 
     def __init__(self):
