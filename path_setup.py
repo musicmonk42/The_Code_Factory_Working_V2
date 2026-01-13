@@ -36,6 +36,10 @@ COMPONENT_PATHS = {
     "monitoring": PROJECT_ROOT / "monitoring",
 }
 
+# Initialize logger module-level for efficiency
+import logging
+_logger = logging.getLogger(__name__)
+
 
 def setup_paths(verbose: bool = False) -> List[str]:
     """
@@ -110,9 +114,7 @@ _added_on_import = setup_paths(verbose=False)
 
 if _added_on_import:
     # Only log if we actually added paths (avoid spam on re-imports)
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.debug(f"path_setup: Added {len(_added_on_import)} component paths to sys.path")
+    _logger.debug("path_setup: Added %d component paths to sys.path", len(_added_on_import))
 
 
 __all__ = [

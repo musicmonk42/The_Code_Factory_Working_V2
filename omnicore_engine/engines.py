@@ -118,10 +118,12 @@ except ImportError:
 try:
     from generator.agents import get_available_agents, is_agent_available
 except ImportError:
-    def get_available_agents():
+    def get_available_agents() -> dict:
+        """Fallback when generator.agents is not available."""
         return {}
     
     def is_agent_available(agent_name: str) -> bool:
+        """Fallback when generator.agents is not available."""
         return False
 
 try:
@@ -287,7 +289,11 @@ class PluginService:
             
             # Check if codegen agent is available
             if not is_agent_available("codegen"):
-                raise RuntimeError("CodeGen agent not available")
+                raise RuntimeError(
+                    "CodeGen agent not available. The generator's codegen_agent module "
+                    "may not be installed or dependencies are missing. "
+                    "Install with: pip install -e generator[codegen]"
+                )
             
             self.logger.info(f"Processing code generation for language: {language}")
             await self.message_bus.publish(
@@ -317,7 +323,11 @@ class PluginService:
         try:
             # Check if testgen agent is available
             if not is_agent_available("testgen"):
-                raise RuntimeError("TestGen agent not available")
+                raise RuntimeError(
+                    "TestGen agent not available. The generator's testgen_agent module "
+                    "may not be installed or has missing dependencies (presidio, spacy, torch). "
+                    "Install with: pip install -e generator[testgen]"
+                )
             
             target_code = message.payload.get("target_code", "")
             self.logger.info(f"Processing test generation")
@@ -348,7 +358,11 @@ class PluginService:
         try:
             # Check if docgen agent is available
             if not is_agent_available("docgen"):
-                raise RuntimeError("DocGen agent not available")
+                raise RuntimeError(
+                    "DocGen agent not available. The generator's docgen_agent module "
+                    "may not be installed or dependencies are missing. "
+                    "Install with: pip install -e generator[docgen]"
+                )
             
             code_path = message.payload.get("code_path", "")
             self.logger.info(f"Processing documentation generation for: {code_path}")
@@ -492,7 +506,7 @@ class OmniCoreOmega:
         for path_str in search_paths:
             path = Path(path_str)
             if path.exists() and path.is_file():
-                logger.info(f"Found crew_config.yaml at: {path.absolute()}")
+                logger.info("Found crew_config.yaml at: %s", path.absolute())
                 return str(path)
         
         logger.warning("crew_config.yaml not found in any standard location")
@@ -693,7 +707,7 @@ class OmniCoreOmega:
         logger.info("Registered arbiters in ENGINE_REGISTRY")
 
         # Register generator capabilities (if available)
-        if GeneratorRunner or get_available_agents():
+        if GeneratorRunner is not None or get_available_agents():
             generator_entrypoints = {
                 "description": "Generator code/test/doc generation capabilities",
                 "available_agents": get_available_agents(),
