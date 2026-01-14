@@ -140,8 +140,22 @@ async def check_status():
     print("\nStatus check complete.\n")
 
 
-async def simple_scan():
-    """Simplified scan that just works"""
+async def simple_scan() -> None:
+    """
+    Perform a simplified codebase scan using the CodebaseAnalyzer.
+    
+    This function scans the arbiter directory for code issues, defects, and
+    complexity problems. It uses dynamic path resolution to find the correct
+    directory to scan, falling back to the current working directory if needed.
+    
+    The scan results include:
+        - Number of files scanned
+        - Defects found (syntax errors, potential bugs)
+        - Complexity issues (high cyclomatic complexity, long functions)
+    
+    Raises:
+        No exceptions are raised; all errors are caught and reported gracefully.
+    """
     print("\nStarting simplified codebase scan...")
 
     try:
@@ -155,7 +169,8 @@ async def simple_scan():
         if not os.path.exists(scan_path):
             # Fallback to current directory
             scan_path = os.getcwd()
-            print(f"Note: Using current directory for scan: {scan_path}")
+            print(f"Note: arbiter directory not found at {os.path.join(package_dir, 'arbiter')}")
+            print(f"      Using current directory for scan: {scan_path}")
         else:
             print(f"  Scanning: {scan_path}")
 
@@ -185,9 +200,10 @@ async def simple_scan():
                 print(f"  - {file}:{line}")
                 print(f"    {message[:80]}...")
 
-    except ImportError:
+    except ImportError as e:
         print("✗ CodebaseAnalyzer not available")
         print("  Please install required dependencies")
+        print(f"  Error details: {e}")
     except Exception as e:
         print(f"✗ Scan error: {e}")
         # Don't print full traceback for cleaner output
@@ -196,23 +212,64 @@ async def simple_scan():
     print("\nScan complete.\n")
 
 
-async def repair_issues():
+async def repair_issues() -> None:
     """
-    Attempt to repair found issues automatically.
+    Attempt to automatically repair found code issues.
     
-    TODO: This feature is not yet implemented. Planned functionality:
-    - Auto-fix import errors
-    - Resolve circular dependencies  
-    - Apply suggested code fixes from static analysis
+    Status: NOT YET IMPLEMENTED
     
-    Currently requires the Arena to be running for full repair capabilities.
+    This feature is planned for future releases and will provide automated
+    repair capabilities for common code issues identified during scanning.
+    
+    Planned Functionality:
+        - Auto-fix import errors (missing imports, circular dependencies)
+        - Resolve circular dependencies by restructuring code
+        - Apply suggested fixes from static analysis tools
+        - Fix common code style violations
+        - Refactor code to reduce complexity
+        - Update deprecated API usage
+    
+    Current Workaround:
+        Use the 'run' command to start the full Self-Fixing Engineer platform.
+        Once running, access the Arena's built-in repair tools through the
+        web interface.
+    
+    Implementation Notes:
+        When implemented, this function will:
+        1. Load the codebase configuration
+        2. Initialize the repair engine
+        3. Scan for fixable issues
+        4. Apply automated repairs with user confirmation
+        5. Generate a repair report
+        6. Optionally create a backup before applying changes
+    
+    See Also:
+        - Arena web interface for manual repair tools
+        - Documentation: docs/repair_features.md
     """
-    print("\n" + "="*50)
-    print("REPAIR FEATURE - NOT YET IMPLEMENTED")
-    print("="*50)
-    print("\nThis feature is planned but not yet available.")
-    print("Current workaround: Use 'run' command to start the full platform,")
-    print("then use the Arena's built-in repair tools.\n")
+    print("\n" + "="*70)
+    print("AUTOMATED REPAIR FEATURE")
+    print("="*70)
+    print()
+    print("Status: NOT YET IMPLEMENTED")
+    print()
+    print("This feature is planned but not yet available in the current release.")
+    print()
+    print("Planned Capabilities:")
+    print("  • Auto-fix import errors and missing dependencies")
+    print("  • Resolve circular dependency issues")
+    print("  • Apply code style and linting fixes")
+    print("  • Refactor high-complexity code sections")
+    print("  • Update deprecated API usage patterns")
+    print()
+    print("Current Workaround:")
+    print("  1. Use the 'run' command to start the full SFE platform")
+    print("  2. Access the Arena web interface (typically http://localhost:8000)")
+    print("  3. Use the built-in repair tools available in the Arena UI")
+    print()
+    print("For more information, see the documentation at docs/repair_features.md")
+    print("="*70)
+    print()
 
 
 async def launch_arena_subprocess():
