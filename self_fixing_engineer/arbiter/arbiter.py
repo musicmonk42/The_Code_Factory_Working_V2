@@ -279,8 +279,25 @@ except ImportError as e:
     logging.warning(f"Optional dependency missing: {e} (PostgresClient)")
 
     class PostgresClient:
+        """
+        Fallback stub for PostgresClient when asyncpg is not installed.
+        
+        This is an optional dependency used for advanced database features.
+        To enable PostgresClient:
+        1. Install asyncpg: pip install asyncpg
+        2. Configure DATABASE_URL with postgresql:// connection string
+        3. Ensure arbiter.models.postgres_client module is available
+        """
         def __init__(self, *args, **kwargs):
-            raise NotImplementedError("PostgresClient requires asyncpg module")
+            logging.error(
+                "PostgresClient initialization failed. Required dependencies: asyncpg. "
+                "Install with: pip install asyncpg"
+            )
+            raise NotImplementedError(
+                "PostgresClient requires asyncpg module. "
+                "Install with: pip install asyncpg. "
+                "This is an optional dependency for advanced database features."
+            )
 
 
 try:
@@ -289,6 +306,7 @@ except ImportError as e:
     logging.warning(f"Optional dependency missing: {e} (MultiModalPlugin)")
 
     class MultiModalPlugin:
+        """Fallback stub for MultiModalPlugin when dependencies are not available."""
         pass
 
 
@@ -298,8 +316,25 @@ except ImportError as e:
     logging.warning(f"Optional dependency missing: {e} (Neo4jKnowledgeGraph)")
 
     class Neo4jKnowledgeGraph:
+        """
+        Fallback stub for Neo4jKnowledgeGraph when neo4j driver is not installed.
+        
+        This is an optional dependency used for knowledge graph features.
+        To enable Neo4jKnowledgeGraph:
+        1. Install neo4j driver: pip install neo4j
+        2. Configure NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD environment variables
+        3. Ensure arbiter.models.knowledge_graph_db module is available
+        """
         def __init__(self, *args, **kwargs):
-            raise NotImplementedError("Neo4jKnowledgeGraph requires neo4j module")
+            logging.error(
+                "Neo4jKnowledgeGraph initialization failed. Required dependencies: neo4j driver. "
+                "Install with: pip install neo4j"
+            )
+            raise NotImplementedError(
+                "Neo4jKnowledgeGraph requires neo4j module. "
+                "Install with: pip install neo4j. "
+                "This is an optional dependency for knowledge graph features."
+            )
 
 
 try:

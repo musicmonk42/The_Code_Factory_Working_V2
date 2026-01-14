@@ -37,10 +37,40 @@ try:
     _LLM_AVAILABLE = True
 except ImportError:
     _LLM_AVAILABLE = False
+    logger.warning(
+        "LLMClient plugin not available. File watcher will use fallback implementation. "
+        "Install plugins.llm_client for full LLM integration."
+    )
 
     class LLMClient:
+        """
+        Fallback LLM client stub for when the actual plugin is not available.
+        
+        This allows the file watcher to operate in a degraded mode without LLM support.
+        For production use, ensure plugins.llm_client is properly installed and configured.
+        """
+        def __init__(self, *args, **kwargs):
+            logger.warning("Using fallback LLMClient - LLM features will be disabled")
+        
         async def generate_text(self, prompt: str) -> str:
-            raise NotImplementedError("LLMClient not available")
+            """
+            Stub implementation that returns a descriptive message instead of raising.
+            
+            This allows the file watcher to continue operating without LLM support,
+            which may be acceptable for scenarios where LLM analysis is optional.
+            
+            Args:
+                prompt: The text prompt (ignored in stub)
+                
+            Returns:
+                A message indicating LLM is not available
+            """
+            logger.debug(f"LLMClient.generate_text called with prompt (stub mode): {prompt[:50]}...")
+            return (
+                "[LLM NOT AVAILABLE] LLM analysis is disabled. "
+                "To enable LLM features, install and configure plugins.llm_client module. "
+                f"Prompt was: {prompt[:100]}..."
+            )
 
 
 # Load environment variables

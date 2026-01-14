@@ -636,8 +636,14 @@ class CheckpointManager:
             # Delegate to backend-specific initialization
             backend_fn = self._backends.get(self.backend_type)
             if not backend_fn:
+                supported_backends = ["local", "s3", "redis", "postgres", "gcs", "azure", "minio", "etcd"]
+                available_backends = [k for k, v in self._backends.items() if v is not None]
                 raise NotImplementedError(
-                    f"Backend '{self.backend_type}' not implemented"
+                    f"Backend '{self.backend_type}' is not implemented or not available. "
+                    f"Supported backends: {', '.join(supported_backends)}. "
+                    f"Currently available backends: {', '.join(available_backends)}. "
+                    f"Note: Some backends require additional dependencies to be installed. "
+                    f"Check checkpoint_backends.py for backend implementation details."
                 )
 
             # Backend initialization is handled by first operation
