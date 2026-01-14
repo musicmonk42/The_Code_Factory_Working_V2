@@ -13,6 +13,9 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
+# Production mode flag
+PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+
 
 # ============================================================================
 # MetaLearning - Proper Implementation with ABC
@@ -417,7 +420,7 @@ class MockLLM(LLMBase):
 
 
 class OpenAILLM(LLMBase):
-    """OpenAI LLM implementation."""
+    """OpenAI LLM implementation with production mode checks."""
     
     def __init__(self, **config):
         self.config = config
@@ -425,12 +428,25 @@ class OpenAILLM(LLMBase):
         self.model = config.get("model", "gpt-3.5-turbo")
         
         if not self.api_key:
-            logger.warning("OpenAI API key not found, LLM calls will fail")
+            if PRODUCTION_MODE:
+                raise RuntimeError(
+                    "CRITICAL: OpenAI API key required in production mode. "
+                    "Set OPENAI_API_KEY environment variable."
+                )
+            logger.warning("OpenAI API key not found, LLM calls will fail or use mock")
     
     def generate(self, prompt: str, **kwargs) -> str:
-        """Generate text using OpenAI API."""
+        """Generate text using OpenAI API with production mode enforcement."""
         if not isinstance(prompt, str):
             raise TypeError(f"prompt must be a string, got {type(prompt)}")
+        
+        if not self.api_key:
+            if PRODUCTION_MODE:
+                raise RuntimeError(
+                    "CRITICAL: Cannot generate text in production mode without API key"
+                )
+            logger.warning("No API key, returning empty response")
+            return ""
         
         try:
             import openai
@@ -444,15 +460,22 @@ class OpenAILLM(LLMBase):
             content = response.choices[0].message.content
             return content if content is not None else ""
         except ImportError:
-            logger.warning("openai package not installed, using mock response")
-            return f"[OpenAI stub response - install openai package for real API calls]"
+            if PRODUCTION_MODE:
+                raise RuntimeError(
+                    "CRITICAL: openai package required in production mode. "
+                    "Install with: pip install openai"
+                )
+            logger.warning("openai package not installed, returning empty response")
+            return ""
         except Exception as e:
             logger.error(f"OpenAI API call failed: {e}")
-            raise
+            if PRODUCTION_MODE:
+                raise
+            return ""
 
 
 class AnthropicLLM(LLMBase):
-    """Anthropic Claude LLM implementation."""
+    """Anthropic Claude LLM implementation with production mode checks."""
     
     def __init__(self, **config):
         self.config = config
@@ -460,12 +483,25 @@ class AnthropicLLM(LLMBase):
         self.model = config.get("model", "claude-3-haiku-20240307")
         
         if not self.api_key:
-            logger.warning("Anthropic API key not found, LLM calls will fail")
+            if PRODUCTION_MODE:
+                raise RuntimeError(
+                    "CRITICAL: Anthropic API key required in production mode. "
+                    "Set ANTHROPIC_API_KEY environment variable."
+                )
+            logger.warning("Anthropic API key not found, LLM calls will fail or use mock")
     
     def generate(self, prompt: str, **kwargs) -> str:
-        """Generate text using Anthropic API."""
+        """Generate text using Anthropic API with production mode enforcement."""
         if not isinstance(prompt, str):
             raise TypeError(f"prompt must be a string, got {type(prompt)}")
+        
+        if not self.api_key:
+            if PRODUCTION_MODE:
+                raise RuntimeError(
+                    "CRITICAL: Cannot generate text in production mode without API key"
+                )
+            logger.warning("No API key, returning empty response")
+            return ""
         
         try:
             import anthropic
@@ -481,15 +517,22 @@ class AnthropicLLM(LLMBase):
                 return getattr(message.content[0], 'text', '')
             return ""
         except ImportError:
-            logger.warning("anthropic package not installed, using mock response")
-            return f"[Anthropic stub response - install anthropic package for real API calls]"
+            if PRODUCTION_MODE:
+                raise RuntimeError(
+                    "CRITICAL: anthropic package required in production mode. "
+                    "Install with: pip install anthropic"
+                )
+            logger.warning("anthropic package not installed, returning empty response")
+            return ""
         except Exception as e:
             logger.error(f"Anthropic API call failed: {e}")
-            raise
+            if PRODUCTION_MODE:
+                raise
+            return ""
 
 
 class GeminiLLM(LLMBase):
-    """Google Gemini LLM implementation."""
+    """Google Gemini LLM implementation with production mode checks."""
     
     def __init__(self, **config):
         self.config = config
@@ -497,12 +540,25 @@ class GeminiLLM(LLMBase):
         self.model = config.get("model", "gemini-pro")
         
         if not self.api_key:
-            logger.warning("Gemini API key not found, LLM calls will fail")
+            if PRODUCTION_MODE:
+                raise RuntimeError(
+                    "CRITICAL: Gemini API key required in production mode. "
+                    "Set GEMINI_API_KEY environment variable."
+                )
+            logger.warning("Gemini API key not found, LLM calls will fail or use mock")
     
     def generate(self, prompt: str, **kwargs) -> str:
-        """Generate text using Gemini API."""
+        """Generate text using Gemini API with production mode enforcement."""
         if not isinstance(prompt, str):
             raise TypeError(f"prompt must be a string, got {type(prompt)}")
+        
+        if not self.api_key:
+            if PRODUCTION_MODE:
+                raise RuntimeError(
+                    "CRITICAL: Cannot generate text in production mode without API key"
+                )
+            logger.warning("No API key, returning empty response")
+            return ""
         
         try:
             import google.generativeai as genai
@@ -512,11 +568,18 @@ class GeminiLLM(LLMBase):
             response = model.generate_content(prompt)
             return response.text if response.text is not None else ""
         except ImportError:
-            logger.warning("google-generativeai package not installed, using mock response")
-            return f"[Gemini stub response - install google-generativeai package for real API calls]"
+            if PRODUCTION_MODE:
+                raise RuntimeError(
+                    "CRITICAL: google-generativeai package required in production mode. "
+                    "Install with: pip install google-generativeai"
+                )
+            logger.warning("google-generativeai package not installed, returning empty response")
+            return ""
         except Exception as e:
             logger.error(f"Gemini API call failed: {e}")
-            raise
+            if PRODUCTION_MODE:
+                raise
+            return ""
 
 
 def init_llm(provider: str = "openai", **kwargs) -> LLMBase:
