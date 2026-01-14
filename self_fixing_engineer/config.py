@@ -202,7 +202,7 @@ class GlobalConfigManager:
                 self.ARENA_PORT: int = int(os.getenv("ARENA_PORT", "8000"))
                 self.REPORTS_DIRECTORY: str = os.getenv("REPORTS_DIRECTORY", "./reports")
 
-            def __getattr__(self, name: str) -> None:
+            def __getattr__(self, name: str) -> Any:
                 """
                 Return None for any missing attributes in minimal config.
                 
@@ -210,7 +210,7 @@ class GlobalConfigManager:
                     name: The attribute name being accessed
                     
                 Returns:
-                    None: Always returns None for missing attributes
+                    None for missing attributes (to allow graceful degradation)
                     
                 Note:
                     This is intentionally permissive to allow graceful degradation

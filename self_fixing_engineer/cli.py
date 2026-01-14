@@ -169,16 +169,20 @@ async def simple_scan() -> None:
         package_dir = os.path.dirname(os.path.abspath(__file__))
         scan_path = os.path.join(package_dir, ARBITER_DIR_NAME)
         
+        # Determine the root directory for the analyzer
         if not os.path.exists(scan_path):
             # Fallback to current directory
-            scan_path = os.getcwd()
+            root_dir = os.getcwd()
+            scan_path = root_dir
             print(f"Note: {ARBITER_DIR_NAME} directory not found at {os.path.join(package_dir, ARBITER_DIR_NAME)}")
             print(f"      Using current directory for scan: {scan_path}")
         else:
+            # Use package directory as root when scanning arbiter subdirectory
+            root_dir = package_dir
             print(f"  Scanning: {scan_path}")
 
-        # Create analyzer with simple path
-        analyzer = CodebaseAnalyzer(root_dir=".")
+        # Create analyzer with dynamically resolved root directory
+        analyzer = CodebaseAnalyzer(root_dir=root_dir)
 
         # Initialize manually to avoid context manager issues
         analyzer.executor = None
