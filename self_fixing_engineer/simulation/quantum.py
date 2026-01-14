@@ -260,23 +260,191 @@ except ImportError:
 
 # --- Robust Alerting System ---
 async def send_pagerduty_alert(message, level):
-    """Send alert to PagerDuty."""
+    """
+    Send alert to PagerDuty using Events API v2.
+    
+    Requires PAGERDUTY_ROUTING_KEY environment variable.
+    Falls back to logging if not configured or on error.
+    """
+    routing_key = os.environ.get("PAGERDUTY_ROUTING_KEY")
+    
+    if not routing_key:
+        quantum_logger.info(f"PAGERDUTY ALERT ({level}): {message} [No routing key configured]")
+        return
+    
     try:
-        # Placeholder implementation
-        quantum_logger.info(f"PAGERDUTY ALERT ({level}): {message}")
-        pass
+        # Map severity levels to PagerDuty severity
+        severity_map = {
+            "CRITICAL": "critical",
+            "ERROR": "error",
+            "WARNING": "warning",
+            "INFO": "info"
+        }
+        severity = severity_map.get(level, "error")
+        
+        # Prepare PagerDuty Events API v2 payload
+        payload = {
+            "routing_key": routing_key,
+            "event_action": "trigger",
+            "payload": {
+                "summary": message[:1024],  # PagerDuty limit
+                "severity": severity,
+                "source": "quantum_module",
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "custom_details": {
+                    "level": level,
+                    "module": "simulation.quantum"
+                }
+            }
+        }
+        
+        # Send to PagerDuty with retry logic
+        if TENACITY_AVAILABLE:
+            @retry(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                reraise=False
+            )
+            async def _send_pd():
+                async with asyncio.timeout(10):
+                    # Use aiohttp if available, otherwise fallback
+                    try:
+                        import aiohttp
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post(
+                                "https://events.pagerduty.com/v2/enqueue",
+                                json=payload,
+                                headers={"Content-Type": "application/json"}
+                            ) as response:
+                                if response.status == 202:
+                                    quantum_logger.info(f"PagerDuty alert sent successfully for: {message[:50]}...")
+                                    return True
+                                else:
+                                    error_text = await response.text()
+                                    quantum_logger.error(
+                                        f"PagerDuty API returned {response.status}: {error_text}"
+                                    )
+                                    return False
+                    except ImportError:
+                        quantum_logger.warning("aiohttp not available, PagerDuty alert not sent")
+                        return False
+            
+            await _send_pd()
+        else:
+            # Without tenacity, make single attempt
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        "https://events.pagerduty.com/v2/enqueue",
+                        json=payload,
+                        headers={"Content-Type": "application/json"},
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as response:
+                        if response.status == 202:
+                            quantum_logger.info(f"PagerDuty alert sent: {message[:50]}...")
+                        else:
+                            quantum_logger.error(f"PagerDuty API error: {response.status}")
+            except ImportError:
+                quantum_logger.warning("aiohttp not available for PagerDuty")
+            except Exception as e:
+                quantum_logger.error(f"Failed to send PagerDuty alert: {e}")
+                
     except Exception as e:
         quantum_logger.error(f"Failed to send PagerDuty alert: {e}")
+        # Fallback to logging
+        quantum_logger.info(f"PAGERDUTY ALERT (fallback) ({level}): {message}")
 
 
 async def send_slack_alert(message, level):
-    """Send alert to Slack."""
+    """
+    Send alert to Slack using Incoming Webhook.
+    
+    Requires SLACK_WEBHOOK_URL environment variable.
+    Falls back to logging if not configured or on error.
+    """
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    
+    if not webhook_url:
+        quantum_logger.info(f"SLACK ALERT ({level}): {message} [No webhook URL configured]")
+        return
+    
     try:
-        # Placeholder implementation
-        quantum_logger.info(f"SLACK ALERT ({level}): {message}")
-        pass
+        # Map levels to Slack colors
+        color_map = {
+            "CRITICAL": "#FF0000",  # Red
+            "ERROR": "#FF6B00",     # Orange
+            "WARNING": "#FFD700",   # Gold
+            "INFO": "#36A64F"       # Green
+        }
+        color = color_map.get(level, "#808080")
+        
+        # Prepare Slack message payload
+        payload = {
+            "attachments": [{
+                "color": color,
+                "title": f"Quantum Module Alert - {level}",
+                "text": message,
+                "footer": "Quantum Plugin",
+                "ts": int(time.time())
+            }]
+        }
+        
+        # Send to Slack with retry logic
+        if TENACITY_AVAILABLE:
+            @retry(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                reraise=False
+            )
+            async def _send_slack():
+                async with asyncio.timeout(10):
+                    try:
+                        import aiohttp
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post(
+                                webhook_url,
+                                json=payload,
+                                headers={"Content-Type": "application/json"}
+                            ) as response:
+                                if response.status == 200:
+                                    quantum_logger.info(f"Slack alert sent successfully for: {message[:50]}...")
+                                    return True
+                                else:
+                                    error_text = await response.text()
+                                    quantum_logger.error(
+                                        f"Slack webhook returned {response.status}: {error_text}"
+                                    )
+                                    return False
+                    except ImportError:
+                        quantum_logger.warning("aiohttp not available, Slack alert not sent")
+                        return False
+            
+            await _send_slack()
+        else:
+            # Without tenacity, make single attempt
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        webhook_url,
+                        json=payload,
+                        headers={"Content-Type": "application/json"},
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as response:
+                        if response.status == 200:
+                            quantum_logger.info(f"Slack alert sent: {message[:50]}...")
+                        else:
+                            quantum_logger.error(f"Slack webhook error: {response.status}")
+            except ImportError:
+                quantum_logger.warning("aiohttp not available for Slack")
+            except Exception as e:
+                quantum_logger.error(f"Failed to send Slack alert: {e}")
+                
     except Exception as e:
         quantum_logger.error(f"Failed to send Slack alert: {e}")
+        # Fallback to logging
+        quantum_logger.info(f"SLACK ALERT (fallback) ({level}): {message}")
 
 
 async def alert_operator(message: str, level: str = "CRITICAL"):
