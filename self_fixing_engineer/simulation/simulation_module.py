@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import traceback
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
@@ -254,11 +255,18 @@ class ShardedMessageBus:
     Environment Variables:
     - USE_REAL_EVENT_BUS: Set to 'true' to attempt using mesh.event_bus (default: 'false')
     """
-    def __init__(self):
+    def __init__(self, enable_dlq: bool = False):
+        """
+        Initialize ShardedMessageBus.
+        
+        Args:
+            enable_dlq: Enable dead-letter queue for failed message handlers (default: False)
+        """
         self._production_mode = PRODUCTION_MODE
         self._use_real = os.getenv("USE_REAL_EVENT_BUS", "false").lower() == "true"
         self._real_bus = None
         self._local_subscribers: Dict[str, List[Dict[str, Any]]] = {}
+        self.enable_dlq = enable_dlq
         
         if self._use_real:
             try:
@@ -393,10 +401,46 @@ class ShardedMessageBus:
                             await handler(msg_obj)
                             logger.debug(f"Message routed to handler for pattern {pattern}")
                         except Exception as e:
+                            # Generate correlation ID for tracking
+                            # Use message ID if available, otherwise generate new UUID
+                            correlation_id = getattr(msg_obj, 'id', None) or str(uuid.uuid4())
+                            
                             logger.error(
-                                f"Error in message handler for pattern {pattern}: {e}",
-                                exc_info=True
+                                f"Error in message handler for pattern {pattern}. "
+                                f"Correlation ID: {correlation_id}, Error: {e}",
+                                exc_info=True,
+                                extra={
+                                    "correlation_id": correlation_id,
+                                    "pattern": pattern,
+                                    "topic": topic,
+                                    "error_type": type(e).__name__
+                                }
                             )
+                            
+                            # Optionally publish to dead-letter queue for failed messages
+                            # This allows for later replay or investigation
+                            # Enable DLQ by setting enable_dlq=True when creating ShardedMessageBus
+                            if getattr(self, 'enable_dlq', False):
+                                try:
+                                    await self.publish(
+                                        topic="deadletter.message_bus",
+                                        payload={
+                                            "original_topic": topic,
+                                            "pattern": pattern,
+                                            "error": str(e),
+                                            "error_type": type(e).__name__,
+                                            "correlation_id": correlation_id,
+                                            "message": msg_obj.payload if hasattr(msg_obj, 'payload') else str(msg_obj),
+                                            "timestamp": time.time()
+                                        }
+                                    )
+                                    logger.info(f"Message {correlation_id} sent to dead-letter queue")
+                                except Exception as dlq_error:
+                                    logger.error(f"Failed to send message to DLQ: {dlq_error}")
+                            
+                            # Re-raise the exception to allow upstream error handling
+                            # This ensures errors are not silently swallowed
+                            raise
 
     async def subscribe(
         self, 

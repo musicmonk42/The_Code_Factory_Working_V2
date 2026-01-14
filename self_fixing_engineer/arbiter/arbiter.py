@@ -3026,9 +3026,16 @@ class Arbiter:
             )
 
     async def _handle_incoming_event(self, event_type: str, data: Dict[str, Any]):
-        """Routes incoming events to appropriate handlers."""
-        logging.getLogger(__name__).info(
-            f"[{self.name}] Routing event type: {event_type}"
+        """
+        Routes incoming events to appropriate handlers.
+        
+        Enhanced with metrics tracking for unknown event types and detailed logging.
+        Follows industry best practices for event-driven architectures.
+        """
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"[{self.name}] Routing event type: {event_type}",
+            extra={"event_type": event_type, "agent": self.name}
         )
         
         # Route to handler based on event type
@@ -3050,16 +3057,137 @@ class Arbiter:
         handler = handler_map.get(event_type)
         if handler:
             try:
+                # Track successful routing
+                try:
+                    routed_events_counter = get_or_create_counter(
+                        "arbiter_events_routed_total",
+                        "Total number of events successfully routed to handlers",
+                        labelnames=["event_type", "agent"]
+                    )
+                    routed_events_counter.labels(
+                        event_type=event_type,
+                        agent=self.name
+                    ).inc()
+                except Exception as metrics_error:
+                    # Log metric errors at debug level to aid troubleshooting
+                    logger.debug(
+                        f"Failed to update routed events metric: {metrics_error}",
+                        extra={"event_type": event_type, "agent": self.name}
+                    )
+                
                 await handler(data)
             except Exception as e:
-                logging.getLogger(__name__).error(
+                logger.error(
                     f"[{self.name}] Handler error for {event_type}: {e}",
-                    exc_info=True
+                    exc_info=True,
+                    extra={
+                        "event_type": event_type,
+                        "agent": self.name,
+                        "error_type": type(e).__name__
+                    }
                 )
+                
+                # Track handler errors
+                try:
+                    handler_errors_counter = get_or_create_counter(
+                        "arbiter_event_handler_errors_total",
+                        "Total number of errors in event handlers",
+                        labelnames=["event_type", "agent", "error_type"]
+                    )
+                    handler_errors_counter.labels(
+                        event_type=event_type,
+                        agent=self.name,
+                        error_type=type(e).__name__
+                    ).inc()
+                except Exception as metrics_error:
+                    logger.debug(
+                        f"Failed to update handler errors metric: {metrics_error}",
+                        extra={"event_type": event_type, "agent": self.name}
+                    )
         else:
-            logging.getLogger(__name__).warning(
-                f"[{self.name}] No handler found for event type: {event_type}"
+            # Unknown event type - log with more context and track metrics
+            logger.warning(
+                f"[{self.name}] No handler found for event type: {event_type}. "
+                f"Available handlers: {', '.join(handler_map.keys())}. "
+                f"Event data keys: {list(data.keys()) if data else 'none'}",
+                extra={
+                    "event_type": event_type,
+                    "agent": self.name,
+                    "available_handlers": list(handler_map.keys())
+                }
             )
+            
+            # Track unknown event types for monitoring
+            try:
+                unknown_events_counter = get_or_create_counter(
+                    "arbiter_events_unknown_total",
+                    "Total number of unknown/unrouted event types",
+                    labelnames=["event_type", "agent"]
+                )
+                unknown_events_counter.labels(
+                    event_type=event_type,
+                    agent=self.name
+                ).inc()
+            except Exception as metrics_error:
+                logger.debug(
+                    f"Failed to update unknown events metric: {metrics_error}",
+                    extra={"event_type": event_type, "agent": self.name}
+                )
+            
+            # Consider implementing a dead-letter handler for unrouted events
+            # For now, log the event data for investigation (sanitized)
+            try:
+                # Sanitize sensitive data before logging
+                sanitized_data = self._sanitize_event_data(data)
+                logger.debug(
+                    f"[{self.name}] Unrouted event data: {json.dumps(sanitized_data, indent=2)}",
+                    extra={"event_type": event_type, "data": sanitized_data}
+                )
+            except Exception:
+                logger.debug(
+                    f"[{self.name}] Unrouted event data (non-serializable): {str(data)[:200]}"
+                )
+    
+    def _sanitize_event_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sanitize event data by redacting sensitive fields before logging.
+        
+        Args:
+            data: Raw event data dictionary
+            
+        Returns:
+            Sanitized dictionary with sensitive fields redacted
+        """
+        if not isinstance(data, dict):
+            return data
+        
+        # Set of sensitive field names to redact (for O(1) lookup)
+        sensitive_fields = {
+            'password', 'token', 'secret', 'api_key', 'apikey',
+            'auth', 'authorization', 'credential', 'private_key',
+            'access_token', 'refresh_token', 'session_id'
+        }
+        
+        sanitized = {}
+        for key, value in data.items():
+            key_lower = key.lower()
+            
+            # Check if any sensitive field name is contained in the key
+            # O(n) where n is number of sensitive fields (small constant)
+            is_sensitive = any(sensitive in key_lower for sensitive in sensitive_fields)
+            
+            if is_sensitive:
+                sanitized[key] = "[REDACTED]"
+            # Recursively sanitize nested dictionaries
+            elif isinstance(value, dict):
+                sanitized[key] = self._sanitize_event_data(value)
+            # Truncate very long strings
+            elif isinstance(value, str) and len(value) > 500:
+                sanitized[key] = value[:500] + "... [TRUNCATED]"
+            else:
+                sanitized[key] = value
+        
+        return sanitized
 
     # Fix 3: Event Handler Methods
     async def _on_bug_detected(self, data: Dict[str, Any]):

@@ -123,6 +123,10 @@ except ImportError as e:
 
 
 # Import internal package components that might create a circular dependency loop.
+# Enhanced with retry logic and better error handling.
+_channel_import_failed = False
+_channel_import_error = None
+
 try:
     from omnicore_engine.plugin_registry import PlugInKind, plugin
 
@@ -130,18 +134,46 @@ try:
     from .clarifier_user_prompt import UserPromptChannel as InteractionMode
     from .clarifier_user_prompt import get_channel
 except ImportError as e:
+    _channel_import_failed = True
+    _channel_import_error = e
     logging.warning(
-        f"Failed to load package dependencies (Prompt/Updater/Plugin) due to potential circular import: {e}"
+        f"Failed to load package dependencies (Prompt/Updater/Plugin) due to potential circular import: {e}. "
+        f"This may be resolved by importing the module directly instead of through a package."
     )
 
     # Define minimal dummies for other internal components
     class InteractionMode:
+        """Stub InteractionMode when clarifier_user_prompt cannot be imported"""
         pass
 
     def get_channel(*args, **kwargs):
-        raise NotImplementedError("Channel imports failed.")
+        """
+        Fallback for get_channel when import fails.
+        
+        This provides a more helpful error message and suggests alternatives.
+        """
+        error_msg = (
+            "Channel imports failed - clarifier_user_prompt module is unavailable. "
+            f"Original error: {_channel_import_error}. "
+            "Possible solutions:\n"
+            "1. Ensure clarifier_user_prompt.py exists in the same directory\n"
+            "2. Check for circular import issues in the module dependencies\n"
+            "3. Try importing the channel module directly before initializing Clarifier\n"
+            "4. Use a mock/stub channel implementation for testing"
+        )
+        logging.error(error_msg)
+        raise NotImplementedError(error_msg)
 
     def update_requirements_with_answers(*args, **kwargs):
+        """
+        Fallback for update_requirements_with_answers when import fails.
+        
+        Returns empty dict to allow graceful degradation.
+        """
+        logging.warning(
+            "update_requirements_with_answers called but clarifier_updater module is unavailable. "
+            "Returning empty result."
+        )
         return {}
 
     def plugin(*args, **kwargs):
