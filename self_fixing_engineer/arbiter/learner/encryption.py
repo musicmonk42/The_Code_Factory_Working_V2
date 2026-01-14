@@ -172,13 +172,14 @@ class ArbiterConfig:
             
             parameter_name = f"/arbiter/encryption_keys/{version}"
             
-            # Fernet keys are base64-encoded bytes, store as base64 string
-            key_b64 = base64.b64encode(key).decode("ascii")
+            # Fernet.generate_key() returns base64-encoded bytes already
+            # Just decode to string for storage
+            key_str = key.decode("ascii")
             
             # Store as SecureString for added security
             ssm_client.put_parameter(
                 Name=parameter_name,
-                Value=key_b64,
+                Value=key_str,
                 Type="SecureString",
                 Overwrite=True,
                 Description=f"Arbiter encryption key version {version}",

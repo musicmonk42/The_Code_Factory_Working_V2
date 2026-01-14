@@ -3135,16 +3135,56 @@ class Arbiter:
                 )
             
             # Consider implementing a dead-letter handler for unrouted events
-            # For now, log the event data for investigation
+            # For now, log the event data for investigation (sanitized)
             try:
+                # Sanitize sensitive data before logging
+                sanitized_data = self._sanitize_event_data(data)
                 logger.debug(
-                    f"[{self.name}] Unrouted event data: {json.dumps(data, indent=2)}",
-                    extra={"event_type": event_type, "data": data}
+                    f"[{self.name}] Unrouted event data: {json.dumps(sanitized_data, indent=2)}",
+                    extra={"event_type": event_type, "data": sanitized_data}
                 )
             except Exception:
                 logger.debug(
-                    f"[{self.name}] Unrouted event data (non-serializable): {str(data)}"
+                    f"[{self.name}] Unrouted event data (non-serializable): {str(data)[:200]}"
                 )
+    
+    def _sanitize_event_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sanitize event data by redacting sensitive fields before logging.
+        
+        Args:
+            data: Raw event data dictionary
+            
+        Returns:
+            Sanitized dictionary with sensitive fields redacted
+        """
+        if not isinstance(data, dict):
+            return data
+        
+        # List of sensitive field names to redact
+        sensitive_fields = {
+            'password', 'token', 'secret', 'api_key', 'apikey',
+            'auth', 'authorization', 'credential', 'private_key',
+            'access_token', 'refresh_token', 'session_id'
+        }
+        
+        sanitized = {}
+        for key, value in data.items():
+            key_lower = key.lower()
+            
+            # Redact sensitive fields
+            if any(sensitive in key_lower for sensitive in sensitive_fields):
+                sanitized[key] = "[REDACTED]"
+            # Recursively sanitize nested dictionaries
+            elif isinstance(value, dict):
+                sanitized[key] = self._sanitize_event_data(value)
+            # Truncate very long strings
+            elif isinstance(value, str) and len(value) > 500:
+                sanitized[key] = value[:500] + "... [TRUNCATED]"
+            else:
+                sanitized[key] = value
+        
+        return sanitized
 
     # Fix 3: Event Handler Methods
     async def _on_bug_detected(self, data: Dict[str, Any]):

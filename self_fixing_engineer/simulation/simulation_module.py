@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import traceback
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
@@ -402,7 +403,6 @@ class ShardedMessageBus:
                         except Exception as e:
                             # Generate correlation ID for tracking
                             # Use message ID if available, otherwise generate new UUID
-                            import uuid
                             correlation_id = getattr(msg_obj, 'id', None) or str(uuid.uuid4())
                             
                             logger.error(
