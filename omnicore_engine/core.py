@@ -13,6 +13,13 @@ import numpy as np
 import structlog
 from pydantic_settings import BaseSettings
 
+# Try to import metrics functions at module level for better visibility
+try:
+    from omnicore_engine.metrics import get_or_create_counter
+except ImportError:
+    # Fallback if metrics module is not available
+    get_or_create_counter = None
+
 
 def _create_fallback_settings():
     """Create a minimal settings object for when ArbiterConfig is unavailable."""
@@ -1029,19 +1036,19 @@ class OmniCoreEngine:
             )
         
         # 2. Track error metrics using Prometheus
-        try:
-            from omnicore_engine.metrics import get_or_create_counter
-            
-            # Track error counts by severity and component
-            error_counter = get_or_create_counter(
-                'omnicore_system_errors_total',
-                'Total number of system errors',
-                labelnames=('severity', 'component')
-            )
-            error_counter.labels(severity=severity, component=component).inc()
-            
-        except Exception as e:
-            self.logger.warning(f"Failed to record error metrics: {e}")
+        if get_or_create_counter is not None:
+            try:
+                # Track error counts by severity and component
+                error_counter = get_or_create_counter(
+                    'omnicore_system_errors_total',
+                    'Total number of system errors',
+                    labelnames=('severity', 'component')
+                )
+                error_counter.labels(severity=severity, component=component).inc()
+            except Exception as e:
+                self.logger.warning(f"Failed to record error metrics: {e}")
+        else:
+            self.logger.debug("Metrics module not available, skipping error counter")
         
         # 3. Send alerts for critical/high severity errors
         if severity in ['critical', 'high']:
@@ -1145,23 +1152,28 @@ class OmniCoreEngine:
         
         Args:
             log_data: Structured log data to send
+            
+        Note:
+            This is a placeholder for external logging integration.
+            In production environments, implement specific integrations
+            based on your monitoring infrastructure:
+            - Configure InfluxDB client and write_api at module level
+            - Use dedicated logging libraries (e.g., python-json-logger)
+            - Integrate with cloud-native monitoring services
         """
         # Placeholder for external logging integration
         # In production, this would send to services like:
-        # - InfluxDB for time-series logging
-        # - Elasticsearch for log aggregation
-        # - CloudWatch/DataDog for cloud monitoring
+        # - InfluxDB for time-series logging (requires configured client)
+        # - Elasticsearch for log aggregation (requires elasticsearch-py)
+        # - CloudWatch/DataDog for cloud monitoring (requires respective SDKs)
         
-        # Example: Send to InfluxDB if available
-        try:
-            from omnicore_engine.metrics import write_api
-            
-            if write_api and hasattr(write_api, 'write'):
-                # Write to InfluxDB (implementation depends on setup)
-                self.logger.debug("Logged error to external system (InfluxDB)")
-        except (ImportError, AttributeError):
-            # External logging not configured, this is acceptable
-            pass
+        # Future implementation example:
+        # if hasattr(self, 'influx_client') and self.influx_client:
+        #     write_api = self.influx_client.write_api()
+        #     point = Point("system_errors").tag("component", log_data.get("component"))
+        #     write_api.write(bucket="omnicore", record=point)
+        
+        self.logger.debug("External logging not configured (placeholder implementation)")
     
     async def _trigger_self_healing(
         self,
