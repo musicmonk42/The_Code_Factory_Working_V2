@@ -18,6 +18,9 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+# Module-level constants
+PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+
 
 # --------------------------- Settings (patchable) ----------------------------
 class Settings:
@@ -141,7 +144,7 @@ class Database:
     For production, connect to a real database implementation.
     """
     def __init__(self):
-        self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+        self._production_mode = PRODUCTION_MODE
         if self._production_mode:
             logger.critical(
                 "CRITICAL: Using fallback Database stub in PRODUCTION mode. "
@@ -190,7 +193,7 @@ class ShardedMessageBus:
     - USE_REAL_EVENT_BUS: Set to 'true' to attempt using mesh.event_bus (default: 'false')
     """
     def __init__(self):
-        self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+        self._production_mode = PRODUCTION_MODE
         self._use_real = os.getenv("USE_REAL_EVENT_BUS", "false").lower() == "true"
         self._real_bus = None
         

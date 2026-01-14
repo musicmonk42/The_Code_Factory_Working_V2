@@ -135,13 +135,19 @@ except ImportError:
             try:
                 # Create backup of existing file
                 if os.path.exists(self._db_file):
-                    # Rotate backups
+                    # Delete oldest backup if it exists
+                    oldest_backup = f"{self._db_file}.{self._backup_count}"
+                    if os.path.exists(oldest_backup):
+                        os.remove(oldest_backup)
+                    
+                    # Rotate backups (move each backup to next number)
                     for i in range(self._backup_count - 1, 0, -1):
                         old_backup = f"{self._db_file}.{i}"
                         new_backup = f"{self._db_file}.{i+1}"
                         if os.path.exists(old_backup):
                             os.rename(old_backup, new_backup)
-                    # Create new backup
+                    
+                    # Create new backup from current file
                     os.rename(self._db_file, f"{self._db_file}.1")
                 
                 # Write current data

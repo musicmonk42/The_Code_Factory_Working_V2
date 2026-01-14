@@ -69,6 +69,9 @@ except ImportError:
             r'-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----',  # Private keys
         ]
         
+        # Constants
+        MAX_RECURSION_DEPTH = 100  # Prevent infinite recursion in scrubbing
+        
         def is_sensitive_key(key: str) -> bool:
             """Check if a key name suggests sensitive data."""
             key_lower = key.lower()
@@ -86,7 +89,7 @@ except ImportError:
         def scrub_recursive(data: Any, depth: int = 0) -> Any:
             """Recursively scrub secrets from data structure."""
             # Prevent infinite recursion
-            if depth > 100:
+            if depth > MAX_RECURSION_DEPTH:
                 return '***DEPTH_LIMIT***'
             
             if isinstance(data, dict):
