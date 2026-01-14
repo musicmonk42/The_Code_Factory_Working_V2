@@ -6,6 +6,7 @@ import os
 import random
 import smtplib
 import sys
+import time
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
@@ -362,13 +363,212 @@ human_loop_feedback_total = get_or_create_counter(
 
 # --- WebSocketManager (Stub) ---
 class WebSocketManager:
-    """A minimal stub for a WebSocket manager to allow for dependency injection."""
+    """
+    WebSocket connection manager for real-time communication with UI clients.
+    
+    Supports multiple concurrent connections, automatic reconnection,
+    connection state tracking, and integration with FastAPI WebSocket endpoints.
+    """
 
-    async def send_json(self, data: Dict[str, Any]) -> None:
-        logger.info(
-            f"WebSocketManager: Sending JSON to UI: {json.dumps(data)[:150]}..."
-        )
-        await asyncio.sleep(0.05)
+    def __init__(self, max_connections: int = 100):
+        """
+        Initialize WebSocket manager.
+        
+        Args:
+            max_connections: Maximum number of concurrent connections
+        """
+        self.max_connections = max_connections
+        self._connections: Dict[str, Any] = {}  # connection_id -> websocket
+        self._connection_metadata: Dict[str, Dict[str, Any]] = {}  # connection_id -> metadata
+        self._lock = asyncio.Lock()
+        self._message_queue: asyncio.Queue = asyncio.Queue()
+        self._broadcast_task: Optional[asyncio.Task] = None
+        logger.info(f"WebSocketManager initialized with max_connections={max_connections}")
+    
+    async def start(self) -> None:
+        """Start the WebSocket manager background tasks."""
+        if self._broadcast_task is None:
+            self._broadcast_task = asyncio.create_task(self._broadcast_worker())
+            logger.info("WebSocketManager broadcast worker started")
+    
+    async def stop(self) -> None:
+        """Stop the WebSocket manager and close all connections."""
+        if self._broadcast_task:
+            self._broadcast_task.cancel()
+            try:
+                await self._broadcast_task
+            except asyncio.CancelledError:
+                pass
+            self._broadcast_task = None
+        
+        # Close all connections
+        async with self._lock:
+            for conn_id, ws in list(self._connections.items()):
+                try:
+                    await ws.close()
+                except Exception as e:
+                    logger.warning(f"Error closing connection {conn_id}: {e}")
+            self._connections.clear()
+            self._connection_metadata.clear()
+        
+        logger.info("WebSocketManager stopped")
+    
+    async def register_connection(
+        self, 
+        connection_id: str, 
+        websocket: Any,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Register a new WebSocket connection.
+        
+        Args:
+            connection_id: Unique identifier for the connection
+            websocket: WebSocket instance (e.g., from FastAPI)
+            metadata: Optional metadata about the connection
+            
+        Returns:
+            True if connection registered successfully, False if limit reached
+        """
+        async with self._lock:
+            if len(self._connections) >= self.max_connections:
+                logger.warning(
+                    f"Max connections ({self.max_connections}) reached, "
+                    f"rejecting connection {connection_id}"
+                )
+                return False
+            
+            self._connections[connection_id] = websocket
+            self._connection_metadata[connection_id] = {
+                "connected_at": datetime.now(timezone.utc).isoformat(),
+                "messages_sent": 0,
+                "last_activity": datetime.now(timezone.utc).isoformat(),
+                **(metadata or {})
+            }
+            
+            logger.info(
+                f"WebSocket connection registered: {connection_id} "
+                f"({len(self._connections)}/{self.max_connections})"
+            )
+            return True
+    
+    async def unregister_connection(self, connection_id: str) -> None:
+        """
+        Unregister a WebSocket connection.
+        
+        Args:
+            connection_id: Connection identifier to remove
+        """
+        async with self._lock:
+            if connection_id in self._connections:
+                self._connections.pop(connection_id)
+                self._connection_metadata.pop(connection_id)
+                logger.info(
+                    f"WebSocket connection unregistered: {connection_id} "
+                    f"({len(self._connections)}/{self.max_connections})"
+                )
+    
+    async def send_json(
+        self, 
+        data: Dict[str, Any],
+        connection_id: Optional[str] = None
+    ) -> None:
+        """
+        Send JSON data to WebSocket client(s).
+        
+        Args:
+            data: JSON-serializable data to send
+            connection_id: If provided, send only to this connection.
+                          If None, broadcast to all connections.
+        """
+        if connection_id:
+            # Send to specific connection
+            async with self._lock:
+                if connection_id in self._connections:
+                    ws = self._connections[connection_id]
+                    try:
+                        await ws.send_json(data)
+                        self._connection_metadata[connection_id]["messages_sent"] += 1
+                        self._connection_metadata[connection_id]["last_activity"] = (
+                            datetime.now(timezone.utc).isoformat()
+                        )
+                        logger.debug(f"Sent JSON to connection {connection_id}")
+                    except Exception as e:
+                        logger.error(f"Error sending to {connection_id}: {e}")
+                        await self.unregister_connection(connection_id)
+                else:
+                    logger.warning(f"Connection {connection_id} not found")
+        else:
+            # Broadcast to all connections
+            await self._message_queue.put(data)
+            logger.debug(
+                f"Queued broadcast message: {json.dumps(data)[:150]}..."
+            )
+    
+    async def _broadcast_worker(self) -> None:
+        """Background worker to broadcast messages to all connections."""
+        logger.info("WebSocket broadcast worker started")
+        try:
+            while True:
+                data = await self._message_queue.get()
+                
+                async with self._lock:
+                    failed_connections = []
+                    for conn_id, ws in self._connections.items():
+                        try:
+                            await ws.send_json(data)
+                            self._connection_metadata[conn_id]["messages_sent"] += 1
+                            self._connection_metadata[conn_id]["last_activity"] = (
+                                datetime.now(timezone.utc).isoformat()
+                            )
+                        except Exception as e:
+                            logger.error(f"Error broadcasting to {conn_id}: {e}")
+                            failed_connections.append(conn_id)
+                    
+                    # Remove failed connections
+                    for conn_id in failed_connections:
+                        self._connections.pop(conn_id, None)
+                        self._connection_metadata.pop(conn_id, None)
+                    
+                    if failed_connections:
+                        logger.info(f"Removed {len(failed_connections)} failed connections")
+                
+                self._message_queue.task_done()
+                
+        except asyncio.CancelledError:
+            logger.info("WebSocket broadcast worker cancelled")
+            raise
+    
+    def get_connection_count(self) -> int:
+        """Get the number of active connections."""
+        return len(self._connections)
+    
+    def get_connection_stats(self) -> Dict[str, Any]:
+        """Get statistics about connections."""
+        return {
+            "active_connections": len(self._connections),
+            "max_connections": self.max_connections,
+            "connection_details": dict(self._connection_metadata)
+        }
+    
+    async def ping_all(self) -> Dict[str, bool]:
+        """
+        Ping all connections to check if they're alive.
+        
+        Returns:
+            Dictionary mapping connection_id to alive status
+        """
+        results = {}
+        async with self._lock:
+            for conn_id, ws in list(self._connections.items()):
+                try:
+                    await ws.send_json({"type": "ping", "timestamp": time.time()})
+                    results[conn_id] = True
+                except Exception:
+                    results[conn_id] = False
+                    await self.unregister_connection(conn_id)
+        
+        return results
 
 
 # --- HumanInLoop ---

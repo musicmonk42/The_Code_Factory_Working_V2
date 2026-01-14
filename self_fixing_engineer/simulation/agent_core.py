@@ -417,7 +417,7 @@ class MockLLM(LLMBase):
 
 
 class OpenAILLM(LLMBase):
-    """OpenAI LLM implementation (stub - requires openai package)."""
+    """OpenAI LLM implementation."""
     
     def __init__(self, **config):
         self.config = config
@@ -434,19 +434,88 @@ class OpenAILLM(LLMBase):
         
         try:
             import openai
-            openai.api_key = self.api_key
+            client = openai.OpenAI(api_key=self.api_key)
             
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model=kwargs.get("model", self.model),
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=kwargs.get("max_tokens", 150)
             )
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            return content if content is not None else ""
         except ImportError:
             logger.warning("openai package not installed, using mock response")
             return f"[OpenAI stub response - install openai package for real API calls]"
         except Exception as e:
             logger.error(f"OpenAI API call failed: {e}")
+            raise
+
+
+class AnthropicLLM(LLMBase):
+    """Anthropic Claude LLM implementation."""
+    
+    def __init__(self, **config):
+        self.config = config
+        self.api_key = config.get("api_key") or os.environ.get("ANTHROPIC_API_KEY")
+        self.model = config.get("model", "claude-3-haiku-20240307")
+        
+        if not self.api_key:
+            logger.warning("Anthropic API key not found, LLM calls will fail")
+    
+    def generate(self, prompt: str, **kwargs) -> str:
+        """Generate text using Anthropic API."""
+        if not isinstance(prompt, str):
+            raise TypeError(f"prompt must be a string, got {type(prompt)}")
+        
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=self.api_key)
+            
+            message = client.messages.create(
+                model=kwargs.get("model", self.model),
+                max_tokens=kwargs.get("max_tokens", 1024),
+                messages=[{"role": "user", "content": prompt}]
+            )
+            # Handle potential empty content or missing text attribute
+            if message.content and len(message.content) > 0:
+                return getattr(message.content[0], 'text', '')
+            return ""
+        except ImportError:
+            logger.warning("anthropic package not installed, using mock response")
+            return f"[Anthropic stub response - install anthropic package for real API calls]"
+        except Exception as e:
+            logger.error(f"Anthropic API call failed: {e}")
+            raise
+
+
+class GeminiLLM(LLMBase):
+    """Google Gemini LLM implementation."""
+    
+    def __init__(self, **config):
+        self.config = config
+        self.api_key = config.get("api_key") or os.environ.get("GEMINI_API_KEY")
+        self.model = config.get("model", "gemini-pro")
+        
+        if not self.api_key:
+            logger.warning("Gemini API key not found, LLM calls will fail")
+    
+    def generate(self, prompt: str, **kwargs) -> str:
+        """Generate text using Gemini API."""
+        if not isinstance(prompt, str):
+            raise TypeError(f"prompt must be a string, got {type(prompt)}")
+        
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=self.api_key)
+            
+            model = genai.GenerativeModel(kwargs.get("model", self.model))
+            response = model.generate_content(prompt)
+            return response.text if response.text is not None else ""
+        except ImportError:
+            logger.warning("google-generativeai package not installed, using mock response")
+            return f"[Gemini stub response - install google-generativeai package for real API calls]"
+        except Exception as e:
+            logger.error(f"Gemini API call failed: {e}")
             raise
 
 
@@ -457,7 +526,7 @@ def init_llm(provider: str = "openai", **kwargs) -> LLMBase:
     Supports multiple providers with proper fallback to mock implementation.
     
     Args:
-        provider: LLM provider name ("openai", "anthropic", "mock")
+        provider: LLM provider name ("openai", "anthropic", "gemini", "mock")
         **kwargs: Provider-specific configuration
             - api_key: API key for the provider
             - model: Model name to use
@@ -473,6 +542,12 @@ def init_llm(provider: str = "openai", **kwargs) -> LLMBase:
     Examples:
         >>> llm = init_llm("openai", api_key="sk-...", model="gpt-4")
         >>> response = llm.generate("Hello, world!")
+        
+        >>> llm = init_llm("anthropic", api_key="sk-ant-...", model="claude-3-opus-20240229")
+        >>> response = llm.generate("Explain quantum computing")
+        
+        >>> llm = init_llm("gemini", api_key="...", model="gemini-pro")
+        >>> response = llm.generate("Write a poem")
         
         >>> llm = init_llm("mock")  # For testing
         >>> response = llm("Test prompt")
@@ -490,17 +565,49 @@ def init_llm(provider: str = "openai", **kwargs) -> LLMBase:
         if use_mock:
             logger.info("LLM_USE_MOCK is set, using MockLLM instead of real OpenAI")
             return MockLLM(provider="openai", **kwargs)
+        
+        # Check if API key is available
+        api_key = kwargs.get("api_key") or os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            logger.warning("OpenAI API key not found, using MockLLM")
+            return MockLLM(provider="openai", **kwargs)
+        
         return OpenAILLM(**kwargs)
     
     elif provider == "anthropic":
-        # Placeholder for Anthropic implementation
-        logger.warning(f"Provider '{provider}' not yet implemented, using MockLLM")
-        return MockLLM(provider=provider, **kwargs)
+        # Check if we should use mock based on environment
+        use_mock = os.environ.get("LLM_USE_MOCK", "false").lower() == "true"
+        if use_mock:
+            logger.info("LLM_USE_MOCK is set, using MockLLM instead of real Anthropic")
+            return MockLLM(provider="anthropic", **kwargs)
+        
+        # Check if API key is available
+        api_key = kwargs.get("api_key") or os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            logger.warning("Anthropic API key not found, using MockLLM")
+            return MockLLM(provider="anthropic", **kwargs)
+        
+        return AnthropicLLM(**kwargs)
+    
+    elif provider == "gemini":
+        # Check if we should use mock based on environment
+        use_mock = os.environ.get("LLM_USE_MOCK", "false").lower() == "true"
+        if use_mock:
+            logger.info("LLM_USE_MOCK is set, using MockLLM instead of real Gemini")
+            return MockLLM(provider="gemini", **kwargs)
+        
+        # Check if API key is available
+        api_key = kwargs.get("api_key") or os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            logger.warning("Gemini API key not found, using MockLLM")
+            return MockLLM(provider="gemini", **kwargs)
+        
+        return GeminiLLM(**kwargs)
     
     else:
         raise ValueError(
             f"Unsupported LLM provider: {provider}. "
-            f"Supported providers: openai, anthropic, mock"
+            f"Supported providers: openai, anthropic, gemini, mock"
         )
 
 
@@ -547,6 +654,8 @@ __all__ = [
     "LLMBase",
     "MockLLM",
     "OpenAILLM",
+    "AnthropicLLM",
+    "GeminiLLM",
     "get_meta_learning_instance",
     "get_policy_engine_instance",
     "init_llm",
