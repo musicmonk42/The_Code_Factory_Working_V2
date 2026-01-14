@@ -332,11 +332,226 @@ class AWSCredentialProvider(CredentialProvider):
 
 
 class VaultCredentialProvider(CredentialProvider):
-    """HashiCorp Vault credential provider."""
+    """
+    HashiCorp Vault credential provider with caching and TTL.
+    
+    Supports multiple authentication methods:
+    - Token authentication
+    - AppRole authentication
+    - Kubernetes authentication
+    
+    Environment variables:
+        VAULT_ADDR: Vault server address (required)
+        VAULT_TOKEN: Direct token authentication
+        VAULT_ROLE_ID: AppRole role ID
+        VAULT_SECRET_ID: AppRole secret ID
+        VAULT_MOUNT_POINT: Secret mount point (default: secret)
+        VAULT_NAMESPACE: Vault namespace (optional)
+        VAULT_CACERT: Path to CA certificate (optional)
+    """
+
+    def __init__(self):
+        """Initialize Vault provider with configuration from environment."""
+        self.vault_addr = os.environ.get("VAULT_ADDR")
+        self.mount_point = os.environ.get("VAULT_MOUNT_POINT", "secret")
+        self.namespace = os.environ.get("VAULT_NAMESPACE")
+        self.cacert = os.environ.get("VAULT_CACERT")
+        self._client = None
+        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._cache_lock = asyncio.Lock()
+        self._default_ttl = 300  # 5 minutes default TTL
+        
+        if not self.vault_addr:
+            quantum_logger.warning(
+                "VAULT_ADDR not set. VaultCredentialProvider will not function."
+            )
+    
+    async def _get_client(self):
+        """Get or create Vault client with authentication."""
+        if self._client:
+            return self._client
+        
+        if not self.vault_addr:
+            raise RuntimeError("VAULT_ADDR environment variable not set")
+        
+        try:
+            import hvac
+            
+            # Create client
+            client = hvac.Client(
+                url=self.vault_addr,
+                namespace=self.namespace,
+                verify=self.cacert if self.cacert else True
+            )
+            
+            # Authenticate using available method
+            if os.environ.get("VAULT_TOKEN"):
+                # Token authentication
+                client.token = os.environ["VAULT_TOKEN"]
+                quantum_logger.info("Vault: Using token authentication")
+                
+            elif os.environ.get("VAULT_ROLE_ID") and os.environ.get("VAULT_SECRET_ID"):
+                # AppRole authentication
+                role_id = os.environ["VAULT_ROLE_ID"]
+                secret_id = os.environ["VAULT_SECRET_ID"]
+                
+                auth_response = client.auth.approle.login(
+                    role_id=role_id,
+                    secret_id=secret_id
+                )
+                client.token = auth_response["auth"]["client_token"]
+                quantum_logger.info("Vault: Using AppRole authentication")
+                
+            elif os.environ.get("VAULT_K8S_ROLE"):
+                # Kubernetes authentication
+                k8s_role = os.environ["VAULT_K8S_ROLE"]
+                jwt_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+                
+                if os.path.exists(jwt_path):
+                    with open(jwt_path, "r") as f:
+                        jwt = f.read()
+                    
+                    auth_response = client.auth.kubernetes.login(
+                        role=k8s_role,
+                        jwt=jwt
+                    )
+                    client.token = auth_response["auth"]["client_token"]
+                    quantum_logger.info("Vault: Using Kubernetes authentication")
+                else:
+                    raise RuntimeError("Kubernetes service account token not found")
+            else:
+                raise RuntimeError(
+                    "No Vault authentication method configured. "
+                    "Set VAULT_TOKEN, VAULT_ROLE_ID/VAULT_SECRET_ID, or VAULT_K8S_ROLE"
+                )
+            
+            # Verify authentication
+            if not client.is_authenticated():
+                raise RuntimeError("Vault authentication failed")
+            
+            self._client = client
+            quantum_logger.info("Successfully authenticated with Vault")
+            return client
+            
+        except ImportError:
+            quantum_logger.error(
+                "hvac (HashiCorp Vault client) not installed. "
+                "Install with: pip install hvac"
+            )
+            raise RuntimeError("hvac package not available")
+        except Exception as e:
+            quantum_logger.error(f"Failed to initialize Vault client: {e}")
+            raise
 
     async def get_credentials(self, key: str) -> Dict[str, Any]:
-        quantum_logger.debug("Vault provider not implemented.")
-        raise NotImplementedError("VaultCredentialProvider not implemented")
+        """
+        Get credentials from Vault with caching and TTL.
+        
+        Args:
+            key: Secret path in Vault (e.g., "quantum/api-key")
+        
+        Returns:
+            Dictionary containing the credentials
+            
+        Raises:
+            RuntimeError: If Vault is not configured or authentication fails
+            ValueError: If secret not found in Vault
+        """
+        async with self._cache_lock:
+            # Check cache first
+            if key in self._cache:
+                cached_data = self._cache[key]
+                if time.time() < cached_data["expiry"]:
+                    quantum_logger.debug(f"Vault: Using cached credentials for {key}")
+                    return cached_data["value"]
+                else:
+                    # Cache expired, remove it
+                    del self._cache[key]
+                    quantum_logger.debug(f"Vault: Cache expired for {key}")
+            
+            # Fetch from Vault
+            try:
+                client = await self._get_client()
+                
+                # Read secret from Vault
+                # Try KV v2 first (default for newer Vault installations)
+                try:
+                    secret_response = await asyncio.to_thread(
+                        client.secrets.kv.v2.read_secret_version,
+                        path=key,
+                        mount_point=self.mount_point
+                    )
+                    secret_data = secret_response["data"]["data"]
+                    quantum_logger.debug(f"Vault: Retrieved secret from KV v2: {key}")
+                    
+                except Exception:
+                    # Fallback to KV v1
+                    try:
+                        secret_response = await asyncio.to_thread(
+                            client.secrets.kv.v1.read_secret,
+                            path=key,
+                            mount_point=self.mount_point
+                        )
+                        secret_data = secret_response["data"]
+                        quantum_logger.debug(f"Vault: Retrieved secret from KV v1: {key}")
+                    except Exception as kv1_error:
+                        quantum_logger.error(
+                            f"Failed to retrieve secret {key} from both KV v2 and v1: {kv1_error}"
+                        )
+                        raise ValueError(f"Secret not found in Vault: {key}")
+                
+                # Determine TTL
+                lease_duration = secret_response.get("lease_duration", self._default_ttl)
+                if lease_duration == 0:
+                    lease_duration = self._default_ttl
+                
+                # Cache the credentials
+                expiry_time = time.time() + lease_duration
+                self._cache[key] = {
+                    "value": secret_data,
+                    "expiry": expiry_time
+                }
+                
+                quantum_logger.info(
+                    f"Vault: Cached credentials for {key} with TTL {lease_duration}s"
+                )
+                
+                return secret_data
+                
+            except Exception as e:
+                quantum_logger.error(f"Failed to get credentials from Vault for {key}: {e}")
+                
+                # Fallback: try to return expired cache if available
+                if key in self._cache:
+                    quantum_logger.warning(
+                        f"Vault: Using expired cache as fallback for {key}"
+                    )
+                    return self._cache[key]["value"]
+                
+                raise
+    
+    async def invalidate_cache(self, key: Optional[str] = None):
+        """
+        Invalidate cached credentials.
+        
+        Args:
+            key: Specific key to invalidate, or None to clear all cache
+        """
+        async with self._cache_lock:
+            if key:
+                if key in self._cache:
+                    del self._cache[key]
+                    quantum_logger.info(f"Vault: Invalidated cache for {key}")
+            else:
+                self._cache.clear()
+                quantum_logger.info("Vault: Cleared all credential cache")
+    
+    async def close(self):
+        """Close Vault client and cleanup resources."""
+        if self._client:
+            # hvac doesn't require explicit close, but we can clean up
+            self._client = None
+            quantum_logger.info("Vault: Client closed")
 
 
 class EnvCredentialProvider(CredentialProvider):

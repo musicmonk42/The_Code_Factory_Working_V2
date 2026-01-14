@@ -18,7 +18,7 @@ from self_fixing_engineer.agent_orchestration.crew_manager import (
 
 # Import availability flags
 try:
-    from agent_orchestration.crew_manager import _AIOREDIS_AVAILABLE, _PSUTIL_AVAILABLE
+    from self_fixing_engineer.agent_orchestration.crew_manager import _AIOREDIS_AVAILABLE, _PSUTIL_AVAILABLE
 except ImportError:
     try:
         import psutil
