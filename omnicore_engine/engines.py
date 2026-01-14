@@ -30,10 +30,52 @@ try:
 except Exception:
     # Minimal stub used when arbiter isn't installed (tests will typically patch this)
     class BugManager:
+        """
+        Stub implementation of BugManager for environments without Arbiter installed.
+        
+        This is a development/testing stub that provides no-op functionality.
+        In production environments with Arbiter installed, the real BugManager
+        from arbiter.bug_manager will be used instead.
+        
+        Industry Standard Note:
+        - This stub follows the Null Object pattern for graceful degradation
+        - Tests should mock this class for proper bug reporting verification
+        - Production deployments should install the full Arbiter package
+        
+        Real Implementation Features (when Arbiter is available):
+        - Bug tracking and reporting to external systems
+        - Integration with issue trackers (Jira, GitHub Issues)
+        - Automated bug triage and prioritization
+        - ML-based bug pattern detection
+        """
+        
         def __init__(self, *args, **kwargs):
+            """
+            Initialize BugManager stub.
+            
+            Args:
+                *args: Ignored in stub implementation
+                **kwargs: Ignored in stub implementation
+            """
             pass
 
         async def report_bug(self, payload):
+            """
+            No-op bug reporting method for stub implementation.
+            
+            Args:
+                payload: Bug report data (ignored in stub)
+                
+            Returns:
+                None (no bug is actually reported)
+                
+            Note:
+                In production with Arbiter installed, this method would:
+                - Validate and sanitize the bug report payload
+                - Submit to configured bug tracking systems
+                - Trigger automated triage workflows
+                - Return a bug tracking ID
+            """
             # no-op fallback for tests / import-time usage
             return None
 
@@ -43,16 +85,78 @@ try:
 except ImportError:
     # Minimal stub when arbiter isn't installed
     class Arbiter:
+        """
+        Stub implementation of Arbiter for environments without Arbiter installed.
+        
+        This is a development/testing stub that provides no-op functionality.
+        The real Arbiter is a sophisticated AI-driven autonomous agent system.
+        
+        Industry Standard Note:
+        - Follows the Null Object pattern for graceful degradation
+        - Enables development and testing without full Arbiter installation
+        - Production systems should use the complete Arbiter package
+        
+        Real Arbiter Features (when installed):
+        - Autonomous decision-making and task execution
+        - Self-healing and adaptive behavior
+        - Multi-agent coordination and arbitration
+        - Policy-based governance and compliance
+        - Real-time monitoring and alerting
+        - Explainable AI reasoning
+        """
+        
         def __init__(self, *args, **kwargs):
+            """
+            Initialize Arbiter stub.
+            
+            Args:
+                *args: Ignored in stub implementation
+                **kwargs: Ignored in stub implementation
+            """
             pass
 
         async def start_async_services(self):
+            """
+            No-op async services startup for stub.
+            
+            Real implementation would start:
+            - Message queue consumers
+            - Monitoring agents
+            - Health check services
+            - Metric collection workers
+            """
             pass
 
         async def stop_async_services(self):
+            """
+            No-op async services shutdown for stub.
+            
+            Real implementation would gracefully stop:
+            - All async workers and agents
+            - Message queue connections
+            - Monitoring services
+            - Active task executors
+            """
             pass
 
         async def respond(self, *args, **kwargs):
+            """
+            Stub response method indicating Arbiter unavailability.
+            
+            Args:
+                *args: Query/request arguments (ignored)
+                **kwargs: Additional parameters (ignored)
+                
+            Returns:
+                str: Message indicating Arbiter is unavailable
+                
+            Note:
+                Real Arbiter would process requests and return:
+                - Intelligent responses based on context
+                - Action recommendations
+                - Status updates
+                - Query results
+            """
             return "Arbiter unavailable"
 
 
@@ -63,7 +167,22 @@ try:
 except ImportError:
 
     async def get_system_metrics_async():
-        """Fallback system metrics function."""
+        """
+        Fallback system metrics function when Arbiter is not available.
+        
+        This stub returns unavailability status instead of real metrics.
+        
+        Returns:
+            dict: Status dictionary indicating metrics are unavailable
+            
+        Real Implementation (when Arbiter is available):
+            Returns comprehensive system metrics including:
+            - CPU, memory, disk, and network usage
+            - Application-specific metrics (request rates, error rates)
+            - Database performance metrics
+            - Service health indicators
+            - Test pass rates and quality metrics
+        """
         return {"status": "unavailable", "message": "arbiter.utils not available"}
 
 # Optional imports that may not be available in all environments
