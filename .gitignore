@@ -252,3 +252,4 @@ integration_test_report.json
 feedback_log.json
 pytest_report.xml
 /test_integration_fixes.py
+/test_acceptance_criteria.py
