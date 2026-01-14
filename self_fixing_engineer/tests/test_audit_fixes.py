@@ -211,11 +211,11 @@ class TestCodeQuality:
     
     def test_init_has_comprehensive_docstring(self):
         """Verify __init__.py has detailed module documentation."""
-        from self_fixing_engineer import __init__
+        import self_fixing_engineer
         
-        assert __init__.__doc__ is not None
-        assert len(__init__.__doc__) > 200
-        assert "alias" in __init__.__doc__.lower()
+        assert self_fixing_engineer.__doc__ is not None
+        assert len(self_fixing_engineer.__doc__) > 200
+        assert "alias" in self_fixing_engineer.__doc__.lower()
     
     def test_config_has_type_hints(self):
         """Verify config.py uses type hints."""
@@ -224,8 +224,8 @@ class TestCodeQuality:
         
         # Check ConfigWrapper.__init__ has type hints
         sig = inspect.signature(config.ConfigWrapper.__init__)
-        # Should have return annotation
-        assert sig.return_annotation is not None or sig.return_annotation == inspect.Signature.empty
+        # Return annotation should be None for __init__
+        assert sig.return_annotation is inspect.Signature.empty or sig.return_annotation is None
     
     def test_no_bare_except_clauses(self):
         """Verify no bare except clauses in critical files."""

@@ -6,6 +6,9 @@ import asyncio
 import subprocess
 import sys
 
+# Constants for directory names and paths
+ARBITER_DIR_NAME = "arbiter"  # Can be easily changed if directory structure changes
+
 
 class SFEPlatform:
     def __init__(self):
@@ -164,12 +167,12 @@ async def simple_scan() -> None:
         # Use the package directory instead of hardcoded path
         import os
         package_dir = os.path.dirname(os.path.abspath(__file__))
-        scan_path = os.path.join(package_dir, "arbiter")
+        scan_path = os.path.join(package_dir, ARBITER_DIR_NAME)
         
         if not os.path.exists(scan_path):
             # Fallback to current directory
             scan_path = os.getcwd()
-            print(f"Note: arbiter directory not found at {os.path.join(package_dir, 'arbiter')}")
+            print(f"Note: {ARBITER_DIR_NAME} directory not found at {os.path.join(package_dir, ARBITER_DIR_NAME)}")
             print(f"      Using current directory for scan: {scan_path}")
         else:
             print(f"  Scanning: {scan_path}")

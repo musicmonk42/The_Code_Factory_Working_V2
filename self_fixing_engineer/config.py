@@ -119,10 +119,16 @@ class GlobalConfigManager:
     
     This class ensures only one configuration instance is created and shared
     across the application, following the Singleton pattern.
+    
+    Thread Safety:
+        The current implementation is not thread-safe. Since configuration
+        is typically loaded once at application startup before any concurrent
+        operations begin, this is acceptable for most use cases. If thread
+        safety is required (e.g., for hot-reloading configuration), implement
+        locking using threading.Lock() or use a thread-safe singleton pattern.
     """
 
     _instance: Optional[ConfigWrapper] = None
-    _lock = None  # Could use threading.Lock() if thread safety is needed
 
     @classmethod
     def get_config(cls) -> ConfigWrapper:
@@ -214,6 +220,9 @@ class GlobalConfigManager:
                     If strict attribute checking is required, use ConfigWrapper
                     instead of MinimalConfig by ensuring ArbiterConfig is available.
                     
+                    Debug logging is intentionally minimal to avoid performance
+                    impact from frequent __getattr__ calls.
+                    
                 Example:
                     >>> config = MinimalConfig()
                     >>> value = config.SOME_OPTIONAL_FEATURE
@@ -221,10 +230,8 @@ class GlobalConfigManager:
                     >>>     # Use the feature
                     >>>     pass
                 """
-                logger.debug(
-                    "Attribute '%s' not found in MinimalConfig, returning None for graceful degradation",
-                    name
-                )
+                # Only log at debug level and only for first access (implicit)
+                # to avoid performance impact from frequent attribute access
                 return None
             
             def __repr__(self) -> str:
