@@ -200,8 +200,36 @@ except Exception:
     client = types.ModuleType("client")
     kube_config = types.ModuleType("kube_config")
 
+    # Production mode check for K8s mock
+    _production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+    if _production_mode:
+        sandbox_logger.critical(
+            "CRITICAL: Kubernetes client unavailable in PRODUCTION mode. "
+            "Mock K8s API will raise errors. Install kubernetes Python client."
+        )
+
     class _CoreV1Api:
+        """
+        Fallback Kubernetes CoreV1Api with production mode enforcement.
+        
+        PRODUCTION MODE: When PRODUCTION_MODE=true, all methods raise errors.
+        
+        For production, install the kubernetes Python client:
+        pip install kubernetes
+        """
+        def __init__(self):
+            self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+        
         def create_namespaced_pod(self, namespace, body):
+            """Create pod with production mode check."""
+            if self._production_mode:
+                raise RuntimeError(
+                    "CRITICAL: Mock K8s API create_namespaced_pod() in production. "
+                    "Install kubernetes client."
+                )
+            sandbox_logger.warning(
+                f"Mock K8s API: create_namespaced_pod() called - returning mock pod"
+            )
             return types.SimpleNamespace(
                 metadata=types.SimpleNamespace(
                     name=body.get("metadata", {}).get("name", "mock-pod")
@@ -209,17 +237,55 @@ except Exception:
             )
 
         def delete_namespaced_pod(self, name, namespace, body):
+            """Delete pod with production mode check."""
+            if self._production_mode:
+                raise RuntimeError(
+                    "CRITICAL: Mock K8s API delete_namespaced_pod() in production."
+                )
+            sandbox_logger.warning(
+                f"Mock K8s API: delete_namespaced_pod({name}, {namespace})"
+            )
             return None
 
         def read_namespaced_pod_status(self, name, namespace):
+            """
+            Read pod status with production mode check.
+            
+            WARNING: Mock always returns 'Succeeded' status.
+            """
+            if self._production_mode:
+                raise RuntimeError(
+                    "CRITICAL: Mock K8s API read_namespaced_pod_status() in production. "
+                    "This always returns 'Succeeded', masking real failures."
+                )
+            sandbox_logger.warning(
+                f"Mock K8s API: read_namespaced_pod_status({name}, {namespace}) - "
+                "returning mock 'Succeeded' status"
+            )
             return types.SimpleNamespace(
                 status=types.SimpleNamespace(phase="Succeeded")
             )
 
         def read_namespaced_pod_log(self, name, namespace):
+            """Read pod log with production mode check."""
+            if self._production_mode:
+                raise RuntimeError(
+                    "CRITICAL: Mock K8s API read_namespaced_pod_log() in production."
+                )
+            sandbox_logger.warning(
+                f"Mock K8s API: read_namespaced_pod_log({name}, {namespace})"
+            )
             return "output"
 
         def list_namespaced_pod(self, namespace, label_selector):
+            """List pods with production mode check."""
+            if self._production_mode:
+                raise RuntimeError(
+                    "CRITICAL: Mock K8s API list_namespaced_pod() in production."
+                )
+            sandbox_logger.warning(
+                f"Mock K8s API: list_namespaced_pod({namespace}, {label_selector})"
+            )
             return types.SimpleNamespace(
                 items=[
                     types.SimpleNamespace(
@@ -229,7 +295,21 @@ except Exception:
             )
 
     class _BatchV1Api:
+        """
+        Fallback Kubernetes BatchV1Api with production mode enforcement.
+        """
+        def __init__(self):
+            self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+        
         def create_namespaced_job(self, namespace, body):
+            """Create job with production mode check."""
+            if self._production_mode:
+                raise RuntimeError(
+                    "CRITICAL: Mock K8s API create_namespaced_job() in production."
+                )
+            sandbox_logger.warning(
+                f"Mock K8s API: create_namespaced_job({namespace})"
+            )
             return types.SimpleNamespace(
                 metadata=types.SimpleNamespace(
                     name=body.get("metadata", {}).get("name", "mock-job")
@@ -237,13 +317,44 @@ except Exception:
             )
 
         def delete_namespaced_job(self, name, namespace, body):
+            """Delete job with production mode check."""
+            if self._production_mode:
+                raise RuntimeError(
+                    "CRITICAL: Mock K8s API delete_namespaced_job() in production."
+                )
+            sandbox_logger.warning(
+                f"Mock K8s API: delete_namespaced_job({name}, {namespace})"
+            )
             return None
 
         def read_namespaced_job_status(self, name, namespace):
+            """Read job status with production mode check."""
+            if self._production_mode:
+                raise RuntimeError(
+                    "CRITICAL: Mock K8s API read_namespaced_job_status() in production. "
+                    "Mock always returns succeeded=1."
+                )
+            sandbox_logger.warning(
+                f"Mock K8s API: read_namespaced_job_status({name}, {namespace})"
+            )
             return types.SimpleNamespace(status=types.SimpleNamespace(succeeded=1))
 
     class _NetworkingV1Api:
+        """
+        Fallback Kubernetes NetworkingV1Api with production mode enforcement.
+        """
+        def __init__(self):
+            self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+        
         def create_namespaced_network_policy(self, namespace, body):
+            """Create network policy with production mode check."""
+            if self._production_mode:
+                raise RuntimeError(
+                    "CRITICAL: Mock K8s API create_namespaced_network_policy() in production."
+                )
+            sandbox_logger.warning(
+                f"Mock K8s API: create_namespaced_network_policy({namespace})"
+            )
             return types.SimpleNamespace(
                 metadata=types.SimpleNamespace(
                     name=body.get("metadata", {}).get("name", "mock-np")

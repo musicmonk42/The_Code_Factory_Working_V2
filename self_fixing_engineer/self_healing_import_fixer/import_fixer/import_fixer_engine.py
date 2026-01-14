@@ -151,74 +151,94 @@ class MessageFilter:
     headers: Dict[str, str] = field(default_factory=dict)
 
 
-class Database:
-    async def health_check(self) -> Dict[str, Any]:  # pragma: no cover
-        return {"status": "ok", "latency_ms": 1}
+# Import shared implementations from simulation_module instead of duplicating
+try:
+    from simulation.simulation_module import (
+        Database,
+        ShardedMessageBus,
+        ExplainableReasonerPlugin,
+        QuantumPluginAPI,
+        ReasonerError,
+        ExplanationInput
+    )
+    logger.info("ImportFixerEngine: Using implementations from simulation.simulation_module")
+except ImportError as e:
+    logger.warning(
+        f"Failed to import from simulation.simulation_module: {e}. "
+        "Defining fallback implementations."
+    )
+    
+    # Fallback implementations if simulation_module is unavailable
+    class Database:
+        """Fallback Database - see simulation_module.py for full implementation."""
+        async def health_check(self) -> Dict[str, Any]:
+            logger.warning("Using fallback Database.health_check()")
+            return {"status": "ok", "latency_ms": 1, "note": "import_fixer_fallback"}
 
-    async def save_audit_record(
-        self, _record: Dict[str, Any]
-    ) -> None:  # pragma: no cover
-        return None
+        async def save_audit_record(self, _record: Dict[str, Any]) -> None:
+            logger.warning("Fallback Database.save_audit_record() - data NOT persisted")
+            return None
 
-    async def close(self) -> None:  # pragma: no cover
-        return None
+        async def close(self) -> None:
+            return None
 
+    class ShardedMessageBus:
+        """Fallback ShardedMessageBus - see simulation_module.py for full implementation."""
+        async def health_check(self) -> Dict[str, Any]:
+            logger.warning("Using fallback ShardedMessageBus.health_check()")
+            return {"status": "running", "note": "import_fixer_fallback"}
 
-class ShardedMessageBus:
-    async def health_check(self) -> Dict[str, Any]:  # pragma: no cover
-        return {"status": "running"}
+        async def publish(self, *_args, **_kwargs) -> None:
+            logger.warning("Fallback ShardedMessageBus.publish() - message NOT sent")
+            return None
 
-    async def publish(self, *_args, **_kwargs) -> None:  # pragma: no cover
-        return None
+        async def subscribe(self, *_args, **_kwargs) -> None:
+            logger.warning("Fallback ShardedMessageBus.subscribe() - subscription NOT created")
+            return None
 
-    async def subscribe(self, *_args, **_kwargs) -> None:  # pragma: no cover
-        return None
+        async def close(self) -> None:
+            return None
 
-    async def close(self) -> None:  # pragma: no cover
-        return None
+    class ReasonerError(Exception):
+        """Fallback ReasonerError."""
+        def __init__(self, message: str):
+            super().__init__(message)
+            self.message = message
 
+    @dataclass
+    class ExplanationInput:
+        """Fallback ExplanationInput."""
+        result_id: str
+        result_data: Dict[str, Any]
+        context: Dict[str, Any]
 
-class RetryPolicy:  # pragma: no cover
-    pass
+    class ExplainableReasonerPlugin:
+        """Fallback ExplainableReasonerPlugin - see simulation_module.py for full implementation."""
+        async def async_init(self) -> None:
+            logger.warning("Fallback ExplainableReasonerPlugin.async_init()")
+            return None
 
+        async def execute(self, *_, **__) -> Dict[str, Any]:
+            logger.warning("Fallback ExplainableReasonerPlugin.execute()")
+            return {"status": "ok", "note": "import_fixer_fallback"}
 
-class CircuitBreaker:  # pragma: no cover
-    def __init__(self, *_, **__):
-        pass
+        async def explain_result(self, _inp: ExplanationInput) -> str:
+            logger.warning("Fallback ExplainableReasonerPlugin.explain_result()")
+            return "No explanation available (fallback)"
 
+        async def shutdown(self) -> None:
+            return None
 
-class ReasonerError(Exception):
-    def __init__(self, message: str):
-        super().__init__(message)
-        self.message = message  # tests expect .message
-
-
-@dataclass
-class ExplanationInput:
-    result_id: str
-    result_data: Dict[str, Any]
-    context: Dict[str, Any]
-
-
-class ExplainableReasonerPlugin:
-    async def async_init(self) -> None:  # pragma: no cover
-        return None
-
-    async def execute(self, *_, **__) -> Dict[str, Any]:  # pragma: no cover
-        return {"status": "ok"}
-
-    async def explain_result(self, _inp: ExplanationInput) -> str:  # pragma: no cover
-        return ""
-
-    async def shutdown(self) -> None:  # pragma: no cover
-        return None
-
-
-class QuantumPluginAPI:
-    async def perform_quantum_operation(
-        self, *, operation_type: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:  # pragma: no cover
-        return {"status": "SUCCESS", "result": {}}
+    class QuantumPluginAPI:
+        """Fallback QuantumPluginAPI - see simulation_module.py for full implementation."""
+        async def perform_quantum_operation(
+            self, *, operation_type: str, params: Dict[str, Any]
+        ) -> Dict[str, Any]:
+            logger.warning(
+                f"Fallback QuantumPluginAPI.perform_quantum_operation(): "
+                f"operation={operation_type}"
+            )
+            return {"status": "SUCCESS", "result": {}, "note": "import_fixer_fallback"}
 
     def get_available_backends(self) -> List[str]:  # pragma: no cover
         return ["qasm_simulator"]

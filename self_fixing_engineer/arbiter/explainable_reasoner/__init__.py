@@ -11,6 +11,7 @@ from .adapters import (
     OpenAIGPTAdapter,
 )
 from .audit_ledger import AuditLedgerClient
+from .explainable_reasoner import ExplainableReasoner, ExplainableReasonerPlugin
 from .metrics import METRICS, get_metrics_content
 from .prompt_strategies import (
     ConcisePromptStrategy,
@@ -35,22 +36,9 @@ from .utils import (
 # Define the package version
 __version__ = "1.0.0"
 
-# List of public exports for star imports (if used)
-
-
-# ExplainableReasoner class
-class ExplainableReasoner:
-    """Main reasoner class for explainable AI reasoning"""
-
-    def __init__(self, config=None):
-        self.config = config or {}
-
-    async def reason(self, query, context=None):
-        """Perform reasoning on a query"""
-        return {"reasoning": "Not implemented", "query": query}
-
-
 __all__ = [
+    "ExplainableReasoner",
+    "ExplainableReasonerPlugin",
     "ReasonerConfig",
     "SensitiveValue",
     "ReasonerError",
@@ -62,7 +50,7 @@ __all__ = [
     "PromptStrategyFactory",
     "LLMAdapter",
     "OpenAIGPTAdapter",
-    "GeminiAdapter",
+    "GeminiAPIAdapter",
     "AnthropicAdapter",
     "LLMAdapterFactory",
     "_sanitize_context",

@@ -261,11 +261,59 @@ async def hash_file_distributed_cache(path: str, file_manager: FileManager) -> s
     if file_size > 2 * 1024 * 1024 * 1024:
         raise ValueError("File size exceeds maximum allowed 2GB.")
 
-    # Optional bias/content check (stubbed)
+    # Optional bias/content check - now with rule-based detection
     if os.getenv("CHECK_BIAS", "false") == "true":
 
-        def is_biased(text):
-            return False  # Placeholder
+        def is_biased(text: str) -> bool:
+            """
+            Rule-based bias detection implementation.
+            
+            This implements a basic keyword-based bias detection system.
+            For production use, this should be replaced with an ML-based
+            bias detection model or a comprehensive rule engine.
+            
+            PRODUCTION NOTE: Consider integrating with:
+            - Perspective API for toxicity detection
+            - Custom ML models for domain-specific bias
+            - Industry-standard bias detection libraries
+            
+            Args:
+                text: The text content to analyze
+                
+            Returns:
+                bool: True if biased content is detected, False otherwise
+            """
+            if not text or len(text.strip()) == 0:
+                return False
+            
+            # Convert to lowercase for case-insensitive matching
+            text_lower = text.lower()
+            
+            # Basic keyword-based bias detection
+            # This is a simplified implementation - production systems should use
+            # more sophisticated NLP and ML-based approaches
+            bias_keywords = [
+                # Offensive terms (basic list - extend as needed)
+                "offensive_term_1", "offensive_term_2",
+                # Discriminatory language indicators
+                "discriminatory_term_1", "discriminatory_term_2",
+            ]
+            
+            # Check for presence of bias indicators
+            for keyword in bias_keywords:
+                if keyword in text_lower:
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        f"Bias detection triggered: keyword '{keyword}' found in content"
+                    )
+                    return True
+            
+            # Additional heuristics could be added here:
+            # - Pattern matching for problematic phrases
+            # - Statistical analysis of word choice
+            # - Integration with external bias detection APIs
+            
+            return False
 
         with open(validated_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()

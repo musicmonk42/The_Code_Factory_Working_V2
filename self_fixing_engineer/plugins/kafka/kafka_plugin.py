@@ -31,8 +31,92 @@ except ImportError:
         print(f"[OPS ALERT - {level}] {msg}", file=sys.stderr)
 
     def scrub_secrets(obj: Any) -> Any:
-        """Dummy secret scrubber."""
-        return obj
+        """
+        Production-ready secret scrubber with pattern-based detection.
+        
+        This implementation:
+        - Recursively scrubs secrets from nested data structures
+        - Uses pattern matching to identify sensitive fields
+        - Redacts common secret patterns (API keys, tokens, passwords)
+        - Preserves data structure while removing sensitive values
+        
+        SECURITY: This is a fallback implementation. For production use,
+        integrate with enterprise secret management and DLP systems.
+        
+        Args:
+            obj: The object to scrub (dict, list, str, or primitive)
+            
+        Returns:
+            The scrubbed object with secrets replaced by '***REDACTED***'
+        """
+        import re
+        
+        # Patterns for sensitive field names (case-insensitive)
+        SENSITIVE_KEYS = {
+            'password', 'passwd', 'pwd', 'secret', 'token', 'api_key', 
+            'apikey', 'access_key', 'private_key', 'auth', 'authorization',
+            'credential', 'cert', 'certificate', 'ssh_key', 'bearer'
+        }
+        
+        # Patterns for sensitive values (regex patterns)
+        SECRET_PATTERNS = [
+            r'sk-[a-zA-Z0-9]{48}',  # OpenAI API keys
+            r'Bearer\s+[a-zA-Z0-9\-._~+/]+',  # Bearer tokens
+            r'ghp_[a-zA-Z0-9]{36}',  # GitHub Personal Access Tokens
+            r'glpat-[a-zA-Z0-9\-_]{20}',  # GitLab Personal Access Tokens
+            r'xox[baprs]-[0-9]{10,12}-[0-9]{10,12}-[a-zA-Z0-9]{24}',  # Slack tokens
+            r'AKIA[0-9A-Z]{16}',  # AWS Access Key IDs
+            r'-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----',  # Private keys
+        ]
+        
+        # Constants
+        MAX_RECURSION_DEPTH = 100  # Prevent infinite recursion in scrubbing
+        
+        def is_sensitive_key(key: str) -> bool:
+            """Check if a key name suggests sensitive data."""
+            key_lower = key.lower()
+            return any(sensitive in key_lower for sensitive in SENSITIVE_KEYS)
+        
+        def contains_secret_pattern(value: str) -> bool:
+            """Check if a string matches known secret patterns."""
+            if not isinstance(value, str):
+                return False
+            for pattern in SECRET_PATTERNS:
+                if re.search(pattern, value):
+                    return True
+            return False
+        
+        def scrub_recursive(data: Any, depth: int = 0) -> Any:
+            """Recursively scrub secrets from data structure."""
+            # Prevent infinite recursion
+            if depth > MAX_RECURSION_DEPTH:
+                return '***DEPTH_LIMIT***'
+            
+            if isinstance(data, dict):
+                scrubbed = {}
+                for key, value in data.items():
+                    if is_sensitive_key(str(key)):
+                        scrubbed[key] = '***REDACTED***'
+                    else:
+                        scrubbed[key] = scrub_recursive(value, depth + 1)
+                return scrubbed
+            
+            elif isinstance(data, list):
+                return [scrub_recursive(item, depth + 1) for item in data]
+            
+            elif isinstance(data, tuple):
+                return tuple(scrub_recursive(item, depth + 1) for item in data)
+            
+            elif isinstance(data, str):
+                if contains_secret_pattern(data):
+                    return '***REDACTED***'
+                return data
+            
+            else:
+                # Primitives (int, float, bool, None) pass through
+                return data
+        
+        return scrub_recursive(obj)
 
     class _DummyAudit:
         """Dummy audit logger."""

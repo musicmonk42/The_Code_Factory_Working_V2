@@ -52,25 +52,96 @@ except ImportError:
             ]
 
         async def start_arena_services(self, http_port):
-            pass
+            """Fallback: Mock implementation."""
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "Using fallback ArbiterArena.start_arena_services(). "
+                "Install real arbiter.arena module for production use."
+            )
 
         async def stop_arena_services(self):
-            pass
+            """Fallback: Mock implementation."""
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "Using fallback ArbiterArena.stop_arena_services(). "
+                "Install real arbiter.arena module for production use."
+            )
 
     class Arbiter:
+        """
+        Fallback Arbiter implementation with production mode checks.
+        
+        WARNING: This is a mock implementation that should only be used
+        in development/testing. In production mode, it will log critical
+        warnings and return controlled failures.
+        
+        SECURITY: Mock implementations always return success for development,
+        but in production mode (PRODUCTION_MODE=true), they will raise
+        exceptions to prevent silent failures.
+        """
         def __init__(self, *args, **kwargs):
-            self.name = kwargs.get("name", "MockArbiter")
+            self.name = kwargs.get("name", "FallbackArbiter")
             self.db_engine = kwargs.get("db_engine")
+            self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+            
+            logger = logging.getLogger(__name__)
+            if self._production_mode:
+                logger.critical(
+                    "CRITICAL: Using fallback Arbiter implementation in PRODUCTION mode. "
+                    "This is NOT suitable for production. Install real arbiter.arbiter module."
+                )
 
         async def run_task(self, task, output_dir):
+            """
+            Fallback task runner.
+            
+            In production mode, this will raise an exception.
+            In dev/test mode, it returns a mock success.
+            """
+            logger = logging.getLogger(__name__)
+            
+            if self._production_mode:
+                error_msg = (
+                    "CRITICAL: Attempted to run task with fallback Arbiter in production mode. "
+                    "This is forbidden. Install real arbiter.arbiter module."
+                )
+                logger.critical(error_msg)
+                raise RuntimeError(error_msg)
+            
+            logger.warning(
+                f"Fallback Arbiter.run_task() called for task: {task}. "
+                "This is a mock implementation for dev/test only."
+            )
+            
             if task.get("fail"):
-                raise Exception("Mock failure")
-            return {"status": "success"}
+                raise Exception("Mock failure (requested by test)")
+            return {"status": "success", "note": "fallback_arbiter"}
 
         async def explore_and_fix(self, paths):
+            """
+            Fallback explore and fix implementation.
+            
+            In production mode, this will raise an exception.
+            In dev/test mode, it returns a mock success.
+            """
+            logger = logging.getLogger(__name__)
+            
+            if self._production_mode:
+                error_msg = (
+                    "CRITICAL: Attempted to explore_and_fix with fallback Arbiter in production mode. "
+                    "This is forbidden. Install real arbiter.arbiter module."
+                )
+                logger.critical(error_msg)
+                raise RuntimeError(error_msg)
+            
+            logger.warning(
+                f"Fallback Arbiter.explore_and_fix() called for paths: {paths}. "
+                "This is a mock implementation for dev/test only."
+            )
+            
             if paths and "fail" in paths:
-                raise Exception("Mock failure")
-            return {"status": "success"}
+                raise Exception("Mock failure (requested by test)")
+            return {"status": "success", "note": "fallback_arbiter"}
 
     class registry:
         @staticmethod

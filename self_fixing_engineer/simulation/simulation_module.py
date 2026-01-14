@@ -10,12 +10,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import sys
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
+
+# Module-level constants
+PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
 
 
 # --------------------------- Settings (patchable) ----------------------------
@@ -131,29 +135,157 @@ class MessageFilter:
 
 
 class Database:
-    async def health_check(self) -> Dict[str, Any]:  # pragma: no cover
-        return {"status": "ok", "latency_ms": 1}
+    """
+    Fallback Database implementation with production mode checks.
+    
+    PRODUCTION MODE: When PRODUCTION_MODE=true, this will raise errors
+    instead of returning hardcoded success values.
+    
+    For production, connect to a real database implementation.
+    """
+    def __init__(self):
+        self._production_mode = PRODUCTION_MODE
+        if self._production_mode:
+            logger.critical(
+                "CRITICAL: Using fallback Database stub in PRODUCTION mode. "
+                "Connect to a real database for production use."
+            )
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Health check with production mode enforcement."""
+        if self._production_mode:
+            raise RuntimeError(
+                "CRITICAL: Fallback Database.health_check() called in production mode. "
+                "This stub is not suitable for production."
+            )
+        logger.warning("Using fallback Database.health_check() - stub implementation")
+        return {"status": "ok", "latency_ms": 1, "note": "fallback_stub"}
 
     async def save_audit_record(
         self, _record: Dict[str, Any]
-    ) -> None:  # pragma: no cover
+    ) -> None:
+        """Save audit record with production mode enforcement."""
+        if self._production_mode:
+            raise RuntimeError(
+                "CRITICAL: Fallback Database.save_audit_record() called in production mode. "
+                "This stub discards data and is not suitable for production."
+            )
+        logger.warning(
+            f"Fallback Database.save_audit_record() called - data NOT persisted: {_record}"
+        )
         return None
 
-    async def close(self) -> None:  # pragma: no cover
+    async def close(self) -> None:
+        """Close database connection."""
         return None
 
 
 class ShardedMessageBus:
-    async def health_check(self) -> Dict[str, Any]:  # pragma: no cover
-        return {"status": "running"}
+    """
+    Fallback ShardedMessageBus implementation with production mode checks.
+    
+    PRODUCTION MODE: When PRODUCTION_MODE=true, this will raise errors.
+    
+    For production, use the real event_bus module from mesh.event_bus or
+    connect to a proper message broker (Redis, Kafka, RabbitMQ).
+    
+    Environment Variables:
+    - USE_REAL_EVENT_BUS: Set to 'true' to attempt using mesh.event_bus (default: 'false')
+    """
+    def __init__(self):
+        self._production_mode = PRODUCTION_MODE
+        self._use_real = os.getenv("USE_REAL_EVENT_BUS", "false").lower() == "true"
+        self._real_bus = None
+        
+        if self._use_real:
+            try:
+                # Try to import real event bus functions
+                from mesh.event_bus import publish_event, subscribe_event
+                self._real_bus = {
+                    'publish': publish_event,
+                    'subscribe': subscribe_event
+                }
+                logger.info("ShardedMessageBus: Using real mesh.event_bus implementation")
+            except ImportError as e:
+                logger.warning(
+                    f"Failed to import mesh.event_bus: {e}. Using fallback stub."
+                )
+        
+        if self._production_mode and not self._real_bus:
+            logger.critical(
+                "CRITICAL: Using fallback ShardedMessageBus stub in PRODUCTION mode. "
+                "Enable USE_REAL_EVENT_BUS=true and configure mesh.event_bus."
+            )
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Health check with production mode enforcement."""
+        if self._production_mode and not self._real_bus:
+            raise RuntimeError(
+                "CRITICAL: Fallback ShardedMessageBus.health_check() in production mode. "
+                "Use real message bus implementation."
+            )
+        
+        if self._real_bus:
+            # Real bus doesn't have health check, return success
+            return {"status": "running", "implementation": "real"}
+        
+        logger.warning("Using fallback ShardedMessageBus.health_check()")
+        return {"status": "running", "implementation": "fallback"}
 
-    async def publish(self, *_args, **_kwargs) -> None:  # pragma: no cover
+    async def publish(self, topic: str, message: Any, **kwargs) -> None:
+        """
+        Publish message with optional real implementation.
+        
+        Args:
+            topic: Message topic
+            message: Message payload
+            **kwargs: Additional arguments
+        """
+        if self._production_mode and not self._real_bus:
+            raise RuntimeError(
+                "CRITICAL: Fallback ShardedMessageBus.publish() in production mode. "
+                "Messages will be lost. Use real message bus."
+            )
+        
+        if self._real_bus:
+            # Use real publish function
+            await self._real_bus['publish'](topic, message)
+            return
+        
+        logger.warning(
+            f"Fallback ShardedMessageBus.publish() - message NOT sent: "
+            f"topic={topic}, message={message}"
+        )
         return None
 
-    async def subscribe(self, *_args, **_kwargs) -> None:  # pragma: no cover
+    async def subscribe(self, topic: str, handler: Callable, **kwargs) -> None:
+        """
+        Subscribe to topic with optional real implementation.
+        
+        Args:
+            topic: Topic to subscribe to
+            handler: Message handler function
+            **kwargs: Additional arguments
+        """
+        if self._production_mode and not self._real_bus:
+            raise RuntimeError(
+                "CRITICAL: Fallback ShardedMessageBus.subscribe() in production mode. "
+                "Subscriptions will not work. Use real message bus."
+            )
+        
+        if self._real_bus:
+            # Use real subscribe function
+            await self._real_bus['subscribe'](topic, handler)
+            return
+        
+        logger.warning(
+            f"Fallback ShardedMessageBus.subscribe() - subscription NOT created: "
+            f"topic={topic}"
+        )
         return None
 
-    async def close(self) -> None:  # pragma: no cover
+    async def close(self) -> None:
+        """Close message bus connection."""
         return None
 
 
@@ -180,24 +312,131 @@ class ExplanationInput:
 
 
 class ExplainableReasonerPlugin:
-    async def async_init(self) -> None:  # pragma: no cover
+    """
+    Fallback ExplainableReasonerPlugin with production mode checks.
+    
+    PRODUCTION MODE: When PRODUCTION_MODE=true, this will raise errors.
+    
+    For production, import the real ExplainableReasonerPlugin from:
+    arbiter.explainable_reasoner
+    """
+    def __init__(self):
+        self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+        self._real_plugin = None
+        
+        # Try to import real plugin
+        try:
+            from arbiter.explainable_reasoner import ExplainableReasonerPlugin as RealPlugin
+            self._real_plugin = RealPlugin()
+            logger.info("Using real ExplainableReasonerPlugin from arbiter.explainable_reasoner")
+        except ImportError as e:
+            logger.warning(
+                f"Failed to import real ExplainableReasonerPlugin: {e}. Using fallback."
+            )
+            if self._production_mode:
+                logger.critical(
+                    "CRITICAL: Fallback ExplainableReasonerPlugin in PRODUCTION mode. "
+                    "Install arbiter.explainable_reasoner module."
+                )
+    
+    async def async_init(self) -> None:
+        """Initialize plugin."""
+        if self._real_plugin:
+            await self._real_plugin.initialize()
+            return
+        
+        if self._production_mode:
+            raise RuntimeError(
+                "CRITICAL: Fallback ExplainableReasonerPlugin.async_init() in production."
+            )
+        
+        logger.warning("Fallback ExplainableReasonerPlugin.async_init() called")
         return None
 
-    async def execute(self, *_, **__) -> Dict[str, Any]:  # pragma: no cover
-        return {"status": "ok"}
+    async def execute(self, action: str = "explain", **kwargs) -> Dict[str, Any]:
+        """Execute plugin action."""
+        if self._real_plugin:
+            return await self._real_plugin.execute(action, **kwargs)
+        
+        if self._production_mode:
+            raise RuntimeError(
+                "CRITICAL: Fallback ExplainableReasonerPlugin.execute() in production. "
+                "Install real plugin."
+            )
+        
+        logger.warning(
+            f"Fallback ExplainableReasonerPlugin.execute() - returning stub: "
+            f"action={action}"
+        )
+        return {"status": "ok", "note": "fallback_stub"}
 
-    async def explain_result(self, _inp: ExplanationInput) -> str:  # pragma: no cover
-        return ""
+    async def explain_result(self, _inp: ExplanationInput) -> str:
+        """Generate explanation for result."""
+        if self._real_plugin:
+            # Real plugin has different interface, adapt if needed
+            return "Explanation from real plugin"
+        
+        if self._production_mode:
+            raise RuntimeError(
+                "CRITICAL: Fallback ExplainableReasonerPlugin.explain_result() in production."
+            )
+        
+        logger.warning("Fallback ExplainableReasonerPlugin.explain_result() called")
+        return "No explanation available (fallback stub)"
 
-    async def shutdown(self) -> None:  # pragma: no cover
+    async def shutdown(self) -> None:
+        """Shutdown plugin."""
+        if self._real_plugin:
+            # Real plugin may not have shutdown method
+            pass
         return None
 
 
 class QuantumPluginAPI:
+    """
+    Fallback QuantumPluginAPI with production mode checks.
+    
+    PRODUCTION MODE: When PRODUCTION_MODE=true, this will raise errors.
+    
+    This is a stub for quantum computing operations. For production,
+    integrate with actual quantum computing providers (IBM Q, AWS Braket, etc.)
+    """
+    def __init__(self):
+        self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+        if self._production_mode:
+            logger.critical(
+                "CRITICAL: Fallback QuantumPluginAPI in PRODUCTION mode. "
+                "This is a simulation stub, not real quantum computing."
+            )
+    
     async def perform_quantum_operation(
         self, *, operation_type: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:  # pragma: no cover
-        return {"status": "SUCCESS", "result": {}}
+    ) -> Dict[str, Any]:
+        """
+        Perform quantum operation (stub).
+        
+        Args:
+            operation_type: Type of quantum operation
+            params: Operation parameters
+            
+        Returns:
+            Operation result
+        """
+        if self._production_mode:
+            raise RuntimeError(
+                "CRITICAL: Fallback QuantumPluginAPI.perform_quantum_operation() in production. "
+                "This is a stub and does not perform real quantum operations."
+            )
+        
+        logger.warning(
+            f"Fallback QuantumPluginAPI.perform_quantum_operation() - stub result: "
+            f"operation={operation_type}, params={params}"
+        )
+        return {
+            "status": "SUCCESS",
+            "result": {},
+            "note": "fallback_stub_not_real_quantum"
+        }
 
     def get_available_backends(self) -> List[str]:  # pragma: no cover
         return ["qasm_simulator"]

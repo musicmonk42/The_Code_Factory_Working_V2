@@ -84,11 +84,50 @@ except ImportError:
             pass
 
     class PermissionManager:
+        """
+        Fallback PermissionManager with secure default-deny behavior.
+        
+        SECURITY: This is a fallback implementation used when the real PermissionManager
+        cannot be imported. It implements a secure default-deny policy where all
+        permission checks fail by default, preventing unauthorized access.
+        
+        In production mode (PRODUCTION_MODE=true), this fallback will log critical
+        warnings to alert operators that the system is running without proper
+        permission management.
+        """
         def __init__(self, config):
-            pass
+            self._config = config
+            self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+            logger = logging.getLogger(__name__)
+            
+            if self._production_mode:
+                logger.critical(
+                    "SECURITY ALERT: Running with fallback PermissionManager in PRODUCTION mode. "
+                    "All permission checks will DENY by default. Install proper PermissionManager."
+                )
 
         def check_permission(self, role, permission):
-            return True
+            """
+            Check if a role has a specific permission.
+            
+            SECURITY: Fallback implementation returns False (DENY) by default.
+            This is the secure choice when the real permission system is unavailable.
+            
+            Args:
+                role: The role to check
+                permission: The permission to verify
+                
+            Returns:
+                bool: Always False (deny) for security
+            """
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Fallback PermissionManager denying permission check: role={role}, "
+                f"permission={permission}. This is expected if running in dev/test mode "
+                f"without the real PermissionManager."
+            )
+            # SECURITY: Default DENY - safer than allowing everything
+            return False
 
     class ArbiterConfig:
         def __init__(self):
