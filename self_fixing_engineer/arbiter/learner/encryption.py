@@ -172,8 +172,8 @@ class ArbiterConfig:
             
             parameter_name = f"/arbiter/encryption_keys/{version}"
             
-            # Fernet.generate_key() returns base64-encoded bytes already
-            # Just decode to string for storage
+            # Fernet.generate_key() returns URL-safe base64-encoded bytes (44 chars)
+            # Decode to ASCII string for SSM storage
             key_str = key.decode("ascii")
             
             # Store as SecureString for added security

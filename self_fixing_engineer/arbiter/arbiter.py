@@ -3161,7 +3161,7 @@ class Arbiter:
         if not isinstance(data, dict):
             return data
         
-        # List of sensitive field names to redact
+        # Set of sensitive field names to redact (for O(1) lookup)
         sensitive_fields = {
             'password', 'token', 'secret', 'api_key', 'apikey',
             'auth', 'authorization', 'credential', 'private_key',
@@ -3172,8 +3172,11 @@ class Arbiter:
         for key, value in data.items():
             key_lower = key.lower()
             
-            # Redact sensitive fields
-            if any(sensitive in key_lower for sensitive in sensitive_fields):
+            # Check if any sensitive field name is contained in the key
+            # O(n) where n is number of sensitive fields (small constant)
+            is_sensitive = any(sensitive in key_lower for sensitive in sensitive_fields)
+            
+            if is_sensitive:
                 sanitized[key] = "[REDACTED]"
             # Recursively sanitize nested dictionaries
             elif isinstance(value, dict):

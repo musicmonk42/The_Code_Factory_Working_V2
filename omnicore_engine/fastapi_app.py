@@ -1169,7 +1169,7 @@ async def set_feature_flag(
             detail="Feature flag name must contain only letters, numbers, and underscores"
         )
     
-    # Use timezone-aware datetime for Python 3.12+ compatibility
+    # Use timezone-aware datetime for compatibility
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
     
     async with _feature_flags_lock:
