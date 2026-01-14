@@ -3068,8 +3068,12 @@ class Arbiter:
                         event_type=event_type,
                         agent=self.name
                     ).inc()
-                except Exception:
-                    pass  # Don't fail if metrics are unavailable
+                except Exception as metrics_error:
+                    # Log metric errors at debug level to aid troubleshooting
+                    logger.debug(
+                        f"Failed to update routed events metric: {metrics_error}",
+                        extra={"event_type": event_type, "agent": self.name}
+                    )
                 
                 await handler(data)
             except Exception as e:
@@ -3095,8 +3099,11 @@ class Arbiter:
                         agent=self.name,
                         error_type=type(e).__name__
                     ).inc()
-                except Exception:
-                    pass  # Don't fail if metrics are unavailable
+                except Exception as metrics_error:
+                    logger.debug(
+                        f"Failed to update handler errors metric: {metrics_error}",
+                        extra={"event_type": event_type, "agent": self.name}
+                    )
         else:
             # Unknown event type - log with more context and track metrics
             logger.warning(
@@ -3121,8 +3128,11 @@ class Arbiter:
                     event_type=event_type,
                     agent=self.name
                 ).inc()
-            except Exception:
-                pass  # Don't fail if metrics are unavailable
+            except Exception as metrics_error:
+                logger.debug(
+                    f"Failed to update unknown events metric: {metrics_error}",
+                    extra={"event_type": event_type, "agent": self.name}
+                )
             
             # Consider implementing a dead-letter handler for unrouted events
             # For now, log the event data for investigation

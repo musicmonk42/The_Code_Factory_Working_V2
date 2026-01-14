@@ -1,4 +1,5 @@
 # D:\SFE\self_fixing_engineer\arbiter\learner\encryption.py
+import base64
 import json
 import os
 from typing import Any, Dict, Optional
@@ -171,10 +172,13 @@ class ArbiterConfig:
             
             parameter_name = f"/arbiter/encryption_keys/{version}"
             
+            # Fernet keys are base64-encoded bytes, store as base64 string
+            key_b64 = base64.b64encode(key).decode("ascii")
+            
             # Store as SecureString for added security
             ssm_client.put_parameter(
                 Name=parameter_name,
-                Value=key.decode("utf-8"),
+                Value=key_b64,
                 Type="SecureString",
                 Overwrite=True,
                 Description=f"Arbiter encryption key version {version}",

@@ -229,11 +229,7 @@ async def agent_error_handler(request: Request, exc: AgentError):
     """
     logger.error(f"Agent error for {request.method} {request.url}: {exc}", exc_info=True)
     if os.getenv("SENTRY_DSN"):
-        try:
-            import sentry_sdk
-            sentry_sdk.capture_exception(exc)
-        except ImportError:
-            pass
+        sentry_sdk.capture_exception(exc)
     return JSONResponse(
         status_code=500,
         content={"detail": "An internal server error occurred in the agent."}

@@ -254,11 +254,18 @@ class ShardedMessageBus:
     Environment Variables:
     - USE_REAL_EVENT_BUS: Set to 'true' to attempt using mesh.event_bus (default: 'false')
     """
-    def __init__(self):
+    def __init__(self, enable_dlq: bool = False):
+        """
+        Initialize ShardedMessageBus.
+        
+        Args:
+            enable_dlq: Enable dead-letter queue for failed message handlers (default: False)
+        """
         self._production_mode = PRODUCTION_MODE
         self._use_real = os.getenv("USE_REAL_EVENT_BUS", "false").lower() == "true"
         self._real_bus = None
         self._local_subscribers: Dict[str, List[Dict[str, Any]]] = {}
+        self.enable_dlq = enable_dlq
         
         if self._use_real:
             try:
@@ -394,7 +401,9 @@ class ShardedMessageBus:
                             logger.debug(f"Message routed to handler for pattern {pattern}")
                         except Exception as e:
                             # Generate correlation ID for tracking
-                            correlation_id = getattr(msg_obj, 'id', None) or str(id(msg_obj))
+                            # Use message ID if available, otherwise generate new UUID
+                            import uuid
+                            correlation_id = getattr(msg_obj, 'id', None) or str(uuid.uuid4())
                             
                             logger.error(
                                 f"Error in message handler for pattern {pattern}. "
@@ -410,7 +419,8 @@ class ShardedMessageBus:
                             
                             # Optionally publish to dead-letter queue for failed messages
                             # This allows for later replay or investigation
-                            if hasattr(self, '_enable_dlq') and self._enable_dlq:
+                            # Enable DLQ by setting enable_dlq=True when creating ShardedMessageBus
+                            if getattr(self, 'enable_dlq', False):
                                 try:
                                     await self.publish(
                                         topic="deadletter.message_bus",

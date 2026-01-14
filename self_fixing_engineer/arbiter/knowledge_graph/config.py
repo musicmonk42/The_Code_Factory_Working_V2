@@ -399,7 +399,7 @@ class MetaLearningConfig(BaseSettings):
             except ImportError as e:
                 logger.error(
                     f"Failed to import etcd3 library: {e}. "
-                    "Install etcd3 package: pip install etcd3-py"
+                    "Install etcd3 package: pip install etcd3"
                 )
             except Exception as e:
                 logger.error(
@@ -431,7 +431,7 @@ class MetaLearningConfig(BaseSettings):
         except ImportError:
             raise ImportError(
                 "etcd3 library not installed. "
-                "Install it with: pip install etcd3-py"
+                "Install it with: pip install etcd3"
             )
         
         try:

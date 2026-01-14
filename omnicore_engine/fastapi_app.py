@@ -1,6 +1,7 @@
 # File: omnicore_engine/fastapi_app.py
 import ast
 import os
+import re
 import secrets
 import sys
 from pathlib import Path
@@ -1162,14 +1163,14 @@ async def set_feature_flag(
     API_REQUESTS.labels(endpoint="/admin/feature-flag", method="POST").inc()
     
     # Validate flag name (alphanumeric and underscores only)
-    import re
     if not re.match(r'^[a-zA-Z0-9_]+$', flag_name):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Feature flag name must contain only letters, numbers, and underscores"
         )
     
-    timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+    # Use timezone-aware datetime for Python 3.12+ compatibility
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
     
     async with _feature_flags_lock:
         is_new = flag_name not in _feature_flags
