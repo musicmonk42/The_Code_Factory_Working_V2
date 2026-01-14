@@ -13,8 +13,12 @@ from omnicore_engine.plugin_registry import PLUGIN_REGISTRY as global_plugin_reg
 # Try to import ArbiterConfig at module level for use in tests
 try:
     from self_fixing_engineer.arbiter.config import ArbiterConfig
-except ImportError:
+except ImportError as e:
     # If import fails, create a fallback class
+    logging.warning(
+        f"ArbiterConfig not available (using fallback): {e}. "
+        "Full arbiter configuration features will be limited."
+    )
     class ArbiterConfig:
         """Fallback ArbiterConfig when arbiter module is not available."""
         def __init__(self):
@@ -27,7 +31,12 @@ except ImportError:
 
 try:
     from arbiter.bug_manager import BugManager
-except Exception:
+except Exception as e:
+    # Minimal stub used when arbiter isn't installed (tests will typically patch this)
+    logging.info(
+        f"BugManager not available (using stub): {e}. "
+        "Bug reporting will be disabled. Install arbiter package for full functionality."
+    )
     # Minimal stub used when arbiter isn't installed (tests will typically patch this)
     class BugManager:
         """
@@ -82,7 +91,13 @@ except Exception:
 
 try:
     from arbiter import Arbiter
-except ImportError:
+except ImportError as e:
+    # Minimal stub when arbiter isn't installed
+    logging.info(
+        f"Arbiter not available (using stub): {e}. "
+        "AI-driven autonomous agent features will be disabled. "
+        "Install arbiter package for full functionality."
+    )
     # Minimal stub when arbiter isn't installed
     class Arbiter:
         """
@@ -164,7 +179,11 @@ try:
     from arbiter.utils import (
         get_system_metrics_async,
     )  # New import needed for helper function
-except ImportError:
+except ImportError as e:
+    logging.debug(
+        f"arbiter.utils not available (using stub): {e}. "
+        "System metrics collection will return mock data."
+    )
 
     async def get_system_metrics_async():
         """
@@ -188,12 +207,14 @@ except ImportError:
 # Optional imports that may not be available in all environments
 try:
     from envs.code_health_env import CodeHealthEnv
-except ImportError:
+except ImportError as e:
+    logging.info(f"CodeHealthEnv not available: {e}. Code health environment features disabled.")
     CodeHealthEnv = None
 
 try:
     from intent_capture.api import app as intent_capture_api
-except ImportError:
+except ImportError as e:
+    logging.info(f"Intent capture API not available: {e}. Intent capture features disabled.")
     intent_capture_api = None
 
 try:
@@ -201,42 +222,49 @@ try:
         ImportFixerEngine,
         create_import_fixer_engine,
     )
-except ImportError:
+except ImportError as e:
+    logging.info(f"ImportFixerEngine not available: {e}. Self-healing import fixer disabled.")
     ImportFixerEngine = None
     create_import_fixer_engine = None
 
 try:
     from test_generation.orchestrator import TestGenerationOrchestrator
-except ImportError:
+except ImportError as e:
+    logging.info(f"TestGenerationOrchestrator not available: {e}. Test generation features disabled.")
     TestGenerationOrchestrator = None
 
 try:
     from self_fixing_engineer.agent_orchestration.crew_manager import CrewManager
-except ImportError:
+except ImportError as e:
+    logging.info(f"CrewManager not available: {e}. Agent orchestration features disabled.")
     CrewManager = None
 
 try:
     from self_fixing_engineer.simulation.simulation_module import (
         UnifiedSimulationModule,
     )
-except ImportError:
+except ImportError as e:
+    logging.info(f"UnifiedSimulationModule not available: {e}. Simulation features disabled.")
     UnifiedSimulationModule = None
 
 # Generator component imports (optional, graceful degradation)
 try:
     from generator.runner.runner_core import Runner as GeneratorRunner
-except ImportError:
+except ImportError as e:
+    logging.info(f"GeneratorRunner not available: {e}. Generator runner features disabled.")
     GeneratorRunner = None
 
 try:
     from generator.runner.llm_client import call_llm_api, call_ensemble_api
-except ImportError:
+except ImportError as e:
+    logging.info(f"LLM client functions not available: {e}. LLM API features disabled.")
     call_llm_api = None
     call_ensemble_api = None
 
 try:
     from generator.agents import get_available_agents, is_agent_available
-except ImportError:
+except ImportError as e:
+    logging.debug(f"Generator agents not available: {e}. Using fallback stub.")
     def get_available_agents() -> dict:
         """Fallback when generator.agents is not available."""
         return {}

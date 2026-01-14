@@ -392,8 +392,20 @@ class MetaLearningConfig(BaseSettings):
                     exc_info=True,
                 )
         elif self.CONFIG_SOURCE == "etcd" and self.ETCD_HOST:
-            logger.warning("Etcd configuration reloading is not yet implemented.")
-            # TODO: Implement Etcd client to fetch and update configuration
+            # IMPLEMENTED: Etcd client for dynamic configuration reloading
+            try:
+                self._reload_from_etcd()
+                logger.info("Successfully reloaded configuration from Etcd")
+            except ImportError as e:
+                logger.error(
+                    f"Failed to import etcd3 library: {e}. "
+                    "Install etcd3 package: pip install etcd3-py"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to reload configuration from Etcd: {str(e)}",
+                    exc_info=True
+                )
         elif self.CONFIG_SOURCE == "env":
             logger.info(
                 "Configuration is set to reload from environment variables (default behavior)."
@@ -402,6 +414,110 @@ class MetaLearningConfig(BaseSettings):
             logger.warning(
                 f"Unsupported CONFIG_SOURCE: {self.CONFIG_SOURCE}. Configuration will not be dynamically reloaded."
             )
+    
+    def _reload_from_etcd(self):
+        """
+        Reload configuration from Etcd key-value store.
+        
+        This method connects to Etcd and fetches configuration values
+        for dynamic updates without restarting the application.
+        
+        Raises:
+            ImportError: If etcd3 library is not installed
+            Exception: If Etcd connection or fetch fails
+        """
+        try:
+            import etcd3
+        except ImportError:
+            raise ImportError(
+                "etcd3 library not installed. "
+                "Install it with: pip install etcd3-py"
+            )
+        
+        try:
+            # Connect to Etcd
+            etcd_port = int(os.getenv("ETCD_PORT", "2379"))
+            etcd = etcd3.client(
+                host=self.ETCD_HOST,
+                port=etcd_port,
+                timeout=5
+            )
+            
+            # Define configuration keys to fetch from Etcd
+            # Using a common prefix for all arbiter configurations
+            prefix = os.getenv("ETCD_CONFIG_PREFIX", "/arbiter/config/")
+            
+            # Fetch all configuration values with the prefix
+            config_updates = {}
+            for value, metadata in etcd.get_prefix(prefix):
+                if value is not None:
+                    # Extract key name from full path
+                    key = metadata.key.decode("utf-8").replace(prefix, "")
+                    decoded_value = value.decode("utf-8")
+                    
+                    # Try to parse as JSON for complex values
+                    try:
+                        config_updates[key] = json.loads(decoded_value)
+                    except json.JSONDecodeError:
+                        # Use as string if not JSON
+                        config_updates[key] = decoded_value
+            
+            if not config_updates:
+                logger.warning(
+                    f"No configuration found in Etcd with prefix: {prefix}"
+                )
+                return
+            
+            # Apply configuration updates
+            for key, value in config_updates.items():
+                # Map Etcd keys to configuration attributes
+                # Convert snake_case to UPPER_CASE for matching
+                attr_name = key.upper()
+                
+                if hasattr(self, attr_name):
+                    try:
+                        # Type conversion based on current attribute type
+                        current_value = getattr(self, attr_name)
+                        if isinstance(current_value, bool):
+                            new_value = str(value).lower() in ("true", "1", "yes")
+                        elif isinstance(current_value, int):
+                            new_value = int(value)
+                        elif isinstance(current_value, float):
+                            new_value = float(value)
+                        elif isinstance(current_value, list):
+                            new_value = value if isinstance(value, list) else [value]
+                        else:
+                            new_value = value
+                        
+                        setattr(self, attr_name, new_value)
+                        logger.debug(
+                            f"Updated configuration from Etcd: {attr_name} = {new_value}"
+                        )
+                    except (ValueError, TypeError) as e:
+                        logger.warning(
+                            f"Failed to convert Etcd value for {key}: {e}"
+                        )
+                else:
+                    logger.debug(
+                        f"Etcd key {key} does not match any configuration attribute"
+                    )
+            
+            logger.info(
+                f"Reloaded {len(config_updates)} configuration values from Etcd",
+                extra={"etcd_host": self.ETCD_HOST, "prefix": prefix}
+            )
+            
+        except etcd3.exceptions.ConnectionFailedError as e:
+            logger.error(
+                f"Failed to connect to Etcd at {self.ETCD_HOST}: {e}"
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                f"Error fetching configuration from Etcd: {e}",
+                exc_info=True
+            )
+            raise
 
 
 # --- Persona Management ---
