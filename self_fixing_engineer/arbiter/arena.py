@@ -252,14 +252,8 @@ class ArbiterArena:
         except Exception as e:
             logger.error(f"Failed to initialize SimulationEngine: {e}")
             self.simulation_module = SimulationEngine()  # Use fallback
-        if not self.simulation_module:
-            logger.error(
-                "SimulationModule not found in plugin registry. Falling back to mock."
-            )
-            # fmt: off
-            self.simulation_module = MockSimulationModule()  # noqa: F821 - TODO: define mock or remove this fallback
-            # fmt: on
-            # WARNING: This will cause a NameError at runtime. MockSimulationModule needs to be defined.
+        # FIXED: Removed undefined MockSimulationModule fallback
+        # SimulationEngine fallback is already defined and sufficient
 
         self.analyzer = CodebaseAnalyzer(root_dir=self.settings.REPORTS_DIRECTORY)
 
