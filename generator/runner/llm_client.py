@@ -161,9 +161,23 @@ class DistributedRateLimiter:
     def __init__(
         self, redis_url: Optional[str] = None, limit: int = 100, window: int = 60
     ):
-        self.redis = aioredis.from_url(redis_url) if redis_url else None
+        self.redis = None
         self.limit = limit
         self.window = window
+        
+        # Wrap Redis connection in try-except to handle connection failures gracefully
+        if redis_url:
+            try:
+                self.redis = aioredis.from_url(redis_url)
+                logger.info(f"DistributedRateLimiter initialized with Redis at {redis_url}")
+            except Exception as e:
+                logger.warning(
+                    f"DistributedRateLimiter: Failed to connect to Redis at {redis_url}: {e}. "
+                    "Falling back to no rate limiting."
+                )
+                self.redis = None
+        else:
+            logger.info("DistributedRateLimiter initialized without Redis (no rate limiting)")
 
     async def acquire(self, key: str) -> bool:
         if not self.redis:
@@ -245,8 +259,37 @@ class LLMClient:
         self.rate_limiter = DistributedRateLimiter(config.redis_url)
         self.circuit_breaker = CircuitBreaker()
         self._is_initialized = asyncio.Event()
-        # This starts the initialization process immediately in the background
-        asyncio.create_task(self._initialize())
+        self._init_task = None
+    
+    @classmethod
+    async def create(cls, config: RunnerConfig) -> "LLMClient":
+        """
+        Factory method to create and initialize LLMClient.
+        This is the recommended way to create an LLMClient instance.
+        
+        Usage:
+            client = await LLMClient.create(config)
+        """
+        client = cls(config)
+        await client._initialize()
+        return client
+    
+    def _ensure_initialization(self):
+        """
+        Lazy initialization: Start initialization task if not already started.
+        This allows backward compatibility with direct instantiation while avoiding
+        asyncio.create_task() in __init__.
+        """
+        if self._init_task is None:
+            try:
+                loop = asyncio.get_running_loop()
+                self._init_task = loop.create_task(self._initialize())
+            except RuntimeError:
+                # No event loop running - initialization will happen on first use
+                logger.warning(
+                    "LLMClient: No event loop running during initialization. "
+                    "Initialization will be deferred until first use."
+                )
 
     async def _initialize(self):
         # NOTE: self.manager._load_task is awaited here.
@@ -261,6 +304,7 @@ class LLMClient:
         for name in self.manager.list_providers():
             metrics.LLM_PROVIDER_HEALTH.labels(provider=name).set(1)
         self._is_initialized.set()
+        logger.info("LLMClient initialization complete")
 
     async def count_tokens(self, text: str, model: str) -> int:
         if not HAS_TIKTOKEN:
@@ -268,7 +312,8 @@ class LLMClient:
         try:
             encoding = tiktoken.get_encoding("cl100k_base")
             return len(encoding.encode(text))
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to count tokens using tiktoken: {e}. Falling back to word-based estimation.")
             return int(len(text.split()) * 1.3)
 
     async def call_llm_api(
@@ -281,6 +326,8 @@ class LLMClient:
         ] = None,
         **kwargs,
     ) -> Dict[str, Any] | AsyncGenerator[str, None]:
+        # Ensure initialization has started (lazy initialization for backward compatibility)
+        self._ensure_initialization()
         await self._is_initialized.wait()
         provider = provider or self.config.llm_provider or "openai"
         # FIX: Ensure default_llm_model exists on the mock object (or provide a safe fallback)
@@ -442,7 +489,8 @@ class LLMClient:
                 1 if is_healthy else 0
             )
             return is_healthy
-        except:
+        except Exception as e:
+            logger.error(f"Health check failed for provider {provider or 'unknown'}: {e}")
             metrics.LLM_PROVIDER_HEALTH.labels(provider=provider or "unknown").set(0)
             return False
 
@@ -453,13 +501,30 @@ class LLMClient:
             if hasattr(provider, "close"):
                 try:
                     await provider.close()
-                except:
-                    logger.error(f"Error closing {name}")
+                except Exception as e:
+                    logger.error(f"Error closing provider {name}: {e}", exc_info=True)
 
 
 # --- Global API ---
+# Note: Global singleton pattern with module-level lock for backward compatibility.
+# For new code, prefer using the factory method: client = await LLMClient.create(config)
+# This provides better dependency injection and testing capabilities.
 _async_client: Optional[LLMClient] = None
-_client_lock = asyncio.Lock()
+# Create lock lazily to avoid issues when module is imported outside async context
+_client_lock = None
+
+
+def _get_client_lock():
+    """Get or create the client lock in the current event loop."""
+    global _client_lock
+    if _client_lock is None:
+        try:
+            loop = asyncio.get_running_loop()
+            _client_lock = asyncio.Lock()
+        except RuntimeError:
+            # No event loop yet, will be created when needed
+            pass
+    return _client_lock
 
 
 async def call_llm_api(
@@ -470,9 +535,14 @@ async def call_llm_api(
     config: Optional[RunnerConfig] = None,
 ) -> Dict[str, Any] | AsyncGenerator[str, None]:
     global _async_client
-    async with _client_lock:
+    lock = _get_client_lock()
+    if lock is None:
+        # Create lock if not exists
+        lock = asyncio.Lock()
+    async with lock:
         if _async_client is None:
             config = config or RunnerConfig.load()
+            # Use direct instantiation for backward compatibility (lazy init happens on first call)
             _async_client = LLMClient(config)
     return await _async_client.call_llm_api(prompt, model, stream, provider)
 
@@ -484,7 +554,10 @@ async def call_ensemble_api(
     config: Optional[RunnerConfig] = None,
 ) -> Dict[str, Any]:
     global _async_client
-    async with _client_lock:
+    lock = _get_client_lock()
+    if lock is None:
+        lock = asyncio.Lock()
+    async with lock:
         if _async_client is None:
             config = config or RunnerConfig.load()
             _async_client = LLMClient(config)

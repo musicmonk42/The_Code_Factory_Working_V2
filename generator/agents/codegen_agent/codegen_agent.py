@@ -10,6 +10,7 @@ import sqlite3
 import sys
 import uuid
 from abc import ABC, abstractmethod
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -97,20 +98,86 @@ class AuditLogger(ABC):
 
 
 class JsonConsoleAuditLogger(AuditLogger):
-    """Dummy for old signature compatibility in health checks."""
+    """
+    JSON Console Audit Logger - outputs structured JSON audit logs to console/stdout.
+    Delegates to the centralized log_audit_event for consistent audit logging.
+    """
 
     def log_action(self, action: str, details: Dict[str, Any]):
-        log_audit_event(action, details)
+        """Log an audit action as JSON to console via centralized audit system."""
+        # Add metadata to indicate this is from JsonConsoleAuditLogger
+        enriched_details = {
+            **details,
+            "audit_logger": "JsonConsoleAuditLogger",
+            "output_target": "console",
+        }
+        log_audit_event(action, enriched_details)
+        # Also output directly to console as JSON for immediate visibility
+        import json
+        import sys
+        audit_record = {
+            "timestamp": datetime.now().isoformat(),
+            "action": action,
+            "details": enriched_details,
+        }
+        print(json.dumps(audit_record), file=sys.stdout, flush=True)
 
 
 class FileAuditLogger(AuditLogger):
-    """Dummy for old signature compatibility in health checks."""
+    """
+    File Audit Logger - writes structured audit logs to a configured file.
+    Delegates to the centralized log_audit_event and appends to file.
+    """
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
+        self.log_file = config.get("audit_log_file", "audit.log")
+        self.max_bytes = config.get("audit_log_max_bytes", 10 * 1024 * 1024)  # 10MB default
+        self.backup_count = config.get("audit_log_backup_count", 5)
+        
+        # Create rotating file handler for audit logs
+        from logging.handlers import RotatingFileHandler
+        import os
+        
+        # Ensure directory exists
+        log_dir = os.path.dirname(self.log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+        
+        self.file_handler = RotatingFileHandler(
+            self.log_file,
+            maxBytes=self.max_bytes,
+            backupCount=self.backup_count
+        )
+        self.file_handler.setFormatter(logging.Formatter('%(message)s'))
 
     def log_action(self, action: str, details: Dict[str, Any]):
-        log_audit_event(action, details)
+        """Log an audit action to file via centralized audit system and direct file write."""
+        # Add metadata to indicate this is from FileAuditLogger
+        enriched_details = {
+            **details,
+            "audit_logger": "FileAuditLogger",
+            "output_target": self.log_file,
+        }
+        log_audit_event(action, enriched_details)
+        
+        # Also write directly to the audit log file
+        import json
+        audit_record = {
+            "timestamp": datetime.now().isoformat(),
+            "action": action,
+            "details": enriched_details,
+        }
+        log_record = logging.LogRecord(
+            name="audit",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg=json.dumps(audit_record),
+            args=(),
+            exc_info=None
+        )
+        self.file_handler.emit(log_record)
 
 
 # Standard application logging

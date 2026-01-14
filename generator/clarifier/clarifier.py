@@ -65,31 +65,61 @@ except ImportError as e:
 
     # Minimal Dummies for LLM/Prioritizer to allow Clarifier class to initialize
     class LLMProvider:
+        """Stub LLM Provider - actual implementation should be in clarifier_llm.py"""
         def __init__(self, *args, **kwargs):
-            pass
+            logging.warning("Using stub LLMProvider - clarifier_llm.py module not available")
+            self.api_key = kwargs.get('api_key')
+            self.model = kwargs.get('model', 'default')
+        
+        async def generate(self, prompt: str, **kwargs) -> str:
+            """Stub method that raises NotImplementedError"""
+            raise NotImplementedError(
+                "LLMProvider.generate is not implemented. "
+                "The clarifier_llm.py module with actual LLM integration is required."
+            )
 
     class GrokLLM(LLMProvider):
+        """Stub Grok LLM Provider - actual implementation should be in clarifier_llm.py"""
         def __init__(self, *args, **kwargs):
-            pass
+            logging.warning("Using stub GrokLLM - clarifier_llm.py module not available")
+            super().__init__(*args, **kwargs)
+        
+        async def generate(self, prompt: str, **kwargs) -> str:
+            """Stub method that raises NotImplementedError"""
+            raise NotImplementedError(
+                "GrokLLM.generate is not implemented. "
+                "The clarifier_llm.py module with actual Grok API integration is required. "
+                "Please implement the GrokLLM class with proper API calls."
+            )
 
     class Prioritizer(ABC):
+        """Base class for prioritizing ambiguities in requirements"""
         def __init__(self, llm):
             self.llm = llm
 
         @abstractmethod
         async def prioritize(self, ambiguities, context, target_language):
+            """Prioritize ambiguities based on importance and context"""
             pass
 
     class DefaultPrioritizer(Prioritizer):
+        """Stub Default Prioritizer - actual implementation should be in clarifier_prioritizer.py"""
         async def prioritize(self, ambiguities, context, target_language):
-            # Mock return for testing clarity flow
-            return {
-                "prioritized": [
-                    {"original": a, "score": 1, "question": f"Mock Question for {a}"}
-                    for a in ambiguities
-                ],
-                "batch": [0],
-            }
+            """
+            Stub implementation that raises NotImplementedError.
+            
+            A proper implementation should:
+            1. Analyze each ambiguity for complexity and impact
+            2. Score ambiguities based on context and target language
+            3. Group related ambiguities into batches
+            4. Return prioritized list with questions for user clarification
+            """
+            logging.warning("Using stub DefaultPrioritizer - clarifier_prioritizer.py module not available")
+            raise NotImplementedError(
+                "DefaultPrioritizer.prioritize is not implemented. "
+                "The clarifier_prioritizer.py module with actual prioritization logic is required. "
+                "Please implement intelligent prioritization based on ambiguity analysis."
+            )
 
 
 # Import internal package components that might create a circular dependency loop.
