@@ -79,39 +79,132 @@ except ImportError:
         pass
 
     class DummyDBClient:
+        """
+        Fallback in-memory database client with file-based persistence.
+        
+        PERSISTENCE: Unlike the previous stub, this implementation:
+        - Persists data to a JSON file on disk
+        - Automatically loads data on initialization
+        - Saves data after each write operation
+        - Provides fallback when real database is unavailable
+        
+        WARNING: This is not suitable for production multi-process deployments.
+        Use a real database (PostgreSQL, SQLite) in production.
+        
+        Environment Variables:
+        - DUMMY_DB_FILE: Path to persistence file (default: '/tmp/dummy_db_feedback.json')
+        - DUMMY_DB_BACKUP_COUNT: Number of backup files to keep (default: 3)
+        """
         def __init__(self) -> None:
             self.feedback_entries: List[Dict[str, Any]] = []
+            self._db_file = os.getenv("DUMMY_DB_FILE", "/tmp/dummy_db_feedback.json")
+            self._backup_count = int(os.getenv("DUMMY_DB_BACKUP_COUNT", "3"))
+            self._lock = threading.Lock()
+            logger = logging.getLogger(__name__)
+            
+            # Log warning about using in-memory fallback
+            logger.warning(
+                "Using DummyDBClient fallback with file persistence. "
+                f"Data will be persisted to: {self._db_file}. "
+                "Install a real database client for production use."
+            )
+            
+            # Load existing data from file
+            self._load_from_file()
+
+        def _load_from_file(self) -> None:
+            """Load feedback entries from persistence file."""
+            logger = logging.getLogger(__name__)
+            try:
+                if os.path.exists(self._db_file):
+                    with open(self._db_file, 'r') as f:
+                        data = json.load(f)
+                        self.feedback_entries = data.get('entries', [])
+                    logger.info(
+                        f"Loaded {len(self.feedback_entries)} entries from {self._db_file}"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"Failed to load data from {self._db_file}: {e}. Starting with empty dataset."
+                )
+                self.feedback_entries = []
+
+        def _save_to_file(self) -> None:
+            """Save feedback entries to persistence file with backup rotation."""
+            logger = logging.getLogger(__name__)
+            try:
+                # Create backup of existing file
+                if os.path.exists(self._db_file):
+                    # Rotate backups
+                    for i in range(self._backup_count - 1, 0, -1):
+                        old_backup = f"{self._db_file}.{i}"
+                        new_backup = f"{self._db_file}.{i+1}"
+                        if os.path.exists(old_backup):
+                            os.rename(old_backup, new_backup)
+                    # Create new backup
+                    os.rename(self._db_file, f"{self._db_file}.1")
+                
+                # Write current data
+                with open(self._db_file, 'w') as f:
+                    json.dump({
+                        'entries': self.feedback_entries,
+                        'last_updated': datetime.now(timezone.utc).isoformat()
+                    }, f, indent=2)
+                
+                logger.debug(
+                    f"Saved {len(self.feedback_entries)} entries to {self._db_file}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to save data to {self._db_file}: {e}")
 
         async def save_feedback_entry(self, entry: Dict[str, Any]) -> None:
-            entry_copy = entry.copy()
-            if "timestamp" not in entry_copy:
-                entry_copy["timestamp"] = datetime.now(timezone.utc).isoformat()
-            self.feedback_entries.append(entry_copy)
-            logger.debug(
-                f"DummyDBClient: Saved entry. Total entries: {len(self.feedback_entries)}"
-            )
+            """Save a feedback entry with file persistence."""
+            with self._lock:
+                entry_copy = entry.copy()
+                if "timestamp" not in entry_copy:
+                    entry_copy["timestamp"] = datetime.now(timezone.utc).isoformat()
+                self.feedback_entries.append(entry_copy)
+                
+                logger = logging.getLogger(__name__)
+                logger.debug(
+                    f"DummyDBClient: Saved entry. Total entries: {len(self.feedback_entries)}"
+                )
+                
+                # Persist to file
+                self._save_to_file()
 
         async def get_feedback_entries(
             self, query: Optional[Dict[str, Any]] = None
         ) -> List[Dict[str, Any]]:
-            if query is None:
-                return self.feedback_entries.copy()
-            return [
-                e
-                for e in self.feedback_entries
-                if isinstance(e, dict) and all(e.get(k) == v for k, v in query.items())
-            ]
+            """Retrieve feedback entries matching optional query."""
+            with self._lock:
+                if query is None:
+                    return self.feedback_entries.copy()
+                return [
+                    e
+                    for e in self.feedback_entries
+                    if isinstance(e, dict) and all(e.get(k) == v for k, v in query.items())
+                ]
 
         async def update_feedback_entry(
             self, query: Dict[str, Any], updates: Dict[str, Any]
         ) -> bool:
-            updated = 0
-            for e in self.feedback_entries:
-                if isinstance(e, dict) and all(e.get(k) == v for k, v in query.items()):
-                    e.update(updates)
-                    updated += 1
-            logger.debug(f"DummyDBClient: Updated {updated} entries for query {query}.")
-            return updated > 0
+            """Update feedback entries matching query."""
+            with self._lock:
+                updated = 0
+                for e in self.feedback_entries:
+                    if isinstance(e, dict) and all(e.get(k) == v for k, v in query.items()):
+                        e.update(updates)
+                        updated += 1
+                
+                logger = logging.getLogger(__name__)
+                logger.debug(f"DummyDBClient: Updated {updated} entries for query {query}.")
+                
+                if updated > 0:
+                    # Persist changes to file
+                    self._save_to_file()
+                
+                return updated > 0
 
     # The original file had a different fallback class name, I've consolidated it to DummyDBClient
     # as the fallback class for internal use to avoid confusion.
