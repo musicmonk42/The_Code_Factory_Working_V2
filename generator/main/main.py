@@ -224,7 +224,7 @@ try:
 except NameError:
 
     async def send_alert(*args, **kwargs):
-        logging.warning("send_alert (dummy) called.")
+        logging.warning("send_alert (fallback/dummy) called - runner.alerting import failed.")
 
 
 # ****************************************
@@ -240,7 +240,7 @@ try:
 except NameError:
 
     def load_config(*args, **kwargs):
-        logging.warning("load_config (dummy) called.")
+        logging.warning("load_config (fallback/dummy) called - runner.runner_config import failed.")
         return {}
 
 
@@ -261,7 +261,7 @@ try:
 except NameError:
 
     def api_create_db_tables():
-        pass
+        logging.warning("api_create_db_tables (fallback/dummy) called - api module import failed.")
 
 
 try:
@@ -269,6 +269,7 @@ try:
 except NameError:
 
     def get_metrics_dict():
+        logging.warning("get_metrics_dict (fallback/dummy) called - runner.runner_metrics import failed.")
         return {}
 
 
