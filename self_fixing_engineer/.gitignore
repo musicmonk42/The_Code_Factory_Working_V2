@@ -2,10 +2,32 @@ plugins.json
 *.pyc
 __pycache__/
 *.db
+
+# Log files - all log files and rotated logs should be excluded
 *.log
+*.log.*
+exceptions.log*
+reasoner.log*
+
 .pytest_cache/
 dlt_audit_integrity.json
 dlt_audit.jsonl
 test_plugins*.json
 arbiter_config.json
 policies.json
+
+# Backup files - IDE and editor backup files
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+.#*
+\#*\#
+
+# Pip artifacts - malformed install commands create files like =0.13.0
+# These result from incorrect pip syntax (e.g., pip install package =version)
+=*
+
+# Empty stub files - temporary or accidentally created empty files
+call_args

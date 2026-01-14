@@ -6,6 +6,9 @@ import asyncio
 import subprocess
 import sys
 
+# Constants for directory names and paths
+ARBITER_DIR_NAME = "arbiter"  # Can be easily changed if directory structure changes
+
 
 class SFEPlatform:
     def __init__(self):
@@ -140,20 +143,46 @@ async def check_status():
     print("\nStatus check complete.\n")
 
 
-async def simple_scan():
-    """Simplified scan that just works"""
+async def simple_scan() -> None:
+    """
+    Perform a simplified codebase scan using the CodebaseAnalyzer.
+    
+    This function scans the arbiter directory for code issues, defects, and
+    complexity problems. It uses dynamic path resolution to find the correct
+    directory to scan, falling back to the current working directory if needed.
+    
+    The scan results include:
+        - Number of files scanned
+        - Defects found (syntax errors, potential bugs)
+        - Complexity issues (high cyclomatic complexity, long functions)
+    
+    Raises:
+        No exceptions are raised; all errors are caught and reported gracefully.
+    """
     print("\nStarting simplified codebase scan...")
 
     try:
         from arbiter.codebase_analyzer import CodebaseAnalyzer
 
-        # Use current directory by default
-        scan_path = "./arbiter"
+        # Use the package directory instead of hardcoded path
+        import os
+        package_dir = os.path.dirname(os.path.abspath(__file__))
+        scan_path = os.path.join(package_dir, ARBITER_DIR_NAME)
+        
+        # Determine the root directory for the analyzer
+        if not os.path.exists(scan_path):
+            # Fallback to current directory
+            root_dir = os.getcwd()
+            scan_path = root_dir
+            print(f"Note: {ARBITER_DIR_NAME} directory not found at {os.path.join(package_dir, ARBITER_DIR_NAME)}")
+            print(f"      Using current directory for scan: {scan_path}")
+        else:
+            # Use package directory as root when scanning arbiter subdirectory
+            root_dir = package_dir
+            print(f"  Scanning: {scan_path}")
 
-        print(f"  Scanning: {scan_path}")
-
-        # Create analyzer with simple path
-        analyzer = CodebaseAnalyzer(root_dir=".")
+        # Create analyzer with dynamically resolved root directory
+        analyzer = CodebaseAnalyzer(root_dir=root_dir)
 
         # Initialize manually to avoid context manager issues
         analyzer.executor = None
@@ -178,9 +207,10 @@ async def simple_scan():
                 print(f"  - {file}:{line}")
                 print(f"    {message[:80]}...")
 
-    except ImportError:
+    except ImportError as e:
         print("✗ CodebaseAnalyzer not available")
         print("  Please install required dependencies")
+        print(f"  Error details: {e}")
     except Exception as e:
         print(f"✗ Scan error: {e}")
         # Don't print full traceback for cleaner output
@@ -189,10 +219,64 @@ async def simple_scan():
     print("\nScan complete.\n")
 
 
-async def repair_issues():
-    """Attempt to repair found issues"""
-    print("\nRepair feature requires the Arena to be running.")
-    print("Use 'run' command to start the full platform.\n")
+async def repair_issues() -> None:
+    """
+    Attempt to automatically repair found code issues.
+    
+    Status: NOT YET IMPLEMENTED
+    
+    This feature is planned for future releases and will provide automated
+    repair capabilities for common code issues identified during scanning.
+    
+    Planned Functionality:
+        - Auto-fix import errors (missing imports, circular dependencies)
+        - Resolve circular dependencies by restructuring code
+        - Apply suggested fixes from static analysis tools
+        - Fix common code style violations
+        - Refactor code to reduce complexity
+        - Update deprecated API usage
+    
+    Current Workaround:
+        Use the 'run' command to start the full Self-Fixing Engineer platform.
+        Once running, access the Arena's built-in repair tools through the
+        web interface.
+    
+    Implementation Notes:
+        When implemented, this function will:
+        1. Load the codebase configuration
+        2. Initialize the repair engine
+        3. Scan for fixable issues
+        4. Apply automated repairs with user confirmation
+        5. Generate a repair report
+        6. Optionally create a backup before applying changes
+    
+    See Also:
+        - Arena web interface for manual repair tools
+        - Documentation: docs/repair_features.md
+    """
+    print("\n" + "="*70)
+    print("AUTOMATED REPAIR FEATURE")
+    print("="*70)
+    print()
+    print("Status: NOT YET IMPLEMENTED")
+    print()
+    print("This feature is planned but not yet available in the current release.")
+    print()
+    print("Planned Capabilities:")
+    print("  • Auto-fix import errors and missing dependencies")
+    print("  • Resolve circular dependency issues")
+    print("  • Apply code style and linting fixes")
+    print("  • Refactor high-complexity code sections")
+    print("  • Update deprecated API usage patterns")
+    print()
+    print("Current Workaround:")
+    print("  1. Use the 'run' command to start the full SFE platform")
+    print("  2. Access the Arena web interface (typically http://localhost:8000)")
+    print("  3. Use the built-in repair tools available in the Arena UI")
+    print()
+    print("For more information, see the documentation at docs/repair_features.md")
+    print("="*70)
+    print()
 
 
 async def launch_arena_subprocess():

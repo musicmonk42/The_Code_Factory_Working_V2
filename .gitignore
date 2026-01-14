@@ -231,6 +231,22 @@ test_log.txt
 exceptions.log.*
 reasoner.log.*
 
+# Backup files - IDE and editor backup files should not be committed
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+.#*
+\#*\#
+
+# Pip artifacts - malformed install commands create files like =0.13.0
+# These result from incorrect pip syntax (e.g., pip install package =version)
+=*
+
+# Empty stub files - temporary or accidentally created empty files
+call_args
+
 # Runtime artifacts - these are generated during execution and should not be committed
 dlt_audit_integrity.json
 plugins.json
