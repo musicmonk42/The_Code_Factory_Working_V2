@@ -3,9 +3,20 @@ plugins.json
 __pycache__/
 *.db
 *.log
+*.log.*
 .pytest_cache/
 dlt_audit_integrity.json
 dlt_audit.jsonl
 test_plugins*.json
 arbiter_config.json
 policies.json
+
+# Backup files
+*.bak
+*.backup
+
+# Pip artifacts (malformed install commands)
+=*
+
+# Empty stub files
+call_args

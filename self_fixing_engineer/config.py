@@ -17,6 +17,13 @@ except ImportError:
 class ConfigWrapper:
     """Wrapper that combines ArbiterConfig with additional fields needed by main.py"""
 
+    # Define known optional fields with defaults
+    _OPTIONAL_FIELDS = {
+        "REDIS_URL": None,
+        "SENTRY_DSN": None,
+        "API_CORS_ORIGINS": None,
+    }
+
     def __init__(self, arbiter_config=None):
         self._arbiter_config = arbiter_config
         # Add fields that main.py expects but ArbiterConfig doesn't have
@@ -25,10 +32,12 @@ class ConfigWrapper:
         self.APP_ENV = os.getenv("APP_ENV", "development")
 
     def __getattr__(self, name):
-        """Forward attribute access to ArbiterConfig if it exists, otherwise return None"""
+        """Forward attribute access to ArbiterConfig if it exists"""
         if self._arbiter_config and hasattr(self._arbiter_config, name):
             return getattr(self._arbiter_config, name)
-        return None
+        if name in self._OPTIONAL_FIELDS:
+            return self._OPTIONAL_FIELDS[name]
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
 
 class GlobalConfigManager:

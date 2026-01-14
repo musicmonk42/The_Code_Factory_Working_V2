@@ -147,10 +147,17 @@ async def simple_scan():
     try:
         from arbiter.codebase_analyzer import CodebaseAnalyzer
 
-        # Use current directory by default
-        scan_path = "./arbiter"
-
-        print(f"  Scanning: {scan_path}")
+        # Use the package directory instead of hardcoded path
+        import os
+        package_dir = os.path.dirname(os.path.abspath(__file__))
+        scan_path = os.path.join(package_dir, "arbiter")
+        
+        if not os.path.exists(scan_path):
+            # Fallback to current directory
+            scan_path = os.getcwd()
+            print(f"Note: Using current directory for scan: {scan_path}")
+        else:
+            print(f"  Scanning: {scan_path}")
 
         # Create analyzer with simple path
         analyzer = CodebaseAnalyzer(root_dir=".")
@@ -190,9 +197,22 @@ async def simple_scan():
 
 
 async def repair_issues():
-    """Attempt to repair found issues"""
-    print("\nRepair feature requires the Arena to be running.")
-    print("Use 'run' command to start the full platform.\n")
+    """
+    Attempt to repair found issues automatically.
+    
+    TODO: This feature is not yet implemented. Planned functionality:
+    - Auto-fix import errors
+    - Resolve circular dependencies  
+    - Apply suggested code fixes from static analysis
+    
+    Currently requires the Arena to be running for full repair capabilities.
+    """
+    print("\n" + "="*50)
+    print("REPAIR FEATURE - NOT YET IMPLEMENTED")
+    print("="*50)
+    print("\nThis feature is planned but not yet available.")
+    print("Current workaround: Use 'run' command to start the full platform,")
+    print("then use the Arena's built-in repair tools.\n")
 
 
 async def launch_arena_subprocess():
