@@ -781,21 +781,29 @@ class Database:
 
     async def get_feedback_entries(self, query=None) -> List[Dict]:
         DB_OPERATIONS_LOCAL.labels(operation="get_feedback_entries").inc()
-        query_str = "SELECT id, type, message, timestamp FROM feedback"
-        params = []
-        if query and "type" in query:
-            query_str += " WHERE type = ?"
-            params.append(query["type"])
-
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Feedback entries retrieval not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                cursor = await conn.execute(query_str, params)
-                rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
+                # PostgreSQL implementation
+                async with self._get_asyncpg_connection() as conn:
+                    sql = "SELECT id, type, message, timestamp FROM feedback"
+                    params = []
+                    if query and "type" in query:
+                        sql += " WHERE type = $1"
+                        params.append(query["type"])
+                    rows = await conn.fetch(sql, *params)
+                    return [dict(row) for row in rows]
+            else:
+                # SQLite implementation
+                query_str = "SELECT id, type, message, timestamp FROM feedback"
+                params = []
+                if query and "type" in query:
+                    query_str += " WHERE type = ?"
+                    params.append(query["type"])
+                async with self._get_aiosqlite_connection() as conn:
+                    cursor = await conn.execute(query_str, params)
+                    rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="get_feedback_entries").inc()
             logger.error(f"Error retrieving feedback entries: {e}", exc_info=True)
@@ -803,21 +811,38 @@ class Database:
 
     async def save_feedback_entry(self, entry: Dict[str, Any]) -> None:
         DB_OPERATIONS_LOCAL.labels(operation="save_feedback_entry").inc()
+        
+        # Validate and sanitize input
+        feedback_type = entry.get("type", "")
+        message = entry.get("message", "")
+        timestamp = entry.get("timestamp", datetime.now().isoformat())
+        
+        if not feedback_type or not message:
+            raise ValueError("Feedback entry must contain 'type' and 'message' fields")
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Feedback entries saving not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                await conn.execute(
-                    "INSERT INTO feedback (type, message, timestamp) VALUES (?, ?, ?)",
-                    (
-                        entry.get("type", ""),
-                        entry.get("message", ""),
-                        entry.get("timestamp", datetime.now().isoformat()),
-                    ),
-                )
-                await conn.commit()
+                # PostgreSQL implementation with proper parameter binding
+                async with self._get_asyncpg_connection() as conn:
+                    await conn.execute(
+                        """
+                        INSERT INTO feedback (type, message, timestamp) 
+                        VALUES ($1, $2, $3)
+                        """,
+                        feedback_type,
+                        message,
+                        timestamp
+                    )
+                    logger.debug(f"Feedback entry saved to PostgreSQL: type={feedback_type}")
+            else:
+                # SQLite implementation
+                async with self._get_aiosqlite_connection() as conn:
+                    await conn.execute(
+                        "INSERT INTO feedback (type, message, timestamp) VALUES (?, ?, ?)",
+                        (feedback_type, message, timestamp)
+                    )
+                    await conn.commit()
+                    logger.debug(f"Feedback entry saved to SQLite: type={feedback_type}")
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="save_feedback_entry").inc()
             logger.error(f"Error saving feedback entry: {e}", exc_info=True)
@@ -828,21 +853,36 @@ class Database:
         self, user_id: str, decrypt: bool = False
     ) -> Optional[Dict]:
         DB_OPERATIONS_LOCAL.labels(operation="get_preferences").inc()
+        
+        # Validate and sanitize user_id
         user_id = validate_user_id(user_id)
-        query = (
-            "SELECT data, encrypted FROM preferences WHERE user_id = ? AND deleted=0"
-        )
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Preferences retrieval not implemented for PostgreSQL directly."
+                # PostgreSQL implementation with proper parameter binding
+                async with self._get_asyncpg_connection() as conn:
+                    row = await conn.fetchrow(
+                        """
+                        SELECT data, encrypted 
+                        FROM preferences 
+                        WHERE user_id = $1 AND deleted = 0
+                        """,
+                        user_id
+                    )
+                    if row:
+                        return self._decrypt_json(row["data"], row["encrypted"] and decrypt)
+                    return None
+            else:
+                # SQLite implementation
+                query = (
+                    "SELECT data, encrypted FROM preferences WHERE user_id = ? AND deleted=0"
                 )
-            async with self._get_aiosqlite_connection() as conn:
-                cur = await conn.execute(query, (user_id,))
-                row = await cur.fetchone()
-            if row:
-                return self._decrypt_json(row["data"], row["encrypted"] and decrypt)
-            return None
+                async with self._get_aiosqlite_connection() as conn:
+                    cur = await conn.execute(query, (user_id,))
+                    row = await cur.fetchone()
+                if row:
+                    return self._decrypt_json(row["data"], row["encrypted"] and decrypt)
+                return None
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="get_preferences").inc()
             logger.error(
@@ -855,22 +895,42 @@ class Database:
         self, user_id: str, prefs: Dict, encrypt: bool = False
     ) -> None:
         DB_OPERATIONS_LOCAL.labels(operation="save_preferences").inc()
+        
+        # Validate and sanitize inputs
         user_id = validate_user_id(user_id)
         data = self._validate_json(prefs, encrypt)
-        query = """
-            INSERT INTO preferences (user_id, data, encrypted, deleted, updated_at)
-            VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP)
-            ON CONFLICT(user_id) DO UPDATE SET data=excluded.data, encrypted=excluded.encrypted,
-            deleted=0, updated_at=CURRENT_TIMESTAMP
-        """
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Preferences saving not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                await conn.execute(query, (user_id, data, int(encrypt)))
-                await conn.commit()
+                # PostgreSQL implementation with proper UPSERT
+                async with self._get_asyncpg_connection() as conn:
+                    await conn.execute(
+                        """
+                        INSERT INTO preferences (user_id, data, encrypted, deleted, updated_at)
+                        VALUES ($1, $2, $3, 0, CURRENT_TIMESTAMP)
+                        ON CONFLICT(user_id) DO UPDATE SET 
+                            data = EXCLUDED.data,
+                            encrypted = EXCLUDED.encrypted,
+                            deleted = 0,
+                            updated_at = CURRENT_TIMESTAMP
+                        """,
+                        user_id,
+                        data,
+                        encrypt
+                    )
+                    logger.debug(f"Preferences saved to PostgreSQL for user: {user_id}")
+            else:
+                # SQLite implementation
+                query = """
+                    INSERT INTO preferences (user_id, data, encrypted, deleted, updated_at)
+                    VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP)
+                    ON CONFLICT(user_id) DO UPDATE SET data=excluded.data, encrypted=excluded.encrypted,
+                    deleted=0, updated_at=CURRENT_TIMESTAMP
+                """
+                async with self._get_aiosqlite_connection() as conn:
+                    await conn.execute(query, (user_id, data, encrypt))
+                    await conn.commit()
+                    logger.debug(f"Preferences saved to SQLite for user: {user_id}")
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="save_preferences").inc()
             logger.error(f"Error saving preferences for {user_id}: {e}", exc_info=True)

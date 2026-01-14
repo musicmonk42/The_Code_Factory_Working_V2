@@ -52,9 +52,17 @@ from omnicore_engine.plugin_registry import (
 )
 
 try:
-    from simulations.simulation_module import UnifiedSimulationModule
+    from self_fixing_engineer.simulation.simulation_module import (
+        UnifiedSimulationModule,
+        Database as SimulationDatabase,
+        ShardedMessageBus as SimulationMessageBus,
+        create_simulation_module
+    )
 except ImportError:
-    UnifiedSimulationModule = None
+    try:
+        from simulations.simulation_module import UnifiedSimulationModule
+    except ImportError:
+        UnifiedSimulationModule = None
 try:
     from self_healing_import_fixer.import_fixer.fixer_ai import AIManager
 except ImportError:
@@ -339,22 +347,58 @@ async def startup_event_fastapi():
 
     await omnicore_engine.initialize()
 
+    # Initialize simulation module with proper database and message bus adapters
     try:
-        if omnicore_engine.database and omnicore_engine.message_bus:
-            simulation_module = UnifiedSimulationModule(
-                config=settings,
-                db=omnicore_engine.database,
-                message_bus=omnicore_engine.message_bus,
-            )
-            await simulation_module.initialize()
-            logger.info("UnifiedSimulationModule initialized successfully.")
+        if UnifiedSimulationModule is not None:
+            # Check if we have the enhanced simulation module with adapter classes
+            if 'create_simulation_module' in dir():
+                # Use the factory function to create simulation module with proper adapters
+                logger.info("Initializing simulation module with real database adapter...")
+                
+                # Get database URL from environment or use default
+                db_url = os.getenv("DATABASE_URL") or (
+                    omnicore_engine.database.db_path if omnicore_engine.database else None
+                )
+                
+                # Create database adapter
+                sim_db = SimulationDatabase(db_path=db_url)
+                
+                # Create message bus adapter
+                sim_bus = SimulationMessageBus()
+                
+                # Create simulation module configuration
+                sim_config = {
+                    "SIM_MAX_WORKERS": getattr(settings, "SIM_MAX_WORKERS", 4),
+                    "SIM_RETRY_ATTEMPTS": getattr(settings, "SIM_RETRY_ATTEMPTS", 3),
+                    "SIM_BACKOFF_FACTOR": getattr(settings, "SIM_BACKOFF_FACTOR", 1.0),
+                }
+                
+                # Initialize using factory function
+                simulation_module = await create_simulation_module(
+                    config=sim_config,
+                    db=sim_db,
+                    message_bus=sim_bus
+                )
+                logger.info("Simulation module initialized successfully with real adapters.")
+            elif omnicore_engine.database and omnicore_engine.message_bus:
+                # Fallback to original initialization method
+                simulation_module = UnifiedSimulationModule(
+                    config=settings,
+                    db=omnicore_engine.database,
+                    message_bus=omnicore_engine.message_bus,
+                )
+                await simulation_module.initialize()
+                logger.info("UnifiedSimulationModule initialized successfully (legacy mode).")
+            else:
+                logger.warning(
+                    "Database or MessageBus not available, creating minimal simulation module."
+                )
+                simulation_module = UnifiedSimulationModule(
+                    config=settings, db=None, message_bus=None
+                )
         else:
-            logger.warning(
-                "Database or MessageBus not available, skipping UnifiedSimulationModule initialization."
-            )
-            simulation_module = UnifiedSimulationModule(
-                config=settings, db=None, message_bus=None
-            )
+            logger.warning("UnifiedSimulationModule not available, skipping initialization.")
+            simulation_module = None
     except Exception as e:
         logger.error(
             f"Failed to initialize UnifiedSimulationModule: {e}", exc_info=True
