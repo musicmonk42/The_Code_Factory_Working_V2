@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import asyncio
+import datetime
 import json
 import time
 from typing import Any, Dict, List, Optional
@@ -459,6 +460,34 @@ app.add_middleware(
 )
 app.mount("/metrics", make_asgi_app())
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
+
+
+# Feature Flag Management Store
+# In-memory store for feature flags (replace with persistent storage in production)
+_feature_flags: Dict[str, Dict[str, Any]] = {
+    "experimental_features": {
+        "value": False,
+        "description": "Enable experimental features",
+        "created_at": None,
+        "updated_at": None,
+        "updated_by": None
+    },
+    "debug_mode": {
+        "value": False,
+        "description": "Enable debug logging and diagnostics",
+        "created_at": None,
+        "updated_at": None,
+        "updated_by": None
+    },
+    "maintenance_mode": {
+        "value": False,
+        "description": "Put system in maintenance mode",
+        "created_at": None,
+        "updated_at": None,
+        "updated_by": None
+    }
+}
+_feature_flags_lock = asyncio.Lock()
 
 
 class SizeLimitMiddleware(BaseHTTPMiddleware):
@@ -1035,31 +1064,59 @@ async def get_feature_flag(
     )
 ):
     """
-    Get feature flag configuration (Not Implemented).
+    Get feature flag configuration.
     
-    This endpoint is reserved for future feature flag management functionality.
-    Returns HTTP 501 Not Implemented status per industry standards.
+    Retrieves one or all feature flags from the system.
+    Feature flags allow dynamic control of system behavior without code changes.
     
     Args:
-        flag_name: Optional specific feature flag name to retrieve
+        flag_name: Optional specific feature flag name to retrieve.
+                  If not provided, returns all feature flags.
         
     Returns:
-        HTTP 501 with appropriate message
+        JSON response with feature flag(s) data
+        
+    Example Response (single flag):
+        {
+            "flag_name": "experimental_features",
+            "value": false,
+            "description": "Enable experimental features",
+            "created_at": "2026-01-14T00:00:00Z",
+            "updated_at": null,
+            "updated_by": null
+        }
+        
+    Example Response (all flags):
+        {
+            "flags": {
+                "experimental_features": {...},
+                "debug_mode": {...}
+            },
+            "count": 2
+        }
     """
     API_REQUESTS.labels(endpoint="/admin/feature-flag", method="GET").inc()
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail={
-            "message": "Feature flag management is not yet implemented.",
-            "status": "not_implemented",
-            "planned_features": [
-                "Dynamic feature toggle",
-                "A/B testing support",
-                "Gradual rollout configuration",
-                "Feature flag audit logging"
-            ]
-        }
-    )
+    
+    async with _feature_flags_lock:
+        if flag_name:
+            # Get specific flag
+            if flag_name not in _feature_flags:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "message": f"Feature flag '{flag_name}' not found.",
+                        "available_flags": list(_feature_flags.keys())
+                    }
+                )
+            flag_data = _feature_flags[flag_name].copy()
+            flag_data["flag_name"] = flag_name
+            return flag_data
+        else:
+            # Get all flags
+            return {
+                "flags": {k: v for k, v in _feature_flags.items()},
+                "count": len(_feature_flags)
+            }
 
 
 @admin_router.post("/feature-flag")
@@ -1069,33 +1126,79 @@ async def set_feature_flag(
     user_id: str = Depends(get_user_id),
 ):
     """
-    Set feature flag configuration (Not Implemented).
+    Set or update feature flag configuration.
     
-    This endpoint is reserved for future feature flag management functionality.
-    Returns HTTP 501 Not Implemented status per industry standards.
+    Updates the value of an existing feature flag or creates a new one.
+    Changes are applied immediately and affect system behavior in real-time.
+    
+    Security:
+        - Requires authentication (admin access recommended)
+        - Changes are logged with user ID for audit trail
     
     Args:
-        flag_name: Feature flag name to set
-        request_body: Feature flag configuration
-        user_id: Authenticated user ID
+        flag_name: Feature flag name to set (alphanumeric and underscores)
+        request_body: Feature flag configuration with 'value' field (boolean)
+        user_id: Authenticated user ID (from token)
         
     Returns:
-        HTTP 501 with appropriate message
+        JSON response with updated feature flag data
+        
+    Example Request:
+        POST /admin/feature-flag?flag_name=debug_mode
+        {
+            "value": true
+        }
+        
+    Example Response:
+        {
+            "message": "Feature flag 'debug_mode' updated successfully",
+            "flag_name": "debug_mode",
+            "value": true,
+            "updated_at": "2026-01-14T04:55:00Z",
+            "updated_by": "user_123",
+            "is_new": false
+        }
     """
     API_REQUESTS.labels(endpoint="/admin/feature-flag", method="POST").inc()
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail={
-            "message": "Feature flag management is not yet implemented.",
-            "status": "not_implemented",
-            "planned_features": [
-                "Dynamic feature toggle",
-                "A/B testing support",
-                "Gradual rollout configuration",
-                "Feature flag audit logging"
-            ]
+    
+    # Validate flag name (alphanumeric and underscores only)
+    import re
+    if not re.match(r'^[a-zA-Z0-9_]+$', flag_name):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Feature flag name must contain only letters, numbers, and underscores"
+        )
+    
+    timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+    
+    async with _feature_flags_lock:
+        is_new = flag_name not in _feature_flags
+        
+        if is_new:
+            # Create new flag
+            _feature_flags[flag_name] = {
+                "value": request_body.value,
+                "description": f"Feature flag: {flag_name}",
+                "created_at": timestamp,
+                "updated_at": timestamp,
+                "updated_by": user_id
+            }
+            logger.info(f"Created new feature flag '{flag_name}' with value {request_body.value} by user {user_id}")
+        else:
+            # Update existing flag
+            _feature_flags[flag_name]["value"] = request_body.value
+            _feature_flags[flag_name]["updated_at"] = timestamp
+            _feature_flags[flag_name]["updated_by"] = user_id
+            logger.info(f"Updated feature flag '{flag_name}' to {request_body.value} by user {user_id}")
+        
+        return {
+            "message": f"Feature flag '{flag_name}' {'created' if is_new else 'updated'} successfully",
+            "flag_name": flag_name,
+            "value": request_body.value,
+            "updated_at": timestamp,
+            "updated_by": user_id,
+            "is_new": is_new
         }
-    )
 
 
 @admin_router.post("/plugins/install")
