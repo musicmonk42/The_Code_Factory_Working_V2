@@ -493,13 +493,57 @@ class ArbiterArena:
                 "Created in-memory database and agent_state table for arbiters."
             )
 
+        # Fix 5: Create shared MessageQueueService instance
+        try:
+            from arbiter.message_queue_service import MessageQueueService
+            
+            shared_mq_service = MessageQueueService(
+                backend_type="redis_streams",
+                redis_url=self.settings.REDIS_URL,
+                config=self.settings,
+                omnicore_url=str(getattr(self.settings, "OMNICORE_URL", "https://api.example.com"))
+            )
+            logger.info("Created shared MessageQueueService for Arbiters")
+        except Exception as e:
+            logger.warning(f"Failed to create MessageQueueService: {e}")
+            shared_mq_service = None
+        
+        # Fix 5: Create Generator Engine for 100% integration
+        generator_engine = None
+        try:
+            from generator.runner.runner_core import Runner
+            from generator.runner.runner_config import load_config
+            
+            # Load generator config
+            generator_config_path = os.path.join(
+                os.path.dirname(__file__), 
+                "..", "..", "generator", "config.yaml"
+            )
+            if os.path.exists(generator_config_path):
+                generator_config = load_config(generator_config_path)
+            else:
+                generator_config = {}
+            
+            generator_engine = Runner(config=generator_config)
+            logger.info("Created Generator Engine for 100% generator integration")
+        except Exception as e:
+            logger.warning(f"Failed to create Generator Engine: {e}. Generator integration will be limited.")
+            generator_engine = None
+
         world_size = getattr(self.settings, "WORLD_SIZE", 3)
         self.arbiters = []
 
         for i in range(world_size):
             peer_ports = [self.base_port + j for j in range(world_size) if j != i]
+            
+            # Create engines dict with generator engine
+            engines_dict = {
+                "generator": generator_engine,
+            }
+            if self.intent_capture_engine:
+                engines_dict["intent_capture"] = self.intent_capture_engine
 
-            # This is the primary production integration point, updated to pass the new dependency.
+            # This is the primary production integration point, updated to pass the new dependencies.
             arbiter = Arbiter(
                 name=f"Arbiter_{self.base_port + i}",
                 db_engine=db_engine_for_arbiters,
@@ -511,9 +555,30 @@ class ArbiterArena:
                 port=self.base_port + i,
                 peer_ports=peer_ports,
                 settings=self.settings,
-                intent_capture_engine=self.intent_capture_engine,  # NEW: Passing the dependency
+                engines=engines_dict,  # Fix 5: Pass generator engine
+                message_queue_service=shared_mq_service,  # Fix 5: Inject MessageQueueService
             )
             self.arbiters.append(arbiter)
+        
+        # Fix 5: Create DecisionOptimizer after all Arbiters are initialized
+        try:
+            from arbiter.decision_optimizer import DecisionOptimizer
+            
+            decision_optimizer = DecisionOptimizer(
+                plugin_registry=PLUGIN_REGISTRY,
+                settings=self.settings,
+                logger=logger,
+                arena=self,
+            )
+            
+            # Inject DecisionOptimizer into each Arbiter
+            for arbiter in self.arbiters:
+                arbiter.decision_optimizer = decision_optimizer
+            
+            logger.info("Created and injected DecisionOptimizer into Arbiters")
+        except Exception as e:
+            logger.warning(f"Failed to create DecisionOptimizer: {e}")
+        
         logger.info(
             f"Initialized {len(self.arbiters)} arbiters in the arena structure."
         )
@@ -754,6 +819,61 @@ class ArbiterArena:
                 except Exception as e:
                     logger.error(f"Failed to list arbiters: {e}", exc_info=True)
                     arena_errors_total.labels(error_type="list_arbiters").inc()
+                    raise HTTPException(status_code=500, detail=str(e))
+
+        # Fix 4: Add /events endpoint for event distribution
+        @self.router.post(
+            "/events", summary="Receive and Distribute Events", tags=["Arena Operations"]
+        )
+        async def events_endpoint(request: Request):
+            """Receives events and distributes them to all managed Arbiters."""
+            with tracer.start_as_current_span("arena_distribute_events"):
+                try:
+                    data = await request.json()
+                    event_type = data.get("event_type")
+                    event_data = data.get("data", {})
+                    
+                    logger.info(f"[{self.name}] Received event: {event_type}")
+                    
+                    # Distribute to all arbiters
+                    distribution_results = []
+                    for arbiter in self.arbiters:
+                        try:
+                            # Call the arbiter's event handler
+                            if hasattr(arbiter, "_handle_incoming_event"):
+                                await arbiter._handle_incoming_event(event_type, event_data)
+                                distribution_results.append({
+                                    "arbiter": arbiter.name,
+                                    "status": "delivered"
+                                })
+                            else:
+                                distribution_results.append({
+                                    "arbiter": arbiter.name,
+                                    "status": "no_handler"
+                                })
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to distribute event to {arbiter.name}: {e}",
+                                exc_info=True
+                            )
+                            distribution_results.append({
+                                "arbiter": arbiter.name,
+                                "status": "error",
+                                "error": str(e)
+                            })
+                    
+                    arena_ops_total.labels(operation="distribute_events").inc()
+                    
+                    return JSONResponse(content={
+                        "status": "distributed",
+                        "event_type": event_type,
+                        "distribution_results": distribution_results,
+                        "total_arbiters": len(self.arbiters),
+                        "successful": sum(1 for r in distribution_results if r["status"] == "delivered")
+                    })
+                except Exception as e:
+                    logger.error(f"Failed to distribute events: {e}", exc_info=True)
+                    arena_errors_total.labels(error_type="event_distribution").inc()
                     raise HTTPException(status_code=500, detail=str(e))
 
         @self.router.post(

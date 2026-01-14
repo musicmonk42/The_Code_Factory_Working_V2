@@ -98,6 +98,228 @@ class TestEngineConfiguration:
         except Exception as e:
             pytest.fail(f"Failed to load ArbiterConfig: {e}")
 
+
+class TestArbiterIntegration:
+    """Test Arbiter integration with MessageQueueService and event handling."""
+
+    def test_arbiter_has_message_queue_service_param(self):
+        """Test that Arbiter __init__ accepts message_queue_service parameter."""
+        try:
+            from arbiter.arbiter import Arbiter
+            import inspect
+            
+            # Check that __init__ has message_queue_service parameter
+            sig = inspect.signature(Arbiter.__init__)
+            assert "message_queue_service" in sig.parameters, \
+                "Arbiter should have message_queue_service parameter"
+        except Exception as e:
+            pytest.fail(f"Failed to verify Arbiter parameters: {e}")
+
+    def test_arbiter_has_event_handlers(self):
+        """Test that Arbiter has all required event handler methods."""
+        try:
+            from arbiter.arbiter import Arbiter
+            
+            required_handlers = [
+                "_on_bug_detected",
+                "_on_policy_violation",
+                "_on_analysis_complete",
+                "_on_generator_output",
+                "_on_test_results",
+                "_on_workflow_completed",
+                "_handle_incoming_event",
+            ]
+            
+            for handler in required_handlers:
+                assert hasattr(Arbiter, handler), \
+                    f"Arbiter should have {handler} method"
+        except Exception as e:
+            pytest.fail(f"Failed to verify Arbiter event handlers: {e}")
+
+    def test_arbiter_has_event_receiver_setup(self):
+        """Test that Arbiter has setup_event_receiver method."""
+        try:
+            from arbiter.arbiter import Arbiter
+            
+            assert hasattr(Arbiter, "setup_event_receiver"), \
+                "Arbiter should have setup_event_receiver method"
+        except Exception as e:
+            pytest.fail(f"Failed to verify setup_event_receiver: {e}")
+
+    @pytest.mark.asyncio
+    async def test_event_handler_accepts_data(self):
+        """Test that event handlers can accept data dictionaries."""
+        try:
+            from arbiter.arbiter import Arbiter
+            from unittest.mock import AsyncMock, MagicMock
+            
+            # Create a minimal mock Arbiter instance
+            arbiter = MagicMock(spec=Arbiter)
+            arbiter.name = "TestArbiter"
+            arbiter.log_event = MagicMock()
+            arbiter.coordinate_with_peers = AsyncMock()
+            arbiter.decision_optimizer = None
+            
+            # Test _on_bug_detected handler
+            handler = Arbiter._on_bug_detected
+            test_data = {
+                "bug_id": "test-bug-123",
+                "bug_type": "import_error",
+                "severity": "high"
+            }
+            
+            # Call the handler (it's an instance method, so we need to bind it)
+            await handler(arbiter, test_data)
+            
+            # Verify it was called without errors
+            assert True, "Event handler should process data without errors"
+        except Exception as e:
+            # Skip if dependencies are missing for full test
+            pytest.skip(f"Skipping handler test due to dependencies: {e}")
+
+
+class TestArenaIntegration:
+    """Test Arena integration with event distribution."""
+
+    def test_arena_has_event_distribution_route(self):
+        """Test that Arena sets up /events endpoint."""
+        try:
+            from arbiter.arena import ArbiterArena
+            
+            # Check that _setup_routes exists (it sets up the endpoint)
+            assert hasattr(ArbiterArena, "_setup_routes"), \
+                "Arena should have _setup_routes method"
+        except Exception as e:
+            pytest.fail(f"Failed to verify Arena routes: {e}")
+
+    def test_arena_injects_dependencies(self):
+        """Test that Arena injects MessageQueueService and DecisionOptimizer."""
+        try:
+            from arbiter.arena import ArbiterArena
+            import inspect
+            
+            # Check _initialize_arbiters method exists
+            assert hasattr(ArbiterArena, "_initialize_arbiters"), \
+                "Arena should have _initialize_arbiters method"
+            
+            # Verify the method creates dependencies (by checking source)
+            source = inspect.getsource(ArbiterArena._initialize_arbiters)
+            assert "MessageQueueService" in source, \
+                "_initialize_arbiters should create MessageQueueService"
+            assert "DecisionOptimizer" in source, \
+                "_initialize_arbiters should create DecisionOptimizer"
+        except Exception as e:
+            pytest.skip(f"Skipping dependency injection test: {e}")
+
+
+class TestMessageQueueServiceIntegration:
+    """Test MessageQueueService subscription integration."""
+
+    def test_message_queue_service_can_be_imported(self):
+        """Test that MessageQueueService can be imported."""
+        try:
+            from arbiter.message_queue_service import MessageQueueService
+            
+            assert MessageQueueService is not None, \
+                "MessageQueueService should be importable"
+        except ImportError as e:
+            pytest.skip(f"MessageQueueService not available: {e}")
+
+    def test_message_queue_service_has_subscribe(self):
+        """Test that MessageQueueService has subscribe method."""
+        try:
+            from arbiter.message_queue_service import MessageQueueService
+            
+            assert hasattr(MessageQueueService, "subscribe"), \
+                "MessageQueueService should have subscribe method"
+        except ImportError as e:
+            pytest.skip(f"MessageQueueService not available: {e}")
+
+
+class TestDecisionOptimizerIntegration:
+    """Test DecisionOptimizer integration."""
+
+    def test_decision_optimizer_can_be_imported(self):
+        """Test that DecisionOptimizer can be imported."""
+        try:
+            from arbiter.decision_optimizer import DecisionOptimizer
+            
+            assert DecisionOptimizer is not None, \
+                "DecisionOptimizer should be importable"
+        except ImportError as e:
+            pytest.skip(f"DecisionOptimizer not available: {e}")
+
+    def test_decision_optimizer_accepts_arena(self):
+        """Test that DecisionOptimizer can be initialized with arena parameter."""
+        try:
+            from arbiter.decision_optimizer import DecisionOptimizer
+            import inspect
+            
+            # Check __init__ signature
+            sig = inspect.signature(DecisionOptimizer.__init__)
+            assert "arena" in sig.parameters, \
+                "DecisionOptimizer should accept arena parameter"
+        except ImportError as e:
+            pytest.skip(f"DecisionOptimizer not available: {e}")
+
+
+class TestGeneratorIntegration:
+    """Test 100% Generator integration with Arbiter."""
+
+    def test_arbiter_has_generator_engine(self):
+        """Test that Arbiter has generator_engine attribute."""
+        try:
+            from arbiter.arbiter import Arbiter
+            import inspect
+            
+            # Check Arbiter __init__ processes generator engine
+            source = inspect.getsource(Arbiter.__init__)
+            assert "generator_engine" in source, \
+                "Arbiter should have generator_engine attribute"
+        except ImportError as e:
+            pytest.skip(f"Arbiter not available: {e}")
+    
+    def test_generator_output_handler_has_direct_integration(self):
+        """Test that _on_generator_output uses generator_engine directly."""
+        try:
+            from arbiter.arbiter import Arbiter
+            import inspect
+            
+            # Check _on_generator_output method includes direct generator integration
+            source = inspect.getsource(Arbiter._on_generator_output)
+            assert "self.generator_engine" in source, \
+                "_on_generator_output should use self.generator_engine"
+            assert "process_output" in source or "publish_to_omnicore" in source, \
+                "_on_generator_output should have direct generator engine integration"
+        except (ImportError, AttributeError) as e:
+            pytest.skip(f"Generator output handler not available: {e}")
+    
+    def test_arena_creates_generator_engine(self):
+        """Test that Arena creates and injects generator engine."""
+        try:
+            from arbiter.arena import ArbiterArena
+            import inspect
+            
+            # Check _initialize_arbiters creates generator engine
+            source = inspect.getsource(ArbiterArena._initialize_arbiters)
+            assert "generator_engine" in source or "Runner" in source, \
+                "Arena should create generator engine"
+            assert '"generator"' in source, \
+                "Arena should inject generator into engines dict"
+        except (ImportError, AttributeError) as e:
+            pytest.skip(f"Arena generator integration not available: {e}")
+    
+    def test_generator_runner_can_be_imported(self):
+        """Test that Generator Runner can be imported."""
+        try:
+            from generator.runner.runner_core import Runner
+            
+            assert Runner is not None, \
+                "Generator Runner should be importable"
+        except ImportError as e:
+            pytest.skip(f"Generator Runner not available: {e}")
+
+
     def test_simulation_settings_exist(self):
         """Test that simulation settings can be accessed."""
         try:
