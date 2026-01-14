@@ -103,7 +103,7 @@ class JsonConsoleAuditLogger(AuditLogger):
     Delegates to the centralized log_audit_event for consistent audit logging.
     """
 
-    def log_action(self, action: str, details: Dict[str, Any]):
+    async def log_action(self, action: str, details: Dict[str, Any]):
         """Log an audit action as JSON to console via centralized audit system."""
         # Add metadata to indicate this is from JsonConsoleAuditLogger
         enriched_details = {
@@ -113,8 +113,6 @@ class JsonConsoleAuditLogger(AuditLogger):
         }
         log_audit_event(action, enriched_details)
         # Also output directly to console as JSON for immediate visibility
-        import json
-        import sys
         audit_record = {
             "timestamp": datetime.now().isoformat(),
             "action": action,
@@ -137,21 +135,39 @@ class FileAuditLogger(AuditLogger):
         
         # Create rotating file handler for audit logs
         from logging.handlers import RotatingFileHandler
-        import os
         
-        # Ensure directory exists
-        log_dir = os.path.dirname(self.log_file)
-        if log_dir and not os.path.exists(log_dir):
-            os.makedirs(log_dir, exist_ok=True)
+        # Validate and secure the log file path
+        log_file_path = Path(self.log_file).resolve()
         
-        self.file_handler = RotatingFileHandler(
-            self.log_file,
-            maxBytes=self.max_bytes,
-            backupCount=self.backup_count
-        )
-        self.file_handler.setFormatter(logging.Formatter('%(message)s'))
+        # Ensure directory exists and is within safe boundaries
+        log_dir = log_file_path.parent
+        if not log_dir.exists():
+            try:
+                log_dir.mkdir(parents=True, mode=0o755, exist_ok=True)
+            except (OSError, PermissionError) as e:
+                logger.error(f"Failed to create audit log directory {log_dir}: {e}")
+                # Fall back to using stdout if directory creation fails
+                self.file_handler = None
+                return
+        
+        # Check write permissions
+        if not os.access(log_dir, os.W_OK):
+            logger.error(f"No write permission for audit log directory {log_dir}")
+            self.file_handler = None
+            return
+        
+        try:
+            self.file_handler = RotatingFileHandler(
+                str(log_file_path),
+                maxBytes=self.max_bytes,
+                backupCount=self.backup_count
+            )
+            self.file_handler.setFormatter(logging.Formatter('%(message)s'))
+        except (OSError, PermissionError) as e:
+            logger.error(f"Failed to create audit log file handler: {e}")
+            self.file_handler = None
 
-    def log_action(self, action: str, details: Dict[str, Any]):
+    async def log_action(self, action: str, details: Dict[str, Any]):
         """Log an audit action to file via centralized audit system and direct file write."""
         # Add metadata to indicate this is from FileAuditLogger
         enriched_details = {
@@ -161,23 +177,23 @@ class FileAuditLogger(AuditLogger):
         }
         log_audit_event(action, enriched_details)
         
-        # Also write directly to the audit log file
-        import json
-        audit_record = {
-            "timestamp": datetime.now().isoformat(),
-            "action": action,
-            "details": enriched_details,
-        }
-        log_record = logging.LogRecord(
-            name="audit",
-            level=logging.INFO,
-            pathname="",
-            lineno=0,
-            msg=json.dumps(audit_record),
-            args=(),
-            exc_info=None
-        )
-        self.file_handler.emit(log_record)
+        # Also write directly to the audit log file if handler is available
+        if self.file_handler:
+            audit_record = {
+                "timestamp": datetime.now().isoformat(),
+                "action": action,
+                "details": enriched_details,
+            }
+            log_record = logging.LogRecord(
+                name="audit",
+                level=logging.INFO,
+                pathname="",
+                lineno=0,
+                msg=json.dumps(audit_record),
+                args=(),
+                exc_info=None
+            )
+            self.file_handler.emit(log_record)
 
 
 # Standard application logging

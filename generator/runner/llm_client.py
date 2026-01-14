@@ -169,10 +169,12 @@ class DistributedRateLimiter:
         if redis_url:
             try:
                 self.redis = aioredis.from_url(redis_url)
-                logger.info(f"DistributedRateLimiter initialized with Redis at {redis_url}")
+                # Redact sensitive info from URL for logging
+                safe_url = redis_url.split('@')[-1] if '@' in redis_url else redis_url.split('//')[1] if '//' in redis_url else 'configured'
+                logger.info(f"DistributedRateLimiter initialized with Redis at {safe_url}")
             except Exception as e:
                 logger.warning(
-                    f"DistributedRateLimiter: Failed to connect to Redis at {redis_url}: {e}. "
+                    f"DistributedRateLimiter: Failed to connect to Redis: {e}. "
                     "Falling back to no rate limiting."
                 )
                 self.redis = None
@@ -510,21 +512,34 @@ class LLMClient:
 # For new code, prefer using the factory method: client = await LLMClient.create(config)
 # This provides better dependency injection and testing capabilities.
 _async_client: Optional[LLMClient] = None
-# Create lock lazily to avoid issues when module is imported outside async context
-_client_lock = None
+# Lock is lazily created in the event loop to avoid initialization issues
+_client_lock: Optional[asyncio.Lock] = None
+_lock_loop_id: Optional[int] = None  # Track which event loop owns the lock
 
 
-def _get_client_lock():
-    """Get or create the client lock in the current event loop."""
-    global _client_lock
-    if _client_lock is None:
-        try:
-            loop = asyncio.get_running_loop()
+def _get_or_create_lock() -> asyncio.Lock:
+    """
+    Get or create the client lock for the current event loop.
+    Creates a new lock if called from a different event loop.
+    """
+    global _client_lock, _lock_loop_id
+    
+    try:
+        loop = asyncio.get_running_loop()
+        loop_id = id(loop)
+        
+        # Create new lock if none exists or if we're in a different event loop
+        if _client_lock is None or _lock_loop_id != loop_id:
             _client_lock = asyncio.Lock()
-        except RuntimeError:
-            # No event loop yet, will be created when needed
-            pass
-    return _client_lock
+            _lock_loop_id = loop_id
+            logger.debug(f"Created new client lock for event loop {loop_id}")
+        
+        return _client_lock
+    except RuntimeError:
+        # No event loop - this shouldn't happen in async context
+        logger.error("No running event loop in async function - this is a bug")
+        # Return a fresh lock as fallback
+        return asyncio.Lock()
 
 
 async def call_llm_api(
@@ -535,10 +550,7 @@ async def call_llm_api(
     config: Optional[RunnerConfig] = None,
 ) -> Dict[str, Any] | AsyncGenerator[str, None]:
     global _async_client
-    lock = _get_client_lock()
-    if lock is None:
-        # Create lock if not exists
-        lock = asyncio.Lock()
+    lock = _get_or_create_lock()
     async with lock:
         if _async_client is None:
             config = config or RunnerConfig.load()
@@ -554,9 +566,7 @@ async def call_ensemble_api(
     config: Optional[RunnerConfig] = None,
 ) -> Dict[str, Any]:
     global _async_client
-    lock = _get_client_lock()
-    if lock is None:
-        lock = asyncio.Lock()
+    lock = _get_or_create_lock()
     async with lock:
         if _async_client is None:
             config = config or RunnerConfig.load()
