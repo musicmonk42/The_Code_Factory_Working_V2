@@ -751,16 +751,19 @@ class OmniCoreOmega:
             )
             logger.info("Registered test_generation engine in ENGINE_REGISTRY")
 
-        # Register simulation engine
+        # Register simulation engine with consistent entrypoint structure
         if self.simulation_engine:
             register_engine(
                 "simulation",
                 {
                     "engine": self.simulation_engine,
                     "description": "Unified simulation module",
+                    "run": getattr(self.simulation_engine, "run_simulation", None),
+                    "health_check": getattr(self.simulation_engine, "health_check", None),
+                    "get_registry": getattr(self.simulation_engine, "get_registry", None),
                 },
             )
-            logger.info("Registered simulation engine in ENGINE_REGISTRY")
+            logger.info("Registered simulation engine in ENGINE_REGISTRY with unified entrypoints")
 
         # Register crew manager
         if self.crew_manager:

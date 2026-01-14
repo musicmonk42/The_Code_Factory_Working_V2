@@ -355,10 +355,16 @@ async def startup_event_fastapi():
                 # Use the factory function to create simulation module with proper adapters
                 logger.info("Initializing simulation module with real database adapter...")
                 
-                # Get database URL from environment or use default
-                db_url = os.getenv("DATABASE_URL") or (
-                    omnicore_engine.database.db_path if omnicore_engine.database else None
-                )
+                # Get database URL from environment or use default with null safety
+                db_url = os.getenv("DATABASE_URL")
+                if not db_url and omnicore_engine.database:
+                    # Safely access db_path with null check
+                    db_url = getattr(omnicore_engine.database, 'db_path', None)
+                
+                # Provide fallback if no database URL available
+                if not db_url:
+                    logger.warning("No database URL available, using default SQLite path")
+                    db_url = "sqlite:///./omnicore.db"
                 
                 # Create database adapter
                 sim_db = SimulationDatabase(db_path=db_url)
@@ -783,11 +789,32 @@ async def get_feature_flag(
         None, description="Specific feature flag name to retrieve"
     )
 ):
+    """
+    Get feature flag configuration (Not Implemented).
+    
+    This endpoint is reserved for future feature flag management functionality.
+    Returns HTTP 501 Not Implemented status per industry standards.
+    
+    Args:
+        flag_name: Optional specific feature flag name to retrieve
+        
+    Returns:
+        HTTP 501 with appropriate message
+    """
     API_REQUESTS.labels(endpoint="/admin/feature-flag", method="GET").inc()
-    return {
-        "status": "not_implemented",
-        "message": "Feature flag management to be implemented.",
-    }
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail={
+            "message": "Feature flag management is not yet implemented.",
+            "status": "not_implemented",
+            "planned_features": [
+                "Dynamic feature toggle",
+                "A/B testing support",
+                "Gradual rollout configuration",
+                "Feature flag audit logging"
+            ]
+        }
+    )
 
 
 @admin_router.post("/feature-flag")
@@ -796,11 +823,34 @@ async def set_feature_flag(
     request_body: FeatureFlagUpdateRequest,
     user_id: str = Depends(get_user_id),
 ):
+    """
+    Set feature flag configuration (Not Implemented).
+    
+    This endpoint is reserved for future feature flag management functionality.
+    Returns HTTP 501 Not Implemented status per industry standards.
+    
+    Args:
+        flag_name: Feature flag name to set
+        request_body: Feature flag configuration
+        user_id: Authenticated user ID
+        
+    Returns:
+        HTTP 501 with appropriate message
+    """
     API_REQUESTS.labels(endpoint="/admin/feature-flag", method="POST").inc()
-    return {
-        "status": "not_implemented",
-        "message": "Feature flag management to be implemented.",
-    }
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail={
+            "message": "Feature flag management is not yet implemented.",
+            "status": "not_implemented",
+            "planned_features": [
+                "Dynamic feature toggle",
+                "A/B testing support",
+                "Gradual rollout configuration",
+                "Feature flag audit logging"
+            ]
+        }
+    )
 
 
 @admin_router.post("/plugins/install")
