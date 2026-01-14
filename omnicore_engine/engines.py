@@ -30,10 +30,52 @@ try:
 except Exception:
     # Minimal stub used when arbiter isn't installed (tests will typically patch this)
     class BugManager:
+        """
+        Stub implementation of BugManager for environments without Arbiter installed.
+        
+        This is a development/testing stub that provides no-op functionality.
+        In production environments with Arbiter installed, the real BugManager
+        from arbiter.bug_manager will be used instead.
+        
+        Industry Standard Note:
+        - This stub follows the Null Object pattern for graceful degradation
+        - Tests should mock this class for proper bug reporting verification
+        - Production deployments should install the full Arbiter package
+        
+        Real Implementation Features (when Arbiter is available):
+        - Bug tracking and reporting to external systems
+        - Integration with issue trackers (Jira, GitHub Issues)
+        - Automated bug triage and prioritization
+        - ML-based bug pattern detection
+        """
+        
         def __init__(self, *args, **kwargs):
+            """
+            Initialize BugManager stub.
+            
+            Args:
+                *args: Ignored in stub implementation
+                **kwargs: Ignored in stub implementation
+            """
             pass
 
         async def report_bug(self, payload):
+            """
+            No-op bug reporting method for stub implementation.
+            
+            Args:
+                payload: Bug report data (ignored in stub)
+                
+            Returns:
+                None (no bug is actually reported)
+                
+            Note:
+                In production with Arbiter installed, this method would:
+                - Validate and sanitize the bug report payload
+                - Submit to configured bug tracking systems
+                - Trigger automated triage workflows
+                - Return a bug tracking ID
+            """
             # no-op fallback for tests / import-time usage
             return None
 
@@ -43,16 +85,78 @@ try:
 except ImportError:
     # Minimal stub when arbiter isn't installed
     class Arbiter:
+        """
+        Stub implementation of Arbiter for environments without Arbiter installed.
+        
+        This is a development/testing stub that provides no-op functionality.
+        The real Arbiter is a sophisticated AI-driven autonomous agent system.
+        
+        Industry Standard Note:
+        - Follows the Null Object pattern for graceful degradation
+        - Enables development and testing without full Arbiter installation
+        - Production systems should use the complete Arbiter package
+        
+        Real Arbiter Features (when installed):
+        - Autonomous decision-making and task execution
+        - Self-healing and adaptive behavior
+        - Multi-agent coordination and arbitration
+        - Policy-based governance and compliance
+        - Real-time monitoring and alerting
+        - Explainable AI reasoning
+        """
+        
         def __init__(self, *args, **kwargs):
+            """
+            Initialize Arbiter stub.
+            
+            Args:
+                *args: Ignored in stub implementation
+                **kwargs: Ignored in stub implementation
+            """
             pass
 
         async def start_async_services(self):
+            """
+            No-op async services startup for stub.
+            
+            Real implementation would start:
+            - Message queue consumers
+            - Monitoring agents
+            - Health check services
+            - Metric collection workers
+            """
             pass
 
         async def stop_async_services(self):
+            """
+            No-op async services shutdown for stub.
+            
+            Real implementation would gracefully stop:
+            - All async workers and agents
+            - Message queue connections
+            - Monitoring services
+            - Active task executors
+            """
             pass
 
         async def respond(self, *args, **kwargs):
+            """
+            Stub response method indicating Arbiter unavailability.
+            
+            Args:
+                *args: Query/request arguments (ignored)
+                **kwargs: Additional parameters (ignored)
+                
+            Returns:
+                str: Message indicating Arbiter is unavailable
+                
+            Note:
+                Real Arbiter would process requests and return:
+                - Intelligent responses based on context
+                - Action recommendations
+                - Status updates
+                - Query results
+            """
             return "Arbiter unavailable"
 
 
@@ -63,7 +167,22 @@ try:
 except ImportError:
 
     async def get_system_metrics_async():
-        """Fallback system metrics function."""
+        """
+        Fallback system metrics function when Arbiter is not available.
+        
+        This stub returns unavailability status instead of real metrics.
+        
+        Returns:
+            dict: Status dictionary indicating metrics are unavailable
+            
+        Real Implementation (when Arbiter is available):
+            Returns comprehensive system metrics including:
+            - CPU, memory, disk, and network usage
+            - Application-specific metrics (request rates, error rates)
+            - Database performance metrics
+            - Service health indicators
+            - Test pass rates and quality metrics
+        """
         return {"status": "unavailable", "message": "arbiter.utils not available"}
 
 # Optional imports that may not be available in all environments
@@ -434,11 +553,19 @@ class PluginService:
 
 def run_import_fixer(path):
     """
-    Synchronous helper to run the fixer. This method is deprecated in favor of the async engine.
+    Synchronous helper to run the fixer.
+    
+    Uses asyncio.run() for proper async execution instead of deprecated
+    get_event_loop() pattern (Python 3.10+ compatibility).
+    
+    Args:
+        path: File path to fix imports for
+        
+    Returns:
+        Result from import_fixer.fix_file()
     """
     import_fixer = get_engine("import_fixer")["engine"]
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(import_fixer.fix_file(path))
+    return asyncio.run(import_fixer.fix_file(path))
 
 
 class OmniCoreOmega:
@@ -464,6 +591,7 @@ class OmniCoreOmega:
         intent_parser: Optional["IntentParser"] = None,
         llm_client: Optional[Any] = None,
     ):
+        self.logger = logging.getLogger(__name__)
         self.db = database
         self.message_bus = message_bus
         self.plugin_service = plugin_service
@@ -481,6 +609,76 @@ class OmniCoreOmega:
         self.generator_runner = generator_runner
         self.intent_parser = intent_parser
         self.llm_client = llm_client
+
+    @property
+    def is_initialized(self) -> bool:
+        """
+        Check if OmniCoreOmega has been initialized.
+        
+        Returns:
+            bool: True if initialized, False otherwise.
+        """
+        return self._is_initialized
+
+    async def shutdown(self):
+        """
+        Gracefully shutdown all OmniCoreOmega components.
+        
+        This method ensures proper cleanup of all resources including:
+        - Arbiters and their async services
+        - Message bus connections
+        - Database connections
+        - Crew manager agents
+        
+        Implements industry-standard graceful shutdown with error handling
+        and logging at each step.
+        """
+        if not self._is_initialized:
+            self.logger.warning("OmniCoreOmega: Shutdown called but not initialized")
+            return
+        
+        self.logger.info("OmniCoreOmega: Beginning graceful shutdown...")
+        
+        # Stop arbiters
+        if self.arbiters:
+            self.logger.info(f"Stopping {len(self.arbiters)} arbiters...")
+            for i, arbiter in enumerate(self.arbiters):
+                try:
+                    await arbiter.stop_async_services()
+                    self.logger.debug(f"Arbiter {i} stopped successfully")
+                except Exception as e:
+                    self.logger.error(f"Error stopping arbiter {i}: {e}", exc_info=True)
+            self.arbiters.clear()
+        
+        # Stop crew manager agents
+        if self.crew_manager:
+            try:
+                self.logger.info("Stopping crew manager...")
+                await self.crew_manager.stop_all()
+                self.logger.debug("Crew manager stopped successfully")
+            except Exception as e:
+                self.logger.error(f"Error stopping crew manager: {e}", exc_info=True)
+        
+        # Shutdown message bus
+        if self.message_bus:
+            try:
+                self.logger.info("Shutting down message bus...")
+                await self.message_bus.shutdown()
+                self.logger.debug("Message bus shutdown successfully")
+            except Exception as e:
+                self.logger.error(f"Error shutting down message bus: {e}", exc_info=True)
+        
+        # Close database connections
+        if self.db:
+            try:
+                self.logger.info("Closing database connections...")
+                await self.db.close()
+                self.logger.debug("Database connections closed successfully")
+            except Exception as e:
+                self.logger.error(f"Error closing database: {e}", exc_info=True)
+        
+        self._is_initialized = False
+        self.logger.info("OmniCoreOmega: Shutdown complete")
 
     @staticmethod
     def _find_crew_config() -> Optional[str]:
@@ -672,16 +870,19 @@ class OmniCoreOmega:
             )
             logger.info("Registered test_generation engine in ENGINE_REGISTRY")
 
-        # Register simulation engine
+        # Register simulation engine with consistent entrypoint structure
         if self.simulation_engine:
             register_engine(
                 "simulation",
                 {
                     "engine": self.simulation_engine,
                     "description": "Unified simulation module",
+                    "run": getattr(self.simulation_engine, "run_simulation", None),
+                    "health_check": getattr(self.simulation_engine, "health_check", None),
+                    "get_registry": getattr(self.simulation_engine, "get_registry", None),
                 },
             )
-            logger.info("Registered simulation engine in ENGINE_REGISTRY")
+            logger.info("Registered simulation engine in ENGINE_REGISTRY with unified entrypoints")
 
         # Register crew manager
         if self.crew_manager:

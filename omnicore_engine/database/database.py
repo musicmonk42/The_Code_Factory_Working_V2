@@ -1185,19 +1185,49 @@ class Database:
     async def get_plugin_legacy(
         self, kind: str, name: str, decrypt: bool = False
     ) -> Optional[Dict]:
+        """
+        Retrieve a legacy plugin by kind and name.
+        
+        Industry-standard implementation with:
+        - PostgreSQL and SQLite support
+        - Optional decryption of plugin metadata
+        - Soft delete filtering (deleted=0)
+        
+        Args:
+            kind: Plugin kind/type
+            name: Plugin name
+            decrypt: Whether to decrypt encrypted metadata
+            
+        Returns:
+            Plugin metadata dictionary or None if not found
+        """
         DB_OPERATIONS_LOCAL.labels(operation="get_plugin_legacy").inc()
-        query = "SELECT meta, encrypted FROM plugins WHERE kind = ? AND name = ? AND deleted=0"
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Legacy plugin retrieval not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                cur = await conn.execute(query, (kind, name))
-                row = await cur.fetchone()
+                # PostgreSQL implementation
+                async with self.AsyncSessionLocal() as session:
+                    query = text("""
+                        SELECT meta, encrypted FROM plugins 
+                        WHERE kind = :kind AND name = :name AND deleted = 0
+                    """)
+                    result = await session.execute(
+                        query, {"kind": kind, "name": name}
+                    )
+                    row = result.fetchone()
+            else:
+                # SQLite implementation
+                query = "SELECT meta, encrypted FROM plugins WHERE kind = ? AND name = ? AND deleted=0"
+                async with self._get_aiosqlite_connection() as conn:
+                    cur = await conn.execute(query, (kind, name))
+                    row = await cur.fetchone()
+            
             if row:
-                return self._decrypt_json(row["meta"], row["encrypted"] and decrypt)
+                meta = row["meta"] if isinstance(row, dict) else row[0]
+                encrypted = row["encrypted"] if isinstance(row, dict) else row[1]
+                return self._decrypt_json(meta, encrypted and decrypt)
             return None
+            
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="get_plugin_legacy").inc()
             logger.error(
@@ -1207,26 +1237,53 @@ class Database:
 
     @DB_LATENCY_LOCAL.labels(operation="list_plugins_legacy").time()
     async def list_plugins_legacy(self, decrypt: bool = False) -> List[Dict]:
+        """
+        List all non-deleted legacy plugins.
+        
+        Industry-standard implementation with:
+        - PostgreSQL and SQLite support
+        - Optional bulk decryption
+        - Soft delete filtering
+        - Performance timing metrics
+        
+        Args:
+            decrypt: Whether to decrypt encrypted metadata
+            
+        Returns:
+            List of plugin metadata dictionaries
+        """
         DB_OPERATIONS_LOCAL.labels(operation="list_plugins_legacy").inc()
-        query = "SELECT kind, name, meta, encrypted FROM plugins WHERE deleted=0"
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Legacy plugin listing not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                cur = await conn.execute(query)
-                rows = await cur.fetchall()
+                # PostgreSQL implementation
+                async with self.AsyncSessionLocal() as session:
+                    query = text("""
+                        SELECT kind, name, meta, encrypted FROM plugins 
+                        WHERE deleted = 0
+                    """)
+                    result = await session.execute(query)
+                    rows = result.fetchall()
+            else:
+                # SQLite implementation
+                query = "SELECT kind, name, meta, encrypted FROM plugins WHERE deleted=0"
+                async with self._get_aiosqlite_connection() as conn:
+                    cur = await conn.execute(query)
+                    rows = await cur.fetchall()
+            
+            # Process and return results
             return [
                 {
-                    "kind": row["kind"],
-                    "name": row["name"],
+                    "kind": row["kind"] if isinstance(row, dict) else row[0],
+                    "name": row["name"] if isinstance(row, dict) else row[1],
                     "meta": self._decrypt_json(
-                        row["meta"], row["encrypted"] and decrypt
+                        row["meta"] if isinstance(row, dict) else row[2],
+                        (row["encrypted"] if isinstance(row, dict) else row[3]) and decrypt
                     ),
                 }
                 for row in rows
             ]
+            
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="list_plugins_legacy").inc()
             logger.error(f"Error listing legacy plugins: {e}", exc_info=True)
@@ -1234,16 +1291,44 @@ class Database:
 
     @DB_LATENCY_LOCAL.labels(operation="delete_plugin_legacy").time()
     async def delete_plugin_legacy(self, kind: str, name: str) -> None:
+        """
+        Soft delete a legacy plugin.
+        
+        Industry-standard implementation with:
+        - PostgreSQL and SQLite support
+        - Soft delete (sets deleted=1)
+        - Automatic timestamp update
+        - Performance timing metrics
+        
+        Args:
+            kind: Plugin kind/type
+            name: Plugin name
+            
+        Raises:
+            Exception: If deletion fails
+        """
         DB_OPERATIONS_LOCAL.labels(operation="delete_plugin_legacy").inc()
-        query = "UPDATE plugins SET deleted=1, updated_at=CURRENT_TIMESTAMP WHERE kind = ? AND name = ?"
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Legacy plugin deletion not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                await conn.execute(query, (kind, name))
-                await conn.commit()
+                # PostgreSQL implementation
+                async with self.AsyncSessionLocal() as session:
+                    query = text("""
+                        UPDATE plugins 
+                        SET deleted = 1, updated_at = CURRENT_TIMESTAMP 
+                        WHERE kind = :kind AND name = :name
+                    """)
+                    await session.execute(
+                        query, {"kind": kind, "name": name}
+                    )
+                    await session.commit()
+            else:
+                # SQLite implementation
+                query = "UPDATE plugins SET deleted=1, updated_at=CURRENT_TIMESTAMP WHERE kind = ? AND name = ?"
+                async with self._get_aiosqlite_connection() as conn:
+                    await conn.execute(query, (kind, name))
+                    await conn.commit()
+                    
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="delete_plugin_legacy").inc()
             logger.error(
@@ -1819,28 +1904,55 @@ class Database:
 
     @circuit(failure_threshold=5, recovery_timeout=60)
     async def get_audit_snapshot(self, snapshot_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve an audit snapshot by ID.
+        
+        Industry-standard implementation with:
+        - PostgreSQL and SQLite support
+        - Encrypted state storage
+        - Circuit breaker pattern for resilience
+        - Comprehensive error handling
+        
+        Args:
+            snapshot_id: Unique identifier for the snapshot
+            
+        Returns:
+            Dictionary containing snapshot data or None if not found
+        """
         AUDIT_DB_OPERATIONS.labels(operation="get_audit_snapshot").inc()
-        query = "SELECT state, user_id, timestamp FROM audit_snapshots WHERE snapshot_id = ?"
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Audit snapshot retrieval not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                cur = await conn.execute(query, (snapshot_id,))
-                row = await cur.fetchone()
+                # PostgreSQL implementation using async session
+                async with self.AsyncSessionLocal() as session:
+                    query = text(
+                        "SELECT state, user_id, timestamp FROM audit_snapshots "
+                        "WHERE snapshot_id = :snapshot_id"
+                    )
+                    result = await session.execute(
+                        query, {"snapshot_id": snapshot_id}
+                    )
+                    row = result.fetchone()
+            else:
+                # SQLite implementation
+                query = "SELECT state, user_id, timestamp FROM audit_snapshots WHERE snapshot_id = ?"
+                async with self._get_aiosqlite_connection() as conn:
+                    cur = await conn.execute(query, (snapshot_id,))
+                    row = await cur.fetchone()
 
             if row:
                 try:
+                    # Decrypt the encrypted state
                     decrypted_state_str = self.encrypter.decrypt(
-                        row["state"].encode("utf-8")
+                        row["state"].encode("utf-8") if isinstance(row["state"], str) else row[0].encode("utf-8")
                     ).decode("utf-8")
                     state = json.loads(decrypted_state_str)
+                    
+                    # Return structured snapshot data
                     return {
                         "snapshot_id": snapshot_id,
                         "state": state,
-                        "user_id": row["user_id"],
-                        "timestamp": row["timestamp"],
+                        "user_id": row["user_id"] if isinstance(row, dict) else row[1],
+                        "timestamp": row["timestamp"] if isinstance(row, dict) else row[2],
                     }
                 except (InvalidToken, json.JSONDecodeError) as e:
                     logger.error(
@@ -1860,25 +1972,61 @@ class Database:
     async def snapshot_audit_state(
         self, snapshot_id: str, encrypted_state: str, user_id: str
     ):
+        """
+        Save an audit snapshot with encrypted state.
+        
+        Industry-standard implementation with:
+        - PostgreSQL and SQLite support
+        - Upsert semantics (INSERT or UPDATE)
+        - Retry logic with exponential backoff
+        - Circuit breaker for fault tolerance
+        
+        Args:
+            snapshot_id: Unique identifier for the snapshot
+            encrypted_state: Encrypted state data
+            user_id: User who created the snapshot
+        """
         AUDIT_DB_OPERATIONS.labels(operation="snapshot_audit_state").inc()
         user_id = validate_user_id(user_id)
-        query = "INSERT OR REPLACE INTO audit_snapshots (snapshot_id, state, user_id, timestamp) VALUES (?, ?, ?, ?)"
+        timestamp = datetime.utcnow().isoformat()
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Audit snapshot saving not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                await conn.execute(
-                    query,
-                    (
-                        snapshot_id,
-                        encrypted_state,
-                        user_id,
-                        datetime.utcnow().isoformat(),
-                    ),
-                )
-                await conn.commit()
+                # PostgreSQL implementation with UPSERT (INSERT ... ON CONFLICT)
+                async with self.AsyncSessionLocal() as session:
+                    query = text("""
+                        INSERT INTO audit_snapshots (snapshot_id, state, user_id, timestamp)
+                        VALUES (:snapshot_id, :state, :user_id, :timestamp)
+                        ON CONFLICT (snapshot_id) 
+                        DO UPDATE SET 
+                            state = EXCLUDED.state,
+                            user_id = EXCLUDED.user_id,
+                            timestamp = EXCLUDED.timestamp
+                    """)
+                    await session.execute(
+                        query,
+                        {
+                            "snapshot_id": snapshot_id,
+                            "state": encrypted_state,
+                            "user_id": user_id,
+                            "timestamp": timestamp,
+                        },
+                    )
+                    await session.commit()
+            else:
+                # SQLite implementation with INSERT OR REPLACE
+                query = "INSERT OR REPLACE INTO audit_snapshots (snapshot_id, state, user_id, timestamp) VALUES (?, ?, ?, ?)"
+                async with self._get_aiosqlite_connection() as conn:
+                    await conn.execute(
+                        query,
+                        (
+                            snapshot_id,
+                            encrypted_state,
+                            user_id,
+                            timestamp,
+                        ),
+                    )
+                    await conn.commit()
             AUDIT_DB_OPERATIONS.labels(operation="snapshot_audit_state_success").inc()
         except Exception as e:
             AUDIT_DB_ERRORS.labels(operation="snapshot_audit_state").inc()
@@ -1899,14 +2047,32 @@ class Database:
     @circuit(failure_threshold=5, recovery_timeout=60)
     @retry(tries=3, delay=1, backoff=2)
     async def snapshot_world_state(self, user_id: str) -> str:
+        """
+        Create a snapshot of all agent states in the world.
+        
+        Industry-standard implementation with:
+        - PostgreSQL and SQLite support
+        - Data anonymization before storage
+        - Encryption of sensitive data
+        - Retry logic and comprehensive error handling
+        
+        Args:
+            user_id: User creating the snapshot
+            
+        Returns:
+            Unique snapshot ID
+        """
         DB_OPERATIONS.labels(operation="snapshot_world_state").inc()
         user_id = validate_user_id(user_id)
         snapshot_id = str(uuid.uuid4())
+        
         try:
+            # Retrieve all agent states using ORM
             async with self.AsyncSessionLocal() as session:
                 agent_states = await session.execute(select(AgentState))
                 states_list = [state.__dict__ for state in agent_states.scalars().all()]
 
+            # Anonymize and encrypt data
             anonymized_states = [
                 await self._anonymize_data(state) for state in states_list
             ]
@@ -1915,23 +2081,41 @@ class Database:
                 "utf-8"
             )
 
+            # Save to database
+            timestamp = datetime.utcnow().isoformat()
             if self.is_postgres:
-                raise NotImplementedError(
-                    "World snapshot saving not implemented for PostgreSQL directly."
-                )
-            query = "INSERT INTO world_snapshots (snapshot_id, state, user_id, timestamp) VALUES (?, ?, ?, ?)"
-            async with self._get_aiosqlite_connection() as conn:
-                await conn.execute(
-                    query,
-                    (
-                        snapshot_id,
-                        encrypted_state,
-                        user_id,
-                        datetime.utcnow().isoformat(),
-                    ),
-                )
-                await conn.commit()
+                # PostgreSQL implementation
+                async with self.AsyncSessionLocal() as session:
+                    query = text("""
+                        INSERT INTO world_snapshots (snapshot_id, state, user_id, timestamp)
+                        VALUES (:snapshot_id, :state, :user_id, :timestamp)
+                    """)
+                    await session.execute(
+                        query,
+                        {
+                            "snapshot_id": snapshot_id,
+                            "state": encrypted_state,
+                            "user_id": user_id,
+                            "timestamp": timestamp,
+                        },
+                    )
+                    await session.commit()
+            else:
+                # SQLite implementation
+                query = "INSERT INTO world_snapshots (snapshot_id, state, user_id, timestamp) VALUES (?, ?, ?, ?)"
+                async with self._get_aiosqlite_connection() as conn:
+                    await conn.execute(
+                        query,
+                        (
+                            snapshot_id,
+                            encrypted_state,
+                            user_id,
+                            timestamp,
+                        ),
+                    )
+                    await conn.commit()
 
+            # Log audit trail
             await self._log_audit(
                 "snapshot_world_state",
                 snapshot_id,
@@ -1956,37 +2140,70 @@ class Database:
     @circuit(failure_threshold=5, recovery_timeout=60)
     @retry(tries=3, delay=1, backoff=2)
     async def restore_world_state(self, snapshot_id: str, user_id: str):
+        """
+        Restore world state from a snapshot.
+        
+        Industry-standard implementation with:
+        - PostgreSQL and SQLite support
+        - Transactional restore (all-or-nothing)
+        - State decryption and validation
+        - Circuit breaker and retry logic
+        
+        Args:
+            snapshot_id: ID of snapshot to restore
+            user_id: User performing the restore
+        """
         DB_OPERATIONS.labels(operation="restore_world_state").inc()
         user_id = validate_user_id(user_id)
+        
         try:
+            # Retrieve snapshot
             if self.is_postgres:
-                raise NotImplementedError(
-                    "World snapshot restoration not implemented for PostgreSQL directly."
-                )
-            query = "SELECT state FROM world_snapshots WHERE snapshot_id = ?"
-            async with self._get_aiosqlite_connection() as conn:
-                cur = await conn.execute(query, (snapshot_id,))
-                row = await cur.fetchone()
+                # PostgreSQL implementation
+                async with self.AsyncSessionLocal() as session:
+                    query = text(
+                        "SELECT state FROM world_snapshots WHERE snapshot_id = :snapshot_id"
+                    )
+                    result = await session.execute(
+                        query, {"snapshot_id": snapshot_id}
+                    )
+                    row = result.fetchone()
+            else:
+                # SQLite implementation
+                query = "SELECT state FROM world_snapshots WHERE snapshot_id = ?"
+                async with self._get_aiosqlite_connection() as conn:
+                    cur = await conn.execute(query, (snapshot_id,))
+                    row = await cur.fetchone()
 
             if not row:
                 raise ValueError(f"World snapshot '{snapshot_id}' not found.")
 
+            # Decrypt and deserialize state
+            encrypted_state = row["state"] if isinstance(row, dict) else row[0]
             decrypted_state_str = self.encrypter.decrypt(
-                row["state"].encode("utf-8")
+                encrypted_state.encode("utf-8") if isinstance(encrypted_state, str) else encrypted_state
             ).decode("utf-8")
             states_list = json.loads(decrypted_state_str)
 
+            # Restore states in a transaction (all-or-nothing)
             async with self.AsyncSessionLocal() as session:
+                # Clear existing states
                 await session.execute(delete(AgentState))
+                
+                # Restore states from snapshot
                 for state_data in states_list:
+                    # Hash the ID to maintain anonymization
                     state_data["name"] = hashlib.sha256(
                         state_data["id"].encode()
                     ).hexdigest()
                     del state_data["id"]
                     state = AgentState(**state_data)
                     session.add(state)
+                
+                # Commit transaction
                 await session.commit()
 
+            # Log audit trail
             await self._log_audit(
                 "restore_world_state",
                 snapshot_id,

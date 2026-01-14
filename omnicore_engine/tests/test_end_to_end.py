@@ -4,8 +4,6 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-# FIXME: command_handlers is not exported from cli module, needs refactoring
-# from omnicore_engine.cli import command_handlers, parse_args
 from omnicore_engine.fastapi_app import app
 from omnicore_engine.plugin_registry import PlugInKind, plugin
 
@@ -37,10 +35,23 @@ async def test_end_to_end_plugin_api(tmp_path):
 
 
 @pytest.mark.skip(
-    reason="command_handlers not exported from cli module - needs refactoring"
+    reason="CLI command_handlers is defined inside main() function and not easily testable. "
+    "Future refactoring should extract command handlers to module-level for better testability."
 )
 @pytest.mark.asyncio
 async def test_end_to_end_plugin_cli(tmp_path):
+    """
+    Test CLI plugin execution (currently skipped - requires CLI refactoring).
+    
+    This test is skipped because command_handlers is defined inside the main() function
+    in cli.py, making it not directly accessible for testing. To enable this test,
+    the CLI module would need refactoring to:
+    1. Extract command_handlers to module level
+    2. Create a parse_args function accessible at module level
+    3. Make command functions testable independently
+    
+    This is intentionally left as future work to maintain minimal changes.
+    """
     # Mock the plugin registry's execute method to simulate the CLI calling a plugin
     with patch(
         "omnicore_engine.cli.PLUGIN_REGISTRY.execute",
@@ -48,6 +59,7 @@ async def test_end_to_end_plugin_cli(tmp_path):
     ):
         test_file = tmp_path / "test.py"
         test_file.write_text("data")
+        # Future implementation would call:
         # args = parse_args(["fix-imports", str(test_file)])
         # result = await command_handlers["fix-imports"](args)
         # assert result == {"suggestion": {"result": "test"}}
