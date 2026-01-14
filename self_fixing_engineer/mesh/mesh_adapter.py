@@ -679,8 +679,16 @@ class MeshPubSub:
                         password=self.etcd_password,
                     )
                 else:
+                    # List of supported backends for user reference
+                    supported_backends = [
+                        "redis", "nats", "kafka", "rabbitmq", "aws", 
+                        "gcs", "azure", "etcd"
+                    ]
                     raise NotImplementedError(
-                        f"Backend '{self.backend_type}' not implemented."
+                        f"Backend '{self.backend_type}' is not implemented. "
+                        f"Supported backends: {', '.join(supported_backends)}. "
+                        f"To add support for '{self.backend_type}', implement the connection "
+                        f"logic in mesh_adapter.py connect() method."
                     )
 
                 await self.healthcheck()
@@ -980,8 +988,14 @@ class MeshPubSub:
                         lambda: self._etcd_client.put(etcd_key, data_bytes.decode()),
                     )
                 else:
+                    supported_backends = [
+                        "redis", "nats", "kafka", "rabbitmq", "aws", 
+                        "gcs", "azure", "etcd"
+                    ]
                     raise NotImplementedError(
-                        f"Publish not implemented for backend '{self.backend_type}'."
+                        f"Publish operation not implemented for backend '{self.backend_type}'. "
+                        f"Supported backends: {', '.join(supported_backends)}. "
+                        f"To add support, implement publish logic in mesh_adapter.py publish() method."
                     )
 
                 if PUB_COUNT:
@@ -1457,8 +1471,14 @@ class MeshPubSub:
                                 ).inc()
 
             else:
+                supported_backends = [
+                    "redis", "nats", "kafka", "rabbitmq", "aws", 
+                    "gcs", "azure", "etcd"
+                ]
                 raise NotImplementedError(
-                    f"Subscribe not implemented for backend '{self.backend_type}'."
+                    f"Subscribe operation not implemented for backend '{self.backend_type}'. "
+                    f"Supported backends: {', '.join(supported_backends)}. "
+                    f"To add support, implement subscribe logic in mesh_adapter.py subscribe() method."
                 )
 
     async def replay_dlq(self):
@@ -1596,7 +1616,15 @@ class MeshPubSub:
                     None, lambda: self._etcd_client.status()
                 )
             else:
-                raise NotImplementedError
+                supported_backends = [
+                    "redis", "nats", "kafka", "rabbitmq", "aws", 
+                    "gcs", "azure", "etcd"
+                ]
+                raise NotImplementedError(
+                    f"Health check not implemented for backend '{self.backend_type}'. "
+                    f"Supported backends: {', '.join(supported_backends)}. "
+                    f"To add support, implement health check logic in mesh_adapter.py healthcheck() method."
+                )
 
             status = {
                 "backend": self.backend_type,
