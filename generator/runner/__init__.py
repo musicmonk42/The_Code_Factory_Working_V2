@@ -168,29 +168,27 @@ def register_summarizer(name: str):
 # REMOVED THE "if not TESTING:" CONDITION THAT WAS BREAKING IMPORTS
 try:
     from .runner_core import run_stress_tests, run_tests_in_sandbox
-except ImportError:
-    # Define working stub functions if import fails
+except ImportError as e:
+    import logging
+    _logger = logging.getLogger(__name__)
+    _logger.error(f"Failed to import sandbox functions from runner_core: {e}")
+    
+    # Define fallback stub functions that raise meaningful exceptions
     async def run_tests_in_sandbox(*args, **kwargs):
-        return {
-            "coverage_percentage": 85.0,
-            "lines_covered": 42,
-            "total_lines": 50,
-            "test_results": {"passed": 3, "failed": 0, "total": 3},
-            "pass_count": 3,
-            "fail_count": 0,
-            "status": "success",
-        }
+        _logger.warning("run_tests_in_sandbox called but runner_core is not available - raising NotImplementedError")
+        raise NotImplementedError(
+            "run_tests_in_sandbox is not available. "
+            "The runner_core module failed to import. "
+            "This functionality requires proper installation of the runner module."
+        )
 
     async def run_stress_tests(*args, **kwargs):
-        return {
-            "avg_response_time_ms": 150.0,
-            "error_rate_percentage": 0.0,
-            "crashes_detected": False,
-            "total_iterations": 3,
-            "successful_runs": 3,
-            "response_times": [140, 150, 160],
-            "status": "success",
-        }
+        _logger.warning("run_stress_tests called but runner_core is not available - raising NotImplementedError")
+        raise NotImplementedError(
+            "run_stress_tests is not available. "
+            "The runner_core module failed to import. "
+            "This functionality requires proper installation of the runner module."
+        )
 
 
 __all__ = [
