@@ -393,10 +393,44 @@ class ShardedMessageBus:
                             await handler(msg_obj)
                             logger.debug(f"Message routed to handler for pattern {pattern}")
                         except Exception as e:
+                            # Generate correlation ID for tracking
+                            correlation_id = getattr(msg_obj, 'id', None) or str(id(msg_obj))
+                            
                             logger.error(
-                                f"Error in message handler for pattern {pattern}: {e}",
-                                exc_info=True
+                                f"Error in message handler for pattern {pattern}. "
+                                f"Correlation ID: {correlation_id}, Error: {e}",
+                                exc_info=True,
+                                extra={
+                                    "correlation_id": correlation_id,
+                                    "pattern": pattern,
+                                    "topic": topic,
+                                    "error_type": type(e).__name__
+                                }
                             )
+                            
+                            # Optionally publish to dead-letter queue for failed messages
+                            # This allows for later replay or investigation
+                            if hasattr(self, '_enable_dlq') and self._enable_dlq:
+                                try:
+                                    await self.publish(
+                                        topic="deadletter.message_bus",
+                                        payload={
+                                            "original_topic": topic,
+                                            "pattern": pattern,
+                                            "error": str(e),
+                                            "error_type": type(e).__name__,
+                                            "correlation_id": correlation_id,
+                                            "message": msg_obj.payload if hasattr(msg_obj, 'payload') else str(msg_obj),
+                                            "timestamp": time.time()
+                                        }
+                                    )
+                                    logger.info(f"Message {correlation_id} sent to dead-letter queue")
+                                except Exception as dlq_error:
+                                    logger.error(f"Failed to send message to DLQ: {dlq_error}")
+                            
+                            # Re-raise the exception to allow upstream error handling
+                            # This ensures errors are not silently swallowed
+                            raise
 
     async def subscribe(
         self, 

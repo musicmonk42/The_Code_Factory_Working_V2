@@ -216,18 +216,28 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# FIX: Add specific handler for AgentError if you want 500 instead of 400
-# NOTE: Currently the code returns 400 for AgentError in the /predict endpoint
-# Uncomment this if you want to return 500 for AgentError instead
-"""
+# FIXED: Enabled AgentError handler to return HTTP 500 for server errors
+# AgentError represents server-side issues, not client errors (400).
+# This follows HTTP status code best practices.
+@app.exception_handler(AgentError)
 async def agent_error_handler(request: Request, exc: AgentError):
+    """
+    Handle AgentError exceptions with HTTP 500 status.
+    
+    AgentError indicates internal agent processing failures,
+    which are server-side errors, not client request issues.
+    """
     logger.error(f"Agent error for {request.method} {request.url}: {exc}", exc_info=True)
-    if os.getenv("SENTRY_DSN"): sentry_sdk.capture_exception(exc)
+    if os.getenv("SENTRY_DSN"):
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_exception(exc)
+        except ImportError:
+            pass
     return JSONResponse(
         status_code=500,
-        content={"detail": "An internal server error occurred."}
+        content={"detail": "An internal server error occurred in the agent."}
     )
-"""
 
 # RECONSTRUCTED: Security and Dependencies
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
@@ -354,8 +364,8 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-    # FIX: Uncomment this line if you want AgentError to return 500 instead of 400
-    # app.add_exception_handler(AgentError, agent_error_handler)
+    # FIXED: Enabled AgentError handler to return HTTP 500 for server errors
+    app.add_exception_handler(AgentError, agent_error_handler)
 
     # SECURITY: Configure CORS with specific allowed origins
     # Use environment variable API_CORS_ORIGINS for production
@@ -451,9 +461,13 @@ def create_app() -> FastAPI:
                     ):
                         raise SafetyViolationError()
                 return prediction_result
-        except (AgentError, ConfigurationError, InvalidSessionError) as e:
-            # NOTE: This returns 400 for AgentError. Change to 'raise' to let the exception handler deal with it if you want 500
+        except (ConfigurationError, InvalidSessionError) as e:
+            # Client errors - incorrect configuration or invalid session
             raise HTTPException(status_code=400, detail=str(e))
+        except AgentError as e:
+            # Server error - let the AgentError handler deal with it
+            # Returns HTTP 500 via the registered exception handler
+            raise
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Prediction timed out")
 

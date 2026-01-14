@@ -3026,9 +3026,16 @@ class Arbiter:
             )
 
     async def _handle_incoming_event(self, event_type: str, data: Dict[str, Any]):
-        """Routes incoming events to appropriate handlers."""
-        logging.getLogger(__name__).info(
-            f"[{self.name}] Routing event type: {event_type}"
+        """
+        Routes incoming events to appropriate handlers.
+        
+        Enhanced with metrics tracking for unknown event types and detailed logging.
+        Follows industry best practices for event-driven architectures.
+        """
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"[{self.name}] Routing event type: {event_type}",
+            extra={"event_type": event_type, "agent": self.name}
         )
         
         # Route to handler based on event type
@@ -3050,16 +3057,84 @@ class Arbiter:
         handler = handler_map.get(event_type)
         if handler:
             try:
+                # Track successful routing
+                try:
+                    routed_events_counter = get_or_create_counter(
+                        "arbiter_events_routed_total",
+                        "Total number of events successfully routed to handlers",
+                        labelnames=["event_type", "agent"]
+                    )
+                    routed_events_counter.labels(
+                        event_type=event_type,
+                        agent=self.name
+                    ).inc()
+                except Exception:
+                    pass  # Don't fail if metrics are unavailable
+                
                 await handler(data)
             except Exception as e:
-                logging.getLogger(__name__).error(
+                logger.error(
                     f"[{self.name}] Handler error for {event_type}: {e}",
-                    exc_info=True
+                    exc_info=True,
+                    extra={
+                        "event_type": event_type,
+                        "agent": self.name,
+                        "error_type": type(e).__name__
+                    }
                 )
+                
+                # Track handler errors
+                try:
+                    handler_errors_counter = get_or_create_counter(
+                        "arbiter_event_handler_errors_total",
+                        "Total number of errors in event handlers",
+                        labelnames=["event_type", "agent", "error_type"]
+                    )
+                    handler_errors_counter.labels(
+                        event_type=event_type,
+                        agent=self.name,
+                        error_type=type(e).__name__
+                    ).inc()
+                except Exception:
+                    pass  # Don't fail if metrics are unavailable
         else:
-            logging.getLogger(__name__).warning(
-                f"[{self.name}] No handler found for event type: {event_type}"
+            # Unknown event type - log with more context and track metrics
+            logger.warning(
+                f"[{self.name}] No handler found for event type: {event_type}. "
+                f"Available handlers: {', '.join(handler_map.keys())}. "
+                f"Event data keys: {list(data.keys()) if data else 'none'}",
+                extra={
+                    "event_type": event_type,
+                    "agent": self.name,
+                    "available_handlers": list(handler_map.keys())
+                }
             )
+            
+            # Track unknown event types for monitoring
+            try:
+                unknown_events_counter = get_or_create_counter(
+                    "arbiter_events_unknown_total",
+                    "Total number of unknown/unrouted event types",
+                    labelnames=["event_type", "agent"]
+                )
+                unknown_events_counter.labels(
+                    event_type=event_type,
+                    agent=self.name
+                ).inc()
+            except Exception:
+                pass  # Don't fail if metrics are unavailable
+            
+            # Consider implementing a dead-letter handler for unrouted events
+            # For now, log the event data for investigation
+            try:
+                logger.debug(
+                    f"[{self.name}] Unrouted event data: {json.dumps(data, indent=2)}",
+                    extra={"event_type": event_type, "data": data}
+                )
+            except Exception:
+                logger.debug(
+                    f"[{self.name}] Unrouted event data (non-serializable): {str(data)}"
+                )
 
     # Fix 3: Event Handler Methods
     async def _on_bug_detected(self, data: Dict[str, Any]):
