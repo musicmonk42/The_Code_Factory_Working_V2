@@ -434,11 +434,19 @@ class PluginService:
 
 def run_import_fixer(path):
     """
-    Synchronous helper to run the fixer. This method is deprecated in favor of the async engine.
+    Synchronous helper to run the fixer.
+    
+    Uses asyncio.run() for proper async execution instead of deprecated
+    get_event_loop() pattern (Python 3.10+ compatibility).
+    
+    Args:
+        path: File path to fix imports for
+        
+    Returns:
+        Result from import_fixer.fix_file()
     """
     import_fixer = get_engine("import_fixer")["engine"]
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(import_fixer.fix_file(path))
+    return asyncio.run(import_fixer.fix_file(path))
 
 
 class OmniCoreOmega:
@@ -464,6 +472,7 @@ class OmniCoreOmega:
         intent_parser: Optional["IntentParser"] = None,
         llm_client: Optional[Any] = None,
     ):
+        self.logger = logging.getLogger(__name__)
         self.db = database
         self.message_bus = message_bus
         self.plugin_service = plugin_service
@@ -481,6 +490,76 @@ class OmniCoreOmega:
         self.generator_runner = generator_runner
         self.intent_parser = intent_parser
         self.llm_client = llm_client
+
+    @property
+    def is_initialized(self) -> bool:
+        """
+        Check if OmniCoreOmega has been initialized.
+        
+        Returns:
+            bool: True if initialized, False otherwise.
+        """
+        return self._is_initialized
+
+    async def shutdown(self):
+        """
+        Gracefully shutdown all OmniCoreOmega components.
+        
+        This method ensures proper cleanup of all resources including:
+        - Arbiters and their async services
+        - Message bus connections
+        - Database connections
+        - Crew manager agents
+        
+        Implements industry-standard graceful shutdown with error handling
+        and logging at each step.
+        """
+        if not self._is_initialized:
+            self.logger.warning("OmniCoreOmega: Shutdown called but not initialized")
+            return
+        
+        self.logger.info("OmniCoreOmega: Beginning graceful shutdown...")
+        
+        # Stop arbiters
+        if self.arbiters:
+            self.logger.info(f"Stopping {len(self.arbiters)} arbiters...")
+            for i, arbiter in enumerate(self.arbiters):
+                try:
+                    await arbiter.stop_async_services()
+                    self.logger.debug(f"Arbiter {i} stopped successfully")
+                except Exception as e:
+                    self.logger.error(f"Error stopping arbiter {i}: {e}", exc_info=True)
+            self.arbiters.clear()
+        
+        # Stop crew manager agents
+        if self.crew_manager:
+            try:
+                self.logger.info("Stopping crew manager...")
+                await self.crew_manager.stop_all()
+                self.logger.debug("Crew manager stopped successfully")
+            except Exception as e:
+                self.logger.error(f"Error stopping crew manager: {e}", exc_info=True)
+        
+        # Shutdown message bus
+        if self.message_bus:
+            try:
+                self.logger.info("Shutting down message bus...")
+                await self.message_bus.shutdown()
+                self.logger.debug("Message bus shutdown successfully")
+            except Exception as e:
+                self.logger.error(f"Error shutting down message bus: {e}", exc_info=True)
+        
+        # Close database connections
+        if self.db:
+            try:
+                self.logger.info("Closing database connections...")
+                await self.db.close()
+                self.logger.debug("Database connections closed successfully")
+            except Exception as e:
+                self.logger.error(f"Error closing database: {e}", exc_info=True)
+        
+        self._is_initialized = False
+        self.logger.info("OmniCoreOmega: Shutdown complete")
 
     @staticmethod
     def _find_crew_config() -> Optional[str]:
