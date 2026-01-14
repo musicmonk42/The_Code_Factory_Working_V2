@@ -886,33 +886,73 @@ class Database:
         user_id: Optional[str] = None,
         encrypt: bool = False,
     ) -> None:
+        """
+        Save a simulation record to the database (legacy table format).
+        
+        Args:
+            sim_id: Unique simulation identifier
+            request_data: Request data dictionary
+            result: Result data dictionary
+            status: Simulation status
+            user_id: Optional user identifier
+            encrypt: Whether to encrypt the JSON data
+            
+        Raises:
+            ValueError: If data validation fails
+        """
         DB_OPERATIONS_LOCAL.labels(operation="save_simulation_legacy").inc()
         if user_id:
             user_id = validate_user_id(user_id)
         request_data_json = self._validate_json(request_data, encrypt)
         result_json = self._validate_json(result, encrypt)
-        query = """
-            INSERT OR REPLACE INTO simulations (sim_id, user_id, request_data, result, status, encrypted, deleted, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
-        """
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Legacy simulation saving not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                await conn.execute(
-                    query,
-                    (
-                        sim_id,
-                        user_id,
-                        request_data_json,
-                        result_json,
-                        status,
-                        int(encrypt),
-                    ),
-                )
-                await conn.commit()
+                # PostgreSQL implementation with UPSERT using ON CONFLICT
+                query = """
+                    INSERT INTO simulations (sim_id, user_id, request_data, result, status, encrypted, deleted, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, 0, NOW())
+                    ON CONFLICT (sim_id) 
+                    DO UPDATE SET
+                        user_id = EXCLUDED.user_id,
+                        request_data = EXCLUDED.request_data,
+                        result = EXCLUDED.result,
+                        status = EXCLUDED.status,
+                        encrypted = EXCLUDED.encrypted,
+                        updated_at = NOW()
+                """
+                async with self.AsyncSessionLocal() as session:
+                    await session.execute(
+                        text(query),
+                        {
+                            "sim_id": sim_id,
+                            "user_id": user_id,
+                            "request_data": request_data_json,
+                            "result": result_json,
+                            "status": status,
+                            "encrypted": encrypt,
+                        }
+                    )
+                    await session.commit()
+            else:
+                # SQLite implementation
+                query = """
+                    INSERT OR REPLACE INTO simulations (sim_id, user_id, request_data, result, status, encrypted, deleted, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                """
+                async with self._get_aiosqlite_connection() as conn:
+                    await conn.execute(
+                        query,
+                        (
+                            sim_id,
+                            user_id,
+                            request_data_json,
+                            result_json,
+                            status,
+                            int(encrypt),
+                        ),
+                    )
+                    await conn.commit()
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="save_simulation_legacy").inc()
             logger.error(f"Error saving legacy simulation {sim_id}: {e}", exc_info=True)
@@ -922,31 +962,61 @@ class Database:
     async def get_simulation_legacy(
         self, sim_id: str, decrypt: bool = False
     ) -> Optional[Dict]:
+        """
+        Retrieve a simulation record from the database (legacy table format).
+        
+        Args:
+            sim_id: Simulation identifier
+            decrypt: Whether to decrypt encrypted JSON data
+            
+        Returns:
+            Dictionary with simulation data or None if not found
+        """
         DB_OPERATIONS_LOCAL.labels(operation="get_simulation_legacy").inc()
-        query = "SELECT sim_id, user_id, request_data, result, status, encrypted, updated_at FROM simulations WHERE sim_id = ? AND deleted=0"
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Legacy simulation retrieval not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                cur = await conn.execute(query, (sim_id,))
-                row = await cur.fetchone()
+                # PostgreSQL implementation
+                query = """
+                    SELECT sim_id, user_id, request_data, result, status, encrypted, updated_at 
+                    FROM simulations 
+                    WHERE sim_id = $1 AND deleted = 0
+                """
+                async with self.AsyncSessionLocal() as session:
+                    result = await session.execute(text(query), {"sim_id": sim_id})
+                    row = result.fetchone()
+                
+                if row:
+                    return {
+                        "sim_id": row[0],
+                        "user_id": row[1],
+                        "request_data": self._decrypt_json(row[2], row[5] and decrypt),
+                        "result": self._decrypt_json(row[3], row[5] and decrypt),
+                        "status": row[4],
+                        "updated_at": row[6],
+                    }
+                return None
+            else:
+                # SQLite implementation
+                query = "SELECT sim_id, user_id, request_data, result, status, encrypted, updated_at FROM simulations WHERE sim_id = ? AND deleted=0"
+                async with self._get_aiosqlite_connection() as conn:
+                    cur = await conn.execute(query, (sim_id,))
+                    row = await cur.fetchone()
 
-            if row:
-                return {
-                    "sim_id": row["sim_id"],
-                    "user_id": row["user_id"],
-                    "request_data": self._decrypt_json(
-                        row["request_data"], row["encrypted"] and decrypt
-                    ),
-                    "result": self._decrypt_json(
-                        row["result"], row["encrypted"] and decrypt
-                    ),
-                    "status": row["status"],
-                    "updated_at": row["updated_at"],
-                }
-            return None
+                if row:
+                    return {
+                        "sim_id": row["sim_id"],
+                        "user_id": row["user_id"],
+                        "request_data": self._decrypt_json(
+                            row["request_data"], row["encrypted"] and decrypt
+                        ),
+                        "result": self._decrypt_json(
+                            row["result"], row["encrypted"] and decrypt
+                        ),
+                        "status": row["status"],
+                        "updated_at": row["updated_at"],
+                    }
+                return None
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="get_simulation_legacy").inc()
             logger.error(
@@ -956,16 +1026,34 @@ class Database:
 
     @DB_LATENCY_LOCAL.labels(operation="delete_simulation_legacy").time()
     async def delete_simulation_legacy(self, sim_id: str) -> None:
+        """
+        Soft delete a simulation record (legacy table format).
+        
+        Args:
+            sim_id: Simulation identifier
+            
+        Raises:
+            Exception: If database operation fails
+        """
         DB_OPERATIONS_LOCAL.labels(operation="delete_simulation_legacy").inc()
-        query = "UPDATE simulations SET deleted=1, updated_at=CURRENT_TIMESTAMP WHERE sim_id = ?"
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Legacy simulation deletion not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                await conn.execute(query, (sim_id,))
-                await conn.commit()
+                # PostgreSQL implementation
+                query = """
+                    UPDATE simulations 
+                    SET deleted = 1, updated_at = NOW() 
+                    WHERE sim_id = $1
+                """
+                async with self.AsyncSessionLocal() as session:
+                    await session.execute(text(query), {"sim_id": sim_id})
+                    await session.commit()
+            else:
+                # SQLite implementation
+                query = "UPDATE simulations SET deleted=1, updated_at=CURRENT_TIMESTAMP WHERE sim_id = ?"
+                async with self._get_aiosqlite_connection() as conn:
+                    await conn.execute(query, (sim_id,))
+                    await conn.commit()
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="delete_simulation_legacy").inc()
             logger.error(
@@ -977,24 +1065,55 @@ class Database:
     async def save_plugin_legacy(
         self, plugin_meta: Dict, encrypt: bool = False
     ) -> None:
+        """
+        Save a plugin metadata record to the database (legacy table format).
+        
+        Args:
+            plugin_meta: Plugin metadata dictionary with 'kind' and 'name' required
+            encrypt: Whether to encrypt the metadata JSON
+            
+        Raises:
+            ValueError: If kind or name is missing
+        """
         DB_OPERATIONS_LOCAL.labels(operation="save_plugin_legacy").inc()
         kind = plugin_meta.get("kind")
         name = plugin_meta.get("name")
         if not kind or not name:
             raise ValueError("Plugin kind and name are required")
         meta_json = self._validate_json(plugin_meta, encrypt)
-        query = """
-            INSERT OR REPLACE INTO plugins (kind, name, meta, encrypted, deleted, updated_at)
-            VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
-        """
+        
         try:
             if self.is_postgres:
-                raise NotImplementedError(
-                    "Legacy plugin saving not implemented for PostgreSQL directly."
-                )
-            async with self._get_aiosqlite_connection() as conn:
-                await conn.execute(query, (kind, name, meta_json, int(encrypt)))
-                await conn.commit()
+                # PostgreSQL implementation with UPSERT using ON CONFLICT
+                query = """
+                    INSERT INTO plugins (kind, name, meta, encrypted, deleted, updated_at)
+                    VALUES ($1, $2, $3, $4, 0, NOW())
+                    ON CONFLICT (kind, name) 
+                    DO UPDATE SET
+                        meta = EXCLUDED.meta,
+                        encrypted = EXCLUDED.encrypted,
+                        updated_at = NOW()
+                """
+                async with self.AsyncSessionLocal() as session:
+                    await session.execute(
+                        text(query),
+                        {
+                            "kind": kind,
+                            "name": name,
+                            "meta": meta_json,
+                            "encrypted": encrypt,
+                        }
+                    )
+                    await session.commit()
+            else:
+                # SQLite implementation
+                query = """
+                    INSERT OR REPLACE INTO plugins (kind, name, meta, encrypted, deleted, updated_at)
+                    VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                """
+                async with self._get_aiosqlite_connection() as conn:
+                    await conn.execute(query, (kind, name, meta_json, int(encrypt)))
+                    await conn.commit()
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="save_plugin_legacy").inc()
             logger.error(
