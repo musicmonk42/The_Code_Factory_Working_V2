@@ -441,7 +441,8 @@ class OpenAILLM(LLMBase):
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=kwargs.get("max_tokens", 150)
             )
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            return content if content is not None else ""
         except ImportError:
             logger.warning("openai package not installed, using mock response")
             return f"[OpenAI stub response - install openai package for real API calls]"
@@ -475,7 +476,10 @@ class AnthropicLLM(LLMBase):
                 max_tokens=kwargs.get("max_tokens", 1024),
                 messages=[{"role": "user", "content": prompt}]
             )
-            return message.content[0].text
+            # Handle potential empty content or missing text attribute
+            if message.content and len(message.content) > 0:
+                return getattr(message.content[0], 'text', '')
+            return ""
         except ImportError:
             logger.warning("anthropic package not installed, using mock response")
             return f"[Anthropic stub response - install anthropic package for real API calls]"
@@ -506,7 +510,7 @@ class GeminiLLM(LLMBase):
             
             model = genai.GenerativeModel(kwargs.get("model", self.model))
             response = model.generate_content(prompt)
-            return response.text
+            return response.text if response.text is not None else ""
         except ImportError:
             logger.warning("google-generativeai package not installed, using mock response")
             return f"[Gemini stub response - install google-generativeai package for real API calls]"

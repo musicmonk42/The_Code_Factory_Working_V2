@@ -290,7 +290,7 @@ async def send_pagerduty_alert(message, level):
                 "summary": message[:1024],  # PagerDuty limit
                 "severity": severity,
                 "source": "quantum_module",
-                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "custom_details": {
                     "level": level,
                     "module": "simulation.quantum"
