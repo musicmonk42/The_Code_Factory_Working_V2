@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A.S.E - Automated Software Engineering Platform</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <!-- Header with A.S.E branding in top left -->
+    <header class="main-header">
+        <div class="header-content">
+            <div class="logo-section">
+                <div class="branding-left">
+                    <h1>A.S.E</h1>
+                    <div class="by-line">
+                        <span class="by-text">by</span>
+                        <span class="company-name">Novatrax Labs</span>
+                    </div>
+                </div>
+                <p class="subtitle">Automated Software Engineering Platform</p>
+            </div>
+            <div class="header-spacer"></div>
+        </div>
+    </header>
+
+    <!-- Main Navigation -->
+    <nav class="main-nav">
+        <ul>
+            <li><a href="#dashboard" class="active" data-view="dashboard">Dashboard</a></li>
+            <li><a href="#jobs" data-view="jobs">Jobs</a></li>
+            <li><a href="#generator" data-view="generator">Generator</a></li>
+            <li><a href="#sfe" data-view="sfe">Self-Fixing Engineer</a></li>
+            <li><a href="#fixes" data-view="fixes">Fixes</a></li>
+            <li><a href="#system" data-view="system">System Status</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Dashboard View -->
+        <section id="dashboard-view" class="view active">
+            <h2>Platform Dashboard</h2>
+            
+            <div class="status-grid">
+                <div class="status-card">
+                    <div class="card-icon">📊</div>
+                    <div class="card-content">
+                        <h3>Total Jobs</h3>
+                        <p class="stat-number" id="total-jobs">0</p>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="card-icon">▶️</div>
+                    <div class="card-content">
+                        <h3>Running Jobs</h3>
+                        <p class="stat-number" id="running-jobs">0</p>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="card-icon">✅</div>
+                    <div class="card-content">
+                        <h3>Completed</h3>
+                        <p class="stat-number" id="completed-jobs">0</p>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="card-icon">🔧</div>
+                    <div class="card-content">
+                        <h3>Active Fixes</h3>
+                        <p class="stat-number" id="active-fixes">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="system-health">
+                <h3>System Health</h3>
+                <div class="health-indicators" id="health-indicators">
+                    <div class="health-item">
+                        <span class="health-label">API Server</span>
+                        <span class="health-status loading">Checking...</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="health-label">OmniCore Engine</span>
+                        <span class="health-status loading">Checking...</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="health-label">Generator</span>
+                        <span class="health-status loading">Checking...</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="health-label">Self-Fixing Engineer</span>
+                        <span class="health-status loading">Checking...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="event-stream">
+                <h3>Live Event Stream</h3>
+                <div class="stream-controls">
+                    <button id="connect-stream" class="btn btn-primary">Connect to Stream</button>
+                    <button id="disconnect-stream" class="btn btn-secondary" disabled>Disconnect</button>
+                    <span class="connection-status" id="stream-status">Disconnected</span>
+                </div>
+                <div class="events-container" id="events-container">
+                    <p class="no-events">No events yet. Connect to stream to see live updates.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Jobs View -->
+        <section id="jobs-view" class="view">
+            <div class="view-header">
+                <h2>Job Management</h2>
+                <button id="create-job-btn" class="btn btn-primary">+ Create New Job</button>
+            </div>
+            
+            <div class="filters">
+                <label>
+                    Status:
+                    <select id="job-status-filter">
+                        <option value="">All</option>
+                        <option value="pending">Pending</option>
+                        <option value="running">Running</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                    </select>
+                </label>
+                <button id="refresh-jobs" class="btn btn-secondary">🔄 Refresh</button>
+            </div>
+
+            <div class="jobs-list" id="jobs-list">
+                <p class="loading">Loading jobs...</p>
+            </div>
+        </section>
+
+        <!-- Generator View -->
+        <section id="generator-view" class="view">
+            <h2>Generator Module</h2>
+            
+            <div class="upload-section">
+                <h3>Upload Files for Generation</h3>
+                <div class="upload-area" id="upload-area">
+                    <div class="upload-prompt">
+                        <div class="upload-icon">📁</div>
+                        <p>Drop files here or click to browse</p>
+                        <p class="upload-hint">Supported: .md, .txt, .pdf, .docx</p>
+                    </div>
+                    <input type="file" id="file-input" multiple accept=".md,.txt,.pdf,.docx" hidden>
+                </div>
+                <div class="selected-files" id="selected-files"></div>
+                <button id="upload-files-btn" class="btn btn-primary" disabled>Upload Files</button>
+            </div>
+
+            <div class="generator-status" id="generator-status">
+                <h3>Recent Generation Jobs</h3>
+                <div class="status-list" id="generator-jobs-list">
+                    <p class="no-data">No generation jobs yet</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Self-Fixing Engineer View -->
+        <section id="sfe-view" class="view">
+            <h2>Self-Fixing Engineer</h2>
+            
+            <div class="sfe-controls">
+                <h3>Code Analysis</h3>
+                <div class="input-group">
+                    <label for="analyze-job-id">Job ID:</label>
+                    <input type="text" id="analyze-job-id" placeholder="Enter job ID to analyze">
+                    <button id="analyze-btn" class="btn btn-primary">Analyze Code</button>
+                </div>
+            </div>
+
+            <div class="errors-section">
+                <h3>Detected Errors</h3>
+                <div class="errors-list" id="errors-list">
+                    <p class="no-data">No errors detected</p>
+                </div>
+            </div>
+
+            <div class="insights-section">
+                <h3>Meta-Learning Insights</h3>
+                <button id="load-insights-btn" class="btn btn-secondary">Load Insights</button>
+                <div class="insights-content" id="insights-content">
+                    <p class="no-data">Click to load insights</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Fixes View -->
+        <section id="fixes-view" class="view">
+            <h2>Fix Management</h2>
+            
+            <div class="filters">
+                <label>
+                    Status:
+                    <select id="fix-status-filter">
+                        <option value="">All</option>
+                        <option value="proposed">Proposed</option>
+                        <option value="approved">Approved</option>
+                        <option value="applied">Applied</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </label>
+                <button id="refresh-fixes" class="btn btn-secondary">🔄 Refresh</button>
+            </div>
+
+            <div class="fixes-list" id="fixes-list">
+                <p class="loading">Loading fixes...</p>
+            </div>
+        </section>
+
+        <!-- System Status View -->
+        <section id="system-view" class="view">
+            <h2>System Status</h2>
+            
+            <div class="system-info">
+                <h3>OmniCore Engine</h3>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <h4>Plugins</h4>
+                        <div id="plugins-info" class="info-content">Loading...</div>
+                    </div>
+                    <div class="info-card">
+                        <h4>Message Bus</h4>
+                        <div id="messagebus-info" class="info-content">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="api-info">
+                <h3>API Information</h3>
+                <div class="info-list">
+                    <div class="info-item">
+                        <span class="label">Version:</span>
+                        <span class="value" id="api-version">Loading...</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Documentation:</span>
+                        <span class="value">
+                            <a href="/api/docs" target="_blank">Swagger UI</a> | 
+                            <a href="/api/redoc" target="_blank">ReDoc</a>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal for Job Creation -->
+    <div id="create-job-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Job</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="job-description">Description:</label>
+                    <textarea id="job-description" rows="3" placeholder="Enter job description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="job-metadata">Metadata (JSON):</label>
+                    <textarea id="job-metadata" rows="4" placeholder='{"key": "value"}'>{}</textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="submit-job">Create Job</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <div class="footer-content">
+            <p>&copy; 2026 Novatrax Labs LLC. All rights reserved.</p>
+            <p class="footer-subtitle">A.S.E - Automated Software Engineering Platform</p>
+        </div>
+    </footer>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

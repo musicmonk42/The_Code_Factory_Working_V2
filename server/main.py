@@ -22,11 +22,14 @@ coordination layer for centralized control and monitoring.
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from server import __version__
 from server.routers import (
@@ -45,6 +48,13 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Get the directory where this file is located
+BASE_DIR = Path(__file__).resolve().parent
+
+# Configure templates and static files
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+static_dir = BASE_DIR / "static"
 
 
 @asynccontextmanager
@@ -190,21 +200,32 @@ async def health_check() -> HealthResponse:
 
 
 @app.get("/", tags=["Root"])
-async def root() -> Dict[str, Any]:
+async def root(request: Request):
     """
-    API root endpoint.
+    API root endpoint / Web UI.
 
-    Provides basic information about the API and links to documentation.
+    Serves the A.S.E web interface or provides API information in JSON format
+    based on the Accept header.
 
     **Returns:**
-    - API name and version
-    - Documentation links
-    - Available endpoints
+    - HTML: A.S.E Web Interface (if Accept: text/html)
+    - JSON: API information and links (default)
     """
+    # Check if client wants HTML
+    accept_header = request.headers.get("accept", "")
+    if "text/html" in accept_header:
+        # Serve the web UI
+        return templates.TemplateResponse("index.html", {"request": request})
+    
+    # Otherwise return JSON API info
     return {
         "name": "Code Factory Platform API",
         "version": __version__,
         "description": "Enterprise-grade HTTP API for automated software development",
+        "ui": {
+            "web_interface": "/",
+            "description": "Access the A.S.E web interface by visiting / in a browser"
+        },
         "documentation": {
             "swagger": "/api/docs",
             "redoc": "/api/redoc",
