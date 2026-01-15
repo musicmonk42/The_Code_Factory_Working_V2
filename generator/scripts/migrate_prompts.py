@@ -2,14 +2,17 @@
 # Its purpose is to perform one-time or controlled updates to source code files.
 
 """
-Auto-migrate inline prompt string dictionaries (e.g., PROMPT_TEMPLATES) to Jinja2 .j2 template files.
+Auto-migrate inline prompt string dictionaries (e.g., PROMPT_TEMPLATES, prompts, TEMPLATES) to Jinja2 .j2 template files.
 
 Usage:
     python scripts/migrate_prompts.py --source clarifier_llm_call.py --dest clarifier/prompts/
     python scripts/migrate_prompts.py --source . --dest . --recursive
+    python scripts/migrate_prompts.py --source . --dest . --var-names MY_PROMPTS custom_templates
 
 Features:
-- Finds Python files with inline prompt dicts (specifically 'PROMPT_TEMPLATES').
+- Finds Python files with inline prompt dicts (supports multiple naming conventions).
+- By default, searches for: PROMPT_TEMPLATES, prompts, TEMPLATES, PROMPTS, prompt_templates, template_dict, TEMPLATE_DICT
+- Supports custom variable names via --var-names argument for flexibility.
 - Extracts each prompt string to a separate .j2 file named by its key (e.g., 'my_prompt_key.j2').
 - Replaces the inline prompt dict in the original Python file with code to load templates at runtime using Jinja2.
 - Handles multiline strings, triple quotes, and escapes during extraction.
@@ -70,23 +73,31 @@ class PromptMigrationError(Exception):
     pass
 
 
-def find_prompt_dict(tree: ast.Module) -> Optional[ast.Dict]:
+def find_prompt_dict(tree: ast.Module, var_names: List[str] = None) -> Optional[Tuple[str, ast.Dict]]:
     """
-    Finds the 'PROMPT_TEMPLATES' dictionary assignment in the AST.
+    Finds a prompt dictionary assignment in the AST.
+    
     Args:
         tree (ast.Module): The AST of the Python file.
+        var_names (List[str]): List of variable names to search for.
+                               Defaults to common prompt dictionary names.
     Returns:
-        Optional[ast.Dict]: The AST Dict node if found, otherwise None.
+        Optional[Tuple[str, ast.Dict]]: A tuple of (variable_name, ast.Dict) if found, otherwise None.
     """
+    if var_names is None:
+        # Default list of common prompt dictionary variable names
+        var_names = ["PROMPT_TEMPLATES", "prompts", "TEMPLATES", "PROMPTS", 
+                     "prompt_templates", "template_dict", "TEMPLATE_DICT"]
+    
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "PROMPT_TEMPLATES":
+                if isinstance(target, ast.Name) and target.id in var_names:
                     if isinstance(node.value, ast.Dict):
-                        return node.value
+                        return (target.id, node.value)
                     else:
                         logger.warning(
-                            f"Found 'PROMPT_TEMPLATES' but it's not a dict in: {ast.unparse(node).strip()}. Skipping."
+                            f"Found '{target.id}' but it's not a dict in: {ast.unparse(node).strip()}. Skipping."
                         )
                         return None
     return None
@@ -129,11 +140,12 @@ def extract_prompts_from_dict(dict_node: ast.Dict) -> List[Tuple[str, str]]:
     return prompts
 
 
-def generate_loader_code(template_dir: str) -> str:
+def generate_loader_code(template_dir: str, var_name: str = "PROMPT_TEMPLATES") -> str:
     """
     Generates Python code that dynamically loads prompts from Jinja2 files in a specified directory.
     Args:
         template_dir (str): The directory where Jinja2 templates will be stored.
+        var_name (str): The name of the variable to assign the loaded templates to.
     Returns:
         str: The Python code snippet.
     """
@@ -172,25 +184,26 @@ def _load_prompt_templates_from_disk():
         print(f"CRITICAL ERROR: Failed to initialize prompt template loader: {{e}}", file=sys.stderr)
     return loaded_templates
 
-PROMPT_TEMPLATES = _load_prompt_templates_from_disk()
+{var_name} = _load_prompt_templates_from_disk()
 """
 
 
 class PromptReplacer(ast.NodeTransformer):
     """
-    AST transformer to replace the PROMPT_TEMPLATES dict assignment with loader code.
+    AST transformer to replace the prompt dict assignment with loader code.
     """
 
-    def __init__(self, loader_code: str):
+    def __init__(self, loader_code: str, var_name: str):
         self.loader_code_ast = ast.parse(loader_code.strip()).body
+        self.var_name = var_name
         self.replaced = False
 
     def visit_Assign(self, node: ast.Assign) -> ast.AST:
         self.generic_visit(node)
-        # Check if this is the PROMPT_TEMPLATES assignment
+        # Check if this is the target variable assignment
         if not self.replaced:
             for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "PROMPT_TEMPLATES":
+                if isinstance(target, ast.Name) and target.id == self.var_name:
                     if isinstance(node.value, ast.Dict):
                         # Replace the assignment node with the loader code
                         self.replaced = True
@@ -204,13 +217,13 @@ class PromptReplacer(ast.NodeTransformer):
 
 
 def replace_prompt_dict_in_code(
-    original_code: str, dict_node: ast.Dict, loader_code: str
+    original_code: str, var_name: str, loader_code: str
 ) -> str:
     """
-    Replaces the PROMPT_TEMPLATES dict in the original code with generated loader code.
+    Replaces the prompt dict in the original code with generated loader code.
     Args:
         original_code (str): The content of the original Python file.
-        dict_node (ast.Dict): The AST node of the PROMPT_TEMPLATES dictionary (not used, kept for compatibility).
+        var_name (str): The name of the variable to replace.
         loader_code (str): The Python code string for the new loader.
     Returns:
         str: The modified Python code.
@@ -218,11 +231,11 @@ def replace_prompt_dict_in_code(
         PromptMigrationError: If the dict node cannot be found or replaced in the code.
     """
     tree = ast.parse(original_code)
-    transformer = PromptReplacer(loader_code)
+    transformer = PromptReplacer(loader_code, var_name)
     new_tree = transformer.visit(tree)
     if not transformer.replaced:
         raise PromptMigrationError(
-            "Failed to find and replace PROMPT_TEMPLATES dict in the code."
+            f"Failed to find and replace '{var_name}' dict in the code."
         )
 
     # ast.unparse requires Python 3.9+
@@ -253,6 +266,7 @@ def migrate_file(
     dry_run: bool = False,
     verbose: bool = True,
     backup: bool = True,
+    var_names: List[str] = None,
 ) -> Dict[str, Any]:
     """
     Migrates a single Python file's prompt dict to .j2 templates.
@@ -262,6 +276,7 @@ def migrate_file(
         dry_run (bool): If True, only preview changes, do not write.
         verbose (bool): If True, log detailed messages.
         backup (bool): If True, create a .bak file of the original.
+        var_names (List[str]): List of variable names to search for. If None, uses defaults.
     Returns:
         Dict[str, Any]: A report of the migration process for this file.
     """
@@ -276,20 +291,24 @@ def migrate_file(
     try:
         original_code = source_file.read_text(encoding="utf-8")
         tree = ast.parse(original_code)
-        dict_node = find_prompt_dict(tree)
+        result = find_prompt_dict(tree, var_names)
 
-        if not dict_node:
+        if not result:
             report["status"] = "no_prompts_found"
-            report["message"] = "No PROMPT_TEMPLATES dict found."
+            report["message"] = "No prompt dict found with recognized variable names."
             if verbose:
-                logger.info(f"No PROMPT_TEMPLATES found in {source_file}")
+                logger.info(f"No prompt dict found in {source_file}")
             return report
+        
+        var_name, dict_node = result
+        if verbose:
+            logger.info(f"Found prompt dict variable '{var_name}' in {source_file}")
 
         prompts = extract_prompts_from_dict(dict_node)
         if not prompts:
             report["status"] = "no_prompts_extracted"
             report["message"] = (
-                "PROMPT_TEMPLATES dict found, but no valid prompts extracted (non-string values)."
+                f"Prompt dict '{var_name}' found, but no valid prompts extracted (non-string values)."
             )
             if verbose:
                 logger.info(f"No valid prompts extracted from {source_file}")
@@ -334,9 +353,10 @@ def migrate_file(
 
         # --- Generate Loader Code and Replace in Source File ---
         loader_code = generate_loader_code(
-            str(dest_dir.relative_to(source_file.parent))
+            str(dest_dir.relative_to(source_file.parent)),
+            var_name
         )  # Relative path for loader
-        new_code = replace_prompt_dict_in_code(original_code, dict_node, loader_code)
+        new_code = replace_prompt_dict_in_code(original_code, var_name, loader_code)
 
         # --- Backup and Write (if not dry run) ---
         if not dry_run:
@@ -404,6 +424,7 @@ def migrate_dir(
     dry_run: bool = False,
     verbose: bool = True,
     backup: bool = True,
+    var_names: List[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Walks source_dir for Python files and migrates all prompt dicts.
@@ -414,6 +435,7 @@ def migrate_dir(
         dry_run (bool): If True, only preview changes.
         verbose (bool): If True, log detailed messages.
         backup (bool): If True, create backups of original files.
+        var_names (List[str]): List of variable names to search for. If None, uses defaults.
     Returns:
         List[Dict[str, Any]]: A list of migration reports for each processed file.
     """
@@ -443,7 +465,7 @@ def migrate_dir(
             # will all go into the *same* `dest_dir`.
             # This is acceptable if all prompts are unique across files.
             # If not, a more complex `dest_dir` strategy (e.g., mirroring source folder structure) is needed.
-            report = migrate_file(py_file, dest_dir, dry_run, verbose, backup)
+            report = migrate_file(py_file, dest_dir, dry_run, verbose, backup, var_names)
             reports.append(report)
 
             if report["status"] == "success":
@@ -538,6 +560,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Run unit tests for the script (requires Hypothesis).",
     )
+    parser.add_argument(
+        "--var-names",
+        nargs="+",
+        help="Custom variable names to search for (e.g., 'PROMPT_TEMPLATES prompts TEMPLATES'). Default: searches common names.",
+    )
     args = parser.parse_args()
 
     # Run unit tests if --test flag is present
@@ -597,11 +624,13 @@ def some_other_function():
 
             def test_find_prompt_dict(self):
                 tree = ast.parse(self.initial_content)
-                dict_node = find_prompt_dict(tree)
-                self.assertIsNotNone(dict_node)
+                result = find_prompt_dict(tree)
+                self.assertIsNotNone(result)
+                var_name, dict_node = result
+                self.assertEqual(var_name, "PROMPT_TEMPLATES")
                 self.assertEqual(len(dict_node.keys), 2)
 
-                # Test no PROMPT_TEMPLATES
+                # Test no prompt dict
                 no_prompt_content = "VAR = 123"
                 tree_no_prompt = ast.parse(no_prompt_content)
                 self.assertIsNone(find_prompt_dict(tree_no_prompt))
@@ -610,10 +639,19 @@ def some_other_function():
                 non_dict_content = "PROMPT_TEMPLATES = [1,2,3]"
                 tree_non_dict = ast.parse(non_dict_content)
                 self.assertIsNone(find_prompt_dict(tree_non_dict))
+                
+                # Test alternative naming
+                alt_content = "prompts = {'key': 'value'}"
+                tree_alt = ast.parse(alt_content)
+                result_alt = find_prompt_dict(tree_alt)
+                self.assertIsNotNone(result_alt)
+                var_name_alt, _ = result_alt
+                self.assertEqual(var_name_alt, "prompts")
 
             def test_extract_prompts_from_dict(self):
                 tree = ast.parse(self.initial_content)
-                dict_node = find_prompt_dict(tree)
+                result = find_prompt_dict(tree)
+                _, dict_node = result
                 prompts = extract_prompts_from_dict(dict_node)
                 self.assertEqual(
                     prompts,
@@ -626,7 +664,8 @@ def some_other_function():
                 # Test with non-string value (should be skipped by warning)
                 non_string_content = "PROMPT_TEMPLATES = {'key': 123}"
                 tree_non_string = ast.parse(non_string_content)
-                dict_node_non_string = find_prompt_dict(tree_non_string)
+                result_non_string = find_prompt_dict(tree_non_string)
+                _, dict_node_non_string = result_non_string
                 prompts_non_string = extract_prompts_from_dict(dict_node_non_string)
                 self.assertEqual(prompts_non_string, [])  # Should extract nothing
 
@@ -796,6 +835,7 @@ PROMPT_TEMPLATES = {
                     args.dry_run,
                     args.verbose,
                     not args.no_backup,
+                    args.var_names,
                 )
             else:
                 reports = [
@@ -805,6 +845,7 @@ PROMPT_TEMPLATES = {
                         args.dry_run,
                         args.verbose,
                         not args.no_backup,
+                        args.var_names,
                     )
                 ]
 
