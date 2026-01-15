@@ -30,7 +30,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, Final, List, Optional, TypedDict
+from typing import Any, Callable, Dict, Final, List, Optional, Tuple, TypedDict
 
 logger = logging.getLogger(__name__)
 
@@ -741,7 +741,7 @@ class DefaultPrioritizer(Prioritizer):
     def _validate_ambiguities(
         self,
         ambiguities: List[str]
-    ) -> List[tuple[int, str]]:
+    ) -> List[Tuple[int, str]]:
         """
         Validate and filter ambiguities.
         

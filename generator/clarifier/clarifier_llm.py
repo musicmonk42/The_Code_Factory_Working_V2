@@ -192,8 +192,57 @@ class GrokConfig:
     default_max_tokens: int = 1024
 
 
-# Default configuration
+@dataclass(frozen=True)
+class FallbackQuestion:
+    """A single fallback clarification question."""
+    question: str
+    context: str
+    priority: str = "medium"
+
+
+@dataclass
+class FallbackConfig:
+    """
+    Configuration for fallback response generation.
+    
+    Allows customization of clarification questions without code changes.
+    """
+    questions: List[FallbackQuestion] = field(default_factory=lambda: [
+        FallbackQuestion(
+            question="What is the expected scope and scale of this requirement?",
+            context="Understanding scale helps determine architecture decisions",
+            priority="high"
+        ),
+        FallbackQuestion(
+            question="Are there specific constraints or limitations to consider?",
+            context="Constraints affect implementation approach and technology choices",
+            priority="high"
+        ),
+        FallbackQuestion(
+            question="What are the acceptance criteria for this requirement?",
+            context="Clear criteria ensure proper validation and testing",
+            priority="medium"
+        ),
+        FallbackQuestion(
+            question="Are there any dependencies on external systems or services?",
+            context="Dependencies affect timeline and integration complexity",
+            priority="medium"
+        ),
+    ])
+    
+    generic_guidance: str = (
+        "To provide a comprehensive response, please clarify the following:\n\n"
+        "1. **Functionality**: What specific functionality is required?\n"
+        "2. **Constraints**: Are there performance, security, or compliance constraints?\n"
+        "3. **Integration**: What systems need to integrate with this component?\n"
+        "4. **Success Criteria**: How will success be measured?\n\n"
+        "_Note: This response was generated locally as the API is currently unavailable._"
+    )
+
+
+# Default configurations
 DEFAULT_GROK_CONFIG: Final[GrokConfig] = GrokConfig()
+DEFAULT_FALLBACK_CONFIG: Final[FallbackConfig] = FallbackConfig()
 
 
 # ============================================================================
@@ -244,13 +293,29 @@ class LLMProvider(ABC):
     
     @property
     def api_key(self) -> Optional[str]:
-        """Get the API key (read-only)."""
+        """
+        Get the API key.
+        
+        Note: This returns the raw API key for internal use only.
+        Never log or expose this value. For external checks, use has_api_key.
+        
+        Security: The API key is stored in memory and should be
+        managed through secure credential managers in production.
+        """
         return self._api_key
     
     @property
     def has_api_key(self) -> bool:
-        """Check if API key is configured."""
+        """Check if API key is configured without exposing the value."""
         return bool(self._api_key)
+    
+    def __repr__(self) -> str:
+        """Safe string representation that doesn't expose API key."""
+        return (
+            f"{self.__class__.__name__}("
+            f"model={self.model!r}, "
+            f"has_api_key={self.has_api_key})"
+        )
     
     @abstractmethod
     async def generate(
@@ -344,6 +409,7 @@ class GrokLLM(LLMProvider):
         model: str = "grok-1",
         target_language: str = "en",
         config: Optional[GrokConfig] = None,
+        fallback_config: Optional[FallbackConfig] = None,
         **kwargs: Any
     ) -> None:
         """
@@ -354,6 +420,7 @@ class GrokLLM(LLMProvider):
             model: Grok model identifier
             target_language: Target language for responses (ISO code)
             config: GrokConfig instance for advanced settings
+            fallback_config: FallbackConfig for customizing fallback responses
             **kwargs: Additional configuration passed to base class
         """
         # Resolve API key from environment if not provided
@@ -363,6 +430,7 @@ class GrokLLM(LLMProvider):
         
         self.target_language = target_language
         self._config = config or DEFAULT_GROK_CONFIG
+        self._fallback_config = fallback_config or DEFAULT_FALLBACK_CONFIG
         
         # Session management for connection pooling
         self._session: Optional[aiohttp.ClientSession] = None
@@ -733,8 +801,9 @@ class GrokLLM(LLMProvider):
         """
         Generate an intelligent fallback response when API is unavailable.
         
-        This method analyzes the prompt structure and generates contextually
-        appropriate clarifying questions using rule-based logic.
+        This method uses the FallbackConfig to generate contextually
+        appropriate clarifying questions. The questions can be customized
+        via the fallback_config parameter during initialization.
         
         Args:
             prompt: The original prompt
@@ -750,46 +819,27 @@ class GrokLLM(LLMProvider):
         )
         
         if is_clarification_request:
-            # Generate structured clarification response
+            # Generate structured clarification response using configured questions
+            clarifications = [
+                {
+                    "question": q.question,
+                    "context": q.context,
+                    "priority": q.priority
+                }
+                for q in self._fallback_config.questions
+            ]
+            
             return json.dumps({
-                "clarifications": [
-                    {
-                        "question": "What is the expected scope and scale of this requirement?",
-                        "context": "Understanding scale helps determine architecture decisions",
-                        "priority": "high"
-                    },
-                    {
-                        "question": "Are there specific constraints or limitations to consider?",
-                        "context": "Constraints affect implementation approach and technology choices",
-                        "priority": "high"
-                    },
-                    {
-                        "question": "What are the acceptance criteria for this requirement?",
-                        "context": "Clear criteria ensure proper validation and testing",
-                        "priority": "medium"
-                    },
-                    {
-                        "question": "Are there any dependencies on external systems or services?",
-                        "context": "Dependencies affect timeline and integration complexity",
-                        "priority": "medium"
-                    }
-                ],
+                "clarifications": clarifications,
                 "metadata": {
                     "generated_by": "fallback",
                     "target_language": self.target_language,
-                    "note": "API unavailable - using rule-based generation"
+                    "note": "API unavailable - using configured fallback questions"
                 }
             }, indent=2)
         
-        # Generic response for non-clarification prompts
-        return (
-            "To provide a comprehensive response, please clarify the following:\n\n"
-            "1. **Functionality**: What specific functionality is required?\n"
-            "2. **Constraints**: Are there performance, security, or compliance constraints?\n"
-            "3. **Integration**: What systems need to integrate with this component?\n"
-            "4. **Success Criteria**: How will success be measured?\n\n"
-            "_Note: This response was generated locally as the API is currently unavailable._"
-        )
+        # Generic response using configured guidance
+        return self._fallback_config.generic_guidance
     
     def set_target_language(self, language: str) -> None:
         """
@@ -903,6 +953,9 @@ __all__ = [
     # Configuration
     "GrokConfig",
     "DEFAULT_GROK_CONFIG",
+    "FallbackConfig",
+    "FallbackQuestion",
+    "DEFAULT_FALLBACK_CONFIG",
     # Types
     "GenerationParams",
     "GenerationResult",
