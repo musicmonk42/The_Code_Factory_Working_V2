@@ -32,38 +32,6 @@ from langdetect import DetectorFactory, LangDetectException, detect
 from prometheus_client import Counter, Gauge, Histogram
 from pydantic import BaseModel, Field, field_validator
 
-# ********** SECURITY: Required runner dependencies **********
-# These imports are REQUIRED for secure audit logging and PII redaction.
-# The intent parser handles potentially sensitive business logic and requirements,
-# which MUST be properly logged to a secure audit trail and have PII redacted.
-#
-# DO NOT use dummy fallbacks that bypass security controls.
-# If runner modules are not available, the parser should fail fast.
-try:
-    from runner.runner_logging import log_action
-    from runner.runner_security_utils import redact_secrets
-except ImportError as e:
-    # In test environments, we allow mocking via sys.modules patching
-    # but we do NOT provide insecure fallbacks here
-    if (
-        "runner.runner_logging" not in sys.modules
-        and "runner.runner_security_utils" not in sys.modules
-    ):
-        logger.critical(
-            f"FATAL: Required runner modules not available: {e}. "
-            "Intent parser requires secure audit logging (runner.runner_logging) "
-            "and PII redaction (runner.runner_security_utils) to operate safely. "
-            "These dependencies must be installed or properly mocked in tests."
-        )
-        raise ImportError(
-            "Required security modules (runner.runner_logging, runner.runner_security_utils) "
-            "are not available. Install the runner package or mock these modules in tests."
-        ) from e
-    # If they ARE in sys.modules (mocked by tests), import them normally
-    from runner.runner_logging import log_action
-    from runner.runner_security_utils import redact_secrets
-# **************************************************************************************
-
 
 # PDF processing libraries
 try:
@@ -203,6 +171,38 @@ def get_transformers():
 load_dotenv()
 DetectorFactory.seed = 0
 logger = logging.getLogger(__name__)
+
+# ********** SECURITY: Required runner dependencies **********
+# These imports are REQUIRED for secure audit logging and PII redaction.
+# The intent parser handles potentially sensitive business logic and requirements,
+# which MUST be properly logged to a secure audit trail and have PII redacted.
+#
+# DO NOT use dummy fallbacks that bypass security controls.
+# If runner modules are not available, the parser should fail fast.
+try:
+    from runner.runner_logging import log_action
+    from runner.runner_security_utils import redact_secrets
+except ImportError as e:
+    # In test environments, we allow mocking via sys.modules patching
+    # but we do NOT provide insecure fallbacks here
+    if (
+        "runner.runner_logging" not in sys.modules
+        and "runner.runner_security_utils" not in sys.modules
+    ):
+        logger.critical(
+            f"FATAL: Required runner modules not available: {e}. "
+            "Intent parser requires secure audit logging (runner.runner_logging) "
+            "and PII redaction (runner.runner_security_utils) to operate safely. "
+            "These dependencies must be installed or properly mocked in tests."
+        )
+        raise ImportError(
+            "Required security modules (runner.runner_logging, runner.runner_security_utils) "
+            "are not available. Install the runner package or mock these modules in tests."
+        ) from e
+    # If they ARE in sys.modules (mocked by tests), import them normally
+    from runner.runner_logging import log_action
+    from runner.runner_security_utils import redact_secrets
+# **************************************************************************************
 
 # --- Metrics ---
 # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
@@ -506,7 +506,19 @@ class RegexExtractor(ExtractorStrategy):
                 matches = pattern.finditer(text)
                 for m in matches:
                     # Extract the last capture group if there are multiple groups,
-                    # otherwise extract the first group or full match
+                    # otherwise extract the first group or full match.
+                    #
+                    # Rationale for using last group:
+                    # Patterns are often structured as: prefix(keyword:)\s*(.+)
+                    # where the first group captures the keyword itself, and the
+                    # last group captures the actual content we want to extract.
+                    #
+                    # Example: '- *(rasgo|característica):\s*(.+)' has 2 groups:
+                    #   Group 1: 'rasgo' or 'característica' (keyword)
+                    #   Group 2: 'Feature ES' (the actual feature text we want)
+                    #
+                    # This convention works for both simple patterns with 1 group
+                    # and complex patterns with multiple groups.
                     if m.groups():
                         # Use the last capture group (most specific)
                         extracted[key].append(m.group(len(m.groups())).strip())
