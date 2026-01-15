@@ -1060,7 +1060,7 @@ class TestCryptoProviderFactory:
         # The error message should match what's actually produced
         with pytest.raises(
             CryptoInitializationError,
-            match="Failed to initialize even the fallback 'software' crypto provider",
+            match="CRITICAL: Failed to initialize 'software' crypto provider",
         ):
             factory.get_provider("software")
 
