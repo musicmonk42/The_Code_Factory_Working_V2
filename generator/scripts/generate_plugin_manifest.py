@@ -17,8 +17,12 @@ Requirements:
     pip install cryptography
 
 Usage:
-    # Generate and sign manifest (RECOMMENDED for prod)
+    # Generate and sign manifest using a key file (RECOMMENDED for prod)
     python generate_plugin_manifest.py /path/to/plugins --sign private_key.pem --out plugin_hash_manifest.json
+
+    # Generate and sign manifest using environment variable (BETTER for CI/CD)
+    export SIGNING_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    python generate_plugin_manifest.py /path/to/plugins --sign env:SIGNING_KEY --out plugin_hash_manifest.json
 
     # Verify manifest
     python generate_plugin_manifest.py --verify manifest.json --pubkey public_key.pem
@@ -28,7 +32,14 @@ Usage:
 
 Security Notes:
 - If --sign is omitted, a warning is printed and the manifest is NOT suitable for regulated production.
-- Signing key should be protected via HSM or vault in real deployments.
+- For production environments, use a Key Management Service (KMS):
+  * AWS KMS: https://aws.amazon.com/kms/
+  * Azure Key Vault: https://azure.microsoft.com/en-us/services/key-vault/
+  * Google Cloud KMS: https://cloud.google.com/kms
+  * HashiCorp Vault: https://www.vaultproject.io/
+- Signing key can be provided via:
+  * File path: --sign private_key.pem
+  * Environment variable: --sign env:SIGNING_KEY_VAR
 - Manifest includes a version string, timestamp, and file size for each plugin.
 
 Key Generation:
@@ -67,9 +78,36 @@ def compute_hash_and_size(filepath):
     return hashlib.sha256(data).hexdigest(), len(data)
 
 
-def load_private_key(path):
-    with open(path, "rb") as f:
-        key = serialization.load_pem_private_key(f.read(), password=None)
+def load_private_key(path_or_envvar):
+    """
+    Load private key from file path or environment variable.
+    
+    Args:
+        path_or_envvar: Either a file path or an environment variable name
+        
+    Returns:
+        Ed25519PrivateKey instance
+        
+    Security Note:
+        In production environments, consider using a Key Management Service (KMS)
+        such as AWS KMS, Azure Key Vault, Google Cloud KMS, or HashiCorp Vault
+        instead of storing keys in files or environment variables.
+    """
+    key_data = None
+    
+    # Check if it's an environment variable reference
+    if path_or_envvar.startswith("env:"):
+        env_var_name = path_or_envvar[4:]  # Remove "env:" prefix
+        key_data = os.getenv(env_var_name)
+        if not key_data:
+            raise ValueError("Environment variable for private key not found or empty")
+        key_data = key_data.encode('utf-8')
+    else:
+        # Treat as file path
+        with open(path_or_envvar, "rb") as f:
+            key_data = f.read()
+    
+    key = serialization.load_pem_private_key(key_data, password=None)
     if not isinstance(key, Ed25519PrivateKey):
         raise ValueError("Private key must be Ed25519")
     return key
@@ -110,7 +148,7 @@ def main():
     parser.add_argument(
         "--sign",
         metavar="PRIVATE_KEY",
-        help="Sign manifest with Ed25519 private key (PEM)",
+        help="Sign manifest with Ed25519 private key. Provide either a file path (e.g., 'private_key.pem') or an environment variable reference (e.g., 'env:SIGNING_KEY'). For production, consider using a KMS.",
     )
     parser.add_argument(
         "--out",
@@ -203,6 +241,16 @@ def main():
             error(
                 "cryptography package required for signing. (pip install cryptography)"
             )
+        
+        # Print KMS recommendation for production
+        if not args.sign.startswith("env:"):
+            print(
+                "INFO: Using file-based private key. For production environments, "
+                "consider using a Key Management Service (KMS) such as AWS KMS, "
+                "Azure Key Vault, Google Cloud KMS, or HashiCorp Vault.",
+                file=sys.stderr,
+            )
+        
         manifest_bytes = json.dumps(
             {
                 "manifest": manifest,

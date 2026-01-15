@@ -9,13 +9,20 @@ Usage:
     python scripts/bootstrap_agent_dev.py
 
 What it does:
-- Generates local dummy files that mimic interfaces of real dependencies.
+- Generates local dummy files in 'tests/mocks/' directory that mimic interfaces of real dependencies.
 - Allows the agent to run for development/testing without a production setup.
+- Prevents accidental overwriting of production files by using a dedicated mock directory.
 
 CAUTION:
 - These files are for developer convenience ONLY.
 - DO NOT deploy these files to production environments.
 - The real implementations must exist in production deployments.
+- Add tests/mocks/ to your PYTHONPATH to use these mocks: export PYTHONPATH=$PYTHONPATH:tests/mocks
+
+SECURITY:
+- This script now writes to 'tests/mocks/' directory to prevent the "Poison Pill" risk
+  of accidentally overwriting production files.
+- The .gitignore should exclude tests/mocks/ to prevent accidental commits.
 """
 
 import logging
@@ -32,8 +39,18 @@ def create_dummy_files():
     """
     Creates dummy Python modules and a temporary Git repository
     required for local development and testing of testgen_agent.py.
+    
+    All dummy files are created in 'tests/mocks/' directory to prevent
+    accidental overwriting of production files.
     """
     logger.info("Starting creation of dummy development environment modules...")
+    
+    # Define the safe directory for dummy files
+    mock_dir = os.path.join("tests", "mocks")
+    
+    # Create the mock directory if it doesn't exist
+    os.makedirs(mock_dir, exist_ok=True)
+    logger.info(f"Using mock directory: {mock_dir}")
 
     required_dummy_files = {
         "audit_log.py": """
@@ -117,30 +134,48 @@ class DummyClientSession:
     }
 
     for fname, content in required_dummy_files.items():
-        if not os.path.exists(fname):
+        # Create file path within mock directory
+        fpath = os.path.join(mock_dir, fname)
+        
+        # Safety check: Warn if file exists outside mock directory
+        if os.path.exists(fname):
+            logger.warning(
+                f"WARNING: Production file '{fname}' exists in current directory. "
+                f"This bootstrap script will NOT overwrite it. Using mock directory instead."
+            )
+        
+        if not os.path.exists(fpath):
             try:
-                with open(fname, "w", encoding="utf-8") as f:
+                with open(fpath, "w", encoding="utf-8") as f:
                     f.write(content)
-                logger.info(f"Created dummy {fname}.")
+                logger.info(f"Created dummy {fpath}.")
             except Exception as e:
-                logger.error(f"Failed to create dummy file {fname}: {e}")
+                logger.error(f"Failed to create dummy file {fpath}: {e}")
                 sys.exit(1)
         else:
-            logger.info(f"Dummy {fname} already exists, skipping creation.")
+            logger.info(f"Dummy {fpath} already exists, skipping creation.")
 
-    # Create dummy llm_providers directory if missing
-    if not os.path.exists("llm_providers"):
-        os.makedirs("llm_providers")
-        logger.info("Created 'llm_providers' directory.")
+    # Create dummy llm_providers directory if missing within mock directory
+    llm_providers_dir = os.path.join(mock_dir, "llm_providers")
+    if not os.path.exists(llm_providers_dir):
+        os.makedirs(llm_providers_dir)
+        logger.info(f"Created '{llm_providers_dir}' directory.")
 
     print("\n" + "=" * 80)
     print("DUMMY DEVELOPMENT ENVIRONMENT BOOTSTRAP COMPLETE".center(80))
+    print("".center(80))
+    print(f"Mock files created in: {os.path.abspath(mock_dir)}".center(80))
     print("".center(80))
     print(
         "You can now run `testgen_agent.py` locally for development and testing.".center(
             80
         )
     )
+    print("".center(80))
+    print(
+        "To use these mocks, add the mock directory to your Python path:".center(80)
+    )
+    print(f"    export PYTHONPATH=$PYTHONPATH:{os.path.abspath(mock_dir)}".center(80))
     print("".center(80))
     print("REMEMBER: These are DUMMY implementations.".center(80))
     print("DO NOT package or deploy these dummy files to production.".center(80))
