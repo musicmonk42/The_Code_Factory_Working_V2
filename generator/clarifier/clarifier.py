@@ -197,27 +197,85 @@ StatusCode = None
 circuit_breaker = None
 HAS_OPENTELEMETRY = False
 
-# Import log_action and send_alert from audit_log
+# Import log_action and send_alert from runner logging (preferred) or audit_log
+# NOTE: In production environments, these should come from the runner module.
+# The fallback is only for development/testing scenarios.
+_USING_DUMMY_CLARIFIER_LOGGING = False
+
+# Create a wrapper for log_audit_event that maintains backwards compatibility
+# with the original log_action interface
+async def _wrap_log_audit_event(action: str, **kwargs) -> None:
+    """
+    Wrapper that converts legacy log_action calls to log_audit_event format.
+    
+    The original log_action interface accepted (action_name, **kwargs).
+    The new log_audit_event requires (action, data_dict).
+    """
+    try:
+        from runner.runner_logging import log_audit_event
+        await log_audit_event(action=action, data=kwargs)
+    except ImportError:
+        # Fallback if runner not available
+        get_logger().debug(f"log_action: {action}, {kwargs}")
+    except Exception as e:
+        # Don't let logging failures crash the application
+        get_logger().warning(f"log_action failed: {e}", extra={"action": action})
+
 try:
-    from audit_log import log_action, send_alert
+    from runner.runner_logging import log_audit_event as _log_audit_event, send_alert
+    # Use the wrapper to maintain backwards compatibility
+    log_action = _wrap_log_audit_event
 except ImportError:
-    # Use a dummy logger for the warning before the main logger is configured
-    logging.warning(
-        "audit_log.py not found. log_action and send_alert will be dummy functions."
-    )
-
-    async def log_action(*args, **kwargs):
-        # This will use the properly configured logger once it's initialized
-        get_logger().info(
-            f"Dummy log_action: {args}, {kwargs}",
-            extra={"operation": "dummy_log_action"},
+    try:
+        from audit_log import log_action, send_alert
+    except ImportError:
+        # In production, we should fail hard if runner logging is not available
+        _is_production = os.getenv("PYTHON_ENV", "development").lower() == "production"
+        _is_testing = (
+            os.getenv("TESTING") == "1" 
+            or "pytest" in sys.modules
+            or os.getenv("PYTEST_CURRENT_TEST") is not None
+        )
+        
+        if _is_production and not _is_testing:
+            # Fail hard in production if runner logging is not available
+            raise ImportError(
+                "CRITICAL: Runner logging module (runner.runner_logging) is required in production. "
+                "Clarification events must be logged to the secure audit trail. "
+                "Please ensure the runner module is properly installed and configured."
+            )
+        
+        _USING_DUMMY_CLARIFIER_LOGGING = True
+        # Use a dummy logger for the warning before the main logger is configured
+        logging.warning(
+            "audit_log.py and runner.runner_logging not found. "
+            "Using dummy functions (NOT FOR PRODUCTION)."
         )
 
-    async def send_alert(*args, **kwargs):
-        get_logger().info(
-            f"Dummy send_alert: {args}, {kwargs}",
-            extra={"operation": "dummy_send_alert"},
-        )
+        async def log_action(action: str, **kwargs) -> None:
+            """
+            Fallback log_action for development/testing only.
+            WARNING: This does NOT provide secure audit logging.
+            """
+            get_logger().warning(
+                f"DUMMY log_action (NOT FOR PRODUCTION): {action}",
+                extra={
+                    "operation": "dummy_log_action", 
+                    "warning": "not_audit_logged",
+                    "action": action,
+                    "data": kwargs,
+                },
+            )
+
+        async def send_alert(*args, **kwargs) -> None:
+            """
+            Fallback send_alert for development/testing only.
+            WARNING: Alerts are NOT sent in this mode.
+            """
+            get_logger().warning(
+                f"DUMMY send_alert (NOT FOR PRODUCTION): {args}",
+                extra={"operation": "dummy_send_alert", "warning": "alert_not_sent"},
+            )
 
 
 # --- Sensitive Data Filter ---

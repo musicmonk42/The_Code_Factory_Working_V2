@@ -5,6 +5,7 @@ import logging
 import os
 import smtplib
 import ssl
+import sys
 import time
 import uuid  # For WebPrompt session_id generation
 from abc import ABC, abstractmethod
@@ -15,32 +16,63 @@ from typing import Any, Dict, List, Optional
 import aiohttp  # For Slack/web (add to reqs)
 
 # --- Conditional Imports for Channels ---
+# NOTE: These imports catch both ImportError and any other exceptions to avoid
+# silent failures when a library is partially installed or has version conflicts.
+
+HAS_TEXTUAL = False
+_TEXTUAL_ERROR = None
 try:
     import textual  # GUI/TUI (textual req)
+    # Verify the library is usable by checking for expected attributes
+    if hasattr(textual, 'app') and hasattr(textual, 'widgets'):
+        HAS_TEXTUAL = True
+    else:
+        _TEXTUAL_ERROR = "textual library loaded but missing expected modules (app, widgets)"
+        logging.error(
+            f"Textual library version mismatch: {_TEXTUAL_ERROR}. "
+            "GUIPrompt will be unavailable. Please check your textual installation."
+        )
+except ImportError as e:
+    _TEXTUAL_ERROR = str(e)
+    logging.warning(f"Textual (TUI/GUI) not found: {e}. GUIPrompt will be unavailable.")
+except Exception as e:
+    _TEXTUAL_ERROR = str(e)
+    logging.error(
+        f"Unexpected error loading Textual: {e}. "
+        "This may indicate a broken installation. GUIPrompt will be unavailable.",
+        exc_info=True
+    )
 
-    HAS_TEXTUAL = True
-except ImportError:
-    HAS_TEXTUAL = False
-    logging.warning("Textual (TUI/GUI) not found. GUIPrompt will be unavailable.")
-
+HAS_FASTAPI = False
+_FASTAPI_ERROR = None
 try:
     from fastapi import FastAPI, Form, Request  # Web form (fastapi req)
     from starlette.exceptions import HTTPException
     from starlette.responses import HTMLResponse
-
     HAS_FASTAPI = True
-except ImportError:
-    HAS_FASTAPI = False
-    logging.warning("FastAPI not found. WebPrompt will be unavailable.")
+except ImportError as e:
+    _FASTAPI_ERROR = str(e)
+    logging.warning(f"FastAPI not found: {e}. WebPrompt will be unavailable.")
+except Exception as e:
+    _FASTAPI_ERROR = str(e)
+    logging.error(
+        f"Unexpected error loading FastAPI: {e}. WebPrompt will be unavailable.",
+        exc_info=True
+    )
 
+HAS_SPEECH_RECOGNITION = False
+_SPEECH_ERROR = None
 try:
     import speech_recognition as sr  # Voice input (add to reqs)
-
     HAS_SPEECH_RECOGNITION = True
-except ImportError:
-    HAS_SPEECH_RECOGNITION = False
-    logging.warning(
-        "Speech Recognition (VoicePrompt) not found. VoicePrompt will be unavailable."
+except ImportError as e:
+    _SPEECH_ERROR = str(e)
+    logging.warning(f"Speech Recognition not found: {e}. VoicePrompt will be unavailable.")
+except Exception as e:
+    _SPEECH_ERROR = str(e)
+    logging.error(
+        f"Unexpected error loading Speech Recognition: {e}. VoicePrompt will be unavailable.",
+        exc_info=True
     )
 
 
@@ -64,36 +96,71 @@ from pydantic import BaseModel  # Config (pydantic req)
 from .clarifier import get_config, get_fernet, get_logger
 
 # --- RUNNER FOUNDATION IMPORTS ---
+# NOTE: In production, these imports should succeed. Fallbacks are only for development/testing.
+_is_production = os.getenv("PYTHON_ENV", "development").lower() == "production"
+_is_testing = (
+    os.getenv("TESTING") == "1" 
+    or "pytest" in sys.modules
+    or os.getenv("PYTEST_CURRENT_TEST") is not None
+)
+
+_RUNNER_IMPORTS_AVAILABLE = True
+
 try:
     from runner.runner_logging import add_provenance as log_action
-except ImportError:
-
+except ImportError as e:
+    _RUNNER_IMPORTS_AVAILABLE = False
+    if _is_production and not _is_testing:
+        raise ImportError(
+            f"CRITICAL: Runner logging module is required in production: {e}"
+        )
+    
     def log_action(*args, **kwargs):
-        logging.warning("Dummy log_action used: Runner logging is not available.")
+        """Fallback log_action - NOT FOR PRODUCTION USE."""
+        logging.warning(
+            f"DUMMY log_action (NOT FOR PRODUCTION): Runner logging is not available. "
+            f"Args: {args[:2] if args else 'none'}..."
+        )
 
 
 try:
     from runner.language_utils import detect_language
-except ImportError:
-
+except ImportError as e:
+    if _is_production and not _is_testing:
+        raise ImportError(
+            f"CRITICAL: Runner language utils module is required in production: {e}"
+        )
+    
     def detect_language(text):
+        """Fallback detect_language - NOT FOR PRODUCTION USE."""
         logging.warning(
-            "Dummy detect_language used: Runner language utils not available."
+            "DUMMY detect_language (NOT FOR PRODUCTION): Runner language utils not available. "
+            "Defaulting to 'en'."
         )
         return "en"
 
 
 try:
-    from runner.security_utils import (
+    from runner.runner_security_utils import (
         redact_secrets as redact_sensitive,
-    )  # MINIMAL FIX APPLIED HERE
-except ImportError:
-
-    def redact_sensitive(text):
-        logging.warning(
-            "Dummy redact_sensitive used: Runner security utils not available."
-        )
-        return text
+    )
+except ImportError as e:
+    try:
+        # Try alternative import path
+        from runner.security_utils import redact_secrets as redact_sensitive
+    except ImportError:
+        if _is_production and not _is_testing:
+            raise ImportError(
+                f"CRITICAL: Runner security utils module is required in production: {e}"
+            )
+        
+        def redact_sensitive(text):
+            """Fallback redact_sensitive - NOT FOR PRODUCTION USE."""
+            logging.warning(
+                "DUMMY redact_sensitive (NOT FOR PRODUCTION): Runner security utils not available. "
+                "Sensitive data may be exposed in logs!"
+            )
+            return text
 
 
 # ---------------------------------
