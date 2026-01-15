@@ -302,7 +302,7 @@ class IntentParserConfig(BaseModel):
             )
         return v
 
-    @field_validator("cache_dir")
+    @field_validator("cache_dir", mode="after")
     @classmethod
     def create_cache_dir_if_not_exists(cls, v):
         path = Path(v)
@@ -505,9 +505,13 @@ class RegexExtractor(ExtractorStrategy):
             for key, pattern in current_patterns.items():
                 matches = pattern.finditer(text)
                 for m in matches:
-                    extracted[key].append(
-                        m.group(1).strip() if m.groups() else m.group(0).strip()
-                    )
+                    # Extract the last capture group if there are multiple groups,
+                    # otherwise extract the first group or full match
+                    if m.groups():
+                        # Use the last capture group (most specific)
+                        extracted[key].append(m.group(len(m.groups())).strip())
+                    else:
+                        extracted[key].append(m.group(0).strip())
         EXTRACTION_COUNT.labels(extractor_type="regex", language=language).inc()
         return dict(extracted)
 
@@ -728,8 +732,10 @@ class IntentParser:
 
         # ThreadPoolExecutor for CPU-bound operations
         # Using cpu_count ensures optimal parallelism for parsing/regex operations
+        # In test mode, use smaller pool to avoid exhausting threads
+        max_workers = int(os.getenv("INTENT_PARSER_MAX_WORKERS", os.cpu_count() or 1))
         self.executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=os.cpu_count() or 1,
+            max_workers=max_workers,
             thread_name_prefix="IntentParser-"
         )
         self.input_language: str = self.config.multi_language_support.default_lang
