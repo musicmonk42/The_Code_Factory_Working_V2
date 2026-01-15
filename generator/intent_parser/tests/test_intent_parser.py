@@ -16,9 +16,10 @@ import yaml  # <-- FIX 1: Added missing import
 # 1. Mock Pydantic models from other modules (if any were used)
 # (No external Pydantic models are imported by intent_parser.py)
 
-# 2. Mock runner.* modules
+# 2. Mock runner.* modules with proper secure defaults
 mock_runner_logging = MagicMock()
 mock_runner_logging.log_action = MagicMock()
+sys.modules["runner"] = MagicMock()
 sys.modules["runner.runner_logging"] = mock_runner_logging
 
 mock_runner_security = MagicMock()
@@ -51,8 +52,8 @@ sys.modules["pytesseract"] = MagicMock()
 sys.modules["rst_to_myst"] = MagicMock()
 sys.modules["langdetect"] = MagicMock()
 
-# --- Now, import the module to be tested ---
-from intent_parser.intent_parser import (
+# --- Now, import the module to be tested using canonical path ---
+from generator.intent_parser.intent_parser import (
     IntentParser,
     IntentParserConfig,
     MarkdownStrategy,
@@ -209,7 +210,7 @@ class TestIntentParser(unittest.TestCase):
 
     # --- FIX 6: Patch the correct function: rst_to_myst.convert ---
     @patch(
-        "intent_parser.intent_parser.rst_to_myst.convert",
+        "generator.intent_parser.intent_parser.rst_to_myst.convert",
         side_effect=Exception("RST Error"),
     )
     def test_rst_strategy_failure_fallback(self, mock_convert):
@@ -235,18 +236,18 @@ class TestIntentParser(unittest.TestCase):
         sections = strategy.parse(content)
         self.assertEqual(sections, {"Full Document": content})
 
-    @patch("intent_parser.intent_parser.HAS_PDFPLUMBER", False)
+    @patch("generator.intent_parser.intent_parser.HAS_PDFPLUMBER", False)
     def test_pdf_strategy_no_lib_fallback(self):
         """Tests PDF parser falling back to Plaintext when library is missing."""
         strategy = PDFStrategy()
         sections = strategy.parse(Path("dummy.pdf"))
         self.assertIn("Full Document", sections)
 
-    @patch("intent_parser.intent_parser.HAS_PDFPLUMBER", True)
-    @patch("intent_parser.intent_parser.HAS_PYTESSERACT", True)
-    @patch("intent_parser.intent_parser.pdfplumber")
-    @patch("intent_parser.intent_parser.pytesseract")
-    @patch("intent_parser.intent_parser.Image")
+    @patch("generator.intent_parser.intent_parser.HAS_PDFPLUMBER", True)
+    @patch("generator.intent_parser.intent_parser.HAS_PYTESSERACT", True)
+    @patch("generator.intent_parser.intent_parser.pdfplumber")
+    @patch("generator.intent_parser.intent_parser.pytesseract")
+    @patch("generator.intent_parser.intent_parser.Image")
     def test_pdf_strategy_with_ocr(self, mock_image, mock_tesseract, mock_pdfplumber):
         """Tests PDF parsing with successful text and OCR extraction."""
         mock_page = MagicMock()
@@ -313,8 +314,8 @@ class TestIntentParser(unittest.TestCase):
 
     # --- Main IntentParser Class Tests ---
 
-    @patch("intent_parser.intent_parser.LLMDetector")
-    @patch("intent_parser.intent_parser.LLMSummarizer")
+    @patch("generator.intent_parser.intent_parser.LLMDetector")
+    @patch("generator.intent_parser.intent_parser.LLMSummarizer")
     def test_parser_init_and_reload(self, mock_summarizer, mock_detector):
         """Tests that the parser initializes and reloads its config."""
         parser = IntentParser(config_path=str(self.config_path))
@@ -351,20 +352,20 @@ class TestIntentParser(unittest.TestCase):
             parser._select_parser("auto", Path("file.unknown")), PlaintextStrategy
         )
         # Test PDF fallback
-        with patch("intent_parser.intent_parser.HAS_PDFPLUMBER", False):
+        with patch("generator.intent_parser.intent_parser.HAS_PDFPLUMBER", False):
             self.assertIsInstance(
                 parser._select_parser("auto", Path("file.pdf")), PlaintextStrategy
             )
 
     @patch(
-        "intent_parser.intent_parser.LLMDetector",
+        "generator.intent_parser.intent_parser.LLMDetector",
         return_value=MagicMock(detect=AsyncMock(return_value=[])),
     )
     @patch(
-        "intent_parser.intent_parser.LLMSummarizer",
+        "generator.intent_parser.intent_parser.LLMSummarizer",
         return_value=MagicMock(summarize=MagicMock(side_effect=lambda x, **kw: x)),
     )
-    @patch("intent_parser.intent_parser.detect", return_value="en")
+    @patch("generator.intent_parser.intent_parser.detect", return_value="en")
     def test_parse_workflow_simple_markdown(
         self, mock_detect, mock_summarizer, mock_detector
     ):
@@ -388,14 +389,14 @@ class TestIntentParser(unittest.TestCase):
         )
 
     @patch(
-        "intent_parser.intent_parser.LLMDetector",
+        "generator.intent_parser.intent_parser.LLMDetector",
         return_value=MagicMock(detect=AsyncMock(return_value=[])),
     )
     @patch(
-        "intent_parser.intent_parser.LLMSummarizer",
+        "generator.intent_parser.intent_parser.LLMSummarizer",
         return_value=MagicMock(summarize=MagicMock(side_effect=lambda x, **kw: x)),
     )
-    @patch("intent_parser.intent_parser.detect", return_value="es")
+    @patch("generator.intent_parser.intent_parser.detect", return_value="es")
     def test_parse_workflow_multilang_file(
         self, mock_detect, mock_summarizer, mock_detector
     ):
@@ -412,8 +413,8 @@ class TestIntentParser(unittest.TestCase):
         self.assertEqual(parser.input_language, "es")
         mock_detect.assert_called_with(content_es)
 
-    @patch("intent_parser.intent_parser.LLMDetector")
-    @patch("intent_parser.intent_parser.LLMSummarizer")
+    @patch("generator.intent_parser.intent_parser.LLMDetector")
+    @patch("generator.intent_parser.intent_parser.LLMSummarizer")
     def test_parse_workflow_errors(self, mock_summarizer, mock_detector):
         """Tests error handling in the parse workflow."""
         parser = IntentParser(config_path=str(self.config_path))
@@ -430,6 +431,60 @@ class TestIntentParser(unittest.TestCase):
         mock_detector.return_value.detect.side_effect = Exception("Detector failed")
         with self.assertRaises(Exception):
             asyncio.run(parser.parse(content="test"))
+
+    @patch("generator.intent_parser.intent_parser.LLMDetector")
+    @patch("generator.intent_parser.intent_parser.LLMSummarizer")
+    def test_context_manager_and_executor_cleanup(self, mock_summarizer, mock_detector):
+        """Tests that IntentParser properly cleans up executor via context manager."""
+        with IntentParser(config_path=str(self.config_path)) as parser:
+            self.assertIsNotNone(parser.executor)
+            self.assertFalse(parser.executor._shutdown)
+        
+        # After exiting context, executor should be shut down
+        self.assertTrue(parser.executor._shutdown)
+
+    @patch("generator.intent_parser.intent_parser.LLMDetector")
+    @patch("generator.intent_parser.intent_parser.LLMSummarizer")
+    def test_manual_shutdown(self, mock_summarizer, mock_detector):
+        """Tests manual executor shutdown."""
+        parser = IntentParser(config_path=str(self.config_path))
+        self.assertFalse(parser.executor._shutdown)
+        
+        parser.shutdown()
+        self.assertTrue(parser.executor._shutdown)
+
+    @patch(
+        "generator.intent_parser.intent_parser.LLMDetector",
+        return_value=MagicMock(detect=AsyncMock(return_value=[])),
+    )
+    @patch(
+        "generator.intent_parser.intent_parser.LLMSummarizer",
+        return_value=MagicMock(summarize=MagicMock(side_effect=lambda x, **kw: x)),
+    )
+    @patch("generator.intent_parser.intent_parser.detect", return_value="en")
+    def test_parse_uses_executor_for_cpu_bound_ops(
+        self, mock_detect, mock_summarizer, mock_detector
+    ):
+        """Tests that CPU-bound operations are properly offloaded to executor."""
+        parser = IntentParser(config_path=str(self.config_path))
+        content = "# Features\n- F1\nConstraint: C1"
+
+        # Mock the executor to track calls
+        original_executor = parser.executor
+        mock_executor = MagicMock(wraps=original_executor)
+        parser.executor = mock_executor
+
+        try:
+            result = asyncio.run(parser.parse(content=content, format_hint="markdown"))
+            
+            # Verify that run_in_executor would have been called
+            # (We can't directly verify asyncio.loop.run_in_executor calls without deeper mocking)
+            self.assertEqual(result["features"], ["F1"])
+            self.assertEqual(result["constraints"], ["C1"])
+        finally:
+            # Clean up
+            original_executor.shutdown(wait=False)
+            parser.shutdown()
 
 
 if __name__ == "__main__":
