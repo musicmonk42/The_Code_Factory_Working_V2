@@ -5,6 +5,7 @@ Intent Parser Module - Extracts requirements and features from README documents.
 LAZY LOADING STRATEGY:
 ...
 """
+import asyncio
 import concurrent.futures
 import datetime  # <-- FIX: Added missing import
 import hashlib
@@ -12,6 +13,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -28,29 +30,7 @@ import yaml
 from dotenv import load_dotenv
 from langdetect import DetectorFactory, LangDetectException, detect
 from prometheus_client import Counter, Gauge, Histogram
-from pydantic import BaseModel, Field, validator
-
-# ********** FIX 1: Corrected import of log_action **********
-try:
-    from runner.runner_logging import log_action
-except ImportError:
-
-    def log_action(*args, **kwargs):
-        logging.warning("Dummy log_action used: Runner logging is not available.")
-
-
-# *********************************************************
-
-# ********** FIX 2: Updated utility imports to runner foundation **********
-try:
-    from runner.runner_security_utils import redact_secrets
-except ImportError:
-    # Final Fallback for testing when specific runner module is not available
-    def redact_secrets(content, **_kwargs):
-        return content
-
-
-# **************************************************************************************
+from pydantic import BaseModel, Field, field_validator
 
 
 # PDF processing libraries
@@ -71,6 +51,7 @@ try:
     HAS_PYTESSERACT = True
 except ImportError:
     HAS_PYTESSERACT = False
+    Image = None  # Define for module attribute access
     logging.warning(
         "pytesseract or Pillow not installed. OCR for PDF images will be unavailable. Run 'pip install pytesseract Pillow'"
     )
@@ -191,6 +172,38 @@ load_dotenv()
 DetectorFactory.seed = 0
 logger = logging.getLogger(__name__)
 
+# ********** SECURITY: Required runner dependencies **********
+# These imports are REQUIRED for secure audit logging and PII redaction.
+# The intent parser handles potentially sensitive business logic and requirements,
+# which MUST be properly logged to a secure audit trail and have PII redacted.
+#
+# DO NOT use dummy fallbacks that bypass security controls.
+# If runner modules are not available, the parser should fail fast.
+try:
+    from runner.runner_logging import log_action
+    from runner.runner_security_utils import redact_secrets
+except ImportError as e:
+    # In test environments, we allow mocking via sys.modules patching
+    # but we do NOT provide insecure fallbacks here
+    if (
+        "runner.runner_logging" not in sys.modules
+        and "runner.runner_security_utils" not in sys.modules
+    ):
+        logger.critical(
+            f"FATAL: Required runner modules not available: {e}. "
+            "Intent parser requires secure audit logging (runner.runner_logging) "
+            "and PII redaction (runner.runner_security_utils) to operate safely. "
+            "These dependencies must be installed or properly mocked in tests."
+        )
+        raise ImportError(
+            "Required security modules (runner.runner_logging, runner.runner_security_utils) "
+            "are not available. Install the runner package or mock these modules in tests."
+        ) from e
+    # If they ARE in sys.modules (mocked by tests), import them normally
+    from runner.runner_logging import log_action
+    from runner.runner_security_utils import redact_secrets
+# **************************************************************************************
+
 # --- Metrics ---
 # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
 try:
@@ -279,7 +292,8 @@ class IntentParserConfig(BaseModel):
         default_factory=MultiLanguageSupportConfig
     )
 
-    @validator("format")
+    @field_validator("format")
+    @classmethod
     def validate_format(cls, v):
         supported_formats = ["auto", "markdown", "rst", "plaintext", "yaml", "pdf"]
         if v not in supported_formats:
@@ -288,7 +302,8 @@ class IntentParserConfig(BaseModel):
             )
         return v
 
-    @validator("cache_dir", pre=True, always=True)
+    @field_validator("cache_dir", mode="after")
+    @classmethod
     def create_cache_dir_if_not_exists(cls, v):
         path = Path(v)
         path.mkdir(parents=True, exist_ok=True)
@@ -490,9 +505,25 @@ class RegexExtractor(ExtractorStrategy):
             for key, pattern in current_patterns.items():
                 matches = pattern.finditer(text)
                 for m in matches:
-                    extracted[key].append(
-                        m.group(1).strip() if m.groups() else m.group(0).strip()
-                    )
+                    # Extract the last capture group if there are multiple groups,
+                    # otherwise extract the first group or full match.
+                    #
+                    # Rationale for using last group:
+                    # Patterns are often structured as: prefix(keyword:)\s*(.+)
+                    # where the first group captures the keyword itself, and the
+                    # last group captures the actual content we want to extract.
+                    #
+                    # Example: '- *(rasgo|característica):\s*(.+)' has 2 groups:
+                    #   Group 1: 'rasgo' or 'característica' (keyword)
+                    #   Group 2: 'Feature ES' (the actual feature text we want)
+                    #
+                    # This convention works for both simple patterns with 1 group
+                    # and complex patterns with multiple groups.
+                    if m.groups():
+                        # Use the last capture group (most specific)
+                        extracted[key].append(m.group(len(m.groups())).strip())
+                    else:
+                        extracted[key].append(m.group(0).strip())
         EXTRACTION_COUNT.labels(extractor_type="regex", language=language).inc()
         return dict(extracted)
 
@@ -685,6 +716,16 @@ def generate_provenance(
 
 # --- Main IntentParser Class ---
 class IntentParser:
+    """
+    Main Intent Parser class for extracting structured requirements from documents.
+    
+    This class properly manages async operations and uses a ThreadPoolExecutor
+    to offload CPU-bound operations (parsing, regex, I/O) to worker threads,
+    preventing event loop blocking in async contexts.
+    
+    The executor is properly managed with context manager support for cleanup.
+    """
+    
     def __init__(self, config_path: str = "intent_parser.yaml"):
         self._config_path = Path(config_path)
         self.config: IntentParserConfig = self._load_and_validate_config(
@@ -701,11 +742,38 @@ class IntentParser:
         self.detector: AmbiguityDetectorStrategy = self._select_detector()
         self.summarizer: SummarizerStrategy = self._select_summarizer()
 
+        # ThreadPoolExecutor for CPU-bound operations
+        # Using cpu_count ensures optimal parallelism for parsing/regex operations
+        # In test mode, use smaller pool to avoid exhausting threads
+        max_workers = int(os.getenv("INTENT_PARSER_MAX_WORKERS", os.cpu_count() or 1))
         self.executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=os.cpu_count() or 1
+            max_workers=max_workers,
+            thread_name_prefix="IntentParser-"
         )
         self.input_language: str = self.config.multi_language_support.default_lang
         self._health_check()
+        logger.info(f"IntentParser initialized with {self.executor._max_workers} worker threads")
+
+    def __enter__(self):
+        """Context manager support for proper resource cleanup."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Ensure executor is properly shut down."""
+        self.shutdown()
+        return False
+
+    def shutdown(self, wait: bool = True):
+        """
+        Shut down the thread pool executor.
+        
+        Args:
+            wait: If True, wait for all pending futures to complete before shutdown
+        """
+        if hasattr(self, 'executor') and self.executor:
+            logger.info("Shutting down IntentParser executor...")
+            self.executor.shutdown(wait=wait)
+            logger.info("IntentParser executor shut down successfully")
 
     def _load_and_validate_config(self, config_path: Path) -> IntentParserConfig:
         try:
@@ -793,10 +861,37 @@ class IntentParser:
         dry_run: bool = False,
         user_id: str = "anonymous",
     ) -> Dict[str, Any]:
+        """
+        Parse document content and extract structured requirements.
+        
+        This method is async and properly offloads CPU-bound operations to a thread pool
+        to avoid blocking the event loop. The following operations are CPU-bound and
+        run in the executor:
+        - File I/O (reading text files)
+        - Document parsing (Markdown, RST, PDF, etc.)
+        - Regex extraction
+        - Secret redaction
+        
+        Args:
+            content: Raw document content as string
+            format_hint: Optional format hint ('auto', 'markdown', 'rst', etc.)
+            file_path: Optional path to document file
+            dry_run: If True, skip certain operations
+            user_id: User identifier for audit logging
+            
+        Returns:
+            Dictionary containing extracted features, constraints, and ambiguities
+            
+        Raises:
+            FileNotFoundError: If file_path is provided but file doesn't exist
+            ValueError: If neither content nor file_path is provided
+        """
         start_time = time.time()
         span = trace.get_current_span() if tracer else None
+        loop = asyncio.get_event_loop()
 
         try:
+            # --- File I/O: Run in executor to avoid blocking ---
             if file_path:
                 file_path = Path(file_path)
                 if not file_path.exists():
@@ -806,20 +901,37 @@ class IntentParser:
                     and file_path.is_file()
                     and file_path.suffix.lower() not in [".pdf"]
                 ):
-                    content = file_path.read_text(encoding="utf-8")
+                    # CPU-bound I/O operation - run in executor
+                    content = await loop.run_in_executor(
+                        self.executor,
+                        lambda: file_path.read_text(encoding="utf-8")
+                    )
+                    logger.debug(f"Read {len(content)} bytes from {file_path} (via executor)")
 
             if not content and not file_path:
                 raise ValueError("No content or file path provided.")
 
-            content_redacted = redact_secrets(content)
+            # --- PII Redaction: CPU-bound regex operations - run in executor ---
+            content_redacted = await loop.run_in_executor(
+                self.executor,
+                redact_secrets,
+                content
+            )
             if content_redacted != content:
                 REDACTION_COUNT.inc()
+                logger.debug("PII/secrets redacted from content (via executor)")
 
             provenance = generate_provenance(content_redacted, file_path)
 
+            # --- Language Detection: CPU-bound - run in executor ---
             if self.config.multi_language_support.enabled and content_redacted.strip():
                 try:
-                    self.input_language = detect(content_redacted)
+                    self.input_language = await loop.run_in_executor(
+                        self.executor,
+                        detect,
+                        content_redacted
+                    )
+                    logger.debug(f"Detected language: {self.input_language} (via executor)")
                 except LangDetectException:
                     self.input_language = (
                         self.config.multi_language_support.default_lang
@@ -827,15 +939,33 @@ class IntentParser:
             else:
                 self.input_language = self.config.multi_language_support.default_lang
 
+            # --- Document Parsing: HIGHLY CPU-bound (regex, text processing) ---
+            # This is the most critical operation to offload
             self.parser = self._select_parser(
                 format_hint or self.config.format, file_path
             )
             parser_input = (
                 file_path if isinstance(self.parser, PDFStrategy) else content_redacted
             )
-            sections = self.parser.parse(parser_input)
+            
+            # Run parser in executor - it may involve heavy regex or PDF processing
+            sections = await loop.run_in_executor(
+                self.executor,
+                self.parser.parse,
+                parser_input
+            )
+            logger.debug(f"Parsed document into {len(sections)} sections (via executor)")
 
-            extracted = self.extractor.extract(sections, language=self.input_language)
+            # --- Regex Extraction: CPU-bound regex operations - run in executor ---
+            extracted = await loop.run_in_executor(
+                self.executor,
+                self.extractor.extract,
+                sections,
+                self.input_language
+            )
+            logger.debug(f"Extracted {sum(len(v) for v in extracted.values())} items (via executor)")
+            
+            # --- Ambiguity Detection: Already async, uses LLM ---
             full_text_for_ambiguity = " ".join(sections.values())
             ambiguities = await self.detector.detect(
                 full_text_for_ambiguity, dry_run, language=self.input_language
@@ -848,6 +978,9 @@ class IntentParser:
                 "ambiguities": ambiguities,
             }
 
+            # --- Summarization: May be CPU or I/O bound depending on implementation ---
+            # If using local models (torch/transformers), this should also use executor
+            # For now, we assume LLMSummarizer is I/O bound (API calls)
             requirements = self.summarizer.summarize(
                 requirements, language=self.input_language
             )
@@ -856,7 +989,7 @@ class IntentParser:
             PARSE_LATENCY.observe(parse_latency)
 
             log_action(
-                "Parse Completed", {"provenance": provenance, "user_id": user_id}
+                "Parse Completed", {"provenance": provenance, "user_id": user_id, "latency_seconds": parse_latency}
             )
             if span:
                 span.set_status(Status(StatusCode.OK))
