@@ -629,24 +629,27 @@ class TestPublicSyncAPI:
         assert blob == b"encrypted-key-blob"
 
     @pytest.mark.asyncio
-    async def test_get_hsm_pin_fails_in_async_context(self):
-        with pytest.raises(
-            SecretError, match="Cannot call sync get_hsm_pin from an async context"
-        ):
-            get_hsm_pin()
+    async def test_get_hsm_pin_works_in_async_context(self):
+        """Test that sync get_hsm_pin now works from async context (fixed deadlock)."""
+        self.mock_manager.get_secret.return_value = b"12345"
+        # This should now succeed instead of raising an error
+        pin = get_hsm_pin()
+        assert pin == "12345"
 
     @pytest.mark.asyncio
-    async def test_get_fallback_fails_in_async_context(self):
-        with pytest.raises(
-            SecretError,
-            match="Cannot call sync get_fallback_hmac_secret from an async context",
-        ):
-            get_fallback_hmac_secret()
+    async def test_get_fallback_works_in_async_context(self):
+        """Test that sync get_fallback_hmac_secret now works from async context (fixed deadlock)."""
+        b64_secret = base64.b64encode(b"a_very_long_secret_key_16_bytes")
+        self.mock_manager.get_secret.return_value = b64_secret
+        # This should now succeed instead of raising an error
+        secret = get_fallback_hmac_secret()
+        assert secret == b"a_very_long_secret_key_16_bytes"
 
     @pytest.mark.asyncio
-    async def test_get_kms_fails_in_async_context(self):
-        with pytest.raises(
-            SecretError,
-            match="Cannot call sync get_kms_master_key_ciphertext_blob from an async context",
-        ):
-            get_kms_master_key_ciphertext_blob()
+    async def test_get_kms_works_in_async_context(self):
+        """Test that sync get_kms_master_key_ciphertext_blob now works from async context (fixed deadlock)."""
+        b64_blob = base64.b64encode(b"encrypted-key-blob")
+        self.mock_manager.get_secret.return_value = b64_blob
+        # This should now succeed instead of raising an error
+        blob = get_kms_master_key_ciphertext_blob()
+        assert blob == b"encrypted-key-blob"

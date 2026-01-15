@@ -24,45 +24,19 @@ from cryptography.hazmat.backends import default_backend
 # Core cryptography primitives
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-# Imported from factory for metrics and alerts - REMOVED TO BREAK CIRCULAR DEPENDENCY
-# from audit_crypto_factory import CRYPTO_ERRORS, KEY_STORE_COUNT, KEY_LOAD_COUNT, send_alert, SensitiveDataFilter, log_action
-# from audit_crypto_provider import CryptoOperationError # Import custom exception
+# --- FIX: Import from audit_common.py to break circular dependency ---
+# audit_common is a "leaf node" module with no dependencies on other audit_crypto modules
+from .audit_common import (
+    CryptoOperationError,
+    SensitiveDataFilter,
+    add_sensitive_filter_to_logger,
+)
 
 logger = logging.getLogger(__name__)
 
-# --- Start of Patch for Circular Dependency ---
+# Apply sensitive data filter from audit_common
+add_sensitive_filter_to_logger(logger)
 
-
-# Function to add the SensitiveDataFilter using a late import
-def _add_sensitive_filter():
-    try:
-        # Relative import for same-package file
-        from .audit_crypto_factory import SensitiveDataFilter
-
-        logger.addFilter(SensitiveDataFilter())
-    except ImportError as e:
-        # Fallback for environments where relative imports fail (e.g., direct script execution/simple setup)
-        logging.warning(
-            f"Could not import SensitiveDataFilter from .audit_crypto_factory (circular dependency fix): {e}. Proceeding without filter for now."
-        )
-
-
-_add_sensitive_filter()  # Call immediately after logger setup
-
-# Re-define CryptoOperationError locally for type hinting, as it is critical
-# We can't import it directly at module level without risking the cycle.
-# We will still import it inside the functions for actual use/raising.
-try:
-    from .audit_crypto_provider import CryptoOperationError
-except ImportError:
-    # Define a temporary placeholder class if import fails, ensuring the file loads
-    class CryptoOperationError(Exception):
-        """Placeholder for CryptoOperationError when import fails."""
-
-        pass
-
-
-# --- End of Patch for Circular Dependency ---
 
 # --- Production TODOs: ---
 # [X] Replace file-based storage with a production-grade key vault (HSM, KMS, or at least encrypted storage).

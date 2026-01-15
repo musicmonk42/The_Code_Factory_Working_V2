@@ -632,12 +632,32 @@ from .audit_crypto_provider import (
     SoftwareCryptoProvider,
 )
 
+# Import centralized environment detection from audit_common
+# (imported here, after audit_crypto_provider, to ensure proper load order)
+from .audit_common import is_production_environment as _is_production_env
+
 
 class DummyCryptoProvider(CryptoProvider):
     """
-    Very small provider for DEV/TEST:
-    - Single hard-coded key id
-    - Deterministic signature
+    A minimal crypto provider for DEV/TEST environments ONLY.
+    
+    WARNING: This provider provides NO REAL SECURITY.
+    - All signatures are deterministic and predictable
+    - All verifications return True
+    - This is intended ONLY for testing and development
+    
+    Security Guardrails:
+    - In production environments, using this provider will raise an error
+    - Even in dev/test, a warning is always logged
+    - The provider checks for explicit opt-in via AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER
+    
+    Usage:
+        This provider is automatically used when:
+        1. Running in test/dev mode (AUDIT_LOG_DEV_MODE=true or PYTEST_CURRENT_TEST set)
+        2. AND PROVIDER_TYPE is not explicitly set to a production provider
+        
+        To force a real provider in tests, set:
+        - AUDIT_CRYPTO_FORCE_REAL_PROVIDER=true
     """
 
     # NOTE: The base CryptoProvider.__init__ takes accessors and settings.
@@ -648,27 +668,52 @@ class DummyCryptoProvider(CryptoProvider):
         fallback_hmac_secret_accessor: Callable[[], Awaitable[bytes]],
         settings: Dynaconf,
     ):
+        # SECURITY GUARDRAIL: Verify this is not being used in production
+        # Use centralized environment detection from audit_common
+        is_production = _is_production_env()
+        allow_dummy_override = os.getenv("AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER", "").lower() == "true"
+        
+        if is_production and not allow_dummy_override:
+            error_msg = (
+                "CRITICAL SECURITY ERROR: Attempted to use DummyCryptoProvider in production. "
+                "This provider offers NO SECURITY and must not be used in production. "
+                "If this is intentional (NOT RECOMMENDED), set AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER=true"
+            )
+            logger.critical(error_msg)
+            raise CryptoInitializationError(error_msg)
+        
         super().__init__(
             software_key_master_accessor, fallback_hmac_secret_accessor, settings
         )
         self.key_id = "test-key-id"
-        logger.warning("AUDIT_CRYPTO: Using DummyCryptoProvider. NOT FOR PRODUCTION.")
+        
+        # Always log a warning when DummyCryptoProvider is used
+        logger.warning(
+            "AUDIT_CRYPTO: Using DummyCryptoProvider. "
+            "This provider offers NO REAL SECURITY and should NEVER be used in production. "
+            "All signatures are deterministic and all verifications return True.",
+            extra={"operation": "dummy_provider_init", "security_warning": True}
+        )
 
     async def generate_key(self, algo: str) -> str:
+        logger.debug(f"DummyCryptoProvider.generate_key called with algo={algo}")
         return self.key_id
 
     async def sign(self, data: bytes, key_id: str) -> bytes:
+        logger.debug(f"DummyCryptoProvider.sign called (returning dummy signature)")
         return b"dummy-signature"
 
     async def verify(self, data: bytes, signature: bytes, key_id: str) -> bool:
+        logger.debug(f"DummyCryptoProvider.verify called (always returns True)")
         return True
 
     # Must implement all required abstract methods, including rotate_key and close
     async def rotate_key(self, key_id: str) -> str:
+        logger.debug(f"DummyCryptoProvider.rotate_key called")
         return self.key_id
 
     async def close(self):
-        # Dummy close
+        logger.debug("DummyCryptoProvider.close called")
         pass
 
 
@@ -745,22 +790,55 @@ class CryptoProviderFactory:
     ) -> CryptoProvider:
         """
         Factory method to get a CryptoProvider instance dynamically based on configuration.
-        Ensures proper initialization and provides fallback logic to the 'software' provider if
-        the configured provider fails to initialize. Instances are cached for reuse.
-
-        The factory passes the *lazy initializer functions* and settings to the provider.
-
+        
+        SECURITY CONSIDERATIONS:
+        - In production, this method will NEVER automatically fall back to DummyCryptoProvider
+        - If initialization fails in production, the application MUST crash (fail-closed)
+        - Silent security downgrades are explicitly prevented
+        - The 'software' provider can be used as fallback from 'hsm', but never 'dummy'
+        
+        Behavior by Environment:
+        - Production: Initializes requested provider, falls back to 'software' if HSM fails,
+                      crashes if software fails (fail-closed security)
+        - Dev/Test: Returns DummyCryptoProvider for safe, deterministic testing
+        - Force real provider in tests: Set AUDIT_CRYPTO_FORCE_REAL_PROVIDER=true
+        
         Args:
             provider_type (str): The type of crypto provider to retrieve (e.g., "software", "hsm").
+            
         Returns:
             CryptoProvider: An initialized instance of the requested crypto provider.
+            
         Raises:
-            CryptoInitializationError: If no crypto provider can be successfully initialized (including fallback).
+            CryptoInitializationError: If no crypto provider can be successfully initialized.
+                                       In production, this is a fatal error that prevents
+                                       application startup.
         """
         provider_type_lower = provider_type.lower()
-
-        # DEV/TEST: Always return the Dummy provider for a safe, deterministic import/test environment.
-        if _is_test_or_dev_mode():
+        
+        # Check if real provider is forced in test environment
+        force_real_provider = os.getenv("AUDIT_CRYPTO_FORCE_REAL_PROVIDER", "").lower() == "true"
+        
+        # DEV/TEST MODE HANDLING
+        # IMPORTANT: This block ONLY runs in dev/test environments
+        # Production environments (PYTHON_ENV=production) skip this entirely
+        if _is_test_or_dev_mode() and not force_real_provider:
+            # Extra safety check: verify we're not accidentally in production
+            # Use centralized environment detection from audit_common
+            if _is_production_env():
+                # This is a CRITICAL security guardrail
+                # If we reach here, something is misconfigured - dev mode flags are set
+                # but production env vars are also set. Fail closed.
+                error_msg = (
+                    "SECURITY ERROR: Conflicting environment configuration detected. "
+                    "Production environment variables are set but dev mode is also enabled. "
+                    "This could lead to security downgrade. Refusing to continue. "
+                    f"AUDIT_LOG_DEV_MODE={os.getenv('AUDIT_LOG_DEV_MODE', '')}"
+                )
+                logger.critical(error_msg, extra={"operation": "security_config_conflict"})
+                raise CryptoInitializationError(error_msg)
+            
+            # Safe to use dummy provider in dev/test
             if "dummy" in self._instances:
                 return self._instances["dummy"]
 
@@ -772,9 +850,15 @@ class CryptoProviderFactory:
                 settings=settings,
             )
             self._instances["dummy"] = dummy_instance
+            logger.info(
+                "Using DummyCryptoProvider in dev/test mode",
+                extra={"operation": "dummy_provider_dev_mode"}
+            )
             return dummy_instance
 
         # --- Production/Non-Test Path ---
+        # From this point on, we are in production mode (or forced real provider in tests)
+        
         if provider_type_lower in self._instances:
             logger.debug(
                 f"Returning cached instance of {provider_type_lower} crypto provider."
@@ -799,17 +883,15 @@ class CryptoProviderFactory:
         provider_cls = self._registry.get(provider_type_lower)
 
         if not provider_cls:
-            logger.error(
-                f"Crypto provider '{provider_type}' not found in registry. Attempting fallback to 'software'.",
-                extra={"operation": "get_provider_not_found"},
+            # SECURITY: In production, unknown provider type is a configuration error
+            # Do NOT fall back silently - fail fast
+            error_msg = (
+                f"Crypto provider '{provider_type}' not found in registry. "
+                "Valid options are: 'software', 'hsm'. "
+                "Check AUDIT_CRYPTO_PROVIDER_TYPE configuration."
             )
-            provider_cls = self._registry.get("software")
-            if not provider_cls:  # Should not happen if 'software' is always registered
-                error_msg = "Critical: 'software' crypto provider not found in registry for fallback."
-                logger.critical(
-                    error_msg, extra={"operation": "get_provider_no_software_fallback"}
-                )
-                raise CryptoInitializationError(error_msg)
+            logger.critical(error_msg, extra={"operation": "get_provider_not_found"})
+            raise CryptoInitializationError(error_msg)
 
         try:
             # Pass only the accessors and settings, matching the CryptoProvider.__init__ signature
@@ -829,28 +911,41 @@ class CryptoProviderFactory:
             return instance
         except Exception as e:
             error_msg = (
-                f"Critical: Failed to initialize provider '{provider_type}': {e}"
+                f"Failed to initialize provider '{provider_type}': {e}"
             )
             logger.error(error_msg, exc_info=True)
 
-            # Non-test context, attempt fallback or fail fast
+            # SECURITY: In production, we only allow fallback from HSM to software
+            # Never to dummy, and software itself has no fallback
             if provider_type_lower == "software":
-                # No fallback possible from software
-                error_msg = f"Critical: Failed to initialize even the fallback 'software' crypto provider: {e}"
-                logger.critical(
-                    error_msg, extra={"operation": "get_provider_software_init_fail"}
+                # No fallback possible from software - this is fatal
+                critical_msg = (
+                    f"CRITICAL: Failed to initialize 'software' crypto provider: {e}. "
+                    "This is a fatal error. The application cannot provide cryptographic "
+                    "guarantees and must not start. Check configuration and secret access."
                 )
-                raise CryptoInitializationError(error_msg)
+                logger.critical(
+                    critical_msg, 
+                    extra={"operation": "get_provider_software_init_fail"}
+                )
+                raise CryptoInitializationError(critical_msg) from e
 
+            # HSM failed - attempt fallback to software provider
+            # This is the ONLY allowed fallback path in production
+            logger.warning(
+                f"HSM provider initialization failed. Attempting fallback to software provider. "
+                f"Original error: {e}",
+                extra={"operation": "hsm_fallback_to_software"}
+            )
+            
             try:
-                # Attempt fallback to software if primary failed
                 # >>> REFRESH 'software' ENTRY BEFORE FALLBACK <<<
                 if self._registry.get("software") is not SoftwareCryptoProvider:
                     self._registry["software"] = SoftwareCryptoProvider
 
                 if "software" in self._instances:
                     logger.warning(
-                        "Returning cached 'software' crypto provider as a fallback."
+                        "Returning cached 'software' crypto provider as HSM fallback."
                     )
                     return self._instances["software"]
 
