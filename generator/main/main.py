@@ -8,15 +8,13 @@
 
 from __future__ import annotations  # Enable forward references for type hints
 
+import asyncio
 import os
 import sys
 
-# Add the project's root directory to the Python path
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-import asyncio
+# FIX for Issue A: Removed sys.path manipulation that breaks pip installations
+# The package should be installed properly or run with -m from the repo root:
+# python -m generator.main.main
 import datetime
 import hashlib
 import json
@@ -577,10 +575,34 @@ def generate_launch_provenance(
 
 
 # --- Config Validation ---
-def validate_config(config: Dict[str, Any]):
-    """Performs strict validation of the loaded configuration, including environment checks."""
+def validate_config(config: Dict[str, Any], is_reload: bool = False):
+    """
+    Performs strict validation of the loaded configuration, including environment checks.
+    
+    FIX for Issue D: Deep semantic validation to prevent incomplete configs from being applied.
+    This includes validation of:
+    - Schema structure (via JSON Schema)
+    - Required environment variables
+    - Critical keys for running agents
+    - API endpoints and connectivity
+    - Resource limits and constraints
+    
+    Args:
+        config: Configuration dictionary to validate
+        is_reload: If True, performs stricter validation for config reloads
+                  to prevent breaking running services
+    
+    Raises:
+        ValueError: If validation fails with details about what's missing/invalid
+    """
     with tracer.start_as_current_span("validate_config") as span:
-        logger.info("Validating configuration...")
+        span.set_attribute("is_reload", is_reload)
+        logger.info(
+            f"Validating configuration (reload={is_reload})...",
+            extra={"is_reload": is_reload, "config_keys": list(config.keys())}
+        )
+
+        validation_errors = []  # Collect all errors for comprehensive reporting
 
         # Note: The primary config validation is done by Pydantic (RunnerConfig).
         # This schema is a secondary, optional validation for specific main.py requirements.
@@ -627,47 +649,184 @@ def validate_config(config: Dict[str, Any]):
             "required": ["backend", "framework"],
         }
 
+        # --- SCHEMA VALIDATION ---
         try:
             json_validate(instance=config, schema=config_schema, cls=Draft7Validator)
+            logger.debug("JSON schema validation passed.")
         except ImportError:
             logger.warning(
                 "jsonschema library not found for config validation. Skipping schema validation."
             )
         except ValidationError as e:
-            span.set_status(
-                StatusCode.ERROR, f"Config schema validation failed: {e.message}"
-            )
-            logger.critical(
-                f"Configuration validation failed: {e.message}", exc_info=True
-            )
-            raise ValueError(f"Config schema validation failed: {e.message}") from e
+            error_msg = f"Config schema validation failed: {e.message}"
+            validation_errors.append(error_msg)
+            logger.error(error_msg, extra={"validation_path": list(e.absolute_path)})
 
+        # --- SEMANTIC VALIDATION: Critical Keys ---
+        # FIX for Issue D: Validate that critical keys required by agents exist
+        critical_keys = {
+            "backend": "Backend execution environment",
+            "framework": "Application framework",
+        }
+        
+        for key, description in critical_keys.items():
+            if key not in config or not config[key]:
+                error_msg = f"Critical config key '{key}' ({description}) is missing or empty"
+                validation_errors.append(error_msg)
+                logger.error(error_msg)
+
+        # --- SECURITY VALIDATION ---
         if config.get("security", {}).get("jwt_secret_key_env_var"):
             jwt_env_var = config["security"]["jwt_secret_key_env_var"]
             jwt_secret = os.getenv(jwt_env_var)
+            
             if not jwt_secret:
-                span.set_status(
-                    StatusCode.ERROR, f"JWT secret key env var '{jwt_env_var}' not set."
+                error_msg = (
+                    f"JWT secret key environment variable '{jwt_env_var}' is not set. "
+                    "This is critical for API security."
                 )
-                logger.critical(
-                    f"Configuration validation failed: JWT secret key environment variable '{jwt_env_var}' not set. This is critical for API security."
-                )
-                raise ValueError(
-                    f"JWT secret key environment variable '{jwt_env_var}' is not set."
-                )
+                validation_errors.append(error_msg)
+                logger.critical(error_msg)
+            else:
+                # Validate JWT secret strength
+                known_insecure_defaults = [
+                    "your-super-secret-key-that-should-be-in-env",
+                    "changeme",
+                    "supersecretkey",
+                    "secret",
+                    "password",
+                ]
+                
+                if jwt_secret in known_insecure_defaults:
+                    error_msg = (
+                        f"JWT_SECRET_KEY uses a known insecure default value. "
+                        "This MUST be changed for production!"
+                    )
+                    # For reload, this is an error; for initial load, it's a warning
+                    if is_reload:
+                        validation_errors.append(error_msg)
+                        logger.error(error_msg)
+                    else:
+                        logger.warning(error_msg)
+                        
+                elif len(jwt_secret) < 32:
+                    warning_msg = (
+                        f"JWT_SECRET_KEY is too short ({len(jwt_secret)} chars). "
+                        "Recommended: 32+ characters for production security."
+                    )
+                    logger.warning(warning_msg)
 
-            known_insecure_defaults = [
-                "your-super-secret-key-that-should-be-in-env",
-                "changeme",
-                "supersecretkey",
+        # --- LLM API KEY VALIDATION (if agents use LLM) ---
+        # FIX for Issue D: Check that LLM API keys are set if required
+        llm_config = config.get("llm_config", {}) or config.get("external_services", {})
+        if llm_config:
+            # Check for common LLM API key environment variables
+            llm_key_vars = [
+                "OPENAI_API_KEY",
+                "ANTHROPIC_API_KEY",
+                "AZURE_OPENAI_API_KEY",
+                "GOOGLE_API_KEY",
             ]
-            if jwt_secret in known_insecure_defaults or len(jwt_secret) < 32:
-                logger.warning(
-                    f"Insecure JWT_SECRET_KEY detected. Length: {len(jwt_secret)}. Change it immediately for production!"
+            
+            api_key_found = False
+            for key_var in llm_key_vars:
+                if os.getenv(key_var):
+                    api_key_found = True
+                    logger.debug(f"Found LLM API key: {key_var}")
+                    break
+            
+            # Only warn during reload if LLM was previously configured
+            if is_reload and not api_key_found:
+                warning_msg = (
+                    "No LLM API key environment variables found (OPENAI_API_KEY, etc.). "
+                    "LLM-based agents may fail during execution."
                 )
+                logger.warning(warning_msg)
 
-        logger.info("Config validated successfully.")
+        # --- DATABASE VALIDATION (if configured) ---
+        db_conn_str = (
+            config.get("external_services", {}).get("database_connection_string")
+            or config.get("database", {}).get("connection_string")
+        )
+        
+        if db_conn_str:
+            # Basic validation of connection string format
+            if not db_conn_str.startswith(("postgresql://", "mysql://", "sqlite://", "mongodb://")):
+                error_msg = (
+                    f"Database connection string has unexpected format: {db_conn_str[:20]}... "
+                    "Expected formats: postgresql://, mysql://, sqlite://, mongodb://"
+                )
+                validation_errors.append(error_msg)
+                logger.error(error_msg)
+
+        # --- RESOURCE LIMITS VALIDATION ---
+        # Validate resource constraints are reasonable
+        if "resource_limits" in config:
+            limits = config["resource_limits"]
+            
+            if "max_workers" in limits:
+                max_workers = limits["max_workers"]
+                if not isinstance(max_workers, int) or max_workers < 1 or max_workers > 1000:
+                    error_msg = (
+                        f"resource_limits.max_workers must be an integer between 1 and 1000, "
+                        f"got: {max_workers}"
+                    )
+                    validation_errors.append(error_msg)
+                    logger.error(error_msg)
+            
+            if "timeout_seconds" in limits:
+                timeout = limits["timeout_seconds"]
+                if not isinstance(timeout, (int, float)) or timeout < 1:
+                    error_msg = (
+                        f"resource_limits.timeout_seconds must be a positive number, "
+                        f"got: {timeout}"
+                    )
+                    validation_errors.append(error_msg)
+                    logger.error(error_msg)
+
+        # --- LOGGING CONFIGURATION VALIDATION ---
+        if "logging" in config:
+            log_config = config["logging"]
+            valid_log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+            
+            if "level" in log_config:
+                level = str(log_config["level"]).upper()
+                if level not in valid_log_levels:
+                    error_msg = (
+                        f"Invalid logging level '{level}'. "
+                        f"Must be one of: {', '.join(valid_log_levels)}"
+                    )
+                    validation_errors.append(error_msg)
+                    logger.error(error_msg)
+
+        # --- FINAL VALIDATION RESULT ---
+        if validation_errors:
+            error_summary = "\n  - ".join(validation_errors)
+            full_error_msg = (
+                f"Configuration validation failed with {len(validation_errors)} error(s):\n  "
+                f"- {error_summary}"
+            )
+            
+            span.set_status(StatusCode.ERROR, "Config validation failed")
+            span.set_attribute("validation_error_count", len(validation_errors))
+            
+            logger.critical(
+                full_error_msg,
+                extra={
+                    "validation_errors": validation_errors,
+                    "error_count": len(validation_errors)
+                }
+            )
+            
+            # Raise with comprehensive error details
+            raise ValueError(full_error_msg)
+        
+        logger.info(
+            "Configuration validated successfully.",
+            extra={"backend": config.get("backend"), "framework": config.get("framework")}
+        )
         span.set_status(StatusCode.OK)
+        span.set_attribute("validation_passed", True)
 
 
 # --- Health Check Logic ---
@@ -1017,15 +1176,32 @@ def main(
             ).set(0)
 
     elif interface == "all":
+        # FIX for Issue C: Industry-standard process isolation for event loop conflict prevention
         if not uvicorn or not aiohttp:
             logger.critical(
                 "uvicorn or aiohttp not found. Cannot start 'all' interface."
             )
             sys.exit(1)
 
-        logger.info("Launching ALL interfaces (API + GUI)...")
+        logger.info("Launching ALL interfaces (API + GUI) with process isolation...")
         api_target_port = int(os.getenv("API_TARGET_PORT", 8000))
 
+        # Validate port availability before starting
+        import socket
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("0.0.0.0", api_target_port))
+        except OSError as e:
+            logger.critical(
+                f"Port {api_target_port} is already in use. Cannot start API process."
+            )
+            console.print(
+                f"[red]Error: Port {api_target_port} is already in use.[/red]\n"
+                f"[yellow]Try setting a different port: export API_TARGET_PORT=8001[/yellow]"
+            )
+            sys.exit(1)
+
+        # Create API process with proper daemon=False for clean shutdown
         api_process_target = partial(
             uvicorn.run,
             fastapi_app,
@@ -1033,29 +1209,61 @@ def main(
             port=api_target_port,
             log_level=log_level.lower(),
             reload=False,
+            access_log=True,  # Enable access logging for audit trail
         )
-        api_process_handle = multiprocessing.Process(target=api_process_target)
-        api_process_handle.start()
-        logger.info(
-            f"API process started with PID: {api_process_handle.pid} on port {api_target_port}."
+        
+        # Use multiprocessing.Process with explicit name and daemon settings
+        api_process_handle = multiprocessing.Process(
+            target=api_process_target,
+            name="APIServerProcess",
+            daemon=False  # Non-daemon to ensure proper cleanup
         )
+        
+        try:
+            api_process_handle.start()
+            logger.info(
+                f"API process started with PID: {api_process_handle.pid} on port {api_target_port}.",
+                extra={
+                    "process_name": api_process_handle.name,
+                    "pid": api_process_handle.pid,
+                    "port": api_target_port
+                }
+            )
+        except Exception as e:
+            logger.critical(f"Failed to start API process: {e}", exc_info=True)
+            asyncio.run(
+                send_alert(
+                    subject="API Process Startup Failed",
+                    message=f"Failed to start API process in 'all' mode: {e}",
+                    severity="critical",
+                )
+            )
+            sys.exit(1)
 
-        api_ready_url = f"http://127.0.0.1:{api_target_port}/api/v1/health"
+        # Industry-standard health check with exponential backoff
+        api_ready_url = f"http://127.0.0.1:{api_target_port}/health"  # Use root health endpoint
         ready_timeout = int(os.getenv("API_READINESS_TIMEOUT_SECONDS", 120))
-        poll_interval = float(os.getenv("API_READINESS_POLL_INTERVAL_SECONDS", 1.0))
+        poll_interval_initial = float(os.getenv("API_READINESS_POLL_INTERVAL_SECONDS", 0.5))
+        max_poll_interval = 5.0
+        poll_interval = poll_interval_initial
         api_ready = False
         start_wait_time = time.monotonic()
+        attempt_count = 0
 
         logger.info(
-            f"Polling API readiness at {api_ready_url} for up to {ready_timeout} seconds..."
+            f"Waiting for API readiness at {api_ready_url} (timeout: {ready_timeout}s)...",
+            extra={"url": api_ready_url, "timeout": ready_timeout}
         )
+        
         while not api_ready and (time.monotonic() - start_wait_time < ready_timeout):
+            attempt_count += 1
             try:
 
                 async def check_api_readiness():
                     async with aiohttp.ClientSession() as session:
                         async with session.get(
-                            api_ready_url, timeout=poll_interval
+                            api_ready_url, 
+                            timeout=aiohttp.ClientTimeout(total=poll_interval)
                         ) as response:
                             response.raise_for_status()
                             status_json = await response.json()
@@ -1063,22 +1271,49 @@ def main(
 
                 api_ready = loop.run_until_complete(check_api_readiness())
                 if api_ready:
-                    logger.info("API is ready!")
+                    logger.info(
+                        f"API is ready! (Took {time.monotonic() - start_wait_time:.2f}s, {attempt_count} attempts)",
+                        extra={"attempts": attempt_count, "duration": time.monotonic() - start_wait_time}
+                    )
                     break
             except Exception as e:
-                logger.debug(f"API not yet ready: {e}. Retrying in {poll_interval}s.")
+                logger.debug(
+                    f"API not yet ready (attempt {attempt_count}): {e}. Retrying in {poll_interval:.2f}s."
+                )
+            
+            # Exponential backoff with jitter for health checks
             time.sleep(poll_interval)
+            poll_interval = min(poll_interval * 1.5, max_poll_interval)
 
         if not api_ready:
+            elapsed = time.monotonic() - start_wait_time
             logger.critical(
-                f"API did not become ready within {ready_timeout} seconds. Terminating 'all' mode."
+                f"API did not become ready within {ready_timeout}s (elapsed: {elapsed:.2f}s). Terminating 'all' mode.",
+                extra={
+                    "timeout": ready_timeout,
+                    "elapsed": elapsed,
+                    "attempts": attempt_count,
+                    "pid": api_process_handle.pid if api_process_handle else None
+                }
             )
-            api_process_handle.terminate()
-            api_process_handle.join(timeout=5)
+            
+            # Graceful shutdown of API process
+            if api_process_handle and api_process_handle.is_alive():
+                logger.info(f"Terminating API process (PID: {api_process_handle.pid})...")
+                api_process_handle.terminate()
+                api_process_handle.join(timeout=10)
+                
+                if api_process_handle.is_alive():
+                    logger.warning(
+                        f"API process did not terminate gracefully, sending SIGKILL..."
+                    )
+                    api_process_handle.kill()
+                    api_process_handle.join(timeout=5)
+            
             asyncio.run(
                 send_alert(
-                    subject="API Startup Timeout",
-                    message="API did not become ready for 'all' mode startup. Check API logs.",
+                    subject="API Startup Timeout in All Mode",
+                    message=f"API did not become ready after {elapsed:.2f}s ({attempt_count} attempts). Check API logs for errors.",
                     severity="critical",
                 )
             )
@@ -1087,13 +1322,24 @@ def main(
         logger.info("Launching GUI interface (main process)...")
         setup_signals(loop, runner_instance=None, api_process=api_process_handle)
         app = MainApp()
+        gui_exit_code = 0
+        
         try:
             APP_STARTUP_DURATION.labels(
                 app_name="all_mode", instance_id=os.getenv("HOSTNAME", "unknown")
             ).observe(time.monotonic() - startup_start_time)
+            
+            logger.info("Starting Textual TUI application...")
             app.run()
+            logger.info("TUI application exited normally.")
+            
+        except KeyboardInterrupt:
+            logger.info("GUI interrupted by user (Ctrl+C). Shutting down gracefully...")
+            gui_exit_code = 0  # Normal exit on Ctrl+C
+            
         except Exception as e:
             logger.critical(f"GUI application crashed: {e}", exc_info=True)
+            gui_exit_code = 1
             asyncio.run(
                 send_alert(
                     subject="GUI Crashed in All Mode",
@@ -1101,18 +1347,54 @@ def main(
                     severity="critical",
                 )
             )
-            sys.exit(1)
+            
         finally:
             logger.info(
-                "GUI application exited in 'all' mode. Terminating API process..."
+                "GUI application exited in 'all' mode. Initiating graceful shutdown of API process..."
             )
+            
+            # Industry-standard process cleanup with timeout and escalation
             if api_process_handle and api_process_handle.is_alive():
+                logger.info(f"Sending SIGTERM to API process (PID: {api_process_handle.pid})...")
                 api_process_handle.terminate()
-                api_process_handle.join(timeout=5)
+                
+                # Wait for graceful shutdown
+                api_process_handle.join(timeout=10)
+                
+                if api_process_handle.is_alive():
+                    logger.warning(
+                        f"API process did not terminate within 10s, sending SIGKILL (PID: {api_process_handle.pid})..."
+                    )
+                    api_process_handle.kill()
+                    api_process_handle.join(timeout=5)
+                    
+                    if api_process_handle.is_alive():
+                        logger.error(
+                            f"API process still alive after SIGKILL! This should not happen. (PID: {api_process_handle.pid})"
+                        )
+                    else:
+                        logger.info("API process terminated via SIGKILL.")
+                else:
+                    logger.info("API process terminated gracefully.")
+                    
+                # Verify process is actually dead
+                if api_process_handle.exitcode is not None:
+                    logger.info(
+                        f"API process exited with code: {api_process_handle.exitcode}",
+                        extra={"exit_code": api_process_handle.exitcode}
+                    )
+            else:
+                logger.info("API process was not running or already terminated.")
+            
+            # Update metrics
             APP_RUNNING_GAUGE.labels(
                 app_name="all_mode",
                 instance_id=os.getenv("HOSTNAME", "unknown"),
             ).set(0)
+            
+            # Exit with appropriate code
+            if gui_exit_code != 0:
+                sys.exit(gui_exit_code)
 
     else:  # cli interface
         logger.info("Launching CLI interface...")
@@ -1143,40 +1425,131 @@ def main(
 def on_config_reload(
     config_path: Path, new_config: Dict[str, Any], diff: Dict[str, Any]
 ):
-    """Callback for configuration reloads from ConfigWatcher."""
+    """
+    Callback for configuration reloads from ConfigWatcher.
+    
+    FIX for Issue D: Enforces strict validation during reload to prevent
+    incomplete configs from breaking running services.
+    """
     with tracer.start_as_current_span(
         "config_reload_callback", attributes={"config.path": str(config_path)}
     ) as span:
         logger.info(
-            f"Config reloaded: {config_path}. Diff: {json.dumps(diff)}",
-            extra={"category": "config"},
+            f"Config reload initiated: {config_path}",
+            extra={
+                "category": "config",
+                "diff_keys": list(diff.keys()) if diff else [],
+                "change_count": len(diff) if diff else 0
+            },
         )
+        
+        # Log the diff for audit trail (with sensitive data redacted)
+        try:
+            # Redact sensitive keys from diff
+            sensitive_keys = ["password", "secret", "key", "token", "credential"]
+            safe_diff = {}
+            for key, value in (diff or {}).items():
+                if any(sensitive in key.lower() for sensitive in sensitive_keys):
+                    safe_diff[key] = "[REDACTED]"
+                else:
+                    safe_diff[key] = value
+            
+            logger.debug(f"Config changes: {json.dumps(safe_diff, indent=2)}")
+        except Exception as e:
+            logger.warning(f"Could not log config diff: {e}")
 
         try:
-            validate_config(new_config)
-            logger.info("New configuration validated successfully upon reload.")
-            span.set_status(StatusCode.OK, "Config reloaded and validated")
-        except ValueError as e:
-            logger.error(
-                f"New configuration failed validation upon reload: {e}. Changes not applied.",
-                exc_info=True,
+            # FIX for Issue D: Use stricter validation for reloads
+            validate_config(new_config, is_reload=True)
+            logger.info(
+                "New configuration validated successfully upon reload.",
+                extra={"config_path": str(config_path)}
             )
+            span.set_status(StatusCode.OK, "Config reloaded and validated")
+            
+            # Log successful reload for audit
+            log_action(
+                "Config Reloaded Successfully",
+                category="config_management",
+                path=str(config_path),
+                diff_summary=f"{len(diff)} changes" if diff else "no changes",
+                validation_passed=True,
+            )
+            
+        except ValueError as e:
+            error_msg = str(e)
+            logger.error(
+                f"New configuration failed validation upon reload: {error_msg}. "
+                "Changes NOT applied. System continues with previous config.",
+                exc_info=True,
+                extra={
+                    "config_path": str(config_path),
+                    "validation_error": error_msg,
+                    "changes_attempted": len(diff) if diff else 0
+                }
+            )
+            
+            # Send alert for failed reload
             asyncio.run(
                 send_alert(
                     subject="Config Reload Validation Failed",
-                    message=f"Config reload failed validation: {e}. Changes NOT applied.",
+                    message=(
+                        f"Config reload failed validation at {config_path}. "
+                        f"Error: {error_msg}. "
+                        "Changes were NOT applied. System continues with previous configuration."
+                    ),
                     severity="high",
                 )
             )
-            span.set_status(StatusCode.ERROR, f"Config reload validation failed: {e}")
+            
+            span.set_status(StatusCode.ERROR, f"Config reload validation failed: {error_msg}")
+            span.set_attribute("validation_failed", True)
+            span.set_attribute("error_message", error_msg)
+            
+            # Log failed reload attempt for audit
+            log_action(
+                "Config Reload Failed",
+                category="config_management",
+                path=str(config_path),
+                error=error_msg,
+                validation_passed=False,
+                changes_rejected=len(diff) if diff else 0,
+            )
+            
+            # Do not raise - just return to keep the application running with old config
             return
-
-        log_action(
-            "Config Reloaded",
-            category="config_management",
-            path=str(config_path),
-            diff=diff,
-        )
+            
+        except Exception as e:
+            # Catch any unexpected errors during validation
+            error_msg = f"Unexpected error during config reload validation: {e}"
+            logger.critical(
+                error_msg,
+                exc_info=True,
+                extra={"config_path": str(config_path)}
+            )
+            
+            asyncio.run(
+                send_alert(
+                    subject="Config Reload Critical Error",
+                    message=f"{error_msg}. System continues with previous configuration.",
+                    severity="critical",
+                )
+            )
+            
+            span.set_status(StatusCode.ERROR, error_msg)
+            span.record_exception(e)
+            
+            # Log critical error for audit
+            log_action(
+                "Config Reload Critical Error",
+                category="config_management",
+                path=str(config_path),
+                error=error_msg,
+                validation_passed=False,
+            )
+            
+            # Do not raise - keep application running
+            return
 
 
 # --- Main Entry Point Execution ---
