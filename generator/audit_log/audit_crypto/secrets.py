@@ -8,12 +8,14 @@ All sensitive configurations MUST BE retrieved via the configured SECRET_MANAGER
 
 import asyncio
 import base64
+import concurrent.futures
 import logging
 import os
+import threading
 import time
 from abc import ABC, abstractmethod  # For SecretManager ABC
 from collections import defaultdict  # For rate limiting in MockSecretManager
-from typing import Dict, List, Optional
+from typing import Awaitable, Callable, Dict, List, Optional, TypeVar
 
 # Conditional import for AWS Secrets Manager
 try:
@@ -791,15 +793,8 @@ async def aget_kms_master_key_ciphertext_blob() -> bytes:
 # following industry best practices for thread safety, resource management, and
 # security in cryptographic operations.
 
-import concurrent.futures
-import threading
-from typing import Awaitable, Callable, TypeVar
-
 # Type variable for generic return types
 _T = TypeVar("_T")
-
-# Thread-local storage for event loop isolation
-_thread_local = threading.local()
 
 # Global thread pool for sync->async bridging (bounded to prevent resource exhaustion)
 _SYNC_BRIDGE_EXECUTOR: Optional[concurrent.futures.ThreadPoolExecutor] = None
@@ -856,7 +851,9 @@ def _run_coroutine_in_new_loop(coro: Awaitable[_T]) -> _T:
     finally:
         # Proper cleanup: cancel all pending tasks before closing
         try:
-            # Cancel all running tasks
+            # Cancel all running tasks in this specific loop
+            # Note: We pass the loop explicitly because we're in a separate thread
+            # and need to cancel tasks in this specific loop, not the default one
             pending = asyncio.all_tasks(new_loop)
             for task in pending:
                 task.cancel()

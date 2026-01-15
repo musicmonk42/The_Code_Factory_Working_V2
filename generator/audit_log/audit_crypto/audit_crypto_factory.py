@@ -632,6 +632,10 @@ from .audit_crypto_provider import (
     SoftwareCryptoProvider,
 )
 
+# Import centralized environment detection from audit_common
+# (imported here, after audit_crypto_provider, to ensure proper load order)
+from .audit_common import is_production_environment as _is_production_env
+
 
 class DummyCryptoProvider(CryptoProvider):
     """
@@ -665,10 +669,8 @@ class DummyCryptoProvider(CryptoProvider):
         settings: Dynaconf,
     ):
         # SECURITY GUARDRAIL: Verify this is not being used in production
-        python_env = os.getenv("PYTHON_ENV", "").lower()
-        app_env = os.getenv("APP_ENV", "").lower()
-        
-        is_production = python_env == "production" or app_env == "production"
+        # Use centralized environment detection from audit_common
+        is_production = _is_production_env()
         allow_dummy_override = os.getenv("AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER", "").lower() == "true"
         
         if is_production and not allow_dummy_override:
@@ -822,10 +824,8 @@ class CryptoProviderFactory:
         # Production environments (PYTHON_ENV=production) skip this entirely
         if _is_test_or_dev_mode() and not force_real_provider:
             # Extra safety check: verify we're not accidentally in production
-            python_env = os.getenv("PYTHON_ENV", "").lower()
-            app_env = os.getenv("APP_ENV", "").lower()
-            
-            if python_env == "production" or app_env == "production":
+            # Use centralized environment detection from audit_common
+            if _is_production_env():
                 # This is a CRITICAL security guardrail
                 # If we reach here, something is misconfigured - dev mode flags are set
                 # but production env vars are also set. Fail closed.
@@ -833,7 +833,6 @@ class CryptoProviderFactory:
                     "SECURITY ERROR: Conflicting environment configuration detected. "
                     "Production environment variables are set but dev mode is also enabled. "
                     "This could lead to security downgrade. Refusing to continue. "
-                    f"PYTHON_ENV={python_env}, APP_ENV={app_env}, "
                     f"AUDIT_LOG_DEV_MODE={os.getenv('AUDIT_LOG_DEV_MODE', '')}"
                 )
                 logger.critical(error_msg, extra={"operation": "security_config_conflict"})
