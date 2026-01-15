@@ -126,6 +126,95 @@ class WorkflowError(GeneratorPluginError):
     pass
 
 
+class ConfigurationError(GeneratorPluginError):
+    """Raised when critical agents or configurations are missing.
+    
+    This error indicates a fatal misconfiguration that prevents the workflow
+    from executing. In production environments, this should halt startup
+    rather than allowing silent degradation.
+    """
+
+    pass
+
+
+class AgentUnavailableError(GeneratorPluginError):
+    """Raised when a required agent is not available in the plugin registry.
+    
+    This error is raised when the orchestrator attempts to use an agent
+    that failed to load or was not registered. This prevents silent failures
+    and NoneType errors during workflow execution.
+    """
+
+    pass
+
+
+# --- Agent Validation Utilities ---
+# These utilities ensure fail-fast behavior for missing critical agents
+
+# Define which agents are required vs optional for the workflow
+REQUIRED_AGENTS = frozenset({"codegen_agent", "critique_agent", "testgen_agent", "deploy_agent", "docgen_agent"})
+OPTIONAL_AGENTS = frozenset({"clarifier"})
+
+
+def validate_agent_available(agent_name: str, agent: object) -> None:
+    """Validate that an agent is available and callable.
+    
+    Args:
+        agent_name: The name of the agent being validated.
+        agent: The agent object retrieved from the registry.
+        
+    Raises:
+        AgentUnavailableError: If the agent is None or not callable.
+    """
+    if agent is None:
+        raise AgentUnavailableError(
+            f"Critical agent '{agent_name}' is not available in the plugin registry. "
+            f"This may indicate a failed import, missing dependency, or configuration error. "
+            f"Check the agent's __init__.py for import errors and ensure all dependencies are installed."
+        )
+    if not callable(agent):
+        raise AgentUnavailableError(
+            f"Agent '{agent_name}' was found but is not callable (type: {type(agent).__name__}). "
+            f"Expected an async callable function or class with __call__ method."
+        )
+
+
+def validate_required_agents(registry: object) -> dict:
+    """Validate all required agents are available at startup.
+    
+    This function should be called during workflow initialization to ensure
+    fail-fast behavior rather than discovering missing agents mid-workflow.
+    
+    Args:
+        registry: The plugin registry to check for agents.
+        
+    Returns:
+        A dict mapping agent names to their callables.
+        
+    Raises:
+        ConfigurationError: If any required agent is missing.
+    """
+    missing_agents = []
+    agents = {}
+    
+    for agent_name in REQUIRED_AGENTS:
+        agent = registry.get(agent_name)
+        if agent is None:
+            missing_agents.append(agent_name)
+        else:
+            agents[agent_name] = agent
+    
+    if missing_agents:
+        raise ConfigurationError(
+            f"Critical workflow agents are missing from the plugin registry: {', '.join(sorted(missing_agents))}. "
+            f"The generator workflow cannot execute without these agents. "
+            f"Please check agent initialization logs and ensure all dependencies are properly installed. "
+            f"Required agents: {', '.join(sorted(REQUIRED_AGENTS))}"
+        )
+    
+    return agents
+
+
 # Pydantic models for validation
 class WorkflowInput(BaseModel):
     requirements: Dict[str, Any] = Field(
@@ -216,7 +305,23 @@ async def run_generator_workflow(
 ) -> Dict[str, Any]:
     """
     Orchestrates the full Generator pipeline: clarify -> code -> critique -> tests -> deploy -> docs.
+    
     This version calls agents via the PLUGIN_REGISTRY for better decoupling and maintainability.
+    All critical agents are validated before workflow execution to ensure fail-fast behavior
+    rather than silent failures mid-workflow.
+    
+    Args:
+        requirements: Natural language requirements from README.
+        config: Configuration for workflow execution.
+        repo_path: The local path to the codebase repository.
+        ambiguities: A list of ambiguous statements found in requirements.
+        
+    Returns:
+        A WorkflowOutput dict containing status, correlation_id, final_results, errors, and timestamp.
+        
+    Raises:
+        ConfigurationError: If critical agents are missing from the registry (not caught).
+        AgentUnavailableError: If a required agent is None or not callable (not caught).
     """
     correlation_id = str(uuid.uuid4())
     start_time = time.time()
@@ -236,6 +341,27 @@ async def run_generator_workflow(
             )
             span.set_attribute("workflow_start", datetime.now(timezone.utc).isoformat())
 
+            # --- CRITICAL: Validate all required agents are available BEFORE workflow starts ---
+            # This ensures fail-fast behavior rather than discovering missing agents mid-workflow.
+            # ConfigurationError is intentionally NOT caught here - it should propagate up.
+            logger.debug(f"Validating required agents [Correlation ID: {correlation_id}]")
+            try:
+                validated_agents = validate_required_agents(PLUGIN_REGISTRY)
+                logger.info(
+                    f"All required agents validated successfully [Correlation ID: {correlation_id}]: "
+                    f"{', '.join(sorted(validated_agents.keys()))}"
+                )
+            except ConfigurationError as config_err:
+                # Log the configuration error with full details for operators
+                logger.critical(
+                    f"FATAL: Workflow cannot start due to missing critical agents "
+                    f"[Correlation ID: {correlation_id}]: {config_err}"
+                )
+                span.set_attribute("workflow_status", "configuration_error")
+                span.record_exception(config_err)
+                # Re-raise to ensure the caller knows this is a fatal configuration issue
+                raise
+
             # --- State dictionary to pass between stages ---
             workflow_state = {
                 "requirements": input_data.requirements,
@@ -249,25 +375,38 @@ async def run_generator_workflow(
                 "documentation": {},
             }
 
-            # --- 1. Clarification Stage ---
+            # --- 1. Clarification Stage (Optional) ---
+            # Clarifier is optional - workflow continues if it's not available
             clarifier = PLUGIN_REGISTRY.get("clarifier")
             if clarifier and workflow_state["ambiguities"]:
-                with workflow_latency.labels(
-                    stage="clarify", correlation_id=correlation_id
-                ).time():
-                    clarified_result = await clarifier(
-                        requirements=workflow_state["requirements"],
-                        ambiguities=workflow_state["ambiguities"],
+                if not callable(clarifier):
+                    logger.warning(
+                        f"Clarifier agent found but not callable, skipping clarification "
+                        f"[Correlation ID: {correlation_id}]"
                     )
-                    workflow_state["requirements"] = clarified_result.get(
-                        "requirements", workflow_state["requirements"]
-                    )
-                    logger.info(
-                        f"Clarification stage complete [Correlation ID: {correlation_id}]"
-                    )
+                else:
+                    with workflow_latency.labels(
+                        stage="clarify", correlation_id=correlation_id
+                    ).time():
+                        clarified_result = await clarifier(
+                            requirements=workflow_state["requirements"],
+                            ambiguities=workflow_state["ambiguities"],
+                        )
+                        workflow_state["requirements"] = clarified_result.get(
+                            "requirements", workflow_state["requirements"]
+                        )
+                        logger.info(
+                            f"Clarification stage complete [Correlation ID: {correlation_id}]"
+                        )
+            elif workflow_state["ambiguities"] and not clarifier:
+                logger.warning(
+                    f"Ambiguities present but clarifier agent not available, proceeding without clarification "
+                    f"[Correlation ID: {correlation_id}]"
+                )
 
-            # --- 2. Code Generation Stage ---
-            codegen = PLUGIN_REGISTRY.get("codegen_agent")
+            # --- 2. Code Generation Stage (Required) ---
+            codegen = validated_agents["codegen_agent"]
+            validate_agent_available("codegen_agent", codegen)  # Double-check before use
             with workflow_latency.labels(
                 stage="codegen", correlation_id=correlation_id
             ).time():
@@ -283,8 +422,9 @@ async def run_generator_workflow(
                     f"Code generation stage complete [Correlation ID: {correlation_id}]"
                 )
 
-            # --- 3. Critique Stage ---
-            critiquer = PLUGIN_REGISTRY.get("critique_agent")
+            # --- 3. Critique Stage (Required) ---
+            critiquer = validated_agents["critique_agent"]
+            validate_agent_available("critique_agent", critiquer)  # Double-check before use
             with workflow_latency.labels(
                 stage="critique", correlation_id=correlation_id
             ).time():
@@ -300,8 +440,9 @@ async def run_generator_workflow(
                     f"Critique stage complete [Correlation ID: {correlation_id}]"
                 )
 
-            # --- 4. Test Generation Stage ---
-            testgen = PLUGIN_REGISTRY.get("testgen_agent")
+            # --- 4. Test Generation Stage (Required) ---
+            testgen = validated_agents["testgen_agent"]
+            validate_agent_available("testgen_agent", testgen)  # Double-check before use
             with workflow_latency.labels(
                 stage="testgen", correlation_id=correlation_id
             ).time():
@@ -314,8 +455,9 @@ async def run_generator_workflow(
                     f"Test generation stage complete [Correlation ID: {correlation_id}]"
                 )
 
-            # --- 5. Deployment Artifact Generation Stage ---
-            deployer = PLUGIN_REGISTRY.get("deploy_agent")
+            # --- 5. Deployment Artifact Generation Stage (Required) ---
+            deployer = validated_agents["deploy_agent"]
+            validate_agent_available("deploy_agent", deployer)  # Double-check before use
             with workflow_latency.labels(
                 stage="deploy", correlation_id=correlation_id
             ).time():
@@ -330,8 +472,9 @@ async def run_generator_workflow(
                     f"Deployment artifact generation stage complete [Correlation ID: {correlation_id}]"
                 )
 
-            # --- 6. Documentation Generation Stage ---
-            docgen = PLUGIN_REGISTRY.get("docgen_agent")
+            # --- 6. Documentation Generation Stage (Required) ---
+            docgen = validated_agents["docgen_agent"]
+            validate_agent_available("docgen_agent", docgen)  # Double-check before use
             with workflow_latency.labels(
                 stage="docgen", correlation_id=correlation_id
             ).time():
@@ -361,6 +504,26 @@ async def run_generator_workflow(
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
             return output.model_dump()
+
+        except (ConfigurationError, AgentUnavailableError) as e:
+            # CRITICAL: Configuration errors should NOT be silently caught.
+            # These indicate fatal misconfiguration that requires operator intervention.
+            # We log, record metrics, but then RE-RAISE to ensure the caller knows.
+            workflow_errors.labels(
+                correlation_id=correlation_id, 
+                stage="configuration", 
+                error_type=type(e).__name__
+            ).inc()
+            logger.critical(
+                f"FATAL CONFIGURATION ERROR: {e} [Correlation ID: {correlation_id}]. "
+                f"This error indicates missing critical agents and requires operator intervention.",
+                exc_info=True,
+            )
+            span.record_exception(e)
+            span.set_attribute("workflow_status", "configuration_error")
+            # Re-raise configuration errors - these should NOT return a "failed" response
+            # because they indicate a system-level issue, not a workflow-level failure.
+            raise
 
         except (
             PydanticValidationError,
@@ -424,4 +587,10 @@ __all__ = [
     "GeneratorPluginError",
     "ValidationError",
     "WorkflowError",
+    "ConfigurationError",
+    "AgentUnavailableError",
+    "validate_agent_available",
+    "validate_required_agents",
+    "REQUIRED_AGENTS",
+    "OPTIONAL_AGENTS",
 ]
