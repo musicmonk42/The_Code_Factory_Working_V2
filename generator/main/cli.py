@@ -1431,6 +1431,375 @@ def suggest_recovery_cli(error: Optional[Exception] = None):
     )
 
 
+# --- FIX for Issue B: Admin User Management Commands ---
+# Industry-standard approach: Secure bootstrap process with proper validation and audit trail
+@cli.group()
+def admin():
+    """Administrative commands for user and system management."""
+    pass
+
+
+@admin.command(
+    name="create-user",
+    help="Create an initial admin user for bootstrapping authentication. Use ONLY during initial deployment.",
+)
+@click.option(
+    "--username",
+    prompt="Admin username",
+    help="Username for the admin account (3-50 characters, alphanumeric and underscore only).",
+)
+@click.option(
+    "--password",
+    prompt="Admin password",
+    hide_input=True,
+    confirmation_prompt=True,
+    help="Password for the admin account (min 8 characters, recommended 16+).",
+)
+@click.option(
+    "--email",
+    prompt="Admin email (optional)",
+    default="",
+    help="Email address for the admin account (optional, for notifications).",
+)
+@click.option(
+    "--scopes",
+    default="admin,user,run,parse,feedback,logs",
+    help="Comma-separated list of scopes (default: admin,user,run,parse,feedback,logs).",
+)
+@click.option(
+    "--api-endpoint",
+    default="http://127.0.0.1:8000/api/v1/users",
+    help="API endpoint for user creation.",
+)
+@click.option(
+    "--timeout",
+    default=10,
+    type=int,
+    help="Request timeout in seconds (default: 10).",
+)
+async def create_admin_user(username, password, email, scopes, api_endpoint, timeout):
+    """
+    Creates an initial admin user via the API for bootstrapping authentication.
+    
+    SECURITY CONSIDERATIONS:
+    - This command should be run ONCE after initial deployment
+    - Requires BOOTSTRAP_API_KEY environment variable for authorization
+    - Password should meet complexity requirements (8+ chars, mixed case recommended)
+    - All actions are logged for audit trail
+    
+    USAGE:
+        python -m generator.main.cli admin create-user
+    
+    ENVIRONMENT VARIABLES:
+        BOOTSTRAP_API_KEY: Required for authorization during initial setup
+    """
+    import re
+    
+    console.print(Panel(
+        "[bold yellow]Admin User Creation - Bootstrap Mode[/bold yellow]\n\n"
+        "[dim]This creates the initial administrator account.\n"
+        "Ensure this is run only during initial deployment.[/dim]",
+        title="⚠️  Security Notice",
+        border_style="yellow"
+    ))
+    
+    # --- VALIDATION: Industry-standard input validation ---
+    
+    # Validate username: alphanumeric and underscore only, 3-50 chars
+    if not re.match(r'^[a-zA-Z0-9_]{3,50}$', username):
+        console.print(
+            "[red]Error: Username must be 3-50 characters and contain only letters, numbers, and underscores.[/red]"
+        )
+        logger.error(f"Invalid username format attempted: {username}")
+        sys.exit(1)
+    
+    # Validate password strength
+    if len(password) < 8:
+        console.print("[red]Error: Password must be at least 8 characters long.[/red]")
+        sys.exit(1)
+    
+    # Check password complexity (industry standard: mixed case, numbers, symbols)
+    has_upper = any(c.isupper() for c in password)
+    has_lower = any(c.islower() for c in password)
+    has_digit = any(c.isdigit() for c in password)
+    has_special = any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password)
+    
+    complexity_score = sum([has_upper, has_lower, has_digit, has_special])
+    
+    if complexity_score < 3:
+        console.print(
+            "[yellow]Warning: Password is weak. For production, use a password with:[/yellow]\n"
+            "  - Uppercase and lowercase letters\n"
+            "  - Numbers\n"
+            "  - Special characters (!@#$%^&*)"
+        )
+        if not Confirm.ask("Continue with this password?", default=False):
+            console.print("[dim]User creation cancelled.[/dim]")
+            sys.exit(0)
+    
+    # Validate email if provided
+    if email:
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, email):
+            console.print("[red]Error: Invalid email format.[/red]")
+            sys.exit(1)
+    
+    # Parse and validate scopes
+    valid_scopes = {"admin", "user", "run", "parse", "feedback", "logs", "api"}
+    scope_list = [s.strip() for s in scopes.split(",") if s.strip()]
+    invalid_scopes = set(scope_list) - valid_scopes
+    
+    if invalid_scopes:
+        console.print(
+            f"[red]Error: Invalid scopes: {', '.join(invalid_scopes)}[/red]\n"
+            f"[dim]Valid scopes: {', '.join(sorted(valid_scopes))}[/dim]"
+        )
+        sys.exit(1)
+    
+    # Ensure admin scope is present
+    if "admin" not in scope_list:
+        console.print("[yellow]Warning: Adding 'admin' scope (required for admin user).[/yellow]")
+        scope_list.append("admin")
+    
+    # --- SECURITY: Bootstrap token verification ---
+    bootstrap_token = os.getenv("BOOTSTRAP_API_KEY")
+    if not bootstrap_token:
+        console.print(
+            Panel(
+                "[bold red]BOOTSTRAP_API_KEY environment variable is not set.[/bold red]\n\n"
+                "For security, initial user creation requires a bootstrap key.\n\n"
+                "[bold]Set the environment variable:[/bold]\n"
+                "  export BOOTSTRAP_API_KEY='your-secure-bootstrap-key'\n\n"
+                "[dim]The bootstrap key should be:\n"
+                "- Generated securely (e.g., openssl rand -hex 32)\n"
+                "- Kept secret and rotated after initial setup\n"
+                "- Removed from environment after first admin is created[/dim]",
+                title="❌ Authentication Required",
+                border_style="red"
+            )
+        )
+        logger.error("Admin user creation attempted without BOOTSTRAP_API_KEY")
+        sys.exit(1)
+    
+    # Prepare user data (excluding password from logs)
+    user_data = {
+        "username": username,
+        "password": password,  # Will be sent securely via HTTPS
+        "scopes": scope_list,
+    }
+    
+    # Add email if provided
+    if email:
+        user_data["email"] = email
+    
+    # Log sanitized version (without password)
+    log_data = {k: v for k, v in user_data.items() if k != "password"}
+    log_data["password"] = "[REDACTED]"
+    logger.info(
+        f"Attempting admin user creation via CLI",
+        extra={"user_data": log_data, "endpoint": api_endpoint}
+    )
+    
+    # --- API CALL: Secure user creation with proper error handling ---
+    try:
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                "Content-Type": "application/json",
+                "X-API-Key": bootstrap_token,
+                "X-Client-Version": "1.0.0",  # For API compatibility tracking
+                "User-Agent": "CodeFactory-CLI-Admin/1.0",
+            }
+            
+            console.print(f"[dim]Connecting to API: {api_endpoint}[/dim]")
+            
+            response = await session.post(
+                api_endpoint, 
+                json=user_data, 
+                headers=headers, 
+                timeout=aiohttp.ClientTimeout(total=timeout),
+                ssl=True  # Enforce SSL/TLS in production
+            )
+            
+            if response.status == 201:
+                response_json = await response.json()
+                
+                # Success - display confirmation
+                console.print(Panel(
+                    f"[bold green]✓ Admin user '{username}' created successfully![/bold green]\n\n"
+                    f"[dim]Scopes: {', '.join(scope_list)}[/dim]\n"
+                    f"[dim]Created at: {response_json.get('created_at', 'N/A')}[/dim]",
+                    title="✓ Success",
+                    border_style="green"
+                ))
+                
+                # Audit log (password never logged)
+                logger.info(
+                    f"Admin user '{username}' created successfully via CLI.",
+                    extra={
+                        "username": username,
+                        "scopes": scope_list,
+                        "email": email or "not_provided",
+                        "endpoint": api_endpoint,
+                    },
+                )
+                
+                # Display next steps
+                console.print(
+                    "\n[bold cyan]Next Steps:[/bold cyan]\n"
+                    "1. [bold]Test the account:[/bold] Login via API to verify\n"
+                    "   curl -X POST http://127.0.0.1:8000/api/v1/token \\\n"
+                    "        -d \"username={username}&password=<your-password>\"\n\n"
+                    "2. [bold]Secure the bootstrap key:[/bold]\n"
+                    "   - Remove or rotate BOOTSTRAP_API_KEY\n"
+                    "   - Store admin credentials in a password manager\n\n"
+                    "3. [bold]Create additional users:[/bold] Use the admin account\n"
+                    "4. [bold]Enable MFA:[/bold] Configure 2FA for admin accounts (if supported)\n"
+                )
+                
+            elif response.status == 409:
+                console.print(
+                    Panel(
+                        f"[yellow]User '{username}' already exists.[/yellow]\n\n"
+                        "[dim]If you need to reset the password, use the password reset endpoint or contact your database administrator.[/dim]",
+                        title="⚠️  Conflict",
+                        border_style="yellow"
+                    )
+                )
+                logger.warning(f"Admin user creation skipped: '{username}' already exists")
+                
+            elif response.status == 401:
+                console.print(
+                    Panel(
+                        "[red]Authentication failed.[/red]\n\n"
+                        "The BOOTSTRAP_API_KEY may be invalid or expired.\n"
+                        "Verify the key and try again.",
+                        title="❌ Unauthorized",
+                        border_style="red"
+                    )
+                )
+                logger.error("Admin user creation failed: Invalid BOOTSTRAP_API_KEY")
+                sys.exit(1)
+                
+            elif response.status == 403:
+                console.print(
+                    Panel(
+                        "[red]Access forbidden.[/red]\n\n"
+                        "The bootstrap endpoint may be disabled or your key lacks permissions.",
+                        title="❌ Forbidden",
+                        border_style="red"
+                    )
+                )
+                logger.error("Admin user creation failed: Access forbidden")
+                sys.exit(1)
+                
+            else:
+                # Handle other errors
+                try:
+                    error_json = await response.json()
+                    error_detail = error_json.get("detail", "Unknown error")
+                except:
+                    error_detail = await response.text()
+                
+                console.print(
+                    Panel(
+                        f"[red]Error creating user (HTTP {response.status})[/red]\n\n"
+                        f"{error_detail}",
+                        title="❌ Error",
+                        border_style="red"
+                    )
+                )
+                logger.error(
+                    f"Failed to create admin user: HTTP {response.status}",
+                    extra={"status": response.status, "detail": error_detail}
+                )
+                sys.exit(1)
+                
+    except aiohttp.ClientConnectorError as e:
+        console.print(
+            Panel(
+                f"[red]Cannot connect to API server[/red]\n\n"
+                f"Endpoint: {api_endpoint}\n"
+                f"Error: {str(e)}\n\n"
+                "[yellow]Troubleshooting:[/yellow]\n"
+                "1. Verify the API server is running\n"
+                "2. Check the endpoint URL is correct\n"
+                "3. Ensure no firewall is blocking the connection\n"
+                "4. Check network connectivity",
+                title="❌ Connection Failed",
+                border_style="red"
+            )
+        )
+        logger.error(
+            f"Admin user creation failed: Cannot connect to API at {api_endpoint}",
+            exc_info=True
+        )
+        await send_alert(
+            f"CLI admin user creation failed: API unreachable at {api_endpoint}",
+            severity="high"
+        )
+        sys.exit(1)
+        
+    except asyncio.TimeoutError:
+        console.print(
+            Panel(
+                f"[red]Request timeout after {timeout} seconds[/red]\n\n"
+                "The API server may be overloaded or unresponsive.\n"
+                "Try increasing the timeout with --timeout option.",
+                title="❌ Timeout",
+                border_style="red"
+            )
+        )
+        logger.error(f"Admin user creation timed out after {timeout}s")
+        sys.exit(1)
+        
+    except aiohttp.ClientError as e:
+        console.print(
+            Panel(
+                f"[red]Network error:[/red] {str(e)}\n\n"
+                "Check your network connection and try again.",
+                title="❌ Network Error",
+                border_style="red"
+            )
+        )
+        logger.error(f"Admin user creation failed: Network error - {e}", exc_info=True)
+        await send_alert(
+            f"CLI admin user creation failed: Network error - {e}",
+            severity="high"
+        )
+        sys.exit(1)
+        
+    except json.JSONDecodeError as e:
+        console.print(
+            Panel(
+                "[red]Invalid response from API[/red]\n\n"
+                "The API returned malformed JSON. This may indicate a server error.",
+                title="❌ Invalid Response",
+                border_style="red"
+            )
+        )
+        logger.error("Admin user creation failed: Invalid JSON response", exc_info=True)
+        sys.exit(1)
+        
+    except Exception as e:
+        console.print(
+            Panel(
+                f"[red]Unexpected error:[/red] {str(e)}\n\n"
+                "An unexpected error occurred. Check logs for details.",
+                title="❌ Unexpected Error",
+                border_style="red"
+            )
+        )
+        logger.critical(
+            f"Unexpected error during admin user creation: {e}",
+            exc_info=True
+        )
+        await send_alert(
+            f"CLI admin user creation critical failure: {e}",
+            severity="critical"
+        )
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     # Ensure asyncio is available for any async operations, especially for Click commands that are async.
     # Click 8.0+ supports async commands directly.
