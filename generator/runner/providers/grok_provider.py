@@ -66,11 +66,13 @@ class GrokProvider(LLMProvider):
         if not api_key:
             # --- FIX: Pass 'error_code' and 'detail' keywords ---
             raise ConfigurationError(
-                detail="GrokProvider initialized without an API key.",
                 error_code="CONFIG_INIT_KEY_MISSING",
+                detail="GrokProvider initialized without an API key.",
             )
 
         self.api_key = api_key
+        # NOTE: Using OpenAI's cl100k_base tokenizer as an approximation for Grok.
+        # While reasonably accurate, this may not exactly match xAI's tokenization.
         self.tokenizer = tiktoken.get_encoding("cl100k_base")  # Approximate tokenizer
         self.custom_models: Dict[str, Dict[str, Any]] = {}
         self.pre_hooks: List[Callable[[str], str]] = []
@@ -283,6 +285,11 @@ class GrokProvider(LLMProvider):
     async def count_tokens(self, text: str, model: str) -> int:
         """
         Count tokens using approximate tokenizer (cl100k_base).
+        
+        WARNING: This uses OpenAI's tiktoken (cl100k_base) as an approximation
+        for Grok models. While this is reasonably accurate, it may not match
+        the exact tokenization used by xAI's Grok models, potentially leading
+        to slight discrepancies in token budgeting and cost estimation.
         """
         # Kept async signature for consistency
         return await asyncio.to_thread(lambda: len(self.tokenizer.encode(text)))
@@ -318,8 +325,8 @@ def get_provider():
         # This error will be caught by the llm_plugin_manager
         # --- FIX: Pass 'error_code' and 'detail' keywords ---
         raise ConfigurationError(
-            detail="GROK_API_KEY environment variable or runner config not set.",
             error_code="CONFIG_LOAD_KEY_MISSING",
+            detail="GROK_API_KEY environment variable or runner config not set.",
         )
 
     return GrokProvider(api_key=API_KEY)

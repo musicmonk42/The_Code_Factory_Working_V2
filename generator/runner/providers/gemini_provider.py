@@ -94,11 +94,6 @@ from runner.runner_metrics import stream_chunk_latency, stream_chunks_total
 
 # --- END FIX ---
 
-# --- FIX: REMOVE LOCAL DEFINITIONS ---
-# stream_chunks_total = Counter('llm_stream_chunks_total', 'Total number of stream chunks', ['model'])
-# stream_chunk_latency = Histogram('llm_stream_chunk_latency_seconds', 'Latency per stream chunk in seconds', ['model'])
-# --- END FIX ---
-
 
 class GeminiProvider(LLMProvider):
     """
@@ -120,15 +115,15 @@ class GeminiProvider(LLMProvider):
         if not HAS_GEMINI:
             # --- FIX: Pass 'error_code' and 'detail' keywords ---
             raise ConfigurationError(
-                detail="Gemini provider configured but SDK (google-generativeai) is missing.",
                 error_code="CONFIG_SDK_MISSING",
+                detail="Gemini provider configured but SDK (google-generativeai) is missing.",
             )
 
         if not api_key:
             # --- FIX: Pass 'error_code' and 'detail' keywords ---
             raise ConfigurationError(
-                detail="GeminiProvider initialized without an API key.",
                 error_code="CONFIG_INIT_KEY_MISSING",
+                detail="GeminiProvider initialized without an API key.",
             )
 
         self.api_key = api_key
@@ -138,8 +133,8 @@ class GeminiProvider(LLMProvider):
         except Exception as e:
             # --- FIX: Pass 'error_code' and 'detail' keywords ---
             raise ConfigurationError(
-                detail=f"Failed to configure Gemini SDK: {e}",
                 error_code="CONFIG_SDK_FAILURE",
+                detail=f"Failed to configure Gemini SDK: {e}",
             )
 
         self.custom_models: Dict[str, str] = (
@@ -367,16 +362,16 @@ def get_provider():
         logger.error("Google GenerativeAI SDK not found. Skipping GeminiProvider.")
         # --- FIX: Pass 'error_code' and 'detail' keywords ---
         raise ConfigurationError(
-            detail="Google GenerativeAI SDK not found. Please run 'pip install google-generativeai'.",
             error_code="CONFIG_SDK_MISSING",
+            detail="Google GenerativeAI SDK not found. Please run 'pip install google-generativeai'.",
         )
 
     if not API_KEY:
         # This error will be caught by the llm_plugin_manager
         # --- FIX: Pass 'error_code' and 'detail' keywords ---
         raise ConfigurationError(
-            detail="GEMINI_API_KEY environment variable or runner config not set.",
             error_code="CONFIG_LOAD_KEY_MISSING",
+            detail="GEMINI_API_KEY environment variable or runner config not set.",
         )
 
     return GeminiProvider(api_key=API_KEY)
