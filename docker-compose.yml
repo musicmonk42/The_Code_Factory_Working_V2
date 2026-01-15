@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Redis for message bus and caching
   redis:
@@ -36,7 +34,7 @@ services:
   #   restart: unless-stopped
 
   # Unified Code Factory Platform
-  # Note: All three modules (generator, omnicore_engine, self_fixing_engineer) 
+  # Note: All three modules (generator, omnicore_engine, self_fixing_engineer)
   # are part of a single unified platform and are built together.
   codefactory:
     build:

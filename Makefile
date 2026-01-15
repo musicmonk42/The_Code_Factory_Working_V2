@@ -110,7 +110,7 @@ docker-build: ## Build all Docker images
 
 docker-up: ## Start all services with Docker Compose
 	@echo "$(BLUE)Starting Docker Compose services...$(NC)"
-	docker-compose up -d
+	docker compose up -d
 	@echo "$(GREEN)Services started!$(NC)"
 	@echo "$(YELLOW)Generator: http://localhost:8000$(NC)"
 	@echo "$(YELLOW)OmniCore: http://localhost:8001$(NC)"
@@ -119,15 +119,15 @@ docker-up: ## Start all services with Docker Compose
 
 docker-down: ## Stop all Docker Compose services
 	@echo "$(BLUE)Stopping Docker Compose services...$(NC)"
-	docker-compose down
+	docker compose down
 	@echo "$(GREEN)Services stopped!$(NC)"
 
 docker-logs: ## Show Docker Compose logs
-	docker-compose logs -f
+	docker compose logs -f
 
 docker-clean: ## Remove all Docker containers, images, and volumes
 	@echo "$(RED)Cleaning Docker resources...$(NC)"
-	docker-compose down -v
+	docker compose down -v
 	docker system prune -af
 	@echo "$(GREEN)Docker resources cleaned!$(NC)"
 
