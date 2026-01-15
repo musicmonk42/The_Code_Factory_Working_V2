@@ -100,7 +100,7 @@ def load_private_key(path_or_envvar):
         env_var_name = path_or_envvar[4:]  # Remove "env:" prefix
         key_data = os.getenv(env_var_name)
         if not key_data:
-            raise ValueError(f"Environment variable '{env_var_name}' not found or empty")
+            raise ValueError("Environment variable for private key not found or empty")
         key_data = key_data.encode('utf-8')
     else:
         # Treat as file path

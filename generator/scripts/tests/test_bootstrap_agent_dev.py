@@ -1,12 +1,7 @@
 """Tests for bootstrap_agent_dev.py"""
 import os
 import tempfile
-import shutil
 from pathlib import Path
-import sys
-
-# Add parent directory to path to import bootstrap_agent_dev
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
