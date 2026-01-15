@@ -146,6 +146,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    logger.info(f"Mounted static files from {static_dir}")
+else:
+    logger.warning(f"Static directory not found: {static_dir}")
+
 
 # Exception handlers
 @app.exception_handler(Exception)

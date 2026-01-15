@@ -151,7 +151,7 @@ def count_lines_of_code():
             if file.endswith(".py"):
                 file_path = os.path.join(root, file)
                 with open(file_path, 'r') as f:
-                    lines = len(f.readlines())
+                    lines = sum(1 for line in f)
                     total_lines += lines
                     total_files += 1
     

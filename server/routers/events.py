@@ -28,6 +28,8 @@ def get_omnicore_service() -> OmniCoreService:
 
 
 # Active WebSocket connections
+# Note: In production with multiple workers, use a shared connection manager
+# (e.g., Redis pub/sub) instead of a global list
 active_connections: list[WebSocket] = []
 
 
