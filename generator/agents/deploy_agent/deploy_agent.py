@@ -467,10 +467,70 @@ class DeployAgent:
         self.post_gen_hooks: List[Callable[[Any, str], Awaitable[Any]]] = []
 
         self.last_result: Optional[Dict[str, Any]] = None
+        
+        # Track initialization state
+        self._db_initialized = False
+
+    # --- Async Context Manager Support ---
+    # This ensures _init_db() is automatically called when using 'async with'
+    
+    async def __aenter__(self) -> "DeployAgent":
+        """Async context manager entry - initializes the database.
+        
+        Usage:
+            async with DeployAgent(repo_path) as agent:
+                result = await agent.generate_documentation(...)
+        
+        This eliminates the need for manual _init_db() calls and prevents
+        race conditions where database operations are attempted before
+        initialization.
+        """
+        await self._init_db()
+        self._db_initialized = True
+        logger.info(
+            f"DeployAgent initialized via context manager [run_id: {self.run_id}]"
+        )
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit - cleanup resources.
+        
+        Currently a no-op since aiosqlite manages its own connections,
+        but provides a hook for future cleanup needs.
+        """
+        # Log if we're exiting due to an exception
+        if exc_type is not None:
+            logger.warning(
+                f"DeployAgent context exiting due to exception: {exc_type.__name__}: {exc_val} "
+                f"[run_id: {self.run_id}]"
+            )
+        else:
+            logger.debug(f"DeployAgent context exiting normally [run_id: {self.run_id}]")
+        
+        # No explicit cleanup needed - aiosqlite manages connections
+        return None  # Don't suppress exceptions
 
     # --- persistence ------------------------------------------------
     # --- FIX: Convert to async with aiosqlite ---
     async def _init_db(self) -> None:
+        """Initialize the SQLite database for history persistence.
+        
+        This method is idempotent - it can be called multiple times safely.
+        It is automatically called when using the agent as an async context manager.
+        
+        Manual call is still supported for backwards compatibility:
+            agent = DeployAgent(repo_path)
+            await agent._init_db()  # Manual init
+        
+        Preferred usage (auto-init):
+            async with DeployAgent(repo_path) as agent:
+                # Database is automatically initialized
+                pass
+        """
+        if self._db_initialized:
+            logger.debug("Database already initialized, skipping")
+            return
+            
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """
@@ -482,17 +542,76 @@ class DeployAgent:
                 """
             )
             await db.commit()
+        
+        self._db_initialized = True
+        logger.debug(f"Database initialized at {self.db_path}")
+
+    def _ensure_db_initialized(self) -> None:
+        """Check that the database has been initialized.
+        
+        Raises:
+            RuntimeError: If the database has not been initialized.
+        """
+        if not self._db_initialized:
+            raise RuntimeError(
+                "DeployAgent database not initialized. Either use 'async with DeployAgent(...) as agent:' "
+                "or call 'await agent._init_db()' before performing database operations."
+            )
 
     # -------------------------------------------
 
     # --- FIX: Convert to async with aiosqlite ---
     async def get_previous_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        """Get a previous run result from the database.
+        
+        Args:
+            run_id: The unique identifier of the run to retrieve.
+            
+        Returns:
+            The run result dict, or None if not found.
+            
+        Raises:
+            RuntimeError: If the database has not been initialized.
+        """
+        self._ensure_db_initialized()
+        
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
                 "SELECT result FROM history WHERE id=?", (run_id,)
             ) as cursor:
                 row = await cursor.fetchone()
                 return json.loads(row[0]) if row else None
+
+    async def _save_to_history(self, run_id: str, timestamp: str, result: Dict[str, Any]) -> None:
+        """Save a run result to the history database.
+        
+        This method ensures the database is initialized before saving.
+        If the database is not initialized, it will attempt to initialize it.
+        
+        Args:
+            run_id: The unique identifier for this run.
+            timestamp: ISO format timestamp string.
+            result: The result dict to save.
+        """
+        # Auto-initialize if not already done (backwards compatibility)
+        if not self._db_initialized:
+            logger.warning(
+                "Database not initialized when saving to history. "
+                "Auto-initializing. For best practice, use 'async with DeployAgent(...) as agent:'"
+            )
+            await self._init_db()
+        
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute(
+                    "INSERT INTO history (id, timestamp, result) VALUES (?, ?, ?)",
+                    (run_id, timestamp, json.dumps(result)),
+                )
+                await db.commit()
+            logger.debug(f"Saved run {run_id} to history database")
+        except Exception as e:
+            logger.error(f"Failed to save run {run_id} to history: {e}", exc_info=True)
+            # Don't raise - history saving failure shouldn't break the workflow
 
     # -------------------------------------------
 
@@ -914,18 +1033,8 @@ Respond in plain prose only (no JSON / no code fences).
                 self.last_result = result
                 self.history.append(result)
 
-                # --- FIX: Convert to async with aiosqlite ---
-                async with aiosqlite.connect(self.db_path) as db:
-                    await db.execute(
-                        "INSERT INTO history (id, timestamp, result) VALUES (?, ?, ?)",
-                        (
-                            self.run_id,
-                            result["timestamp"],
-                            json.dumps(result),
-                        ),
-                    )
-                    await db.commit()
-                # -------------------------------------------
+                # Save to history database using helper method
+                await self._save_to_history(self.run_id, result["timestamp"], result)
 
                 span.set_status(Status(StatusCode.OK, "Pipeline completed"))
                 return result
@@ -955,18 +1064,8 @@ Respond in plain prose only (no JSON / no code fences).
                     "timestamp": datetime.now().isoformat(),
                     "status": "failed_pipeline",
                 }
-                # --- FIX: Convert to async with aiosqlite ---
-                async with aiosqlite.connect(self.db_path) as db:
-                    await db.execute(
-                        "INSERT INTO history (id, timestamp, result) VALUES (?, ?, ?)",
-                        (
-                            self.run_id,
-                            err["timestamp"],
-                            json.dumps(err),
-                        ),
-                    )
-                    await db.commit()
-                # -------------------------------------------
+                # Save error to history database
+                await self._save_to_history(self.run_id, err["timestamp"], err)
                 raise
 
     # --- run_deployment ---------------------------------------------
@@ -1069,18 +1168,8 @@ Respond in plain prose only (no JSON / no code fences).
 
                 self.last_result = result
                 self.history.append(result)
-                # --- FIX: Convert to async with aiosqlite ---
-                async with aiosqlite.connect(self.db_path) as db:
-                    await db.execute(
-                        "INSERT INTO history (id, timestamp, result) VALUES (?, ?, ?)",
-                        (
-                            self.run_id,
-                            result["timestamp"],
-                            json.dumps(result),
-                        ),
-                    )
-                    await db.commit()
-                # -------------------------------------------
+                # Save to history database using helper method
+                await self._save_to_history(self.run_id, result["timestamp"], result)
 
                 DEPLOY_RUNS.labels(status="success").inc()
                 DEPLOY_LATENCY.observe(time.time() - start)
@@ -1347,18 +1436,9 @@ Propose corrected configurations as JSON keyed by target.
                         self.last_result = healed
                         self.history.append(healed)
 
-                        # --- FIX: Convert to async with aiosqlite ---
-                        async with aiosqlite.connect(self.db_path) as db:
-                            await db.execute(
-                                "INSERT INTO history (id, timestamp, result) VALUES (?, ?, ?)",
-                                (
-                                    f"{self.run_id}_healed_{int(time.time())}",
-                                    healed["timestamp"],
-                                    json.dumps(healed),
-                                ),
-                            )
-                            await db.commit()
-                        # -------------------------------------------
+                        # Save healed result to history
+                        healed_run_id = f"{self.run_id}_healed_{int(time.time())}"
+                        await self._save_to_history(healed_run_id, healed["timestamp"], healed)
                         return healed
                 except Exception as e:  # pragma: no cover
                     logger.warning(
@@ -1562,18 +1642,16 @@ async def _main_async() -> None:
     )
     args = parser.parse_args()
 
-    agent = DeployAgent(args.repo)
-    # --- FIX 4: Await _init_db after instantiation ---
-    await agent._init_db()
-    # ---------------------------------------------
-    result = await agent.generate_documentation(
-        target_files=args.files,
-        targets=args.targets,
-        doc_type="CLI_DEMO",
-        human_approval=False,
-    )
-    report = await agent.generate_report(result)
-    print(report)
+    # Use async context manager for automatic DB initialization
+    async with DeployAgent(args.repo) as agent:
+        result = await agent.generate_documentation(
+            target_files=args.files,
+            targets=args.targets,
+            doc_type="CLI_DEMO",
+            human_approval=False,
+        )
+        report = await agent.generate_report(result)
+        print(report)
 
 
 def main() -> None:
