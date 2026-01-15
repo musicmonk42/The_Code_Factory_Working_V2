@@ -29,10 +29,17 @@ import aiofiles
 import pytest
 import pytest_asyncio
 from agents.generator_plugin_wrapper import (
+    AgentUnavailableError,
+    ConfigurationError,
     GeneratorPluginError,
+    OPTIONAL_AGENTS,
+    REQUIRED_AGENTS,
+    ValidationError,
     WorkflowError,
     WorkflowOutput,
     run_generator_workflow,
+    validate_agent_available,
+    validate_required_agents,
 )
 from faker import Faker
 from freezegun import freeze_time
@@ -386,6 +393,106 @@ class TestGeneratorPluginWrapper:
         assert "Persistent error" in output.errors[0]
         # Verify it was only called once (no retry happened because exception was caught)
         assert call_count["count"] == 1
+
+
+class TestAgentValidation:
+    """Test suite for agent validation utilities."""
+
+    def test_validate_agent_available_with_none(self):
+        """Test that validate_agent_available raises for None agent."""
+        with pytest.raises(AgentUnavailableError) as exc_info:
+            validate_agent_available("test_agent", None)
+        
+        assert "test_agent" in str(exc_info.value)
+        assert "not available" in str(exc_info.value)
+
+    def test_validate_agent_available_with_non_callable(self):
+        """Test that validate_agent_available raises for non-callable agent."""
+        with pytest.raises(AgentUnavailableError) as exc_info:
+            validate_agent_available("test_agent", "not_callable")
+        
+        assert "test_agent" in str(exc_info.value)
+        assert "not callable" in str(exc_info.value)
+
+    def test_validate_agent_available_with_callable(self):
+        """Test that validate_agent_available passes for callable agent."""
+        async def mock_agent():
+            pass
+        
+        # Should not raise
+        validate_agent_available("test_agent", mock_agent)
+
+    def test_validate_required_agents_all_present(self):
+        """Test validate_required_agents when all agents are present."""
+        mock_registry = MagicMock()
+        mock_registry.get.side_effect = lambda name: AsyncMock() if name in REQUIRED_AGENTS else None
+        
+        agents = validate_required_agents(mock_registry)
+        
+        assert len(agents) == len(REQUIRED_AGENTS)
+        for agent_name in REQUIRED_AGENTS:
+            assert agent_name in agents
+
+    def test_validate_required_agents_missing_one(self):
+        """Test validate_required_agents raises when an agent is missing."""
+        mock_registry = MagicMock()
+        
+        def get_agent(name):
+            if name == "codegen_agent":
+                return None  # Missing
+            return AsyncMock()
+        
+        mock_registry.get.side_effect = get_agent
+        
+        with pytest.raises(ConfigurationError) as exc_info:
+            validate_required_agents(mock_registry)
+        
+        assert "codegen_agent" in str(exc_info.value)
+        assert "missing" in str(exc_info.value).lower()
+
+    def test_validate_required_agents_all_missing(self):
+        """Test validate_required_agents raises when all agents are missing."""
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = None
+        
+        with pytest.raises(ConfigurationError) as exc_info:
+            validate_required_agents(mock_registry)
+        
+        # Should list all missing agents
+        for agent_name in REQUIRED_AGENTS:
+            assert agent_name in str(exc_info.value)
+
+    def test_required_agents_constant(self):
+        """Test that REQUIRED_AGENTS contains expected agent names."""
+        expected_agents = {"codegen_agent", "critique_agent", "testgen_agent", "deploy_agent", "docgen_agent"}
+        assert REQUIRED_AGENTS == expected_agents
+
+    def test_optional_agents_constant(self):
+        """Test that OPTIONAL_AGENTS contains expected agent names."""
+        expected_optional = {"clarifier"}
+        assert OPTIONAL_AGENTS == expected_optional
+
+    @pytest.mark.asyncio
+    async def test_workflow_raises_configuration_error_on_missing_agents(
+        self, test_repository, mock_metrics
+    ):
+        """Test that workflow raises ConfigurationError when agents are missing."""
+        # Create a mock registry that returns None for all agents
+        with patch("agents.generator_plugin_wrapper.PLUGIN_REGISTRY") as mock_registry:
+            mock_registry.get.return_value = None
+            
+            requirements = {"description": "Test"}
+            config = {}
+            repo_path = str(test_repository)
+            ambiguities = []
+
+            with pytest.raises(ConfigurationError):
+                await run_generator_workflow(
+                    requirements=requirements,
+                    config=config,
+                    repo_path=repo_path,
+                    ambiguities=ambiguities,
+                )
 
 
 # ============================================================================

@@ -57,6 +57,10 @@ class SecurityScannerUnavailableError(Exception):
     pass
 
 
+# Counter for tracking audit logging failures (for compliance monitoring)
+_AUDIT_LOG_FAILURE_COUNT = 0
+
+
 try:  # Prefer real runner logging if available
     # --- FIX: Changed import to be relative ---
     from ...runner.runner_logging import log_audit_event as _runner_log_audit_event
@@ -66,10 +70,16 @@ except ImportError:  # Fallback stub
     def _runner_log_audit_event(
         event_type: str, payload: Dict[str, Any] | None = None
     ) -> None:
-        logger.warning(
-            "AUDIT LOG UNAVAILABLE: Using stub log_audit_event (runner not available). "
-            "Audit events will NOT be recorded. event_type=%s",
+        global _AUDIT_LOG_FAILURE_COUNT
+        _AUDIT_LOG_FAILURE_COUNT += 1
+        
+        # Log at ERROR level - audit trail loss is a serious compliance concern
+        logger.error(
+            "AUDIT LOG UNAVAILABLE [COMPLIANCE RISK]: Audit event NOT recorded. "
+            "This is a compliance violation in production. "
+            "event_type=%s, failure_count=%d",
             event_type,
+            _AUDIT_LOG_FAILURE_COUNT,
         )
 
 
@@ -230,6 +240,28 @@ def get_security_scanner_status() -> Dict[str, Any]:
         )
     
     return status
+
+
+def get_audit_log_failure_count() -> int:
+    """Get the count of audit logging failures.
+    
+    This is useful for compliance monitoring and alerting.
+    A non-zero count indicates audit events have been lost,
+    which is a serious compliance concern.
+    
+    Returns:
+        The number of audit logging failures since module load.
+    """
+    return _AUDIT_LOG_FAILURE_COUNT
+
+
+def is_audit_logging_available() -> bool:
+    """Check if the real audit logging is available.
+    
+    Returns:
+        True if real runner audit logging is available, False if using stub.
+    """
+    return not _USING_STUB_AUDIT_LOG
 
 
 # ==============================================================================

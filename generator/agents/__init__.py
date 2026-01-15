@@ -261,7 +261,9 @@ def validate_agents_for_production(required_agents: Optional[List[str]] = None) 
         error_details = []
         for agent_name in missing:
             error_msg = _AGENT_IMPORT_ERRORS.get(agent_name, "Unknown error")
-            error_details.append(f"  - {agent_name}: {error_msg.split(chr(10))[0]}")
+            # Get just the first line of the error for the summary
+            first_line = error_msg.split('\n')[0]
+            error_details.append(f"  - {agent_name}: {first_line}")
         
         raise AgentLoadError(
             f"Critical agents failed to load: {', '.join(missing)}. "

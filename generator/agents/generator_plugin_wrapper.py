@@ -405,8 +405,8 @@ async def run_generator_workflow(
                 )
 
             # --- 2. Code Generation Stage (Required) ---
+            # Note: Agents are already validated by validate_required_agents() above
             codegen = validated_agents["codegen_agent"]
-            validate_agent_available("codegen_agent", codegen)  # Double-check before use
             with workflow_latency.labels(
                 stage="codegen", correlation_id=correlation_id
             ).time():
@@ -424,7 +424,6 @@ async def run_generator_workflow(
 
             # --- 3. Critique Stage (Required) ---
             critiquer = validated_agents["critique_agent"]
-            validate_agent_available("critique_agent", critiquer)  # Double-check before use
             with workflow_latency.labels(
                 stage="critique", correlation_id=correlation_id
             ).time():
@@ -442,7 +441,6 @@ async def run_generator_workflow(
 
             # --- 4. Test Generation Stage (Required) ---
             testgen = validated_agents["testgen_agent"]
-            validate_agent_available("testgen_agent", testgen)  # Double-check before use
             with workflow_latency.labels(
                 stage="testgen", correlation_id=correlation_id
             ).time():
@@ -457,7 +455,6 @@ async def run_generator_workflow(
 
             # --- 5. Deployment Artifact Generation Stage (Required) ---
             deployer = validated_agents["deploy_agent"]
-            validate_agent_available("deploy_agent", deployer)  # Double-check before use
             with workflow_latency.labels(
                 stage="deploy", correlation_id=correlation_id
             ).time():
@@ -474,7 +471,6 @@ async def run_generator_workflow(
 
             # --- 6. Documentation Generation Stage (Required) ---
             docgen = validated_agents["docgen_agent"]
-            validate_agent_available("docgen_agent", docgen)  # Double-check before use
             with workflow_latency.labels(
                 stage="docgen", correlation_id=correlation_id
             ).time():
