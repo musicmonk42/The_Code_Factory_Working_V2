@@ -1,19 +1,69 @@
 # omnicore_engine/database/models.py
 """
 SQLAlchemy ORM models for the Omnicore Omega Pro Engine.
-Uses joined-table inheritance from the `arbiter` package.
+Uses joined-table inheritance from the `arbiter` package when available.
 All models are fully type-annotated and compatible with SQLAlchemy 2.0+.
+
+DEFENSIVE IMPORT STRATEGY:
+- Attempts to import Base and ArbiterAgentState from arbiter package
+- Falls back to creating standalone models if arbiter is unavailable
+- This allows omnicore_engine to run independently for testing/development
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-# Import the EXACT Base and parent model from arbiter
-from arbiter.agent_state import AgentState as ArbiterAgentState
-from arbiter.agent_state import Base
 from sqlalchemy import JSON, Float, ForeignKey, Index, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, declarative_base
+
+# DEFENSIVE IMPORT: Try to import from arbiter, fall back to standalone mode
+_ARBITER_AVAILABLE = False
+_Base = None
+_ArbiterAgentState = None
+
+try:
+    from arbiter.agent_state import AgentState as ArbiterAgentState
+    from arbiter.agent_state import Base
+    _ARBITER_AVAILABLE = True
+    _Base = Base
+    _ArbiterAgentState = ArbiterAgentState
+    import logging
+    logging.getLogger(__name__).info("Successfully imported arbiter.agent_state - using joined-table inheritance")
+except ImportError as e:
+    import logging
+    logging.getLogger(__name__).warning(
+        f"Could not import arbiter.agent_state ({e}). "
+        "Running in standalone mode with independent Base class. "
+        "Joined-table inheritance will not be available."
+    )
+    # Create standalone Base for testing/development without arbiter
+    _Base = declarative_base()
+    
+    # Create minimal standalone ArbiterAgentState replacement
+    class _StandaloneAgentState(_Base):
+        """
+        Standalone replacement for ArbiterAgentState when arbiter package is unavailable.
+        Provides minimal compatible interface for testing and development.
+        """
+        __tablename__ = "agent_state"
+        
+        id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+        name: Mapped[str] = mapped_column(String, nullable=False)
+        x: Mapped[float] = mapped_column(Float, default=0.0)
+        y: Mapped[float] = mapped_column(Float, default=0.0)
+        energy: Mapped[float] = mapped_column(Float, default=100.0)
+        world_size: Mapped[int] = mapped_column(Integer, default=100)
+        agent_type: Mapped[str] = mapped_column(String, nullable=False)
+        
+        def __repr__(self) -> str:
+            return f"<AgentState(id={self.id}, name={self.name}, type={self.agent_type})>"
+    
+    _ArbiterAgentState = _StandaloneAgentState
+
+# Export for use in this module
+Base = _Base
+ArbiterAgentState = _ArbiterAgentState
 
 
 # ----------------------------------------------------------------------

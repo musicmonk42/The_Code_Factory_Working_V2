@@ -15,19 +15,11 @@ from pydantic import BaseModel, Field
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-# --- BEGIN SOLUTION (Corrected Path) ---
-# Force Python to find the local 'self_fixing_engineer' package
-# This resolves import conflicts when running from the project root.
-_project_root = Path(__file__).parent.parent  # This is The_Code_Factory-master
-_arbiter_path = _project_root / "self_fixing_engineer"
-if _arbiter_path.exists() and str(_arbiter_path) not in sys.path:
-    sys.path.insert(0, str(_arbiter_path))
-
-# Add generator to sys.path for discoverability
-_generator_path = _project_root / "generator"
-if _generator_path.exists() and str(_generator_path) not in sys.path:
-    sys.path.insert(0, str(_generator_path))
-# --- END SOLUTION ---
+# REMOVED: sys.path manipulation (path hacking)
+# The code now relies on proper package installation and PYTHONPATH configuration.
+# For development, ensure the project root is in PYTHONPATH or install in editable mode:
+#   pip install -e .
+# This makes imports predictable and consistent across different environments.
 
 import ast
 import importlib
@@ -1040,6 +1032,10 @@ class PluginRegistry:
 
         self.logger.info(f"Scanning directory '{directory}' for plugins...")
 
+        # NOTE: Adding plugin directory to sys.path is necessary for dynamic plugin loading.
+        # This is different from the removed sys.path hacking that was manipulating parent directories.
+        # This addition is scoped to the specific plugin directory and allows importlib to load
+        # plugin modules dynamically at runtime.
         if str(plugin_dir_path) not in sys.path:
             sys.path.insert(0, str(plugin_dir_path))
 
