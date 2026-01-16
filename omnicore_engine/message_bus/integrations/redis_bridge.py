@@ -15,15 +15,18 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 try:
     import redis.asyncio as redis
     from redis.asyncio import PubSub, Redis
-    from redis.exceptions import ConnectionError, TimeoutError
+    from redis.exceptions import ConnectionError as RedisLibConnectionError
+    from redis.exceptions import TimeoutError as RedisLibTimeoutError
+    _REDIS_AVAILABLE = True
 except ImportError:
     # Use standard library logging for initial import failure
     logging.warning("Redis dependencies not found. RedisBridge will be unavailable.")
     redis = None
     Redis = None
     PubSub = None
-    ConnectionError = type("MockConnectionError", (Exception,), {})
-    TimeoutError = type("MockTimeoutError", (Exception,), {})
+    RedisLibConnectionError = None
+    RedisLibTimeoutError = None
+    _REDIS_AVAILABLE = False
 
 
 from pydantic import BaseModel, Field
@@ -32,6 +35,11 @@ from omnicore_engine.core import safe_serialize
 
 from ..message_types import Message
 from ..resilience import CircuitBreaker  # Assumes resilience.py is available
+from ..exceptions import (
+    RedisConnectionError,
+    RedisTimeoutError,
+    OmniCoreConnectionError,
+)
 
 # Optional Prometheus metrics
 try:
@@ -152,6 +160,16 @@ def _metrics_inc_dedup_hit() -> None:
             pass
 
 
+def _is_redis_connection_error(e: Exception) -> bool:
+    """Check if exception is a Redis connection error."""
+    return _REDIS_AVAILABLE and RedisLibConnectionError and isinstance(e, RedisLibConnectionError)
+
+
+def _is_redis_timeout_error(e: Exception) -> bool:
+    """Check if exception is a Redis timeout error."""
+    return _REDIS_AVAILABLE and RedisLibTimeoutError and isinstance(e, RedisLibTimeoutError)
+
+
 # --- Handler Type ---
 MessageHandler = Callable[[str, Message], Awaitable[None]]  # topic, message
 
@@ -181,9 +199,10 @@ class RedisBridge:
         config: RedisBridgeConfig,
         circuit_breaker: CircuitBreaker,
     ):
-        if redis is None:
-            raise RuntimeError(
-                "RedisBridge requires 'redis-py' with asyncio support. Please install it."
+        if not _REDIS_AVAILABLE:
+            raise RedisConnectionError(
+                "RedisBridge requires 'redis-py' with asyncio support. Please install it.",
+                redis_url=config.REDIS_URL
             )
 
         self.message_bus = message_bus
@@ -251,9 +270,21 @@ class RedisBridge:
                 "RedisBridge started successfully.",
                 topics=list(self._subscribed_topics),
             )
-        except (ConnectionError, TimeoutError) as e:
+        except Exception as e:
             self.circuit.record_failure()
-            logger.error(f"Failed to start RedisBridge due to connection error: {e}")
+            # Map Redis library exceptions to our unified exceptions
+            if _REDIS_AVAILABLE and RedisLibConnectionError and isinstance(e, RedisLibConnectionError):
+                raise RedisConnectionError(
+                    f"Failed to connect to Redis: {e}",
+                    redis_url=self.cfg.REDIS_URL
+                ) from e
+            elif _REDIS_AVAILABLE and RedisLibTimeoutError and isinstance(e, RedisLibTimeoutError):
+                raise RedisTimeoutError(
+                    f"Redis connection timeout: {e}",
+                    operation="start"
+                ) from e
+            else:
+                logger.error(f"Failed to start RedisBridge: {e}", exc_info=True)
             raise
         except Exception as e:
             logger.error(f"Unexpected error starting RedisBridge: {e}", exc_info=True)
@@ -317,22 +348,22 @@ class RedisBridge:
                 trace_id=message.trace_id,
             )
             return True
-        except (ConnectionError, TimeoutError) as e:
-            self.circuit.record_failure()
-            _metrics_inc_publish("conn_fail", message.topic)
-            logger.error(
-                f"Redis publish failed due to connection/timeout error: {e}",
-                topic=message.topic,
-            )
-            return False
         except Exception as e:
             self.circuit.record_failure()
-            _metrics_inc_publish("error", message.topic)
-            logger.error(
-                f"Unexpected error during Redis publish: {e}",
-                topic=message.topic,
-                exc_info=True,
-            )
+            _metrics_inc_publish("conn_fail", message.topic)
+            
+            # Log appropriate error message based on exception type
+            if _is_redis_connection_error(e) or _is_redis_timeout_error(e):
+                logger.error(
+                    f"Redis publish failed due to connection/timeout error: {e}",
+                    topic=message.topic,
+                )
+            else:
+                logger.error(
+                    f"Unexpected error during Redis publish: {e}",
+                    topic=message.topic,
+                    exc_info=True,
+                )
             return False
 
     async def publish_dlq(self, message: Message, original_error: str) -> bool:
@@ -452,15 +483,17 @@ class RedisBridge:
 
             except asyncio.TimeoutError:
                 continue  # Expected on timeout
-            except (ConnectionError, TimeoutError) as e:
-                self.circuit.record_failure()
-                logger.warning(f"Redis listener connection issue: {e}. Retrying...")
-                await asyncio.sleep(1)
             except Exception as e:
-                logger.error(
-                    f"Unexpected error in Redis listener loop: {e}", exc_info=True
-                )
-                await asyncio.sleep(1)
+                # Handle Redis connection/timeout errors
+                if _is_redis_connection_error(e) or _is_redis_timeout_error(e):
+                    self.circuit.record_failure()
+                    logger.warning(f"Redis listener connection issue: {e}. Retrying...")
+                    await asyncio.sleep(1)
+                else:
+                    logger.error(
+                        f"Unexpected error in Redis listener loop: {e}", exc_info=True
+                    )
+                    await asyncio.sleep(1)
 
         logger.info("Redis listener loop exited.")
 
@@ -520,16 +553,10 @@ class RedisBridge:
                 _metrics_inc_dedup_hit()
             self.circuit.record_success()
             return exists > 0
-        except (ConnectionError, TimeoutError) as e:
+        except Exception as e:
             self.circuit.record_failure()
             logger.error(f"Redis dedup check failed: {e}")
             return False  # Conservative fail: assume not seen if Redis is down
-        except Exception as e:
-            self.circuit.record_failure()
-            logger.error(
-                f"Unexpected error during Redis dedup check: {e}", exc_info=True
-            )
-            return False
 
     async def set_dedup_cache(self, key: str, value: str) -> None:
         """Sets an idempotency key in the shared Redis cache with a TTL."""
@@ -541,12 +568,9 @@ class RedisBridge:
                 self._dedup_key(key), value, ex=self.cfg.DEDUP_KEY_TTL_SECONDS
             )
             self.circuit.record_success()
-        except (ConnectionError, TimeoutError) as e:
-            self.circuit.record_failure()
-            logger.error(f"Redis dedup set failed: {e}")
         except Exception as e:
             self.circuit.record_failure()
-            logger.error(f"Unexpected error during Redis dedup set: {e}", exc_info=True)
+            logger.error(f"Redis dedup set failed: {e}")
 
     def _dedup_key(self, key: str) -> str:
         """Generates a namespaced key for deduplication."""
