@@ -23,7 +23,8 @@ import sqlalchemy
 from circuitbreaker import circuit
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import SecretStr
-from sqlalchemy import delete, insert, select, text
+from sqlalchemy import delete, insert, select, text, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -2391,47 +2392,154 @@ class Database:
 
     async def save_generator_state(self, agent_id: str, data: Dict[str, Any]):
         """
-        Save state for a generator agent.
+        Save or update state for a generator agent using UPSERT logic.
+        
+        FIXED: Previous implementation always inserted new rows with default coordinates,
+        resetting agent positions on every save. Now uses SQLite's ON CONFLICT clause
+        to update existing records or insert new ones.
+        
+        Also creates an audit record for state changes (Bug C fix).
 
         Uses module-level constants for default values: DEFAULT_AGENT_X, DEFAULT_AGENT_Y,
         DEFAULT_AGENT_ENERGY, and DEFAULT_AGENT_WORLD_SIZE.
         """
         async with self.AsyncSessionLocal() as session:
-            stmt = insert(GeneratorAgentState).values(
+            # First, check if agent exists to determine if this is create or update
+            result = await session.execute(
+                select(GeneratorAgentState).where(GeneratorAgentState.id == agent_id)
+            )
+            existing_agent = result.scalar_one_or_none()
+            is_update = existing_agent is not None
+            
+            # Use SQLite's INSERT ... ON CONFLICT for upsert
+            # This preserves existing coordinates and only updates changed fields
+            stmt = sqlite_insert(GeneratorAgentState).values(
                 id=agent_id,
-                name="generator",
-                x=DEFAULT_AGENT_X,
-                y=DEFAULT_AGENT_Y,
-                energy=DEFAULT_AGENT_ENERGY,
-                world_size=DEFAULT_AGENT_WORLD_SIZE,
+                name=data.get("name", "generator"),
+                x=data.get("x", DEFAULT_AGENT_X),
+                y=data.get("y", DEFAULT_AGENT_Y),
+                energy=data.get("energy", DEFAULT_AGENT_ENERGY),
+                world_size=data.get("world_size", DEFAULT_AGENT_WORLD_SIZE),
                 agent_type="generator",
                 generated_code=data.get("code"),
                 test_results=data.get("tests"),
                 deployment_config=data.get("deployment"),
                 docs=data.get("docs"),
             )
+            
+            # On conflict (duplicate id), update only the fields that changed
+            # Preserve x, y, energy unless explicitly provided in data
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['id'],
+                set_={
+                    'name': stmt.excluded.name,
+                    'x': stmt.excluded.x if 'x' in data else GeneratorAgentState.x,
+                    'y': stmt.excluded.y if 'y' in data else GeneratorAgentState.y,
+                    'energy': stmt.excluded.energy if 'energy' in data else GeneratorAgentState.energy,
+                    'world_size': stmt.excluded.world_size if 'world_size' in data else GeneratorAgentState.world_size,
+                    'generated_code': stmt.excluded.generated_code,
+                    'test_results': stmt.excluded.test_results,
+                    'deployment_config': stmt.excluded.deployment_config,
+                    'docs': stmt.excluded.docs,
+                }
+            )
+            
             await session.execute(stmt)
             await session.commit()
+            
+            # BUG C FIX: Create audit record for state change
+            try:
+                audit_record = {
+                    'uuid': str(uuid.uuid4()),
+                    'kind': 'agent_state_change',
+                    'name': f'generator_agent_{agent_id}',
+                    'detail': json.dumps({
+                        'action': 'update' if is_update else 'create',
+                        'agent_id': agent_id,
+                        'agent_type': 'generator',
+                        'changed_fields': list(data.keys()),
+                    }),
+                    'ts': time.time(),
+                    'hash': hashlib.sha256(f"{agent_id}_{time.time()}".encode()).hexdigest(),
+                    'agent_id': agent_id,
+                    'context': json.dumps({'operation': 'save_generator_state'}),
+                }
+                await self.save_audit_record(audit_record)
+            except Exception as e:
+                logger.warning(f"Failed to create audit record for generator state change: {e}")
+                # Don't fail the state save if audit fails
 
     async def save_sfe_state(self, agent_id: str, data: Dict[str, Any]):
         """
-        Save state for a self-fixing engineer agent.
+        Save or update state for a self-fixing engineer agent using UPSERT logic.
+        
+        FIXED: Previous implementation always inserted new rows with default coordinates,
+        resetting agent positions on every save. Now uses SQLite's ON CONFLICT clause
+        to update existing records or insert new ones.
+        
+        Also creates an audit record for state changes (Bug C fix).
 
         Uses module-level constants for default values: DEFAULT_AGENT_X, DEFAULT_AGENT_Y,
         DEFAULT_AGENT_ENERGY, and DEFAULT_AGENT_WORLD_SIZE.
         """
         async with self.AsyncSessionLocal() as session:
-            stmt = insert(SFEAgentState).values(
+            # First, check if agent exists to determine if this is create or update
+            result = await session.execute(
+                select(SFEAgentState).where(SFEAgentState.id == agent_id)
+            )
+            existing_agent = result.scalar_one_or_none()
+            is_update = existing_agent is not None
+            
+            # Use SQLite's INSERT ... ON CONFLICT for upsert
+            stmt = sqlite_insert(SFEAgentState).values(
                 id=agent_id,
-                name="sfe",
-                x=DEFAULT_AGENT_X,
-                y=DEFAULT_AGENT_Y,
-                energy=DEFAULT_AGENT_ENERGY,
-                world_size=DEFAULT_AGENT_WORLD_SIZE,
+                name=data.get("name", "sfe"),
+                x=data.get("x", DEFAULT_AGENT_X),
+                y=data.get("y", DEFAULT_AGENT_Y),
+                energy=data.get("energy", DEFAULT_AGENT_ENERGY),
+                world_size=data.get("world_size", DEFAULT_AGENT_WORLD_SIZE),
                 agent_type="sfe",
                 fixed_code=data.get("fixed_code"),
                 analysis_report=data.get("analysis"),
                 trust_score=data.get("trust_score"),
             )
+            
+            # On conflict (duplicate id), update only the fields that changed
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['id'],
+                set_={
+                    'name': stmt.excluded.name,
+                    'x': stmt.excluded.x if 'x' in data else SFEAgentState.x,
+                    'y': stmt.excluded.y if 'y' in data else SFEAgentState.y,
+                    'energy': stmt.excluded.energy if 'energy' in data else SFEAgentState.energy,
+                    'world_size': stmt.excluded.world_size if 'world_size' in data else SFEAgentState.world_size,
+                    'fixed_code': stmt.excluded.fixed_code,
+                    'analysis_report': stmt.excluded.analysis_report,
+                    'trust_score': stmt.excluded.trust_score,
+                }
+            )
+            
             await session.execute(stmt)
             await session.commit()
+            
+            # BUG C FIX: Create audit record for state change
+            try:
+                audit_record = {
+                    'uuid': str(uuid.uuid4()),
+                    'kind': 'agent_state_change',
+                    'name': f'sfe_agent_{agent_id}',
+                    'detail': json.dumps({
+                        'action': 'update' if is_update else 'create',
+                        'agent_id': agent_id,
+                        'agent_type': 'sfe',
+                        'changed_fields': list(data.keys()),
+                    }),
+                    'ts': time.time(),
+                    'hash': hashlib.sha256(f"{agent_id}_{time.time()}".encode()).hexdigest(),
+                    'agent_id': agent_id,
+                    'context': json.dumps({'operation': 'save_sfe_state'}),
+                }
+                await self.save_audit_record(audit_record)
+            except Exception as e:
+                logger.warning(f"Failed to create audit record for SFE state change: {e}")
+                # Don't fail the state save if audit fails
