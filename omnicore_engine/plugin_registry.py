@@ -1032,6 +1032,10 @@ class PluginRegistry:
 
         self.logger.info(f"Scanning directory '{directory}' for plugins...")
 
+        # NOTE: Adding plugin directory to sys.path is necessary for dynamic plugin loading.
+        # This is different from the removed sys.path hacking that was manipulating parent directories.
+        # This addition is scoped to the specific plugin directory and allows importlib to load
+        # plugin modules dynamically at runtime.
         if str(plugin_dir_path) not in sys.path:
             sys.path.insert(0, str(plugin_dir_path))
 
