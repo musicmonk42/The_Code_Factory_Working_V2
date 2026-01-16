@@ -141,12 +141,15 @@ except ImportError:
 
         def get(self, key: Tuple, default: T) -> T:
             with self._lock:
-                self._access_times[key] = time.time()
-                return self._data.get(key, default)
+                # Only record access time if key exists to avoid ghost entries
+                if key in self._data:
+                    self._access_times[key] = time.time()
+                    return self._data[key]
+                return default
 
         def set(self, key: Tuple, value: T):
             with self._lock:
-                # Check capacity and evict if needed
+                # Check capacity and evict if needed (only for new keys when at capacity)
                 if key not in self._data and len(self._data) >= self.max_size:
                     if len(self._data) >= self.max_size * 0.9 and not self._warned_at_threshold:
                         logger.warning(

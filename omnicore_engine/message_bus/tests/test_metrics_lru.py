@@ -8,18 +8,22 @@ Tests verify:
 - Memory leak prevention
 - Warning thresholds
 - Memory usage tracking
+
+NOTE: This test module forces mock mode by mocking prometheus_client at module level.
+This is intentional as we're specifically testing the mock implementation.
+These tests should be run in isolation or with proper test collection ordering.
 """
 
+import sys
 import threading
 import time
+from unittest.mock import MagicMock
 
 import pytest
 
 # Force mock mode by ensuring prometheus is not available
-import sys
-from unittest.mock import MagicMock
-
-# Mock prometheus_client to force mock mode
+# NOTE: This affects the entire test module but is necessary to test mock metrics
+# Run these tests in isolation if concerned about side effects
 sys.modules['prometheus_client'] = MagicMock()
 sys.modules['prometheus_client.registry'] = MagicMock()
 

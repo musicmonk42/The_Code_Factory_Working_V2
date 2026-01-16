@@ -16,7 +16,6 @@ Major improvements:
 
 import asyncio
 import logging
-import sys
 import threading
 import time
 from typing import Optional
@@ -93,7 +92,7 @@ class CircuitBreaker:
         self._async_lock: Optional[asyncio.Lock] = None
         self._lock_init_lock = threading.Lock()
 
-    def _get_async_lock(self) -> asyncio.Lock:
+    def _get_async_lock(self) -> Optional[asyncio.Lock]:
         """
         Lazy initialization of asyncio.Lock.
         
@@ -101,7 +100,8 @@ class CircuitBreaker:
         an event loop at initialization time. This method creates it on first use.
         
         Returns:
-            asyncio.Lock instance bound to the current event loop
+            asyncio.Lock instance bound to the current event loop, or None if
+            no event loop is available
         """
         if self._async_lock is None:
             with self._lock_init_lock:
