@@ -15,9 +15,12 @@ but all new code should import directly from omnicore_engine.core or omnicore_en
 """
 import warnings
 
+# Show deprecation warning only once per session to avoid log noise
+warnings.simplefilter('once', DeprecationWarning)
 warnings.warn(
     "scenario_plugin_manager is deprecated. Use omnicore_engine.plugin_registry for plugin management "
-    "and omnicore_engine.core for engine functionality.",
+    "and omnicore_engine.core for engine functionality. "
+    "This module will be removed in a future version.",
     DeprecationWarning,
     stacklevel=2
 )
