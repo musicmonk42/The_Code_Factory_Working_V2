@@ -406,6 +406,16 @@ class SecurityConfigManager:
         logger.info(
             f"Security configuration initialized for level: {security_level.value}"
         )
+        
+        # SECURITY FIX: Validate TLS configuration for production environments
+        # Fail fast if critical security settings are missing instead of defaulting to insecure values
+        if security_level in [SecurityLevel.PRODUCTION, SecurityLevel.HIGH_SECURITY]:
+            is_valid, errors = self.tls_config.validate_certificates()
+            if not is_valid:
+                error_msg = f"TLS certificates not configured for {security_level.value} environment: {'; '.join(errors)}"
+                logger.error(error_msg)
+                logger.error("SECURITY RISK: Running without TLS in production is not allowed. Please configure cert_file and key_file.")
+                raise ValueError(error_msg)
 
     def load_from_file(self, config_path: str) -> None:
         """Load security configuration from JSON file"""

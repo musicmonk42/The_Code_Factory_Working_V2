@@ -1,6 +1,10 @@
 """
 Test suite for omnicore_engine/scenario_plugin_manager.py
 Tests the OmniCoreEngine, Base class, and utility functions.
+
+NOTE: scenario_plugin_manager.py is deprecated. These tests now import from omnicore_engine.core
+which is the canonical location for these classes. The scenario_plugin_manager module now
+simply re-exports from core.py for backward compatibility.
 """
 
 import asyncio
@@ -14,7 +18,8 @@ import pytest
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from omnicore_engine.scenario_plugin_manager import (
+# Import from the canonical location (core.py) instead of deprecated scenario_plugin_manager
+from omnicore_engine.core import (
     Base,
     ExplainableAI,
     OmniCoreEngine,
