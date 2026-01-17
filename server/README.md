@@ -1,6 +1,6 @@
 # Code Factory Platform API Server
 
-Enterprise-grade HTTP API for The Code Factory Platform, providing centralized access to all platform capabilities through OmniCore Engine.
+ HTTP API for The Code Factory Platform, providing centralized access to all platform capabilities through OmniCore Engine.
 
 ## Overview
 
