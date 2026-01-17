@@ -43,7 +43,7 @@ jobs:
         TEST_EXISTS=false
         if [ -d "tests" ]; then
           TEST_EXISTS=true
-        elif find . -maxdepth 1 -name 'test_*.py' -o -name '*_test.py' 2>/dev/null | grep -q .; then
+        elif find . -maxdepth 1 \( -name 'test_*.py' -o -name '*_test.py' \) -quit 2>/dev/null | grep -q .; then
           TEST_EXISTS=true
         fi
         

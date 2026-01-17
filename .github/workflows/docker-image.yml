@@ -5,6 +5,15 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      skip_heavy_deps:
+        description: 'Skip heavy dependencies (0=include, 1=skip)'
+        required: false
+        default: '0'
+
+env:
+  SKIP_HEAVY_DEPS: ${{ github.event.inputs.skip_heavy_deps || '0' }}
 
 jobs:
   build:
@@ -27,7 +36,7 @@ jobs:
         DOCKER_BUILDKIT: 1
       run: |
         IMAGE_TAG="code-factory-platform:ci-${{ github.run_number }}"
-        docker build . --file Dockerfile --tag "$IMAGE_TAG" --build-arg SKIP_HEAVY_DEPS=0
+        docker build . --file Dockerfile --tag "$IMAGE_TAG" --build-arg SKIP_HEAVY_DEPS=${{ env.SKIP_HEAVY_DEPS }}
         echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
     
     - name: Test Docker image can run
