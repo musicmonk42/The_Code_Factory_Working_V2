@@ -55,7 +55,7 @@ jobs:
           
       - name: Run Black formatter check
         run: |
-          black --check --diff generator/ omnicore_engine/ self_fixing_engineer/
+          black --check --diff --extend-exclude "(test_project.*|bad_syntax\.py|many_bad_files)" generator/ omnicore_engine/ self_fixing_engineer/
           
       - name: Run Ruff linter
         run: |

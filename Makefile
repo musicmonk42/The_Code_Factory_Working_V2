@@ -73,7 +73,7 @@ test-watch: ## Run tests in watch mode (requires pytest-watch)
 lint: ## Run all linters on entire platform
 	@echo "$(BLUE)Running linters on entire platform...$(NC)"
 	@echo "$(YELLOW)Running Black...$(NC)"
-	black --check generator/ omnicore_engine/ self_fixing_engineer/ *.py
+	black --check --extend-exclude "(test_project.*|bad_syntax\.py|many_bad_files)" generator/ omnicore_engine/ self_fixing_engineer/ *.py
 	@echo "$(YELLOW)Running Ruff...$(NC)"
 	ruff check generator/ omnicore_engine/ self_fixing_engineer/ *.py
 	@echo "$(YELLOW)Running Flake8...$(NC)"
@@ -82,7 +82,7 @@ lint: ## Run all linters on entire platform
 
 format: ## Format code with Black
 	@echo "$(BLUE)Formatting code...$(NC)"
-	black generator/ omnicore_engine/ self_fixing_engineer/
+	black --extend-exclude "(test_project.*|bad_syntax\.py|many_bad_files)" generator/ omnicore_engine/ self_fixing_engineer/
 	@echo "$(GREEN)Code formatted!$(NC)"
 
 type-check: ## Run type checking with mypy
