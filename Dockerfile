@@ -73,8 +73,8 @@ RUN if [ "$SKIP_HEAVY_DEPS" = "1" ]; then \
     find /opt/venv -type f -name '*.pyc' -delete 2>/dev/null || true; \
     find /opt/venv -type f -name '*.pyo' -delete 2>/dev/null || true; \
     # Enhanced cleanup to reduce size of files being copied to runtime stage
-    find /opt/venv -type d \( -name 'tests' -o -name 'test' \) -exec rm -rf {} + 2>/dev/null || true; \
-    find /opt/venv -path '*/pip/_vendor/*' -exec rm -rf {} + 2>/dev/null || true
+    find /opt/venv -type d \( -name 'tests' -o -name 'test' \) -prune -exec rm -rf {} + 2>/dev/null || true; \
+    find /opt/venv -path '*/pip/_vendor/*' -prune -exec rm -rf {} + 2>/dev/null || true
 
 # Copy the rest of the application
 COPY . /app
@@ -102,7 +102,7 @@ RUN useradd -m -u 10001 appuser
 WORKDIR /app
 
 # Create directories and set ownership BEFORE copying files
-RUN mkdir -p /opt/venv /app && chown -R appuser:appuser /opt/venv /app
+RUN mkdir -p /opt/venv /app && chown appuser:appuser /opt/venv /app
 
 # Bring in the venv and application source with proper ownership during copy
 COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
