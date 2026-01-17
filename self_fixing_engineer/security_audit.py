@@ -263,7 +263,8 @@ class SecurityAuditor:
                                 "context": "Review endpoint authentication",
                             }
                         )
-            except:
+            except (OSError, IOError, UnicodeDecodeError) as e:
+                # Skip files that cannot be read
                 pass
 
         return findings
