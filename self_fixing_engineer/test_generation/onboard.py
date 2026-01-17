@@ -247,7 +247,7 @@ def _attempt_import() -> bool:
     Returns:
         True if import succeeded, False otherwise.
     """
-    global OnboardConfig, ONBOARD_DEFAULTS, CORE_VERSION, onboard, _MODULE_STATE
+    global OnboardConfig, ONBOARD_DEFAULTS, CORE_VERSION, onboard
 
     if _MODULE_STATE["import_attempted"]:
         return _MODULE_STATE["import_success"]
@@ -327,7 +327,7 @@ def _attempt_import() -> bool:
 
 def _initialize_fallbacks() -> None:
     """Initialize fallback implementations for all exported symbols."""
-    global OnboardConfig, ONBOARD_DEFAULTS, CORE_VERSION, onboard, _MODULE_STATE
+    global OnboardConfig, ONBOARD_DEFAULTS, CORE_VERSION, onboard
 
     OnboardConfig = OnboardConfigFallback
     ONBOARD_DEFAULTS = OnboardConfigFallback()
