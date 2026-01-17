@@ -230,11 +230,12 @@ make clean             # Clean up generated files
 ### Docker
 
 ```bash
-make docker-build      # Build Docker images
+make docker-build      # Build unified platform Docker image
 make docker-up         # Start services
 make docker-down       # Stop services
 make docker-logs       # View logs
 make docker-clean      # Clean up Docker resources
+make docker-validate   # Validate Docker build and configuration
 ```
 
 ### Testing

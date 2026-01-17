@@ -102,11 +102,11 @@ security-scan: ## Run security scans
 # Docker
 # =============================================================================
 
-docker-build: ## Build all Docker images
-	@echo "$(BLUE)Building Docker images...$(NC)"
+docker-build: ## Build unified platform Docker image
+	@echo "$(BLUE)Building unified Code Factory platform image...$(NC)"
 	docker build -t code-factory:latest -f Dockerfile .
-	docker build -t code-factory-generator:latest -f generator/Dockerfile ./generator
-	@echo "$(GREEN)Docker images built!$(NC)"
+	@echo "$(GREEN)Docker image built successfully!$(NC)"
+	@echo "$(YELLOW)Note: The unified image includes Generator, OmniCore, and SFE modules$(NC)"
 
 docker-up: ## Start all services with Docker Compose
 	@echo "$(BLUE)Starting Docker Compose services...$(NC)"
@@ -130,6 +130,11 @@ docker-clean: ## Remove all Docker containers, images, and volumes
 	docker compose down -v
 	docker system prune -af
 	@echo "$(GREEN)Docker resources cleaned!$(NC)"
+
+docker-validate: ## Validate Docker build and configuration
+	@echo "$(BLUE)Running Docker validation...$(NC)"
+	./validate_docker_build.sh
+	@echo "$(GREEN)Docker validation complete!$(NC)"
 
 # =============================================================================
 # Development
