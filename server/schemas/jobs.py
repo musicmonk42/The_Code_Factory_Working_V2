@@ -52,9 +52,7 @@ class JobProgress(BaseModel):
 
     job_id: str = Field(..., description="Unique job identifier")
     status: JobStatus = Field(..., description="Overall job status")
-    current_stage: Optional[JobStage] = Field(
-        None, description="Current active stage"
-    )
+    current_stage: Optional[JobStage] = Field(None, description="Current active stage")
     overall_progress: float = Field(
         0.0, ge=0.0, le=100.0, description="Overall progress percentage"
     )
@@ -70,9 +68,7 @@ class Job(BaseModel):
 
     id: str = Field(..., description="Unique job identifier")
     status: JobStatus = Field(..., description="Job execution status")
-    current_stage: Optional[JobStage] = Field(
-        None, description="Current active stage"
-    )
+    current_stage: Optional[JobStage] = Field(None, description="Current active stage")
     input_files: List[str] = Field(
         default_factory=list, description="List of input file names"
     )
@@ -89,9 +85,7 @@ class Job(BaseModel):
 class JobCreateRequest(BaseModel):
     """Request to create a new job."""
 
-    description: Optional[str] = Field(
-        None, description="Optional job description"
-    )
+    description: Optional[str] = Field(None, description="Optional job description")
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional job metadata"
     )

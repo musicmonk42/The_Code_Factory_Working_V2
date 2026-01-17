@@ -214,7 +214,9 @@ try:
         "intent_parser_ambiguity_rate", "Ratio of ambiguities to features"
     )
     PARSE_ERRORS = Counter(
-        "intent_parser_errors_total", "Total errors during parsing", ["stage", "error_type"]
+        "intent_parser_errors_total",
+        "Total errors during parsing",
+        ["stage", "error_type"],
     )
     LANG_DETECTION_COUNT = Counter(
         "intent_parser_lang_detection_total", "Language detection calls", ["language"]
@@ -252,18 +254,39 @@ try:
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
-    PARSE_LATENCY = REGISTRY._names_to_collectors.get("intent_parser_parse_latency_seconds")
+
+    PARSE_LATENCY = REGISTRY._names_to_collectors.get(
+        "intent_parser_parse_latency_seconds"
+    )
     AMBIGUITY_RATE = REGISTRY._names_to_collectors.get("intent_parser_ambiguity_rate")
     PARSE_ERRORS = REGISTRY._names_to_collectors.get("intent_parser_errors_total")
-    LANG_DETECTION_COUNT = REGISTRY._names_to_collectors.get("intent_parser_lang_detection_total")
-    FORMAT_DETECTION_COUNT = REGISTRY._names_to_collectors.get("intent_parser_format_detection_total")
-    EXTRACTION_COUNT = REGISTRY._names_to_collectors.get("intent_parser_extraction_total")
-    LLM_CLIENT_CALLS = REGISTRY._names_to_collectors.get("intent_parser_llm_client_calls_total")
-    LLM_CLIENT_CACHE_HITS = REGISTRY._names_to_collectors.get("intent_parser_llm_client_cache_hits_total")
-    LLM_CLIENT_FALLBACKS = REGISTRY._names_to_collectors.get("intent_parser_llm_client_fallbacks_total")
-    REDACTION_COUNT = REGISTRY._names_to_collectors.get("intent_parser_redaction_events_total")
-    FEEDBACK_RECORDED_COUNT = REGISTRY._names_to_collectors.get("intent_parser_feedback_recorded_total")
-    CACHE_CORRUPTION_EVENTS = REGISTRY._names_to_collectors.get("intent_parser_cache_corruption_total")
+    LANG_DETECTION_COUNT = REGISTRY._names_to_collectors.get(
+        "intent_parser_lang_detection_total"
+    )
+    FORMAT_DETECTION_COUNT = REGISTRY._names_to_collectors.get(
+        "intent_parser_format_detection_total"
+    )
+    EXTRACTION_COUNT = REGISTRY._names_to_collectors.get(
+        "intent_parser_extraction_total"
+    )
+    LLM_CLIENT_CALLS = REGISTRY._names_to_collectors.get(
+        "intent_parser_llm_client_calls_total"
+    )
+    LLM_CLIENT_CACHE_HITS = REGISTRY._names_to_collectors.get(
+        "intent_parser_llm_client_cache_hits_total"
+    )
+    LLM_CLIENT_FALLBACKS = REGISTRY._names_to_collectors.get(
+        "intent_parser_llm_client_fallbacks_total"
+    )
+    REDACTION_COUNT = REGISTRY._names_to_collectors.get(
+        "intent_parser_redaction_events_total"
+    )
+    FEEDBACK_RECORDED_COUNT = REGISTRY._names_to_collectors.get(
+        "intent_parser_feedback_recorded_total"
+    )
+    CACHE_CORRUPTION_EVENTS = REGISTRY._names_to_collectors.get(
+        "intent_parser_cache_corruption_total"
+    )
 
 
 # --- Config Schema ---
@@ -718,14 +741,14 @@ def generate_provenance(
 class IntentParser:
     """
     Main Intent Parser class for extracting structured requirements from documents.
-    
+
     This class properly manages async operations and uses a ThreadPoolExecutor
     to offload CPU-bound operations (parsing, regex, I/O) to worker threads,
     preventing event loop blocking in async contexts.
-    
+
     The executor is properly managed with context manager support for cleanup.
     """
-    
+
     def __init__(self, config_path: str = "intent_parser.yaml"):
         self._config_path = Path(config_path)
         self.config: IntentParserConfig = self._load_and_validate_config(
@@ -747,12 +770,13 @@ class IntentParser:
         # In test mode, use smaller pool to avoid exhausting threads
         max_workers = int(os.getenv("INTENT_PARSER_MAX_WORKERS", os.cpu_count() or 1))
         self.executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=max_workers,
-            thread_name_prefix="IntentParser-"
+            max_workers=max_workers, thread_name_prefix="IntentParser-"
         )
         self.input_language: str = self.config.multi_language_support.default_lang
         self._health_check()
-        logger.info(f"IntentParser initialized with {self.executor._max_workers} worker threads")
+        logger.info(
+            f"IntentParser initialized with {self.executor._max_workers} worker threads"
+        )
 
     def __enter__(self):
         """Context manager support for proper resource cleanup."""
@@ -766,11 +790,11 @@ class IntentParser:
     def shutdown(self, wait: bool = True):
         """
         Shut down the thread pool executor.
-        
+
         Args:
             wait: If True, wait for all pending futures to complete before shutdown
         """
-        if hasattr(self, 'executor') and self.executor:
+        if hasattr(self, "executor") and self.executor:
             logger.info("Shutting down IntentParser executor...")
             self.executor.shutdown(wait=wait)
             logger.info("IntentParser executor shut down successfully")
@@ -863,7 +887,7 @@ class IntentParser:
     ) -> Dict[str, Any]:
         """
         Parse document content and extract structured requirements.
-        
+
         This method is async and properly offloads CPU-bound operations to a thread pool
         to avoid blocking the event loop. The following operations are CPU-bound and
         run in the executor:
@@ -871,17 +895,17 @@ class IntentParser:
         - Document parsing (Markdown, RST, PDF, etc.)
         - Regex extraction
         - Secret redaction
-        
+
         Args:
             content: Raw document content as string
             format_hint: Optional format hint ('auto', 'markdown', 'rst', etc.)
             file_path: Optional path to document file
             dry_run: If True, skip certain operations
             user_id: User identifier for audit logging
-            
+
         Returns:
             Dictionary containing extracted features, constraints, and ambiguities
-            
+
         Raises:
             FileNotFoundError: If file_path is provided but file doesn't exist
             ValueError: If neither content nor file_path is provided
@@ -903,19 +927,18 @@ class IntentParser:
                 ):
                     # CPU-bound I/O operation - run in executor
                     content = await loop.run_in_executor(
-                        self.executor,
-                        lambda: file_path.read_text(encoding="utf-8")
+                        self.executor, lambda: file_path.read_text(encoding="utf-8")
                     )
-                    logger.debug(f"Read {len(content)} bytes from {file_path} (via executor)")
+                    logger.debug(
+                        f"Read {len(content)} bytes from {file_path} (via executor)"
+                    )
 
             if not content and not file_path:
                 raise ValueError("No content or file path provided.")
 
             # --- PII Redaction: CPU-bound regex operations - run in executor ---
             content_redacted = await loop.run_in_executor(
-                self.executor,
-                redact_secrets,
-                content
+                self.executor, redact_secrets, content
             )
             if content_redacted != content:
                 REDACTION_COUNT.inc()
@@ -927,11 +950,11 @@ class IntentParser:
             if self.config.multi_language_support.enabled and content_redacted.strip():
                 try:
                     self.input_language = await loop.run_in_executor(
-                        self.executor,
-                        detect,
-                        content_redacted
+                        self.executor, detect, content_redacted
                     )
-                    logger.debug(f"Detected language: {self.input_language} (via executor)")
+                    logger.debug(
+                        f"Detected language: {self.input_language} (via executor)"
+                    )
                 except LangDetectException:
                     self.input_language = (
                         self.config.multi_language_support.default_lang
@@ -947,24 +970,23 @@ class IntentParser:
             parser_input = (
                 file_path if isinstance(self.parser, PDFStrategy) else content_redacted
             )
-            
+
             # Run parser in executor - it may involve heavy regex or PDF processing
             sections = await loop.run_in_executor(
-                self.executor,
-                self.parser.parse,
-                parser_input
+                self.executor, self.parser.parse, parser_input
             )
-            logger.debug(f"Parsed document into {len(sections)} sections (via executor)")
+            logger.debug(
+                f"Parsed document into {len(sections)} sections (via executor)"
+            )
 
             # --- Regex Extraction: CPU-bound regex operations - run in executor ---
             extracted = await loop.run_in_executor(
-                self.executor,
-                self.extractor.extract,
-                sections,
-                self.input_language
+                self.executor, self.extractor.extract, sections, self.input_language
             )
-            logger.debug(f"Extracted {sum(len(v) for v in extracted.values())} items (via executor)")
-            
+            logger.debug(
+                f"Extracted {sum(len(v) for v in extracted.values())} items (via executor)"
+            )
+
             # --- Ambiguity Detection: Already async, uses LLM ---
             full_text_for_ambiguity = " ".join(sections.values())
             ambiguities = await self.detector.detect(
@@ -989,7 +1011,12 @@ class IntentParser:
             PARSE_LATENCY.observe(parse_latency)
 
             log_action(
-                "Parse Completed", {"provenance": provenance, "user_id": user_id, "latency_seconds": parse_latency}
+                "Parse Completed",
+                {
+                    "provenance": provenance,
+                    "user_id": user_id,
+                    "latency_seconds": parse_latency,
+                },
             )
             if span:
                 span.set_status(Status(StatusCode.OK))

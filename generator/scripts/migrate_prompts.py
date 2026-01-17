@@ -73,10 +73,12 @@ class PromptMigrationError(Exception):
     pass
 
 
-def find_prompt_dict(tree: ast.Module, var_names: List[str] = None) -> Optional[Tuple[str, ast.Dict]]:
+def find_prompt_dict(
+    tree: ast.Module, var_names: List[str] = None
+) -> Optional[Tuple[str, ast.Dict]]:
     """
     Finds a prompt dictionary assignment in the AST.
-    
+
     Args:
         tree (ast.Module): The AST of the Python file.
         var_names (List[str]): List of variable names to search for.
@@ -86,9 +88,16 @@ def find_prompt_dict(tree: ast.Module, var_names: List[str] = None) -> Optional[
     """
     if var_names is None:
         # Default list of common prompt dictionary variable names
-        var_names = ["PROMPT_TEMPLATES", "prompts", "TEMPLATES", "PROMPTS", 
-                     "prompt_templates", "template_dict", "TEMPLATE_DICT"]
-    
+        var_names = [
+            "PROMPT_TEMPLATES",
+            "prompts",
+            "TEMPLATES",
+            "PROMPTS",
+            "prompt_templates",
+            "template_dict",
+            "TEMPLATE_DICT",
+        ]
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
@@ -299,7 +308,7 @@ def migrate_file(
             if verbose:
                 logger.info(f"No prompt dict found in {source_file}")
             return report
-        
+
         var_name, dict_node = result
         if verbose:
             logger.info(f"Found prompt dict variable '{var_name}' in {source_file}")
@@ -353,8 +362,7 @@ def migrate_file(
 
         # --- Generate Loader Code and Replace in Source File ---
         loader_code = generate_loader_code(
-            str(dest_dir.relative_to(source_file.parent)),
-            var_name
+            str(dest_dir.relative_to(source_file.parent)), var_name
         )  # Relative path for loader
         new_code = replace_prompt_dict_in_code(original_code, var_name, loader_code)
 
@@ -465,7 +473,9 @@ def migrate_dir(
             # will all go into the *same* `dest_dir`.
             # This is acceptable if all prompts are unique across files.
             # If not, a more complex `dest_dir` strategy (e.g., mirroring source folder structure) is needed.
-            report = migrate_file(py_file, dest_dir, dry_run, verbose, backup, var_names)
+            report = migrate_file(
+                py_file, dest_dir, dry_run, verbose, backup, var_names
+            )
             reports.append(report)
 
             if report["status"] == "success":
@@ -639,7 +649,7 @@ def some_other_function():
                 non_dict_content = "PROMPT_TEMPLATES = [1,2,3]"
                 tree_non_dict = ast.parse(non_dict_content)
                 self.assertIsNone(find_prompt_dict(tree_non_dict))
-                
+
                 # Test alternative naming
                 alt_content = "prompts = {'key': 'value'}"
                 tree_alt = ast.parse(alt_content)

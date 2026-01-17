@@ -18,10 +18,10 @@ Planned Features:
 Usage:
     Current workaround - run tests directly with pytest:
         pytest self_fixing_engineer/tests/
-        
+
     With coverage:
         pytest self_fixing_engineer/tests/ --cov=self_fixing_engineer
-        
+
     Run specific test categories:
         pytest self_fixing_engineer/tests/ -m unit
         pytest self_fixing_engineer/tests/ -m integration
@@ -41,10 +41,10 @@ from typing import NoReturn
 def main() -> int:
     """
     Main entry point for the test runner.
-    
+
     Returns:
         int: Exit code (1 to indicate not implemented)
-        
+
     Note:
         This function currently serves as a placeholder and always returns
         exit code 1. When implemented, it should return 0 for success,
@@ -73,7 +73,7 @@ def main() -> int:
     print("    $ pytest self_fixing_engineer/tests/ -v")
     print()
     print("=" * 70)
-    
+
     return 1
 
 

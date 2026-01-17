@@ -175,7 +175,9 @@ async def test_initialization_default_password_error(mocker: MockerFixture):
 
 
 @pytest.mark.asyncio
-async def test_initialization_dev_mode_no_password_warning(mocker: MockerFixture, caplog):
+async def test_initialization_dev_mode_no_password_warning(
+    mocker: MockerFixture, caplog
+):
     """Test initialization succeeds in dev mode without a password, but logs a warning."""
     mocker.patch.dict(os.environ, {"NEO4J_PASSWORD": "", "ENV": "dev"}, clear=False)
 
@@ -191,9 +193,13 @@ async def test_initialization_dev_mode_no_password_warning(mocker: MockerFixture
 
 
 @pytest.mark.asyncio
-async def test_initialization_dev_mode_default_password_warning(mocker: MockerFixture, caplog):
+async def test_initialization_dev_mode_default_password_warning(
+    mocker: MockerFixture, caplog
+):
     """Test initialization succeeds in dev mode with default password, but logs a warning."""
-    mocker.patch.dict(os.environ, {"NEO4J_PASSWORD": "password", "ENV": "dev"}, clear=False)
+    mocker.patch.dict(
+        os.environ, {"NEO4J_PASSWORD": "password", "ENV": "dev"}, clear=False
+    )
 
     with caplog.at_level(logging.WARNING):
         client = Neo4jKnowledgeGraph()

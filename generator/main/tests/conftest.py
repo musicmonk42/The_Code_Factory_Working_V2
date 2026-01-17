@@ -84,19 +84,22 @@ def mock_modules(monkeypatch):
     """
     Fixture to mock modules needed by tests.
     Use this in tests that need specific modules mocked, for example:
-    
+
     def test_something(mock_modules):
         # Mock specific modules for this test
         mock_modules(['runner.runner_core', 'intent_parser.intent_parser'])
         # ... test code that imports those modules
-    
+
     Note: This fixture uses MagicMock to create module mocks, so tests using this
     fixture should only be run with pytest, not with static type checkers.
     """
+
     def _mock_modules(module_names):
         from unittest.mock import MagicMock
+
         for name in module_names:
             monkeypatch.setitem(sys.modules, name, MagicMock(name=f"mock_{name}"))
+
     return _mock_modules
 
 

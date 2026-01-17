@@ -8,9 +8,11 @@ import pytest
 try:
     from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
+
     # FIXED: Replaced InMemorySpanExporter with ConsoleSpanExporter
     # This is a stable import path and will fix the 'NoOpSpan' errors.
     from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+
     _OTEL_AVAILABLE = True
 except ImportError:
     # OpenTelemetry not available, use stub

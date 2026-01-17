@@ -81,34 +81,35 @@ except ImportError:
     class DummyDBClient:
         """
         Fallback in-memory database client with file-based persistence.
-        
+
         PERSISTENCE: Unlike the previous stub, this implementation:
         - Persists data to a JSON file on disk
         - Automatically loads data on initialization
         - Saves data after each write operation
         - Provides fallback when real database is unavailable
-        
+
         WARNING: This is not suitable for production multi-process deployments.
         Use a real database (PostgreSQL, SQLite) in production.
-        
+
         Environment Variables:
         - DUMMY_DB_FILE: Path to persistence file (default: '/tmp/dummy_db_feedback.json')
         - DUMMY_DB_BACKUP_COUNT: Number of backup files to keep (default: 3)
         """
+
         def __init__(self) -> None:
             self.feedback_entries: List[Dict[str, Any]] = []
             self._db_file = os.getenv("DUMMY_DB_FILE", "/tmp/dummy_db_feedback.json")
             self._backup_count = int(os.getenv("DUMMY_DB_BACKUP_COUNT", "3"))
             self._lock = threading.Lock()
             logger = logging.getLogger(__name__)
-            
+
             # Log warning about using in-memory fallback
             logger.warning(
                 "Using DummyDBClient fallback with file persistence. "
                 f"Data will be persisted to: {self._db_file}. "
                 "Install a real database client for production use."
             )
-            
+
             # Load existing data from file
             self._load_from_file()
 
@@ -117,9 +118,9 @@ except ImportError:
             logger = logging.getLogger(__name__)
             try:
                 if os.path.exists(self._db_file):
-                    with open(self._db_file, 'r') as f:
+                    with open(self._db_file, "r") as f:
                         data = json.load(f)
-                        self.feedback_entries = data.get('entries', [])
+                        self.feedback_entries = data.get("entries", [])
                     logger.info(
                         f"Loaded {len(self.feedback_entries)} entries from {self._db_file}"
                     )
@@ -139,24 +140,28 @@ except ImportError:
                     oldest_backup = f"{self._db_file}.{self._backup_count}"
                     if os.path.exists(oldest_backup):
                         os.remove(oldest_backup)
-                    
+
                     # Rotate backups (move each backup to next number)
                     for i in range(self._backup_count - 1, 0, -1):
                         old_backup = f"{self._db_file}.{i}"
                         new_backup = f"{self._db_file}.{i+1}"
                         if os.path.exists(old_backup):
                             os.rename(old_backup, new_backup)
-                    
+
                     # Create new backup from current file
                     os.rename(self._db_file, f"{self._db_file}.1")
-                
+
                 # Write current data
-                with open(self._db_file, 'w') as f:
-                    json.dump({
-                        'entries': self.feedback_entries,
-                        'last_updated': datetime.now(timezone.utc).isoformat()
-                    }, f, indent=2)
-                
+                with open(self._db_file, "w") as f:
+                    json.dump(
+                        {
+                            "entries": self.feedback_entries,
+                            "last_updated": datetime.now(timezone.utc).isoformat(),
+                        },
+                        f,
+                        indent=2,
+                    )
+
                 logger.debug(
                     f"Saved {len(self.feedback_entries)} entries to {self._db_file}"
                 )
@@ -170,12 +175,12 @@ except ImportError:
                 if "timestamp" not in entry_copy:
                     entry_copy["timestamp"] = datetime.now(timezone.utc).isoformat()
                 self.feedback_entries.append(entry_copy)
-                
+
                 logger = logging.getLogger(__name__)
                 logger.debug(
                     f"DummyDBClient: Saved entry. Total entries: {len(self.feedback_entries)}"
                 )
-                
+
                 # Persist to file
                 self._save_to_file()
 
@@ -189,7 +194,8 @@ except ImportError:
                 return [
                     e
                     for e in self.feedback_entries
-                    if isinstance(e, dict) and all(e.get(k) == v for k, v in query.items())
+                    if isinstance(e, dict)
+                    and all(e.get(k) == v for k, v in query.items())
                 ]
 
         async def update_feedback_entry(
@@ -199,17 +205,21 @@ except ImportError:
             with self._lock:
                 updated = 0
                 for e in self.feedback_entries:
-                    if isinstance(e, dict) and all(e.get(k) == v for k, v in query.items()):
+                    if isinstance(e, dict) and all(
+                        e.get(k) == v for k, v in query.items()
+                    ):
                         e.update(updates)
                         updated += 1
-                
+
                 logger = logging.getLogger(__name__)
-                logger.debug(f"DummyDBClient: Updated {updated} entries for query {query}.")
-                
+                logger.debug(
+                    f"DummyDBClient: Updated {updated} entries for query {query}."
+                )
+
                 if updated > 0:
                     # Persist changes to file
                     self._save_to_file()
-                
+
                 return updated > 0
 
     # The original file had a different fallback class name, I've consolidated it to DummyDBClient
@@ -223,14 +233,16 @@ except ImportError:
     logging.getLogger(__name__).warning(
         "Warning: arbiter.feedback.FeedbackManager not found. Using fallback implementation."
     )
-    
+
     # Fallback FeedbackManager for cases where arbiter.feedback is not available
     class FeedbackManager:
         def __init__(
             self, db_client: Union[DummyDBClient, PostgresClient, SQLiteClient]
         ) -> None:
             self.db_client = db_client
-            logger.info(f"FeedbackManager (fallback) initialized with {type(db_client).__name__}.")
+            logger.info(
+                f"FeedbackManager (fallback) initialized with {type(db_client).__name__}."
+            )
 
         async def log_approval_request(
             self, decision_id: str, decision_context: Dict[str, Any]
@@ -464,7 +476,7 @@ human_loop_feedback_total = get_or_create_counter(
 class WebSocketManager:
     """
     WebSocket connection manager for real-time communication with UI clients.
-    
+
     Supports multiple concurrent connections, automatic reconnection,
     connection state tracking, and integration with FastAPI WebSocket endpoints.
     """
@@ -472,24 +484,28 @@ class WebSocketManager:
     def __init__(self, max_connections: int = 100):
         """
         Initialize WebSocket manager.
-        
+
         Args:
             max_connections: Maximum number of concurrent connections
         """
         self.max_connections = max_connections
         self._connections: Dict[str, Any] = {}  # connection_id -> websocket
-        self._connection_metadata: Dict[str, Dict[str, Any]] = {}  # connection_id -> metadata
+        self._connection_metadata: Dict[str, Dict[str, Any]] = (
+            {}
+        )  # connection_id -> metadata
         self._lock = asyncio.Lock()
         self._message_queue: asyncio.Queue = asyncio.Queue()
         self._broadcast_task: Optional[asyncio.Task] = None
-        logger.info(f"WebSocketManager initialized with max_connections={max_connections}")
-    
+        logger.info(
+            f"WebSocketManager initialized with max_connections={max_connections}"
+        )
+
     async def start(self) -> None:
         """Start the WebSocket manager background tasks."""
         if self._broadcast_task is None:
             self._broadcast_task = asyncio.create_task(self._broadcast_worker())
             logger.info("WebSocketManager broadcast worker started")
-    
+
     async def stop(self) -> None:
         """Stop the WebSocket manager and close all connections."""
         if self._broadcast_task:
@@ -499,7 +515,7 @@ class WebSocketManager:
             except asyncio.CancelledError:
                 pass
             self._broadcast_task = None
-        
+
         # Close all connections
         async with self._lock:
             for conn_id, ws in list(self._connections.items()):
@@ -509,23 +525,23 @@ class WebSocketManager:
                     logger.warning(f"Error closing connection {conn_id}: {e}")
             self._connections.clear()
             self._connection_metadata.clear()
-        
+
         logger.info("WebSocketManager stopped")
-    
+
     async def register_connection(
-        self, 
-        connection_id: str, 
+        self,
+        connection_id: str,
         websocket: Any,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Register a new WebSocket connection.
-        
+
         Args:
             connection_id: Unique identifier for the connection
             websocket: WebSocket instance (e.g., from FastAPI)
             metadata: Optional metadata about the connection
-            
+
         Returns:
             True if connection registered successfully, False if limit reached
         """
@@ -536,25 +552,25 @@ class WebSocketManager:
                     f"rejecting connection {connection_id}"
                 )
                 return False
-            
+
             self._connections[connection_id] = websocket
             self._connection_metadata[connection_id] = {
                 "connected_at": datetime.now(timezone.utc).isoformat(),
                 "messages_sent": 0,
                 "last_activity": datetime.now(timezone.utc).isoformat(),
-                **(metadata or {})
+                **(metadata or {}),
             }
-            
+
             logger.info(
                 f"WebSocket connection registered: {connection_id} "
                 f"({len(self._connections)}/{self.max_connections})"
             )
             return True
-    
+
     async def unregister_connection(self, connection_id: str) -> None:
         """
         Unregister a WebSocket connection.
-        
+
         Args:
             connection_id: Connection identifier to remove
         """
@@ -566,15 +582,13 @@ class WebSocketManager:
                     f"WebSocket connection unregistered: {connection_id} "
                     f"({len(self._connections)}/{self.max_connections})"
                 )
-    
+
     async def send_json(
-        self, 
-        data: Dict[str, Any],
-        connection_id: Optional[str] = None
+        self, data: Dict[str, Any], connection_id: Optional[str] = None
     ) -> None:
         """
         Send JSON data to WebSocket client(s).
-        
+
         Args:
             data: JSON-serializable data to send
             connection_id: If provided, send only to this connection.
@@ -600,17 +614,15 @@ class WebSocketManager:
         else:
             # Broadcast to all connections
             await self._message_queue.put(data)
-            logger.debug(
-                f"Queued broadcast message: {json.dumps(data)[:150]}..."
-            )
-    
+            logger.debug(f"Queued broadcast message: {json.dumps(data)[:150]}...")
+
     async def _broadcast_worker(self) -> None:
         """Background worker to broadcast messages to all connections."""
         logger.info("WebSocket broadcast worker started")
         try:
             while True:
                 data = await self._message_queue.get()
-                
+
                 async with self._lock:
                     failed_connections = []
                     for conn_id, ws in self._connections.items():
@@ -623,37 +635,39 @@ class WebSocketManager:
                         except Exception as e:
                             logger.error(f"Error broadcasting to {conn_id}: {e}")
                             failed_connections.append(conn_id)
-                    
+
                     # Remove failed connections
                     for conn_id in failed_connections:
                         self._connections.pop(conn_id, None)
                         self._connection_metadata.pop(conn_id, None)
-                    
+
                     if failed_connections:
-                        logger.info(f"Removed {len(failed_connections)} failed connections")
-                
+                        logger.info(
+                            f"Removed {len(failed_connections)} failed connections"
+                        )
+
                 self._message_queue.task_done()
-                
+
         except asyncio.CancelledError:
             logger.info("WebSocket broadcast worker cancelled")
             raise
-    
+
     def get_connection_count(self) -> int:
         """Get the number of active connections."""
         return len(self._connections)
-    
+
     def get_connection_stats(self) -> Dict[str, Any]:
         """Get statistics about connections."""
         return {
             "active_connections": len(self._connections),
             "max_connections": self.max_connections,
-            "connection_details": dict(self._connection_metadata)
+            "connection_details": dict(self._connection_metadata),
         }
-    
+
     async def ping_all(self) -> Dict[str, bool]:
         """
         Ping all connections to check if they're alive.
-        
+
         Returns:
             Dictionary mapping connection_id to alive status
         """
@@ -666,7 +680,7 @@ class WebSocketManager:
                 except Exception:
                     results[conn_id] = False
                     await self.unregister_connection(conn_id)
-        
+
         return results
 
 

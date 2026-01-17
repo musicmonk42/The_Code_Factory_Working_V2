@@ -34,13 +34,17 @@ mock_prometheus.__name__ = "prometheus_client"
 mock_prometheus.__file__ = "<mocked prometheus_client>"
 sys.modules["prometheus_client"] = mock_prometheus
 
+
 # 4. Mock OpenTelemetry - Need proper decorator support
 # The tracer.start_as_current_span is used as a decorator, so we need to make it pass-through
 def passthrough_decorator(name):
     """Pass-through decorator that doesn't modify the function."""
+
     def decorator(func):
         return func  # Return the original function unchanged
+
     return decorator
+
 
 mock_otel = MagicMock()
 mock_otel.__path__ = []  # Required for package imports
@@ -113,7 +117,7 @@ class TestIntentParser(unittest.TestCase):
         """Set up test environment once for all tests."""
         # Use minimal thread pool for tests to avoid exhausting system threads
         os.environ["INTENT_PARSER_MAX_WORKERS"] = "1"
-    
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.temp_path = Path(self.temp_dir.name)
@@ -140,13 +144,14 @@ class TestIntentParser(unittest.TestCase):
         _spacy = None
         _torch = None
         _transformers = None
-        
+
         # Track parsers created for cleanup
         self.parsers_to_cleanup = []
 
     def tearDown(self):
         # Clean up all parsers to avoid thread leaks
         import time
+
         for parser in self.parsers_to_cleanup:
             try:
                 parser.shutdown(wait=True)  # Wait for threads to finish
@@ -155,14 +160,14 @@ class TestIntentParser(unittest.TestCase):
         self.parsers_to_cleanup.clear()
         # Give threads time to fully terminate
         time.sleep(0.1)
-        
+
         self.temp_dir.cleanup()
         # --- FIX: Reset lazy loaders after each test ---
         global _spacy, _torch, _transformers
         _spacy = None
         _torch = None
         _transformers = None
-        
+
     def create_parser(self, config_path=None):
         """Helper to create parser and track for cleanup."""
         parser = IntentParser(config_path=str(config_path or self.config_path))
@@ -480,7 +485,7 @@ class TestIntentParser(unittest.TestCase):
         with IntentParser(config_path=str(self.config_path)) as parser:
             self.assertIsNotNone(parser.executor)
             self.assertFalse(parser.executor._shutdown)
-        
+
         # After exiting context, executor should be shut down
         self.assertTrue(parser.executor._shutdown)
 
@@ -490,7 +495,7 @@ class TestIntentParser(unittest.TestCase):
         """Tests manual executor shutdown."""
         parser = self.create_parser()
         self.assertFalse(parser.executor._shutdown)
-        
+
         parser.shutdown()
         self.assertTrue(parser.executor._shutdown)
 
@@ -517,7 +522,7 @@ class TestIntentParser(unittest.TestCase):
 
         try:
             result = asyncio.run(parser.parse(content=content, format_hint="markdown"))
-            
+
             # Verify that run_in_executor would have been called
             # (We can't directly verify asyncio.loop.run_in_executor calls without deeper mocking)
             self.assertEqual(result["features"], ["F1"])

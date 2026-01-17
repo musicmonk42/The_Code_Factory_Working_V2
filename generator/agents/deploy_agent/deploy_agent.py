@@ -467,20 +467,20 @@ class DeployAgent:
         self.post_gen_hooks: List[Callable[[Any, str], Awaitable[Any]]] = []
 
         self.last_result: Optional[Dict[str, Any]] = None
-        
+
         # Track initialization state
         self._db_initialized = False
 
     # --- Async Context Manager Support ---
     # This ensures _init_db() is automatically called when using 'async with'
-    
+
     async def __aenter__(self) -> "DeployAgent":
         """Async context manager entry - initializes the database.
-        
+
         Usage:
             async with DeployAgent(repo_path) as agent:
                 result = await agent.generate_documentation(...)
-        
+
         This eliminates the need for manual _init_db() calls and prevents
         race conditions where database operations are attempted before
         initialization.
@@ -491,10 +491,10 @@ class DeployAgent:
             f"DeployAgent initialized via context manager [run_id: {self.run_id}]"
         )
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Async context manager exit - cleanup resources.
-        
+
         Currently a no-op since aiosqlite manages its own connections,
         but provides a hook for future cleanup needs.
         """
@@ -505,8 +505,10 @@ class DeployAgent:
                 f"[run_id: {self.run_id}]"
             )
         else:
-            logger.debug(f"DeployAgent context exiting normally [run_id: {self.run_id}]")
-        
+            logger.debug(
+                f"DeployAgent context exiting normally [run_id: {self.run_id}]"
+            )
+
         # No explicit cleanup needed - aiosqlite manages connections
         return None  # Don't suppress exceptions
 
@@ -514,14 +516,14 @@ class DeployAgent:
     # --- FIX: Convert to async with aiosqlite ---
     async def _init_db(self) -> None:
         """Initialize the SQLite database for history persistence.
-        
+
         This method is idempotent - it can be called multiple times safely.
         It is automatically called when using the agent as an async context manager.
-        
+
         Manual call is still supported for backwards compatibility:
             agent = DeployAgent(repo_path)
             await agent._init_db()  # Manual init
-        
+
         Preferred usage (auto-init):
             async with DeployAgent(repo_path) as agent:
                 # Database is automatically initialized
@@ -530,7 +532,7 @@ class DeployAgent:
         if self._db_initialized:
             logger.debug("Database already initialized, skipping")
             return
-            
+
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """
@@ -542,13 +544,13 @@ class DeployAgent:
                 """
             )
             await db.commit()
-        
+
         self._db_initialized = True
         logger.debug(f"Database initialized at {self.db_path}")
 
     def _ensure_db_initialized(self) -> None:
         """Check that the database has been initialized.
-        
+
         Raises:
             RuntimeError: If the database has not been initialized.
         """
@@ -563,18 +565,18 @@ class DeployAgent:
     # --- FIX: Convert to async with aiosqlite ---
     async def get_previous_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         """Get a previous run result from the database.
-        
+
         Args:
             run_id: The unique identifier of the run to retrieve.
-            
+
         Returns:
             The run result dict, or None if not found.
-            
+
         Raises:
             RuntimeError: If the database has not been initialized.
         """
         self._ensure_db_initialized()
-        
+
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
                 "SELECT result FROM history WHERE id=?", (run_id,)
@@ -582,12 +584,14 @@ class DeployAgent:
                 row = await cursor.fetchone()
                 return json.loads(row[0]) if row else None
 
-    async def _save_to_history(self, run_id: str, timestamp: str, result: Dict[str, Any]) -> None:
+    async def _save_to_history(
+        self, run_id: str, timestamp: str, result: Dict[str, Any]
+    ) -> None:
         """Save a run result to the history database.
-        
+
         This method ensures the database is initialized before saving.
         If the database is not initialized, it will attempt to initialize it.
-        
+
         Args:
             run_id: The unique identifier for this run.
             timestamp: ISO format timestamp string.
@@ -600,7 +604,7 @@ class DeployAgent:
                 "Auto-initializing. For best practice, use 'async with DeployAgent(...) as agent:'"
             )
             await self._init_db()
-        
+
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute(
@@ -1438,7 +1442,9 @@ Propose corrected configurations as JSON keyed by target.
 
                         # Save healed result to history
                         healed_run_id = f"{self.run_id}_healed_{int(time.time())}"
-                        await self._save_to_history(healed_run_id, healed["timestamp"], healed)
+                        await self._save_to_history(
+                            healed_run_id, healed["timestamp"], healed
+                        )
                         return healed
                 except Exception as e:  # pragma: no cover
                     logger.warning(

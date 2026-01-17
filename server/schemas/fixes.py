@@ -59,9 +59,7 @@ class Fix(BaseModel):
     created_at: datetime = Field(..., description="Fix creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
     applied_at: Optional[datetime] = Field(None, description="Application timestamp")
-    rolled_back_at: Optional[datetime] = Field(
-        None, description="Rollback timestamp"
-    )
+    rolled_back_at: Optional[datetime] = Field(None, description="Rollback timestamp")
 
 
 class FixReviewRequest(BaseModel):

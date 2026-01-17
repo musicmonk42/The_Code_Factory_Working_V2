@@ -129,12 +129,23 @@ try:
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
+
     validator_calls = REGISTRY._names_to_collectors.get("deploy_validator_calls_total")
-    validator_errors = REGISTRY._names_to_collectors.get("deploy_validator_errors_total")
-    validator_latency = REGISTRY._names_to_collectors.get("deploy_validator_latency_seconds")
-    issue_count_gauge = REGISTRY._names_to_collectors.get("deploy_validator_issue_count")
-    issue_total_found = REGISTRY._names_to_collectors.get("deploy_validator_issues_total")
-    scan_total_findings = REGISTRY._names_to_collectors.get("deploy_scan_total_findings")
+    validator_errors = REGISTRY._names_to_collectors.get(
+        "deploy_validator_errors_total"
+    )
+    validator_latency = REGISTRY._names_to_collectors.get(
+        "deploy_validator_latency_seconds"
+    )
+    issue_count_gauge = REGISTRY._names_to_collectors.get(
+        "deploy_validator_issue_count"
+    )
+    issue_total_found = REGISTRY._names_to_collectors.get(
+        "deploy_validator_issues_total"
+    )
+    scan_total_findings = REGISTRY._names_to_collectors.get(
+        "deploy_scan_total_findings"
+    )
 
 # --- Security: PII/Secret & Dangerous Config Scanning Patterns ---
 # NOTE: This DANGEROUS_CONFIG_PATTERNS is now used by the *imported* scan_config_for_findings

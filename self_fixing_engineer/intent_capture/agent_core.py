@@ -876,14 +876,14 @@ async def main():
 class VaultSecretManager:
     """
     Production-ready HashiCorp Vault secret manager with comprehensive error handling.
-    
+
     This implementation provides:
     - Real Vault integration using hvac library
     - Proper error handling and fallback behavior
     - Environment-based configuration
     - Connection pooling and retry logic
     - Security best practices
-    
+
     Environment Variables:
     - VAULT_ADDR: Vault server address (required)
     - VAULT_TOKEN: Vault authentication token (required, or use VAULT_ROLE_ID/VAULT_SECRET_ID)
@@ -895,7 +895,7 @@ class VaultSecretManager:
     - VAULT_VERIFY_SSL: Verify SSL certificates (default: 'true')
     - VAULT_TIMEOUT: Request timeout in seconds (default: '30')
     - VAULT_FALLBACK_MODE: If 'true', returns placeholder on failure (default: 'false')
-    
+
     Usage:
         secret_manager = VaultSecretManager()
         api_key = await secret_manager.get_secret("app/config", "api_key")
@@ -908,13 +908,15 @@ class VaultSecretManager:
         self._client = None
         self._mount_point = os.getenv("VAULT_MOUNT_POINT", "secret")
         self._kv_version = int(os.getenv("VAULT_KV_VERSION", "2"))
-        self._fallback_mode = os.getenv("VAULT_FALLBACK_MODE", "false").lower() == "true"
+        self._fallback_mode = (
+            os.getenv("VAULT_FALLBACK_MODE", "false").lower() == "true"
+        )
         self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
-        
+
         # Try to initialize Vault client
         try:
             import hvac
-            
+
             vault_addr = os.getenv("VAULT_ADDR")
             vault_token = os.getenv("VAULT_TOKEN")
             vault_role_id = os.getenv("VAULT_ROLE_ID")
@@ -922,44 +924,43 @@ class VaultSecretManager:
             vault_namespace = os.getenv("VAULT_NAMESPACE")
             verify_ssl = os.getenv("VAULT_VERIFY_SSL", "true").lower() == "true"
             timeout = int(os.getenv("VAULT_TIMEOUT", "30"))
-            
+
             if not vault_addr:
                 raise ValueError("VAULT_ADDR environment variable is required")
-            
+
             # Initialize client
             self._client = hvac.Client(
                 url=vault_addr,
                 namespace=vault_namespace,
                 verify=verify_ssl,
-                timeout=timeout
+                timeout=timeout,
             )
-            
+
             # Authenticate
             if vault_token:
                 self._client.token = vault_token
             elif vault_role_id and vault_secret_id:
                 # Use AppRole authentication
                 auth_response = self._client.auth.approle.login(
-                    role_id=vault_role_id,
-                    secret_id=vault_secret_id
+                    role_id=vault_role_id, secret_id=vault_secret_id
                 )
-                self._client.token = auth_response['auth']['client_token']
+                self._client.token = auth_response["auth"]["client_token"]
             else:
                 raise ValueError(
                     "Either VAULT_TOKEN or VAULT_ROLE_ID/VAULT_SECRET_ID must be provided"
                 )
-            
+
             # Verify authentication
             if not self._client.is_authenticated():
                 raise RuntimeError("Vault authentication failed")
-            
+
             self._vault_available = True
             self.logger.info(
                 "VaultSecretManager initialized successfully",
                 vault_addr=vault_addr,
-                kv_version=self._kv_version
+                kv_version=self._kv_version,
             )
-            
+
         except ImportError:
             self.logger.warning(
                 "hvac library not installed. Install with: pip install hvac"
@@ -970,10 +971,7 @@ class VaultSecretManager:
                     "Install with: pip install hvac"
                 )
         except Exception as e:
-            self.logger.error(
-                f"Failed to initialize Vault client: {e}",
-                exc_info=True
-            )
+            self.logger.error(f"Failed to initialize Vault client: {e}", exc_info=True)
             if self._production_mode and not self._fallback_mode:
                 raise RuntimeError(
                     f"CRITICAL: Vault initialization failed in production mode: {e}"
@@ -982,83 +980,77 @@ class VaultSecretManager:
     async def get_secret(self, path: str, key: str = "value") -> str:
         """
         Retrieve a secret from HashiCorp Vault.
-        
+
         Args:
             path: The secret path (e.g., 'app/config' or 'database/credentials')
             key: The key within the secret (default: 'value')
-        
+
         Returns:
             str: The secret value
-            
+
         Raises:
             RuntimeError: If Vault is unavailable in production mode
             KeyError: If the secret or key doesn't exist
         """
         if not self._vault_available:
             error_msg = f"Vault unavailable, cannot retrieve secret: {path}/{key}"
-            
+
             if self._production_mode and not self._fallback_mode:
                 self.logger.critical(error_msg)
                 raise RuntimeError(
                     f"CRITICAL: {error_msg}. Vault is required in production mode."
                 )
-            
+
             if self._fallback_mode:
                 self.logger.warning(
                     f"{error_msg}. Returning placeholder (FALLBACK_MODE enabled)."
                 )
                 return f"vault-fallback-{path.replace('/', '-')}-{key}"
-            
+
             self.logger.error(error_msg)
             raise RuntimeError(f"Vault unavailable: {error_msg}")
-        
+
         try:
             # Read secret based on KV version
             if self._kv_version == 2:
                 response = self._client.secrets.kv.v2.read_secret_version(
-                    path=path,
-                    mount_point=self._mount_point
+                    path=path, mount_point=self._mount_point
                 )
-                secret_data = response['data']['data']
+                secret_data = response["data"]["data"]
             else:
                 response = self._client.secrets.kv.v1.read_secret(
-                    path=path,
-                    mount_point=self._mount_point
+                    path=path, mount_point=self._mount_point
                 )
-                secret_data = response['data']
-            
+                secret_data = response["data"]
+
             if key not in secret_data:
                 raise KeyError(
                     f"Key '{key}' not found in secret at path '{path}'. "
                     f"Available keys: {list(secret_data.keys())}"
                 )
-            
-            self.logger.info(
-                f"Retrieved secret from Vault",
-                path=path,
-                key=key
-            )
+
+            self.logger.info(f"Retrieved secret from Vault", path=path, key=key)
             return secret_data[key]
-            
+
         except Exception as e:
             self.logger.error(
                 f"Failed to retrieve secret from Vault: {e}",
                 path=path,
                 key=key,
-                exc_info=True
+                exc_info=True,
             )
-            
+
             if self._production_mode and not self._fallback_mode:
                 raise RuntimeError(
                     f"CRITICAL: Failed to retrieve secret in production mode: {e}"
                 ) from e
-            
+
             if self._fallback_mode:
                 self.logger.warning(
                     f"Returning placeholder for {path}/{key} (FALLBACK_MODE enabled)"
                 )
                 return f"vault-fallback-{path.replace('/', '-')}-{key}"
-            
+
             raise
 
 

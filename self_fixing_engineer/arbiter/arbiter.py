@@ -281,13 +281,14 @@ except ImportError as e:
     class PostgresClient:
         """
         Fallback stub for PostgresClient when asyncpg is not installed.
-        
+
         This is an optional dependency used for advanced database features.
         To enable PostgresClient:
         1. Install asyncpg: pip install asyncpg
         2. Configure DATABASE_URL with postgresql:// connection string
         3. Ensure arbiter.models.postgres_client module is available
         """
+
         def __init__(self, *args, **kwargs):
             logging.error(
                 "PostgresClient initialization failed. Required dependencies: asyncpg. "
@@ -307,6 +308,7 @@ except ImportError as e:
 
     class MultiModalPlugin:
         """Fallback stub for MultiModalPlugin when dependencies are not available."""
+
         pass
 
 
@@ -318,13 +320,14 @@ except ImportError as e:
     class Neo4jKnowledgeGraph:
         """
         Fallback stub for Neo4jKnowledgeGraph when neo4j driver is not installed.
-        
+
         This is an optional dependency used for knowledge graph features.
         To enable Neo4jKnowledgeGraph:
         1. Install neo4j driver: pip install neo4j
         2. Configure NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD environment variables
         3. Ensure arbiter.models.knowledge_graph_db module is available
         """
+
         def __init__(self, *args, **kwargs):
             logging.error(
                 "Neo4jKnowledgeGraph initialization failed. Required dependencies: neo4j driver. "
@@ -1372,9 +1375,13 @@ class Arbiter:
             ),
             db_client=self.db_client,
         )
-        
+
         # Fixed HumanInLoop initialization with proper config
-        if ARBITER_PACKAGE_AVAILABLE and HumanInLoop is not None and HumanInLoopConfig is not None:
+        if (
+            ARBITER_PACKAGE_AVAILABLE
+            and HumanInLoop is not None
+            and HumanInLoopConfig is not None
+        ):
             if human_in_loop:
                 self.human_in_loop = human_in_loop
             else:
@@ -1389,12 +1396,15 @@ class Arbiter:
                     EMAIL_SENDER=self.settings.EMAIL_SENDER or "no-reply@arbiter.local",
                     EMAIL_USE_TLS=self.settings.EMAIL_USE_TLS,
                     EMAIL_RECIPIENTS=self.settings.EMAIL_RECIPIENTS or {},
-                    SLACK_WEBHOOK_URL=str(self.settings.SLACK_WEBHOOK_URL) if self.settings.SLACK_WEBHOOK_URL else None,
+                    SLACK_WEBHOOK_URL=(
+                        str(self.settings.SLACK_WEBHOOK_URL)
+                        if self.settings.SLACK_WEBHOOK_URL
+                        else None
+                    ),
                     IS_PRODUCTION=os.getenv("APP_ENV") == "production",
                 )
                 self.human_in_loop = HumanInLoop(
-                    config=hitl_config,
-                    feedback_manager=self.feedback
+                    config=hitl_config, feedback_manager=self.feedback
                 )
         else:
             self.human_in_loop = None
@@ -2341,19 +2351,31 @@ class Arbiter:
                 f"[{self.name}] Setting up MessageQueueService subscriptions..."
             )
             try:
-                await self.message_queue_service.subscribe("bug_detected", self._on_bug_detected)
-                await self.message_queue_service.subscribe("policy_violation", self._on_policy_violation)
-                await self.message_queue_service.subscribe("code_analysis_complete", self._on_analysis_complete)
-                await self.message_queue_service.subscribe("generator_output", self._on_generator_output)
-                await self.message_queue_service.subscribe("test_results", self._on_test_results)
-                await self.message_queue_service.subscribe("workflow_completed", self._on_workflow_completed)
+                await self.message_queue_service.subscribe(
+                    "bug_detected", self._on_bug_detected
+                )
+                await self.message_queue_service.subscribe(
+                    "policy_violation", self._on_policy_violation
+                )
+                await self.message_queue_service.subscribe(
+                    "code_analysis_complete", self._on_analysis_complete
+                )
+                await self.message_queue_service.subscribe(
+                    "generator_output", self._on_generator_output
+                )
+                await self.message_queue_service.subscribe(
+                    "test_results", self._on_test_results
+                )
+                await self.message_queue_service.subscribe(
+                    "workflow_completed", self._on_workflow_completed
+                )
                 logging.getLogger(__name__).info(
                     f"[{self.name}] MessageQueueService subscriptions established"
                 )
             except Exception as e:
                 logging.getLogger(__name__).error(
                     f"[{self.name}] Failed to setup MessageQueueService subscriptions: {e}",
-                    exc_info=True
+                    exc_info=True,
                 )
         else:
             logging.getLogger(__name__).warning(
@@ -2363,7 +2385,6 @@ class Arbiter:
         # Fix 1: Setup HTTP /events endpoint
         if self.port:
             await self.setup_event_receiver()
-
 
     async def work_cycle(self) -> Dict[str, Any]:
         """A single work cycle for the agent, which calls the evolve method."""
@@ -2975,18 +2996,18 @@ class Arbiter:
     async def setup_event_receiver(self):
         """Sets up an HTTP endpoint to receive events from OmniCore."""
         from aiohttp import web
-        
+
         logging.getLogger(__name__).info(
             f"[{self.name}] Setting up HTTP /events endpoint on port {self.port}"
         )
-        
+
         app = web.Application()
-        app.router.add_post('/events', self._handle_incoming_event_http)
-        
+        app.router.add_post("/events", self._handle_incoming_event_http)
+
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, 'localhost', self.port)
-        
+        site = web.TCPSite(runner, "localhost", self.port)
+
         try:
             await site.start()
             logging.getLogger(__name__).info(
@@ -2994,50 +3015,45 @@ class Arbiter:
             )
         except Exception as e:
             logging.getLogger(__name__).error(
-                f"[{self.name}] Failed to start HTTP endpoint: {e}",
-                exc_info=True
+                f"[{self.name}] Failed to start HTTP endpoint: {e}", exc_info=True
             )
 
     async def _handle_incoming_event_http(self, request):
         """HTTP handler for incoming events."""
         from aiohttp import web
-        
+
         try:
             data = await request.json()
             event_type = data.get("event_type")
             event_data = data.get("data", {})
-            
+
             logging.getLogger(__name__).info(
                 f"[{self.name}] Received HTTP event: {event_type}"
             )
-            
+
             # Route to appropriate handler
             await self._handle_incoming_event(event_type, event_data)
-            
+
             return web.json_response({"status": "received", "event_type": event_type})
         except Exception as e:
             logging.getLogger(__name__).error(
-                f"[{self.name}] Error handling HTTP event: {e}",
-                exc_info=True
+                f"[{self.name}] Error handling HTTP event: {e}", exc_info=True
             )
-            return web.json_response(
-                {"status": "error", "message": str(e)},
-                status=500
-            )
+            return web.json_response({"status": "error", "message": str(e)}, status=500)
 
     async def _handle_incoming_event(self, event_type: str, data: Dict[str, Any]):
         """
         Routes incoming events to appropriate handlers.
-        
+
         Enhanced with metrics tracking for unknown event types and detailed logging.
         Follows industry best practices for event-driven architectures.
         """
         logger = logging.getLogger(__name__)
         logger.info(
             f"[{self.name}] Routing event type: {event_type}",
-            extra={"event_type": event_type, "agent": self.name}
+            extra={"event_type": event_type, "agent": self.name},
         )
-        
+
         # Route to handler based on event type
         handler_map = {
             "requests.arbiter.bug_detected": self._on_bug_detected,
@@ -3053,7 +3069,7 @@ class Arbiter:
             "test_results": self._on_test_results,
             "workflow_completed": self._on_workflow_completed,
         }
-        
+
         handler = handler_map.get(event_type)
         if handler:
             try:
@@ -3062,19 +3078,18 @@ class Arbiter:
                     routed_events_counter = get_or_create_counter(
                         "arbiter_events_routed_total",
                         "Total number of events successfully routed to handlers",
-                        labelnames=["event_type", "agent"]
+                        labelnames=["event_type", "agent"],
                     )
                     routed_events_counter.labels(
-                        event_type=event_type,
-                        agent=self.name
+                        event_type=event_type, agent=self.name
                     ).inc()
                 except Exception as metrics_error:
                     # Log metric errors at debug level to aid troubleshooting
                     logger.debug(
                         f"Failed to update routed events metric: {metrics_error}",
-                        extra={"event_type": event_type, "agent": self.name}
+                        extra={"event_type": event_type, "agent": self.name},
                     )
-                
+
                 await handler(data)
             except Exception as e:
                 logger.error(
@@ -3083,26 +3098,26 @@ class Arbiter:
                     extra={
                         "event_type": event_type,
                         "agent": self.name,
-                        "error_type": type(e).__name__
-                    }
+                        "error_type": type(e).__name__,
+                    },
                 )
-                
+
                 # Track handler errors
                 try:
                     handler_errors_counter = get_or_create_counter(
                         "arbiter_event_handler_errors_total",
                         "Total number of errors in event handlers",
-                        labelnames=["event_type", "agent", "error_type"]
+                        labelnames=["event_type", "agent", "error_type"],
                     )
                     handler_errors_counter.labels(
                         event_type=event_type,
                         agent=self.name,
-                        error_type=type(e).__name__
+                        error_type=type(e).__name__,
                     ).inc()
                 except Exception as metrics_error:
                     logger.debug(
                         f"Failed to update handler errors metric: {metrics_error}",
-                        extra={"event_type": event_type, "agent": self.name}
+                        extra={"event_type": event_type, "agent": self.name},
                     )
         else:
             # Unknown event type - log with more context and track metrics
@@ -3113,27 +3128,26 @@ class Arbiter:
                 extra={
                     "event_type": event_type,
                     "agent": self.name,
-                    "available_handlers": list(handler_map.keys())
-                }
+                    "available_handlers": list(handler_map.keys()),
+                },
             )
-            
+
             # Track unknown event types for monitoring
             try:
                 unknown_events_counter = get_or_create_counter(
                     "arbiter_events_unknown_total",
                     "Total number of unknown/unrouted event types",
-                    labelnames=["event_type", "agent"]
+                    labelnames=["event_type", "agent"],
                 )
                 unknown_events_counter.labels(
-                    event_type=event_type,
-                    agent=self.name
+                    event_type=event_type, agent=self.name
                 ).inc()
             except Exception as metrics_error:
                 logger.debug(
                     f"Failed to update unknown events metric: {metrics_error}",
-                    extra={"event_type": event_type, "agent": self.name}
+                    extra={"event_type": event_type, "agent": self.name},
                 )
-            
+
             # Consider implementing a dead-letter handler for unrouted events
             # For now, log the event data for investigation (sanitized)
             try:
@@ -3141,41 +3155,50 @@ class Arbiter:
                 sanitized_data = self._sanitize_event_data(data)
                 logger.debug(
                     f"[{self.name}] Unrouted event data: {json.dumps(sanitized_data, indent=2)}",
-                    extra={"event_type": event_type, "data": sanitized_data}
+                    extra={"event_type": event_type, "data": sanitized_data},
                 )
             except Exception:
                 logger.debug(
                     f"[{self.name}] Unrouted event data (non-serializable): {str(data)[:200]}"
                 )
-    
+
     def _sanitize_event_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Sanitize event data by redacting sensitive fields before logging.
-        
+
         Args:
             data: Raw event data dictionary
-            
+
         Returns:
             Sanitized dictionary with sensitive fields redacted
         """
         if not isinstance(data, dict):
             return data
-        
+
         # Set of sensitive field names to redact (for O(1) lookup)
         sensitive_fields = {
-            'password', 'token', 'secret', 'api_key', 'apikey',
-            'auth', 'authorization', 'credential', 'private_key',
-            'access_token', 'refresh_token', 'session_id'
+            "password",
+            "token",
+            "secret",
+            "api_key",
+            "apikey",
+            "auth",
+            "authorization",
+            "credential",
+            "private_key",
+            "access_token",
+            "refresh_token",
+            "session_id",
         }
-        
+
         sanitized = {}
         for key, value in data.items():
             key_lower = key.lower()
-            
+
             # Check if any sensitive field name is contained in the key
             # O(n) where n is number of sensitive fields (small constant)
             is_sensitive = any(sensitive in key_lower for sensitive in sensitive_fields)
-            
+
             if is_sensitive:
                 sanitized[key] = "[REDACTED]"
             # Recursively sanitize nested dictionaries
@@ -3186,7 +3209,7 @@ class Arbiter:
                 sanitized[key] = value[:500] + "... [TRUNCATED]"
             else:
                 sanitized[key] = value
-        
+
         return sanitized
 
     # Fix 3: Event Handler Methods
@@ -3199,19 +3222,23 @@ class Arbiter:
             bug_id = data.get("bug_id")
             bug_type = data.get("bug_type", "unknown")
             severity = data.get("severity", "medium")
-            
+
             # Log the bug
-            self.log_event(f"Bug detected: {bug_type} (severity: {severity})", "bug_detected")
-            
+            self.log_event(
+                f"Bug detected: {bug_type} (severity: {severity})", "bug_detected"
+            )
+
             # Coordinate with peers to distribute workload
-            await self.coordinate_with_peers({
-                "action": "bug_detected",
-                "agent": self.name,
-                "bug_id": bug_id,
-                "bug_type": bug_type,
-                "severity": severity
-            })
-            
+            await self.coordinate_with_peers(
+                {
+                    "action": "bug_detected",
+                    "agent": self.name,
+                    "bug_id": bug_id,
+                    "bug_type": bug_type,
+                    "severity": severity,
+                }
+            )
+
             # If decision optimizer is available, create a fix task
             if self.decision_optimizer and severity in ["high", "critical"]:
                 logging.getLogger(__name__).info(
@@ -3219,8 +3246,7 @@ class Arbiter:
                 )
         except Exception as e:
             logging.getLogger(__name__).error(
-                f"[{self.name}] Error handling bug_detected event: {e}",
-                exc_info=True
+                f"[{self.name}] Error handling bug_detected event: {e}", exc_info=True
             )
 
     async def _on_policy_violation(self, data: Dict[str, Any]):
@@ -3232,26 +3258,28 @@ class Arbiter:
             violation_id = data.get("violation_id")
             policy_name = data.get("policy_name", "unknown")
             action = data.get("action", "unknown")
-            
+
             # Log the violation
             self.log_event(
                 f"Policy violation: {policy_name} (action: {action})",
-                "policy_violation"
+                "policy_violation",
             )
-            
+
             # Request human approval if human-in-loop is available
             if self.human_in_loop:
-                await self.human_in_loop.request_approval({
-                    "issue": f"Policy violation: {policy_name}",
-                    "action": action,
-                    "agent": self.name,
-                    "violation_id": violation_id,
-                    "data": data
-                })
+                await self.human_in_loop.request_approval(
+                    {
+                        "issue": f"Policy violation: {policy_name}",
+                        "action": action,
+                        "agent": self.name,
+                        "violation_id": violation_id,
+                        "data": data,
+                    }
+                )
         except Exception as e:
             logging.getLogger(__name__).error(
                 f"[{self.name}] Error handling policy_violation event: {e}",
-                exc_info=True
+                exc_info=True,
             )
 
     async def _on_analysis_complete(self, data: Dict[str, Any]):
@@ -3262,13 +3290,12 @@ class Arbiter:
         try:
             issues = data.get("issues", [])
             analysis_id = data.get("analysis_id")
-            
+
             # Log completion
             self.log_event(
-                f"Analysis complete: {len(issues)} issues found",
-                "analysis_complete"
+                f"Analysis complete: {len(issues)} issues found", "analysis_complete"
             )
-            
+
             # Trigger fix workflows for detected issues
             for issue in issues:
                 if issue.get("severity") in ["high", "critical"]:
@@ -3283,7 +3310,7 @@ class Arbiter:
         except Exception as e:
             logging.getLogger(__name__).error(
                 f"[{self.name}] Error handling analysis_complete event: {e}",
-                exc_info=True
+                exc_info=True,
             )
 
     async def _on_generator_output(self, data: Dict[str, Any]):
@@ -3296,33 +3323,34 @@ class Arbiter:
             language = data.get("language", "python")
             generator_id = data.get("generator_id")
             metadata = data.get("metadata", {})
-            
+
             # Log the generation
-            self.log_event(
-                f"Code generated by {generator_id}",
-                "generator_output"
-            )
-            
+            self.log_event(f"Code generated by {generator_id}", "generator_output")
+
             # Direct generator engine integration
-            if self.generator_engine and hasattr(self.generator_engine, "process_output"):
+            if self.generator_engine and hasattr(
+                self.generator_engine, "process_output"
+            ):
                 try:
-                    await self.generator_engine.process_output(generated_code, language, metadata)
+                    await self.generator_engine.process_output(
+                        generated_code, language, metadata
+                    )
                     logging.getLogger(__name__).info(
                         f"[{self.name}] Generator engine processed output successfully"
                     )
                 except Exception as e:
                     logging.getLogger(__name__).error(
                         f"[{self.name}] Generator engine processing failed: {e}",
-                        exc_info=True
+                        exc_info=True,
                     )
-            
+
             # Route to test generation if available
             if generated_code:
                 await self.run_test_generation(generated_code, language)
                 logging.getLogger(__name__).info(
                     f"[{self.name}] Triggered test generation for generated code"
                 )
-                
+
             # Update knowledge graph with generator output
             if self.knowledge_graph:
                 try:
@@ -3333,16 +3361,16 @@ class Arbiter:
                             "code": generated_code[:200] if generated_code else None,
                             "language": language,
                             "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "metadata": metadata
+                            "metadata": metadata,
                         },
-                        source=self.name
+                        source=self.name,
                     )
                 except Exception as e:
                     logging.getLogger(__name__).error(
                         f"[{self.name}] Failed to update knowledge graph: {e}",
-                        exc_info=True
+                        exc_info=True,
                     )
-                    
+
             # Publish back to OmniCore for workflow tracking
             await self.publish_to_omnicore(
                 "generator_output_processed",
@@ -3350,14 +3378,14 @@ class Arbiter:
                     "generator_id": generator_id,
                     "arbiter": self.name,
                     "success": True,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
             )
-            
+
         except Exception as e:
             logging.getLogger(__name__).error(
                 f"[{self.name}] Error handling generator_output event: {e}",
-                exc_info=True
+                exc_info=True,
             )
             # Notify OmniCore of processing failure
             try:
@@ -3367,32 +3395,29 @@ class Arbiter:
                         "generator_id": data.get("generator_id"),
                         "arbiter": self.name,
                         "error": str(e),
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    }
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
                 )
             except Exception as pub_err:
                 logging.getLogger(__name__).error(
                     f"[{self.name}] Failed to publish error notification: {pub_err}",
-                    exc_info=True
+                    exc_info=True,
                 )
 
     async def _on_test_results(self, data: Dict[str, Any]):
         """Handler for test_results events."""
-        logging.getLogger(__name__).info(
-            f"[{self.name}] Test results event received"
-        )
+        logging.getLogger(__name__).info(f"[{self.name}] Test results event received")
         try:
             test_id = data.get("test_id")
             failures = data.get("failures", [])
             passed = data.get("passed", 0)
             failed = data.get("failed", 0)
-            
+
             # Log results
             self.log_event(
-                f"Test results: {passed} passed, {failed} failed",
-                "test_results"
+                f"Test results: {passed} passed, {failed} failed", "test_results"
             )
-            
+
             # Create fix tasks for test failures
             if failures and self.decision_optimizer:
                 for failure in failures:
@@ -3401,8 +3426,7 @@ class Arbiter:
                     )
         except Exception as e:
             logging.getLogger(__name__).error(
-                f"[{self.name}] Error handling test_results event: {e}",
-                exc_info=True
+                f"[{self.name}] Error handling test_results event: {e}", exc_info=True
             )
 
     async def _on_workflow_completed(self, data: Dict[str, Any]):
@@ -3414,13 +3438,13 @@ class Arbiter:
             workflow_id = data.get("workflow_id")
             status = data.get("status", "unknown")
             results = data.get("results", {})
-            
+
             # Log completion
             self.log_event(
                 f"Workflow {workflow_id} completed with status: {status}",
-                "workflow_completed"
+                "workflow_completed",
             )
-            
+
             # Update knowledge graph if available
             if hasattr(self, "knowledge_graph") and self.knowledge_graph:
                 await self.knowledge_graph.add_fact(
@@ -3428,7 +3452,7 @@ class Arbiter:
                     workflow_id,
                     results,
                     source=self.name,
-                    timestamp=datetime.now(timezone.utc).isoformat()
+                    timestamp=datetime.now(timezone.utc).isoformat(),
                 )
                 logging.getLogger(__name__).info(
                     f"[{self.name}] Updated knowledge graph with workflow results"
@@ -3436,7 +3460,7 @@ class Arbiter:
         except Exception as e:
             logging.getLogger(__name__).error(
                 f"[{self.name}] Error handling workflow_completed event: {e}",
-                exc_info=True
+                exc_info=True,
             )
 
 

@@ -357,7 +357,9 @@ try:
     from generator.intent_parser.intent_parser import IntentParser
     from generator.runner.runner_config import ConfigWatcher, load_config
     from generator.runner.runner_core import Runner
-    from generator.runner.runner_logging import logger as runner_logger_instance  # Use alias
+    from generator.runner.runner_logging import (
+        logger as runner_logger_instance,
+    )  # Use alias
     from generator.runner.runner_metrics import (
         HEALTH_STATUS,
         RUN_PASS_RATE,

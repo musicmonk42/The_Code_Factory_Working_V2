@@ -46,6 +46,7 @@ async def _wrap_log_audit_event(action: str, **kwargs) -> None:
     """
     try:
         from runner.runner_logging import log_audit_event
+
         await log_audit_event(action=action, data=kwargs)
     except ImportError:
         get_logger().debug(f"log_action: {action}, {kwargs}")
@@ -59,6 +60,7 @@ async def _wrap_log_audit_event(action: str, **kwargs) -> None:
 _USING_DUMMY_LOG_ACTION = False
 try:
     from runner.runner_logging import log_audit_event as _log_audit_event, send_alert
+
     # Use the wrapper to maintain backwards compatibility
     log_action = _wrap_log_audit_event
 except ImportError:
@@ -68,11 +70,11 @@ except ImportError:
         # In production, we should fail hard if runner logging is not available
         _is_production = os.getenv("PYTHON_ENV", "development").lower() == "production"
         _is_testing = (
-            os.getenv("TESTING") == "1" 
+            os.getenv("TESTING") == "1"
             or "pytest" in sys.modules
             or os.getenv("PYTEST_CURRENT_TEST") is not None
         )
-        
+
         if _is_production and not _is_testing:
             # Fail hard in production if runner logging is not available
             raise ImportError(
@@ -80,9 +82,9 @@ except ImportError:
                 "Clarification events must be logged to the secure audit trail. "
                 "Please ensure the runner module is properly installed and configured."
             )
-        
+
         _USING_DUMMY_LOG_ACTION = True
-        
+
         async def log_action(action: str, **kwargs) -> None:
             """
             Fallback log_action for development/testing only.
@@ -91,7 +93,7 @@ except ImportError:
             get_logger().warning(
                 f"DUMMY log_action (NOT FOR PRODUCTION): {action}",
                 extra={
-                    "operation": "dummy_log_action", 
+                    "operation": "dummy_log_action",
                     "warning": "not_audit_logged",
                     "action": action,
                 },

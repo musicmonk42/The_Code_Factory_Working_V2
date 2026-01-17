@@ -164,14 +164,20 @@ class DistributedRateLimiter:
         self.redis = None
         self.limit = limit
         self.window = window
-        
+
         # Wrap Redis connection in try-except to handle connection failures gracefully
         if redis_url:
             try:
                 self.redis = aioredis.from_url(redis_url)
                 # Redact sensitive info from URL for logging
-                safe_url = redis_url.split('@')[-1] if '@' in redis_url else redis_url.split('//')[1] if '//' in redis_url else 'configured'
-                logger.info(f"DistributedRateLimiter initialized with Redis at {safe_url}")
+                safe_url = (
+                    redis_url.split("@")[-1]
+                    if "@" in redis_url
+                    else redis_url.split("//")[1] if "//" in redis_url else "configured"
+                )
+                logger.info(
+                    f"DistributedRateLimiter initialized with Redis at {safe_url}"
+                )
             except Exception as e:
                 logger.warning(
                     f"DistributedRateLimiter: Failed to connect to Redis: {e}. "
@@ -179,7 +185,9 @@ class DistributedRateLimiter:
                 )
                 self.redis = None
         else:
-            logger.info("DistributedRateLimiter initialized without Redis (no rate limiting)")
+            logger.info(
+                "DistributedRateLimiter initialized without Redis (no rate limiting)"
+            )
 
     async def acquire(self, key: str) -> bool:
         if not self.redis:
@@ -262,20 +270,20 @@ class LLMClient:
         self.circuit_breaker = CircuitBreaker()
         self._is_initialized = asyncio.Event()
         self._init_task = None
-    
+
     @classmethod
     async def create(cls, config: RunnerConfig) -> "LLMClient":
         """
         Factory method to create and initialize LLMClient.
         This is the recommended way to create an LLMClient instance.
-        
+
         Usage:
             client = await LLMClient.create(config)
         """
         client = cls(config)
         await client._initialize()
         return client
-    
+
     def _ensure_initialization(self):
         """
         Lazy initialization: Start initialization task if not already started.
@@ -315,7 +323,9 @@ class LLMClient:
             encoding = tiktoken.get_encoding("cl100k_base")
             return len(encoding.encode(text))
         except Exception as e:
-            logger.warning(f"Failed to count tokens using tiktoken: {e}. Falling back to word-based estimation.")
+            logger.warning(
+                f"Failed to count tokens using tiktoken: {e}. Falling back to word-based estimation."
+            )
             return int(len(text.split()) * 1.3)
 
     async def call_llm_api(
@@ -492,7 +502,9 @@ class LLMClient:
             )
             return is_healthy
         except Exception as e:
-            logger.error(f"Health check failed for provider {provider or 'unknown'}: {e}")
+            logger.error(
+                f"Health check failed for provider {provider or 'unknown'}: {e}"
+            )
             metrics.LLM_PROVIDER_HEALTH.labels(provider=provider or "unknown").set(0)
             return False
 
@@ -523,17 +535,17 @@ def _get_or_create_lock() -> asyncio.Lock:
     Creates a new lock if called from a different event loop.
     """
     global _client_lock, _lock_loop_id
-    
+
     try:
         loop = asyncio.get_running_loop()
         loop_id = id(loop)
-        
+
         # Create new lock if none exists or if we're in a different event loop
         if _client_lock is None or _lock_loop_id != loop_id:
             _client_lock = asyncio.Lock()
             _lock_loop_id = loop_id
             logger.debug(f"Created new client lock for event loop {loop_id}")
-        
+
         return _client_lock
     except RuntimeError:
         # No event loop - this shouldn't happen in async context

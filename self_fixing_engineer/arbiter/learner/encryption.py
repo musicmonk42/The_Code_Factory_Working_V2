@@ -116,22 +116,21 @@ class ArbiterConfig:
         cls.ENCRYPTION_KEYS[new_version] = Fernet(new_key)
         key_rotation_counter.labels(version=new_version).inc()
         logger.info("Encryption key rotated", new_version=new_version)
-        
+
         # IMPLEMENTED: Persist the new key to SSM Parameter Store
         try:
             cls._persist_key_to_ssm(new_version, new_key)
             logger.info(
-                "Successfully persisted rotated key to SSM",
-                version=new_version
+                "Successfully persisted rotated key to SSM", version=new_version
             )
         except Exception as e:
             logger.error(
                 "Failed to persist rotated key to SSM. Key is still usable in memory.",
                 version=new_version,
                 error=str(e),
-                exc_info=True
+                exc_info=True,
             )
-        
+
         # Optionally delete oldest key if we have too many versions
         # Keep at least 2 versions for graceful rotation
         if len(cls.ENCRYPTION_KEYS) > 5:
@@ -142,40 +141,39 @@ class ArbiterConfig:
                 logger.info(
                     "Deleted oldest encryption key",
                     version=oldest_version,
-                    remaining_versions=list(cls.ENCRYPTION_KEYS.keys())
+                    remaining_versions=list(cls.ENCRYPTION_KEYS.keys()),
                 )
             except Exception as e:
                 logger.warning(
                     "Failed to delete oldest key from SSM",
                     version=oldest_version,
-                    error=str(e)
+                    error=str(e),
                 )
-    
+
     @classmethod
     def _persist_key_to_ssm(cls, version: str, key: bytes):
         """
         Persist an encryption key to AWS SSM Parameter Store.
-        
+
         Args:
             version: Key version identifier (e.g., "v2", "v3")
             key: Fernet encryption key as bytes
-            
+
         Raises:
             ClientError: If SSM operation fails
             NoCredentialsError: If AWS credentials are not configured
         """
         try:
             ssm_client = boto3.client(
-                "ssm",
-                region_name=os.getenv("AWS_REGION", "us-east-1")
+                "ssm", region_name=os.getenv("AWS_REGION", "us-east-1")
             )
-            
+
             parameter_name = f"/arbiter/encryption_keys/{version}"
-            
+
             # Fernet.generate_key() returns URL-safe base64-encoded bytes (44 chars)
             # Decode to ASCII string for SSM storage
             key_str = key.decode("ascii")
-            
+
             # Store as SecureString for added security
             ssm_client.put_parameter(
                 Name=parameter_name,
@@ -186,19 +184,19 @@ class ArbiterConfig:
                 Tags=[
                     {"Key": "Component", "Value": "Arbiter"},
                     {"Key": "Purpose", "Value": "Encryption"},
-                    {"Key": "Version", "Value": version}
-                ]
+                    {"Key": "Version", "Value": version},
+                ],
             )
-            
+
             logger.info(
                 "Persisted encryption key to SSM",
                 parameter=parameter_name,
-                version=version
+                version=version,
             )
         except NoCredentialsError:
             logger.warning(
                 "AWS credentials not configured. Key persisted in memory only.",
-                version=version
+                version=version,
             )
             raise
         except ClientError as e:
@@ -206,42 +204,39 @@ class ArbiterConfig:
                 "Failed to persist key to SSM",
                 version=version,
                 error=str(e),
-                exc_info=True
+                exc_info=True,
             )
             raise
-    
+
     @classmethod
     def _delete_key_from_ssm(cls, version: str):
         """
         Delete an encryption key from AWS SSM Parameter Store.
-        
+
         Args:
             version: Key version identifier to delete
-            
+
         Raises:
             ClientError: If SSM operation fails
         """
         try:
             ssm_client = boto3.client(
-                "ssm",
-                region_name=os.getenv("AWS_REGION", "us-east-1")
+                "ssm", region_name=os.getenv("AWS_REGION", "us-east-1")
             )
-            
+
             parameter_name = f"/arbiter/encryption_keys/{version}"
             ssm_client.delete_parameter(Name=parameter_name)
-            
+
             logger.info(
                 "Deleted encryption key from SSM",
                 parameter=parameter_name,
-                version=version
+                version=version,
             )
         except ClientError as e:
             # Parameter might not exist, which is acceptable
             if e.response["Error"]["Code"] != "ParameterNotFound":
                 logger.error(
-                    "Failed to delete key from SSM",
-                    version=version,
-                    error=str(e)
+                    "Failed to delete key from SSM", version=version, error=str(e)
                 )
                 raise
 

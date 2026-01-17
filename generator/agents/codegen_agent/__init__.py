@@ -44,19 +44,21 @@ if str(project_root) not in sys.path:
 
 class RunnerDependencyUnavailableError(Exception):
     """Raised when a critical runner dependency is unavailable in strict mode.
-    
+
     This error indicates that the code generation agent cannot function properly
     without the runner foundation. In production, this should halt startup.
     """
+
     pass
 
 
 class MockLLMUsageError(RuntimeError):
     """Raised when mock LLM is used in non-testing mode.
-    
+
     This error prevents silent failures where code generation appears to work
     but actually produces useless mock output.
     """
+
     pass
 
 
@@ -72,12 +74,12 @@ try:
     from runner.runner_errors import RunnerError, ValidationError
     from runner.runner_logging import log_audit_event, logger
     from runner.runner_security_utils import redact_secrets
-    
+
     _module_logger.info("Runner foundation imports successful")
 
 except ImportError as e:
     _RUNNER_IMPORT_ERROR = str(e)
-    
+
     # In strict mode, fail immediately
     if STRICT_MODE:
         _module_logger.critical(
@@ -90,10 +92,10 @@ except ImportError as e:
             f"logging, and security utilities. Please install the runner package "
             f"or disable strict mode for development/testing."
         ) from e
-    
+
     # Not in strict mode - use fallbacks with appropriate warnings
     logger = _module_logger
-    
+
     if TESTING:
         logger.warning(
             f"TESTING MODE: Runner imports not available, using mock implementations. "
@@ -106,14 +108,14 @@ except ImportError as e:
             f"Using mock implementations which will NOT generate real code. "
             f"Set CODEGEN_STRICT_MODE=1 to fail fast in production."
         )
-    
+
     _USING_MOCK_LLM = True
     _USING_MOCK_CONFIG = True
 
     # Define mock implementations with proper guardrails
     async def call_llm_api(*args, **kwargs) -> Dict[str, Any]:
         """Mock LLM API that raises an error in non-testing mode.
-        
+
         In testing mode, returns mock data.
         In non-testing mode, raises MockLLMUsageError to prevent silent failures.
         """
@@ -124,18 +126,16 @@ except ImportError as e:
                 "Either install the runner foundation or set TESTING=1 for development. "
                 f"Original import error: {_RUNNER_IMPORT_ERROR}"
             )
-        
-        logger.warning(
-            "MOCK: call_llm_api returning mock response (TESTING mode)"
-        )
+
+        logger.warning("MOCK: call_llm_api returning mock response (TESTING mode)")
         return {
             "content": "# Mock generated code - TESTING MODE ONLY\n"
-                      "# This is not real generated code\n"
-                      "def mock_function():\n"
-                      "    return 'mock'",
+            "# This is not real generated code\n"
+            "def mock_function():\n"
+            "    return 'mock'",
             "model": "mock-test-model",
             "_mock": True,
-            "_warning": "This is mock output from testing mode"
+            "_warning": "This is mock output from testing mode",
         }
 
     def load_config():
@@ -145,7 +145,7 @@ except ImportError as e:
                 "Mock load_config called in non-testing mode. "
                 "Configuration may not be properly loaded."
             )
-        
+
         class MockConfig:
             llm_provider = "mock"
             max_tokens = 4000
@@ -173,18 +173,22 @@ except ImportError as e:
 
     class LLMError(Exception):
         """Mock LLM error class."""
+
         pass
 
     class ConfigurationError(Exception):
         """Mock configuration error class."""
+
         pass
 
     class ValidationError(Exception):
         """Mock validation error class."""
+
         pass
 
     class RunnerError(Exception):
         """Mock runner error class."""
+
         pass
 
 
@@ -198,7 +202,7 @@ from .codegen_agent import (
 
 def is_using_mock_llm() -> bool:
     """Check if the module is using mock LLM implementations.
-    
+
     Returns:
         True if mock implementations are in use, False if real runner is available.
     """
@@ -207,7 +211,7 @@ def is_using_mock_llm() -> bool:
 
 def get_runner_status() -> Dict[str, Any]:
     """Get the status of runner dependencies.
-    
+
     Returns a dict with:
         - available: bool - True if real runner is available
         - using_mock_llm: bool

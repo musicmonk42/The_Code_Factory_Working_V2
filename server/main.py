@@ -223,7 +223,7 @@ async def root(request: Request):
     if "text/html" in accept_header:
         # Serve the web UI
         return templates.TemplateResponse("index.html", {"request": request})
-    
+
     # Otherwise return JSON API info
     return {
         "name": "Code Factory Platform API",
@@ -231,7 +231,7 @@ async def root(request: Request):
         "description": "Enterprise-grade HTTP API for automated software development",
         "ui": {
             "web_interface": "/",
-            "description": "Access the A.S.E web interface by visiting / in a browser"
+            "description": "Access the A.S.E web interface by visiting / in a browser",
         },
         "documentation": {
             "swagger": "/api/docs",

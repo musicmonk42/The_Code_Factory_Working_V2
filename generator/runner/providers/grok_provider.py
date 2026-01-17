@@ -285,7 +285,7 @@ class GrokProvider(LLMProvider):
     async def count_tokens(self, text: str, model: str) -> int:
         """
         Count tokens using approximate tokenizer (cl100k_base).
-        
+
         WARNING: This uses OpenAI's tiktoken (cl100k_base) as an approximation
         for Grok models. While this is reasonably accurate, it may not match
         the exact tokenization used by xAI's Grok models, potentially leading

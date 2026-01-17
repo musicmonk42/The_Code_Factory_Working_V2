@@ -15,7 +15,7 @@ Features:
 Usage:
     # Automatic setup on import
     import path_setup
-    
+
     # Or explicit setup
     from path_setup import setup_paths, PROJECT_ROOT
     setup_paths()
@@ -38,24 +38,25 @@ COMPONENT_PATHS = {
 
 # Initialize logger module-level for efficiency
 import logging
+
 _logger = logging.getLogger(__name__)
 
 
 def setup_paths(verbose: bool = False) -> List[str]:
     """
     Add all component paths to sys.path for discoverability.
-    
+
     This function is idempotent - it's safe to call multiple times.
     Paths are only added if they exist and aren't already in sys.path.
-    
+
     Args:
         verbose: If True, print status messages about path additions
-    
+
     Returns:
         List of paths that were added to sys.path
     """
     added_paths = []
-    
+
     for component_name, component_path in COMPONENT_PATHS.items():
         if component_path.exists():
             path_str = str(component_path)
@@ -63,27 +64,33 @@ def setup_paths(verbose: bool = False) -> List[str]:
                 sys.path.insert(0, path_str)
                 added_paths.append(path_str)
                 if verbose:
-                    print(f"[path_setup] Added {component_name} to sys.path: {path_str}")
+                    print(
+                        f"[path_setup] Added {component_name} to sys.path: {path_str}"
+                    )
             else:
                 if verbose:
-                    print(f"[path_setup] {component_name} already in sys.path: {path_str}")
+                    print(
+                        f"[path_setup] {component_name} already in sys.path: {path_str}"
+                    )
         else:
             if verbose:
-                print(f"[path_setup] Component not found: {component_name} at {component_path}")
-    
+                print(
+                    f"[path_setup] Component not found: {component_name} at {component_path}"
+                )
+
     return added_paths
 
 
 def get_component_path(component_name: str) -> Path:
     """
     Get the path for a specific component.
-    
+
     Args:
         component_name: Name of the component (e.g., "generator", "self_fixing_engineer")
-    
+
     Returns:
         Path object for the component
-    
+
     Raises:
         KeyError: If component_name is not recognized
     """
@@ -98,7 +105,7 @@ def get_component_path(component_name: str) -> Path:
 def validate_paths() -> dict:
     """
     Validate that all component paths exist.
-    
+
     Returns:
         Dictionary mapping component names to existence status (bool)
     """
@@ -114,7 +121,9 @@ _added_on_import = setup_paths(verbose=False)
 
 if _added_on_import:
     # Only log if we actually added paths (avoid spam on re-imports)
-    _logger.debug("path_setup: Added %d component paths to sys.path", len(_added_on_import))
+    _logger.debug(
+        "path_setup: Added %d component paths to sys.path", len(_added_on_import)
+    )
 
 
 __all__ = [

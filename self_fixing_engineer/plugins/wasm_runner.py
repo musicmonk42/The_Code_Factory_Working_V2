@@ -117,6 +117,7 @@ except ImportError as e:
         """Stub scrub_secrets when core_utils is not available."""
         return text
 
+
 # --- Dependency Enforcement: Hard-fail startup if wasmtime or pydantic are missing. ---
 WASMTIME_AVAILABLE = True
 try:
@@ -142,6 +143,7 @@ if not WASM_RUNNER_AVAILABLE:
         + ("wasmtime not installed, " if not WASMTIME_AVAILABLE else "")
         + ("pydantic not installed" if not PYDANTIC_AVAILABLE else "")
     )
+
 
 # --- Manifest Schema Validation (MANDATORY) ---
 class WasmManifestModel(BaseModel):

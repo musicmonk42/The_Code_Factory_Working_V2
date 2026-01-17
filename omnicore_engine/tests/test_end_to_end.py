@@ -42,14 +42,14 @@ async def test_end_to_end_plugin_api(tmp_path):
 async def test_end_to_end_plugin_cli(tmp_path):
     """
     Test CLI plugin execution (currently skipped - requires CLI refactoring).
-    
+
     This test is skipped because command_handlers is defined inside the main() function
     in cli.py, making it not directly accessible for testing. To enable this test,
     the CLI module would need refactoring to:
     1. Extract command_handlers to module level
     2. Create a parse_args function accessible at module level
     3. Make command functions testable independently
-    
+
     This is intentionally left as future work to maintain minimal changes.
     """
     # Mock the plugin registry's execute method to simulate the CLI calling a plugin

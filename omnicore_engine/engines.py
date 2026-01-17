@@ -19,8 +19,10 @@ except ImportError as e:
         f"ArbiterConfig not available (using fallback): {e}. "
         "Full arbiter configuration features will be limited."
     )
+
     class ArbiterConfig:
         """Fallback ArbiterConfig when arbiter module is not available."""
+
         def __init__(self):
             self.log_level = "INFO"
             self.LOG_LEVEL = "INFO"
@@ -28,6 +30,7 @@ except ImportError as e:
             self.DB_PATH = "sqlite:///./omnicore.db"
             self.API_HOST = "0.0.0.0"
             self.API_PORT = 8000
+
 
 try:
     from arbiter.bug_manager import BugManager
@@ -37,31 +40,32 @@ except Exception as e:
         f"BugManager not available (using stub): {e}. "
         "Bug reporting will be disabled. Install arbiter package for full functionality."
     )
+
     # Minimal stub used when arbiter isn't installed (tests will typically patch this)
     class BugManager:
         """
         Stub implementation of BugManager for environments without Arbiter installed.
-        
+
         This is a development/testing stub that provides no-op functionality.
         In production environments with Arbiter installed, the real BugManager
         from arbiter.bug_manager will be used instead.
-        
+
         Industry Standard Note:
         - This stub follows the Null Object pattern for graceful degradation
         - Tests should mock this class for proper bug reporting verification
         - Production deployments should install the full Arbiter package
-        
+
         Real Implementation Features (when Arbiter is available):
         - Bug tracking and reporting to external systems
         - Integration with issue trackers (Jira, GitHub Issues)
         - Automated bug triage and prioritization
         - ML-based bug pattern detection
         """
-        
+
         def __init__(self, *args, **kwargs):
             """
             Initialize BugManager stub.
-            
+
             Args:
                 *args: Ignored in stub implementation
                 **kwargs: Ignored in stub implementation
@@ -71,13 +75,13 @@ except Exception as e:
         async def report_bug(self, payload):
             """
             No-op bug reporting method for stub implementation.
-            
+
             Args:
                 payload: Bug report data (ignored in stub)
-                
+
             Returns:
                 None (no bug is actually reported)
-                
+
             Note:
                 In production with Arbiter installed, this method would:
                 - Validate and sanitize the bug report payload
@@ -98,19 +102,20 @@ except ImportError as e:
         "AI-driven autonomous agent features will be disabled. "
         "Install arbiter package for full functionality."
     )
+
     # Minimal stub when arbiter isn't installed
     class Arbiter:
         """
         Stub implementation of Arbiter for environments without Arbiter installed.
-        
+
         This is a development/testing stub that provides no-op functionality.
         The real Arbiter is a sophisticated AI-driven autonomous agent system.
-        
+
         Industry Standard Note:
         - Follows the Null Object pattern for graceful degradation
         - Enables development and testing without full Arbiter installation
         - Production systems should use the complete Arbiter package
-        
+
         Real Arbiter Features (when installed):
         - Autonomous decision-making and task execution
         - Self-healing and adaptive behavior
@@ -119,11 +124,11 @@ except ImportError as e:
         - Real-time monitoring and alerting
         - Explainable AI reasoning
         """
-        
+
         def __init__(self, *args, **kwargs):
             """
             Initialize Arbiter stub.
-            
+
             Args:
                 *args: Ignored in stub implementation
                 **kwargs: Ignored in stub implementation
@@ -133,7 +138,7 @@ except ImportError as e:
         async def start_async_services(self):
             """
             No-op async services startup for stub.
-            
+
             Real implementation would start:
             - Message queue consumers
             - Monitoring agents
@@ -145,7 +150,7 @@ except ImportError as e:
         async def stop_async_services(self):
             """
             No-op async services shutdown for stub.
-            
+
             Real implementation would gracefully stop:
             - All async workers and agents
             - Message queue connections
@@ -157,14 +162,14 @@ except ImportError as e:
         async def respond(self, *args, **kwargs):
             """
             Stub response method indicating Arbiter unavailability.
-            
+
             Args:
                 *args: Query/request arguments (ignored)
                 **kwargs: Additional parameters (ignored)
-                
+
             Returns:
                 str: Message indicating Arbiter is unavailable
-                
+
             Note:
                 Real Arbiter would process requests and return:
                 - Intelligent responses based on context
@@ -188,12 +193,12 @@ except ImportError as e:
     async def get_system_metrics_async():
         """
         Fallback system metrics function when Arbiter is not available.
-        
+
         This stub returns unavailability status instead of real metrics.
-        
+
         Returns:
             dict: Status dictionary indicating metrics are unavailable
-            
+
         Real Implementation (when Arbiter is available):
             Returns comprehensive system metrics including:
             - CPU, memory, disk, and network usage
@@ -204,17 +209,22 @@ except ImportError as e:
         """
         return {"status": "unavailable", "message": "arbiter.utils not available"}
 
+
 # Optional imports that may not be available in all environments
 try:
     from envs.code_health_env import CodeHealthEnv
 except ImportError as e:
-    logging.info(f"CodeHealthEnv not available: {e}. Code health environment features disabled.")
+    logging.info(
+        f"CodeHealthEnv not available: {e}. Code health environment features disabled."
+    )
     CodeHealthEnv = None
 
 try:
     from intent_capture.api import app as intent_capture_api
 except ImportError as e:
-    logging.info(f"Intent capture API not available: {e}. Intent capture features disabled.")
+    logging.info(
+        f"Intent capture API not available: {e}. Intent capture features disabled."
+    )
     intent_capture_api = None
 
 try:
@@ -223,20 +233,26 @@ try:
         create_import_fixer_engine,
     )
 except ImportError as e:
-    logging.info(f"ImportFixerEngine not available: {e}. Self-healing import fixer disabled.")
+    logging.info(
+        f"ImportFixerEngine not available: {e}. Self-healing import fixer disabled."
+    )
     ImportFixerEngine = None
     create_import_fixer_engine = None
 
 try:
     from test_generation.orchestrator import TestGenerationOrchestrator
 except ImportError as e:
-    logging.info(f"TestGenerationOrchestrator not available: {e}. Test generation features disabled.")
+    logging.info(
+        f"TestGenerationOrchestrator not available: {e}. Test generation features disabled."
+    )
     TestGenerationOrchestrator = None
 
 try:
     from self_fixing_engineer.agent_orchestration.crew_manager import CrewManager
 except ImportError as e:
-    logging.info(f"CrewManager not available: {e}. Agent orchestration features disabled.")
+    logging.info(
+        f"CrewManager not available: {e}. Agent orchestration features disabled."
+    )
     CrewManager = None
 
 try:
@@ -244,14 +260,18 @@ try:
         UnifiedSimulationModule,
     )
 except ImportError as e:
-    logging.info(f"UnifiedSimulationModule not available: {e}. Simulation features disabled.")
+    logging.info(
+        f"UnifiedSimulationModule not available: {e}. Simulation features disabled."
+    )
     UnifiedSimulationModule = None
 
 # Generator component imports (optional, graceful degradation)
 try:
     from generator.runner.runner_core import Runner as GeneratorRunner
 except ImportError as e:
-    logging.info(f"GeneratorRunner not available: {e}. Generator runner features disabled.")
+    logging.info(
+        f"GeneratorRunner not available: {e}. Generator runner features disabled."
+    )
     GeneratorRunner = None
 
 try:
@@ -265,13 +285,15 @@ try:
     from generator.agents import get_available_agents, is_agent_available
 except ImportError as e:
     logging.debug(f"Generator agents not available: {e}. Using fallback stub.")
+
     def get_available_agents() -> dict:
         """Fallback when generator.agents is not available."""
         return {}
-    
+
     def is_agent_available(agent_name: str) -> bool:
         """Fallback when generator.agents is not available."""
         return False
+
 
 try:
     from generator.intent_parser.intent_parser import IntentParser
@@ -419,7 +441,7 @@ class PluginService:
     async def handle_codegen_request(self, message):
         """Route code generation requests to generator."""
         self.logger.info(f"Received CodeGen request: {message.payload}")
-        
+
         codegen_engine = get_engine("generator")
         if not codegen_engine:
             self.logger.error("Generator engine not registered")
@@ -428,12 +450,12 @@ class PluginService:
                 {"error": "Generator engine not available", "request": message.payload},
             )
             return
-        
+
         try:
             # Extract request parameters
             code_spec = message.payload.get("spec", "")
             language = message.payload.get("language", "python")
-            
+
             # Check if codegen agent is available
             if not is_agent_available("codegen"):
                 raise RuntimeError(
@@ -441,7 +463,7 @@ class PluginService:
                     "may not be installed or dependencies are missing. "
                     "Install with: pip install -e generator[codegen]"
                 )
-            
+
             self.logger.info(f"Processing code generation for language: {language}")
             await self.message_bus.publish(
                 "generator:codegen_success",
@@ -457,7 +479,7 @@ class PluginService:
     async def handle_testgen_request(self, message):
         """Route test generation requests to generator."""
         self.logger.info(f"Received TestGen request: {message.payload}")
-        
+
         codegen_engine = get_engine("generator")
         if not codegen_engine:
             self.logger.error("Generator engine not registered")
@@ -466,7 +488,7 @@ class PluginService:
                 {"error": "Generator engine not available", "request": message.payload},
             )
             return
-        
+
         try:
             # Check if testgen agent is available
             if not is_agent_available("testgen"):
@@ -475,7 +497,7 @@ class PluginService:
                     "may not be installed or has missing dependencies (presidio, spacy, torch). "
                     "Install with: pip install -e generator[testgen]"
                 )
-            
+
             target_code = message.payload.get("target_code", "")
             self.logger.info(f"Processing test generation")
             await self.message_bus.publish(
@@ -492,7 +514,7 @@ class PluginService:
     async def handle_docgen_request(self, message):
         """Route documentation generation requests to generator."""
         self.logger.info(f"Received DocGen request: {message.payload}")
-        
+
         codegen_engine = get_engine("generator")
         if not codegen_engine:
             self.logger.error("Generator engine not registered")
@@ -501,7 +523,7 @@ class PluginService:
                 {"error": "Generator engine not available", "request": message.payload},
             )
             return
-        
+
         try:
             # Check if docgen agent is available
             if not is_agent_available("docgen"):
@@ -510,7 +532,7 @@ class PluginService:
                     "may not be installed or dependencies are missing. "
                     "Install with: pip install -e generator[docgen]"
                 )
-            
+
             code_path = message.payload.get("code_path", "")
             self.logger.info(f"Processing documentation generation for: {code_path}")
             await self.message_bus.publish(
@@ -526,11 +548,13 @@ class PluginService:
 
     async def handle_sfe_to_generator(self, message):
         """Handle workflow transitions from SFE to generator."""
-        self.logger.info(f"Received SFE to Generator workflow message: {message.payload}")
-        
+        self.logger.info(
+            f"Received SFE to Generator workflow message: {message.payload}"
+        )
+
         try:
             workflow_type = message.payload.get("workflow_type", "unknown")
-            
+
             if workflow_type == "fix_and_regenerate":
                 # SFE fixed code, now regenerate tests
                 self.logger.info("Triggering test regeneration after SFE fix")
@@ -582,13 +606,13 @@ class PluginService:
 def run_import_fixer(path):
     """
     Synchronous helper to run the fixer.
-    
+
     Uses asyncio.run() for proper async execution instead of deprecated
     get_event_loop() pattern (Python 3.10+ compatibility).
-    
+
     Args:
         path: File path to fix imports for
-        
+
     Returns:
         Result from import_fixer.fix_file()
     """
@@ -632,7 +656,7 @@ class OmniCoreOmega:
         self._is_initialized = False
         self.arbiters = []
         self.num = num_arbiters
-        
+
         # Store generator components
         self.generator_runner = generator_runner
         self.intent_parser = intent_parser
@@ -642,7 +666,7 @@ class OmniCoreOmega:
     def is_initialized(self) -> bool:
         """
         Check if OmniCoreOmega has been initialized.
-        
+
         Returns:
             bool: True if initialized, False otherwise.
         """
@@ -651,22 +675,22 @@ class OmniCoreOmega:
     async def shutdown(self):
         """
         Gracefully shutdown all OmniCoreOmega components.
-        
+
         This method ensures proper cleanup of all resources including:
         - Arbiters and their async services
         - Message bus connections
         - Database connections
         - Crew manager agents
-        
+
         Implements industry-standard graceful shutdown with error handling
         and logging at each step.
         """
         if not self._is_initialized:
             self.logger.warning("OmniCoreOmega: Shutdown called but not initialized")
             return
-        
+
         self.logger.info("OmniCoreOmega: Beginning graceful shutdown...")
-        
+
         # Stop arbiters
         if self.arbiters:
             self.logger.info(f"Stopping {len(self.arbiters)} arbiters...")
@@ -677,7 +701,7 @@ class OmniCoreOmega:
                 except Exception as e:
                     self.logger.error(f"Error stopping arbiter {i}: {e}", exc_info=True)
             self.arbiters.clear()
-        
+
         # Stop crew manager agents
         if self.crew_manager:
             try:
@@ -686,7 +710,7 @@ class OmniCoreOmega:
                 self.logger.debug("Crew manager stopped successfully")
             except Exception as e:
                 self.logger.error(f"Error stopping crew manager: {e}", exc_info=True)
-        
+
         # Shutdown message bus
         if self.message_bus:
             try:
@@ -694,8 +718,10 @@ class OmniCoreOmega:
                 await self.message_bus.shutdown()
                 self.logger.debug("Message bus shutdown successfully")
             except Exception as e:
-                self.logger.error(f"Error shutting down message bus: {e}", exc_info=True)
-        
+                self.logger.error(
+                    f"Error shutting down message bus: {e}", exc_info=True
+                )
+
         # Close database connections
         if self.db:
             try:
@@ -704,7 +730,7 @@ class OmniCoreOmega:
                 self.logger.debug("Database connections closed successfully")
             except Exception as e:
                 self.logger.error(f"Error closing database: {e}", exc_info=True)
-        
+
         self._is_initialized = False
         self.logger.info("OmniCoreOmega: Shutdown complete")
 
@@ -712,13 +738,13 @@ class OmniCoreOmega:
     def _find_crew_config() -> Optional[str]:
         """
         Search for crew_config.yaml in standard locations.
-        
+
         Returns:
             Path to crew_config.yaml if found, None otherwise.
         """
         import os
         from pathlib import Path
-        
+
         # Standard search locations
         search_paths = [
             "./crew_config.yaml",
@@ -728,13 +754,13 @@ class OmniCoreOmega:
             "./self_fixing_engineer/crew_config.yaml",
             "./configs/crew_config.yaml",
         ]
-        
+
         for path_str in search_paths:
             path = Path(path_str)
             if path.exists() and path.is_file():
                 logger.info("Found crew_config.yaml at: %s", path.absolute())
                 return str(path)
-        
+
         logger.warning("crew_config.yaml not found in any standard location")
         return None
 
@@ -781,31 +807,33 @@ class OmniCoreOmega:
 
         # Try to use real audit loggers instead of mock
         audit_log_manager = None
-        
+
         # First, try generator's audit log
         try:
             from generator.audit_log.audit_log import AUDIT_LOG
+
             audit_log_manager = AUDIT_LOG
             logger.info("Using generator AUDIT_LOG for audit logging")
         except ImportError:
             pass
-        
+
         # Fall back to SFE's audit logger
         if audit_log_manager is None:
             try:
                 from self_fixing_engineer.guardrails.audit_log import AuditLogger
+
                 audit_log_manager = AuditLogger()
                 logger.info("Using SFE AuditLogger for audit logging")
             except ImportError:
                 pass
-        
+
         # Last resort: use mock
         if audit_log_manager is None:
             logger.warning(
                 "Real audit loggers not available; using MockAuditLogManager. "
                 "Install generator or self_fixing_engineer for production audit logging."
             )
-            
+
             class MockAuditLogManager:
                 def __init__(self):
                     self.logs = []
@@ -906,11 +934,17 @@ class OmniCoreOmega:
                     "engine": self.simulation_engine,
                     "description": "Unified simulation module",
                     "run": getattr(self.simulation_engine, "run_simulation", None),
-                    "health_check": getattr(self.simulation_engine, "health_check", None),
-                    "get_registry": getattr(self.simulation_engine, "get_registry", None),
+                    "health_check": getattr(
+                        self.simulation_engine, "health_check", None
+                    ),
+                    "get_registry": getattr(
+                        self.simulation_engine, "get_registry", None
+                    ),
                 },
             )
-            logger.info("Registered simulation engine in ENGINE_REGISTRY with unified entrypoints")
+            logger.info(
+                "Registered simulation engine in ENGINE_REGISTRY with unified entrypoints"
+            )
 
         # Register crew manager
         if self.crew_manager:
@@ -918,7 +952,11 @@ class OmniCoreOmega:
                 "crew_manager",
                 {
                     "engine": self.crew_manager,
-                    "start_all": self.crew_manager.start_all if hasattr(self.crew_manager, "start_all") else None,
+                    "start_all": (
+                        self.crew_manager.start_all
+                        if hasattr(self.crew_manager, "start_all")
+                        else None
+                    ),
                     "description": "Agent crew orchestration manager",
                 },
             )
@@ -941,19 +979,18 @@ class OmniCoreOmega:
                 "description": "Generator code/test/doc generation capabilities",
                 "available_agents": get_available_agents(),
             }
-            
+
             if self.generator_runner:
                 generator_entrypoints["runner"] = self.generator_runner
-            
+
             if self.intent_parser:
                 generator_entrypoints["intent_parser"] = self.intent_parser
-            
+
             if self.llm_client or call_llm_api:
                 generator_entrypoints["llm_client"] = self.llm_client or call_llm_api
-            
+
             register_engine("generator", generator_entrypoints)
             logger.info("Registered generator engine in ENGINE_REGISTRY")
-
 
         for component in [
             self.db,

@@ -160,7 +160,9 @@ class ComplianceConfig(BaseModel):
 
     @field_validator("mapping")
     @classmethod
-    def validate_compliance_mapping(cls, v: Dict[str, List[str]]) -> Dict[str, List[str]]:
+    def validate_compliance_mapping(
+        cls, v: Dict[str, List[str]]
+    ) -> Dict[str, List[str]]:
         """Ensure all compliance control IDs in the mapping are valid."""
         # This regex pattern is a placeholder; it should be refined based on actual control IDs.
         control_id_pattern = re.compile(r"^(NIST|ISO27001)-[A-Za-z0-9.-]+$")

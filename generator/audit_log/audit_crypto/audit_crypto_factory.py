@@ -640,22 +640,22 @@ from .audit_common import is_production_environment as _is_production_env
 class DummyCryptoProvider(CryptoProvider):
     """
     A minimal crypto provider for DEV/TEST environments ONLY.
-    
+
     WARNING: This provider provides NO REAL SECURITY.
     - All signatures are deterministic and predictable
     - All verifications return True
     - This is intended ONLY for testing and development
-    
+
     Security Guardrails:
     - In production environments, using this provider will raise an error
     - Even in dev/test, a warning is always logged
     - The provider checks for explicit opt-in via AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER
-    
+
     Usage:
         This provider is automatically used when:
         1. Running in test/dev mode (AUDIT_LOG_DEV_MODE=true or PYTEST_CURRENT_TEST set)
         2. AND PROVIDER_TYPE is not explicitly set to a production provider
-        
+
         To force a real provider in tests, set:
         - AUDIT_CRYPTO_FORCE_REAL_PROVIDER=true
     """
@@ -671,8 +671,10 @@ class DummyCryptoProvider(CryptoProvider):
         # SECURITY GUARDRAIL: Verify this is not being used in production
         # Use centralized environment detection from audit_common
         is_production = _is_production_env()
-        allow_dummy_override = os.getenv("AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER", "").lower() == "true"
-        
+        allow_dummy_override = (
+            os.getenv("AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER", "").lower() == "true"
+        )
+
         if is_production and not allow_dummy_override:
             error_msg = (
                 "CRITICAL SECURITY ERROR: Attempted to use DummyCryptoProvider in production. "
@@ -681,18 +683,18 @@ class DummyCryptoProvider(CryptoProvider):
             )
             logger.critical(error_msg)
             raise CryptoInitializationError(error_msg)
-        
+
         super().__init__(
             software_key_master_accessor, fallback_hmac_secret_accessor, settings
         )
         self.key_id = "test-key-id"
-        
+
         # Always log a warning when DummyCryptoProvider is used
         logger.warning(
             "AUDIT_CRYPTO: Using DummyCryptoProvider. "
             "This provider offers NO REAL SECURITY and should NEVER be used in production. "
             "All signatures are deterministic and all verifications return True.",
-            extra={"operation": "dummy_provider_init", "security_warning": True}
+            extra={"operation": "dummy_provider_init", "security_warning": True},
         )
 
     async def generate_key(self, algo: str) -> str:
@@ -790,35 +792,37 @@ class CryptoProviderFactory:
     ) -> CryptoProvider:
         """
         Factory method to get a CryptoProvider instance dynamically based on configuration.
-        
+
         SECURITY CONSIDERATIONS:
         - In production, this method will NEVER automatically fall back to DummyCryptoProvider
         - If initialization fails in production, the application MUST crash (fail-closed)
         - Silent security downgrades are explicitly prevented
         - The 'software' provider can be used as fallback from 'hsm', but never 'dummy'
-        
+
         Behavior by Environment:
         - Production: Initializes requested provider, falls back to 'software' if HSM fails,
                       crashes if software fails (fail-closed security)
         - Dev/Test: Returns DummyCryptoProvider for safe, deterministic testing
         - Force real provider in tests: Set AUDIT_CRYPTO_FORCE_REAL_PROVIDER=true
-        
+
         Args:
             provider_type (str): The type of crypto provider to retrieve (e.g., "software", "hsm").
-            
+
         Returns:
             CryptoProvider: An initialized instance of the requested crypto provider.
-            
+
         Raises:
             CryptoInitializationError: If no crypto provider can be successfully initialized.
                                        In production, this is a fatal error that prevents
                                        application startup.
         """
         provider_type_lower = provider_type.lower()
-        
+
         # Check if real provider is forced in test environment
-        force_real_provider = os.getenv("AUDIT_CRYPTO_FORCE_REAL_PROVIDER", "").lower() == "true"
-        
+        force_real_provider = (
+            os.getenv("AUDIT_CRYPTO_FORCE_REAL_PROVIDER", "").lower() == "true"
+        )
+
         # DEV/TEST MODE HANDLING
         # IMPORTANT: This block ONLY runs in dev/test environments
         # Production environments (PYTHON_ENV=production) skip this entirely
@@ -835,9 +839,11 @@ class CryptoProviderFactory:
                     "This could lead to security downgrade. Refusing to continue. "
                     f"AUDIT_LOG_DEV_MODE={os.getenv('AUDIT_LOG_DEV_MODE', '')}"
                 )
-                logger.critical(error_msg, extra={"operation": "security_config_conflict"})
+                logger.critical(
+                    error_msg, extra={"operation": "security_config_conflict"}
+                )
                 raise CryptoInitializationError(error_msg)
-            
+
             # Safe to use dummy provider in dev/test
             if "dummy" in self._instances:
                 return self._instances["dummy"]
@@ -852,13 +858,13 @@ class CryptoProviderFactory:
             self._instances["dummy"] = dummy_instance
             logger.info(
                 "Using DummyCryptoProvider in dev/test mode",
-                extra={"operation": "dummy_provider_dev_mode"}
+                extra={"operation": "dummy_provider_dev_mode"},
             )
             return dummy_instance
 
         # --- Production/Non-Test Path ---
         # From this point on, we are in production mode (or forced real provider in tests)
-        
+
         if provider_type_lower in self._instances:
             logger.debug(
                 f"Returning cached instance of {provider_type_lower} crypto provider."
@@ -910,9 +916,7 @@ class CryptoProviderFactory:
             )
             return instance
         except Exception as e:
-            error_msg = (
-                f"Failed to initialize provider '{provider_type}': {e}"
-            )
+            error_msg = f"Failed to initialize provider '{provider_type}': {e}"
             logger.error(error_msg, exc_info=True)
 
             # SECURITY: In production, we only allow fallback from HSM to software
@@ -925,8 +929,7 @@ class CryptoProviderFactory:
                     "guarantees and must not start. Check configuration and secret access."
                 )
                 logger.critical(
-                    critical_msg, 
-                    extra={"operation": "get_provider_software_init_fail"}
+                    critical_msg, extra={"operation": "get_provider_software_init_fail"}
                 )
                 raise CryptoInitializationError(critical_msg) from e
 
@@ -935,9 +938,9 @@ class CryptoProviderFactory:
             logger.warning(
                 f"HSM provider initialization failed. Attempting fallback to software provider. "
                 f"Original error: {e}",
-                extra={"operation": "hsm_fallback_to_software"}
+                extra={"operation": "hsm_fallback_to_software"},
             )
-            
+
             try:
                 # >>> REFRESH 'software' ENTRY BEFORE FALLBACK <<<
                 if self._registry.get("software") is not SoftwareCryptoProvider:

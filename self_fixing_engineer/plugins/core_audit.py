@@ -191,44 +191,50 @@ class AuditLogger:
     def __init__(self, secrets_manager: Optional[SecretsManager] = None):
         """
         Initialize the AuditLogger with retry logic.
-        
+
         IMPROVED: This now tracks initialization success/failure and allows
         retries if initial initialization fails. Previous implementation
         would skip all subsequent initialization attempts even if the first
         one failed.
-        
+
         Environment Variables:
         - AUDIT_INIT_RETRY_COUNT: Number of retry attempts (default: 3)
         - AUDIT_INIT_RETRY_DELAY: Delay between retries in seconds (default: 1)
         """
         # Check if already successfully initialized
-        if getattr(self, "_initialized", False) and getattr(self, "_init_successful", False):
+        if getattr(self, "_initialized", False) and getattr(
+            self, "_init_successful", False
+        ):
             return
-        
+
         with _INIT_ONCE_LOCK:
             # Double-check after acquiring lock
-            if getattr(self, "_initialized", False) and getattr(self, "_init_successful", False):
+            if getattr(self, "_initialized", False) and getattr(
+                self, "_init_successful", False
+            ):
                 return
-            
+
             # Allow retry if previous initialization failed
-            if getattr(self, "_initialized", False) and not getattr(self, "_init_successful", False):
+            if getattr(self, "_initialized", False) and not getattr(
+                self, "_init_successful", False
+            ):
                 retry_count = int(os.getenv("AUDIT_INIT_RETRY_COUNT", "3"))
                 current_retry = getattr(self, "_init_retry_count", 0)
-                
+
                 if current_retry >= retry_count:
                     raise RuntimeError(
                         f"AuditLogger initialization failed after {retry_count} attempts. "
                         "Check logs for details."
                     )
-                
+
                 self._init_retry_count = current_retry + 1
                 retry_delay = float(os.getenv("AUDIT_INIT_RETRY_DELAY", "1"))
                 time.sleep(retry_delay)
-            
+
             # Initialize retry tracking
             if not hasattr(self, "_init_retry_count"):
                 self._init_retry_count = 0
-            
+
             try:
                 self.secrets_manager = secrets_manager or SecretsManager()
                 self._init_lock = threading.Lock()
@@ -252,34 +258,34 @@ class AuditLogger:
 
                 self._configure_logger_locked()
                 atexit.register(self.close)
-                
+
                 # Mark as successfully initialized
                 self._init_successful = True
                 self._initialized = True
-                
+
             except Exception as e:
                 # Mark as initialized but failed
                 self._initialized = True
                 self._init_successful = False
-                
+
                 # Log error to stderr
                 error_msg = {
                     "event_type": "audit_logger_init_failed",
                     "timestamp": datetime.utcnow().isoformat() + "Z",
                     "error": str(e),
-                    "retry_count": self._init_retry_count
+                    "retry_count": self._init_retry_count,
                 }
                 try:
                     sys.stderr.write(json.dumps(error_msg) + "\n")
                 except Exception:
                     pass
-                
+
                 raise RuntimeError(f"AuditLogger initialization failed: {e}") from e
-    
+
     def health_check(self) -> Dict[str, Any]:
         """
         Perform a health check on the AuditLogger.
-        
+
         Returns:
             dict: Health status including initialization state, queue status, etc.
         """
@@ -289,7 +295,7 @@ class AuditLogger:
             "init_retry_count": getattr(self, "_init_retry_count", 0),
             "closed": getattr(self, "_closed", True),
             "queue_size": self._log_queue.qsize() if hasattr(self, "_log_queue") else 0,
-            "app_instance_id": getattr(self, "_app_instance_id", None)
+            "app_instance_id": getattr(self, "_app_instance_id", None),
         }
 
     def _get_config_value(

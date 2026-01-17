@@ -46,6 +46,7 @@ plugin = None
 
 try:
     from omnicore_engine.plugin_registry import PlugInKind, plugin
+
     _PLUGIN_REGISTRY_AVAILABLE = True
 except ImportError as e:
     logging.getLogger(__name__).warning(
@@ -57,20 +58,22 @@ except ImportError as e:
 def _noop_plugin(**kwargs):
     """
     No-op plugin decorator for when plugin registry is unavailable.
-    
+
     This fallback allows the module to load and function normally
     even when the plugin registry import fails due to circular imports.
     Functions decorated with this will not be registered as plugins.
     """
+
     def decorator(fn):
         return fn
+
     return decorator
 
 
 def _get_plugin_decorator():
     """
     Get the plugin decorator, returning a no-op if unavailable.
-    
+
     Returns:
         The real plugin decorator if the plugin registry was imported
         successfully, otherwise returns a no-op decorator that simply
@@ -84,10 +87,10 @@ def _get_plugin_decorator():
 def _get_plugin_kind(kind_name: str):
     """
     Get a PlugInKind enum value safely.
-    
+
     Args:
         kind_name: The name of the plugin kind (e.g., 'EXECUTION')
-    
+
     Returns:
         The PlugInKind enum value if available, otherwise the kind_name
         as a string (which the no-op decorator will ignore anyway).
@@ -189,13 +192,16 @@ try:
     import grpc
     import prometheus_client
     from grpc_health.v1 import health_pb2, health_pb2_grpc
+
     # FIX: Pydantic V2 compatibility - Extra is now ConfigDict
     try:
         from pydantic import BaseModel, Field, ValidationError, validator, ConfigDict
+
         # Pydantic V2
         PYDANTIC_V2 = True
     except ImportError:
         from pydantic import BaseModel, Extra, Field, ValidationError, validator
+
         # Pydantic V1
         PYDANTIC_V2 = False
 except ImportError as e:
@@ -212,7 +218,7 @@ except ImportError as e:
         def __init_subclass__(cls, **kwargs):
             # Ignore all keyword arguments (like extra=...)
             super().__init_subclass__()
-    
+
     class Extra:
         forbid = "forbid"  # Mock attribute for Pydantic V1 compatibility
 
@@ -262,9 +268,11 @@ PLUGIN_OPERATION_COUNTER = (
 
 # --- Manifest Model ---
 if PYDANTIC_V2:
+
     class PluginManifest(BaseModel):
         """Strict validation of plugin manifest."""
-        model_config = ConfigDict(extra='forbid')
+
+        model_config = ConfigDict(extra="forbid")
 
         name: str = Field(..., min_length=1)
         version: str = Field(..., pattern=r"^\d+\.\d+\.\d+$")
@@ -276,7 +284,9 @@ if PYDANTIC_V2:
         dependencies: List[str] = Field(default_factory=list)
         min_core_version: str = Field("1.0.0", pattern=r"^\d+\.\d+\.\d+$")
         max_core_version: str = Field("999.0.0", pattern=r"^\d+\.\d+\.\d+$")
+
 else:
+
     class PluginManifest(BaseModel, extra=Extra.forbid):
         """Strict validation of plugin manifest."""
 
@@ -290,6 +300,7 @@ else:
         dependencies: List[str] = Field(default_factory=list)
         min_core_version: str = Field("1.0.0", pattern=r"^\d+\.\d+\.\d+$")
         max_core_version: str = Field("999.0.0", pattern=r"^\d+\.\d+\.\d+$")
+
     health_check: str = Field("plugin_health", min_length=1)
     api_version: str = Field("v1", min_length=1)
     license: str = "Proprietary"
@@ -410,7 +421,9 @@ def _is_endpoint_allowed(address: str) -> bool:
 
 # --- Health ---
 async def plugin_health(
-    channel: "grpc_types.aio.Channel", plugin_name: str, health_check_method_name: str = "Check"
+    channel: "grpc_types.aio.Channel",
+    plugin_name: str,
+    health_check_method_name: str = "Check",
 ) -> str:
     """
     Check the health of a gRPC service via standard Health service.

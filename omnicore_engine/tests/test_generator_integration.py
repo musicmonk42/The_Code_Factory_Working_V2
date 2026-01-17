@@ -140,12 +140,18 @@ class TestGeneratorIntegration:
         ENGINE_REGISTRY.clear()
 
         # Register all engines as OmniCoreOmega would
-        register_engine("import_fixer", {"engine": Mock(), "description": "Import fixer"})
-        register_engine("test_generation", {"engine": Mock(), "description": "Test gen"})
+        register_engine(
+            "import_fixer", {"engine": Mock(), "description": "Import fixer"}
+        )
+        register_engine(
+            "test_generation", {"engine": Mock(), "description": "Test gen"}
+        )
         register_engine("simulation", {"engine": Mock(), "description": "Simulation"})
         register_engine("crew_manager", {"engine": Mock(), "description": "Crew"})
         register_engine("arbiters", {"instances": lambda: [], "count": 5})
-        register_engine("generator", {"description": "Generator", "available_agents": {}})
+        register_engine(
+            "generator", {"description": "Generator", "available_agents": {}}
+        )
 
         # Verify all engines are registered
         assert "import_fixer" in ENGINE_REGISTRY

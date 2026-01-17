@@ -58,7 +58,7 @@ try:
         UnifiedSimulationModule,
         Database as SimulationDatabase,
         ShardedMessageBus as SimulationMessageBus,
-        create_simulation_module
+        create_simulation_module,
     )
 except ImportError:
     try:
@@ -107,13 +107,13 @@ except ImportError as e:
     class ExplainableReasonerPlugin:
         """
         Mock implementation of ExplainableReasonerPlugin for development/testing.
-        
+
         This stub provides minimal functionality when the real Arbiter explainable
         reasoner plugin is not available. It follows industry standards for:
         - Graceful degradation in development environments
         - Predictable mock responses for testing
         - Clear indication that real functionality is unavailable
-        
+
         Real Implementation Features (when Arbiter is installed):
         - AI-driven explanation generation for agent decisions
         - Multi-level explanation detail (high-level, detailed, technical)
@@ -122,7 +122,7 @@ except ImportError as e:
         - Confidence scores and uncertainty quantification
         - Citation of decision factors and data sources
         """
-        
+
         def __init__(self, *args, **kwargs):
             """Initialize mock ExplainableReasonerPlugin."""
             pass
@@ -130,13 +130,13 @@ except ImportError as e:
         async def explain(self, *args, **kwargs):
             """
             Return a mock explanation.
-            
+
             Real implementation would provide detailed reasoning about:
             - Why a particular decision was made
             - What factors influenced the outcome
             - Alternative paths that were considered
             - Confidence levels and uncertainties
-            
+
             Returns:
                 str: Mock explanation message
             """
@@ -145,7 +145,7 @@ except ImportError as e:
     class PolicyEngine:
         """
         Mock implementation of PolicyEngine for development/testing.
-        
+
         This stub provides minimal policy checking functionality when the real
         Arbiter policy engine is not available. Production systems should use
         the full PolicyEngine for:
@@ -154,7 +154,7 @@ except ImportError as e:
         - Resource usage policies
         - Behavior constraints and guardrails
         - Audit requirements and logging policies
-        
+
         Industry Standard Features (when Arbiter is installed):
         - Declarative policy definition (YAML/JSON)
         - Real-time policy evaluation
@@ -162,7 +162,7 @@ except ImportError as e:
         - Policy conflict detection
         - Explainable policy decisions
         """
-        
+
         def __init__(self, *args, **kwargs):
             """Initialize mock PolicyEngine."""
             pass
@@ -170,14 +170,14 @@ except ImportError as e:
         async def should_auto_learn(self, *args, **kwargs):
             """
             Mock policy check for auto-learning permission.
-            
+
             Real implementation would evaluate:
             - User/tenant permissions
             - Resource availability constraints
             - Regulatory compliance requirements
             - Risk assessment thresholds
             - Learning mode configurations
-            
+
             Returns:
                 tuple: (bool, str) - (should_learn, policy_reason)
             """
@@ -186,7 +186,7 @@ except ImportError as e:
     class FeedbackManager:
         """
         Mock implementation of FeedbackManager for development/testing.
-        
+
         This stub provides no-op feedback collection when the real feedback
         system is not available. Production deployments should use the full
         FeedbackManager for:
@@ -196,7 +196,7 @@ except ImportError as e:
         - Sentiment analysis
         - Feedback-driven improvements
         - Integration with issue tracking systems
-        
+
         Industry Standard Features (when installed):
         - Multi-channel feedback collection (API, UI, CLI)
         - Structured feedback taxonomy
@@ -204,7 +204,7 @@ except ImportError as e:
         - Priority scoring and triage
         - Analytics and trend detection
         """
-        
+
         def __init__(self, *args, **kwargs):
             """Initialize mock FeedbackManager."""
             pass
@@ -216,7 +216,7 @@ except ImportError as e:
         async def record_feedback(self, *args, **kwargs):
             """
             No-op feedback recording for mock.
-            
+
             Real implementation would:
             - Validate feedback structure
             - Store in database with metadata
@@ -229,10 +229,11 @@ except ImportError as e:
     class FeedbackType:
         """
         Enumeration of feedback types supported by the system.
-        
+
         This class defines standard feedback categories used throughout
         the platform for consistent feedback handling and routing.
         """
+
         BUG_REPORT = "bug_report"
         GENERAL = "general"
         MOOD_CORRECTION = "mood_correction"
@@ -241,12 +242,12 @@ except ImportError as e:
     class Arbiter:
         """
         Mock Arbiter implementation for development/testing.
-        
+
         See engines.py for full documentation of Arbiter capabilities.
         This mock provides minimal no-op functionality for environments
         without the full Arbiter installation.
         """
-        
+
         def __init__(self, *args, **kwargs):
             """Initialize mock Arbiter."""
             pass
@@ -266,7 +267,7 @@ except ImportError as e:
     class KnowledgeLoader:
         """
         Mock KnowledgeLoader for development/testing.
-        
+
         This stub provides no-op knowledge loading when the real knowledge
         graph system is not available. Production systems should use the
         full KnowledgeLoader for:
@@ -275,7 +276,7 @@ except ImportError as e:
         - Semantic reasoning and inference
         - Knowledge base versioning
         - Integration with external knowledge sources
-        
+
         Industry Standard Features (when available):
         - Multi-format knowledge ingestion (JSON, RDF, GraphML)
         - Ontology management and validation
@@ -283,7 +284,7 @@ except ImportError as e:
         - Incremental knowledge updates
         - Conflict resolution and consistency checking
         """
-        
+
         def load_all(self):
             """No-op knowledge loading for mock."""
             pass
@@ -295,10 +296,10 @@ except ImportError as e:
     class ArbiterArena:
         """
         Mock ArbiterArena for development/testing.
-        
+
         This stub provides minimal scanning functionality when the real
         Arbiter Arena (multi-agent coordination system) is not available.
-        
+
         Real Arena Features (when installed):
         - Multi-agent task coordination
         - Competitive agent evaluation
@@ -307,7 +308,7 @@ except ImportError as e:
         - Automated code scanning and analysis
         - Test case generation
         - Security vulnerability detection
-        
+
         Industry Standard Features:
         - Agent sandboxing and isolation
         - Resource allocation and scheduling
@@ -315,7 +316,7 @@ except ImportError as e:
         - Result aggregation and consensus
         - Explainable agent decisions
         """
-        
+
         def __init__(self, *args, **kwargs):
             """Initialize mock ArbiterArena."""
             pass
@@ -327,7 +328,7 @@ except ImportError as e:
         async def run_scan(self, codebase_path: str):
             """
             Mock codebase scanning.
-            
+
             Real implementation would perform:
             - Static code analysis
             - Security vulnerability scanning
@@ -335,10 +336,10 @@ except ImportError as e:
             - Dependency analysis
             - License compliance checking
             - Architecture validation
-            
+
             Args:
                 codebase_path: Path to codebase to scan
-                
+
             Returns:
                 dict: Mock scan results
             """
@@ -347,14 +348,14 @@ except ImportError as e:
         async def generate_test_cases(self, *args, **kwargs):
             """
             Mock test case generation.
-            
+
             Real implementation would generate:
             - Unit tests with multiple scenarios
             - Integration tests for workflows
             - Edge case coverage
             - Property-based tests
             - Performance test scenarios
-            
+
             Returns:
                 str: Mock test cases message
             """
@@ -363,10 +364,10 @@ except ImportError as e:
     class MerkleTree:
         """
         Mock MerkleTree implementation for development/testing.
-        
+
         This stub provides basic Merkle tree functionality for tamper-proof
         audit logging when the full implementation is not available.
-        
+
         Real Implementation Features (when available):
         - Cryptographic hash tree construction
         - Efficient proof of inclusion
@@ -374,7 +375,7 @@ except ImportError as e:
         - Incremental updates with proof generation
         - Integration with blockchain systems
         - Persistence and recovery
-        
+
         Industry Standard Applications:
         - Audit log integrity verification
         - Distributed system consistency
@@ -382,11 +383,11 @@ except ImportError as e:
         - Version control systems
         - Blockchain and cryptocurrency
         """
-        
+
         def __init__(self, leaves: Optional[List[bytes]] = None, *args, **kwargs):
             """
             Initialize mock MerkleTree.
-            
+
             Args:
                 leaves: Optional initial leaf nodes (stored but not processed in mock)
                 *args: Additional arguments (ignored)
@@ -398,7 +399,7 @@ except ImportError as e:
         def _recalculate_root(self):
             """
             Mock root recalculation.
-            
+
             Real implementation would:
             - Hash all leaf nodes
             - Build tree bottom-up with pairwise hashing
@@ -410,7 +411,7 @@ except ImportError as e:
         def add_leaf(self, leaf: bytes, key: Optional[bytes] = None) -> None:
             """
             Add a leaf to the mock Merkle tree.
-            
+
             Args:
                 leaf: Data to add as a leaf node
                 key: Optional key for indexed access (ignored in mock)
@@ -420,7 +421,7 @@ except ImportError as e:
         def get_root(self) -> bytes:
             """
             Get the mock Merkle tree root hash.
-            
+
             Returns:
                 bytes: Mock root hash
             """
@@ -471,22 +472,22 @@ _feature_flags: Dict[str, Dict[str, Any]] = {
         "description": "Enable experimental features",
         "created_at": None,
         "updated_at": None,
-        "updated_by": None
+        "updated_by": None,
     },
     "debug_mode": {
         "value": False,
         "description": "Enable debug logging and diagnostics",
         "created_at": None,
         "updated_at": None,
-        "updated_by": None
+        "updated_by": None,
     },
     "maintenance_mode": {
         "value": False,
         "description": "Put system in maintenance mode",
         "created_at": None,
         "updated_at": None,
-        "updated_by": None
-    }
+        "updated_by": None,
+    },
 }
 _feature_flags_lock = asyncio.Lock()
 
@@ -626,41 +627,45 @@ async def startup_event_fastapi():
     try:
         if UnifiedSimulationModule is not None:
             # Check if we have the enhanced simulation module with adapter classes
-            if 'create_simulation_module' in dir():
+            if "create_simulation_module" in dir():
                 # Use the factory function to create simulation module with proper adapters
-                logger.info("Initializing simulation module with real database adapter...")
-                
+                logger.info(
+                    "Initializing simulation module with real database adapter..."
+                )
+
                 # Get database URL from environment or use default with null safety
                 db_url = os.getenv("DATABASE_URL")
                 if not db_url and omnicore_engine.database:
                     # Safely access db_path with null check
-                    db_url = getattr(omnicore_engine.database, 'db_path', None)
-                
+                    db_url = getattr(omnicore_engine.database, "db_path", None)
+
                 # Provide fallback if no database URL available
                 if not db_url:
-                    logger.warning("No database URL available, using default SQLite path")
+                    logger.warning(
+                        "No database URL available, using default SQLite path"
+                    )
                     db_url = "sqlite:///./omnicore.db"
-                
+
                 # Create database adapter
                 sim_db = SimulationDatabase(db_path=db_url)
-                
+
                 # Create message bus adapter
                 sim_bus = SimulationMessageBus()
-                
+
                 # Create simulation module configuration
                 sim_config = {
                     "SIM_MAX_WORKERS": getattr(settings, "SIM_MAX_WORKERS", 4),
                     "SIM_RETRY_ATTEMPTS": getattr(settings, "SIM_RETRY_ATTEMPTS", 3),
                     "SIM_BACKOFF_FACTOR": getattr(settings, "SIM_BACKOFF_FACTOR", 1.0),
                 }
-                
+
                 # Initialize using factory function
                 simulation_module = await create_simulation_module(
-                    config=sim_config,
-                    db=sim_db,
-                    message_bus=sim_bus
+                    config=sim_config, db=sim_db, message_bus=sim_bus
                 )
-                logger.info("Simulation module initialized successfully with real adapters.")
+                logger.info(
+                    "Simulation module initialized successfully with real adapters."
+                )
             elif omnicore_engine.database and omnicore_engine.message_bus:
                 # Fallback to original initialization method
                 simulation_module = UnifiedSimulationModule(
@@ -669,7 +674,9 @@ async def startup_event_fastapi():
                     message_bus=omnicore_engine.message_bus,
                 )
                 await simulation_module.initialize()
-                logger.info("UnifiedSimulationModule initialized successfully (legacy mode).")
+                logger.info(
+                    "UnifiedSimulationModule initialized successfully (legacy mode)."
+                )
             else:
                 logger.warning(
                     "Database or MessageBus not available, creating minimal simulation module."
@@ -678,7 +685,9 @@ async def startup_event_fastapi():
                     config=settings, db=None, message_bus=None
                 )
         else:
-            logger.warning("UnifiedSimulationModule not available, skipping initialization.")
+            logger.warning(
+                "UnifiedSimulationModule not available, skipping initialization."
+            )
             simulation_module = None
     except Exception as e:
         logger.error(
@@ -1066,17 +1075,17 @@ async def get_feature_flag(
 ):
     """
     Get feature flag configuration.
-    
+
     Retrieves one or all feature flags from the system.
     Feature flags allow dynamic control of system behavior without code changes.
-    
+
     Args:
         flag_name: Optional specific feature flag name to retrieve.
                   If not provided, returns all feature flags.
-        
+
     Returns:
         JSON response with feature flag(s) data
-        
+
     Example Response (single flag):
         {
             "flag_name": "experimental_features",
@@ -1086,7 +1095,7 @@ async def get_feature_flag(
             "updated_at": null,
             "updated_by": null
         }
-        
+
     Example Response (all flags):
         {
             "flags": {
@@ -1097,7 +1106,7 @@ async def get_feature_flag(
         }
     """
     API_REQUESTS.labels(endpoint="/admin/feature-flag", method="GET").inc()
-    
+
     async with _feature_flags_lock:
         if flag_name:
             # Get specific flag
@@ -1106,8 +1115,8 @@ async def get_feature_flag(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail={
                         "message": f"Feature flag '{flag_name}' not found.",
-                        "available_flags": list(_feature_flags.keys())
-                    }
+                        "available_flags": list(_feature_flags.keys()),
+                    },
                 )
             flag_data = _feature_flags[flag_name].copy()
             flag_data["flag_name"] = flag_name
@@ -1116,7 +1125,7 @@ async def get_feature_flag(
             # Get all flags
             return {
                 "flags": {k: v for k, v in _feature_flags.items()},
-                "count": len(_feature_flags)
+                "count": len(_feature_flags),
             }
 
 
@@ -1128,28 +1137,28 @@ async def set_feature_flag(
 ):
     """
     Set or update feature flag configuration.
-    
+
     Updates the value of an existing feature flag or creates a new one.
     Changes are applied immediately and affect system behavior in real-time.
-    
+
     Security:
         - Requires authentication (admin access recommended)
         - Changes are logged with user ID for audit trail
-    
+
     Args:
         flag_name: Feature flag name to set (alphanumeric and underscores)
         request_body: Feature flag configuration with 'value' field (boolean)
         user_id: Authenticated user ID (from token)
-        
+
     Returns:
         JSON response with updated feature flag data
-        
+
     Example Request:
         POST /admin/feature-flag?flag_name=debug_mode
         {
             "value": true
         }
-        
+
     Example Response:
         {
             "message": "Feature flag 'debug_mode' updated successfully",
@@ -1161,20 +1170,20 @@ async def set_feature_flag(
         }
     """
     API_REQUESTS.labels(endpoint="/admin/feature-flag", method="POST").inc()
-    
+
     # Validate flag name (alphanumeric and underscores only)
-    if not re.match(r'^[a-zA-Z0-9_]+$', flag_name):
+    if not re.match(r"^[a-zA-Z0-9_]+$", flag_name):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Feature flag name must contain only letters, numbers, and underscores"
+            detail="Feature flag name must contain only letters, numbers, and underscores",
         )
-    
+
     # Use timezone-aware datetime for compatibility
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    
+
     async with _feature_flags_lock:
         is_new = flag_name not in _feature_flags
-        
+
         if is_new:
             # Create new flag
             _feature_flags[flag_name] = {
@@ -1182,23 +1191,27 @@ async def set_feature_flag(
                 "description": f"Feature flag: {flag_name}",
                 "created_at": timestamp,
                 "updated_at": timestamp,
-                "updated_by": user_id
+                "updated_by": user_id,
             }
-            logger.info(f"Created new feature flag '{flag_name}' with value {request_body.value} by user {user_id}")
+            logger.info(
+                f"Created new feature flag '{flag_name}' with value {request_body.value} by user {user_id}"
+            )
         else:
             # Update existing flag
             _feature_flags[flag_name]["value"] = request_body.value
             _feature_flags[flag_name]["updated_at"] = timestamp
             _feature_flags[flag_name]["updated_by"] = user_id
-            logger.info(f"Updated feature flag '{flag_name}' to {request_body.value} by user {user_id}")
-        
+            logger.info(
+                f"Updated feature flag '{flag_name}' to {request_body.value} by user {user_id}"
+            )
+
         return {
             "message": f"Feature flag '{flag_name}' {'created' if is_new else 'updated'} successfully",
             "flag_name": flag_name,
             "value": request_body.value,
             "updated_at": timestamp,
             "updated_by": user_id,
-            "is_new": is_new
+            "is_new": is_new,
         }
 
 

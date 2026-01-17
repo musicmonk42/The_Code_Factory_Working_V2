@@ -31,6 +31,7 @@ router = APIRouter(prefix="/sfe", tags=["Self-Fixing Engineer"])
 def get_sfe_service() -> SFEService:
     """Dependency for SFEService."""
     from server.routers.jobs import get_omnicore_service
+
     omnicore = get_omnicore_service()
     return SFEService(omnicore_service=omnicore)
 
@@ -335,7 +336,9 @@ async def get_sfe_metrics(
 
 @router.get("/insights")
 async def get_learning_insights(
-    job_id: Optional[str] = Query(None, description="Optional job ID to filter insights"),
+    job_id: Optional[str] = Query(
+        None, description="Optional job ID to filter insights"
+    ),
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """

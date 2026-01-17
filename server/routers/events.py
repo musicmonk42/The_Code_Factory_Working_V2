@@ -56,7 +56,9 @@ async def websocket_endpoint(websocket: WebSocket):
     """
     await websocket.accept()
     active_connections.append(websocket)
-    logger.info(f"WebSocket client connected. Total connections: {len(active_connections)}")
+    logger.info(
+        f"WebSocket client connected. Total connections: {len(active_connections)}"
+    )
 
     try:
         while True:
@@ -79,7 +81,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         active_connections.remove(websocket)
-        logger.info(f"WebSocket client disconnected. Total connections: {len(active_connections)}")
+        logger.info(
+            f"WebSocket client disconnected. Total connections: {len(active_connections)}"
+        )
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         if websocket in active_connections:

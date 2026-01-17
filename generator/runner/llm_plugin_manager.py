@@ -161,6 +161,7 @@ else:
     except ValueError:
         # Metrics already registered (happens during pytest collection)
         from prometheus_client import REGISTRY
+
         PLUGIN_LOADS = REGISTRY._names_to_collectors.get("llm_plugin_loads_total")
         PLUGIN_ERRORS = REGISTRY._names_to_collectors.get("llm_plugin_errors_total")
 

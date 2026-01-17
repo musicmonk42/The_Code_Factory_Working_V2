@@ -1409,12 +1409,12 @@ class CrewManager:
                     "metadata": agent_info["metadata"],
                     "status": agent_info.get("status"),
                 }
-                
+
                 # Include sandbox ID if agent is running
                 sandbox = agent_info.get("sandbox")
                 if sandbox and hasattr(sandbox, "id"):
                     state_data["sandbox_id"] = getattr(sandbox, "id")
-                
+
                 await self.redis_pool.set(
                     f"crew_manager:agent:{name}:config", json.dumps(state_data)
                 )
@@ -1449,13 +1449,17 @@ class CrewManager:
         async with self._lock:
             try:
                 # Scan for all agent configurations
-                async for key in self.redis_pool.scan_iter("crew_manager:agent:*:config"):
+                async for key in self.redis_pool.scan_iter(
+                    "crew_manager:agent:*:config"
+                ):
                     agent_name_bytes = key if isinstance(key, bytes) else key.encode()
                     agent_name = agent_name_bytes.decode().split(":")[2]
-                    
+
                     config_str = await self.redis_pool.get(key)
                     if not config_str:
-                        logger.warning(f"Empty configuration for agent '{agent_name}', skipping.")
+                        logger.warning(
+                            f"Empty configuration for agent '{agent_name}', skipping."
+                        )
                         continue
 
                     try:
@@ -1506,41 +1510,56 @@ class CrewManager:
                                 logger.info(
                                     f"Attempting to re-attach to sandbox '{sandbox_id}' for agent '{agent_name}'."
                                 )
-                                
+
                                 # Try to verify sandbox health if health poller is available
                                 if self._agent_health_poller:
                                     agent_info = self.agents.get(agent_name)
                                     if agent_info:
                                         # Mock sandbox object for health check
-                                        temp_sandbox = type('obj', (object,), {'id': sandbox_id})()
+                                        temp_sandbox = type(
+                                            "obj", (object,), {"id": sandbox_id}
+                                        )()
                                         agent_info["sandbox"] = temp_sandbox
-                                        
+
                                         try:
                                             health_status = await asyncio.wait_for(
-                                                self._agent_health_poller(agent_name, agent_info),
-                                                timeout=5.0
+                                                self._agent_health_poller(
+                                                    agent_name, agent_info
+                                                ),
+                                                timeout=5.0,
                                             )
-                                            
+
                                             # If health check succeeds, consider sandbox reattached
-                                            if health_status and not health_status.get("error"):
-                                                self._agent_sandboxes[agent_name] = temp_sandbox
+                                            if health_status and not health_status.get(
+                                                "error"
+                                            ):
+                                                self._agent_sandboxes[agent_name] = (
+                                                    temp_sandbox
+                                                )
                                                 agent_info["status"] = "RUNNING"
                                                 agent_info["last_started"] = time.time()
                                                 reattached_count += 1
                                                 logger.info(
                                                     f"Successfully re-attached to sandbox for agent '{agent_name}'."
                                                 )
-                                                
+
                                                 # Start monitoring task for re-attached agent
                                                 if self.auto_restart:
-                                                    asyncio.create_task(self._monitor_agent_sandbox(agent_name))
+                                                    asyncio.create_task(
+                                                        self._monitor_agent_sandbox(
+                                                            agent_name
+                                                        )
+                                                    )
                                                 continue
-                                        except (asyncio.TimeoutError, Exception) as health_e:
+                                        except (
+                                            asyncio.TimeoutError,
+                                            Exception,
+                                        ) as health_e:
                                             logger.warning(
                                                 f"Health check failed for sandbox '{sandbox_id}': {health_e}. Will restart agent."
                                             )
                                             agent_info["sandbox"] = None
-                                
+
                                 # If re-attachment failed, clean up and restart
                                 logger.info(
                                     f"Could not re-attach to sandbox '{sandbox_id}' for agent '{agent_name}'. Starting new sandbox."
@@ -1580,7 +1599,7 @@ class CrewManager:
                     except Exception as agent_e:
                         logger.error(
                             f"Failed to load agent '{agent_name}' from Redis state: {agent_e}",
-                            exc_info=True
+                            exc_info=True,
                         )
                         failed_count += 1
 
@@ -1590,7 +1609,7 @@ class CrewManager:
             except Exception as e:
                 logger.error(
                     f"Critical error during state loading from Redis: {e}",
-                    exc_info=True
+                    exc_info=True,
                 )
                 raise
 
@@ -1604,7 +1623,7 @@ class CrewManager:
             loaded=loaded_count,
             reattached=reattached_count,
             restarted=restarted_count,
-            failed=failed_count
+            failed=failed_count,
         )
 
     async def _cleanup_orphaned_sandboxes(self):
@@ -1619,7 +1638,9 @@ class CrewManager:
             logger.debug("Cleaning up orphaned sandbox references in Redis...")
             cleaned_count = 0
 
-            async for key in self.redis_pool.scan_iter("crew_manager:agent:*:sandbox_id"):
+            async for key in self.redis_pool.scan_iter(
+                "crew_manager:agent:*:sandbox_id"
+            ):
                 agent_name_bytes = key if isinstance(key, bytes) else key.encode()
                 agent_name = agent_name_bytes.decode().split(":")[2]
 
@@ -1636,10 +1657,7 @@ class CrewManager:
                 logger.info(f"Cleaned up {cleaned_count} orphaned sandbox references.")
 
         except Exception as e:
-            logger.warning(
-                f"Error during orphaned sandbox cleanup: {e}",
-                exc_info=True
-            )
+            logger.warning(f"Error during orphaned sandbox cleanup: {e}", exc_info=True)
 
 
 # Example agent subclass for testing/demo (only used for class registration)

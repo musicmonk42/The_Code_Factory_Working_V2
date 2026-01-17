@@ -55,6 +55,7 @@ for _mod in _MODULES_TO_MOCK:
     if _mod in sys.modules:
         _ORIGINAL_MODULES[_mod] = sys.modules[_mod]
 
+
 # Helper function to create a proper package mock with __path__
 def _create_package_mock(name):
     """Create a mock module that can act as a package (has __path__)."""
@@ -63,6 +64,7 @@ def _create_package_mock(name):
     mock.__name__ = name
     mock.__file__ = f"<mocked {name}>"
     return mock
+
 
 # Mock all external dependencies BEFORE importing the module under test
 # NOTE: Do NOT mock cryptography - other tests need the real module

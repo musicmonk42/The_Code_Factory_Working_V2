@@ -181,7 +181,11 @@ async def get_job_progress(
         ),
         StageProgress(
             stage=JobStage.GENERATOR_CLARIFICATION,
-            status=JobStatus.RUNNING if job.status == JobStatus.RUNNING else JobStatus.PENDING,
+            status=(
+                JobStatus.RUNNING
+                if job.status == JobStatus.RUNNING
+                else JobStatus.PENDING
+            ),
             progress_percent=50.0 if job.status == JobStatus.RUNNING else 0.0,
             message="Clarifying requirements",
             started_at=job.created_at if job.status == JobStatus.RUNNING else None,

@@ -26,7 +26,11 @@ class OmniCoreService:
         logger.info("OmniCoreService initialized")
 
     async def route_job(
-        self, job_id: str, source_module: str, target_module: str, payload: Dict[str, Any]
+        self,
+        job_id: str,
+        source_module: str,
+        target_module: str,
+        payload: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Route a job from one module to another via the message bus.
@@ -44,9 +48,7 @@ class OmniCoreService:
             >>> # from omnicore_engine.message_bus import publish_message
             >>> # await publish_message(topic=target_module, payload=payload)
         """
-        logger.info(
-            f"Routing job {job_id} from {source_module} to {target_module}"
-        )
+        logger.info(f"Routing job {job_id} from {source_module} to {target_module}")
 
         # Placeholder: Actual integration with message bus
         # Example:

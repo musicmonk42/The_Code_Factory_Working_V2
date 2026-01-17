@@ -387,21 +387,21 @@ class LocalProvider(LLMProvider):
     async def count_tokens(self, text: str, model: str) -> int:
         """
         Approximate token count.
-        
+
         WARNING: This is a ROUGH APPROXIMATION using word splitting (len(text.split())).
         This is significantly less accurate than proper tokenization, especially for code.
         For example:
         - "def foo():" is 4+ tokens but only 2 words
         - "x = y + z" is 7 tokens but only 5 words
-        
+
         This can lead to:
         1. Context window overflows (budgeting for 4000 tokens but actually using 6000+)
         2. Inaccurate cost estimation
         3. Inconsistent behavior compared to OpenAI/Claude providers
-        
+
         To improve accuracy, register a custom token_counter function for your model
         using the register_custom_model method with a 'token_counter' key in the config.
-        
+
         [FIX] Now correctly uses a custom 'token_counter' if available.
         """
         model_config = self.custom_models.get(model)

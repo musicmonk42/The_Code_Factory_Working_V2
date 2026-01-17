@@ -189,17 +189,19 @@ _base_logger = logging.getLogger(__name__)
 DLT_BACKEND_AVAILABLE = False
 _dlt_client_instance = None
 
+
 def _lazy_load_dlt_backend():
     """Lazy load DLT backend to avoid circular imports."""
     global DLT_BACKEND_AVAILABLE, _dlt_client_instance
-    
+
     if DLT_BACKEND_AVAILABLE is not False:  # Already attempted
         return DLT_BACKEND_AVAILABLE
-    
+
     try:
         from simulation.plugins.dlt_clients import dlt_base
+
         # Store reference for future use
-        globals()['_dlt_base_module'] = dlt_base
+        globals()["_dlt_base_module"] = dlt_base
         DLT_BACKEND_AVAILABLE = True
         _dlt_client_instance = dlt_base._dlt_client_instance
         return True
@@ -210,43 +212,52 @@ def _lazy_load_dlt_backend():
         DLT_BACKEND_AVAILABLE = None  # Mark as attempted but failed
         return False
 
+
 async def initialize_dlt_backend_clients(config):
     """Initialize DLT backend clients - lazy loads the backend if needed."""
     if _lazy_load_dlt_backend():
-        dlt_base = globals().get('_dlt_base_module')
-        if dlt_base and hasattr(dlt_base, 'initialize_dlt_backend_clients'):
+        dlt_base = globals().get("_dlt_base_module")
+        if dlt_base and hasattr(dlt_base, "initialize_dlt_backend_clients"):
             await dlt_base.initialize_dlt_backend_clients(config)
         else:
-            _base_logger.warning("DLT backend loaded but initialize function not found.")
+            _base_logger.warning(
+                "DLT backend loaded but initialize function not found."
+            )
     else:
-        _base_logger.warning("DLT backend initialization skipped (module not available).")
+        _base_logger.warning(
+            "DLT backend initialization skipped (module not available)."
+        )
+
 
 def get_EVMDLTClient():
     """Get EVMDLTClient class - lazy loads if needed."""
     if _lazy_load_dlt_backend():
-        dlt_base = globals().get('_dlt_base_module')
-        return getattr(dlt_base, 'EVMDLTClient', None) if dlt_base else None
+        dlt_base = globals().get("_dlt_base_module")
+        return getattr(dlt_base, "EVMDLTClient", None) if dlt_base else None
     return None
+
 
 def get_SimpleDLTClient():
     """Get SimpleDLTClient class - lazy loads if needed."""
     if _lazy_load_dlt_backend():
-        dlt_base = globals().get('_dlt_base_module')
-        return getattr(dlt_base, 'SimpleDLTClient', None) if dlt_base else None
+        dlt_base = globals().get("_dlt_base_module")
+        return getattr(dlt_base, "SimpleDLTClient", None) if dlt_base else None
     return None
+
 
 def get_ProductionDLTClient():
     """Get ProductionDLTClient class - lazy loads if needed."""
     if _lazy_load_dlt_backend():
-        dlt_base = globals().get('_dlt_base_module')
-        return getattr(dlt_base, 'ProductionDLTClient', None) if dlt_base else None
+        dlt_base = globals().get("_dlt_base_module")
+        return getattr(dlt_base, "ProductionDLTClient", None) if dlt_base else None
     return None
+
 
 def get_ProductionOffChainClient():
     """Get ProductionOffChainClient class - lazy loads if needed."""
     if _lazy_load_dlt_backend():
-        dlt_base = globals().get('_dlt_base_module')
-        return getattr(dlt_base, 'ProductionOffChainClient', None) if dlt_base else None
+        dlt_base = globals().get("_dlt_base_module")
+        return getattr(dlt_base, "ProductionOffChainClient", None) if dlt_base else None
     return None
 
 

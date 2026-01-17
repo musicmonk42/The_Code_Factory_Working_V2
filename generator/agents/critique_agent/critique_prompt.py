@@ -158,8 +158,13 @@ except ImportError as e:
     except ValueError:
         # Metrics already registered (happens during pytest collection)
         from prometheus_client import REGISTRY
-        PROMPT_BUILDS = REGISTRY._names_to_collectors.get("critique_prompt_builds_total")
-        PROMPT_LATENCY = REGISTRY._names_to_collectors.get("critique_prompt_build_latency_seconds")
+
+        PROMPT_BUILDS = REGISTRY._names_to_collectors.get(
+            "critique_prompt_builds_total"
+        )
+        PROMPT_LATENCY = REGISTRY._names_to_collectors.get(
+            "critique_prompt_build_latency_seconds"
+        )
 
 # Constants
 MAX_PROMPT_TOKENS = 8000

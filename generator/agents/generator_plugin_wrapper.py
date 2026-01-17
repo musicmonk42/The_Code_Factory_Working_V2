@@ -128,7 +128,7 @@ class WorkflowError(GeneratorPluginError):
 
 class ConfigurationError(GeneratorPluginError):
     """Raised when critical agents or configurations are missing.
-    
+
     This error indicates a fatal misconfiguration that prevents the workflow
     from executing. In production environments, this should halt startup
     rather than allowing silent degradation.
@@ -139,7 +139,7 @@ class ConfigurationError(GeneratorPluginError):
 
 class AgentUnavailableError(GeneratorPluginError):
     """Raised when a required agent is not available in the plugin registry.
-    
+
     This error is raised when the orchestrator attempts to use an agent
     that failed to load or was not registered. This prevents silent failures
     and NoneType errors during workflow execution.
@@ -152,17 +152,19 @@ class AgentUnavailableError(GeneratorPluginError):
 # These utilities ensure fail-fast behavior for missing critical agents
 
 # Define which agents are required vs optional for the workflow
-REQUIRED_AGENTS = frozenset({"codegen_agent", "critique_agent", "testgen_agent", "deploy_agent", "docgen_agent"})
+REQUIRED_AGENTS = frozenset(
+    {"codegen_agent", "critique_agent", "testgen_agent", "deploy_agent", "docgen_agent"}
+)
 OPTIONAL_AGENTS = frozenset({"clarifier"})
 
 
 def validate_agent_available(agent_name: str, agent: object) -> None:
     """Validate that an agent is available and callable.
-    
+
     Args:
         agent_name: The name of the agent being validated.
         agent: The agent object retrieved from the registry.
-        
+
     Raises:
         AgentUnavailableError: If the agent is None or not callable.
     """
@@ -181,29 +183,29 @@ def validate_agent_available(agent_name: str, agent: object) -> None:
 
 def validate_required_agents(registry: object) -> dict:
     """Validate all required agents are available at startup.
-    
+
     This function should be called during workflow initialization to ensure
     fail-fast behavior rather than discovering missing agents mid-workflow.
-    
+
     Args:
         registry: The plugin registry to check for agents.
-        
+
     Returns:
         A dict mapping agent names to their callables.
-        
+
     Raises:
         ConfigurationError: If any required agent is missing.
     """
     missing_agents = []
     agents = {}
-    
+
     for agent_name in REQUIRED_AGENTS:
         agent = registry.get(agent_name)
         if agent is None:
             missing_agents.append(agent_name)
         else:
             agents[agent_name] = agent
-    
+
     if missing_agents:
         raise ConfigurationError(
             f"Critical workflow agents are missing from the plugin registry: {', '.join(sorted(missing_agents))}. "
@@ -211,7 +213,7 @@ def validate_required_agents(registry: object) -> dict:
             f"Please check agent initialization logs and ensure all dependencies are properly installed. "
             f"Required agents: {', '.join(sorted(REQUIRED_AGENTS))}"
         )
-    
+
     return agents
 
 
@@ -305,20 +307,20 @@ async def run_generator_workflow(
 ) -> Dict[str, Any]:
     """
     Orchestrates the full Generator pipeline: clarify -> code -> critique -> tests -> deploy -> docs.
-    
+
     This version calls agents via the PLUGIN_REGISTRY for better decoupling and maintainability.
     All critical agents are validated before workflow execution to ensure fail-fast behavior
     rather than silent failures mid-workflow.
-    
+
     Args:
         requirements: Natural language requirements from README.
         config: Configuration for workflow execution.
         repo_path: The local path to the codebase repository.
         ambiguities: A list of ambiguous statements found in requirements.
-        
+
     Returns:
         A WorkflowOutput dict containing status, correlation_id, final_results, errors, and timestamp.
-        
+
     Raises:
         ConfigurationError: If critical agents are missing from the registry (not caught).
         AgentUnavailableError: If a required agent is None or not callable (not caught).
@@ -344,7 +346,9 @@ async def run_generator_workflow(
             # --- CRITICAL: Validate all required agents are available BEFORE workflow starts ---
             # This ensures fail-fast behavior rather than discovering missing agents mid-workflow.
             # ConfigurationError is intentionally NOT caught here - it should propagate up.
-            logger.debug(f"Validating required agents [Correlation ID: {correlation_id}]")
+            logger.debug(
+                f"Validating required agents [Correlation ID: {correlation_id}]"
+            )
             try:
                 validated_agents = validate_required_agents(PLUGIN_REGISTRY)
                 logger.info(
@@ -506,9 +510,9 @@ async def run_generator_workflow(
             # These indicate fatal misconfiguration that requires operator intervention.
             # We log, record metrics, but then RE-RAISE to ensure the caller knows.
             workflow_errors.labels(
-                correlation_id=correlation_id, 
-                stage="configuration", 
-                error_type=type(e).__name__
+                correlation_id=correlation_id,
+                stage="configuration",
+                error_type=type(e).__name__,
             ).inc()
             logger.critical(
                 f"FATAL CONFIGURATION ERROR: {e} [Correlation ID: {correlation_id}]. "

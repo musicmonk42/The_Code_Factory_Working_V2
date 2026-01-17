@@ -50,5 +50,6 @@ def __getattr__(name):
     """Lazy import mechanism to avoid loading heavy dependencies at package import time."""
     if name in __all__:
         from generator.intent_parser import intent_parser
+
         return getattr(intent_parser, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

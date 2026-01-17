@@ -150,11 +150,14 @@ try:
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
+
     CRITIQUE_STEPS = REGISTRY._names_to_collectors.get("critique_steps_total")
     CRITIQUE_LATENCY = REGISTRY._names_to_collectors.get("critique_latency_seconds")
     CRITIQUE_ERRORS = REGISTRY._names_to_collectors.get("critique_errors_total")
     CRITIQUE_COVERAGE = REGISTRY._names_to_collectors.get("critique_coverage")
-    CRITIQUE_VULNERABILITIES_FOUND = REGISTRY._names_to_collectors.get("critique_vulnerabilities_found_total")
+    CRITIQUE_VULNERABILITIES_FOUND = REGISTRY._names_to_collectors.get(
+        "critique_vulnerabilities_found_total"
+    )
 
 
 # Audit Logger wrapper

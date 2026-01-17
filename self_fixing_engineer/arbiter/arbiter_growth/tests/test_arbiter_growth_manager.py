@@ -14,7 +14,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from self_fixing_engineer.arbiter.arbiter_growth.arbiter_growth_manager import ArbiterGrowthManager
+from self_fixing_engineer.arbiter.arbiter_growth.arbiter_growth_manager import (
+    ArbiterGrowthManager,
+)
 from self_fixing_engineer.arbiter.arbiter_growth.exceptions import (
     AuditChainTamperedError,
     CircuitBreakerOpenError,

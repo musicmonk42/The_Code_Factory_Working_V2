@@ -94,7 +94,9 @@ class GeneratorService:
             >>> # from omnicore_engine.message_bus import publish_message
             >>> # await publish_message(topic='generator', payload={...})
         """
-        logger.info(f"Creating generation job {job_id} with {len(files)} files via OmniCore")
+        logger.info(
+            f"Creating generation job {job_id} with {len(files)} files via OmniCore"
+        )
 
         # Route through OmniCore
         if self.omnicore_service:
@@ -162,9 +164,7 @@ class GeneratorService:
             "message": "Generating code from README (direct fallback)",
         }
 
-    async def get_job_logs(
-        self, job_id: str, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_job_logs(self, job_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         """
         Get logs for a generator job.
 

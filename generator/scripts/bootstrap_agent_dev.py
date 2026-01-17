@@ -39,15 +39,15 @@ def create_dummy_files():
     """
     Creates dummy Python modules and a temporary Git repository
     required for local development and testing of testgen_agent.py.
-    
+
     All dummy files are created in 'tests/mocks/' directory to prevent
     accidental overwriting of production files.
     """
     logger.info("Starting creation of dummy development environment modules...")
-    
+
     # Define the safe directory for dummy files
     mock_dir = os.path.join("tests", "mocks")
-    
+
     # Create the mock directory if it doesn't exist
     os.makedirs(mock_dir, exist_ok=True)
     logger.info(f"Using mock directory: {mock_dir}")
@@ -136,14 +136,14 @@ class DummyClientSession:
     for fname, content in required_dummy_files.items():
         # Create file path within mock directory
         fpath = os.path.join(mock_dir, fname)
-        
+
         # Safety check: Warn if file exists outside mock directory
         if os.path.exists(fname):
             logger.warning(
                 f"WARNING: Production file '{fname}' exists in current directory. "
                 f"This bootstrap script will NOT overwrite it. Using mock directory instead."
             )
-        
+
         if not os.path.exists(fpath):
             try:
                 with open(fpath, "w", encoding="utf-8") as f:
@@ -172,9 +172,7 @@ class DummyClientSession:
         )
     )
     print("".center(80))
-    print(
-        "To use these mocks, add the mock directory to your Python path:".center(80)
-    )
+    print("To use these mocks, add the mock directory to your Python path:".center(80))
     print(f"    export PYTHONPATH=$PYTHONPATH:{os.path.abspath(mock_dir)}".center(80))
     print("".center(80))
     print("REMEMBER: These are DUMMY implementations.".center(80))

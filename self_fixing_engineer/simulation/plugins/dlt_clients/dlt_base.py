@@ -1552,7 +1552,7 @@ _lazy_imports = {
 def __getattr__(name: str):
     """
     Lazy module attribute loader to avoid circular imports.
-    
+
     This allows EVMDLTClient and SimpleDLTClient to be imported from this module
     without causing circular import issues, as the actual import only happens
     when the attribute is accessed, not at module load time.
@@ -1561,13 +1561,16 @@ def __getattr__(name: str):
         module_path, class_name = _lazy_imports[name]
         try:
             from importlib import import_module
+
             module = import_module(module_path, package=__package__)
             value = getattr(module, class_name)
             # Cache the value for future access
             globals()[name] = value
             return value
         except ImportError:
-            _base_logger.debug(f"{name} not available - dependencies may not be installed")
+            _base_logger.debug(
+                f"{name} not available - dependencies may not be installed"
+            )
             # Return None for missing optional dependencies
             return None
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

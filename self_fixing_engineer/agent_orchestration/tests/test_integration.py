@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 import yaml
-from self_fixing_engineer.agent_orchestration.crew_manager import CrewAgentBase, CrewManager
+from self_fixing_engineer.agent_orchestration.crew_manager import (
+    CrewAgentBase,
+    CrewManager,
+)
 
 # Register the base class for testing
 CrewManager.register_agent_class(CrewAgentBase)

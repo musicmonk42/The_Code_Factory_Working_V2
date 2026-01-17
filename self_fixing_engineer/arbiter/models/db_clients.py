@@ -78,15 +78,16 @@ except ImportError:
     class _NoOpSpan:
         """
         Fallback span implementation with structured logging.
-        
+
         When OpenTelemetry is unavailable, this implementation provides
         tracing-like functionality through structured logging, ensuring
         observability is maintained even without OTEL.
-        
+
         Environment Variables:
         - TRACE_LOG_FILE: Path to trace log file (default: '/tmp/trace_fallback.log')
         - TRACE_LOG_DISABLED: Set to 'true' to disable trace logging
         """
+
         def __init__(self, name, attributes=None):
             self._name = name
             self._attributes = attributes or {}
@@ -94,9 +95,9 @@ except ImportError:
             self._span_id = str(uuid.uuid4())
             self._file = os.getenv("TRACE_LOG_FILE", "/tmp/trace_fallback.log")
             self._disabled = os.getenv("TRACE_LOG_DISABLED", "false").lower() == "true"
-            
+
             if not self._disabled:
-                self._log_event('span_start')
+                self._log_event("span_start")
 
         def __enter__(self):
             return self
@@ -104,62 +105,69 @@ except ImportError:
         def __exit__(self, exc_type, exc_val, exc_tb):
             duration = time.time() - self._start_time
             if not self._disabled:
-                self._log_event('span_end', {
-                    'duration_seconds': duration,
-                    'error': exc_type is not None,
-                    'exception_type': exc_type.__name__ if exc_type else None
-                })
+                self._log_event(
+                    "span_end",
+                    {
+                        "duration_seconds": duration,
+                        "error": exc_type is not None,
+                        "exception_type": exc_type.__name__ if exc_type else None,
+                    },
+                )
 
         def set_attribute(self, key, value):
             """Set a span attribute and log it."""
             self._attributes[key] = value
             if not self._disabled:
-                self._log_event('attribute_set', {'key': key, 'value': value})
+                self._log_event("attribute_set", {"key": key, "value": value})
 
         def set_status(self, status):
             """Set span status and log it."""
             if not self._disabled:
-                status_code = getattr(status, 'status_code', status)
-                self._log_event('status_set', {'status': str(status_code)})
+                status_code = getattr(status, "status_code", status)
+                self._log_event("status_set", {"status": str(status_code)})
 
         def record_exception(self, exc):
             """Record an exception and log it."""
             if not self._disabled:
-                self._log_event('exception', {
-                    'exception_type': type(exc).__name__,
-                    'exception_message': str(exc),
-                    'exception_traceback': traceback.format_exc() if exc else None
-                })
+                self._log_event(
+                    "exception",
+                    {
+                        "exception_type": type(exc).__name__,
+                        "exception_message": str(exc),
+                        "exception_traceback": traceback.format_exc() if exc else None,
+                    },
+                )
 
         def _log_event(self, event_type, extra_data=None):
             """Write structured trace event to log file."""
             try:
                 log_entry = {
-                    'timestamp': datetime.now(timezone.utc).isoformat(),
-                    'span_id': self._span_id,
-                    'span_name': self._name,
-                    'event_type': event_type,
-                    'attributes': self._attributes.copy()
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "span_id": self._span_id,
+                    "span_name": self._name,
+                    "event_type": event_type,
+                    "attributes": self._attributes.copy(),
                 }
                 if extra_data:
                     log_entry.update(extra_data)
-                
-                with open(self._file, 'a') as f:
-                    f.write(json.dumps(log_entry) + '\n')
+
+                with open(self._file, "a") as f:
+                    f.write(json.dumps(log_entry) + "\n")
             except Exception:
                 pass  # Silent failure for fallback tracing
 
     class _NoOpTracer:
         """
         Fallback tracer that creates structured logging spans.
-        
+
         This ensures observability is maintained even when OpenTelemetry
         is unavailable, by logging span information to a file.
         """
+
         @contextlib.contextmanager
         def start_as_current_span(self, name, **kwargs):
             """Start a new span with structured logging."""
-            attributes = kwargs.get('attributes', {})
+            attributes = kwargs.get("attributes", {})
             span = _NoOpSpan(name, attributes)
             try:
                 yield span
@@ -196,26 +204,31 @@ except ImportError:
     class Counter:
         """
         Fallback Counter with file-based metric logging.
-        
+
         When Prometheus is unavailable, this writes metrics to a file
         for later analysis or processing by external monitoring systems.
-        
+
         Environment Variables:
         - METRICS_LOG_FILE: Path to metrics file (default: '/tmp/db_metrics.log')
         - METRICS_LOG_DISABLED: Set to 'true' to disable file logging
         """
+
         def __init__(self, *args, **kwargs):
             self._name = args[0] if args else "unknown_counter"
             self._documentation = args[1] if len(args) > 1 else ""
-            self._labelnames = kwargs.get('labelnames', [])
+            self._labelnames = kwargs.get("labelnames", [])
             self._labels = {}
             self._value = 0
             self._file = os.getenv("METRICS_LOG_FILE", "/tmp/db_metrics.log")
-            self._disabled = os.getenv("METRICS_LOG_DISABLED", "false").lower() == "true"
+            self._disabled = (
+                os.getenv("METRICS_LOG_DISABLED", "false").lower() == "true"
+            )
 
         def labels(self, *args, **kwargs):
             """Return a labeled version of this counter."""
-            labeled = Counter(self._name, self._documentation, labelnames=self._labelnames)
+            labeled = Counter(
+                self._name, self._documentation, labelnames=self._labelnames
+            )
             labeled._labels = kwargs
             labeled._file = self._file
             labeled._disabled = self._disabled
@@ -225,40 +238,50 @@ except ImportError:
             """Increment counter and log to file."""
             if self._disabled:
                 return
-            
+
             self._value += amount
             try:
-                with open(self._file, 'a') as f:
-                    f.write(json.dumps({
-                        'timestamp': datetime.now(timezone.utc).isoformat(),
-                        'type': 'counter',
-                        'name': self._name,
-                        'labels': self._labels,
-                        'operation': 'inc',
-                        'amount': amount,
-                        'value': self._value
-                    }) + '\n')
+                with open(self._file, "a") as f:
+                    f.write(
+                        json.dumps(
+                            {
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "type": "counter",
+                                "name": self._name,
+                                "labels": self._labels,
+                                "operation": "inc",
+                                "amount": amount,
+                                "value": self._value,
+                            }
+                        )
+                        + "\n"
+                    )
             except Exception:
                 pass  # Silent failure for fallback metrics
 
     class Gauge:
         """
         Fallback Gauge with file-based metric logging.
-        
+
         When Prometheus is unavailable, this writes metrics to a file.
         """
+
         def __init__(self, *args, **kwargs):
             self._name = args[0] if args else "unknown_gauge"
             self._documentation = args[1] if len(args) > 1 else ""
-            self._labelnames = kwargs.get('labelnames', [])
+            self._labelnames = kwargs.get("labelnames", [])
             self._labels = {}
             self._value = 0
             self._file = os.getenv("METRICS_LOG_FILE", "/tmp/db_metrics.log")
-            self._disabled = os.getenv("METRICS_LOG_DISABLED", "false").lower() == "true"
+            self._disabled = (
+                os.getenv("METRICS_LOG_DISABLED", "false").lower() == "true"
+            )
 
         def labels(self, *args, **kwargs):
             """Return a labeled version of this gauge."""
-            labeled = Gauge(self._name, self._documentation, labelnames=self._labelnames)
+            labeled = Gauge(
+                self._name, self._documentation, labelnames=self._labelnames
+            )
             labeled._labels = kwargs
             labeled._file = self._file
             labeled._disabled = self._disabled
@@ -268,60 +291,70 @@ except ImportError:
             """Set gauge value and log to file."""
             if self._disabled:
                 return
-            
+
             self._value = value
-            self._log_metric('set', value)
+            self._log_metric("set", value)
 
         def inc(self, amount=1):
             """Increment gauge."""
             if self._disabled:
                 return
-            
+
             self._value += amount
-            self._log_metric('inc', amount)
+            self._log_metric("inc", amount)
 
         def dec(self, amount=1):
             """Decrement gauge."""
             if self._disabled:
                 return
-            
+
             self._value -= amount
-            self._log_metric('dec', amount)
+            self._log_metric("dec", amount)
 
         def _log_metric(self, operation, value):
             """Log metric operation to file."""
             try:
-                with open(self._file, 'a') as f:
-                    f.write(json.dumps({
-                        'timestamp': datetime.now(timezone.utc).isoformat(),
-                        'type': 'gauge',
-                        'name': self._name,
-                        'labels': self._labels,
-                        'operation': operation,
-                        'value': value,
-                        'current_value': self._value
-                    }) + '\n')
+                with open(self._file, "a") as f:
+                    f.write(
+                        json.dumps(
+                            {
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "type": "gauge",
+                                "name": self._name,
+                                "labels": self._labels,
+                                "operation": operation,
+                                "value": value,
+                                "current_value": self._value,
+                            }
+                        )
+                        + "\n"
+                    )
             except Exception:
                 pass  # Silent failure for fallback metrics
 
     class Histogram:
         """
         Fallback Histogram with file-based metric logging.
-        
+
         When Prometheus is unavailable, this writes observations to a file.
         """
+
         def __init__(self, *args, **kwargs):
             self._name = args[0] if args else "unknown_histogram"
             self._documentation = args[1] if len(args) > 1 else ""
-            self._labelnames = kwargs.get('labelnames', [])
+            self._labelnames = kwargs.get("labelnames", [])
             self._labels = {}
             self._observations = []
             self._file = os.getenv("METRICS_LOG_FILE", "/tmp/db_metrics.log")
-            self._disabled = os.getenv("METRICS_LOG_DISABLED", "false").lower() == "true"
+            self._disabled = (
+                os.getenv("METRICS_LOG_DISABLED", "false").lower() == "true"
+            )
 
         def labels(self, *args, **kwargs):
             """Return a labeled version of this histogram."""
-            labeled = Histogram(self._name, self._documentation, labelnames=self._labelnames)
+            labeled = Histogram(
+                self._name, self._documentation, labelnames=self._labelnames
+            )
             labeled._labels = kwargs
             labeled._file = self._file
             labeled._disabled = self._disabled
@@ -331,18 +364,23 @@ except ImportError:
             """Record an observation and log to file."""
             if self._disabled:
                 return
-            
+
             self._observations.append(value)
             try:
-                with open(self._file, 'a') as f:
-                    f.write(json.dumps({
-                        'timestamp': datetime.now(timezone.utc).isoformat(),
-                        'type': 'histogram',
-                        'name': self._name,
-                        'labels': self._labels,
-                        'operation': 'observe',
-                        'value': value
-                    }) + '\n')
+                with open(self._file, "a") as f:
+                    f.write(
+                        json.dumps(
+                            {
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "type": "histogram",
+                                "name": self._name,
+                                "labels": self._labels,
+                                "operation": "observe",
+                                "value": value,
+                            }
+                        )
+                        + "\n"
+                    )
             except Exception:
                 pass  # Silent failure for fallback metrics
 
@@ -407,7 +445,9 @@ def _get_or_create_metric(
 
     try:
         if buckets is not None and metric_class is Histogram:
-            m = metric_class(name, documentation, labelnames=labelnames, buckets=buckets)
+            m = metric_class(
+                name, documentation, labelnames=labelnames, buckets=buckets
+            )
         else:
             m = metric_class(name, documentation, labelnames=labelnames)
     except ValueError:
@@ -569,9 +609,9 @@ class DummyDBClient:
                 raise DBClientQueryError(f"Failed to save entry: {e}") from e
 
             finally:
-                DB_CLIENT_OPS_LATENCY.labels(
-                    client_type="dummy", operation=op
-                ).observe(time.monotonic() - start_time)
+                DB_CLIENT_OPS_LATENCY.labels(client_type="dummy", operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def get_feedback_entries(
         self, query: Optional[Dict[str, Any]] = None
@@ -633,9 +673,9 @@ class DummyDBClient:
                 raise DBClientQueryError(f"Failed to get entries: {e}") from e
 
             finally:
-                DB_CLIENT_OPS_LATENCY.labels(
-                    client_type="dummy", operation=op
-                ).observe(time.monotonic() - start_time)
+                DB_CLIENT_OPS_LATENCY.labels(client_type="dummy", operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def update_feedback_entry(
         self, query: Dict[str, Any], updates: Dict[str, Any]
@@ -698,9 +738,9 @@ class DummyDBClient:
                 raise DBClientQueryError(f"Failed to update entries: {e}") from e
 
             finally:
-                DB_CLIENT_OPS_LATENCY.labels(
-                    client_type="dummy", operation=op
-                ).observe(time.monotonic() - start_time)
+                DB_CLIENT_OPS_LATENCY.labels(client_type="dummy", operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def delete_feedback_entry(self, query: Dict[str, Any]) -> int:
         """
@@ -763,9 +803,9 @@ class DummyDBClient:
                 raise DBClientQueryError(f"Failed to delete entries: {e}") from e
 
             finally:
-                DB_CLIENT_OPS_LATENCY.labels(
-                    client_type="dummy", operation=op
-                ).observe(time.monotonic() - start_time)
+                DB_CLIENT_OPS_LATENCY.labels(client_type="dummy", operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def health_check(self) -> Dict[str, Any]:
         """
@@ -1026,9 +1066,7 @@ class SQLiteClient:
                 span.set_attribute("db.entry_id", entry_id)
                 span.set_status(Status(StatusCode.OK))
 
-                logger.debug(
-                    f"SQLiteClient[{self._client_id}]: Saved entry {entry_id}"
-                )
+                logger.debug(f"SQLiteClient[{self._client_id}]: Saved entry {entry_id}")
                 return entry_id
 
             except sqlite3.Error as e:
