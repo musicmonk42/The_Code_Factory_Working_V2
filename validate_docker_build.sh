@@ -49,6 +49,7 @@ echo ""
 # Build the unified platform image
 echo -e "${YELLOW}4. Building unified platform image...${NC}"
 echo -e "${BLUE}   Using: docker build -t code-factory:validate -f Dockerfile .${NC}"
+# Note: SKIP_HEAVY_DEPS=1 skips heavy dependencies for faster validation builds
 if docker build --build-arg SKIP_HEAVY_DEPS=1 -t code-factory:validate -f Dockerfile . > /tmp/docker_build.log 2>&1; then
     echo -e "${GREEN}✓ Build successful${NC}"
     
@@ -64,7 +65,9 @@ echo ""
 
 # Verify image structure
 echo -e "${YELLOW}5. Verifying image structure...${NC}"
-if docker run --rm code-factory:validate ls -la /app/generator /app/omnicore_engine /app/self_fixing_engineer > /dev/null 2>&1; then
+# Check that all three main modules exist in the unified image
+MODULE_PATHS="/app/generator /app/omnicore_engine /app/self_fixing_engineer"
+if docker run --rm code-factory:validate ls -la ${MODULE_PATHS} > /dev/null 2>&1; then
     echo -e "${GREEN}✓ All modules present in image${NC}"
 else
     echo -e "${RED}✗ Image structure validation failed${NC}"

@@ -174,6 +174,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    # Start the OmniCore Engine API (all modules are available in the unified image)
     command: python -m uvicorn omnicore_engine.fastapi_app:app --host 0.0.0.0 --port 8000
     deploy:
       resources:
