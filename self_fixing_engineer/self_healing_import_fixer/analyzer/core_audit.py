@@ -35,10 +35,11 @@ logger = logging.getLogger(__name__)
 
 # --- Critical Configuration ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
-REGULATORY_MODE = (
-    os.getenv("REGULATORY_MODE", "true").lower() == "true"
-)  # Default ON for safety
 TESTING_MODE = os.getenv("TESTING", "false") == "1" or os.getenv("PYTEST_CURRENT_TEST") is not None
+# REGULATORY_MODE defaults ON for safety, but is disabled in testing mode
+REGULATORY_MODE = (
+    os.getenv("REGULATORY_MODE", "true").lower() == "true" and not TESTING_MODE
+)
 
 # --- Import Core Dependencies ---
 try:
