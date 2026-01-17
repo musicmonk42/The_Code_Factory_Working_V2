@@ -143,7 +143,9 @@ try:
 except ImportError:
     tracer = None
     HAS_OPENTELEMETRY = False
-    get_global_textmap = None  # Ensure it's defined even when OpenTelemetry is not available
+    get_global_textmap = (
+        None  # Ensure it's defined even when OpenTelemetry is not available
+    )
     logging.warning("OpenTelemetry not installed. Tracing disabled.")
 
 
