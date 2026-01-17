@@ -1,0 +1,179 @@
+name: Pytest All - Run All Tests
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+  # OpenTelemetry package versions - pinned for compatibility
+  OTEL_API_VERSION: '1.38.0'
+  OTEL_SDK_VERSION: '1.38.0'
+  OTEL_EXPORTER_VERSION: '1.38.0'
+  OTEL_INSTRUMENTATION_VERSION: '0.59b0'
+  OTEL_SEMANTIC_CONVENTIONS_VERSION: '0.59b0'
+
+permissions:
+  contents: read
+
+jobs:
+  test-all:
+    name: Run All Tests (Pytest from Root)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    env:
+      TESTING: '1'
+      OTEL_SDK_DISABLED: '1'
+      PYTEST_CURRENT_TEST: 'true'
+      REDIS_URL: redis://localhost:6379
+      APP_ENV: test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            .github/constraints.txt
+          
+      - name: Free disk space
+        run: |
+          # Remove apt lists, docs, and clear pip cache to free disk space
+          sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
+          rm -rf /home/runner/.cache/pip/* /tmp/* || true
+          df -h
+          
+      - name: Enable memory overcommit for Redis
+        run: |
+          sudo sysctl -w vm.overcommit_memory=1
+          
+      - name: Install redis-cli on runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-tools
+          redis-cli --version
+          
+      - name: Wait for Redis to be ready
+        run: |
+          # Wait loop to ensure Redis service is fully available before running tests
+          for i in $(seq 1 30); do
+            if redis-cli -h localhost --raw incr ping_test >/dev/null 2>&1; then
+              echo "Redis is up and responding"
+              break
+            fi
+            echo "Waiting for Redis... attempt $i/30"
+            sleep 1
+          done
+          # Final check - fail early if Redis is not available
+          redis-cli -h localhost ping || (echo "ERROR: Redis is not available" && exit 1)
+          
+      - name: Install dependencies
+        env:
+          PIP_NO_CACHE_DIR: "1"
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        run: |
+          python -m pip install --upgrade pip
+          # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
+          # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
+          pip install --no-cache-dir -c .github/constraints.txt protobuf
+          # Install unified platform requirements first
+          if [ -f requirements.txt ]; then
+            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
+          fi
+          # Install self_fixing_engineer package (contains arbiter - CRITICAL) with verbose output
+          echo "Installing self_fixing_engineer package (contains arbiter)..."
+          python -m pip install -v --no-cache-dir -c .github/constraints.txt -e ./self_fixing_engineer || {
+            echo "ERROR: Failed to install self_fixing_engineer package"
+            exit 1
+          }
+          # Verify arbiter is importable with detailed diagnostics
+          python -c "import arbiter; print('arbiter imported from', arbiter.__file__)" || {
+            echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
+            exit 1
+          }
+          # Install omnicore_engine package
+          python -m pip install --no-cache-dir -c .github/constraints.txt -e ./omnicore_engine
+          # Install common test/runtime extras that may be missing
+          pip install --no-cache-dir -c .github/constraints.txt PyYAML httpx PyJWT || true
+          pip install --no-cache-dir -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
+          # Install pytest plugins
+          pip install --no-cache-dir -c .github/constraints.txt \
+            pytest-cov \
+            pytest-timeout \
+            pytest-xdist \
+            pytest-asyncio \
+            tomli_w \
+            typing-extensions
+          # Force-reinstall OpenTelemetry packages to ensure correct versions
+          pip install --force-reinstall -c .github/constraints.txt \
+            opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
+            opentelemetry-instrumentation-fastapi==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-instrumentation==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
+            opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
+            opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          # Check for dependency conflicts
+          pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
+          
+      - name: Free more disk space before tests
+        run: |
+          # Additional cleanup right before running tests
+          sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
+          rm -rf /home/runner/.cache/pip/* /tmp/* || true
+          df -h
+          
+      - name: Run all tests from repository root
+        run: |
+          export PYTHONPATH="$PYTHONPATH:$PWD"
+          # Run pytest from repository root with all configured test paths
+          # The pyproject.toml already configures all test paths in [tool.pytest.ini_options]
+          # The conftest.py sets up Python paths correctly
+          pytest \
+            -n auto \
+            --maxfail=50 \
+            --timeout=300 \
+            --cov=generator \
+            --cov=omnicore_engine \
+            --cov=self_fixing_engineer \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term \
+            -v \
+            2>&1 | tee test-output.log
+          
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: always() && hashFiles('./coverage.xml') != ''
+        with:
+          files: ./coverage.xml
+          flags: pytest-all
+          fail_ci_if_error: false
+          
+      - name: Upload test output log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-output-log
+          path: test-output.log
+          retention-days: 7
