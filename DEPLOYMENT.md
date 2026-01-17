@@ -24,6 +24,8 @@ The Code Factory Platform consists of three main components:
 2. **OmniCore Engine** - Orchestration and coordination layer
 3. **Self-Fixing Engineer** - Automated maintenance and healing
 
+**Important**: The platform uses a **unified Docker image** that includes all three components. This simplifies deployment, ensures consistency, and reduces complexity. The same image can be configured to run different components by specifying different startup commands.
+
 ### Architecture
 
 ```
@@ -137,6 +139,18 @@ vault kv get -field=grok_api_key secret/codefactory/prod
 
 ## Docker Deployment
 
+### Unified Platform Build
+
+The Code Factory platform uses a **unified Docker image** that includes all three modules (Generator, OmniCore Engine, and Self-Fixing Engineer). This approach simplifies deployment and ensures consistency.
+
+```bash
+# Build the unified platform image
+make docker-build
+
+# Or build directly with Docker
+docker build -t code-factory:latest -f Dockerfile .
+```
+
 ### Production Docker Compose
 
 Create `docker-compose.production.yml`:
@@ -145,32 +159,13 @@ Create `docker-compose.production.yml`:
 version: '3.8'
 
 services:
-  generator:
-    image: ghcr.io/musicmonk42/codefactory-generator:latest
+  codefactory:
+    image: ghcr.io/musicmonk42/code-factory:latest
     restart: always
     env_file: .env.production
     ports:
-      - "8000:8000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
-        reservations:
-          cpus: '1'
-          memory: 2G
-
-  omnicore:
-    image: ghcr.io/musicmonk42/codefactory-omnicore:latest
-    restart: always
-    env_file: .env.production
-    ports:
-      - "8001:8000"
+      - "8000:8000"  # Main API endpoint
+      - "8001:8001"  # Metrics port
     depends_on:
       - redis
       - postgres
@@ -179,6 +174,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    command: python -m uvicorn omnicore_engine.fastapi_app:app --host 0.0.0.0 --port 8000
     deploy:
       resources:
         limits:
@@ -223,18 +219,24 @@ volumes:
 ### Deploy with Docker
 
 ```bash
-# Build images
+# Build the unified platform image
 make docker-build
 
 # Tag for registry
-docker tag code-factory:latest ghcr.io/musicmonk42/codefactory:latest
+docker tag code-factory:latest ghcr.io/musicmonk42/code-factory:latest
 
 # Push to registry
-docker push ghcr.io/musicmonk42/codefactory:latest
+docker push ghcr.io/musicmonk42/code-factory:latest
 
 # Deploy
 docker-compose -f docker-compose.production.yml up -d
+
+# Verify deployment
+docker-compose -f docker-compose.production.yml ps
+docker-compose -f docker-compose.production.yml logs -f codefactory
 ```
+
+**Note**: The unified image includes Generator, OmniCore Engine, and Self-Fixing Engineer. The command specified in docker-compose determines which component starts.
 
 ## Kubernetes Deployment
 
