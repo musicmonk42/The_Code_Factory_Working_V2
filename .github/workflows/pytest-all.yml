@@ -153,10 +153,12 @@ jobs:
           pytest --collect-only -q 2>&1 | tee collection.log || true
           
           # Count collected tests
-          TEST_COUNT=$(grep -c "<Function\|<Method" collection.log || echo "0")
+          # Use grep with explicit fallback that only outputs the number
+          TEST_COUNT=$(grep -c "<Function\|<Method" collection.log 2>/dev/null || echo "0")
           echo "Found $TEST_COUNT test items"
           
-          if [ "$TEST_COUNT" -eq "0" ]; then
+          # Check if TEST_COUNT is a valid number and greater than 0
+          if ! [[ "$TEST_COUNT" =~ ^[0-9]+$ ]] || [ "$TEST_COUNT" -eq 0 ]; then
             echo "ERROR: No tests collected! Showing collection errors:"
             cat collection.log
             exit 1
