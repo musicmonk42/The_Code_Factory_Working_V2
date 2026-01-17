@@ -325,7 +325,9 @@ class RegulatoryAuditLogger:
         if self.splunk_client:
             try:
                 self.splunk_client.send_event(event)
-            except:
+            except (ConnectionError, TimeoutError, Exception) as e:
+                # If Splunk fails, buffer event for retry
+                logger.debug(f"Splunk send failed, buffering: {e}")
                 self.splunk_buffer.put(event)
 
     async def verify_integrity(self, full_scan: bool = False) -> bool:
@@ -517,7 +519,8 @@ class RegulatoryAuditLogger:
                 with open(self.primary_log, "r") as f:
                     lines = f.readlines()
                     return len(lines) + 1
-        except:
+        except (OSError, IOError, ValueError) as e:
+            logger.debug(f"Failed to get sequence number: {e}")
             return 1
 
     async def _get_previous_hash(self) -> Optional[str]:
@@ -541,7 +544,8 @@ class RegulatoryAuditLogger:
                             # Re-encode and hash the entire signed entry, including signature
                             last_entry_bytes = last_line.encode("utf-8")
                             return hashlib.sha256(last_entry_bytes).hexdigest()
-        except:
+        except (OSError, IOError, ValueError, UnicodeDecodeError) as e:
+            logger.debug(f"Failed to get previous hash: {e}")
             pass
         return None
 
@@ -584,8 +588,10 @@ class RegulatoryAuditLogger:
             with open(violation_log, "a") as f:
                 f.write(json.dumps(violation_entry) + "\n")
                 os.fsync(f.fileno())
-        except:
-            pass  # Best effort
+        except (OSError, IOError) as e:
+            # Best effort - log error but don't fail
+            logger.debug(f"Failed to write violation log: {e}")
+            pass
 
     async def _update_integrity_metadata(self, lines_verified: int):
         """Update integrity check metadata."""
@@ -604,8 +610,10 @@ class RegulatoryAuditLogger:
             else:
                 with open(self.integrity_file, "w") as f:
                     f.write(json.dumps(metadata, indent=2))
-        except:
-            pass  # Best effort
+        except (OSError, IOError) as e:
+            # Best effort - log error but don't fail
+            logger.debug(f"Failed to update integrity metadata: {e}")
+            pass
 
 
 # --- Global Singleton Instance ---
@@ -660,7 +668,8 @@ def _cleanup_audit_system():
             logger.log_critical_event("AUDIT_SYSTEM_SHUTDOWN", clean_shutdown=True)
         )
         asyncio.run(logger.verify_integrity())
-    except:
+    except (RuntimeError, Exception) as e:
+        # Ignore errors during shutdown cleanup
         pass
 
 

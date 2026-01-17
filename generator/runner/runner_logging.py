@@ -643,10 +643,11 @@ async def _stream_to_dashboard(url: str):
         try:
             log_func = getattr(logger, level, logger.info)
             log_func(message, **kwargs)
-        except (ValueError, OSError):
+        except (ValueError, OSError) as e:
             try:
                 sys.stderr.write(f"[{level.upper()}] {message}\n")
-            except:
+            except (IOError, OSError):
+                # Silently ignore if stderr is not available
                 pass
 
     safe_log("info", f"Attempting to connect to dashboard WebSocket at {url}")
@@ -755,13 +756,15 @@ def stream_log_record_to_dashboard_queue(record: logging.LogRecord):
                     "record_msg_preview": record.getMessage()[:100],
                 },
             )
-        except:
+        except (queue.Full, RuntimeError, ValueError) as e:
+            # Queue is full or not available, skip this log entry
             pass
         UTIL_ERRORS.labels(func="dashboard_queue", type="full").inc()
     except Exception as e:
         try:
             sys.stderr.write(f"Error in stream_log_record_to_dashboard_queue: {e}\n")
-        except:
+        except (IOError, OSError):
+            # Silently ignore if stderr is not available
             pass
         UTIL_ERRORS.labels(func="logging_hook_fail", type=type(e).__name__).inc()
 

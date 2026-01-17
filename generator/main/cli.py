@@ -1697,7 +1697,8 @@ async def create_admin_user(username, password, email, scopes, api_endpoint, tim
                 try:
                     error_json = await response.json()
                     error_detail = error_json.get("detail", "Unknown error")
-                except:
+                except Exception:
+                    # Fallback if JSON parsing fails for any reason
                     error_detail = await response.text()
                 
                 console.print(

@@ -19,12 +19,15 @@ from .fixes import (
     RollbackRequest,
 )
 from .jobs import (
+    GeneratorStatus,
     Job,
     JobCreateRequest,
     JobListResponse,
     JobProgress,
     JobStage,
     JobStatus,
+    LogEntry,
+    LogsResponse,
     StageProgress,
 )
 
@@ -36,12 +39,15 @@ __all__ = [
     "StatusResponse",
     "SuccessResponse",
     # Jobs
+    "GeneratorStatus",
     "Job",
     "JobCreateRequest",
     "JobListResponse",
     "JobProgress",
     "JobStage",
     "JobStatus",
+    "LogEntry",
+    "LogsResponse",
     "StageProgress",
     # Events
     "EventMessage",

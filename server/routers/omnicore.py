@@ -8,8 +8,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from server.routers.jobs import jobs_db
 from server.services import OmniCoreService
+from server.storage import jobs_db
 
 logger = logging.getLogger(__name__)
 
@@ -96,20 +96,23 @@ async def get_audit_trail(
     return {"job_id": job_id, "audit_trail": trail, "count": len(trail)}
 
 
-@router.get("/health")
+@router.get("/system-health")
 async def get_system_health(
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ):
     """
-    Get overall system health from OmniCore perspective.
+    Get detailed system health from OmniCore perspective.
 
-    Returns health status of all OmniCore components including:
+    Returns detailed health status of all OmniCore components including:
     - Message bus
     - Database
     - Plugin registry
+    - Module connectivity
+
+    This endpoint provides more granular health information than the main /health endpoint.
 
     **Returns:**
-    - System health information
+    - Detailed system health information
     """
     health = await omnicore_service.get_system_health()
     return health

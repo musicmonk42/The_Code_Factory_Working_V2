@@ -10,9 +10,9 @@ from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from server.routers.jobs import jobs_db
-from server.schemas import JobStatus, SuccessResponse
+from server.schemas import GeneratorStatus, JobStatus, LogsResponse, SuccessResponse
 from server.services import GeneratorService
+from server.storage import jobs_db
 
 logger = logging.getLogger(__name__)
 
@@ -94,11 +94,11 @@ async def upload_files(
     )
 
 
-@router.get("/{job_id}/status")
+@router.get("/{job_id}/status", response_model=GeneratorStatus)
 async def get_generator_status(
     job_id: str,
     generator_service: GeneratorService = Depends(get_generator_service),
-):
+) -> GeneratorStatus:
     """
     Get generator-specific status for a job.
 
@@ -123,12 +123,12 @@ async def get_generator_status(
     return status
 
 
-@router.get("/{job_id}/logs")
+@router.get("/{job_id}/logs", response_model=LogsResponse)
 async def get_generator_logs(
     job_id: str,
     limit: int = 100,
     generator_service: GeneratorService = Depends(get_generator_service),
-):
+) -> LogsResponse:
     """
     Get logs from the generator module for a specific job.
 
@@ -148,4 +148,4 @@ async def get_generator_logs(
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
     logs = await generator_service.get_job_logs(job_id, limit=limit)
-    return {"job_id": job_id, "logs": logs, "count": len(logs)}
+    return LogsResponse(job_id=job_id, logs=logs, count=len(logs))

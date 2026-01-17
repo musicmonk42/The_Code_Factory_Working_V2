@@ -6,11 +6,11 @@ Handles code analysis, error detection, fix proposals, and automated fixing.
 
 import logging
 from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from server.routers.jobs import jobs_db
 from server.schemas import (
     Fix,
     FixApplyRequest,
@@ -21,13 +21,11 @@ from server.schemas import (
     SuccessResponse,
 )
 from server.services import SFEService
+from server.storage import fixes_db, jobs_db
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sfe", tags=["Self-Fixing Engineer"])
-
-# In-memory fix storage (would be replaced with actual database)
-fixes_db: dict = {}
 
 
 def get_sfe_service() -> SFEService:
@@ -337,6 +335,7 @@ async def get_sfe_metrics(
 
 @router.get("/insights")
 async def get_learning_insights(
+    job_id: Optional[str] = Query(None, description="Optional job ID to filter insights"),
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -345,8 +344,15 @@ async def get_learning_insights(
     Returns insights from the meta-learning orchestrator about
     common patterns, success rates, and learned behaviors.
 
+    **Query Parameters:**
+    - job_id: Optional job ID to filter insights (if omitted, returns global insights)
+
     **Returns:**
-    - Learning insights
+    - Learning insights (global or job-specific)
+
+    **Note:**
+    This endpoint does not require job_id validation since it can return
+    global insights across all jobs or filtered insights for a specific job.
     """
-    insights = await sfe_service.get_learning_insights()
+    insights = await sfe_service.get_learning_insights(job_id=job_id)
     return insights

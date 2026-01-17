@@ -446,7 +446,7 @@ FIREJAIL_AVAILABLE = False
 try:
     subprocess.check_output(["firejail", "--version"], stderr=subprocess.STDOUT)
     FIREJAIL_AVAILABLE = True
-except:
+except (subprocess.CalledProcessError, FileNotFoundError, OSError):
     logging.getLogger(__name__).warning(
         "Firejail not found. Enhanced local process isolation unavailable."
     )
@@ -455,7 +455,7 @@ CAPSH_AVAILABLE = False
 try:
     subprocess.check_output(["capsh", "--help"], stderr=subprocess.STDOUT)
     CAPSH_AVAILABLE = True
-except:
+except (subprocess.CalledProcessError, FileNotFoundError, OSError):
     logging.getLogger(__name__).warning(
         "Capsh not found. Capability dropping for local processes unavailable."
     )

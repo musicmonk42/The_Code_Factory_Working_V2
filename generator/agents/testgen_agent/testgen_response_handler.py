@@ -762,7 +762,8 @@ class DefaultResponseParser(ResponseParser):
         finally:
             try:
                 os.unlink(tmp_path)
-            except:
+            except (OSError, FileNotFoundError) as e:
+                # Ignore cleanup errors
                 pass
 
     async def _scan_for_security_issues(

@@ -23,13 +23,11 @@ from server.schemas import (
     SuccessResponse,
 )
 from server.services import GeneratorService, OmniCoreService
+from server.storage import jobs_db
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
-
-# In-memory job storage (would be replaced with actual database)
-jobs_db: dict = {}
 
 
 def get_generator_service() -> GeneratorService:

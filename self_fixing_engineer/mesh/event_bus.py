@@ -110,7 +110,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from threading import Thread
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Type
 
@@ -271,7 +271,7 @@ class AsyncSafeLogger:
         try:
             # Non-blocking put
             self._queue.put_nowait((level, msg, kwargs))
-        except:
+        except Full:
             # Queue full - in production we'd rather drop logs than block
             if PROD_MODE:
                 pass
