@@ -351,11 +351,12 @@ make security-scan     # Run security scans
 make ci-local          # Run all CI checks locally
 
 Docker:
-make docker-build      # Build Docker images
+make docker-build      # Build unified platform Docker image
 make docker-up         # Start all services
 make docker-down       # Stop all services
 make docker-logs       # View logs
 make docker-clean      # Clean Docker resources
+make docker-validate   # Validate Docker build and configuration
 
 Maintenance:
 make clean             # Clean generated files and caches

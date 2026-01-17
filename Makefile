@@ -131,6 +131,11 @@ docker-clean: ## Remove all Docker containers, images, and volumes
 	docker system prune -af
 	@echo "$(GREEN)Docker resources cleaned!$(NC)"
 
+docker-validate: ## Validate Docker build and configuration
+	@echo "$(BLUE)Running Docker validation...$(NC)"
+	./validate_docker_build.sh
+	@echo "$(GREEN)Docker validation complete!$(NC)"
+
 # =============================================================================
 # Development
 # =============================================================================
