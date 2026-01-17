@@ -45,27 +45,30 @@ except ImportError:
     class LLMClient:
         """
         Fallback LLM client stub for when the actual plugin is not available.
-        
+
         This allows the file watcher to operate in a degraded mode without LLM support.
         For production use, ensure plugins.llm_client is properly installed and configured.
         """
+
         def __init__(self, *args, **kwargs):
             logger.warning("Using fallback LLMClient - LLM features will be disabled")
-        
+
         async def generate_text(self, prompt: str) -> str:
             """
             Stub implementation that returns a descriptive message instead of raising.
-            
+
             This allows the file watcher to continue operating without LLM support,
             which may be acceptable for scenarios where LLM analysis is optional.
-            
+
             Args:
                 prompt: The text prompt (ignored in stub)
-                
+
             Returns:
                 A message indicating LLM is not available
             """
-            logger.debug(f"LLMClient.generate_text called with prompt (stub mode): {prompt[:50]}...")
+            logger.debug(
+                f"LLMClient.generate_text called with prompt (stub mode): {prompt[:50]}..."
+            )
             return (
                 "[LLM NOT AVAILABLE] LLM analysis is disabled. "
                 "To enable LLM features, install and configure plugins.llm_client module. "
@@ -90,7 +93,11 @@ logger = logging.getLogger(__name__)
 
 # Helper function for idempotent metric creation
 def _get_or_create_metric(
-    metric_class: type, name: str, doc: str, labelnames: list = None, buckets: tuple = None
+    metric_class: type,
+    name: str,
+    doc: str,
+    labelnames: list = None,
+    buckets: tuple = None,
 ):
     """Idempotently create or retrieve a Prometheus metric."""
     if name in REGISTRY._names_to_collectors:
@@ -1270,42 +1277,44 @@ if __name__ == "__main__":
 async def send_slack_alert(message: str, webhook_url: str = None):
     """
     Send alert to Slack using Incoming Webhook.
-    
+
     Args:
         message: Alert message to send
         webhook_url: Slack webhook URL (defaults to SLACK_WEBHOOK_URL env var)
-        
+
     Returns:
         True if alert sent successfully, False otherwise
     """
     webhook_url = webhook_url or os.getenv("SLACK_WEBHOOK_URL")
-    
+
     if not webhook_url:
         logger.warning("SLACK_WEBHOOK_URL not configured, alert not sent")
         print(f"Slack alert (no webhook): {message}")
         return False
-    
+
     try:
         payload = {
             "text": f":warning: *File Watcher Alert*\n{message}",
-            "username": "File Watcher Bot"
+            "username": "File Watcher Bot",
         }
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 webhook_url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                timeout=aiohttp.ClientTimeout(total=10)
+                timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
                 if response.status == 200:
                     logger.info(f"Slack alert sent: {message[:50]}...")
                     return True
                 else:
                     error_text = await response.text()
-                    logger.error(f"Slack webhook failed with status {response.status}: {error_text}")
+                    logger.error(
+                        f"Slack webhook failed with status {response.status}: {error_text}"
+                    )
                     return False
-                    
+
     except Exception as e:
         logger.error(f"Failed to send Slack alert: {e}")
         print(f"Slack alert (error): {message}")
@@ -1316,21 +1325,21 @@ async def send_slack_alert(message: str, webhook_url: str = None):
 async def send_pagerduty_alert(message: str, routing_key: str = None):
     """
     Send alert to PagerDuty using Events API v2.
-    
+
     Args:
         message: Alert message to send
         routing_key: PagerDuty routing key (defaults to PAGERDUTY_ROUTING_KEY env var)
-        
+
     Returns:
         True if alert sent successfully, False otherwise
     """
     routing_key = routing_key or os.getenv("PAGERDUTY_ROUTING_KEY")
-    
+
     if not routing_key:
         logger.warning("PAGERDUTY_ROUTING_KEY not configured, alert not sent")
         print(f"PagerDuty alert (no routing key): {message}")
         return False
-    
+
     try:
         payload = {
             "routing_key": routing_key,
@@ -1340,28 +1349,27 @@ async def send_pagerduty_alert(message: str, routing_key: str = None):
                 "severity": "error",
                 "source": "file_watcher",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "custom_details": {
-                    "service": "file_watcher",
-                    "message": message
-                }
-            }
+                "custom_details": {"service": "file_watcher", "message": message},
+            },
         }
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 "https://events.pagerduty.com/v2/enqueue",
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                timeout=aiohttp.ClientTimeout(total=10)
+                timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
                 if response.status == 202:
                     logger.info(f"PagerDuty alert sent: {message[:50]}...")
                     return True
                 else:
                     error_text = await response.text()
-                    logger.error(f"PagerDuty API failed with status {response.status}: {error_text}")
+                    logger.error(
+                        f"PagerDuty API failed with status {response.status}: {error_text}"
+                    )
                     return False
-                    
+
     except Exception as e:
         logger.error(f"Failed to send PagerDuty alert: {e}")
         print(f"PagerDuty alert (error): {message}")

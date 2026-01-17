@@ -20,5 +20,3 @@ try:
     from . import intent_parser  # noqa: F401
 except ImportError:
     pass
-
-

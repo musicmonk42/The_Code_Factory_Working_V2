@@ -25,13 +25,18 @@ _ArbiterAgentState = None
 try:
     from arbiter.agent_state import AgentState as ArbiterAgentState
     from arbiter.agent_state import Base
+
     _ARBITER_AVAILABLE = True
     _Base = Base
     _ArbiterAgentState = ArbiterAgentState
     import logging
-    logging.getLogger(__name__).info("Successfully imported arbiter.agent_state - using joined-table inheritance")
+
+    logging.getLogger(__name__).info(
+        "Successfully imported arbiter.agent_state - using joined-table inheritance"
+    )
 except ImportError as e:
     import logging
+
     logging.getLogger(__name__).warning(
         f"Could not import arbiter.agent_state ({e}). "
         "Running in standalone mode with independent Base class. "
@@ -39,15 +44,16 @@ except ImportError as e:
     )
     # Create standalone Base for testing/development without arbiter
     _Base = declarative_base()
-    
+
     # Create minimal standalone ArbiterAgentState replacement
     class _StandaloneAgentState(_Base):
         """
         Standalone replacement for ArbiterAgentState when arbiter package is unavailable.
         Provides minimal compatible interface for testing and development.
         """
+
         __tablename__ = "agent_state"
-        
+
         id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
         name: Mapped[str] = mapped_column(String, nullable=False)
         x: Mapped[float] = mapped_column(Float, default=0.0)
@@ -55,10 +61,12 @@ except ImportError as e:
         energy: Mapped[float] = mapped_column(Float, default=100.0)
         world_size: Mapped[int] = mapped_column(Integer, default=100)
         agent_type: Mapped[str] = mapped_column(String, nullable=False)
-        
+
         def __repr__(self) -> str:
-            return f"<AgentState(id={self.id}, name={self.name}, type={self.agent_type})>"
-    
+            return (
+                f"<AgentState(id={self.id}, name={self.name}, type={self.agent_type})>"
+            )
+
     _ArbiterAgentState = _StandaloneAgentState
 
 # Export for use in this module
@@ -73,16 +81,16 @@ class AgentState(ArbiterAgentState):
     """
     Omnicore extension of ArbiterAgentState.
     Uses joined-table inheritance to add Omnicore-specific fields.
-    
+
     Inheritance chain:
     - ArbiterAgentState (parent, table: agent_state)
       └─ AgentState (this class, table: omnicore_agent_state)
          ├─ GeneratorAgentState (table: generator_agent_state)
          └─ SFEAgentState (table: sfe_agent_state)
-    
+
     The ForeignKey to agent_state.id establishes the join relationship with the parent table.
     Child classes (GeneratorAgentState, SFEAgentState) reference omnicore_agent_state.id.
-    
+
     Note: The parent ArbiterAgentState uses 'agent_type' as a regular column.
     For proper polymorphic inheritance, GeneratorAgentState and SFEAgentState
     should set agent_type appropriately in their values.
@@ -122,7 +130,7 @@ class ExplainAuditRecord(Base):
     __tablename__ = "explain_audit"
     # Allow table redefinition during test collection to prevent
     # "Table 'explain_audit' is already defined" errors when modules are imported multiple times
-    __table_args__ = {'extend_existing': True}
+    __table_args__ = {"extend_existing": True}
 
     uuid: Mapped[str] = mapped_column(String, primary_key=True)
     kind: Mapped[str] = mapped_column(String, nullable=False)

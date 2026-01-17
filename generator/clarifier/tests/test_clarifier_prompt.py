@@ -114,12 +114,16 @@ MockSendAlert = patcher_send_alert.start()
 try:
     MockTranslatorCls = patcher_translator.start()
     MockTranslatorInstance = MockTranslatorCls.return_value
-    MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(text=text)
+    MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(
+        text=text
+    )
 except (ImportError, AttributeError):
     # Translator not available, create a mock directly
     MockTranslatorCls = MagicMock()
     MockTranslatorInstance = MagicMock()
-    MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(text=text)
+    MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(
+        text=text
+    )
 
 
 # Mock the core Clarifier class

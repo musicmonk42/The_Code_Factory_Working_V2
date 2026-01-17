@@ -159,18 +159,22 @@ try:
         ExplainableReasonerPlugin,
         QuantumPluginAPI,
         ReasonerError,
-        ExplanationInput
+        ExplanationInput,
     )
-    logger.info("ImportFixerEngine: Using implementations from simulation.simulation_module")
+
+    logger.info(
+        "ImportFixerEngine: Using implementations from simulation.simulation_module"
+    )
 except ImportError as e:
     logger.warning(
         f"Failed to import from simulation.simulation_module: {e}. "
         "Defining fallback implementations."
     )
-    
+
     # Fallback implementations if simulation_module is unavailable
     class Database:
         """Fallback Database - see simulation_module.py for full implementation."""
+
         async def health_check(self) -> Dict[str, Any]:
             logger.warning("Using fallback Database.health_check()")
             return {"status": "ok", "latency_ms": 1, "note": "import_fixer_fallback"}
@@ -184,6 +188,7 @@ except ImportError as e:
 
     class ShardedMessageBus:
         """Fallback ShardedMessageBus - see simulation_module.py for full implementation."""
+
         async def health_check(self) -> Dict[str, Any]:
             logger.warning("Using fallback ShardedMessageBus.health_check()")
             return {"status": "running", "note": "import_fixer_fallback"}
@@ -193,7 +198,9 @@ except ImportError as e:
             return None
 
         async def subscribe(self, *_args, **_kwargs) -> None:
-            logger.warning("Fallback ShardedMessageBus.subscribe() - subscription NOT created")
+            logger.warning(
+                "Fallback ShardedMessageBus.subscribe() - subscription NOT created"
+            )
             return None
 
         async def close(self) -> None:
@@ -201,6 +208,7 @@ except ImportError as e:
 
     class ReasonerError(Exception):
         """Fallback ReasonerError."""
+
         def __init__(self, message: str):
             super().__init__(message)
             self.message = message
@@ -208,12 +216,14 @@ except ImportError as e:
     @dataclass
     class ExplanationInput:
         """Fallback ExplanationInput."""
+
         result_id: str
         result_data: Dict[str, Any]
         context: Dict[str, Any]
 
     class ExplainableReasonerPlugin:
         """Fallback ExplainableReasonerPlugin - see simulation_module.py for full implementation."""
+
         async def async_init(self) -> None:
             logger.warning("Fallback ExplainableReasonerPlugin.async_init()")
             return None
@@ -231,6 +241,7 @@ except ImportError as e:
 
     class QuantumPluginAPI:
         """Fallback QuantumPluginAPI - see simulation_module.py for full implementation."""
+
         async def perform_quantum_operation(
             self, *, operation_type: str, params: Dict[str, Any]
         ) -> Dict[str, Any]:

@@ -38,9 +38,7 @@ class HealthResponse(BaseModel):
 
     status: str = Field(..., description="Health status (healthy/unhealthy)")
     version: str = Field(..., description="API version")
-    components: Dict[str, str] = Field(
-        ..., description="Component health statuses"
-    )
+    components: Dict[str, str] = Field(..., description="Component health statuses")
     timestamp: str = Field(..., description="Health check timestamp (ISO 8601)")
 
 
@@ -48,6 +46,4 @@ class PaginationParams(BaseModel):
     """Pagination parameters for list endpoints."""
 
     page: int = Field(1, ge=1, description="Page number (1-indexed)")
-    per_page: int = Field(
-        20, ge=1, le=100, description="Items per page (max 100)"
-    )
+    per_page: int = Field(20, ge=1, le=100, description="Items per page (max 100)")

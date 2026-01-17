@@ -43,7 +43,7 @@ except ImportError:
     class _MockRegistry:
         """
         Simulates Prometheus registry for testing.
-        
+
         Improvements:
         - LRU eviction to prevent memory leaks from dynamic metrics
         - Configurable max size with warning when limit is approached
@@ -53,7 +53,7 @@ except ImportError:
         def __init__(self, max_collectors: int = 1000):
             """
             Initialize mock registry with size limit.
-            
+
             Args:
                 max_collectors: Maximum number of metrics to track (default 1000)
             """
@@ -64,14 +64,17 @@ except ImportError:
         def register(self, collector: Any):
             """Register a collector with LRU eviction if at capacity."""
             # Check if we're approaching the limit
-            if len(self.collectors) >= self.max_collectors * 0.9 and not self._warned_at_threshold:
+            if (
+                len(self.collectors) >= self.max_collectors * 0.9
+                and not self._warned_at_threshold
+            ):
                 logger.warning(
                     f"Mock metric registry approaching capacity: "
                     f"{len(self.collectors)}/{self.max_collectors}. "
                     f"Consider using real Prometheus or reducing dynamic metric creation."
                 )
                 self._warned_at_threshold = True
-            
+
             # If at capacity, remove oldest collector (LRU eviction)
             if len(self.collectors) >= self.max_collectors:
                 removed = self.collectors.pop(0)
@@ -79,24 +82,24 @@ except ImportError:
                     f"Mock metric registry at capacity. "
                     f"Evicting oldest metric: {getattr(removed, 'name', 'unknown')}"
                 )
-            
+
             self.collectors.append(collector)
 
         def unregister(self, collector: Any):
             if collector in self.collectors:
                 self.collectors.remove(collector)
-        
+
         def get_memory_usage(self) -> dict:
             """
             Return memory usage statistics for monitoring.
-            
+
             Returns:
                 Dict with collector count, capacity, and usage percentage
             """
             return {
                 "collector_count": len(self.collectors),
                 "max_collectors": self.max_collectors,
-                "usage_percent": (len(self.collectors) / self.max_collectors) * 100
+                "usage_percent": (len(self.collectors) / self.max_collectors) * 100,
             }
 
     REGISTRY = _MockRegistry()
@@ -106,7 +109,7 @@ except ImportError:
     class _ThreadSafeDict(Generic[T]):
         """
         Thread-safe dictionary for mock metric storage with LRU eviction.
-        
+
         Improvements:
         - Configurable max size to prevent unbounded growth
         - LRU eviction when capacity is reached
@@ -116,7 +119,7 @@ except ImportError:
         def __init__(self, max_size: int = 10000):
             """
             Initialize thread-safe dict with size limit.
-            
+
             Args:
                 max_size: Maximum number of label combinations to track
             """
@@ -133,7 +136,7 @@ except ImportError:
                 if self._data:
                     self._data.popitem()
                 return
-            
+
             # Find and remove least recently used key
             lru_key = min(self._access_times, key=self._access_times.get)
             self._data.pop(lru_key, None)
@@ -151,7 +154,10 @@ except ImportError:
             with self._lock:
                 # Check capacity and evict if needed (only for new keys when at capacity)
                 if key not in self._data and len(self._data) >= self.max_size:
-                    if len(self._data) >= self.max_size * 0.9 and not self._warned_at_threshold:
+                    if (
+                        len(self._data) >= self.max_size * 0.9
+                        and not self._warned_at_threshold
+                    ):
                         logger.warning(
                             f"Mock metric storage approaching capacity: "
                             f"{len(self._data)}/{self.max_size}. "
@@ -159,7 +165,7 @@ except ImportError:
                         )
                         self._warned_at_threshold = True
                     self._evict_lru()
-                
+
                 self._data[key] = value
                 self._access_times[key] = time.time()
 
@@ -168,14 +174,14 @@ except ImportError:
                 # Check capacity and evict if needed
                 if key not in self._data and len(self._data) >= self.max_size:
                     self._evict_lru()
-                
+
                 self._data[key] = self._data.get(key, 0.0) + amount
                 self._access_times[key] = time.time()
 
         def items(self):
             with self._lock:
                 return list(self._data.items())
-        
+
         def clear(self):
             """Clear all data and reset warning flag."""
             with self._lock:
@@ -503,7 +509,7 @@ def dispatch_timer(shard_id: int):
 def reset_metrics():
     """
     Clears all mock metric values (for unit tests).
-    
+
     Uses the new clear() method which also resets warning flags.
     """
     if not _PROMETHEUS_AVAILABLE:
@@ -533,10 +539,10 @@ def get_mock_metric_values(name: str) -> Dict[Tuple, float]:
 def get_mock_registry_stats() -> dict:
     """
     Get statistics about the mock registry for monitoring.
-    
+
     Returns:
         Dict with registry usage statistics
-    
+
     Raises:
         RuntimeError: If called when Prometheus is available
     """

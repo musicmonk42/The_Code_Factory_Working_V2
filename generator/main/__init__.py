@@ -15,4 +15,4 @@ else:
     main_cli = None
     MainApp = None
 
-__all__ = ['fastapi_app', 'create_db_tables', 'main_cli', 'MainApp']
+__all__ = ["fastapi_app", "create_db_tables", "main_cli", "MainApp"]

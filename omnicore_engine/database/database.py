@@ -782,7 +782,7 @@ class Database:
 
     async def get_feedback_entries(self, query=None) -> List[Dict]:
         DB_OPERATIONS_LOCAL.labels(operation="get_feedback_entries").inc()
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation
@@ -812,15 +812,15 @@ class Database:
 
     async def save_feedback_entry(self, entry: Dict[str, Any]) -> None:
         DB_OPERATIONS_LOCAL.labels(operation="save_feedback_entry").inc()
-        
+
         # Validate and sanitize input
         feedback_type = entry.get("type", "")
         message = entry.get("message", "")
         timestamp = entry.get("timestamp", datetime.now().isoformat())
-        
+
         if not feedback_type or not message:
             raise ValueError("Feedback entry must contain 'type' and 'message' fields")
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation with proper parameter binding
@@ -832,18 +832,22 @@ class Database:
                         """,
                         feedback_type,
                         message,
-                        timestamp
+                        timestamp,
                     )
-                    logger.debug(f"Feedback entry saved to PostgreSQL: type={feedback_type}")
+                    logger.debug(
+                        f"Feedback entry saved to PostgreSQL: type={feedback_type}"
+                    )
             else:
                 # SQLite implementation
                 async with self._get_aiosqlite_connection() as conn:
                     await conn.execute(
                         "INSERT INTO feedback (type, message, timestamp) VALUES (?, ?, ?)",
-                        (feedback_type, message, timestamp)
+                        (feedback_type, message, timestamp),
                     )
                     await conn.commit()
-                    logger.debug(f"Feedback entry saved to SQLite: type={feedback_type}")
+                    logger.debug(
+                        f"Feedback entry saved to SQLite: type={feedback_type}"
+                    )
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="save_feedback_entry").inc()
             logger.error(f"Error saving feedback entry: {e}", exc_info=True)
@@ -854,10 +858,10 @@ class Database:
         self, user_id: str, decrypt: bool = False
     ) -> Optional[Dict]:
         DB_OPERATIONS_LOCAL.labels(operation="get_preferences").inc()
-        
+
         # Validate and sanitize user_id
         user_id = validate_user_id(user_id)
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation with proper parameter binding
@@ -868,16 +872,16 @@ class Database:
                         FROM preferences 
                         WHERE user_id = $1 AND deleted = 0
                         """,
-                        user_id
+                        user_id,
                     )
                     if row:
-                        return self._decrypt_json(row["data"], row["encrypted"] and decrypt)
+                        return self._decrypt_json(
+                            row["data"], row["encrypted"] and decrypt
+                        )
                     return None
             else:
                 # SQLite implementation
-                query = (
-                    "SELECT data, encrypted FROM preferences WHERE user_id = ? AND deleted=0"
-                )
+                query = "SELECT data, encrypted FROM preferences WHERE user_id = ? AND deleted=0"
                 async with self._get_aiosqlite_connection() as conn:
                     cur = await conn.execute(query, (user_id,))
                     row = await cur.fetchone()
@@ -896,11 +900,11 @@ class Database:
         self, user_id: str, prefs: Dict, encrypt: bool = False
     ) -> None:
         DB_OPERATIONS_LOCAL.labels(operation="save_preferences").inc()
-        
+
         # Validate and sanitize inputs
         user_id = validate_user_id(user_id)
         data = self._validate_json(prefs, encrypt)
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation with proper UPSERT
@@ -917,7 +921,7 @@ class Database:
                         """,
                         user_id,
                         data,
-                        encrypt
+                        encrypt,
                     )
                     logger.debug(f"Preferences saved to PostgreSQL for user: {user_id}")
             else:
@@ -949,7 +953,7 @@ class Database:
     ) -> None:
         """
         Save a simulation record to the database (legacy table format).
-        
+
         Args:
             sim_id: Unique simulation identifier
             request_data: Request data dictionary
@@ -957,7 +961,7 @@ class Database:
             status: Simulation status
             user_id: Optional user identifier
             encrypt: Whether to encrypt the JSON data
-            
+
         Raises:
             ValueError: If data validation fails
         """
@@ -966,7 +970,7 @@ class Database:
             user_id = validate_user_id(user_id)
         request_data_json = self._validate_json(request_data, encrypt)
         result_json = self._validate_json(result, encrypt)
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation with UPSERT using ON CONFLICT
@@ -992,7 +996,7 @@ class Database:
                             "result": result_json,
                             "status": status,
                             "encrypted": encrypt,
-                        }
+                        },
                     )
                     await session.commit()
             else:
@@ -1025,16 +1029,16 @@ class Database:
     ) -> Optional[Dict]:
         """
         Retrieve a simulation record from the database (legacy table format).
-        
+
         Args:
             sim_id: Simulation identifier
             decrypt: Whether to decrypt encrypted JSON data
-            
+
         Returns:
             Dictionary with simulation data or None if not found
         """
         DB_OPERATIONS_LOCAL.labels(operation="get_simulation_legacy").inc()
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation
@@ -1046,7 +1050,7 @@ class Database:
                 async with self.AsyncSessionLocal() as session:
                     result = await session.execute(text(query), {"sim_id": sim_id})
                     row = result.fetchone()
-                
+
                 if row:
                     return {
                         "sim_id": row[0],
@@ -1089,15 +1093,15 @@ class Database:
     async def delete_simulation_legacy(self, sim_id: str) -> None:
         """
         Soft delete a simulation record (legacy table format).
-        
+
         Args:
             sim_id: Simulation identifier
-            
+
         Raises:
             Exception: If database operation fails
         """
         DB_OPERATIONS_LOCAL.labels(operation="delete_simulation_legacy").inc()
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation
@@ -1128,11 +1132,11 @@ class Database:
     ) -> None:
         """
         Save a plugin metadata record to the database (legacy table format).
-        
+
         Args:
             plugin_meta: Plugin metadata dictionary with 'kind' and 'name' required
             encrypt: Whether to encrypt the metadata JSON
-            
+
         Raises:
             ValueError: If kind or name is missing
         """
@@ -1142,7 +1146,7 @@ class Database:
         if not kind or not name:
             raise ValueError("Plugin kind and name are required")
         meta_json = self._validate_json(plugin_meta, encrypt)
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation with UPSERT using ON CONFLICT
@@ -1163,7 +1167,7 @@ class Database:
                             "name": name,
                             "meta": meta_json,
                             "encrypted": encrypt,
-                        }
+                        },
                     )
                     await session.commit()
             else:
@@ -1188,33 +1192,33 @@ class Database:
     ) -> Optional[Dict]:
         """
         Retrieve a legacy plugin by kind and name.
-        
+
         Industry-standard implementation with:
         - PostgreSQL and SQLite support
         - Optional decryption of plugin metadata
         - Soft delete filtering (deleted=0)
-        
+
         Args:
             kind: Plugin kind/type
             name: Plugin name
             decrypt: Whether to decrypt encrypted metadata
-            
+
         Returns:
             Plugin metadata dictionary or None if not found
         """
         DB_OPERATIONS_LOCAL.labels(operation="get_plugin_legacy").inc()
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation
                 async with self.AsyncSessionLocal() as session:
-                    query = text("""
+                    query = text(
+                        """
                         SELECT meta, encrypted FROM plugins 
                         WHERE kind = :kind AND name = :name AND deleted = 0
-                    """)
-                    result = await session.execute(
-                        query, {"kind": kind, "name": name}
+                    """
                     )
+                    result = await session.execute(query, {"kind": kind, "name": name})
                     row = result.fetchone()
             else:
                 # SQLite implementation
@@ -1222,13 +1226,13 @@ class Database:
                 async with self._get_aiosqlite_connection() as conn:
                     cur = await conn.execute(query, (kind, name))
                     row = await cur.fetchone()
-            
+
             if row:
                 meta = row["meta"] if isinstance(row, dict) else row[0]
                 encrypted = row["encrypted"] if isinstance(row, dict) else row[1]
                 return self._decrypt_json(meta, encrypted and decrypt)
             return None
-            
+
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="get_plugin_legacy").inc()
             logger.error(
@@ -1240,38 +1244,42 @@ class Database:
     async def list_plugins_legacy(self, decrypt: bool = False) -> List[Dict]:
         """
         List all non-deleted legacy plugins.
-        
+
         Industry-standard implementation with:
         - PostgreSQL and SQLite support
         - Optional bulk decryption
         - Soft delete filtering
         - Performance timing metrics
-        
+
         Args:
             decrypt: Whether to decrypt encrypted metadata
-            
+
         Returns:
             List of plugin metadata dictionaries
         """
         DB_OPERATIONS_LOCAL.labels(operation="list_plugins_legacy").inc()
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation
                 async with self.AsyncSessionLocal() as session:
-                    query = text("""
+                    query = text(
+                        """
                         SELECT kind, name, meta, encrypted FROM plugins 
                         WHERE deleted = 0
-                    """)
+                    """
+                    )
                     result = await session.execute(query)
                     rows = result.fetchall()
             else:
                 # SQLite implementation
-                query = "SELECT kind, name, meta, encrypted FROM plugins WHERE deleted=0"
+                query = (
+                    "SELECT kind, name, meta, encrypted FROM plugins WHERE deleted=0"
+                )
                 async with self._get_aiosqlite_connection() as conn:
                     cur = await conn.execute(query)
                     rows = await cur.fetchall()
-            
+
             # Process and return results
             return [
                 {
@@ -1279,12 +1287,13 @@ class Database:
                     "name": row["name"] if isinstance(row, dict) else row[1],
                     "meta": self._decrypt_json(
                         row["meta"] if isinstance(row, dict) else row[2],
-                        (row["encrypted"] if isinstance(row, dict) else row[3]) and decrypt
+                        (row["encrypted"] if isinstance(row, dict) else row[3])
+                        and decrypt,
                     ),
                 }
                 for row in rows
             ]
-            
+
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="list_plugins_legacy").inc()
             logger.error(f"Error listing legacy plugins: {e}", exc_info=True)
@@ -1294,34 +1303,34 @@ class Database:
     async def delete_plugin_legacy(self, kind: str, name: str) -> None:
         """
         Soft delete a legacy plugin.
-        
+
         Industry-standard implementation with:
         - PostgreSQL and SQLite support
         - Soft delete (sets deleted=1)
         - Automatic timestamp update
         - Performance timing metrics
-        
+
         Args:
             kind: Plugin kind/type
             name: Plugin name
-            
+
         Raises:
             Exception: If deletion fails
         """
         DB_OPERATIONS_LOCAL.labels(operation="delete_plugin_legacy").inc()
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation
                 async with self.AsyncSessionLocal() as session:
-                    query = text("""
+                    query = text(
+                        """
                         UPDATE plugins 
                         SET deleted = 1, updated_at = CURRENT_TIMESTAMP 
                         WHERE kind = :kind AND name = :name
-                    """)
-                    await session.execute(
-                        query, {"kind": kind, "name": name}
+                    """
                     )
+                    await session.execute(query, {"kind": kind, "name": name})
                     await session.commit()
             else:
                 # SQLite implementation
@@ -1329,7 +1338,7 @@ class Database:
                 async with self._get_aiosqlite_connection() as conn:
                     await conn.execute(query, (kind, name))
                     await conn.commit()
-                    
+
         except Exception as e:
             DB_ERRORS_LOCAL.labels(operation="delete_plugin_legacy").inc()
             logger.error(
@@ -1907,16 +1916,16 @@ class Database:
     async def get_audit_snapshot(self, snapshot_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve an audit snapshot by ID.
-        
+
         Industry-standard implementation with:
         - PostgreSQL and SQLite support
         - Encrypted state storage
         - Circuit breaker pattern for resilience
         - Comprehensive error handling
-        
+
         Args:
             snapshot_id: Unique identifier for the snapshot
-            
+
         Returns:
             Dictionary containing snapshot data or None if not found
         """
@@ -1929,9 +1938,7 @@ class Database:
                         "SELECT state, user_id, timestamp FROM audit_snapshots "
                         "WHERE snapshot_id = :snapshot_id"
                     )
-                    result = await session.execute(
-                        query, {"snapshot_id": snapshot_id}
-                    )
+                    result = await session.execute(query, {"snapshot_id": snapshot_id})
                     row = result.fetchone()
             else:
                 # SQLite implementation
@@ -1944,16 +1951,20 @@ class Database:
                 try:
                     # Decrypt the encrypted state
                     decrypted_state_str = self.encrypter.decrypt(
-                        row["state"].encode("utf-8") if isinstance(row["state"], str) else row[0].encode("utf-8")
+                        row["state"].encode("utf-8")
+                        if isinstance(row["state"], str)
+                        else row[0].encode("utf-8")
                     ).decode("utf-8")
                     state = json.loads(decrypted_state_str)
-                    
+
                     # Return structured snapshot data
                     return {
                         "snapshot_id": snapshot_id,
                         "state": state,
                         "user_id": row["user_id"] if isinstance(row, dict) else row[1],
-                        "timestamp": row["timestamp"] if isinstance(row, dict) else row[2],
+                        "timestamp": (
+                            row["timestamp"] if isinstance(row, dict) else row[2]
+                        ),
                     }
                 except (InvalidToken, json.JSONDecodeError) as e:
                     logger.error(
@@ -1975,13 +1986,13 @@ class Database:
     ):
         """
         Save an audit snapshot with encrypted state.
-        
+
         Industry-standard implementation with:
         - PostgreSQL and SQLite support
         - Upsert semantics (INSERT or UPDATE)
         - Retry logic with exponential backoff
         - Circuit breaker for fault tolerance
-        
+
         Args:
             snapshot_id: Unique identifier for the snapshot
             encrypted_state: Encrypted state data
@@ -1990,12 +2001,13 @@ class Database:
         AUDIT_DB_OPERATIONS.labels(operation="snapshot_audit_state").inc()
         user_id = validate_user_id(user_id)
         timestamp = datetime.utcnow().isoformat()
-        
+
         try:
             if self.is_postgres:
                 # PostgreSQL implementation with UPSERT (INSERT ... ON CONFLICT)
                 async with self.AsyncSessionLocal() as session:
-                    query = text("""
+                    query = text(
+                        """
                         INSERT INTO audit_snapshots (snapshot_id, state, user_id, timestamp)
                         VALUES (:snapshot_id, :state, :user_id, :timestamp)
                         ON CONFLICT (snapshot_id) 
@@ -2003,7 +2015,8 @@ class Database:
                             state = EXCLUDED.state,
                             user_id = EXCLUDED.user_id,
                             timestamp = EXCLUDED.timestamp
-                    """)
+                    """
+                    )
                     await session.execute(
                         query,
                         {
@@ -2050,23 +2063,23 @@ class Database:
     async def snapshot_world_state(self, user_id: str) -> str:
         """
         Create a snapshot of all agent states in the world.
-        
+
         Industry-standard implementation with:
         - PostgreSQL and SQLite support
         - Data anonymization before storage
         - Encryption of sensitive data
         - Retry logic and comprehensive error handling
-        
+
         Args:
             user_id: User creating the snapshot
-            
+
         Returns:
             Unique snapshot ID
         """
         DB_OPERATIONS.labels(operation="snapshot_world_state").inc()
         user_id = validate_user_id(user_id)
         snapshot_id = str(uuid.uuid4())
-        
+
         try:
             # Retrieve all agent states using ORM
             async with self.AsyncSessionLocal() as session:
@@ -2087,10 +2100,12 @@ class Database:
             if self.is_postgres:
                 # PostgreSQL implementation
                 async with self.AsyncSessionLocal() as session:
-                    query = text("""
+                    query = text(
+                        """
                         INSERT INTO world_snapshots (snapshot_id, state, user_id, timestamp)
                         VALUES (:snapshot_id, :state, :user_id, :timestamp)
-                    """)
+                    """
+                    )
                     await session.execute(
                         query,
                         {
@@ -2143,20 +2158,20 @@ class Database:
     async def restore_world_state(self, snapshot_id: str, user_id: str):
         """
         Restore world state from a snapshot.
-        
+
         Industry-standard implementation with:
         - PostgreSQL and SQLite support
         - Transactional restore (all-or-nothing)
         - State decryption and validation
         - Circuit breaker and retry logic
-        
+
         Args:
             snapshot_id: ID of snapshot to restore
             user_id: User performing the restore
         """
         DB_OPERATIONS.labels(operation="restore_world_state").inc()
         user_id = validate_user_id(user_id)
-        
+
         try:
             # Retrieve snapshot
             if self.is_postgres:
@@ -2165,9 +2180,7 @@ class Database:
                     query = text(
                         "SELECT state FROM world_snapshots WHERE snapshot_id = :snapshot_id"
                     )
-                    result = await session.execute(
-                        query, {"snapshot_id": snapshot_id}
-                    )
+                    result = await session.execute(query, {"snapshot_id": snapshot_id})
                     row = result.fetchone()
             else:
                 # SQLite implementation
@@ -2182,7 +2195,9 @@ class Database:
             # Decrypt and deserialize state
             encrypted_state = row["state"] if isinstance(row, dict) else row[0]
             decrypted_state_str = self.encrypter.decrypt(
-                encrypted_state.encode("utf-8") if isinstance(encrypted_state, str) else encrypted_state
+                encrypted_state.encode("utf-8")
+                if isinstance(encrypted_state, str)
+                else encrypted_state
             ).decode("utf-8")
             states_list = json.loads(decrypted_state_str)
 
@@ -2190,7 +2205,7 @@ class Database:
             async with self.AsyncSessionLocal() as session:
                 # Clear existing states
                 await session.execute(delete(AgentState))
-                
+
                 # Restore states from snapshot
                 for state_data in states_list:
                     # Hash the ID to maintain anonymization
@@ -2200,7 +2215,7 @@ class Database:
                     del state_data["id"]
                     state = AgentState(**state_data)
                     session.add(state)
-                
+
                 # Commit transaction
                 await session.commit()
 
@@ -2393,11 +2408,11 @@ class Database:
     async def save_generator_state(self, agent_id: str, data: Dict[str, Any]):
         """
         Save or update state for a generator agent using UPSERT logic.
-        
+
         FIXED: Previous implementation always inserted new rows with default coordinates,
         resetting agent positions on every save. Now uses SQLite's ON CONFLICT clause
         to update existing records or insert new ones.
-        
+
         Also creates an audit record for state changes (Bug C fix).
 
         Uses module-level constants for default values: DEFAULT_AGENT_X, DEFAULT_AGENT_Y,
@@ -2410,7 +2425,7 @@ class Database:
             )
             existing_agent = result.scalar_one_or_none()
             is_update = existing_agent is not None
-            
+
             # Use SQLite's INSERT ... ON CONFLICT for upsert
             # This preserves existing coordinates and only updates changed fields
             stmt = sqlite_insert(GeneratorAgentState).values(
@@ -2426,57 +2441,71 @@ class Database:
                 deployment_config=data.get("deployment"),
                 docs=data.get("docs"),
             )
-            
+
             # On conflict (duplicate id), update only the fields that changed
             # Preserve x, y, energy unless explicitly provided in data
             stmt = stmt.on_conflict_do_update(
-                index_elements=['id'],
+                index_elements=["id"],
                 set_={
-                    'name': stmt.excluded.name,
-                    'x': stmt.excluded.x if 'x' in data else GeneratorAgentState.x,
-                    'y': stmt.excluded.y if 'y' in data else GeneratorAgentState.y,
-                    'energy': stmt.excluded.energy if 'energy' in data else GeneratorAgentState.energy,
-                    'world_size': stmt.excluded.world_size if 'world_size' in data else GeneratorAgentState.world_size,
-                    'generated_code': stmt.excluded.generated_code,
-                    'test_results': stmt.excluded.test_results,
-                    'deployment_config': stmt.excluded.deployment_config,
-                    'docs': stmt.excluded.docs,
-                }
+                    "name": stmt.excluded.name,
+                    "x": stmt.excluded.x if "x" in data else GeneratorAgentState.x,
+                    "y": stmt.excluded.y if "y" in data else GeneratorAgentState.y,
+                    "energy": (
+                        stmt.excluded.energy
+                        if "energy" in data
+                        else GeneratorAgentState.energy
+                    ),
+                    "world_size": (
+                        stmt.excluded.world_size
+                        if "world_size" in data
+                        else GeneratorAgentState.world_size
+                    ),
+                    "generated_code": stmt.excluded.generated_code,
+                    "test_results": stmt.excluded.test_results,
+                    "deployment_config": stmt.excluded.deployment_config,
+                    "docs": stmt.excluded.docs,
+                },
             )
-            
+
             await session.execute(stmt)
             await session.commit()
-            
+
             # BUG C FIX: Create audit record for state change
             try:
                 audit_record = {
-                    'uuid': str(uuid.uuid4()),
-                    'kind': 'agent_state_change',
-                    'name': f'generator_agent_{agent_id}',
-                    'detail': json.dumps({
-                        'action': 'update' if is_update else 'create',
-                        'agent_id': agent_id,
-                        'agent_type': 'generator',
-                        'changed_fields': list(data.keys()),
-                    }),
-                    'ts': time.time(),
-                    'hash': hashlib.sha256(f"{agent_id}_{time.time()}".encode()).hexdigest(),
-                    'agent_id': agent_id,
-                    'context': json.dumps({'operation': 'save_generator_state'}),
+                    "uuid": str(uuid.uuid4()),
+                    "kind": "agent_state_change",
+                    "name": f"generator_agent_{agent_id}",
+                    "detail": json.dumps(
+                        {
+                            "action": "update" if is_update else "create",
+                            "agent_id": agent_id,
+                            "agent_type": "generator",
+                            "changed_fields": list(data.keys()),
+                        }
+                    ),
+                    "ts": time.time(),
+                    "hash": hashlib.sha256(
+                        f"{agent_id}_{time.time()}".encode()
+                    ).hexdigest(),
+                    "agent_id": agent_id,
+                    "context": json.dumps({"operation": "save_generator_state"}),
                 }
                 await self.save_audit_record(audit_record)
             except Exception as e:
-                logger.warning(f"Failed to create audit record for generator state change: {e}")
+                logger.warning(
+                    f"Failed to create audit record for generator state change: {e}"
+                )
                 # Don't fail the state save if audit fails
 
     async def save_sfe_state(self, agent_id: str, data: Dict[str, Any]):
         """
         Save or update state for a self-fixing engineer agent using UPSERT logic.
-        
+
         FIXED: Previous implementation always inserted new rows with default coordinates,
         resetting agent positions on every save. Now uses SQLite's ON CONFLICT clause
         to update existing records or insert new ones.
-        
+
         Also creates an audit record for state changes (Bug C fix).
 
         Uses module-level constants for default values: DEFAULT_AGENT_X, DEFAULT_AGENT_Y,
@@ -2489,7 +2518,7 @@ class Database:
             )
             existing_agent = result.scalar_one_or_none()
             is_update = existing_agent is not None
-            
+
             # Use SQLite's INSERT ... ON CONFLICT for upsert
             stmt = sqlite_insert(SFEAgentState).values(
                 id=agent_id,
@@ -2503,43 +2532,57 @@ class Database:
                 analysis_report=data.get("analysis"),
                 trust_score=data.get("trust_score"),
             )
-            
+
             # On conflict (duplicate id), update only the fields that changed
             stmt = stmt.on_conflict_do_update(
-                index_elements=['id'],
+                index_elements=["id"],
                 set_={
-                    'name': stmt.excluded.name,
-                    'x': stmt.excluded.x if 'x' in data else SFEAgentState.x,
-                    'y': stmt.excluded.y if 'y' in data else SFEAgentState.y,
-                    'energy': stmt.excluded.energy if 'energy' in data else SFEAgentState.energy,
-                    'world_size': stmt.excluded.world_size if 'world_size' in data else SFEAgentState.world_size,
-                    'fixed_code': stmt.excluded.fixed_code,
-                    'analysis_report': stmt.excluded.analysis_report,
-                    'trust_score': stmt.excluded.trust_score,
-                }
+                    "name": stmt.excluded.name,
+                    "x": stmt.excluded.x if "x" in data else SFEAgentState.x,
+                    "y": stmt.excluded.y if "y" in data else SFEAgentState.y,
+                    "energy": (
+                        stmt.excluded.energy
+                        if "energy" in data
+                        else SFEAgentState.energy
+                    ),
+                    "world_size": (
+                        stmt.excluded.world_size
+                        if "world_size" in data
+                        else SFEAgentState.world_size
+                    ),
+                    "fixed_code": stmt.excluded.fixed_code,
+                    "analysis_report": stmt.excluded.analysis_report,
+                    "trust_score": stmt.excluded.trust_score,
+                },
             )
-            
+
             await session.execute(stmt)
             await session.commit()
-            
+
             # BUG C FIX: Create audit record for state change
             try:
                 audit_record = {
-                    'uuid': str(uuid.uuid4()),
-                    'kind': 'agent_state_change',
-                    'name': f'sfe_agent_{agent_id}',
-                    'detail': json.dumps({
-                        'action': 'update' if is_update else 'create',
-                        'agent_id': agent_id,
-                        'agent_type': 'sfe',
-                        'changed_fields': list(data.keys()),
-                    }),
-                    'ts': time.time(),
-                    'hash': hashlib.sha256(f"{agent_id}_{time.time()}".encode()).hexdigest(),
-                    'agent_id': agent_id,
-                    'context': json.dumps({'operation': 'save_sfe_state'}),
+                    "uuid": str(uuid.uuid4()),
+                    "kind": "agent_state_change",
+                    "name": f"sfe_agent_{agent_id}",
+                    "detail": json.dumps(
+                        {
+                            "action": "update" if is_update else "create",
+                            "agent_id": agent_id,
+                            "agent_type": "sfe",
+                            "changed_fields": list(data.keys()),
+                        }
+                    ),
+                    "ts": time.time(),
+                    "hash": hashlib.sha256(
+                        f"{agent_id}_{time.time()}".encode()
+                    ).hexdigest(),
+                    "agent_id": agent_id,
+                    "context": json.dumps({"operation": "save_sfe_state"}),
                 }
                 await self.save_audit_record(audit_record)
             except Exception as e:
-                logger.warning(f"Failed to create audit record for SFE state change: {e}")
+                logger.warning(
+                    f"Failed to create audit record for SFE state change: {e}"
+                )
                 # Don't fail the state save if audit fails

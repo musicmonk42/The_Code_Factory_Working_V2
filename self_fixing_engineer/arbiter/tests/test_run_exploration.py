@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
+
 # Helper function to create a proper package mock with __path__
 def _create_package_mock(name):
     """Create a mock module that can act as a package (has __path__)."""
@@ -17,6 +18,7 @@ def _create_package_mock(name):
     mock.__name__ = name
     mock.__file__ = f"<mocked {name}>"
     return mock
+
 
 # Store original modules for later restoration
 _ORIGINAL_MODULES = {}

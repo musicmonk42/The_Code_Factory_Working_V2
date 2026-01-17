@@ -22,6 +22,7 @@ router = APIRouter(prefix="/generator", tags=["Generator"])
 def get_generator_service() -> GeneratorService:
     """Dependency for GeneratorService."""
     from server.routers.jobs import get_omnicore_service
+
     omnicore = get_omnicore_service()
     return GeneratorService(omnicore_service=omnicore)
 
@@ -29,7 +30,9 @@ def get_generator_service() -> GeneratorService:
 @router.post("/{job_id}/upload", response_model=SuccessResponse)
 async def upload_files(
     job_id: str,
-    files: List[UploadFile] = File(..., description="Files to upload (e.g., README.md)"),
+    files: List[UploadFile] = File(
+        ..., description="Files to upload (e.g., README.md)"
+    ),
     generator_service: GeneratorService = Depends(get_generator_service),
 ) -> SuccessResponse:
     """

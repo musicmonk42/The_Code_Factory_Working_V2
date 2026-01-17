@@ -17,7 +17,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-GENERATOR_ROOT = Path(__file__).resolve().parents[2]  # generator/runner/tests -> generator/
+GENERATOR_ROOT = (
+    Path(__file__).resolve().parents[2]
+)  # generator/runner/tests -> generator/
 if str(GENERATOR_ROOT) not in sys.path:
     sys.path.insert(0, str(GENERATOR_ROOT))
 

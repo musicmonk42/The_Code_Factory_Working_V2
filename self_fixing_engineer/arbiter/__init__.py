@@ -77,7 +77,7 @@ def get_component_status():
     """
     Returns the availability status of key arbiter components.
     Useful for debugging import issues and checking component availability.
-    
+
     Returns:
         dict: Component names mapped to their availability status (bool).
               True indicates the component was successfully imported and is available.

@@ -24,6 +24,7 @@ try:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.trace import Status, StatusCode
+
     HAS_OPENTELEMETRY = True
 except (ImportError, ModuleNotFoundError):
     # Fallback when OpenTelemetry is not fully installed
@@ -43,9 +44,11 @@ try:
 except ImportError:
     # Define locally if otel_config is not available
     from contextlib import nullcontext
+
     class NoOpTracer:
         def start_as_current_span(self, name, **kwargs):
             return nullcontext()
+
 
 # Prometheus metrics
 from prometheus_client import (
@@ -284,10 +287,12 @@ if HAS_OPENTELEMETRY:
         or not hasattr(_existing_provider, "add_span_processor")
         or type(_existing_provider).__name__ == "ProxyTracerProvider"
     )
-    
+
     if _provider_needs_setup:
         trace.set_tracer_provider(
-            TracerProvider(resource=Resource.create({"service.name": "sfe-knowledge-graph-db"}))
+            TracerProvider(
+                resource=Resource.create({"service.name": "sfe-knowledge-graph-db"})
+            )
         )
         # Configurable OpenTelemetry Exporter via environment variable
         exporter_type = os.getenv("SFE_OTEL_EXPORTER_TYPE", "console").lower()
@@ -300,7 +305,7 @@ if HAS_OPENTELEMETRY:
                 "Using ConsoleSpanExporter for OpenTelemetry traces (default). Set SFE_OTEL_EXPORTER_TYPE=otlp for OTLP."
             )
         trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(exporter))
-    
+
     # Get tracer with version compatibility handling
     try:
         tracer = trace.get_tracer(__name__)

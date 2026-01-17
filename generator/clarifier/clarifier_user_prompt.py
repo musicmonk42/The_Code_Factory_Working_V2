@@ -23,11 +23,14 @@ HAS_TEXTUAL = False
 _TEXTUAL_ERROR = None
 try:
     import textual  # GUI/TUI (textual req)
+
     # Verify the library is usable by checking for expected attributes
-    if hasattr(textual, 'app') and hasattr(textual, 'widgets'):
+    if hasattr(textual, "app") and hasattr(textual, "widgets"):
         HAS_TEXTUAL = True
     else:
-        _TEXTUAL_ERROR = "textual library loaded but missing expected modules (app, widgets)"
+        _TEXTUAL_ERROR = (
+            "textual library loaded but missing expected modules (app, widgets)"
+        )
         logging.error(
             f"Textual library version mismatch: {_TEXTUAL_ERROR}. "
             "GUIPrompt will be unavailable. Please check your textual installation."
@@ -40,7 +43,7 @@ except Exception as e:
     logging.error(
         f"Unexpected error loading Textual: {e}. "
         "This may indicate a broken installation. GUIPrompt will be unavailable.",
-        exc_info=True
+        exc_info=True,
     )
 
 HAS_FASTAPI = False
@@ -49,6 +52,7 @@ try:
     from fastapi import FastAPI, Form, Request  # Web form (fastapi req)
     from starlette.exceptions import HTTPException
     from starlette.responses import HTMLResponse
+
     HAS_FASTAPI = True
 except ImportError as e:
     _FASTAPI_ERROR = str(e)
@@ -57,33 +61,41 @@ except Exception as e:
     _FASTAPI_ERROR = str(e)
     logging.error(
         f"Unexpected error loading FastAPI: {e}. WebPrompt will be unavailable.",
-        exc_info=True
+        exc_info=True,
     )
 
 HAS_SPEECH_RECOGNITION = False
 _SPEECH_ERROR = None
 try:
     import speech_recognition as sr  # Voice input (add to reqs)
+
     HAS_SPEECH_RECOGNITION = True
 except ImportError as e:
     _SPEECH_ERROR = str(e)
-    logging.warning(f"Speech Recognition not found: {e}. VoicePrompt will be unavailable.")
+    logging.warning(
+        f"Speech Recognition not found: {e}. VoicePrompt will be unavailable."
+    )
 except Exception as e:
     _SPEECH_ERROR = str(e)
     logging.error(
         f"Unexpected error loading Speech Recognition: {e}. VoicePrompt will be unavailable.",
-        exc_info=True
+        exc_info=True,
     )
 
 
 from cryptography.fernet import InvalidToken  # Encrypt (cryptography req)
+
 # FIX: Make googletrans optional since it has dependency conflicts
 try:
     from googletrans import Translator  # Translation (googletrans req)
+
     HAS_GOOGLETRANS = True
 except ImportError:
     try:
-        from deep_translator import GoogleTranslator as Translator  # Alternative translator
+        from deep_translator import (
+            GoogleTranslator as Translator,
+        )  # Alternative translator
+
         HAS_GOOGLETRANS = "deep"
     except ImportError:
         Translator = None
@@ -99,7 +111,7 @@ from .clarifier import get_config, get_fernet, get_logger
 # NOTE: In production, these imports should succeed. Fallbacks are only for development/testing.
 _is_production = os.getenv("PYTHON_ENV", "development").lower() == "production"
 _is_testing = (
-    os.getenv("TESTING") == "1" 
+    os.getenv("TESTING") == "1"
     or "pytest" in sys.modules
     or os.getenv("PYTEST_CURRENT_TEST") is not None
 )
@@ -114,7 +126,7 @@ except ImportError as e:
         raise ImportError(
             f"CRITICAL: Runner logging module is required in production: {e}"
         )
-    
+
     def log_action(*args, **kwargs):
         """Fallback log_action - NOT FOR PRODUCTION USE."""
         logging.warning(
@@ -130,7 +142,7 @@ except ImportError as e:
         raise ImportError(
             f"CRITICAL: Runner language utils module is required in production: {e}"
         )
-    
+
     def detect_language(text):
         """Fallback detect_language - NOT FOR PRODUCTION USE."""
         logging.warning(
@@ -153,7 +165,7 @@ except ImportError as e:
             raise ImportError(
                 f"CRITICAL: Runner security utils module is required in production: {e}"
             )
-        
+
         def redact_sensitive(text):
             """Fallback redact_sensitive - NOT FOR PRODUCTION USE."""
             logging.warning(
@@ -310,7 +322,9 @@ try:
         ["channel", "type"],
     )
     USER_ENGAGEMENT = Gauge(
-        "clarifier_user_engagement_score", "Engagement score (0-1) per user", ["user_id"]
+        "clarifier_user_engagement_score",
+        "Engagement score (0-1) per user",
+        ["user_id"],
     )
     FEEDBACK_RATINGS = Histogram(
         "clarifier_feedback_ratings", "User feedback ratings (0-1)"
@@ -328,13 +342,26 @@ try:
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
-    PROMPT_CYCLES = REGISTRY._names_to_collectors.get("clarifier_user_prompt_cycles_total")
-    PROMPT_LATENCY = REGISTRY._names_to_collectors.get("clarifier_user_prompt_latency_seconds")
-    PROMPT_ERRORS = REGISTRY._names_to_collectors.get("clarifier_user_prompt_errors_total")
-    USER_ENGAGEMENT = REGISTRY._names_to_collectors.get("clarifier_user_engagement_score")
+
+    PROMPT_CYCLES = REGISTRY._names_to_collectors.get(
+        "clarifier_user_prompt_cycles_total"
+    )
+    PROMPT_LATENCY = REGISTRY._names_to_collectors.get(
+        "clarifier_user_prompt_latency_seconds"
+    )
+    PROMPT_ERRORS = REGISTRY._names_to_collectors.get(
+        "clarifier_user_prompt_errors_total"
+    )
+    USER_ENGAGEMENT = REGISTRY._names_to_collectors.get(
+        "clarifier_user_engagement_score"
+    )
     FEEDBACK_RATINGS = REGISTRY._names_to_collectors.get("clarifier_feedback_ratings")
-    COMPLIANCE_QUESTIONS_ASKED = REGISTRY._names_to_collectors.get("clarifier_compliance_questions_asked_total")
-    COMPLIANCE_ANSWERS_RECEIVED = REGISTRY._names_to_collectors.get("clarifier_compliance_answers_received_total")
+    COMPLIANCE_QUESTIONS_ASKED = REGISTRY._names_to_collectors.get(
+        "clarifier_compliance_questions_asked_total"
+    )
+    COMPLIANCE_ANSWERS_RECEIVED = REGISTRY._names_to_collectors.get(
+        "clarifier_compliance_answers_received_total"
+    )
 
 
 # User Profile
@@ -401,7 +428,9 @@ class UserPromptChannel(ABC):
             self.translator = Translator() if Translator else None
         else:
             self.translator = None
-            logger.warning("Translation library not available. Translation will be disabled.")
+            logger.warning(
+                "Translation library not available. Translation will be disabled."
+            )
         self.target_language = target_language
 
     def _translate_text(self, text: str, dest: str) -> str:

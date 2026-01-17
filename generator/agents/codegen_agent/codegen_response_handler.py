@@ -50,10 +50,11 @@ _USING_STUB_SECURITY_SCANNER = False
 
 class SecurityScannerUnavailableError(Exception):
     """Raised when the security scanner is required but not available.
-    
+
     This error indicates that security scanning cannot be performed,
     which is a critical security gap in production environments.
     """
+
     pass
 
 
@@ -66,13 +67,13 @@ try:  # Prefer real runner logging if available
     from ...runner.runner_logging import log_audit_event as _runner_log_audit_event
 except ImportError:  # Fallback stub
     _USING_STUB_AUDIT_LOG = True
-    
+
     def _runner_log_audit_event(
         event_type: str, payload: Dict[str, Any] | None = None
     ) -> None:
         global _AUDIT_LOG_FAILURE_COUNT
         _AUDIT_LOG_FAILURE_COUNT += 1
-        
+
         # Log at ERROR level - audit trail loss is a serious compliance concern
         logger.error(
             "AUDIT LOG UNAVAILABLE [COMPLIANCE RISK]: Audit event NOT recorded. "
@@ -90,10 +91,10 @@ try:  # Prefer real security utilities if available
     )
 except ImportError:  # Fallback stub
     _USING_STUB_SECURITY_SCANNER = True
-    
+
     def _runner_scan_for_vulnerabilities(code_files: Dict[str, str]) -> Dict[str, Any]:
         """Stub implementation that raises an error or returns a warning marker.
-        
+
         SECURITY CRITICAL: This stub does NOT perform actual security scanning.
         In production environments, this is a serious security gap.
         """
@@ -103,14 +104,14 @@ except ImportError:  # Fallback stub
             "implementation. NO ACTUAL SECURITY SCANNING IS BEING PERFORMED. "
             "This is a CRITICAL SECURITY GAP in production environments."
         )
-        
+
         # Return a result that clearly indicates scanning was NOT performed
         return {
             "_scanner_status": {
                 "scanned": False,
                 "reason": "Security scanner unavailable - stub implementation in use",
                 "security_gap": True,
-                "recommendation": "Install runner security utilities or set SECURITY_SCANNER_STRICT_MODE=1 to fail on unavailable scanner"
+                "recommendation": "Install runner security utilities or set SECURITY_SCANNER_STRICT_MODE=1 to fail on unavailable scanner",
             }
         }
 
@@ -149,18 +150,18 @@ def log_action(event_type: str, payload: Dict[str, Any] | None = None) -> None:
 def scan_for_vulnerabilities(code_files: Dict[str, str]) -> Dict[str, Any]:
     """
     Wrapper for runner-based SAST (Static Application Security Testing).
-    
+
     SECURITY CRITICAL: This function performs security scanning on generated code.
     If the underlying scanner is unavailable:
     - In strict mode (SECURITY_SCANNER_STRICT_MODE=1): Raises SecurityScannerUnavailableError
     - In non-strict mode: Returns a result with a clear warning that scanning was skipped
-    
+
     Returns a dict structure:
         { filename: { "issues": [ ... ] }, ... }
-        
+
     In stub mode, returns:
         { "_scanner_status": { "scanned": False, "security_gap": True, ... } }
-        
+
     Raises:
         SecurityScannerUnavailableError: In strict mode when scanner is unavailable.
     """
@@ -172,33 +173,33 @@ def scan_for_vulnerabilities(code_files: Dict[str, str]) -> Dict[str, Any]:
             "Please install runner security utilities (runner.runner_security_utils) "
             "or disable strict mode for development/testing."
         )
-    
+
     try:
         result = _runner_scan_for_vulnerabilities(code_files)
-        
+
         # If using stub, ensure the result clearly indicates scanning wasn't performed
         if _USING_STUB_SECURITY_SCANNER:
             # Log a warning every time the stub is used
             logger.warning(
                 "SECURITY WARNING: scan_for_vulnerabilities returned stub result. "
                 "No actual security scanning was performed on %d files.",
-                len(code_files)
+                len(code_files),
             )
-        
+
         return result
     except SecurityScannerUnavailableError:
         # Re-raise our custom exception
         raise
     except Exception as e:  # pragma: no cover - defensive
         logger.exception("scan_for_vulnerabilities failed unexpectedly: %s", e)
-        
+
         # In strict mode, don't silently continue on errors
         if _SECURITY_SCANNER_STRICT_MODE:
             raise SecurityScannerUnavailableError(
                 f"Security scanner failed unexpectedly: {e}. "
                 f"Cannot proceed without security scanning in strict mode."
             ) from e
-        
+
         # Return a result indicating failure
         return {
             "_scanner_status": {
@@ -211,7 +212,7 @@ def scan_for_vulnerabilities(code_files: Dict[str, str]) -> Dict[str, Any]:
 
 def is_security_scanner_available() -> bool:
     """Check if the real security scanner is available.
-    
+
     Returns:
         True if the real runner security scanner is available, False if using stub.
     """
@@ -220,7 +221,7 @@ def is_security_scanner_available() -> bool:
 
 def get_security_scanner_status() -> Dict[str, Any]:
     """Get the current status of the security scanner.
-    
+
     Returns a dict with:
         - available: bool
         - strict_mode: bool
@@ -232,23 +233,23 @@ def get_security_scanner_status() -> Dict[str, Any]:
         "strict_mode": _SECURITY_SCANNER_STRICT_MODE,
         "using_stub": _USING_STUB_SECURITY_SCANNER,
     }
-    
+
     if _USING_STUB_SECURITY_SCANNER:
         status["recommendation"] = (
             "Install runner security utilities for production use. "
             "Set SECURITY_SCANNER_STRICT_MODE=1 to enforce scanner availability."
         )
-    
+
     return status
 
 
 def get_audit_log_failure_count() -> int:
     """Get the count of audit logging failures.
-    
+
     This is useful for compliance monitoring and alerting.
     A non-zero count indicates audit events have been lost,
     which is a serious compliance concern.
-    
+
     Returns:
         The number of audit logging failures since module load.
     """
@@ -257,7 +258,7 @@ def get_audit_log_failure_count() -> int:
 
 def is_audit_logging_available() -> bool:
     """Check if the real audit logging is available.
-    
+
     Returns:
         True if real runner audit logging is available, False if using stub.
     """

@@ -406,26 +406,31 @@ class SecurityConfigManager:
         logger.info(
             f"Security configuration initialized for level: {security_level.value}"
         )
-        
+
         # SECURITY FIX: Validate TLS configuration for production environments
         self._validate_production_security()
 
     def _validate_production_security(self) -> None:
         """
         Validate security configuration for production environments.
-        
+
         This method is called after __init__() and after load_from_file() to ensure
         that critical security settings are always validated, preventing bypasses.
-        
+
         Raises:
             ValueError: If TLS certificates are not configured for production/high-security modes
         """
-        if self.security_level in [SecurityLevel.PRODUCTION, SecurityLevel.HIGH_SECURITY]:
+        if self.security_level in [
+            SecurityLevel.PRODUCTION,
+            SecurityLevel.HIGH_SECURITY,
+        ]:
             is_valid, errors = self.tls_config.validate_certificates()
             if not is_valid:
                 error_msg = f"TLS certificates not configured for {self.security_level.value} environment: {'; '.join(errors)}"
                 logger.error(error_msg)
-                logger.error("SECURITY RISK: Running without TLS in production is not allowed. Please configure cert_file and key_file.")
+                logger.error(
+                    "SECURITY RISK: Running without TLS in production is not allowed. Please configure cert_file and key_file."
+                )
                 raise ValueError(error_msg)
 
     def load_from_file(self, config_path: str) -> None:
@@ -465,7 +470,7 @@ class SecurityConfigManager:
                         setattr(self.hardening_config, key, value)
 
             logger.info(f"Security configuration loaded from: {config_path}")
-            
+
             # SECURITY FIX: Re-validate after loading to prevent bypass
             self._validate_production_security()
 

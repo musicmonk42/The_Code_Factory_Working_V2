@@ -310,7 +310,9 @@ class MetricsClient:
         # Return singleton metrics if available
         if _metrics_singleton is not None:
             self.policy_evaluations_total = _metrics_singleton.policy_evaluations_total
-            self.notification_failures_total = _metrics_singleton.notification_failures_total
+            self.notification_failures_total = (
+                _metrics_singleton.notification_failures_total
+            )
             return
 
         if self.enabled:
@@ -683,7 +685,9 @@ class PolicyEngine:
         # PolicyEngine("config.json", "/path/to/project") or PolicyEngine("config.json", project_root="/path")
         if isinstance(config_or_project_root, str) or project_root is not None:
             # Simple/backward-compatible mode
-            actual_project_root = project_root if project_root is not None else config_or_project_root
+            actual_project_root = (
+                project_root if project_root is not None else config_or_project_root
+            )
             self.config = Configuration.from_env(project_root=actual_project_root)
             self.audit_logger = None  # Will use fallback
             self.metrics_client = MetricsClient()
@@ -695,14 +699,18 @@ class PolicyEngine:
             self.audit_logger = audit_logger
             self.metrics_client = metrics_client or MetricsClient()
             self.filesystem = filesystem or LocalFileSystem()
-            self.policy_client = policy_client or OPAPolicyClient(self.config, audit_logger, self.metrics_client)
+            self.policy_client = policy_client or OPAPolicyClient(
+                self.config, audit_logger, self.metrics_client
+            )
         elif isinstance(config_or_project_root, Configuration):
             # Full dependency injection mode
             self.config = config_or_project_root
             self.audit_logger = audit_logger
             self.metrics_client = metrics_client or MetricsClient()
             self.filesystem = filesystem or LocalFileSystem()
-            self.policy_client = policy_client or OPAPolicyClient(self.config, audit_logger, self.metrics_client)
+            self.policy_client = policy_client or OPAPolicyClient(
+                self.config, audit_logger, self.metrics_client
+            )
         else:
             # Assume it's a dict-like config object (from orchestrator)
             actual_project_root = project_root or os.getcwd()
@@ -710,7 +718,9 @@ class PolicyEngine:
             self.audit_logger = audit_logger
             self.metrics_client = metrics_client or MetricsClient()
             self.filesystem = filesystem or LocalFileSystem()
-            self.policy_client = policy_client or OPAPolicyClient(self.config, audit_logger, self.metrics_client)
+            self.policy_client = policy_client or OPAPolicyClient(
+                self.config, audit_logger, self.metrics_client
+            )
 
         self.policy_config_path = policy_config_path
         self.policies: Dict[str, Any] = {}
@@ -1468,7 +1478,9 @@ class EventBus:
         self._correlation_id_fn = lambda: os.urandom(8).hex()
 
         if self.disabled:
-            logger.debug("EventBus initialized in disabled mode (no destinations configured).")
+            logger.debug(
+                "EventBus initialized in disabled mode (no destinations configured)."
+            )
         else:
             logger.info("EventBus initialized with destinations.")
             logger.info(

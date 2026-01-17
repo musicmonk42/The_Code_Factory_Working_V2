@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import aiofiles
+
 try:
     import etcd3
+
     ETCD3_AVAILABLE = True
 except (ImportError, TypeError):
     # TypeError can occur with protobuf version conflicts
@@ -85,7 +87,9 @@ class ConfigStore:
             if ETCD3_AVAILABLE and etcd3:
                 self.client = etcd3.client(**etcd_kwargs)
             else:
-                logger.warning("etcd3 is not available. Will rely on fallback mechanisms.")
+                logger.warning(
+                    "etcd3 is not available. Will rely on fallback mechanisms."
+                )
                 self.client = None
         except Exception as e:
             logger.error(

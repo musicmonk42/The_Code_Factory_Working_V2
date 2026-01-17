@@ -118,7 +118,7 @@ except ImportError:  # Fallback for environments without LLM_SUMMARY_CALLS_TOTAL
     # Always define a concrete Counter for summary calls in this module so the
     # summarize_section path can record usage without depending on runner changes.
     from prometheus_client import Counter as _Counter
-    
+
     # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
     try:
         LLM_SUMMARY_CALLS_TOTAL = _Counter(
@@ -129,7 +129,10 @@ except ImportError:  # Fallback for environments without LLM_SUMMARY_CALLS_TOTAL
     except ValueError:
         # Metric already registered (happens during pytest collection)
         from prometheus_client import REGISTRY
-        LLM_SUMMARY_CALLS_TOTAL = REGISTRY._names_to_collectors.get("llm_summary_calls_total")
+
+        LLM_SUMMARY_CALLS_TOTAL = REGISTRY._names_to_collectors.get(
+            "llm_summary_calls_total"
+        )
 # -----------------------------------------------------------------------------
 from runner.runner_errors import LLMError
 from runner.runner_file_utils import get_commits  # Needed for enrichment
@@ -179,11 +182,22 @@ try:
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
-    handler_calls = REGISTRY._names_to_collectors.get("deploy_response_handler_calls_total")
-    handler_errors = REGISTRY._names_to_collectors.get("deploy_response_handler_errors_total")
-    handler_latency = REGISTRY._names_to_collectors.get("deploy_response_handler_latency_seconds")
-    scan_findings_gauge = REGISTRY._names_to_collectors.get("deploy_scan_findings_count")
-    scan_total_findings = REGISTRY._names_to_collectors.get("deploy_scan_total_findings")
+
+    handler_calls = REGISTRY._names_to_collectors.get(
+        "deploy_response_handler_calls_total"
+    )
+    handler_errors = REGISTRY._names_to_collectors.get(
+        "deploy_response_handler_errors_total"
+    )
+    handler_latency = REGISTRY._names_to_collectors.get(
+        "deploy_response_handler_latency_seconds"
+    )
+    scan_findings_gauge = REGISTRY._names_to_collectors.get(
+        "deploy_scan_findings_count"
+    )
+    scan_total_findings = REGISTRY._names_to_collectors.get(
+        "deploy_scan_total_findings"
+    )
 
 # --- ADDED: Constants and Functions for Test Fixes ---
 ERROR_FILENAME = "error.txt"

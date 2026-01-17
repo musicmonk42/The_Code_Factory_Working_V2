@@ -146,16 +146,16 @@ async def check_status():
 async def simple_scan() -> None:
     """
     Perform a simplified codebase scan using the CodebaseAnalyzer.
-    
+
     This function scans the arbiter directory for code issues, defects, and
     complexity problems. It uses dynamic path resolution to find the correct
     directory to scan, falling back to the current working directory if needed.
-    
+
     The scan results include:
         - Number of files scanned
         - Defects found (syntax errors, potential bugs)
         - Complexity issues (high cyclomatic complexity, long functions)
-    
+
     Raises:
         No exceptions are raised; all errors are caught and reported gracefully.
     """
@@ -166,15 +166,18 @@ async def simple_scan() -> None:
 
         # Use the package directory instead of hardcoded path
         import os
+
         package_dir = os.path.dirname(os.path.abspath(__file__))
         scan_path = os.path.join(package_dir, ARBITER_DIR_NAME)
-        
+
         # Determine the root directory for the analyzer
         if not os.path.exists(scan_path):
             # Fallback to current directory
             root_dir = os.getcwd()
             scan_path = root_dir
-            print(f"Note: {ARBITER_DIR_NAME} directory not found at {os.path.join(package_dir, ARBITER_DIR_NAME)}")
+            print(
+                f"Note: {ARBITER_DIR_NAME} directory not found at {os.path.join(package_dir, ARBITER_DIR_NAME)}"
+            )
             print(f"      Using current directory for scan: {scan_path}")
         else:
             # Use package directory as root when scanning arbiter subdirectory
@@ -222,12 +225,12 @@ async def simple_scan() -> None:
 async def repair_issues() -> None:
     """
     Attempt to automatically repair found code issues.
-    
+
     Status: NOT YET IMPLEMENTED
-    
+
     This feature is planned for future releases and will provide automated
     repair capabilities for common code issues identified during scanning.
-    
+
     Planned Functionality:
         - Auto-fix import errors (missing imports, circular dependencies)
         - Resolve circular dependencies by restructuring code
@@ -235,12 +238,12 @@ async def repair_issues() -> None:
         - Fix common code style violations
         - Refactor code to reduce complexity
         - Update deprecated API usage
-    
+
     Current Workaround:
         Use the 'run' command to start the full Self-Fixing Engineer platform.
         Once running, access the Arena's built-in repair tools through the
         web interface.
-    
+
     Implementation Notes:
         When implemented, this function will:
         1. Load the codebase configuration
@@ -249,14 +252,14 @@ async def repair_issues() -> None:
         4. Apply automated repairs with user confirmation
         5. Generate a repair report
         6. Optionally create a backup before applying changes
-    
+
     See Also:
         - Arena web interface for manual repair tools
         - Documentation: docs/repair_features.md
     """
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("AUTOMATED REPAIR FEATURE")
-    print("="*70)
+    print("=" * 70)
     print()
     print("Status: NOT YET IMPLEMENTED")
     print()
@@ -275,7 +278,7 @@ async def repair_issues() -> None:
     print("  3. Use the built-in repair tools available in the Arena UI")
     print()
     print("For more information, see the documentation at docs/repair_features.md")
-    print("="*70)
+    print("=" * 70)
     print()
 
 

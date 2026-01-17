@@ -130,15 +130,17 @@ class FileAuditLogger(AuditLogger):
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.log_file = config.get("audit_log_file", "audit.log")
-        self.max_bytes = config.get("audit_log_max_bytes", 10 * 1024 * 1024)  # 10MB default
+        self.max_bytes = config.get(
+            "audit_log_max_bytes", 10 * 1024 * 1024
+        )  # 10MB default
         self.backup_count = config.get("audit_log_backup_count", 5)
-        
+
         # Create rotating file handler for audit logs
         from logging.handlers import RotatingFileHandler
-        
+
         # Validate and secure the log file path
         log_file_path = Path(self.log_file).resolve()
-        
+
         # Ensure directory exists and is within safe boundaries
         log_dir = log_file_path.parent
         if not log_dir.exists():
@@ -149,20 +151,20 @@ class FileAuditLogger(AuditLogger):
                 # Fall back to using stdout if directory creation fails
                 self.file_handler = None
                 return
-        
+
         # Check write permissions
         if not os.access(log_dir, os.W_OK):
             logger.error(f"No write permission for audit log directory {log_dir}")
             self.file_handler = None
             return
-        
+
         try:
             self.file_handler = RotatingFileHandler(
                 str(log_file_path),
                 maxBytes=self.max_bytes,
-                backupCount=self.backup_count
+                backupCount=self.backup_count,
             )
-            self.file_handler.setFormatter(logging.Formatter('%(message)s'))
+            self.file_handler.setFormatter(logging.Formatter("%(message)s"))
         except (OSError, PermissionError) as e:
             logger.error(f"Failed to create audit log file handler: {e}")
             self.file_handler = None
@@ -176,7 +178,7 @@ class FileAuditLogger(AuditLogger):
             "output_target": self.log_file,
         }
         log_audit_event(action, enriched_details)
-        
+
         # Also write directly to the audit log file if handler is available
         if self.file_handler:
             audit_record = {
@@ -191,7 +193,7 @@ class FileAuditLogger(AuditLogger):
                 lineno=0,
                 msg=json.dumps(audit_record),
                 args=(),
-                exc_info=None
+                exc_info=None,
             )
             self.file_handler.emit(log_record)
 

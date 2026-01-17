@@ -36,7 +36,7 @@ class RetryPolicy:
 def _is_async_context() -> bool:
     """
     Detect if we're running in an asyncio event loop context.
-    
+
     Returns:
         True if an event loop is running in the current thread, False otherwise.
     """
@@ -50,29 +50,29 @@ def _is_async_context() -> bool:
 class CircuitBreaker:
     """
     Hybrid sync/async circuit breaker implementation.
-    
+
     This circuit breaker automatically detects the execution context (sync vs async)
     and uses the appropriate locking mechanism to prevent event loop blocking.
-    
+
     States:
         - closed: Normal operation, requests allowed
         - open: Failure threshold exceeded, requests blocked
         - half-open: Testing if service has recovered
-    
+
     Thread-safe and asyncio-safe through context-aware locking.
-    
+
     Industry Standard: Follows the Circuit Breaker pattern from "Release It!"
     by Michael Nygard and Netflix's Hystrix implementation.
     """
-    
+
     def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60):
         """
         Initialize the circuit breaker.
-        
+
         Args:
             failure_threshold: Number of failures before opening circuit
             recovery_timeout: Seconds to wait before attempting recovery (half-open)
-        
+
         Raises:
             ValueError: If parameters are invalid
         """
@@ -80,13 +80,13 @@ class CircuitBreaker:
             raise ValueError("failure_threshold must be positive.")
         if recovery_timeout <= 0:
             raise ValueError("recovery_timeout must be positive.")
-        
+
         self.failure_count = 0
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.last_failure_time: Optional[float] = None
         self.state = "closed"
-        
+
         # Hybrid locking: Both thread lock and async lock for context-aware safety
         self._thread_lock = threading.Lock()
         self._async_lock: Optional[asyncio.Lock] = None
@@ -95,10 +95,10 @@ class CircuitBreaker:
     def _get_async_lock(self) -> Optional[asyncio.Lock]:
         """
         Lazy initialization of asyncio.Lock.
-        
+
         We can't create asyncio.Lock in __init__ because we might not have
         an event loop at initialization time. This method creates it on first use.
-        
+
         Returns:
             asyncio.Lock instance bound to the current event loop, or None if
             no event loop is available
@@ -117,7 +117,7 @@ class CircuitBreaker:
     def record_failure(self):
         """
         Record a failure. Opens circuit if threshold is reached.
-        
+
         Thread-safe. Can be called from both sync and async contexts,
         but uses blocking lock (safe for sync code calling from async).
         """
@@ -134,7 +134,7 @@ class CircuitBreaker:
     async def arecord_failure(self):
         """
         Async version of record_failure().
-        
+
         Use this method when calling from async code to avoid blocking
         the event loop.
         """
@@ -143,7 +143,10 @@ class CircuitBreaker:
             async with async_lock:
                 self.failure_count += 1
                 self.last_failure_time = time.time()
-                if self.failure_count >= self.failure_threshold and self.state == "closed":
+                if (
+                    self.failure_count >= self.failure_threshold
+                    and self.state == "closed"
+                ):
                     self.state = "open"
                     logger.warning(
                         f"Circuit breaker opened due to repeated failures "
@@ -156,7 +159,7 @@ class CircuitBreaker:
     def record_success(self):
         """
         Record a success. Closes circuit and resets failure count.
-        
+
         Thread-safe. Can be called from both sync and async contexts.
         """
         with self._thread_lock:
@@ -168,7 +171,7 @@ class CircuitBreaker:
     async def arecord_success(self):
         """
         Async version of record_success().
-        
+
         Use this method when calling from async code to avoid blocking
         the event loop.
         """
@@ -186,10 +189,10 @@ class CircuitBreaker:
     def can_attempt(self) -> bool:
         """
         Check if an attempt can be made.
-        
+
         Returns:
             True if circuit is closed or moved to half-open, False if open
-        
+
         Thread-safe. Can be called from both sync and async contexts.
         """
         with self._thread_lock:
@@ -212,10 +215,10 @@ class CircuitBreaker:
     async def acan_attempt(self) -> bool:
         """
         Async version of can_attempt().
-        
+
         Use this method when calling from async code to avoid blocking
         the event loop.
-        
+
         Returns:
             True if circuit is closed or moved to half-open, False if open
         """

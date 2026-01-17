@@ -141,13 +141,13 @@ class LearnerArbiterHelper:
     """
     Helper class for Learner's internal use.
     NOTE: This is NOT the main Arbiter class from arbiter.py.
-    
+
     This lightweight helper manages state and dependencies specifically for the Learner module:
     - Maintains a memory dictionary for knowledge storage
     - Provides access to BugManager for issue tracking
     - Interfaces with Neo4j knowledge graph
     - Tracks self-audit execution state
-    
+
     The main Arbiter class (arbiter.py) handles full orchestration, while this helper
     provides minimal state management for learner-specific operations.
     """
@@ -168,7 +168,9 @@ class LearnerArbiterHelper:
             password=ArbiterConfig.NEO4J_PASSWORD,
         )
         self.is_running_self_audit = False
-        logger.debug("LearnerArbiterHelper created for Learner's internal use.", name=self.name)
+        logger.debug(
+            "LearnerArbiterHelper created for Learner's internal use.", name=self.name
+        )
 
 
 class Learner:

@@ -46,21 +46,18 @@ _MODULE_ALIASES = [
 def _setup_module_alias(module_name: str) -> None:
     """
     Set up a module alias in sys.modules for backwards compatibility.
-    
+
     Args:
         module_name: The name of the submodule to alias (e.g., 'simulation')
-        
+
     Note:
         This function silently handles ImportError to allow partial package installations.
         Missing modules are logged at DEBUG level for troubleshooting.
     """
     try:
         # Import the module dynamically
-        submodule = __import__(
-            f"{__name__}.{module_name}",
-            fromlist=[module_name]
-        )
-        
+        submodule = __import__(f"{__name__}.{module_name}", fromlist=[module_name])
+
         # Only create alias if it doesn't already exist
         if module_name not in sys.modules:
             sys.modules[module_name] = submodule
@@ -68,14 +65,14 @@ def _setup_module_alias(module_name: str) -> None:
                 "Module alias created: '%s' -> '%s.%s'",
                 module_name,
                 __name__,
-                module_name
+                module_name,
             )
     except ImportError as e:
         _init_logger.debug(
             "Module '%s' not available for aliasing: %s",
             module_name,
             e,
-            exc_info=False  # Set to True for debugging if needed
+            exc_info=False,  # Set to True for debugging if needed
         )
     except Exception as e:
         # Catch any unexpected errors during module setup
@@ -83,7 +80,7 @@ def _setup_module_alias(module_name: str) -> None:
             "Unexpected error setting up alias for module '%s': %s",
             module_name,
             e,
-            exc_info=True
+            exc_info=True,
         )
 
 

@@ -188,14 +188,16 @@ try:
         )
     except ValueError:
         plugin_loads = REGISTRY._names_to_collectors.get("arbiter_plugin_loads_total")
-    
+
     try:
         plugin_unloads = Counter(
             "arbiter_plugin_unloads_total", "Total plugin unloads", ["kind", "name"]
         )
     except ValueError:
-        plugin_unloads = REGISTRY._names_to_collectors.get("arbiter_plugin_unloads_total")
-    
+        plugin_unloads = REGISTRY._names_to_collectors.get(
+            "arbiter_plugin_unloads_total"
+        )
+
     try:
         plugin_health_checks = Counter(
             "arbiter_plugin_health_checks_total",
@@ -203,22 +205,26 @@ try:
             ["kind", "name", "status"],
         )
     except ValueError:
-        plugin_health_checks = REGISTRY._names_to_collectors.get("arbiter_plugin_health_checks_total")
-    
+        plugin_health_checks = REGISTRY._names_to_collectors.get(
+            "arbiter_plugin_health_checks_total"
+        )
+
     try:
         plugin_load_time = Histogram(
             "arbiter_plugin_load_time_seconds", "Plugin load time", ["kind", "name"]
         )
     except ValueError:
-        plugin_load_time = REGISTRY._names_to_collectors.get("arbiter_plugin_load_time_seconds")
-    
+        plugin_load_time = REGISTRY._names_to_collectors.get(
+            "arbiter_plugin_load_time_seconds"
+        )
+
     try:
         plugin_ops_total = Counter(
             "plugin_ops_total", "Total plugin registry operations", ["operation"]
         )
     except ValueError:
         plugin_ops_total = REGISTRY._names_to_collectors.get("plugin_ops_total")
-    
+
     try:
         plugin_errors_total = Counter(
             "plugin_errors_total",
@@ -696,9 +702,11 @@ class PluginRegistry:
                 raise ValueError(
                     f"Plugin [{kind.value}:{name}] version {version} is not newer than existing version {existing_meta.version}."
                 )
-            
+
             # Allow re-registration of same version (useful for tests)
-            if existing_meta and version_parse(version) == version_parse(existing_meta.version):
+            if existing_meta and version_parse(version) == version_parse(
+                existing_meta.version
+            ):
                 logger.debug(
                     f"Plugin [{kind.value}:{name}] version {version} already registered. Skipping re-registration."
                 )

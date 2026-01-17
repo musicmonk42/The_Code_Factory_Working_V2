@@ -211,15 +211,18 @@ except Exception:
     class _CoreV1Api:
         """
         Fallback Kubernetes CoreV1Api with production mode enforcement.
-        
+
         PRODUCTION MODE: When PRODUCTION_MODE=true, all methods raise errors.
-        
+
         For production, install the kubernetes Python client:
         pip install kubernetes
         """
+
         def __init__(self):
-            self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
-        
+            self._production_mode = (
+                os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+            )
+
         def create_namespaced_pod(self, namespace, body):
             """Create pod with production mode check."""
             if self._production_mode:
@@ -250,7 +253,7 @@ except Exception:
         def read_namespaced_pod_status(self, name, namespace):
             """
             Read pod status with production mode check.
-            
+
             WARNING: Mock always returns 'Succeeded' status.
             """
             if self._production_mode:
@@ -298,18 +301,19 @@ except Exception:
         """
         Fallback Kubernetes BatchV1Api with production mode enforcement.
         """
+
         def __init__(self):
-            self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
-        
+            self._production_mode = (
+                os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+            )
+
         def create_namespaced_job(self, namespace, body):
             """Create job with production mode check."""
             if self._production_mode:
                 raise RuntimeError(
                     "CRITICAL: Mock K8s API create_namespaced_job() in production."
                 )
-            sandbox_logger.warning(
-                f"Mock K8s API: create_namespaced_job({namespace})"
-            )
+            sandbox_logger.warning(f"Mock K8s API: create_namespaced_job({namespace})")
             return types.SimpleNamespace(
                 metadata=types.SimpleNamespace(
                     name=body.get("metadata", {}).get("name", "mock-job")
@@ -343,9 +347,12 @@ except Exception:
         """
         Fallback Kubernetes NetworkingV1Api with production mode enforcement.
         """
+
         def __init__(self):
-            self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
-        
+            self._production_mode = (
+                os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+            )
+
         def create_namespaced_network_policy(self, namespace, body):
             """Create network policy with production mode check."""
             if self._production_mode:

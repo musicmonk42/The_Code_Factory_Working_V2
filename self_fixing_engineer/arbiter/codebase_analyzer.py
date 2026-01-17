@@ -86,20 +86,23 @@ except ImportError:
     class PermissionManager:
         """
         Fallback PermissionManager with secure default-deny behavior.
-        
+
         SECURITY: This is a fallback implementation used when the real PermissionManager
         cannot be imported. It implements a secure default-deny policy where all
         permission checks fail by default, preventing unauthorized access.
-        
+
         In production mode (PRODUCTION_MODE=true), this fallback will log critical
         warnings to alert operators that the system is running without proper
         permission management.
         """
+
         def __init__(self, config):
             self._config = config
-            self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+            self._production_mode = (
+                os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+            )
             logger = logging.getLogger(__name__)
-            
+
             if self._production_mode:
                 logger.critical(
                     "SECURITY ALERT: Running with fallback PermissionManager in PRODUCTION mode. "
@@ -109,14 +112,14 @@ except ImportError:
         def check_permission(self, role, permission):
             """
             Check if a role has a specific permission.
-            
+
             SECURITY: Fallback implementation returns False (DENY) by default.
             This is the secure choice when the real permission system is unavailable.
-            
+
             Args:
                 role: The role to check
                 permission: The permission to verify
-                
+
             Returns:
                 bool: Always False (deny) for security
             """
@@ -762,7 +765,9 @@ class CodebaseAnalyzer:
             if not paths_to_scan:
                 paths_to_scan = [Path(self.root_dir).resolve()]
             primary_path = paths_to_scan[0]
-            logger.info(f"Scanning codebase at multiple paths: {[str(p) for p in paths_to_scan]}")
+            logger.info(
+                f"Scanning codebase at multiple paths: {[str(p) for p in paths_to_scan]}"
+            )
             # Collect Python files from all provided paths
             py_files = []
             for scan_path in paths_to_scan:

@@ -17,6 +17,7 @@ try:
     from redis.asyncio import PubSub, Redis
     from redis.exceptions import ConnectionError as RedisLibConnectionError
     from redis.exceptions import TimeoutError as RedisLibTimeoutError
+
     _REDIS_AVAILABLE = True
 except ImportError:
     # Use standard library logging for initial import failure
@@ -162,12 +163,20 @@ def _metrics_inc_dedup_hit() -> None:
 
 def _is_redis_connection_error(e: Exception) -> bool:
     """Check if exception is a Redis connection error."""
-    return _REDIS_AVAILABLE and RedisLibConnectionError and isinstance(e, RedisLibConnectionError)
+    return (
+        _REDIS_AVAILABLE
+        and RedisLibConnectionError
+        and isinstance(e, RedisLibConnectionError)
+    )
 
 
 def _is_redis_timeout_error(e: Exception) -> bool:
     """Check if exception is a Redis timeout error."""
-    return _REDIS_AVAILABLE and RedisLibTimeoutError and isinstance(e, RedisLibTimeoutError)
+    return (
+        _REDIS_AVAILABLE
+        and RedisLibTimeoutError
+        and isinstance(e, RedisLibTimeoutError)
+    )
 
 
 # --- Handler Type ---
@@ -202,7 +211,7 @@ class RedisBridge:
         if not _REDIS_AVAILABLE:
             raise RedisConnectionError(
                 "RedisBridge requires 'redis-py' with asyncio support. Please install it.",
-                redis_url=config.REDIS_URL
+                redis_url=config.REDIS_URL,
             )
 
         self.message_bus = message_bus
@@ -273,15 +282,21 @@ class RedisBridge:
         except Exception as e:
             self.circuit.record_failure()
             # Map Redis library exceptions to our unified exceptions
-            if _REDIS_AVAILABLE and RedisLibConnectionError and isinstance(e, RedisLibConnectionError):
+            if (
+                _REDIS_AVAILABLE
+                and RedisLibConnectionError
+                and isinstance(e, RedisLibConnectionError)
+            ):
                 raise RedisConnectionError(
-                    f"Failed to connect to Redis: {e}",
-                    redis_url=self.cfg.REDIS_URL
+                    f"Failed to connect to Redis: {e}", redis_url=self.cfg.REDIS_URL
                 ) from e
-            elif _REDIS_AVAILABLE and RedisLibTimeoutError and isinstance(e, RedisLibTimeoutError):
+            elif (
+                _REDIS_AVAILABLE
+                and RedisLibTimeoutError
+                and isinstance(e, RedisLibTimeoutError)
+            ):
                 raise RedisTimeoutError(
-                    f"Redis connection timeout: {e}",
-                    operation="start"
+                    f"Redis connection timeout: {e}", operation="start"
                 ) from e
             else:
                 logger.error(f"Failed to start RedisBridge: {e}", exc_info=True)
@@ -351,7 +366,7 @@ class RedisBridge:
         except Exception as e:
             self.circuit.record_failure()
             _metrics_inc_publish("conn_fail", message.topic)
-            
+
             # Log appropriate error message based on exception type
             if _is_redis_connection_error(e) or _is_redis_timeout_error(e):
                 logger.error(

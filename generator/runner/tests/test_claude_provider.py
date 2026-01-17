@@ -25,7 +25,9 @@ import aiohttp
 import pytest
 
 # Make the *runner* package importable by adding generator/ to sys.path
-GENERATOR_ROOT = Path(__file__).resolve().parents[2]  # generator/runner/tests -> generator/
+GENERATOR_ROOT = (
+    Path(__file__).resolve().parents[2]
+)  # generator/runner/tests -> generator/
 if str(GENERATOR_ROOT) not in sys.path:
     sys.path.insert(0, str(GENERATOR_ROOT))
 

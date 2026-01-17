@@ -81,7 +81,10 @@ def test_yaml_invalid_structure(temp_yaml):
 @pytest.mark.asyncio
 async def test_integration_crew_manager_with_config(temp_yaml, monkeypatch):
     """Integration test: Load config into CrewManager."""
-    from self_fixing_engineer.agent_orchestration.crew_manager import CrewAgentBase, CrewManager
+    from self_fixing_engineer.agent_orchestration.crew_manager import (
+        CrewAgentBase,
+        CrewManager,
+    )
 
     # Register the base class for testing
     CrewManager.register_agent_class(CrewAgentBase)

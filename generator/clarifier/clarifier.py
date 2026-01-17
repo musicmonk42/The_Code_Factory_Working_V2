@@ -66,11 +66,14 @@ except ImportError as e:
     # Minimal Dummies for LLM/Prioritizer to allow Clarifier class to initialize
     class LLMProvider:
         """Stub LLM Provider - actual implementation should be in clarifier_llm.py"""
+
         def __init__(self, *args, **kwargs):
-            logging.warning("Using stub LLMProvider - clarifier_llm.py module not available")
-            self.api_key = kwargs.get('api_key')
-            self.model = kwargs.get('model', 'default')
-        
+            logging.warning(
+                "Using stub LLMProvider - clarifier_llm.py module not available"
+            )
+            self.api_key = kwargs.get("api_key")
+            self.model = kwargs.get("model", "default")
+
         async def generate(self, prompt: str, **kwargs) -> str:
             """Stub method that raises NotImplementedError"""
             raise NotImplementedError(
@@ -80,10 +83,13 @@ except ImportError as e:
 
     class GrokLLM(LLMProvider):
         """Stub Grok LLM Provider - actual implementation should be in clarifier_llm.py"""
+
         def __init__(self, *args, **kwargs):
-            logging.warning("Using stub GrokLLM - clarifier_llm.py module not available")
+            logging.warning(
+                "Using stub GrokLLM - clarifier_llm.py module not available"
+            )
             super().__init__(*args, **kwargs)
-        
+
         async def generate(self, prompt: str, **kwargs) -> str:
             """Stub method that raises NotImplementedError"""
             raise NotImplementedError(
@@ -94,6 +100,7 @@ except ImportError as e:
 
     class Prioritizer(ABC):
         """Base class for prioritizing ambiguities in requirements"""
+
         def __init__(self, llm):
             self.llm = llm
 
@@ -104,17 +111,20 @@ except ImportError as e:
 
     class DefaultPrioritizer(Prioritizer):
         """Stub Default Prioritizer - actual implementation should be in clarifier_prioritizer.py"""
+
         async def prioritize(self, ambiguities, context, target_language):
             """
             Stub implementation that raises NotImplementedError.
-            
+
             A proper implementation should:
             1. Analyze each ambiguity for complexity and impact
             2. Score ambiguities based on context and target language
             3. Group related ambiguities into batches
             4. Return prioritized list with questions for user clarification
             """
-            logging.warning("Using stub DefaultPrioritizer - clarifier_prioritizer.py module not available")
+            logging.warning(
+                "Using stub DefaultPrioritizer - clarifier_prioritizer.py module not available"
+            )
             raise NotImplementedError(
                 "DefaultPrioritizer.prioritize is not implemented. "
                 "The clarifier_prioritizer.py module with actual prioritization logic is required. "
@@ -144,12 +154,13 @@ except ImportError as e:
     # Define minimal dummies for other internal components
     class InteractionMode:
         """Stub InteractionMode when clarifier_user_prompt cannot be imported"""
+
         pass
 
     def get_channel(*args, **kwargs):
         """
         Fallback for get_channel when import fails.
-        
+
         This provides a more helpful error message and suggests alternatives.
         """
         error_msg = (
@@ -167,7 +178,7 @@ except ImportError as e:
     def update_requirements_with_answers(*args, **kwargs):
         """
         Fallback for update_requirements_with_answers when import fails.
-        
+
         Returns empty dict to allow graceful degradation.
         """
         logging.warning(
@@ -202,17 +213,19 @@ HAS_OPENTELEMETRY = False
 # The fallback is only for development/testing scenarios.
 _USING_DUMMY_CLARIFIER_LOGGING = False
 
+
 # Create a wrapper for log_audit_event that maintains backwards compatibility
 # with the original log_action interface
 async def _wrap_log_audit_event(action: str, **kwargs) -> None:
     """
     Wrapper that converts legacy log_action calls to log_audit_event format.
-    
+
     The original log_action interface accepted (action_name, **kwargs).
     The new log_audit_event requires (action, data_dict).
     """
     try:
         from runner.runner_logging import log_audit_event
+
         await log_audit_event(action=action, data=kwargs)
     except ImportError:
         # Fallback if runner not available
@@ -221,8 +234,10 @@ async def _wrap_log_audit_event(action: str, **kwargs) -> None:
         # Don't let logging failures crash the application
         get_logger().warning(f"log_action failed: {e}", extra={"action": action})
 
+
 try:
     from runner.runner_logging import log_audit_event as _log_audit_event, send_alert
+
     # Use the wrapper to maintain backwards compatibility
     log_action = _wrap_log_audit_event
 except ImportError:
@@ -232,11 +247,11 @@ except ImportError:
         # In production, we should fail hard if runner logging is not available
         _is_production = os.getenv("PYTHON_ENV", "development").lower() == "production"
         _is_testing = (
-            os.getenv("TESTING") == "1" 
+            os.getenv("TESTING") == "1"
             or "pytest" in sys.modules
             or os.getenv("PYTEST_CURRENT_TEST") is not None
         )
-        
+
         if _is_production and not _is_testing:
             # Fail hard in production if runner logging is not available
             raise ImportError(
@@ -244,7 +259,7 @@ except ImportError:
                 "Clarification events must be logged to the secure audit trail. "
                 "Please ensure the runner module is properly installed and configured."
             )
-        
+
         _USING_DUMMY_CLARIFIER_LOGGING = True
         # Use a dummy logger for the warning before the main logger is configured
         logging.warning(
@@ -260,7 +275,7 @@ except ImportError:
             get_logger().warning(
                 f"DUMMY log_action (NOT FOR PRODUCTION): {action}",
                 extra={
-                    "operation": "dummy_log_action", 
+                    "operation": "dummy_log_action",
                     "warning": "not_audit_logged",
                     "action": action,
                     "data": kwargs,
@@ -434,12 +449,18 @@ try:
     CLARIFIER_LATENCY = Histogram(
         "clarifier_latency_seconds", "Clarification cycle latency", ["status"]
     )
-    CLARIFIER_ERRORS = Counter("clarifier_errors_total", "Clarifier errors", ["error_type"])
+    CLARIFIER_ERRORS = Counter(
+        "clarifier_errors_total", "Clarifier errors", ["error_type"]
+    )
     CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = Histogram(
-        "clarifier_context_retrieval_seconds", "Context retrieval latency", ["manager_type"]
+        "clarifier_context_retrieval_seconds",
+        "Context retrieval latency",
+        ["manager_type"],
     )
     CLARIFIER_QUESTION_PROMPT_LATENCY = Histogram(
-        "clarifier_question_prompt_seconds", "Question prompt latency", ["interaction_mode"]
+        "clarifier_question_prompt_seconds",
+        "Question prompt latency",
+        ["interaction_mode"],
     )
     CLARIFIER_PRIORITIZATION_LATENCY = Histogram(
         "clarifier_prioritization_seconds", "Prioritization latency", ["strategy"]
@@ -447,12 +468,19 @@ try:
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
+
     CLARIFIER_CYCLES = REGISTRY._names_to_collectors.get("clarifier_cycles_total")
     CLARIFIER_LATENCY = REGISTRY._names_to_collectors.get("clarifier_latency_seconds")
     CLARIFIER_ERRORS = REGISTRY._names_to_collectors.get("clarifier_errors_total")
-    CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = REGISTRY._names_to_collectors.get("clarifier_context_retrieval_seconds")
-    CLARIFIER_QUESTION_PROMPT_LATENCY = REGISTRY._names_to_collectors.get("clarifier_question_prompt_seconds")
-    CLARIFIER_PRIORITIZATION_LATENCY = REGISTRY._names_to_collectors.get("clarifier_prioritization_seconds")
+    CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = REGISTRY._names_to_collectors.get(
+        "clarifier_context_retrieval_seconds"
+    )
+    CLARIFIER_QUESTION_PROMPT_LATENCY = REGISTRY._names_to_collectors.get(
+        "clarifier_question_prompt_seconds"
+    )
+    CLARIFIER_PRIORITIZATION_LATENCY = REGISTRY._names_to_collectors.get(
+        "clarifier_prioritization_seconds"
+    )
 
 
 # --- Circuit Breaker ---

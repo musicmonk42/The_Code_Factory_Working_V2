@@ -138,35 +138,38 @@ class MessageFilter:
 class Database:
     """
     Database adapter that wraps the real OmniCore Database or provides fallback.
-    
+
     This adapter tries to use the real omnicore_engine.database.Database implementation.
     If not available, provides a fallback for dev/test environments.
-    
+
     PRODUCTION MODE: When PRODUCTION_MODE=true, raises errors if real DB unavailable.
     """
+
     def __init__(self, db_path: Optional[str] = None):
         self._production_mode = PRODUCTION_MODE
         self._real_db = None
         self._using_real = False
         self._init_real_db(db_path)
-    
+
     def _init_real_db(self, db_path: Optional[str] = None):
         """Initialize connection to real database."""
         try:
             from omnicore_engine.database import Database as RealDatabase
-            
+
             # Use provided path or get from environment
             if not db_path:
                 db_path = os.getenv("DATABASE_URL")
-            
+
             # Default to SQLite if no path provided
             if not db_path:
                 db_path = "sqlite+aiosqlite:///./data/simulation_db.sqlite"
                 logger.info(f"No DATABASE_URL provided, using default: {db_path}")
-            
+
             self._real_db = RealDatabase(db_path=db_path, system_audit_merkle_tree=None)
             self._using_real = True
-            logger.info(f"Database adapter initialized with real OmniCore Database: {db_path}")
+            logger.info(
+                f"Database adapter initialized with real OmniCore Database: {db_path}"
+            )
         except ImportError as e:
             logger.warning(
                 f"Failed to import real Database from omnicore_engine.database: {e}. "
@@ -178,23 +181,32 @@ class Database:
                     "Install omnicore_engine.database module."
                 )
         except Exception as e:
-            logger.error(f"Failed to initialize real Database: {e}. Using fallback.", exc_info=True)
+            logger.error(
+                f"Failed to initialize real Database: {e}. Using fallback.",
+                exc_info=True,
+            )
             if self._production_mode:
-                raise RuntimeError(f"Failed to initialize Database in production mode: {e}") from e
-    
+                raise RuntimeError(
+                    f"Failed to initialize Database in production mode: {e}"
+                ) from e
+
     async def health_check(self) -> Dict[str, Any]:
         """Health check using real DB or fallback."""
         if self._using_real and self._real_db:
             try:
                 # Real database doesn't have health_check, so we'll test connection
                 # by attempting a simple operation
-                return {"status": "ok", "implementation": "real", "using_database": True}
+                return {
+                    "status": "ok",
+                    "implementation": "real",
+                    "using_database": True,
+                }
             except Exception as e:
                 logger.error(f"Real database health check failed: {e}")
                 if self._production_mode:
                     raise
                 return {"status": "degraded", "error": str(e), "implementation": "real"}
-        
+
         # Fallback behavior
         if self._production_mode:
             raise RuntimeError(
@@ -209,14 +221,18 @@ class Database:
         if self._using_real and self._real_db:
             try:
                 await self._real_db.save_audit_record(record)
-                logger.debug(f"Audit record saved to real database: {record.get('action', 'unknown')}")
+                logger.debug(
+                    f"Audit record saved to real database: {record.get('action', 'unknown')}"
+                )
                 return
             except Exception as e:
-                logger.error(f"Failed to save audit record to real database: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to save audit record to real database: {e}", exc_info=True
+                )
                 if self._production_mode:
                     raise
                 # In non-production, continue with fallback
-        
+
         # Fallback behavior
         if self._production_mode:
             raise RuntimeError(
@@ -232,7 +248,7 @@ class Database:
         if self._using_real and self._real_db:
             try:
                 # Real database uses engine.dispose() for cleanup
-                if hasattr(self._real_db, 'engine') and self._real_db.engine:
+                if hasattr(self._real_db, "engine") and self._real_db.engine:
                     await self._real_db.engine.dispose()
                     logger.info("Real database connection closed")
             except Exception as e:
@@ -243,22 +259,23 @@ class Database:
 class ShardedMessageBus:
     """
     Enhanced ShardedMessageBus with pattern matching and message filtering.
-    
+
     Supports:
     - Pattern-based subscriptions with wildcards (e.g., "requests.simulation.*")
     - Message filtering by headers
     - Real event bus integration (mesh.event_bus)
     - Local routing fallback for dev/test
-    
+
     PRODUCTION MODE: When PRODUCTION_MODE=true, requires real event bus.
-    
+
     Environment Variables:
     - USE_REAL_EVENT_BUS: Set to 'true' to attempt using mesh.event_bus (default: 'false')
     """
+
     def __init__(self, enable_dlq: bool = False):
         """
         Initialize ShardedMessageBus.
-        
+
         Args:
             enable_dlq: Enable dead-letter queue for failed message handlers (default: False)
         """
@@ -267,73 +284,77 @@ class ShardedMessageBus:
         self._real_bus = None
         self._local_subscribers: Dict[str, List[Dict[str, Any]]] = {}
         self.enable_dlq = enable_dlq
-        
+
         if self._use_real:
             try:
                 # Try to import real event bus functions
                 from mesh.event_bus import publish_event, subscribe_event
+
                 self._real_bus = {
-                    'publish': publish_event,
-                    'subscribe': subscribe_event
+                    "publish": publish_event,
+                    "subscribe": subscribe_event,
                 }
-                logger.info("ShardedMessageBus: Using real mesh.event_bus implementation")
+                logger.info(
+                    "ShardedMessageBus: Using real mesh.event_bus implementation"
+                )
             except ImportError as e:
                 logger.warning(
                     f"Failed to import mesh.event_bus: {e}. Using fallback with local routing."
                 )
-        
+
         if self._production_mode and not self._real_bus:
             logger.critical(
                 "CRITICAL: Using fallback ShardedMessageBus stub in PRODUCTION mode. "
                 "Enable USE_REAL_EVENT_BUS=true and configure mesh.event_bus."
             )
-    
+
     def _matches_pattern(self, topic: str, pattern: str) -> bool:
         """
         Check if topic matches pattern with wildcard support.
-        
+
         Supports:
         - Exact match: "requests.simulation" matches "requests.simulation"
         - Wildcard: "requests.simulation.*" matches "requests.simulation.agent"
         - Multi-level wildcard: "requests.*" matches "requests.simulation.agent"
         """
         import fnmatch
+
         return fnmatch.fnmatch(topic, pattern)
-    
+
     def _apply_filter(self, message: Any, msg_filter: Optional[MessageFilter]) -> bool:
         """
         Apply message filter to determine if message should be delivered.
-        
+
         Args:
             message: Message object or payload
             msg_filter: Optional MessageFilter with header requirements
-            
+
         Returns:
             True if message passes filter, False otherwise
         """
         if not msg_filter:
             return True
-        
+
         # If no headers filter is specified, allow all messages
         if not msg_filter.headers:
             return True
-        
+
         # Check header requirements - for dev/test, be lenient
         # In production with real bus, the bus itself handles filtering
-        message_headers = getattr(message, 'headers', {}) or {}
-        
+        message_headers = getattr(message, "headers", {}) or {}
+
         # If message has no headers but filter requires them, pass in dev mode
         if not message_headers and msg_filter.headers:
             # Be lenient in dev/test mode - allow messages without headers
             return True
-        
+
         # Check if all required headers match
         for key, value in msg_filter.headers.items():
             if message_headers.get(key) != value:
                 return False
-        
+
         return True
-    
+
     async def health_check(self) -> Dict[str, Any]:
         """Health check with production mode enforcement."""
         if self._production_mode and not self._real_bus:
@@ -341,22 +362,22 @@ class ShardedMessageBus:
                 "CRITICAL: Fallback ShardedMessageBus.health_check() in production mode. "
                 "Use real message bus implementation."
             )
-        
+
         if self._real_bus:
             # Real bus doesn't have health check, return success
             return {"status": "running", "implementation": "real"}
-        
+
         logger.debug("Using fallback ShardedMessageBus with local routing")
         return {
-            "status": "running", 
+            "status": "running",
             "implementation": "fallback_with_local_routing",
-            "subscribers": len(self._local_subscribers)
+            "subscribers": len(self._local_subscribers),
         }
 
     async def publish(self, topic: str, message: Any, **kwargs) -> None:
         """
         Publish message with pattern matching and real implementation support.
-        
+
         Args:
             topic: Message topic
             message: Message payload (can be Any type)
@@ -367,44 +388,49 @@ class ShardedMessageBus:
                 "CRITICAL: Fallback ShardedMessageBus.publish() in production mode. "
                 "Messages will be lost. Use real message bus."
             )
-        
+
         if self._real_bus:
             # Use real publish function
-            await self._real_bus['publish'](topic, message)
+            await self._real_bus["publish"](topic, message)
             return
-        
+
         # Local routing for dev/test
         logger.debug(f"Local routing: publishing to topic={topic}")
-        
+
         # Route to matching subscribers
         for pattern, subscribers in self._local_subscribers.items():
             if self._matches_pattern(topic, pattern):
                 for sub in subscribers:
-                    handler = sub['handler']
-                    msg_filter = sub.get('filter')
-                    
+                    handler = sub["handler"]
+                    msg_filter = sub.get("filter")
+
                     # Create Message object if needed
                     if not isinstance(message, Message):
                         import uuid
+
                         msg_obj = Message(
                             id=str(uuid.uuid4()),
                             payload=message,
                             topic=topic,
-                            original_payload=str(message) if message else None
+                            original_payload=str(message) if message else None,
                         )
                     else:
                         msg_obj = message
-                    
+
                     # Apply filter
                     if self._apply_filter(msg_obj, msg_filter):
                         try:
                             await handler(msg_obj)
-                            logger.debug(f"Message routed to handler for pattern {pattern}")
+                            logger.debug(
+                                f"Message routed to handler for pattern {pattern}"
+                            )
                         except Exception as e:
                             # Generate correlation ID for tracking
                             # Use message ID if available, otherwise generate new UUID
-                            correlation_id = getattr(msg_obj, 'id', None) or str(uuid.uuid4())
-                            
+                            correlation_id = getattr(msg_obj, "id", None) or str(
+                                uuid.uuid4()
+                            )
+
                             logger.error(
                                 f"Error in message handler for pattern {pattern}. "
                                 f"Correlation ID: {correlation_id}, Error: {e}",
@@ -413,14 +439,14 @@ class ShardedMessageBus:
                                     "correlation_id": correlation_id,
                                     "pattern": pattern,
                                     "topic": topic,
-                                    "error_type": type(e).__name__
-                                }
+                                    "error_type": type(e).__name__,
+                                },
                             )
-                            
+
                             # Optionally publish to dead-letter queue for failed messages
                             # This allows for later replay or investigation
                             # Enable DLQ by setting enable_dlq=True when creating ShardedMessageBus
-                            if getattr(self, 'enable_dlq', False):
+                            if getattr(self, "enable_dlq", False):
                                 try:
                                     await self.publish(
                                         topic="deadletter.message_bus",
@@ -430,27 +456,32 @@ class ShardedMessageBus:
                                             "error": str(e),
                                             "error_type": type(e).__name__,
                                             "correlation_id": correlation_id,
-                                            "message": msg_obj.payload if hasattr(msg_obj, 'payload') else str(msg_obj),
-                                            "timestamp": time.time()
-                                        }
+                                            "message": (
+                                                msg_obj.payload
+                                                if hasattr(msg_obj, "payload")
+                                                else str(msg_obj)
+                                            ),
+                                            "timestamp": time.time(),
+                                        },
                                     )
-                                    logger.info(f"Message {correlation_id} sent to dead-letter queue")
+                                    logger.info(
+                                        f"Message {correlation_id} sent to dead-letter queue"
+                                    )
                                 except Exception as dlq_error:
-                                    logger.error(f"Failed to send message to DLQ: {dlq_error}")
-                            
+                                    logger.error(
+                                        f"Failed to send message to DLQ: {dlq_error}"
+                                    )
+
                             # Re-raise the exception to allow upstream error handling
                             # This ensures errors are not silently swallowed
                             raise
 
     async def subscribe(
-        self, 
-        topic: Optional[str] = None,
-        handler: Optional[Callable] = None,
-        **kwargs
+        self, topic: Optional[str] = None, handler: Optional[Callable] = None, **kwargs
     ) -> None:
         """
         Subscribe to topic with pattern matching and filtering support.
-        
+
         Args:
             topic: Topic to subscribe to (for backward compatibility)
             handler: Message handler function
@@ -459,33 +490,32 @@ class ShardedMessageBus:
                 - filter: MessageFilter for header-based filtering
         """
         # Support both 'topic' and 'topic_pattern' kwargs
-        pattern = kwargs.get('topic_pattern', topic)
-        msg_filter = kwargs.get('filter')
-        
+        pattern = kwargs.get("topic_pattern", topic)
+        msg_filter = kwargs.get("filter")
+
         if not pattern or not handler:
             logger.error("subscribe() requires both topic/topic_pattern and handler")
             return
-        
+
         if self._production_mode and not self._real_bus:
             raise RuntimeError(
                 "CRITICAL: Fallback ShardedMessageBus.subscribe() in production mode. "
                 "Subscriptions will not work. Use real message bus."
             )
-        
+
         if self._real_bus:
             # Use real subscribe function (may not support patterns/filters)
-            await self._real_bus['subscribe'](pattern, handler)
+            await self._real_bus["subscribe"](pattern, handler)
             logger.info(f"Subscribed to pattern {pattern} using real event bus")
             return
-        
+
         # Local routing for dev/test
         if pattern not in self._local_subscribers:
             self._local_subscribers[pattern] = []
-        
-        self._local_subscribers[pattern].append({
-            'handler': handler,
-            'filter': msg_filter
-        })
+
+        self._local_subscribers[pattern].append(
+            {"handler": handler, "filter": msg_filter}
+        )
         logger.info(
             f"Local subscription created: pattern={pattern}, "
             f"filter={'yes' if msg_filter else 'no'}"
@@ -522,21 +552,27 @@ class ExplanationInput:
 class ExplainableReasonerPlugin:
     """
     Fallback ExplainableReasonerPlugin with production mode checks.
-    
+
     PRODUCTION MODE: When PRODUCTION_MODE=true, this will raise errors.
-    
+
     For production, import the real ExplainableReasonerPlugin from:
     arbiter.explainable_reasoner
     """
+
     def __init__(self):
         self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
         self._real_plugin = None
-        
+
         # Try to import real plugin
         try:
-            from arbiter.explainable_reasoner import ExplainableReasonerPlugin as RealPlugin
+            from arbiter.explainable_reasoner import (
+                ExplainableReasonerPlugin as RealPlugin,
+            )
+
             self._real_plugin = RealPlugin()
-            logger.info("Using real ExplainableReasonerPlugin from arbiter.explainable_reasoner")
+            logger.info(
+                "Using real ExplainableReasonerPlugin from arbiter.explainable_reasoner"
+            )
         except ImportError as e:
             logger.warning(
                 f"Failed to import real ExplainableReasonerPlugin: {e}. Using fallback."
@@ -546,18 +582,18 @@ class ExplainableReasonerPlugin:
                     "CRITICAL: Fallback ExplainableReasonerPlugin in PRODUCTION mode. "
                     "Install arbiter.explainable_reasoner module."
                 )
-    
+
     async def async_init(self) -> None:
         """Initialize plugin."""
         if self._real_plugin:
             await self._real_plugin.initialize()
             return
-        
+
         if self._production_mode:
             raise RuntimeError(
                 "CRITICAL: Fallback ExplainableReasonerPlugin.async_init() in production."
             )
-        
+
         logger.warning("Fallback ExplainableReasonerPlugin.async_init() called")
         return None
 
@@ -565,13 +601,13 @@ class ExplainableReasonerPlugin:
         """Execute plugin action."""
         if self._real_plugin:
             return await self._real_plugin.execute(action, **kwargs)
-        
+
         if self._production_mode:
             raise RuntimeError(
                 "CRITICAL: Fallback ExplainableReasonerPlugin.execute() in production. "
                 "Install real plugin."
             )
-        
+
         logger.warning(
             f"Fallback ExplainableReasonerPlugin.execute() - returning stub: "
             f"action={action}"
@@ -583,12 +619,12 @@ class ExplainableReasonerPlugin:
         if self._real_plugin:
             # Real plugin has different interface, adapt if needed
             return "Explanation from real plugin"
-        
+
         if self._production_mode:
             raise RuntimeError(
                 "CRITICAL: Fallback ExplainableReasonerPlugin.explain_result() in production."
             )
-        
+
         logger.warning("Fallback ExplainableReasonerPlugin.explain_result() called")
         return "No explanation available (fallback stub)"
 
@@ -603,12 +639,13 @@ class ExplainableReasonerPlugin:
 class QuantumPluginAPI:
     """
     Fallback QuantumPluginAPI with production mode checks.
-    
+
     PRODUCTION MODE: When PRODUCTION_MODE=true, this will raise errors.
-    
+
     This is a stub for quantum computing operations. For production,
     integrate with actual quantum computing providers (IBM Q, AWS Braket, etc.)
     """
+
     def __init__(self):
         self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
         if self._production_mode:
@@ -616,17 +653,17 @@ class QuantumPluginAPI:
                 "CRITICAL: Fallback QuantumPluginAPI in PRODUCTION mode. "
                 "This is a simulation stub, not real quantum computing."
             )
-    
+
     async def perform_quantum_operation(
         self, *, operation_type: str, params: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Perform quantum operation (stub).
-        
+
         Args:
             operation_type: Type of quantum operation
             params: Operation parameters
-            
+
         Returns:
             Operation result
         """
@@ -635,7 +672,7 @@ class QuantumPluginAPI:
                 "CRITICAL: Fallback QuantumPluginAPI.perform_quantum_operation() in production. "
                 "This is a stub and does not perform real quantum operations."
             )
-        
+
         logger.warning(
             f"Fallback QuantumPluginAPI.perform_quantum_operation() - stub result: "
             f"operation={operation_type}, params={params}"
@@ -643,7 +680,7 @@ class QuantumPluginAPI:
         return {
             "status": "SUCCESS",
             "result": {},
-            "note": "fallback_stub_not_real_quantum"
+            "note": "fallback_stub_not_real_quantum",
         }
 
     def get_available_backends(self) -> List[str]:  # pragma: no cover

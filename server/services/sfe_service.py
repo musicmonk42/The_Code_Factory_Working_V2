@@ -26,16 +26,14 @@ class SFEService:
     def __init__(self, omnicore_service=None):
         """
         Initialize the SFEService.
-        
+
         Args:
             omnicore_service: OmniCoreService instance for centralized routing
         """
         self.omnicore_service = omnicore_service
         logger.info("SFEService initialized")
 
-    async def analyze_code(
-        self, job_id: str, code_path: str
-    ) -> Dict[str, Any]:
+    async def analyze_code(self, job_id: str, code_path: str) -> Dict[str, Any]:
         """
         Analyze code for potential issues via OmniCore.
 
@@ -159,9 +157,7 @@ class SFEService:
             "arbiter_module": "self_fixing_engineer.arbiter",
         }
 
-    async def apply_fix(
-        self, fix_id: str, dry_run: bool = False
-    ) -> Dict[str, Any]:
+    async def apply_fix(self, fix_id: str, dry_run: bool = False) -> Dict[str, Any]:
         """
         Apply a proposed fix.
 

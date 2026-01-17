@@ -223,17 +223,20 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def agent_error_handler(request: Request, exc: AgentError):
     """
     Handle AgentError exceptions with HTTP 500 status.
-    
+
     AgentError indicates internal agent processing failures,
     which are server-side errors, not client request issues.
     """
-    logger.error(f"Agent error for {request.method} {request.url}: {exc}", exc_info=True)
+    logger.error(
+        f"Agent error for {request.method} {request.url}: {exc}", exc_info=True
+    )
     if os.getenv("SENTRY_DSN"):
         sentry_sdk.capture_exception(exc)
     return JSONResponse(
         status_code=500,
-        content={"detail": "An internal server error occurred in the agent."}
+        content={"detail": "An internal server error occurred in the agent."},
     )
+
 
 # RECONSTRUCTED: Security and Dependencies
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")

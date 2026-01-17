@@ -16,6 +16,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 # Merklelib import
 try:
     from merklelib import MerkleTree as MerkleLibTree
+
     # In some versions of merklelib, the function is verify_leaf_inclusion instead of verify_inclusion
     try:
         from merklelib import verify_inclusion

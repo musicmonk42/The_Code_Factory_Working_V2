@@ -808,10 +808,10 @@ _SYNC_BRIDGE_MAX_WORKERS: int = 4  # Maximum concurrent sync->async bridges
 def _get_sync_bridge_executor() -> concurrent.futures.ThreadPoolExecutor:
     """
     Returns a singleton ThreadPoolExecutor for sync->async bridging.
-    
+
     Uses lazy initialization with double-checked locking pattern for thread safety.
     The executor is bounded to prevent resource exhaustion attacks.
-    
+
     Returns:
         ThreadPoolExecutor: A bounded thread pool for executing async operations.
     """
@@ -821,7 +821,7 @@ def _get_sync_bridge_executor() -> concurrent.futures.ThreadPoolExecutor:
             if _SYNC_BRIDGE_EXECUTOR is None:
                 _SYNC_BRIDGE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
                     max_workers=_SYNC_BRIDGE_MAX_WORKERS,
-                    thread_name_prefix="secret_sync_bridge_"
+                    thread_name_prefix="secret_sync_bridge_",
                 )
     return _SYNC_BRIDGE_EXECUTOR
 
@@ -829,17 +829,17 @@ def _get_sync_bridge_executor() -> concurrent.futures.ThreadPoolExecutor:
 def _run_coroutine_in_new_loop(coro: Awaitable[_T]) -> _T:
     """
     Executes a coroutine in a new, isolated event loop.
-    
+
     This function creates a fresh event loop for the current thread, executes
     the coroutine, and properly cleans up all resources. The event loop is
     isolated to this thread to prevent interference with other async operations.
-    
+
     Args:
         coro: The coroutine to execute.
-        
+
     Returns:
         The result of the coroutine execution.
-        
+
     Raises:
         Any exception raised by the coroutine is propagated.
     """
@@ -872,25 +872,25 @@ def _run_coroutine_in_new_loop(coro: Awaitable[_T]) -> _T:
 def _run_async_safely(coro: Awaitable[_T], operation_name: str) -> _T:
     """
     Safely executes an async coroutine from a synchronous context.
-    
+
     This function implements a production-grade sync->async bridge that:
     1. Detects if an event loop is already running
     2. If running, executes the coroutine in a separate thread with its own loop
     3. If not running, executes directly in the current thread
     4. Properly handles timeouts, cancellation, and resource cleanup
     5. Maintains full exception chain for debugging
-    
+
     This design allows synchronous code (e.g., Pydantic validators, __init__ methods,
     legacy plugins) to safely call async secret-fetching functions even when running
     inside an async framework like FastAPI/uvicorn.
-    
+
     Args:
         coro: The async coroutine to execute.
         operation_name: Name of the operation for logging/error messages.
-        
+
     Returns:
         The result of the coroutine.
-        
+
     Raises:
         SecretError: If the operation fails or times out.
     """
@@ -902,12 +902,12 @@ def _run_async_safely(coro: Awaitable[_T], operation_name: str) -> _T:
             # We must execute in a separate thread to avoid deadlock
             logger.debug(
                 f"Executing {operation_name} in thread pool (running loop detected)",
-                extra={"operation": "sync_bridge_thread_execution"}
+                extra={"operation": "sync_bridge_thread_execution"},
             )
-            
+
             executor = _get_sync_bridge_executor()
             future = executor.submit(_run_coroutine_in_new_loop, coro)
-            
+
             try:
                 return future.result(timeout=_SYNC_BRIDGE_TIMEOUT_SECONDS)
             except concurrent.futures.TimeoutError:
@@ -918,23 +918,23 @@ def _run_async_safely(coro: Awaitable[_T], operation_name: str) -> _T:
                     extra={
                         "operation": "sync_bridge_timeout",
                         "operation_name": operation_name,
-                        "timeout_seconds": _SYNC_BRIDGE_TIMEOUT_SECONDS
-                    }
+                        "timeout_seconds": _SYNC_BRIDGE_TIMEOUT_SECONDS,
+                    },
                 )
                 raise SecretError(
                     f"Timeout ({_SYNC_BRIDGE_TIMEOUT_SECONDS}s) waiting for "
                     f"{operation_name} to complete. This may indicate network issues "
                     f"or an unresponsive secret manager."
                 )
-                
+
         except RuntimeError:
             # No running event loop - safe to execute directly
             logger.debug(
                 f"Executing {operation_name} directly (no running loop)",
-                extra={"operation": "sync_bridge_direct_execution"}
+                extra={"operation": "sync_bridge_direct_execution"},
             )
             return _run_coroutine_in_new_loop(coro)
-            
+
     except SecretError:
         # Re-raise SecretError subclasses without wrapping
         raise
@@ -946,8 +946,8 @@ def _run_async_safely(coro: Awaitable[_T], operation_name: str) -> _T:
             extra={
                 "operation": "sync_bridge_error",
                 "operation_name": operation_name,
-                "error_type": type(e).__name__
-            }
+                "error_type": type(e).__name__,
+            },
         )
         raise SecretError(
             f"Failed to execute {operation_name}: {type(e).__name__}: {e}"
@@ -963,35 +963,36 @@ def _run_async_safely(coro: Awaitable[_T], operation_name: str) -> _T:
 #
 # For new code in async contexts, prefer the async versions (aget_*) directly.
 
+
 def get_hsm_pin() -> str:
     """
     Fetches the HSM PIN securely from the configured secret manager.
-    
+
     This function provides a synchronous interface to fetch the HSM PIN.
     It can be safely called from both synchronous and asynchronous contexts.
     When called from within a running async event loop (e.g., FastAPI request
     handler, Pydantic validator), the operation is automatically executed in
     a separate thread to prevent deadlock.
-    
+
     Security Considerations:
         - The PIN is fetched from a secure secret manager, never from environment
           variables or code.
         - The PIN is held in memory only as long as necessary.
         - All access attempts are logged for audit purposes.
-    
+
     Returns:
         str: The HSM PIN as a UTF-8 string.
-        
+
     Raises:
         SecretError: If the PIN cannot be retrieved due to configuration,
             network, authentication, or other errors.
         SecretNotFoundError: If the PIN secret does not exist in the
             configured secret manager.
-            
+
     Example:
         >>> pin = get_hsm_pin()  # Works in sync code
         >>> # Also works inside async frameworks like FastAPI
-    
+
     Note:
         For explicitly async code, prefer using ``aget_hsm_pin()`` directly
         for better performance and cleaner async flow.
@@ -1002,11 +1003,11 @@ def get_hsm_pin() -> str:
 def get_fallback_hmac_secret() -> Optional[bytes]:
     """
     Fetches the fallback HMAC secret securely from the configured secret manager.
-    
+
     This function provides a synchronous interface to fetch the HMAC fallback
     secret used when the primary HSM-based signing is unavailable. It can be
     safely called from both synchronous and asynchronous contexts.
-    
+
     Security Considerations:
         - The secret is fetched from a secure secret manager, never from
           environment variables or code.
@@ -1016,23 +1017,23 @@ def get_fallback_hmac_secret() -> Optional[bytes]:
         - This fallback mechanism should be treated as a critical security
           asset - its compromise would allow signature forgery during
           primary system outages.
-    
+
     Returns:
         Optional[bytes]: The decoded HMAC secret as bytes, or None if the
             secret is not configured (fallback signing will be disabled).
-        
+
     Raises:
         SecretError: If there's an error fetching the secret (network,
             authentication, etc.).
         SecretDecodingError: If the secret exists but cannot be decoded
             (invalid Base64 or insufficient length).
-            
+
     Example:
         >>> secret = get_fallback_hmac_secret()
         >>> if secret:
         ...     # HMAC fallback is available
         ...     pass
-        
+
     Note:
         For explicitly async code, prefer using ``aget_fallback_hmac_secret()``
         directly for better performance and cleaner async flow.
@@ -1043,41 +1044,40 @@ def get_fallback_hmac_secret() -> Optional[bytes]:
 def get_kms_master_key_ciphertext_blob() -> bytes:
     """
     Fetches the KMS-encrypted master key ciphertext for software key encryption.
-    
+
     This function retrieves the Base64-encoded ciphertext blob that, when
     decrypted via AWS KMS, yields the master key used to encrypt software
     keys at rest. It can be safely called from both synchronous and
     asynchronous contexts.
-    
+
     The retrieved blob must be decrypted using the appropriate KMS key
     (configured via AUDIT_CRYPTO_KMS_KEY_ID) before use.
-    
+
     Security Considerations:
         - The ciphertext blob is stored in a secure secret manager.
         - Only the KMS service can decrypt this blob (envelope encryption).
         - The decrypted key should be held in memory only as long as necessary.
         - All access attempts are logged for audit purposes.
-    
+
     Returns:
         bytes: The decoded ciphertext blob ready for KMS decryption.
-        
+
     Raises:
         SecretError: If there's an error fetching the secret.
         SecretNotFoundError: If the master key secret is not configured.
         SecretDecodingError: If the secret exists but is not valid Base64.
-            
+
     Example:
         >>> ciphertext = get_kms_master_key_ciphertext_blob()
         >>> # Decrypt with KMS
         >>> kms_client = boto3.client('kms')
         >>> response = kms_client.decrypt(CiphertextBlob=ciphertext)
         >>> master_key = response['Plaintext']
-        
+
     Note:
-        For explicitly async code, prefer using 
+        For explicitly async code, prefer using
         ``aget_kms_master_key_ciphertext_blob()`` directly.
     """
     return _run_async_safely(
-        aget_kms_master_key_ciphertext_blob(),
-        "get_kms_master_key_ciphertext_blob"
+        aget_kms_master_key_ciphertext_blob(), "get_kms_master_key_ciphertext_blob"
     )

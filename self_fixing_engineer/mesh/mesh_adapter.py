@@ -681,8 +681,14 @@ class MeshPubSub:
                 else:
                     # List of supported backends for user reference
                     supported_backends = [
-                        "redis", "nats", "kafka", "rabbitmq", "aws", 
-                        "gcs", "azure", "etcd"
+                        "redis",
+                        "nats",
+                        "kafka",
+                        "rabbitmq",
+                        "aws",
+                        "gcs",
+                        "azure",
+                        "etcd",
                     ]
                     raise NotImplementedError(
                         f"Backend '{self.backend_type}' is not implemented. "
@@ -989,8 +995,14 @@ class MeshPubSub:
                     )
                 else:
                     supported_backends = [
-                        "redis", "nats", "kafka", "rabbitmq", "aws", 
-                        "gcs", "azure", "etcd"
+                        "redis",
+                        "nats",
+                        "kafka",
+                        "rabbitmq",
+                        "aws",
+                        "gcs",
+                        "azure",
+                        "etcd",
                     ]
                     raise NotImplementedError(
                         f"Publish operation not implemented for backend '{self.backend_type}'. "
@@ -1472,8 +1484,14 @@ class MeshPubSub:
 
             else:
                 supported_backends = [
-                    "redis", "nats", "kafka", "rabbitmq", "aws", 
-                    "gcs", "azure", "etcd"
+                    "redis",
+                    "nats",
+                    "kafka",
+                    "rabbitmq",
+                    "aws",
+                    "gcs",
+                    "azure",
+                    "etcd",
                 ]
                 raise NotImplementedError(
                     f"Subscribe operation not implemented for backend '{self.backend_type}'. "
@@ -1617,8 +1635,14 @@ class MeshPubSub:
                 )
             else:
                 supported_backends = [
-                    "redis", "nats", "kafka", "rabbitmq", "aws", 
-                    "gcs", "azure", "etcd"
+                    "redis",
+                    "nats",
+                    "kafka",
+                    "rabbitmq",
+                    "aws",
+                    "gcs",
+                    "azure",
+                    "etcd",
                 ]
                 raise NotImplementedError(
                     f"Health check not implemented for backend '{self.backend_type}'. "

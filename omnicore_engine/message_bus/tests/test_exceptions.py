@@ -76,7 +76,7 @@ class TestBaseMessageBusError:
         """Test that exception can be raised and caught."""
         with pytest.raises(OmniCoreMessageBusError) as exc_info:
             raise OmniCoreMessageBusError("Test", component="Test")
-        
+
         assert "Test" in str(exc_info.value)
         assert exc_info.value.component == "Test"
 
@@ -93,7 +93,9 @@ class TestRedisExceptions:
 
     def test_redis_connection_error_with_url(self):
         """Test RedisConnectionError with Redis URL."""
-        error = RedisConnectionError("Connection failed", redis_url="redis://localhost:6379")
+        error = RedisConnectionError(
+            "Connection failed", redis_url="redis://localhost:6379"
+        )
         assert error.redis_url == "redis://localhost:6379"
         assert "RedisBridge" in str(error)
 
@@ -228,7 +230,7 @@ class TestExceptionChaining:
     def test_chaining_with_from(self):
         """Test that exceptions can be chained properly."""
         original = ValueError("Original error")
-        
+
         try:
             try:
                 raise original

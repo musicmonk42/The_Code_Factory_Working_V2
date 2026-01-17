@@ -81,32 +81,32 @@ def compute_hash_and_size(filepath):
 def load_private_key(path_or_envvar):
     """
     Load private key from file path or environment variable.
-    
+
     Args:
         path_or_envvar: Either a file path or an environment variable name
-        
+
     Returns:
         Ed25519PrivateKey instance
-        
+
     Security Note:
         In production environments, consider using a Key Management Service (KMS)
         such as AWS KMS, Azure Key Vault, Google Cloud KMS, or HashiCorp Vault
         instead of storing keys in files or environment variables.
     """
     key_data = None
-    
+
     # Check if it's an environment variable reference
     if path_or_envvar.startswith("env:"):
         env_var_name = path_or_envvar[4:]  # Remove "env:" prefix
         key_data = os.getenv(env_var_name)
         if not key_data:
             raise ValueError("Environment variable for private key not found or empty")
-        key_data = key_data.encode('utf-8')
+        key_data = key_data.encode("utf-8")
     else:
         # Treat as file path
         with open(path_or_envvar, "rb") as f:
             key_data = f.read()
-    
+
     key = serialization.load_pem_private_key(key_data, password=None)
     if not isinstance(key, Ed25519PrivateKey):
         raise ValueError("Private key must be Ed25519")
@@ -241,7 +241,7 @@ def main():
             error(
                 "cryptography package required for signing. (pip install cryptography)"
             )
-        
+
         # Print KMS recommendation for production
         if not args.sign.startswith("env:"):
             print(
@@ -250,7 +250,7 @@ def main():
                 "Azure Key Vault, Google Cloud KMS, or HashiCorp Vault.",
                 file=sys.stderr,
             )
-        
+
         manifest_bytes = json.dumps(
             {
                 "manifest": manifest,

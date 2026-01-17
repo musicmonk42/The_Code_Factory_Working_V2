@@ -45,11 +45,12 @@ try:
         scan_for_vulnerabilities,
         redact_secrets as scrub_pii_and_secrets,
     )
-    
+
     # check_owasp_compliance may not exist yet - provide a stub if not available
     try:
         from runner.summarize_utils import check_owasp_compliance
     except ImportError:
+
         def check_owasp_compliance(code: str) -> list:
             """Stub for OWASP compliance check when not available."""
             return []
@@ -100,10 +101,13 @@ except ImportError as e:
 try:
     FIX_SUCCESS = Counter("fix_success_total", "Successful fixes applied", ["strategy"])
     FIX_FAILURE = Counter("fix_failure_total", "Failed fixes", ["strategy", "reason"])
-    FIX_LATENCY = Histogram("fix_latency_seconds", "Fix application latency", ["strategy"])
+    FIX_LATENCY = Histogram(
+        "fix_latency_seconds", "Fix application latency", ["strategy"]
+    )
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
+
     FIX_SUCCESS = REGISTRY._names_to_collectors.get("fix_success_total")
     FIX_FAILURE = REGISTRY._names_to_collectors.get("fix_failure_total")
     FIX_LATENCY = REGISTRY._names_to_collectors.get("fix_latency_seconds")
@@ -115,19 +119,21 @@ os.makedirs(FIX_HISTORY_DIR, exist_ok=True)
 
 # --- Pluggable Fix Strategies ---
 
+
 class PatchToolUnavailableError(Exception):
     """Raised when the 'patch' command-line tool is not available.
-    
+
     This error indicates that diff-based fixes cannot be applied because
     the system does not have the 'patch' utility installed. This is common
     on Windows systems or minimal container images.
     """
+
     pass
 
 
 def _check_patch_tool_available() -> bool:
     """Check if the 'patch' command-line tool is available.
-    
+
     Returns:
         True if 'patch' is available in PATH, False otherwise.
     """
@@ -137,6 +143,7 @@ def _check_patch_tool_available() -> bool:
 def _get_platform_info() -> Dict[str, Any]:
     """Get platform information for debugging patch tool issues."""
     import platform
+
     return {
         "system": platform.system(),
         "release": platform.release(),
@@ -150,18 +157,18 @@ class FixStrategy(ABC):
     async def apply_fix(self, code: str, fix_data: Any, lang: str) -> str:
         """Applies a fix to the code string and returns the potentially modified code."""
         pass
-    
+
     def is_available(self) -> bool:
         """Check if this strategy is available (e.g., required tools installed).
-        
+
         Returns:
             True if the strategy can be used, False otherwise.
         """
         return True
-    
+
     def get_unavailability_reason(self) -> Optional[str]:
         """Get the reason why this strategy is unavailable, if applicable.
-        
+
         Returns:
             A human-readable reason string, or None if available.
         """
@@ -170,36 +177,36 @@ class FixStrategy(ABC):
 
 class DiffPatchStrategy(FixStrategy):
     """Strategy that applies fixes using unified diff patches.
-    
+
     IMPORTANT: This strategy requires the 'patch' command-line tool to be
     installed on the system. This tool is typically available on Linux/Unix
     systems but may not be present on Windows or minimal container images.
-    
+
     If 'patch' is not available, this strategy will:
     1. Log an error with platform information
     2. Increment failure metrics
     3. Return the original code unchanged
-    
+
     For Windows compatibility, consider using the 'regex' or 'llm_generate'
     strategies as alternatives.
     """
-    
+
     def __init__(self):
         self._patch_available: Optional[bool] = None
         self._unavailability_checked = False
-    
+
     def is_available(self) -> bool:
         """Check if the 'patch' tool is available."""
         if self._patch_available is None:
             self._patch_available = _check_patch_tool_available()
             self._unavailability_checked = True
         return self._patch_available
-    
+
     def get_unavailability_reason(self) -> Optional[str]:
         """Get the reason why DiffPatchStrategy is unavailable."""
         if self.is_available():
             return None
-        
+
         platform_info = _get_platform_info()
         return (
             f"The 'patch' command-line tool is not available on this system. "
@@ -208,7 +215,7 @@ class DiffPatchStrategy(FixStrategy):
             f"On Linux, install with: apt-get install patch (Debian/Ubuntu) or yum install patch (RHEL/CentOS). "
             f"Alternatively, use 'regex' or 'llm_generate' strategies instead."
         )
-    
+
     async def apply_fix(self, code: str, fix_data: str, lang: str) -> str:
         with tracer.start_as_current_span(
             "diff_patch_fix", attributes={"language": lang}
@@ -225,11 +232,9 @@ class DiffPatchStrategy(FixStrategy):
             # Check if patch tool is available BEFORE attempting to use it
             if not self.is_available():
                 reason = self.get_unavailability_reason()
-                logger.error(
-                    f"DiffPatchStrategy cannot be used: {reason}"
-                )
+                logger.error(f"DiffPatchStrategy cannot be used: {reason}")
                 FIX_FAILURE.labels("diff", "tool_not_found").inc()
-                
+
                 # Log actionable information for operators
                 log_action(
                     "DiffPatch Tool Missing",
@@ -237,9 +242,9 @@ class DiffPatchStrategy(FixStrategy):
                         "reason": reason,
                         "platform": _get_platform_info(),
                         "recommendation": "Use 'regex' or 'llm_generate' strategy, or install 'patch' tool",
-                    }
+                    },
                 )
-                
+
                 # Return original code - the fix cannot be applied
                 return code
 
@@ -251,7 +256,7 @@ class DiffPatchStrategy(FixStrategy):
                 ) as original_file:
                     original_file.write(code)
                     original_filepath = original_file.name
-                
+
                 proc = await asyncio.create_subprocess_exec(
                     "patch",
                     "-p0",
@@ -261,7 +266,7 @@ class DiffPatchStrategy(FixStrategy):
                     stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await proc.communicate(input=fix_data.encode("utf-8"))
-                
+
                 if proc.returncode != 0:
                     error_msg = stderr.decode().strip() if stderr else "Unknown error"
                     logger.error(
@@ -274,35 +279,29 @@ class DiffPatchStrategy(FixStrategy):
                             "return_code": proc.returncode,
                             "stderr": error_msg[:500],  # Truncate for logging
                             "language": lang,
-                        }
+                        },
                     )
                     return code
 
                 with open(original_filepath, "r") as f:
                     patched_code = f.read()
-                
+
                 FIX_SUCCESS.labels("diff").inc()
                 return patched_code
-                
+
             except FileNotFoundError as e:
                 # This shouldn't happen if is_available() passed, but handle it
-                logger.error(
-                    f"Patch tool not found despite availability check: {e}"
-                )
+                logger.error(f"Patch tool not found despite availability check: {e}")
                 FIX_FAILURE.labels("diff", "tool_not_found").inc()
                 self._patch_available = False  # Update cache
                 return code
             except OSError as e:
-                logger.error(
-                    f"OS error during patch operation: {e}",
-                    exc_info=True
-                )
+                logger.error(f"OS error during patch operation: {e}", exc_info=True)
                 FIX_FAILURE.labels("diff", "os_error").inc()
                 return code
             except Exception as e:
                 logger.error(
-                    f"Unexpected error in DiffPatchStrategy: {e}",
-                    exc_info=True
+                    f"Unexpected error in DiffPatchStrategy: {e}", exc_info=True
                 )
                 FIX_FAILURE.labels("diff", "unexpected").inc()
                 return code
@@ -469,7 +468,7 @@ STRATEGIES: Dict[str, FixStrategy] = {
 
 def get_available_strategies() -> Dict[str, bool]:
     """Get a dict of strategy names and their availability status.
-    
+
     Returns:
         A dict mapping strategy names to booleans indicating availability.
     """
@@ -478,7 +477,7 @@ def get_available_strategies() -> Dict[str, bool]:
 
 def get_strategy_status() -> Dict[str, Dict[str, Any]]:
     """Get detailed status of all fix strategies.
-    
+
     Returns:
         A dict with strategy names as keys and status dicts as values.
         Each status dict contains:
@@ -496,13 +495,13 @@ def get_strategy_status() -> Dict[str, Dict[str, Any]]:
 
 def select_best_available_strategy(preferred: str) -> Tuple[str, FixStrategy]:
     """Select the best available strategy, falling back if preferred is unavailable.
-    
+
     Args:
         preferred: The preferred strategy name.
-        
+
     Returns:
         A tuple of (strategy_name, strategy_instance).
-        
+
     Raises:
         ValueError: If no strategies are available.
     """
@@ -516,7 +515,7 @@ def select_best_available_strategy(preferred: str) -> Tuple[str, FixStrategy]:
                 f"Preferred strategy '{preferred}' is unavailable: "
                 f"{strategy.get_unavailability_reason()}. Trying fallbacks."
             )
-    
+
     # Fallback order: llm_generate > regex > diff
     fallback_order = ["llm_generate", "regex", "diff"]
     for name in fallback_order:
@@ -525,7 +524,7 @@ def select_best_available_strategy(preferred: str) -> Tuple[str, FixStrategy]:
             if strategy.is_available():
                 logger.info(f"Using fallback strategy: {name}")
                 return name, strategy
-    
+
     # No strategies available
     status = get_strategy_status()
     raise ValueError(
