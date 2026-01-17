@@ -1,6 +1,9 @@
 #!/bin/bash
 # Docker Build Validation Script for Code Factory Platform
 # This script validates that the unified Docker build works correctly
+#
+# Usage: ./validate_docker_build.sh
+# Note: If you get a permission denied error, run: chmod +x validate_docker_build.sh
 
 set -e  # Exit on error
 
