@@ -40,7 +40,7 @@ docker compose up -d
 
 ### Legacy Standalone Build
 
-The previous standalone generator Dockerfile has been renamed to `Dockerfile.deprecated` and is kept for reference only. It should not be used for new deployments.
+The previous standalone generator Dockerfile has been removed as it is no longer needed. All builds should use the unified platform Dockerfile at the repository root.
 
 For any questions, refer to:
 - [Main README](../README.md)
