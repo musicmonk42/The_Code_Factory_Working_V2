@@ -20,7 +20,6 @@ jobs:
     
     - name: Install dependencies
       run: make install-dev
-      continue-on-error: false
     
     - name: Run linters
       run: make lint
