@@ -134,6 +134,7 @@ def _load_redaction_patterns() -> List[re.Pattern]:
 try:
     from opentelemetry import trace
     from opentelemetry.trace import Status, StatusCode
+    from opentelemetry.propagate import get_global_textmap
 
     # Use the default/configured tracer provider instead of manually creating one
     # This avoids version compatibility issues and respects OTEL_* environment variables
@@ -142,6 +143,7 @@ try:
 except ImportError:
     tracer = None
     HAS_OPENTELEMETRY = False
+    get_global_textmap = None  # Ensure it's defined even when OpenTelemetry is not available
     logging.warning("OpenTelemetry not installed. Tracing disabled.")
 
 
