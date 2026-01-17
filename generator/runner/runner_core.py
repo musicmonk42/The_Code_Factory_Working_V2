@@ -2322,6 +2322,41 @@ async def parallel_runs(
     return final_results
 
 
+async def run_tests(
+    test_files: Dict[str, str],
+    code_files: Dict[str, str],
+    temp_path: str,
+    language: str = "python",
+    framework: str = "pytest",
+    timeout: int = 300,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Execute tests in an isolated environment.
+    
+    This is a convenience wrapper around run_tests_in_sandbox for simpler usage.
+    
+    Args:
+        test_files: Dictionary of test filename -> content
+        code_files: Dictionary of code filename -> content
+        temp_path: Temporary directory for execution
+        language: Programming language (default: python)
+        framework: Test framework to use (default: pytest)
+        timeout: Execution timeout in seconds
+        
+    Returns:
+        Dictionary with test results
+    """
+    return await run_tests_in_sandbox(
+        code_files=code_files,
+        test_files=test_files,
+        temp_path=temp_path,
+        language=language,
+        coverage=kwargs.get('coverage', True),
+        **kwargs
+    )
+
+
 # --- ConfigWatcher Callback Integration ---
 def _on_config_reload_callback(
     new_config: RunnerConfig,

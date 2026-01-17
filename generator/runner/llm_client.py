@@ -593,7 +593,31 @@ async def shutdown_llm_client():
         _async_client = None
 
 
+async def count_tokens(text: str, model: str = "gpt-4") -> int:
+    """
+    Count tokens in text for the given model.
+    
+    Module-level function for backward compatibility.
+    Uses tiktoken if available, otherwise estimates based on word count.
+    
+    Args:
+        text: Text to count tokens for
+        model: Model name (for encoding selection)
+        
+    Returns:
+        Estimated token count
+    """
+    if not HAS_TIKTOKEN:
+        return int(len(text.split()) * 1.3)
+    try:
+        encoding = tiktoken.get_encoding("cl100k_base")
+        return len(encoding.encode(text))
+    except Exception as e:
+        logger.warning(f"Failed to count tokens using tiktoken: {e}. Using word-based estimation.")
+        return int(len(text.split()) * 1.3)
+
+
 # import atexit
 # atexit.register(lambda: asyncio.run(shutdown_llm_client()))
 
-__all__ = ["call_llm_api", "call_ensemble_api", "shutdown_llm_client"]
+__all__ = ["call_llm_api", "call_ensemble_api", "shutdown_llm_client", "count_tokens"]
