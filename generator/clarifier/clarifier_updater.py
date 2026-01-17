@@ -500,7 +500,7 @@ class GrokLLMClient(LLMClient):
             "max_tokens": 1024,
         }
 
-        if HAS_OPENTELEMETRY and tracer:
+        if HAS_OPENTELEMETRY and tracer and get_global_textmap:
             context = {}
             get_global_textmap().inject(context, headers)
             logger.debug(f"Injected OTel trace context: {headers}")
