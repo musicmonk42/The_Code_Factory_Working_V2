@@ -93,7 +93,7 @@ jobs:
       - name: Build and push Docker image - ${{ matrix.component }}
         uses: docker/build-push-action@v5
         with:
-          context: ${{ matrix.component == 'root' && '.' || format('./{0}', matrix.component) }}
+          context: .
           file: ${{ matrix.component == 'root' && 'Dockerfile' || format('{0}/Dockerfile', matrix.component) }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
