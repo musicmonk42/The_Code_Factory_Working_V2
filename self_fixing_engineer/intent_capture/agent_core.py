@@ -1029,7 +1029,7 @@ class VaultSecretManager:
                     f"Available keys: {list(secret_data.keys())}"
                 )
 
-            self.logger.info(f"Retrieved secret from Vault", path=path, key=key)
+            self.logger.info("Retrieved secret from Vault", path=path, key=key)
             return secret_data[key]
 
         except Exception as e:

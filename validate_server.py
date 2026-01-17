@@ -239,9 +239,9 @@ def main():
         print(f"{GREEN}✓ All checks passed ({passed}/{total}){RESET}")
         print(f"\n{GREEN}Server structure is correctly implemented!{RESET}\n")
         print(f"{YELLOW}To run the server:{RESET}")
-        print(f"  1. Install dependencies: pip install -r requirements.txt")
-        print(f"  2. Run server: python server/run.py --reload")
-        print(f"  3. Access docs: http://localhost:8000/api/docs")
+        print("  1. Install dependencies: pip install -r requirements.txt")
+        print("  2. Run server: python server/run.py --reload")
+        print("  3. Access docs: http://localhost:8000/api/docs")
         return 0
     else:
         print(f"{RED}✗ Some checks failed ({passed}/{total}){RESET}")

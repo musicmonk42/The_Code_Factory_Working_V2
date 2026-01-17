@@ -231,7 +231,7 @@ except Exception:
                     "Install kubernetes client."
                 )
             sandbox_logger.warning(
-                f"Mock K8s API: create_namespaced_pod() called - returning mock pod"
+                "Mock K8s API: create_namespaced_pod() called - returning mock pod"
             )
             return types.SimpleNamespace(
                 metadata=types.SimpleNamespace(

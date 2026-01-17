@@ -104,7 +104,7 @@ def _create_mock_module(name):
         mock_module.ValidationError = ValidationError
         # Create validator submodule
         validator_module = ModuleType("dynaconf.validator")
-        validator_module.__file__ = f"<mocked dynaconf.validator>"
+        validator_module.__file__ = "<mocked dynaconf.validator>"
         validator_module.__path__ = []
         validator_module.Validator = MockValidator
         validator_module.ValidationError = ValidationError

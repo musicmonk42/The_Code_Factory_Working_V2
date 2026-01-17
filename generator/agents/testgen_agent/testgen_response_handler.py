@@ -762,7 +762,7 @@ class DefaultResponseParser(ResponseParser):
         finally:
             try:
                 os.unlink(tmp_path)
-            except (OSError, FileNotFoundError) as e:
+            except (OSError, FileNotFoundError):
                 # Ignore cleanup errors
                 pass
 

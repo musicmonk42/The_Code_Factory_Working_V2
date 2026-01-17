@@ -668,7 +668,7 @@ def _cleanup_audit_system():
             logger.log_critical_event("AUDIT_SYSTEM_SHUTDOWN", clean_shutdown=True)
         )
         asyncio.run(logger.verify_integrity())
-    except (RuntimeError, Exception) as e:
+    except (RuntimeError, Exception):
         # Ignore errors during shutdown cleanup
         pass
 

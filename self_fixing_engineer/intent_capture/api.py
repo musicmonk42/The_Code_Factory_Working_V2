@@ -463,7 +463,7 @@ def create_app() -> FastAPI:
         except (ConfigurationError, InvalidSessionError) as e:
             # Client errors - incorrect configuration or invalid session
             raise HTTPException(status_code=400, detail=str(e))
-        except AgentError as e:
+        except AgentError:
             # Server error - let the AgentError handler deal with it
             # Returns HTTP 500 via the registered exception handler
             raise

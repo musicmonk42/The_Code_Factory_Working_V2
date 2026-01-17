@@ -702,16 +702,16 @@ class DummyCryptoProvider(CryptoProvider):
         return self.key_id
 
     async def sign(self, data: bytes, key_id: str) -> bytes:
-        logger.debug(f"DummyCryptoProvider.sign called (returning dummy signature)")
+        logger.debug("DummyCryptoProvider.sign called (returning dummy signature)")
         return b"dummy-signature"
 
     async def verify(self, data: bytes, signature: bytes, key_id: str) -> bool:
-        logger.debug(f"DummyCryptoProvider.verify called (always returns True)")
+        logger.debug("DummyCryptoProvider.verify called (always returns True)")
         return True
 
     # Must implement all required abstract methods, including rotate_key and close
     async def rotate_key(self, key_id: str) -> str:
-        logger.debug(f"DummyCryptoProvider.rotate_key called")
+        logger.debug("DummyCryptoProvider.rotate_key called")
         return self.key_id
 
     async def close(self):

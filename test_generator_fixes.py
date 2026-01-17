@@ -34,7 +34,7 @@ def test_runner_stubs():
                 return False
             except NotImplementedError as e:
                 logger.info(
-                    f"✓ run_tests_in_sandbox correctly raises NotImplementedError"
+                    "✓ run_tests_in_sandbox correctly raises NotImplementedError"
                 )
                 logger.info(f"  Message: {str(e)[:100]}...")
                 return True
