@@ -35,7 +35,11 @@ logger = logging.getLogger(__name__)
 
 # --- Critical Configuration ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
-TESTING_MODE = os.getenv("TESTING", "false") == "1" or os.getenv("PYTEST_CURRENT_TEST") is not None
+TESTING_MODE = (
+    os.getenv("TESTING", "false").lower() == "true" 
+    or os.getenv("TESTING") == "1"
+    or os.getenv("PYTEST_CURRENT_TEST") is not None
+)
 # REGULATORY_MODE defaults ON for safety, but is disabled in testing mode
 REGULATORY_MODE = (
     os.getenv("REGULATORY_MODE", "true").lower() == "true" and not TESTING_MODE
@@ -113,8 +117,8 @@ class RegulatoryAuditLogger:
         self.hmac_key = _get_audit_hmac_key()
 
         # Audit log paths
-        # In testing mode, use a temp directory to avoid permission issues
-        if TESTING_MODE and "audit_dir" not in self.config:
+        # In testing mode, always use a temp directory to avoid permission issues
+        if TESTING_MODE:
             # Use a temp directory that's writable in CI/test environments
             temp_audit_dir = Path(tempfile.gettempdir()) / "analyzer_audit"
             self.audit_dir = temp_audit_dir
