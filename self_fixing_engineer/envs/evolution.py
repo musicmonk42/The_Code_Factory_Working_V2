@@ -259,7 +259,8 @@ class FitnessEvaluator:
             # Clean up temp file
             try:
                 os.unlink(config_file)
-            except:
+            except (OSError, FileNotFoundError):
+                # Ignore cleanup errors
                 pass
 
     def _evaluate_heuristic(self, individual: List[float]) -> Tuple[float]:

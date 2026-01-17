@@ -271,7 +271,7 @@ class AsyncSafeLogger:
         try:
             # Non-blocking put
             self._queue.put_nowait((level, msg, kwargs))
-        except:
+        except queue.Full:
             # Queue full - in production we'd rather drop logs than block
             if PROD_MODE:
                 pass

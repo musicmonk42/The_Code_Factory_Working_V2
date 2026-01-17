@@ -807,7 +807,8 @@ def backend_operation(operation: str):
                             # Record failure
                             try:
                                 breaker.call(lambda: (_ for _ in ()).throw(e))  # noqa: F821 - e from outer except
-                            except:
+                            except (RuntimeError, Exception):
+                                # Circuit breaker recording failed, ignore
                                 pass
                             raise
                         # fmt: on
