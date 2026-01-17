@@ -13,13 +13,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from server.schemas import Fix, FixStatus
 from server.services import OmniCoreService
+from server.storage import fixes_db
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/fixes", tags=["Fixes"])
-
-# In-memory fix storage (would be replaced with actual database)
-fixes_db: dict = {}
 
 
 def get_omnicore_service() -> OmniCoreService:

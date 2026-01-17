@@ -10,7 +10,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from server.routers.jobs import jobs_db
 from server.schemas import (
     Fix,
     FixApplyRequest,
@@ -21,13 +20,11 @@ from server.schemas import (
     SuccessResponse,
 )
 from server.services import SFEService
+from server.storage import fixes_db, jobs_db
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sfe", tags=["Self-Fixing Engineer"])
-
-# In-memory fix storage (would be replaced with actual database)
-fixes_db: dict = {}
 
 
 def get_sfe_service() -> SFEService:
