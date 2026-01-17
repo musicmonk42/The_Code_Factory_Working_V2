@@ -147,6 +147,21 @@ jobs:
       - name: Run all tests from repository root
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
+          
+          # Verify tests can be collected
+          echo "=== Collecting tests ==="
+          pytest --collect-only -q 2>&1 | tee collection.log || true
+          
+          # Count collected tests
+          TEST_COUNT=$(grep -c "<Function\|<Method" collection.log || echo "0")
+          echo "Found $TEST_COUNT test items"
+          
+          if [ "$TEST_COUNT" -eq "0" ]; then
+            echo "ERROR: No tests collected! Showing collection errors:"
+            cat collection.log
+            exit 1
+          fi
+          
           # Run pytest from repository root with all configured test paths
           # The pyproject.toml already configures all test paths in [tool.pytest.ini_options]
           # The conftest.py sets up Python paths correctly

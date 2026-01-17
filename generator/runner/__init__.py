@@ -215,14 +215,15 @@ __all__ = [
     "run_stress_tests",  # NEW: Export for testgen_validator
 ]
 
-# Import heavy/validating modules only in real runtime, never during tests
-if not TESTING:
-    try:
-        from .runner_logging import tracer
-
-        __all__.append("tracer")
-    except ImportError:
-        pass  # Gracefully fail if tracing isn't set up
+# Import tracer for OpenTelemetry support
+try:
+    from .runner_logging import tracer
+    __all__.append("tracer")
+except ImportError:
+    # Create a no-op tracer for testing environments
+    from opentelemetry import trace
+    tracer = trace.get_tracer(__name__)
+    __all__.append("tracer")
 
 # --- Backwards compatibility aliases ---
 import sys as _sys
