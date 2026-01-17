@@ -520,7 +520,7 @@ class KeyStore:
         self.logger = logging.getLogger(f"{__name__}.KeyStore")
 
         # Re-apply filter to instance logger
-        _add_sensitive_filter()
+        add_sensitive_filter_to_logger(self.logger)
 
         if backend is None:
             self.backend: KeyStorageBackend = FileSystemKeyStorageBackend(key_dir)
