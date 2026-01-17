@@ -26,8 +26,10 @@ jobs:
       env:
         DOCKER_BUILDKIT: 1
       run: |
-        docker build . --file Dockerfile --tag code-factory-platform:$(date +%s) --build-arg SKIP_HEAVY_DEPS=0
+        IMAGE_TAG="code-factory-platform:ci-${{ github.run_number }}"
+        docker build . --file Dockerfile --tag "$IMAGE_TAG" --build-arg SKIP_HEAVY_DEPS=0
+        echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
     
     - name: Test Docker image can run
       run: |
-        docker run --rm code-factory-platform:$(docker images -q code-factory-platform | head -1) python --version
+        docker run --rm "${{ env.IMAGE_TAG }}" python --version

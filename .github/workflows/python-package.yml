@@ -40,7 +40,7 @@ jobs:
       continue-on-error: true
       run: |
         # Create basic test structure if tests don't exist
-        if [ ! -d "tests" ] && [ ! -f "test_*.py" ] && [ ! -f "*_test.py" ]; then
+        if [ ! -d "tests" ] && ! find . -maxdepth 1 -name 'test_*.py' -o -name '*_test.py' | grep -q .; then
           echo "No tests found, creating placeholder"
           mkdir -p tests
           echo "def test_placeholder(): pass" > tests/test_placeholder.py
