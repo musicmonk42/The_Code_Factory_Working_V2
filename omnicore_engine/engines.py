@@ -453,7 +453,7 @@ class PluginService:
 
         try:
             # Extract request parameters
-            code_spec = message.payload.get("spec", "")
+            message.payload.get("spec", "")
             language = message.payload.get("language", "python")
 
             # Check if codegen agent is available
@@ -498,8 +498,8 @@ class PluginService:
                     "Install with: pip install -e generator[testgen]"
                 )
 
-            target_code = message.payload.get("target_code", "")
-            self.logger.info(f"Processing test generation")
+            message.payload.get("target_code", "")
+            self.logger.info("Processing test generation")
             await self.message_bus.publish(
                 "generator:testgen_success",
                 {"status": "accepted", "request_id": message.payload.get("request_id")},

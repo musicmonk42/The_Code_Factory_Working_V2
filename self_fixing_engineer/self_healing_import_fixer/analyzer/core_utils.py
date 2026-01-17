@@ -568,7 +568,7 @@ async def alert_operator_async(
 
         elif channel == AlertChannel.EMAIL and _alert_config.email_smtp_host:
             # Email sending is typically synchronous, skip for async
-            logger.info(f"Email alerts not supported in async mode")
+            logger.info("Email alerts not supported in async mode")
 
         elif (
             channel == AlertChannel.SNS

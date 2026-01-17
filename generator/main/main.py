@@ -711,7 +711,7 @@ def validate_config(config: Dict[str, Any], is_reload: bool = False):
 
                 if jwt_secret in known_insecure_defaults:
                     error_msg = (
-                        f"JWT_SECRET_KEY uses a known insecure default value. "
+                        "JWT_SECRET_KEY uses a known insecure default value. "
                         "This MUST be changed for production!"
                     )
                     # For reload, this is an error; for initial load, it's a warning
@@ -1212,7 +1212,7 @@ def main(
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.bind(("0.0.0.0", api_target_port))
-        except OSError as e:
+        except OSError:
             logger.critical(
                 f"Port {api_target_port} is already in use. Cannot start API process."
             )
@@ -1335,7 +1335,7 @@ def main(
 
                 if api_process_handle.is_alive():
                     logger.warning(
-                        f"API process did not terminate gracefully, sending SIGKILL..."
+                        "API process did not terminate gracefully, sending SIGKILL..."
                     )
                     api_process_handle.kill()
                     api_process_handle.join(timeout=5)

@@ -52,7 +52,7 @@ class TestPermissionManagerSecurity:
         import sys
 
         # Force the fallback by removing arbiter module temporarily
-        arbiter_modules = [k for k in sys.modules.keys() if k.startswith("arbiter")]
+        [k for k in sys.modules.keys() if k.startswith("arbiter")]
 
         # Test the fallback PermissionManager logic
         # Since we can't easily force the fallback, test the principle
@@ -100,7 +100,7 @@ class TestVaultSecretManager:
 
             # In production without Vault, should raise error
             with pytest.raises(RuntimeError, match="CRITICAL"):
-                vault = VaultSecretManager()
+                VaultSecretManager()
 
 
 class TestBiasDetection:

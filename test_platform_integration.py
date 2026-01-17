@@ -476,7 +476,7 @@ CMD ["python", "app.py"]
                 self.log_test(
                     "Step 4: SFE analysis",
                     True,
-                    f"Simulation validated config (expected behavior)",
+                    "Simulation validated config (expected behavior)",
                 )
 
             await sim_module.shutdown()
@@ -629,7 +629,7 @@ CMD ["python", "app.py"]
             }
             serialized_chain = safe_serialize(chain_test_data)
             self.log_test(
-                "Full Chain Test", True, f"Data flows correctly between components"
+                "Full Chain Test", True, "Data flows correctly between components"
             )
 
             return True

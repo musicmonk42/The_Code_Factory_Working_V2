@@ -1600,7 +1600,7 @@ async def create_admin_user(username, password, email, scopes, api_endpoint, tim
     log_data = {k: v for k, v in user_data.items() if k != "password"}
     log_data["password"] = "[REDACTED]"
     logger.info(
-        f"Attempting admin user creation via CLI",
+        "Attempting admin user creation via CLI",
         extra={"user_data": log_data, "endpoint": api_endpoint},
     )
 
@@ -1776,7 +1776,7 @@ async def create_admin_user(username, password, email, scopes, api_endpoint, tim
         )
         sys.exit(1)
 
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         console.print(
             Panel(
                 "[red]Invalid response from API[/red]\n\n"

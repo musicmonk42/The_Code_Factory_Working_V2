@@ -59,7 +59,7 @@ async def analyze_code(
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    job = jobs_db[job_id]
+    jobs_db[job_id]
     code_path = f"./uploads/{job_id}"
 
     result = await sfe_service.analyze_code(job_id, code_path)

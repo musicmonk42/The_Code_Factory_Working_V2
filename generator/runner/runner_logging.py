@@ -643,7 +643,7 @@ async def _stream_to_dashboard(url: str):
         try:
             log_func = getattr(logger, level, logger.info)
             log_func(message, **kwargs)
-        except (ValueError, OSError) as e:
+        except (ValueError, OSError):
             try:
                 sys.stderr.write(f"[{level.upper()}] {message}\n")
             except (IOError, OSError):
@@ -756,7 +756,7 @@ def stream_log_record_to_dashboard_queue(record: logging.LogRecord):
                     "record_msg_preview": record.getMessage()[:100],
                 },
             )
-        except (queue.Full, RuntimeError, ValueError) as e:
+        except (queue.Full, RuntimeError, ValueError):
             # Queue is full or not available, skip this log entry
             pass
         UTIL_ERRORS.labels(func="dashboard_queue", type="full").inc()

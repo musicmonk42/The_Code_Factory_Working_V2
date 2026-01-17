@@ -259,8 +259,8 @@ def validate_agents_for_production(required_agents: Optional[List[str]] = None) 
             f"Critical agents failed to load: {', '.join(missing)}. "
             f"The generator workflow cannot execute without these agents.\n"
             f"Details:\n" + "\n".join(error_details) + "\n"
-            f"Please check dependencies and configuration. "
-            f"Full error details available via get_agent_import_errors()."
+            "Please check dependencies and configuration. "
+            "Full error details available via get_agent_import_errors()."
         )
 
     logger.info(

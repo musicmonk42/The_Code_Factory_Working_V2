@@ -562,7 +562,7 @@ def redact_sensitive_data(data: Any) -> Any:
                 if not k.startswith("__"):  # Avoid private/dunder methods
                     setattr(obj_copy, k, redact_sensitive_data(v))
             return obj_copy
-        except (AttributeError, TypeError, ValueError) as e:
+        except (AttributeError, TypeError, ValueError):
             # Fallback for complex objects that can't be easily copied/mutated
             return data
     return data

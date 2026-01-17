@@ -3289,7 +3289,7 @@ class Arbiter:
         )
         try:
             issues = data.get("issues", [])
-            analysis_id = data.get("analysis_id")
+            data.get("analysis_id")
 
             # Log completion
             self.log_event(
@@ -3408,7 +3408,7 @@ class Arbiter:
         """Handler for test_results events."""
         logging.getLogger(__name__).info(f"[{self.name}] Test results event received")
         try:
-            test_id = data.get("test_id")
+            data.get("test_id")
             failures = data.get("failures", [])
             passed = data.get("passed", 0)
             failed = data.get("failed", 0)
