@@ -27,4 +27,4 @@ jobs:
       continue-on-error: true
       run: |
         # Exclude test artifacts and problematic files
-        pylint $(git ls-files '*.py' | grep -v 'test_project' | grep -v 'bad_syntax.py' | grep -v 'many_bad_files') || echo "Pylint completed with warnings"
+        pylint $(git ls-files '*.py' | grep -v -E 'test_project|bad_syntax\.py|many_bad_files') || echo "Pylint completed with warnings"
