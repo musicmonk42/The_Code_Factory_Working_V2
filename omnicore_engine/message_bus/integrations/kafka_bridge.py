@@ -95,18 +95,52 @@ except ImportError:  # pragma: no cover
         """Fallback CircuitBreaker if resilience module is not available."""
 
         def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60):
-            self.state = "closed"
-            self.failure_threshold = failure_threshold  # Store for reference
-            self.recovery_timeout = recovery_timeout  # Store for reference
+            self.state = "closed"  # closed, open, half_open
+            self.failure_threshold = failure_threshold
+            self.recovery_timeout = recovery_timeout
+            self.failure_count = 0
+            self.last_failure_time = 0.0
+            self.success_count = 0
 
         def record_failure(self):
-            pass
+            """Record a failure and potentially trip the circuit breaker."""
+            import time
+            self.failure_count += 1
+            self.last_failure_time = time.time()
+            self.success_count = 0
+            
+            if self.failure_count >= self.failure_threshold:
+                self.state = "open"
+                logger.warning(
+                    f"Circuit breaker opened after {self.failure_count} failures"
+                )
 
         def record_success(self):
-            pass
+            """Record a success and potentially close the circuit breaker."""
+            self.success_count += 1
+            self.failure_count = 0
+            
+            if self.state == "half_open" and self.success_count >= 2:
+                self.state = "closed"
+                logger.info("Circuit breaker closed after successful recovery")
+            elif self.state == "open":
+                self.state = "half_open"
+                logger.info("Circuit breaker half-open, testing recovery")
 
         def can_attempt(self) -> bool:
-            return True
+            """Check if an attempt can be made based on circuit breaker state."""
+            import time
+            if self.state == "closed":
+                return True
+            elif self.state == "open":
+                # Check if recovery timeout has passed
+                if time.time() - self.last_failure_time >= self.recovery_timeout:
+                    self.state = "half_open"
+                    logger.info("Circuit breaker attempting recovery (half-open)")
+                    return True
+                return False
+            else:  # half_open
+                return True
 
 
 logger = logging.getLogger(__name__)
