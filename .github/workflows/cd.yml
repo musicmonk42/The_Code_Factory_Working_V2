@@ -28,10 +28,6 @@ jobs:
       contents: read
       packages: write
     
-    strategy:
-      matrix:
-        component: [root, generator]
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -82,7 +78,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -90,11 +86,11 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
             
-      - name: Build and push Docker image - ${{ matrix.component }}
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ matrix.component == 'root' && 'Dockerfile' || format('{0}/Dockerfile', matrix.component) }}
+          file: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
