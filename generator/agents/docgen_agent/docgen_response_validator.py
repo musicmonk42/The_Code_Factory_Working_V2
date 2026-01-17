@@ -473,7 +473,7 @@ class HTMLPlugin(DocGenPlugin):
         try:
             soup = BeautifulSoup(content, "html.parser")
             return soup.prettify()
-        except (ValueError, TypeError, Exception) as e:
+        except Exception as e:
             # Fallback if BeautifulSoup fails to parse
             logger.debug(f"HTML formatting failed: {e}")
             return content
@@ -650,7 +650,7 @@ class ResponseValidator:
         # Initialize NLTK components for GOAT features
         try:
             self.sentiment_analyzer = SentimentIntensityAnalyzer()
-        except (LookupError, OSError, Exception) as e:
+        except Exception as e:
             # Download required data if missing
             logger.warning(f"NLTK initialization failed: {e}, attempting setup")
             setup_nltk_data()
