@@ -1082,11 +1082,13 @@ def initialize_codebase_for_rag(repo_path: str):
                 logger.debug(f"Failed to read file {filepath}: {e}")
                 continue
 
-    asyncio.run(multi_vdb.add_files("codebase", code_files))
-    asyncio.run(multi_vdb.add_files("tests", test_files))
-    asyncio.run(multi_vdb.add_files("docs", doc_files))
-    asyncio.run(multi_vdb.add_files("dependencies", dep_files))
-    asyncio.run(multi_vdb.add_files("historical_failures", failure_logs))
+    # Get the multi_vdb instance using the lazy getter
+    vdb = _get_multi_vdb()
+    asyncio.run(vdb.add_files("codebase", code_files))
+    asyncio.run(vdb.add_files("tests", test_files))
+    asyncio.run(vdb.add_files("docs", doc_files))
+    asyncio.run(vdb.add_files("dependencies", dep_files))
+    asyncio.run(vdb.add_files("historical_failures", failure_logs))
     logger.info("Multi-RAG initialization complete. Indexed files across collections.")
 
     # REFACTORED: Use add_provenance
@@ -1120,7 +1122,9 @@ async def startup():
 async def shutdown():
     """Closes all connections and cleans up resources on application shutdown."""
     logger.info("Shutting down TestGen Prompt service components...")
-    await director.close()
+    # Get the director instance using the lazy getter
+    director_instance = _get_director()
+    await director_instance.close()
     logger.info("TestGen Prompt service components shut down.")
     add_provenance(
         {"action": "Shutdown", "timestamp": datetime.now(timezone.utc).isoformat()}
