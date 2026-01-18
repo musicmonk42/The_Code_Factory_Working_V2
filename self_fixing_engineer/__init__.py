@@ -54,9 +54,14 @@ def _setup_module_alias(module_name: str) -> None:
         This function silently handles ImportError to allow partial package installations.
         Missing modules are logged at DEBUG level for troubleshooting.
     """
-    # Skip if alias already exists
+    # Skip if alias already exists (don't overwrite existing modules)
     if module_name in sys.modules:
-        _init_logger.debug("Module alias '%s' already exists, skipping", module_name)
+        existing = sys.modules[module_name]
+        _init_logger.debug(
+            "Module alias '%s' already exists (existing module: %s), skipping",
+            module_name,
+            getattr(existing, '__name__', 'unknown')
+        )
         return
         
     try:
