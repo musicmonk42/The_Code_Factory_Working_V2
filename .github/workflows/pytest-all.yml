@@ -146,6 +146,19 @@ jobs:
           rm -rf /home/runner/.cache/pip/* /tmp/* || true
           df -h
           
+      - name: Debug test collection
+        run: |
+          export PYTHONPATH="$PYTHONPATH:$PWD"
+          
+          echo "=== Python path ==="
+          python -c "import sys; print('\n'.join(sys.path))"
+          
+          echo "=== Testing conftest import ==="
+          python -c "import conftest; print('conftest OK')" || echo "conftest import failed"
+          
+          echo "=== Pytest collection preview ==="
+          pytest --collect-only -q 2>&1 | head -50
+          
       - name: Run all tests from repository root
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
@@ -168,7 +181,7 @@ jobs:
           fi
           
           # Run pytest from repository root with all configured test paths
-          # The pyproject.toml already configures all test paths in [tool.pytest.ini_options]
+          # The pyproject.toml testpaths already configures all test paths including root directory
           # The conftest.py sets up Python paths correctly
           pytest \
             -n 2 \
