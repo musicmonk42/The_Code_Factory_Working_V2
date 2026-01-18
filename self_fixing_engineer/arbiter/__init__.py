@@ -131,11 +131,11 @@ def __getattr__(name):
         "HumanInLoop": _get_human_loop,
         "HumanInLoopConfig": _get_human_loop_config,
     }
-    
+
     if name in lazy_imports:
         result = lazy_imports[name]()
         if result is None:
             raise ImportError(f"Cannot import name '{name}' from 'arbiter'")
         return result
-    
+
     raise AttributeError(f"module 'arbiter' has no attribute '{name}'")
