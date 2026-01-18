@@ -134,7 +134,8 @@ Documentation = "https://your-org.github.io/self_fixing_engineer/"
 # This NEW section tells setuptools how to find your packages
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["arbiter*"]
+include = ["arbiter*", "simulation*", "guardrails*", "test_generation*", "intent_capture*", "agent_orchestration*", "envs*", "mesh*", "plugins*", "self_healing_import_fixer*"]
+exclude = ["tests*", "*.tests*", "docs*"]
 
 [tool.black]
 line-length = 88
