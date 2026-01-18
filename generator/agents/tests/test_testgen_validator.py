@@ -178,17 +178,14 @@ class TestBaseValidator:
         """Test secret and flaky test pattern detection."""
         validator = CoverageValidator()
 
-        test_files_with_secrets = {
-            "test_secrets.py": """
+        test_files_with_secrets = {"test_secrets.py": """
             API_KEY = "sk-1234567890abcdef"
             password = "secret123"
             def test_auth():
                 token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-            """
-        }
+            """}
 
-        test_files_with_flaky_patterns = {
-            "test_flaky.py": """
+        test_files_with_flaky_patterns = {"test_flaky.py": """
             import time
             import random
             from datetime import datetime
@@ -203,8 +200,7 @@ class TestBaseValidator:
                     
             def test_with_datetime():
                 now = datetime.now()
-            """
-        }
+            """}
 
         # Test secret detection
         issues_secrets = validator._scan_for_secrets_and_flaky_tests(
@@ -473,16 +469,14 @@ class TestPropertyBasedValidator:
         }
 
         code_files = {"source.py": "def reverse_string(s): return s[::-1]"}
-        test_files = {
-            "test_source.py": """
+        test_files = {"test_source.py": """
 import hypothesis.strategies as st
 from hypothesis import given
 
 @given(st.text())
 def test_reverse_property(s):
     assert reverse_string(reverse_string(s)) == s
-"""
-        }
+"""}
 
         result = await property_validator.validate(code_files, test_files, "python")
 
@@ -508,16 +502,14 @@ def test_reverse_property(s):
         code_files = {
             "source.py": "def buggy_function(x): return x + 1 if x > 0 else 0"
         }
-        test_files = {
-            "test_source.py": """
+        test_files = {"test_source.py": """
 import hypothesis.strategies as st
 from hypothesis import given
 
 @given(st.integers())
 def test_buggy_property(x):
     assert buggy_function(x) > x  # This will fail for x <= 0
-"""
-        }
+"""}
 
         result = await property_validator.validate(code_files, test_files, "python")
 

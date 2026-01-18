@@ -1035,8 +1035,7 @@ jobs:
 
 def _print_help():
     """Prints the help message for the onboarding wizard."""
-    print(
-        """
+    print("""
 Self-Fixing Engineer Platform Onboarding Wizard
 
 Usage: python onboard.py [OPTIONS]
@@ -1054,8 +1053,7 @@ Options:
   --pubsub-backend BACKEND   Set pubsub backend (no prompt)
   --checkpoint-backend BACKEND Set checkpoint backend (no prompt)
   -h, --help                 Show this help message
-"""
-    )
+""")
 
 
 def _check_existing_configs():

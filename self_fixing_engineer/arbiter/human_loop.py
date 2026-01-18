@@ -63,7 +63,7 @@ except ImportError:
 
 
 # Guard against circular import
-if not globals().get('_HUMAN_LOOP_IMPORTING'):
+if not globals().get("_HUMAN_LOOP_IMPORTING"):
     _HUMAN_LOOP_IMPORTING = True
 
 

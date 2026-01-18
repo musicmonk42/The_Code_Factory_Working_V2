@@ -85,12 +85,10 @@ def mock_temp_jest_project():
             f.write("function sum(a, b) { return a + b; }\nmodule.exports = sum;")
 
         with open(os.path.join(project_root, "tests", "sum.test.js"), "w") as f:
-            f.write(
-                """
+            f.write("""
                 const sum = require('../src/sum');
                 test('adds 1 + 2 to equal 3', () => { expect(sum(1, 2)).toBe(3); });
-            """
-            )
+            """)
 
         yield project_root
 

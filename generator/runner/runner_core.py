@@ -2329,13 +2329,13 @@ async def run_tests(
     language: str = "python",
     framework: str = "pytest",
     timeout: int = 300,
-    **kwargs
+    **kwargs,
 ) -> Dict[str, Any]:
     """
     Execute tests in an isolated environment.
-    
+
     This is a convenience wrapper around run_tests_in_sandbox for simpler usage.
-    
+
     Args:
         test_files: Dictionary of test filename -> content
         code_files: Dictionary of code filename -> content
@@ -2343,7 +2343,7 @@ async def run_tests(
         language: Programming language (default: python)
         framework: Test framework to use (default: pytest)
         timeout: Execution timeout in seconds
-        
+
     Returns:
         Dictionary with test results
     """
@@ -2352,8 +2352,8 @@ async def run_tests(
         test_files=test_files,
         temp_path=temp_path,
         language=language,
-        coverage=kwargs.get('coverage', True),
-        **kwargs
+        coverage=kwargs.get("coverage", True),
+        **kwargs,
     )
 
 

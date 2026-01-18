@@ -175,16 +175,14 @@ class SQLiteClient:
 
     async def _init_db(self):
         if self._conn:
-            await self._conn.execute(
-                """
+            await self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS feedback (
                     id TEXT PRIMARY KEY,
                     type TEXT NOT NULL,
                     data JSON NOT NULL,
                     timestamp TEXT NOT NULL
                 )
-            """
-            )
+            """)
             await self._conn.commit()
 
     @retry(

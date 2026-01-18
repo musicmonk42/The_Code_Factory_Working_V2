@@ -424,7 +424,9 @@ class MetaLearningConfig(BaseSettings):
                     logger.error(f"❌ S3 health check failed: {e}")
                     healthy = False
             else:
-                logger.warning("⚠️ Boto3 not installed, cannot perform S3 health check.")
+                logger.warning(
+                    "⚠️ Boto3 not installed, cannot perform S3 health check."
+                )
 
         return healthy
 

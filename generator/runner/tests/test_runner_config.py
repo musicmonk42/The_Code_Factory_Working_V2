@@ -28,8 +28,7 @@ class TestRunnerConfig(unittest.IsolatedAsyncioTestCase):
         self.temp_dir = Path(tempfile.mkdtemp())
         self.config_file = self.temp_dir / "config.yaml"
         # FIX: Updated YAML to match the modern schema (first-class api_key)
-        self.config_file.write_text(
-            """
+        self.config_file.write_text("""
 version: 4
 backend: docker
 framework: pytest
@@ -45,8 +44,7 @@ real_time_log_streaming: true
 instance_id: test_instance
 metrics_interval_seconds: 5
 api_key: sk-abc123
-"""
-        )
+""")
 
         self.patch_env = patch.dict(
             os.environ,
@@ -105,14 +103,12 @@ api_key: sk-abc123
                 return False
 
         # Prepare the response the watcher should load
-        self.mock_aiohttp_response = MockAiohttpResponse(
-            """
+        self.mock_aiohttp_response = MockAiohttpResponse("""
 version: 4
 backend: local
 framework: pytest
 instance_id: test-remote-loaded
-"""
-        )
+""")
 
         # Factory for ClientSession()
         self.mock_aiohttp_session_cls = MagicMock(
@@ -241,15 +237,13 @@ instance_id: test-remote-loaded
 
     async def test_config_watcher_remote(self):
         # FIX: Align test to call fetch_remote directly and use correct mocks
-        self.config_file.write_text(
-            """
+        self.config_file.write_text("""
 version: 4
 backend: docker
 framework: pytest
 instance_id: test-remote
 dist_url: http://remote/config
-"""
-        )
+""")
         watcher = ConfigWatcher(str(self.config_file), lambda c, d: None)
 
         # (we override response text above in setUp)

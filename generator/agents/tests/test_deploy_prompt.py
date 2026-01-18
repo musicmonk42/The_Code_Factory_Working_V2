@@ -31,8 +31,7 @@ def temp_repo():
         templates_dir.mkdir(exist_ok=True)
 
         # FIX: Updated template to include context.framework and few_shot_examples
-        (templates_dir / "docker_default.jinja").write_text(
-            """
+        (templates_dir / "docker_default.jinja").write_text("""
 Generate a Dockerfile for {{ target }} based on these files:
 {% for file in files %}
 - {{ file }}
@@ -46,16 +45,13 @@ Context Framework: {{ context.framework | default('N/A') }}
 {{ few_shot_examples }}
 
 Output format: Plain Dockerfile text
-"""
-        )
+""")
 
-        (templates_dir / "helm_default.jinja").write_text(
-            """
+        (templates_dir / "helm_default.jinja").write_text("""
 Generate a Helm chart for {{ target }} application.
 Files: {{ files | join(', ') }}
 Instructions: {{ instructions }}
-"""
-        )
+""")
 
         examples_dir = repo_path / "few_shot_examples"
         examples_dir.mkdir(exist_ok=True)
@@ -78,8 +74,7 @@ Instructions: {{ instructions }}
             )
         )
 
-        (repo_path / "app.py").write_text(
-            """
+        (repo_path / "app.py").write_text("""
 from flask import Flask
 app = Flask(__name__)
 
@@ -89,8 +84,7 @@ def hello():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
-"""
-        )
+""")
 
         (repo_path / "requirements.txt").write_text("flask==2.0.1\nrequests==2.26.0")
         (repo_path / "README.md").write_text(

@@ -738,13 +738,11 @@ def some_other_function():
                 )  # File untouched
 
             def test_migrate_file_with_lint_error(self):
-                self.test_file.write_text(
-                    """
+                self.test_file.write_text("""
 PROMPT_TEMPLATES = {
     'bad_key': 'Hello {{ name }' # Malformed Jinja2
 }
-"""
-                )
+""")
                 report = migrate_file(
                     self.test_file,
                     self.dest_dir,

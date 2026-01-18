@@ -98,24 +98,20 @@ class TestAnalyzerE2E:
         """Create a very simple test project"""
         # Just one simple module
         with open(os.path.join(self.project_dir, "main.py"), "w") as f:
-            f.write(
-                """
+            f.write("""
 def main():
     print("Hello World")
 
 if __name__ == "__main__":
     main()
-"""
-            )
+""")
 
         # One more module for testing
         with open(os.path.join(self.project_dir, "utils.py"), "w") as f:
-            f.write(
-                """
+            f.write("""
 def helper():
     return "helper"
-"""
-            )
+""")
 
     def create_config_file(self):
         """Create analyzer configuration file"""

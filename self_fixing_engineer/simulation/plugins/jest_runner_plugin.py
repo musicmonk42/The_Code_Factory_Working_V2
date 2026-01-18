@@ -901,16 +901,14 @@ if __name__ == "__main__":
             with open(
                 os.path.join(temp_dir, dummy_test_path_relative), "w", encoding="utf-8"
             ) as f:
-                f.write(
-                    """
+                f.write("""
                     const sum = require('../src/sum');
                     describe('sum', () => {
                         test('adds 1 + 2 to equal 3', () => {
                             expect(sum(1, 2)).toBe(3);
                         });
                     });
-                """
-                )
+                """)
 
             temp_coverage_report_path_relative = os.path.join(
                 "atco_artifacts", "coverage_reports", "jest_coverage_output.json"
@@ -963,16 +961,14 @@ if __name__ == "__main__":
             with open(
                 os.path.join(temp_dir, "tests", "sum.test.ts"), "w", encoding="utf-8"
             ) as f:
-                f.write(
-                    """
+                f.write("""
                     import { sum } from '../src/sum';
                     describe('sum', () => {
                         test('adds 1 + 2 to equal 3', () => {
                             expect(sum(1, 2)).toBe(3);
                         });
                     });
-                """
-                )
+                """)
 
             temp_coverage_report_path_relative = os.path.join(
                 "atco_artifacts", "coverage_reports", "jest_coverage_output.json"

@@ -105,8 +105,7 @@ Please generate comprehensive API documentation."""
         )
 
         # <--- FIX: Un-indent file content and remove leading newline
-        (repo_path / "module.py").write_text(
-            """import os
+        (repo_path / "module.py").write_text("""import os
 import sys
 from typing import List, Dict
 
@@ -130,12 +129,10 @@ class ExampleClass:
     
     def method(self) -> str:
         return self.name
-"""
-        )
+""")
 
         # <--- FIX: Un-indent file content and remove leading newline
-        (repo_path / "script.js").write_text(
-            """function calculateSum(a, b) {
+        (repo_path / "script.js").write_text("""function calculateSum(a, b) {
     return a + b;
 }
 
@@ -148,8 +145,7 @@ class Helper {
         return this.value;
     }
 }
-"""
-        )
+""")
 
         yield repo_path
 
@@ -295,12 +291,10 @@ class TestDependencyDetection:
     async def test_detect_dependencies_with_requirements(self, temp_repo):
         """Test detecting dependencies from requirements.txt."""
         # <--- FIX: Remove leading newline
-        (temp_repo / "requirements.txt").write_text(
-            """pytest==7.0.0
+        (temp_repo / "requirements.txt").write_text("""pytest==7.0.0
 fastapi==0.100.0
 pydantic>=2.0.0
-"""
-        )
+""")
 
         # <--- FIX: Pass the dependency file name to the function
         deps = await get_dependencies(["requirements.txt"], str(temp_repo))
@@ -316,12 +310,10 @@ pydantic>=2.0.0
     async def test_detect_dependencies_with_pyproject(self, temp_repo):
         """Test detecting dependencies from pyproject.toml."""
         # <--- FIX: Remove leading newline
-        (temp_repo / "pyproject.toml").write_text(
-            """[tool.poetry.dependencies]
+        (temp_repo / "pyproject.toml").write_text("""[tool.poetry.dependencies]
 python = "^3.9"
 fastapi = "^0.100.0"
-"""
-        )
+""")
 
         # <--- FIX: Pass the dependency file name to the function
         deps = await get_dependencies(["pyproject.toml"], str(temp_repo))
@@ -693,10 +685,8 @@ class TestErrorHandling:
 
         # Create invalid Jinja template
         # <--- FIX: Remove leading newline
-        (template_dir / "broken_default.jinja").write_text(
-            """{{ unclosed_tag
-"""
-        )
+        (template_dir / "broken_default.jinja").write_text("""{{ unclosed_tag
+""")
 
         # <--- FIX: Use correct args
         registry = PromptTemplateRegistry(plugin_dir=str(template_dir))

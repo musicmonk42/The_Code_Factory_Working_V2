@@ -11,6 +11,7 @@ Key design:
 - Metrics map (`SIM_MODULE_METRICS`) with an assertable health gauge by default.
 - Clear lifecycle: initialize → (optional) register handlers → shutdown.
 """
+
 from __future__ import annotations
 
 import asyncio

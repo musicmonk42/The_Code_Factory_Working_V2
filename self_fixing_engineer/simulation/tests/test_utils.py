@@ -13,6 +13,7 @@ Covers:
 - Provenance chain integrity and secret scrubbing
 - PluginAPI flows: temp dir lifecycle, report_result, handle_error, compat checks
 """
+
 from __future__ import annotations
 
 import hashlib

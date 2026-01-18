@@ -1388,13 +1388,11 @@ if __name__ == "__main__":
         os.makedirs("deploy_templates")
         # Create a basic default template if it doesn't exist for demo
         with open("deploy_templates/default_default.jinja", "w") as f:
-            f.write(
-                """
+            f.write("""
 Generate a configuration for {{ target }} based on the following files: {{ files | join(', ') }}.
 Instructions: {{ instructions | default('None') }}.
 Output must be in JSON format: {"config": "string content"}
-"""
-            )
+""")
         print(
             "Created 'deploy_templates' directory and a sample 'default_default.jinja' template."
         )
@@ -1402,14 +1400,12 @@ Output must be in JSON format: {"config": "string content"}
     if not os.path.exists("few_shot_examples"):
         os.makedirs("few_shot_examples")
         with open("few_shot_examples/test_example.json", "w") as f:
-            f.write(
-                """
+            f.write("""
 {
   "query": "simple config for testing",
   "example": "This is a simple example config content."
 }
-"""
-            )
+""")
         print("Created 'few_shot_examples' directory and a sample 'test_example.json'.")
 
     # --- FIX: Removed dummy repo creation block ---

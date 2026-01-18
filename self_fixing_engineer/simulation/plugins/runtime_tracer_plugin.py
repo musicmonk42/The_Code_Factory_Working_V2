@@ -1093,8 +1093,7 @@ if __name__ == "__main__":
         temp_code_dir = _tf.mkdtemp(prefix="sfe_trace_code_")
         target_file_path = os.path.join(temp_code_dir, "my_app.py")
         with open(target_file_path, "w", encoding="utf-8") as f:
-            f.write(
-                """\
+            f.write("""\
 import sys, os, time
 def dynamic_loader(module_name):
     return __import__(module_name)
@@ -1108,8 +1107,7 @@ if __name__ == '__main__':
     dangerous_exec("a=3;print(a)")
     try: might_fail(7)
     except ValueError as e: print("Caught:", e)
-"""
-            )
+""")
         analysis_result = await analyze_runtime_behavior(
             target_code_path=target_file_path, analysis_duration_seconds=10
         )

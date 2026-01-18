@@ -52,6 +52,7 @@ Configuration via Environment Variables (through SecretsManager):
 - AUDIT_INCLUDE_TRACES: Set to 'true' to include full stack traces in exception logs. (Default: False)
 - AUDIT_STRICT_WRITES: If 'true', I/O errors will be raised after being logged to stderr. (Default: False)
 """
+
 import atexit
 import hashlib
 import hmac

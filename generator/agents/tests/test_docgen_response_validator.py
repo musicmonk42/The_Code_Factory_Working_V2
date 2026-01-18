@@ -271,15 +271,13 @@ def temp_repo():
 
         # Create sample files
         (repo_path / "README.md").write_text("# Test Project\n\nA test repository.")
-        (repo_path / "src" / "main.py").write_text(
-            """
+        (repo_path / "src" / "main.py").write_text("""
 def main():
     print("Hello, World!")
 
 if __name__ == "__main__":
     main()
-"""
-        )
+""")
 
         yield repo_path
 

@@ -271,16 +271,15 @@ call_summarizer = summarize
 
 
 async def call_summarizer_with_provider(
-    text: str,
-    provider: str = "llm",
-    max_length: int = 500,
-    min_len: int = 50
+    text: str, provider: str = "llm", max_length: int = 500, min_len: int = 50
 ) -> str:
     """
     Backward-compatible wrapper for summarization.
     Alias for the main `summarize` function.
     """
-    return await summarize(text, provider=provider, max_length=max_length, min_len=min_len)
+    return await summarize(
+        text, provider=provider, max_length=max_length, min_len=min_len
+    )
 
 
 @util_decorator

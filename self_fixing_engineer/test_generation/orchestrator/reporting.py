@@ -363,8 +363,7 @@ class HTMLReporter:
         summary = sanitized_results["summary"]
         ai_metrics = sanitized_results["ai_metrics"]
 
-        md_content = textwrap.dedent(
-            f"""
+        md_content = textwrap.dedent(f"""
         # ATCO Run Summary Report
 
         **Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}
@@ -390,8 +389,7 @@ class HTMLReporter:
 
         | Module/File | Status | Test Pass | Cov Gain | Sec. Issues | Reason |
         |---|---|---|---|---|---|
-        """
-        )
+        """)
 
         for module_id, detail in sanitized_results["details"].items():
             test_pass_icon = "✅" if bool(detail.get("test_passed")) else "❌"

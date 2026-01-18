@@ -149,8 +149,7 @@ def setup_test_environment(tmpdir_factory):
     (mock_src_dir / "app.py").write_text("def main():\n    print('hello')\n")
 
     # Create configuration files
-    (configs_dir / "config.yaml").write_text(
-        """
+    (configs_dir / "config.yaml").write_text("""
 jobs:
   - name: e2e_test_job
     description: "End-to-end test job"
@@ -163,11 +162,9 @@ jobs:
 
 notifications:
   slack_webhook_url: "https://hooks.slack.com/services/mock/webhook"
-    """
-    )
+    """)
 
-    (configs_dir / "rbac_policy.yaml").write_text(
-        """
+    (configs_dir / "rbac_policy.yaml").write_text("""
 roles:
   - name: admin
     permissions:
@@ -175,8 +172,7 @@ roles:
         resource: "*"
 user_roles:
   test_user: [admin]
-    """
-    )
+    """)
 
     return {
         "base_dir": base_dir,

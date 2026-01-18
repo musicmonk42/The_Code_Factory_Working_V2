@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # --- Critical Configuration ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
 TESTING_MODE = (
-    os.getenv("TESTING", "false").lower() == "true" 
+    os.getenv("TESTING", "false").lower() == "true"
     or os.getenv("TESTING") == "1"
     or os.getenv("PYTEST_CURRENT_TEST") is not None
 )
@@ -123,8 +123,10 @@ class RegulatoryAuditLogger:
             temp_audit_dir = Path(tempfile.gettempdir()) / "analyzer_audit"
             self.audit_dir = temp_audit_dir
         else:
-            self.audit_dir = Path(self.config.get("audit_dir", "/var/log/analyzer_audit"))
-        
+            self.audit_dir = Path(
+                self.config.get("audit_dir", "/var/log/analyzer_audit")
+            )
+
         self.primary_log = self.audit_dir / "audit.log"
         self.integrity_file = self.audit_dir / "integrity.json"
         self.backup_log = self.audit_dir / "audit.backup.log"
@@ -189,7 +191,7 @@ class RegulatoryAuditLogger:
                 "This is a COMPLIANCE VIOLATION. System must not process any data."
             )
             alert_operator(error_msg, level="CRITICAL")
-            
+
             # In testing mode, log the error but don't halt the system
             # This allows tests to run without requiring privileged filesystem access
             if TESTING_MODE:

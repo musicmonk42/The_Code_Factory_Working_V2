@@ -694,16 +694,14 @@ class SQLiteContextManager(ContextManager):
                     current_schema_version = int(row["value"]) if row else 0
                     if current_schema_version < 1:
                         self.logger.info("Applying schema migration to version 1.")
-                        conn.execute(
-                            """
+                        conn.execute("""
                             CREATE TABLE IF NOT EXISTS context (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
                                 entry_id TEXT UNIQUE NOT NULL,
                                 encrypted_data BLOB NOT NULL
                             )
-                        """
-                        )
+                        """)
                         conn.execute(
                             "CREATE INDEX IF NOT EXISTS idx_timestamp ON context(timestamp)"
                         )

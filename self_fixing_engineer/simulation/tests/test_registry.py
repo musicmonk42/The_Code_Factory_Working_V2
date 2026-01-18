@@ -508,8 +508,7 @@ class TestPluginDiscovery:
             # Create a test plugin file
             plugin_path = os.path.join(tmpdir, "test_plugin.py")
             with open(plugin_path, "w") as f:
-                f.write(
-                    """
+                f.write("""
 PLUGIN_MANIFEST = {
     "name": "test_plugin",
     "version": "1.0.0",
@@ -518,8 +517,7 @@ PLUGIN_MANIFEST = {
 
 async def run(target, params):
     return True, "Success", "Output"
-"""
-                )
+""")
 
             with patch("registry.REGISTRY_PLUGINS_PATH", tmpdir):
                 with patch("registry.MODULE_ALLOWLIST", {"test_plugin": {}}):

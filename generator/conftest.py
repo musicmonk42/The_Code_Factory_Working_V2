@@ -4,6 +4,7 @@ Root conftest.py for generator tests.
 Adds the generator directory to sys.path to allow imports like 'from main.api import ...'
 Sets up mocks for Windows DLL issues and missing dependencies.
 """
+
 import sys
 import os
 from pathlib import Path

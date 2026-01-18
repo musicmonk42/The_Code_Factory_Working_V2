@@ -243,8 +243,7 @@ class TestRunnerApp(unittest.IsolatedAsyncioTestCase):
             "# Test Doc\nContent"
         )
         self.config_file = self.temp_dir / "config.yaml"
-        self.config_file.write_text(
-            """version: 4
+        self.config_file.write_text("""version: 4
 backend: local
 framework: pytest
 parallel_workers: 1
@@ -257,8 +256,7 @@ log_sinks:
     config: {}
 real_time_log_streaming: true
 user_subscription_level: free
-instance_id: tui_test_instance"""
-        )
+instance_id: tui_test_instance""")
 
         # --- FIX: Add back missing patch_env and schedule cleanup ---
         self.patch_env = patch.dict(

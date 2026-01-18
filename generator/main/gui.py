@@ -1541,10 +1541,7 @@ class HelpScreen(App):
 
     def compose(self):
         yield Header()
-        yield Container(
-            Markdown(
-                _(
-                    """
+        yield Container(Markdown(_("""
             # AI Generator TUI Help
 
             This is a unified interface for managing the AI Generator workflow.
@@ -1571,10 +1568,7 @@ class HelpScreen(App):
 
             ---
             [dim]Press ESC to close this help screen.[/dim]
-            """
-                )
-            )
-        )
+            """)))
         yield Footer()
 
     @on(Button.Pressed)

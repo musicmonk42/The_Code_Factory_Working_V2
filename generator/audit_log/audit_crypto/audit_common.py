@@ -41,7 +41,6 @@ import re
 from enum import Enum, auto
 from typing import Any, Dict, FrozenSet, List, Optional, Pattern, Set
 
-
 # =============================================================================
 # CUSTOM EXCEPTIONS
 # =============================================================================

@@ -845,8 +845,7 @@ if __name__ == "__main__":
 
     example_script_path = "example_script.py"
     with open(example_script_path, "w") as f:
-        f.write(
-            """
+        f.write("""
 import sys
 import os
 import json
@@ -868,8 +867,7 @@ if __name__ == "__main__":
     
     print("Script finished successfully.")
     sys.exit(0)
-"""
-        )
+""")
 
     runners_logger.info("\n--- Running example_script.py (success) ---")
     config_success = {

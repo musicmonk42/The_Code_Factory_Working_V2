@@ -218,10 +218,12 @@ __all__ = [
 # Import tracer for OpenTelemetry support
 try:
     from .runner_logging import tracer
+
     __all__.append("tracer")
 except ImportError:
     # Create a no-op tracer for testing environments
     from opentelemetry import trace
+
     tracer = trace.get_tracer(__name__)
     __all__.append("tracer")
 

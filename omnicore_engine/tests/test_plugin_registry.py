@@ -305,12 +305,10 @@ class TestPluginRegistry:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a test plugin file without decorator to avoid global registry issues
             plugin_file = Path(tmpdir) / "test_plugin_dir.py"
-            plugin_file.write_text(
-                """
+            plugin_file.write_text("""
 def test_function():
     return "test"
-"""
-            )
+""")
 
             # Test that load_from_directory doesn't raise an error
             # and can process a plugin file

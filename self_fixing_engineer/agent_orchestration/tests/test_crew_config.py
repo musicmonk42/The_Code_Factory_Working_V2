@@ -11,8 +11,7 @@ def temp_yaml(tmp_path):
     """Fixture for temporary YAML file."""
     path = tmp_path / "crew_config.yaml"
     with open(path, "w") as f:
-        f.write(
-            """
+        f.write("""
 version: 10.0.0
 id: test_crew
 name: Test Crew
@@ -36,8 +35,7 @@ defaults:
   model: gpt-4
 tags:
   - test
-        """
-        )
+        """)
     return str(path)
 
 

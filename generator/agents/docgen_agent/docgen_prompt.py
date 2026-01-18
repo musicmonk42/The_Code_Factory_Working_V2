@@ -1322,15 +1322,13 @@ if __name__ == "__main__":
     if not os.path.exists("prompt_templates"):
         os.makedirs("prompt_templates")
         with open("prompt_templates/README_default.jinja", "w") as f:
-            f.write(
-                """
+            f.write("""
 Generate a comprehensive README for a {{ doc_type }} project.
 Files to document: {{ target_files | join(', ') }}.
 Instructions: {{ instructions | default('None') }}.
 Context: {{ context.files_content | tojson }}
 Output should be well-structured Markdown.
-"""
-            )
+""")
         print(
             "Created 'prompt_templates' directory and a sample 'README_default.jinja' template."
         )
@@ -1338,14 +1336,12 @@ Output should be well-structured Markdown.
     if not os.path.exists("few_shot_examples"):
         os.makedirs("few_shot_examples")
         with open("few_shot_examples/README_python_example.json", "w") as f:
-            f.write(
-                """
+            f.write("""
 {
   "query": "README for a Python Flask app",
   "prompt": "# Python Flask App README\\n\\n## Introduction\\nThis is a sample Flask application...\\n\\n## Installation\\n`pip install -r requirements.txt`\\n\\n## Usage\\n`python app.py`"
 }
-"""
-            )
+""")
         print(
             "Created 'few_shot_examples' directory and a sample 'README_python_example.json'."
         )
@@ -1354,15 +1350,13 @@ Output should be well-structured Markdown.
     if not os.path.exists(test_repo_path):
         os.makedirs(test_repo_path)
         with open(os.path.join(test_repo_path, "main.py"), "w") as f:
-            f.write(
-                """
+            f.write("""
 def my_function(param1: str) -> str:
     \"\"\"
     This is a test function.
     \"\"\"
     return f"Hello, {param1}!"
-"""
-            )
+""")
         with open(os.path.join(test_repo_path, "requirements.txt"), "w") as f:
             f.write("Flask==2.0.1")
         print(f"Created dummy repository at {test_repo_path} with sample files.")

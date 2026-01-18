@@ -86,14 +86,12 @@ try:
             if not self.pool:
                 self.pool = await asyncpg.create_pool(self.db_url)
             async with self.pool.acquire() as conn:
-                await conn.execute(
-                    """
+                await conn.execute("""
                     CREATE TABLE IF NOT EXISTS agent_states (
                         session_id TEXT PRIMARY KEY,
                         state TEXT
                     )
-                """
-                )
+                """)
             logger.info("Postgres client connection pool created and schema ensured.")
 
         async def save(self, table: str, data: Dict[str, Any]):

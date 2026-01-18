@@ -318,8 +318,7 @@ def test_another():
 
     def test_extract_metadata_python(self, parser):
         """Test metadata extraction for Python tests."""
-        test_files = {
-            "test_file.py": """
+        test_files = {"test_file.py": """
 import pytest
 import time
 
@@ -332,8 +331,7 @@ def test_another():
 
 async def test_async():
     assert True
-"""
-        }
+"""}
 
         metadata = parser.extract_metadata(test_files, "python")
 

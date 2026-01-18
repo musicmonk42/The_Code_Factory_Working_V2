@@ -337,8 +337,7 @@ class SecurityAuditor:
         report.append("\n" + "=" * 80)
         report.append("RECOMMENDATIONS")
         report.append("=" * 80)
-        report.append(
-            """
+        report.append("""
 1. Remove all hardcoded secrets and use environment variables or secret managers
 2. Implement parameterized queries to prevent SQL injection
 3. Add input validation to all API endpoints
@@ -349,8 +348,7 @@ class SecurityAuditor:
 8. Use strong cryptographic algorithms (SHA-256+, AES-256)
 9. Implement rate limiting on all public APIs
 10. Add security headers (CSP, X-Frame-Options, etc.)
-        """
-        )
+        """)
 
         return "\n".join(report)
 

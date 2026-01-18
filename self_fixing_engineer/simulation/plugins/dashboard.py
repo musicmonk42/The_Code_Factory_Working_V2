@@ -709,15 +709,13 @@ def _display_summary_and_details(result):
     scores = result.get("review", {}).get("scores", {})
     coverage = scores.get("coverage", "N/A")
 
-    st_dash.markdown(
-        f"""
+    st_dash.markdown(f"""
     ### Workflow Summary
     - **Status:** `{status}`
     - **Coverage:** `{coverage}`
     - **Security Findings:** `{len(findings)}`
     - **Actions Taken:** `{len(actions)}`
-    """
-    )
+    """)
     with st_dash.expander("🔎 Detailed Findings & Actions", expanded=False):
         st_dash.subheader("Findings")
         if findings:

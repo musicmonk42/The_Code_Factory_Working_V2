@@ -1321,16 +1321,14 @@ timeout: 300
 
     # Create a minimal config file for the environment test
     temp_minimal_config_path = "dummy_config.yaml"
-    Path(temp_minimal_config_path).write_text(
-        """
+    Path(temp_minimal_config_path).write_text("""
 version: 4
 backend: docker
 framework: pytest
 parallel_workers: 1
 timeout: 300
 instance_id: dummy_id
-"""
-    )
+""")
 
     env_overridden_config = load_config(
         config_file=temp_minimal_config_path, overrides={}

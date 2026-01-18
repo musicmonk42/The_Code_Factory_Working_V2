@@ -9,6 +9,7 @@ Covers:
 - ASCII vs UTF-8 glyph mapping via module reload
 - Conditional rich progress bar testing
 """
+
 from __future__ import annotations
 
 import importlib

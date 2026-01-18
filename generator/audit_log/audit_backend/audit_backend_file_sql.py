@@ -1069,8 +1069,7 @@ class SQLiteBackend(LogBackend):
             cursor.execute("BEGIN TRANSACTION")
             try:
                 # 1. Create the new table schema (temporary name)
-                cursor.execute(
-                    f"""
+                cursor.execute(f"""
                     CREATE TABLE {temp_table_name} (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -1079,8 +1078,7 @@ class SQLiteBackend(LogBackend):
                         _audit_hash TEXT NOT NULL,
                         data TEXT NOT NULL
                     )
-                """
-                )
+                """)
                 logger.debug(
                     f"SQLiteBackend migration: Created temporary table '{temp_table_name}'."
                 )

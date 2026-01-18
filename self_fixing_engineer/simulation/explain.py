@@ -576,8 +576,7 @@ class HistoryManager:
         try:
             async with self._db_lock:
                 async with aiosqlite.connect(str(self.db_path)) as conn:
-                    await conn.execute(
-                        """
+                    await conn.execute("""
                         CREATE TABLE IF NOT EXISTS reasoner_history (
                             id TEXT PRIMARY KEY,
                             query TEXT NOT NULL,
@@ -586,8 +585,7 @@ class HistoryManager:
                             response_type TEXT NOT NULL,
                             timestamp TEXT NOT NULL
                         )
-                    """
-                    )
+                    """)
                     await conn.commit()
                 logger.info(f"Reasoner history database initialized at {self.db_path}")
                 METRICS["history_operations_total"].labels(
