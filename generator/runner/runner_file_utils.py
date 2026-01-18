@@ -971,6 +971,40 @@ async def save_file_content(
     return filepath
 
 
+async def save_files_to_output(
+    files: Dict[str, Union[str, bytes]],
+    output_dir: Path,
+    encoding: str = "utf-8"
+) -> List[Path]:
+    """
+    Saves multiple files to an output directory.
+    
+    Args:
+        files: Dictionary mapping filenames to content (str or bytes)
+        output_dir: Directory to save files to
+        encoding: Text encoding for string content
+        
+    Returns:
+        List of paths to saved files
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    saved_paths = []
+    for filename, content in files.items():
+        file_path = output_dir / filename
+        await save_file_content(
+            file_path,
+            content,
+            encoding=encoding,
+            backup=False
+        )
+        saved_paths.append(file_path)
+        logger.debug(f"Saved file to {file_path}")
+    
+    return saved_paths
+
+
 @util_decorator("delete_compliant_data")
 async def delete_compliant_data(
     filepath: Union[str, Path], request_id: str, log_only: bool = False

@@ -6,6 +6,7 @@ import os
 import random
 import smtplib
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
@@ -59,6 +60,11 @@ except ImportError:
 
     def get_or_create_counter(*args, **kwargs):
         return DummyCounter()
+
+
+# Guard against circular import
+if not globals().get('_HUMAN_LOOP_IMPORTING'):
+    _HUMAN_LOOP_IMPORTING = True
 
 
 # --- Corrected models.db_clients import block ---
