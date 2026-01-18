@@ -54,33 +54,52 @@ def _setup_module_alias(module_name: str) -> None:
         This function silently handles ImportError to allow partial package installations.
         Missing modules are logged at DEBUG level for troubleshooting.
     """
+    # Skip if alias already exists (don't overwrite existing modules)
+    if module_name in sys.modules:
+        existing = sys.modules[module_name]
+        _init_logger.debug(
+            "Module alias '%s' already exists (existing module: %s), skipping",
+            module_name,
+            getattr(existing, '__name__', 'unknown')
+        )
+        return
+        
     try:
         # Import the module dynamically
-        submodule = __import__(f"{__name__}.{module_name}", fromlist=[module_name])
+        full_module_name = f"{__name__}.{module_name}"
+        submodule = __import__(full_module_name, fromlist=[module_name])
 
-        # Only create alias if it doesn't already exist
-        if module_name not in sys.modules:
-            sys.modules[module_name] = submodule
-            _init_logger.debug(
-                "Module alias created: '%s' -> '%s.%s'",
-                module_name,
-                __name__,
-                module_name,
-            )
+        # Create alias
+        sys.modules[module_name] = submodule
+        _init_logger.debug(
+            "Module alias created: '%s' -> '%s'",
+            module_name,
+            full_module_name,
+        )
     except ImportError as e:
         _init_logger.debug(
             "Module '%s' not available for aliasing: %s",
             module_name,
             e,
-            exc_info=False,  # Set to True for debugging if needed
+            exc_info=False,
         )
+    except RuntimeError as e:
+        # Handle thread creation errors in CI environments
+        if "can't start new thread" in str(e):
+            _init_logger.warning(
+                "Thread limit reached while setting up alias for '%s': %s. This is expected in CI environments.",
+                module_name,
+                e,
+            )
+        else:
+            raise
     except Exception as e:
         # Catch any unexpected errors during module setup
         _init_logger.warning(
             "Unexpected error setting up alias for module '%s': %s",
             module_name,
             e,
-            exc_info=True,
+            exc_info=True,  # Keep full traceback for unexpected errors
         )
 
 
