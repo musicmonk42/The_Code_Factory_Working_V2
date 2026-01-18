@@ -1960,10 +1960,7 @@ async def rag_retrieve(
     Returns:
         List of retrieved documents with metadata
     """
-    logger.warning(
-        "rag_retrieve called but no RAG system is configured. "
-        "Returning empty results. Configure a vector database for production."
-    )
+    logger.warning("rag_retrieve called but no RAG system is configured. Returning empty results. Configure a vector database for production.")
     return []
 
 
