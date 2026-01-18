@@ -502,6 +502,11 @@ else:
         )
 
 
+# --- Export Aliases ---
+# Alias for backward compatibility with docgen_agent
+ensemble_summarizers = ensemble_summarize
+
+
 # --- Test Suite (for __main__ execution) ---
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch

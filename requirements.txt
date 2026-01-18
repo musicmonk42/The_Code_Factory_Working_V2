@@ -294,6 +294,7 @@ PyJWT==2.10.1
 pyOpenSSL==25.1.0
 pyparsing==3.2.5
 PyPDF2==3.0.1
+pdfplumber>=0.5.28
 PyPika==0.48.9
 pyproject_hooks==1.2.0
 pyreadline3==3.5.4
@@ -303,9 +304,11 @@ pytest-asyncio==1.1.0
 pytest-benchmark==5.1.0
 pytest-mock==3.15.0
 python-dateutil==2.9.0.post0
+python-docx>=0.8.11
 python-dotenv==1.2.1
 python-hcl2==7.3.1
 python-jose==3.5.0
+python-magic>=0.4.27
 python-multipart==0.0.20
 pytz==2025.2
 pyunormalize==17.0.0
@@ -348,6 +351,7 @@ spacy-legacy==3.0.12
 spacy-loggers==1.0.5
 SQLAlchemy==2.0.44
 srsly==2.5.1
+stable-baselines3>=2.0.0
 starlette==0.47.3
 stevedore==5.5.0
 structlog==25.5.0
