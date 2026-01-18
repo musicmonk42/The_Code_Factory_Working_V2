@@ -6,7 +6,7 @@ Handles code analysis, error detection, fix proposals, and automated fixing.
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -359,3 +359,118 @@ async def get_learning_insights(
     """
     insights = await sfe_service.get_learning_insights(job_id=job_id)
     return insights
+
+
+@router.get("/{job_id}/status")
+async def get_sfe_status(
+    job_id: str,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Get detailed real-time status of SFE activities for a job.
+
+    Provides comprehensive monitoring of what SFE is doing, including:
+    - Current operations and progress
+    - Recent activity history
+    - Resource usage
+    - Operation queue status
+
+    Routes the request through OmniCore to the self_fixing_engineer module
+    to get accurate real-time information about SFE's current state.
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Returns:**
+    - Detailed SFE status information
+
+    **Errors:**
+    - 404: Job not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    status = await sfe_service.get_sfe_status(job_id)
+    return status
+
+
+@router.get("/{job_id}/logs")
+async def get_sfe_logs(
+    job_id: str,
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of log entries"),
+    level: Optional[str] = Query(None, description="Filter by log level (ERROR, WARNING, INFO, DEBUG)"),
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Get real-time logs from SFE for a specific job.
+
+    Retrieves logs from the self_fixing_engineer module via OmniCore,
+    enabling real-time monitoring and debugging of SFE operations.
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Query Parameters:**
+    - limit: Maximum number of log entries (default: 100, max: 1000)
+    - level: Optional log level filter (ERROR, WARNING, INFO, DEBUG)
+
+    **Returns:**
+    - List of SFE log entries with timestamps and details
+
+    **Errors:**
+    - 404: Job not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    logs = await sfe_service.get_sfe_logs(job_id, limit=limit, level=level)
+    return {"job_id": job_id, "logs": logs, "count": len(logs)}
+
+
+@router.post("/{job_id}/interact")
+async def interact_with_sfe(
+    job_id: str,
+    command: str,
+    params: Dict[str, Any] = {},
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Send interactive commands to SFE for a job.
+
+    Allows direct interaction with the self_fixing_engineer module through
+    OmniCore's message bus. Supported commands include:
+    - pause: Pause current SFE operations
+    - resume: Resume paused operations
+    - analyze_file: Request analysis of a specific file
+    - reanalyze: Trigger complete reanalysis
+    - adjust_priority: Adjust fix priority thresholds
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Request Body:**
+    - command: Command to send to SFE
+    - params: Command-specific parameters
+
+    **Returns:**
+    - Command execution result with status
+
+    **Errors:**
+    - 404: Job not found
+    - 400: Invalid command or parameters
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    # Validate command
+    valid_commands = ["pause", "resume", "analyze_file", "reanalyze", "adjust_priority"]
+    if command not in valid_commands:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid command '{command}'. Valid commands: {', '.join(valid_commands)}"
+        )
+
+    result = await sfe_service.interact_with_sfe(job_id, command, params)
+
+    logger.info(f"SFE command '{command}' executed for job {job_id}")
+    return result

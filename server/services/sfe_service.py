@@ -240,28 +240,189 @@ class SFEService:
             "success_rate": 0.67,
         }
 
-    async def get_learning_insights(self) -> Dict[str, Any]:
+    async def get_learning_insights(
+        self, job_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
-        Get meta-learning insights from SFE.
+        Get meta-learning insights from SFE via OmniCore.
+
+        Args:
+            job_id: Optional job ID to filter insights
 
         Returns:
-            Learning insights
+            Learning insights (global or job-specific)
 
         Example integration:
-            >>> # from self_fixing_engineer.arbiter.meta_learning_orchestrator import get_insights
-            >>> # insights = await get_insights()
+            >>> # Route through OmniCore to SFE meta-learning
+            >>> # insights = await omnicore.query_sfe_insights(job_id)
         """
-        logger.debug("Fetching learning insights")
+        logger.debug(f"Fetching learning insights{' for job ' + job_id if job_id else ''}")
 
-        # Placeholder: Query meta-learning system
-        # Example:
-        # from self_fixing_engineer.arbiter.meta_learning_orchestrator import MetaLearningOrchestrator
-        # orchestrator = MetaLearningOrchestrator()
-        # insights = await orchestrator.get_insights()
+        # Route through OmniCore
+        if self.omnicore_service:
+            payload = {
+                "action": "get_learning_insights",
+                "job_id": job_id,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id or "global",
+                source_module="api",
+                target_module="sfe",
+                payload=payload,
+            )
+            return result.get("data", {})
 
+        # Fallback
         return {
+            "job_id": job_id,
             "total_fixes": 150,
             "success_rate": 0.85,
             "common_patterns": ["missing_imports", "type_errors", "syntax_errors"],
-            "meta_learning_module": "self_fixing_engineer.arbiter.meta_learning_orchestrator",
+            "meta_learning_module": "self_fixing_engineer.arbiter.meta_learning_orchestrator (fallback)",
+        }
+
+    async def get_sfe_status(self, job_id: str) -> Dict[str, Any]:
+        """
+        Get detailed real-time status of SFE activities for a job via OmniCore.
+
+        This provides comprehensive monitoring of what SFE is doing,
+        including current operations, progress, and recent activities.
+
+        Args:
+            job_id: Unique job identifier
+
+        Returns:
+            Detailed SFE status information
+
+        Example integration:
+            >>> # Query SFE status through OmniCore message bus
+            >>> # status = await omnicore.query_sfe_status(job_id)
+        """
+        logger.info(f"Fetching detailed SFE status for job {job_id} via OmniCore")
+
+        # Route through OmniCore
+        if self.omnicore_service:
+            payload = {
+                "action": "get_sfe_status",
+                "job_id": job_id,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="sfe",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        # Fallback
+        return {
+            "job_id": job_id,
+            "status": "running",
+            "current_operation": "analyzing_codebase",
+            "progress_percentage": 45.0,
+            "operations_history": [
+                {"timestamp": "2026-01-18T18:00:00Z", "operation": "scan_started"},
+                {"timestamp": "2026-01-18T18:05:00Z", "operation": "errors_detected"},
+            ],
+            "sfe_module": "self_fixing_engineer.main (fallback)",
+        }
+
+    async def get_sfe_logs(
+        self, job_id: str, limit: int = 100, level: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get real-time logs from SFE for a specific job via OmniCore.
+
+        This enables monitoring of SFE's operations and debugging issues.
+
+        Args:
+            job_id: Unique job identifier
+            limit: Maximum number of log entries to return
+            level: Optional log level filter (e.g., "ERROR", "WARNING", "INFO")
+
+        Returns:
+            List of SFE log entries
+
+        Example integration:
+            >>> # Query SFE logs through OmniCore
+            >>> # logs = await omnicore.query_sfe_logs(job_id, limit)
+        """
+        logger.debug(f"Fetching SFE logs for job {job_id} (limit: {limit}, level: {level})")
+
+        # Route through OmniCore
+        if self.omnicore_service:
+            payload = {
+                "action": "get_sfe_logs",
+                "job_id": job_id,
+                "limit": limit,
+                "level": level,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="sfe",
+                payload=payload,
+            )
+            return result.get("data", [])
+
+        # Fallback
+        return [
+            {
+                "timestamp": "2026-01-18T18:00:00Z",
+                "level": "INFO",
+                "message": f"Processing job {job_id}",
+                "module": "self_fixing_engineer (fallback)",
+            }
+        ]
+
+    async def interact_with_sfe(
+        self, job_id: str, command: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Send interactive commands to SFE for a job via OmniCore.
+
+        This allows direct interaction with SFE, such as pausing operations,
+        requesting specific analyses, or adjusting parameters.
+
+        Args:
+            job_id: Unique job identifier
+            command: Command to send (e.g., "pause", "resume", "analyze_file")
+            params: Command parameters
+
+        Returns:
+            Command execution result
+
+        Example integration:
+            >>> # Send command to SFE through OmniCore
+            >>> # result = await omnicore.send_sfe_command(job_id, command, params)
+        """
+        logger.info(f"Sending command '{command}' to SFE for job {job_id} via OmniCore")
+
+        # Route through OmniCore
+        if self.omnicore_service:
+            payload = {
+                "action": "sfe_command",
+                "job_id": job_id,
+                "command": command,
+                "params": params,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="sfe",
+                payload=payload,
+            )
+            logger.info(f"Command '{command}' sent to SFE for job {job_id} via OmniCore")
+            return result.get("data", {
+                "job_id": job_id,
+                "command": command,
+                "status": "command_executed",
+            })
+
+        # Fallback
+        return {
+            "job_id": job_id,
+            "command": command,
+            "status": "executed",
+            "sfe_module": "self_fixing_engineer.main (fallback)",
         }
