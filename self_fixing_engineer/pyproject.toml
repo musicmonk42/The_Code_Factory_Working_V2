@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "self_fixing_engineer"
 version = "0.1.0"
 description = "A robust, production-ready Python package for enterprise use, featuring simulation tools, plugin architecture, and advanced monitoring."
-# The 'packages' line has been REMOVED from this section
 authors = [
     {name = "Your Name", email = "your.email@example.com"}
 ]
@@ -129,12 +128,13 @@ Repository = "https://github.com/your-org/self_fixing_engineer"
 Issues = "https://github.com/your-org/self_fixing_engineer/issues"
 Documentation = "https://your-org.github.io/self_fixing_engineer/"
 
-# The conflicting section has been removed from here.
+# Setuptools configuration for package discovery
+[tool.setuptools]
+package-dir = {"" = "."}
 
-# This NEW section tells setuptools how to find your packages
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["arbiter*", "simulation*", "guardrails*", "test_generation*", "intent_capture*", "agent_orchestration*", "envs*", "mesh*", "plugins*", "self_healing_import_fixer*"]
+include = ["arbiter*", "simulation*", "guardrails*", "test_generation*", "intent_capture*", "agent_orchestration*", "envs*", "mesh*", "plugins*", "self_healing_import_fixer*", "refactor_agent*", "contracts*"]
 exclude = ["tests*", "*.tests*", "docs*"]
 
 [tool.black]
