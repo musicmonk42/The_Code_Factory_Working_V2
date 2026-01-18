@@ -27,7 +27,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Type  # Awaitable for async methods
+from typing import Any, Callable, Dict, List, Optional, Type  # Awaitable for async methods
 
 import aiofiles
 
