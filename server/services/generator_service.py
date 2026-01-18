@@ -192,25 +192,52 @@ class GeneratorService:
         ]
 
     async def clarify_requirements(
-        self, job_id: str, readme_content: str
+        self, job_id: str, readme_content: str, ambiguities: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Run the clarifier agent to analyze and clarify requirements.
+        Run the clarifier agent to analyze and clarify requirements via OmniCore.
+
+        This method routes the clarification request through OmniCore's message bus
+        to the generator's clarifier module, which uses LLM-based clarification
+        and user feedback to resolve ambiguities.
 
         Args:
             job_id: Unique job identifier
             readme_content: README content to clarify
+            ambiguities: Optional list of detected ambiguities to clarify
 
         Returns:
-            Clarification results
+            Clarification results with clarified requirements
 
         Example integration:
-            >>> # from generator.clarifier import run_clarification
-            >>> # result = await run_clarification(readme_content)
+            >>> # Route through OmniCore to generator.clarifier
+            >>> # await omnicore.route_to_generator('clarify', {...})
         """
-        logger.info(f"Running clarifier for job {job_id}")
+        logger.info(f"Running clarifier for job {job_id} via OmniCore")
 
-        # Placeholder: Call actual clarifier
+        # Route through OmniCore if available
+        if self.omnicore_service:
+            payload = {
+                "action": "clarify_requirements",
+                "job_id": job_id,
+                "readme_content": readme_content,
+                "ambiguities": ambiguities or [],
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            logger.info(f"Clarification for job {job_id} routed to generator via OmniCore")
+            return result.get("data", {
+                "job_id": job_id,
+                "status": "clarification_initiated",
+                "message": "Clarification request sent to generator",
+            })
+
+        # Fallback if OmniCore not available
+        logger.warning("OmniCore service not available, using direct fallback")
         return {
             "job_id": job_id,
             "clarifications": [
@@ -218,6 +245,104 @@ class GeneratorService:
                 "Authentication method not specified",
             ],
             "confidence": 0.85,
+            "clarifier_module": "generator.clarifier (fallback)",
+        }
+
+    async def get_clarification_feedback(
+        self, job_id: str, interaction_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get feedback from the clarifier's user interaction process via OmniCore.
+
+        This allows monitoring the clarification feedback loop, including
+        questions asked, user responses, and clarification status.
+
+        Args:
+            job_id: Unique job identifier
+            interaction_id: Optional specific interaction ID to query
+
+        Returns:
+            Clarification feedback status and history
+
+        Example integration:
+            >>> # Query clarifier feedback through OmniCore
+            >>> # feedback = await omnicore.query_generator_clarifier(job_id)
+        """
+        logger.info(f"Fetching clarification feedback for job {job_id} via OmniCore")
+
+        # Route through OmniCore
+        if self.omnicore_service:
+            payload = {
+                "action": "get_clarification_feedback",
+                "job_id": job_id,
+                "interaction_id": interaction_id,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        # Fallback
+        return {
+            "job_id": job_id,
+            "interaction_id": interaction_id,
+            "status": "no_interactions",
+            "clarifier_module": "generator.clarifier (fallback)",
+        }
+
+    async def submit_clarification_response(
+        self, job_id: str, question_id: str, response: str
+    ) -> Dict[str, Any]:
+        """
+        Submit a user response to a clarification question via OmniCore.
+
+        This enables interactive feedback for the clarifier, allowing users
+        to provide answers to clarification questions through the API.
+
+        Args:
+            job_id: Unique job identifier
+            question_id: ID of the question being answered
+            response: User's response to the question
+
+        Returns:
+            Response submission confirmation
+
+        Example integration:
+            >>> # Route response through OmniCore to clarifier
+            >>> # await omnicore.submit_to_clarifier(job_id, question_id, response)
+        """
+        logger.info(f"Submitting clarification response for job {job_id} via OmniCore")
+
+        # Route through OmniCore
+        if self.omnicore_service:
+            payload = {
+                "action": "submit_clarification_response",
+                "job_id": job_id,
+                "question_id": question_id,
+                "response": response,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            logger.info(f"Clarification response for job {job_id} submitted via OmniCore")
+            return result.get("data", {
+                "job_id": job_id,
+                "question_id": question_id,
+                "status": "response_submitted",
+            })
+
+        # Fallback
+        return {
+            "job_id": job_id,
+            "question_id": question_id,
+            "status": "submitted",
+            "clarifier_module": "generator.clarifier (fallback)",
         }
 
     async def generate_code(
