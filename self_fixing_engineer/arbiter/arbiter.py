@@ -224,6 +224,7 @@ if os.getenv("SENTRY_DSN") and SENTRY_AVAILABLE and sentry_sdk:
     )
 
 # Type checking imports - only used for type hints, not at runtime
+# Use string forward references in annotations (e.g., Optional["HumanInLoop"])
 if TYPE_CHECKING:
     from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
 
@@ -1332,7 +1333,7 @@ class Arbiter:
         port: Optional[int] = None,
         peer_ports: Optional[List[int]] = None,
         feedback_manager: Optional[FeedbackManager] = None,
-        human_in_loop: Optional[HumanInLoop] = None,  # TYPE_CHECKING import allows this
+        human_in_loop: Optional["HumanInLoop"] = None,  # Forward reference for TYPE_CHECKING import
         monitor: Optional[Monitor] = None,
         intent_capture_engine: Optional[Any] = None,
         test_generation_engine: Optional[Any] = None,
