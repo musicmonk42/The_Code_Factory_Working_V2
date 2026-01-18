@@ -14,3 +14,9 @@ grpcio-status==1.63.2
 # Google packages that require specific protobuf versions
 google-cloud-pubsub==2.25.0
 google-ai-generativelanguage==0.6.15
+
+# Circuit breaker pattern library - required by arbiter modules
+circuitbreaker>=1.4.0
+
+# Retry library - updated to resolve version warnings
+tenacity>=9.1.2
