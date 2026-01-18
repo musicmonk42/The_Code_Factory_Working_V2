@@ -37,6 +37,7 @@ Flags:
   --root-path PATH    : override API_ROOT_PATH
 
 """
+
 from __future__ import annotations
 
 # Suppress known deprecation warnings from third-party libraries before any imports

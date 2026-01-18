@@ -245,16 +245,14 @@ class SQLiteClient:
     async def connect(self):
         """Initializes the database schema if it doesn't exist."""
         async with aiosqlite.connect(self.db_file) as db:
-            await db.execute(
-                """
+            await db.execute("""
                 CREATE TABLE IF NOT EXISTS feedback (
                     id TEXT PRIMARY KEY,
                     type TEXT NOT NULL,
                     data TEXT NOT NULL,
                     timestamp TEXT NOT NULL
                 )
-            """
-            )
+            """)
             await db.commit()
         logger.info(f"SQLite database schema ensured for {self.db_file}")
 

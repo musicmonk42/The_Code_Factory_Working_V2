@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run tests with timeout to prevent hanging"""
+
 import subprocess
 import sys
 

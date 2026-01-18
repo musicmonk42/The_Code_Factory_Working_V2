@@ -618,8 +618,7 @@ class Database:
                     )
 
                 async with aiosqlite.connect(self.sqlite_db_file_path) as conn:
-                    await conn.execute(
-                        """
+                    await conn.execute("""
                         CREATE TABLE IF NOT EXISTS preferences (
                             user_id TEXT PRIMARY KEY,
                             data TEXT NOT NULL,
@@ -627,10 +626,8 @@ class Database:
                             deleted INTEGER DEFAULT 0,
                             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
                         )
-                    """
-                    )
-                    await conn.execute(
-                        """
+                    """)
+                    await conn.execute("""
                         CREATE TABLE IF NOT EXISTS simulations (
                             sim_id TEXT PRIMARY KEY,
                             user_id TEXT,
@@ -641,10 +638,8 @@ class Database:
                             deleted INTEGER DEFAULT 0,
                             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
                         )
-                    """
-                    )
-                    await conn.execute(
-                        """
+                    """)
+                    await conn.execute("""
                         CREATE TABLE IF NOT EXISTS plugins (
                             kind TEXT,
                             name TEXT,
@@ -654,38 +649,31 @@ class Database:
                             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                             PRIMARY KEY (kind, name)
                         )
-                    """
-                    )
-                    await conn.execute(
-                        """
+                    """)
+                    await conn.execute("""
                         CREATE TABLE IF NOT EXISTS feedback (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             type TEXT,
                             message TEXT,
                             timestamp TEXT
                         )
-                    """
-                    )
-                    await conn.execute(
-                        """
+                    """)
+                    await conn.execute("""
                         CREATE TABLE IF NOT EXISTS audit_snapshots (
                             snapshot_id TEXT PRIMARY KEY,
                             timestamp TEXT NOT NULL,
                             state TEXT NOT NULL,
                             user_id TEXT NOT NULL
                         )
-                    """
-                    )
-                    await conn.execute(
-                        """
+                    """)
+                    await conn.execute("""
                         CREATE TABLE IF NOT EXISTS world_snapshots (
                             snapshot_id TEXT PRIMARY KEY,
                             timestamp TEXT NOT NULL,
                             state TEXT NOT NULL,
                             user_id TEXT NOT NULL
                         )
-                    """
-                    )
+                    """)
                     await conn.commit()
                 logger.info(
                     "Legacy/non-ORM tables ensured (preferences, simulations, plugins, feedback, audit_snapshots, world_snapshots) asynchronously."
@@ -1212,12 +1200,10 @@ class Database:
             if self.is_postgres:
                 # PostgreSQL implementation
                 async with self.AsyncSessionLocal() as session:
-                    query = text(
-                        """
+                    query = text("""
                         SELECT meta, encrypted FROM plugins 
                         WHERE kind = :kind AND name = :name AND deleted = 0
-                    """
-                    )
+                    """)
                     result = await session.execute(query, {"kind": kind, "name": name})
                     row = result.fetchone()
             else:
@@ -1263,12 +1249,10 @@ class Database:
             if self.is_postgres:
                 # PostgreSQL implementation
                 async with self.AsyncSessionLocal() as session:
-                    query = text(
-                        """
+                    query = text("""
                         SELECT kind, name, meta, encrypted FROM plugins 
                         WHERE deleted = 0
-                    """
-                    )
+                    """)
                     result = await session.execute(query)
                     rows = result.fetchall()
             else:
@@ -1323,13 +1307,11 @@ class Database:
             if self.is_postgres:
                 # PostgreSQL implementation
                 async with self.AsyncSessionLocal() as session:
-                    query = text(
-                        """
+                    query = text("""
                         UPDATE plugins 
                         SET deleted = 1, updated_at = CURRENT_TIMESTAMP 
                         WHERE kind = :kind AND name = :name
-                    """
-                    )
+                    """)
                     await session.execute(query, {"kind": kind, "name": name})
                     await session.commit()
             else:
@@ -2006,8 +1988,7 @@ class Database:
             if self.is_postgres:
                 # PostgreSQL implementation with UPSERT (INSERT ... ON CONFLICT)
                 async with self.AsyncSessionLocal() as session:
-                    query = text(
-                        """
+                    query = text("""
                         INSERT INTO audit_snapshots (snapshot_id, state, user_id, timestamp)
                         VALUES (:snapshot_id, :state, :user_id, :timestamp)
                         ON CONFLICT (snapshot_id) 
@@ -2015,8 +1996,7 @@ class Database:
                             state = EXCLUDED.state,
                             user_id = EXCLUDED.user_id,
                             timestamp = EXCLUDED.timestamp
-                    """
-                    )
+                    """)
                     await session.execute(
                         query,
                         {
@@ -2100,12 +2080,10 @@ class Database:
             if self.is_postgres:
                 # PostgreSQL implementation
                 async with self.AsyncSessionLocal() as session:
-                    query = text(
-                        """
+                    query = text("""
                         INSERT INTO world_snapshots (snapshot_id, state, user_id, timestamp)
                         VALUES (:snapshot_id, :state, :user_id, :timestamp)
-                    """
-                    )
+                    """)
                     await session.execute(
                         query,
                         {

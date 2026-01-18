@@ -134,58 +134,48 @@ def test_project_setup(tmp_path):
 
     # Create main.py
     main_file = project_root / "main.py"
-    main_file.write_text(
-        """
+    main_file.write_text("""
 import utils.helpers
 import lib.component_a
 
 def main():
     pass
-"""
-    )
+""")
 
     # Create utils package
     utils_dir = project_root / "utils"
     utils_dir.mkdir()
     (utils_dir / "__init__.py").write_text("")
-    (utils_dir / "helpers.py").write_text(
-        """
+    (utils_dir / "helpers.py").write_text("""
 import lib.component_b
 
 def helper():
     pass
-"""
-    )
+""")
 
     # Create lib package with circular imports
     lib_dir = project_root / "lib"
     lib_dir.mkdir()
     (lib_dir / "__init__.py").write_text("")
-    (lib_dir / "component_a.py").write_text(
-        """
+    (lib_dir / "component_a.py").write_text("""
 import lib.component_b
 
 class ComponentA:
     pass
-"""
-    )
-    (lib_dir / "component_b.py").write_text(
-        """
+""")
+    (lib_dir / "component_b.py").write_text("""
 import lib.component_a
 
 class ComponentB:
     pass
-"""
-    )
+""")
 
     # Create a dead code file
     dead_file = project_root / "dead_code.py"
-    dead_file.write_text(
-        """
+    dead_file.write_text("""
 def unused():
     pass
-"""
-    )
+""")
 
     # Create a file with syntax error
     bad_file = project_root / "bad_syntax.py"

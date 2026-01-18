@@ -13,7 +13,6 @@ import logging
 import os
 from test_generation.orchestrator.console import log
 
-
 # Check if we're running in a test or offline environment
 _OFFLINE_MODE = (
     os.environ.get("TEST_GENERATION_OFFLINE_MODE", "false").lower() == "true"

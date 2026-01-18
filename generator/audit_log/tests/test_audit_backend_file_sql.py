@@ -458,8 +458,7 @@ async def test_sqlite_backend_migration(tmp_path, mock_alerts_and_otel):
 
     # 1. Create a V1 database manually
     conn = sqlite3.connect(db_file)
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE logs_v1 (
             id INTEGER PRIMARY KEY,
             timestamp TEXT,
@@ -468,8 +467,7 @@ async def test_sqlite_backend_migration(tmp_path, mock_alerts_and_otel):
             _audit_hash TEXT,
             data TEXT
         )
-    """
-    )
+    """)
     conn.execute(
         "INSERT INTO logs_v1 (entry_id, data, timestamp, schema_version, _audit_hash) VALUES (?, ?, ?, ?, ?)",
         (

@@ -99,15 +99,13 @@ async def test_sqlite_feedback_store_round_trip(temp_codegen_env):
 
     conn = sqlite3.connect(db_path, check_same_thread=False)
     try:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS hitl_feedback (
                 req_hash TEXT PRIMARY KEY,
                 feedback TEXT,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
-            """
-        )
+            """)
         conn.commit()
     finally:
         conn.close()

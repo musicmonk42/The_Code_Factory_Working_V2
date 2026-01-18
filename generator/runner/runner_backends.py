@@ -27,7 +27,14 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Type  # Awaitable for async methods
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Type,
+)  # Awaitable for async methods
 
 import aiofiles
 
@@ -1942,25 +1949,25 @@ class LambdaBackend(Backend):
 
 
 async def rag_retrieve(
-    query: str,
-    top_k: int = 5,
-    filters: Optional[Dict[str, Any]] = None
+    query: str, top_k: int = 5, filters: Optional[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
     """
     Retrieves relevant documents using RAG (Retrieval Augmented Generation).
-    
+
     This is a fallback implementation. For production use, integrate with
     a vector database (e.g., Pinecone, Weaviate, ChromaDB).
-    
+
     Args:
         query: Search query
         top_k: Number of results to return
         filters: Optional filters for retrieval
-        
+
     Returns:
         List of retrieved documents with metadata
     """
-    logger.warning("rag_retrieve called but no RAG system is configured. Returning empty results. Configure a vector database for production.")
+    logger.warning(
+        "rag_retrieve called but no RAG system is configured. Returning empty results. Configure a vector database for production."
+    )
     return []
 
 

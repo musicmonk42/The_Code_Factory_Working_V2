@@ -2,6 +2,7 @@
 """Production-grade tests for config.py.
 Covers path safety, deep-merge behavior, immutability, defaults integrity,
 artifact directory creation, and robustness to malformed inputs and symlinks."""
+
 from __future__ import annotations
 
 import json

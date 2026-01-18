@@ -636,15 +636,13 @@ def _default_summary_and_details(
     status = result.get("status", "UNKNOWN")
     scores = result.get("review", {}).get("scores", {})
     coverage = scores.get("coverage", "N/A")
-    dashboard_api.markdown(
-        f"""
+    dashboard_api.markdown(f"""
     ### Workflow Summary
     - **Status:** `{status}`
     - **Coverage:** `{coverage}`
     - **Security Findings:** `{len(findings)}`
     - **Actions Taken:** `{len(actions)}`
-    """
-    )
+    """)
     with dashboard_api.expander("🔎 Detailed Findings & Actions", expanded=False):
         dashboard_api.subheader("Findings")
         if findings:

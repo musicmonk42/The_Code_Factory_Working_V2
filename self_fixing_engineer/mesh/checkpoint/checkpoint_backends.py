@@ -625,8 +625,7 @@ class BackendRegistry:
 
         # Create table if not exists
         async with self._pools["postgres"].acquire() as conn:
-            await conn.execute(
-                f"""
+            await conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {Config.POSTGRES_TABLE} (
                     id SERIAL PRIMARY KEY,
                     name VARCHAR(255) NOT NULL,
@@ -646,8 +645,7 @@ class BackendRegistry:
                 
                 CREATE INDEX IF NOT EXISTS idx_{Config.POSTGRES_TABLE}_created_at 
                 ON {Config.POSTGRES_TABLE}(created_at);
-            """
-            )
+            """)
 
     async def _init_gcs(self, manager: Any):
         """Initialize Google Cloud Storage client."""

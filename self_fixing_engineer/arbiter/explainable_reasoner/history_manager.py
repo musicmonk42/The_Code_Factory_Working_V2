@@ -332,8 +332,7 @@ class SQLiteHistoryManager(BaseHistoryManager):
         start_time = time.monotonic()
         try:
             self._conn = await aiosqlite.connect(self.db_path)
-            await self._conn.execute(
-                """
+            await self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS history (
                     id TEXT PRIMARY KEY,               -- Unique identifier for the history entry
                     query TEXT NOT NULL,               -- The user's query or input text
@@ -343,8 +342,7 @@ class SQLiteHistoryManager(BaseHistoryManager):
                     timestamp TEXT NOT NULL,           -- ISO 8601 timestamp of the entry
                     session_id TEXT                    -- Optional identifier to group related entries
                 )
-            """
-            )
+            """)
             await self._conn.commit()
             self._logger.info("sqlite_db_initialized", db_path=str(self.db_path))
             self._record_op_success("init_db", start_time)
@@ -735,8 +733,7 @@ class PostgresHistoryManager(BaseHistoryManager):
         try:
             self._pool = await asyncpg.create_pool(self.db_url, max_size=10)
             async with self._pool.acquire() as conn:
-                await conn.execute(
-                    """
+                await conn.execute("""
                     CREATE TABLE IF NOT EXISTS history (
                         id TEXT PRIMARY KEY,               -- Unique identifier for the history entry
                         query TEXT NOT NULL,               -- The user's query or input text
@@ -748,8 +745,7 @@ class PostgresHistoryManager(BaseHistoryManager):
                     );
                     CREATE INDEX IF NOT EXISTS idx_history_timestamp ON history (timestamp);
                     CREATE INDEX IF NOT EXISTS idx_history_session_id ON history (session_id);
-                """
-                )
+                """)
             self._logger.info("postgres_db_initialized", db_url="***")
             self._record_op_success("init_db", start_time)
         except Exception as e:

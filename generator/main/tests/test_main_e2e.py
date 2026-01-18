@@ -69,8 +69,7 @@ def test_environment(tmp_path):
 
     # Create test README
     readme = tmp_path / "README.md"
-    readme.write_text(
-        """
+    readme.write_text("""
 # Test Project
 
 A test project for the AI Generator.
@@ -81,8 +80,7 @@ A test project for the AI Generator.
 
 ## Installation
 pip install test-project
-"""
-    )
+""")
 
     # Create output directory
     output_dir = tmp_path / "output"

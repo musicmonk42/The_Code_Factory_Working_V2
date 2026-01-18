@@ -47,8 +47,7 @@ def full_test_repo():
 
         # Create source files
         (repo_path / "src" / "__init__.py").write_text("")
-        (repo_path / "src" / "app.py").write_text(
-            """
+        (repo_path / "src" / "app.py").write_text("""
 from flask import Flask, jsonify
 import logging
 
@@ -65,33 +64,27 @@ def health():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=False)
-"""
-        )
+""")
 
-        (repo_path / "src" / "config.py").write_text(
-            """
+        (repo_path / "src" / "config.py").write_text("""
 import os
 
 class Config:
     DEBUG = os.getenv('DEBUG', 'False') == 'True'
     PORT = int(os.getenv('PORT', 8000))
     DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///app.db')
-"""
-        )
+""")
 
         # Create requirements.txt
-        (repo_path / "requirements.txt").write_text(
-            """
+        (repo_path / "requirements.txt").write_text("""
 flask==2.0.1
 gunicorn==20.1.0
 requests==2.26.0
 python-dotenv==0.19.0
-"""
-        )
+""")
 
         # Create README
-        (repo_path / "README.md").write_text(
-            """
+        (repo_path / "README.md").write_text("""
 # Test Application
 
 A sample Flask application for testing deployment automation.
@@ -110,13 +103,11 @@ python src/app.py
 
 ## Deployment
 This application can be deployed using Docker, Kubernetes, or traditional hosting.
-"""
-        )
+""")
 
         # Create test files
         (repo_path / "tests" / "__init__.py").write_text("")
-        (repo_path / "tests" / "test_app.py").write_text(
-            """
+        (repo_path / "tests" / "test_app.py").write_text("""
 import pytest
 from src.app import app
 
@@ -130,12 +121,10 @@ def test_health():
     client = app.test_client()
     response = client.get('/health')
     assert response.status_code == 200
-"""
-        )
+""")
 
         # Create templates for prompt generation
-        (repo_path / "deploy_templates" / "docker_default.jinja").write_text(
-            """
+        (repo_path / "deploy_templates" / "docker_default.jinja").write_text("""
 Generate a production-ready Dockerfile for a {{ target }} application.
 
 Files in the project:
@@ -154,11 +143,9 @@ Requirements:
 6. Optimize for size
 
 Output only the Dockerfile content, no explanations.
-"""
-        )
+""")
 
-        (repo_path / "deploy_templates" / "helm_default.jinja").write_text(
-            """
+        (repo_path / "deploy_templates" / "helm_default.jinja").write_text("""
 Generate a Helm chart values.yaml for deploying a {{ target }} application.
 
 Files: {{ files | join(', ') }}
@@ -169,8 +156,7 @@ Include:
 - Health/readiness probes
 - Service configuration
 - Ingress setup
-"""
-        )
+""")
 
         # Create few-shot examples
         (repo_path / "few_shot_examples" / "docker_python_flask.json").write_text(
@@ -193,8 +179,7 @@ CMD ["gunicorn", "--bind", "0.0.0.0:8000", "src.app:app"]
         )
 
         # Create .gitignore
-        (repo_path / ".gitignore").write_text(
-            """
+        (repo_path / ".gitignore").write_text("""
 __pycache__/
 *.py[cod]
 *$py.class
@@ -203,8 +188,7 @@ __pycache__/
 venv/
 *.db
 .DS_Store
-"""
-        )
+""")
 
         yield repo_path
 
@@ -271,15 +255,11 @@ CMD ["gunicorn", "--bind", "0.0.0.0:8000", "src.app:app"]
         def json_response(*args, **kwargs):
             # For repair/fix operations that expect JSON
             return {
-                "content": json.dumps(
-                    {
-                        "config": """FROM python:3.9-slim
+                "content": json.dumps({"config": """FROM python:3.9-slim
 WORKDIR /app
 COPY . .
 CMD ["python", "src/app.py"]
-"""
-                    }
-                ),
+"""}),
                 "model": "gpt-4",
                 "provider": "openai",
                 "valid": True,

@@ -29,7 +29,6 @@ Base = declarative_base()
 # Import arbiter module - it should handle its own optional dependencies gracefully
 from arbiter import arbiter
 
-
 # ===== TEST FIXTURES =====
 
 

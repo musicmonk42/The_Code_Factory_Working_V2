@@ -643,8 +643,7 @@ class PromptConfig(BaseModel):
             "Ambiguities: Point out any unclear, vague, or underspecified requirements that could lead to multiple interpretations or incorrect implementations.",
         ]
     )
-    output_schema: str = Field(
-        default="""
+    output_schema: str = Field(default="""
     {
         "semantic_alignment_score": float,
         "drift_issues": [{"description": "string", "severity": "LOW|MEDIUM|HIGH", "location": "file:line_start-line_end"}],
@@ -663,8 +662,7 @@ class PromptConfig(BaseModel):
             "security_posture_issues": [{"description": "string", "suggestion": "string"}]
         }
     }
-    """
-    )
+    """)
     chain_of_thought: bool = Field(default=True)
     multi_modal: bool = Field(default=True)
     user_context: str = Field(

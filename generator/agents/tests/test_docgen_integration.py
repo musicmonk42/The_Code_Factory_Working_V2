@@ -66,8 +66,7 @@ def comprehensive_repo():
         (repo_path / "few_shot_docs").mkdir()
 
         # Create Python module with comprehensive docstrings
-        (repo_path / "src" / "calculator.py").write_text(
-            '''
+        (repo_path / "src" / "calculator.py").write_text('''
 """
 Calculator Module
 =================
@@ -166,12 +165,10 @@ class Calculator:
         result = round(a / b, self.precision)
         self.history.append(f"divide({a}, {b}) = {result}")
         return result
-'''
-        )
+''')
 
         # Create JavaScript module
-        (repo_path / "src" / "utils" / "helper.js").write_text(
-            """
+        (repo_path / "src" / "utils" / "helper.js").write_text("""
 /**
  * Helper utilities module
  * @module utils/helper
@@ -217,12 +214,10 @@ class StringHelper {
 }
 
 module.exports = { formatCurrency, StringHelper };
-"""
-        )
+""")
 
         # Create template
-        (repo_path / "doc_templates" / "python_default.jinja").write_text(
-            """
+        (repo_path / "doc_templates" / "python_default.jinja").write_text("""
 Generate comprehensive API documentation for: {{ file_name }}
 
 Language: {{ language }}
@@ -240,8 +235,7 @@ Please generate documentation including:
 - Class documentation with attributes
 - Method documentation with parameters, returns, and exceptions
 - Usage examples
-"""
-        )
+""")
 
         # Create few-shot example
         (repo_path / "few_shot_docs" / "python_class.json").write_text(
@@ -254,8 +248,7 @@ Please generate documentation including:
         )
 
         # Create README
-        (repo_path / "README.md").write_text(
-            """
+        (repo_path / "README.md").write_text("""
 # Calculator Project
 
 A comprehensive calculator implementation.
@@ -263,19 +256,16 @@ A comprehensive calculator implementation.
 ## License
 
 MIT License
-"""
-        )
+""")
 
         # Create LICENSE
-        (repo_path / "LICENSE").write_text(
-            """
+        (repo_path / "LICENSE").write_text("""
 MIT License
 
 Copyright (c) 2025 Test Author
 
 Permission is hereby granted...
-"""
-        )
+""")
 
         yield repo_path
 
@@ -723,13 +713,11 @@ class TestPerformanceAndConcurrency:
 
         # Create multiple files
         for i in range(5):
-            (comprehensive_repo / "src" / f"module{i}.py").write_text(
-                f"""
+            (comprehensive_repo / "src" / f"module{i}.py").write_text(f"""
 def function_{i}():
     '''Function {i}'''
     return {i}
-"""
-            )
+""")
 
         files = [str(comprehensive_repo / "src" / f"module{i}.py") for i in range(5)]
 

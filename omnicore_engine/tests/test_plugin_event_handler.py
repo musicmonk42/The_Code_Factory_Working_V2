@@ -378,15 +378,13 @@ class TestIntegration:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a test plugin file
             plugin_file = Path(temp_dir) / "test_plugin.py"
-            plugin_file.write_text(
-                """
+            plugin_file.write_text("""
 from omnicore_engine.plugin_registry import plugin
 
 @plugin(kind='execution', name='test_plugin')
 def test_function():
     return "original"
-"""
-            )
+""")
 
             # Setup mock registry
             mock_registry = Mock()
@@ -404,15 +402,13 @@ def test_function():
             event.src_path = str(plugin_file)
 
             # Update file content
-            plugin_file.write_text(
-                """
+            plugin_file.write_text("""
 from omnicore_engine.plugin_registry import plugin
 
 @plugin(kind='execution', name='test_plugin')
 def test_function():
     return "modified"
-"""
-            )
+""")
 
             # Wait a bit to ensure mtime changes
             await asyncio.sleep(0.1)

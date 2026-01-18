@@ -534,15 +534,13 @@ class DeployAgent:
             return
 
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                """
+            await db.execute("""
                 CREATE TABLE IF NOT EXISTS history (
                     id TEXT PRIMARY KEY,
                     timestamp TEXT,
                     result TEXT
                 )
-                """
-            )
+                """)
             await db.commit()
 
         self._db_initialized = True
@@ -771,8 +769,7 @@ class DeployAgent:
         validation_result: Dict[str, Any],
         target: str,
     ) -> str:
-        prompt = scrub_text(
-            f"""
+        prompt = scrub_text(f"""
 Provide a concise explanation for the configuration for target '{target}'.
 Explain key design decisions, trade-offs, and how it addresses requirements, security, performance,
 scalability, and compatibility. Briefly summarize validation results.
@@ -784,8 +781,7 @@ Validation results:
 {json.dumps(validation_result, indent=2)}
 
 Respond in plain prose only (no JSON / no code fences).
-"""
-        )
+""")
         add_provenance(
             "provenance",
             {"action": "explanation_llm_call", "target": target, "model": "grok-4"},
@@ -1325,8 +1321,7 @@ Respond in plain prose only (no JSON / no code fences).
             add_provenance("provenance", {"action": "self_heal_attempt"})
             for attempt in range(1, 4):
                 try:
-                    healing_prompt = scrub_text(
-                        f"""
+                    healing_prompt = scrub_text(f"""
 Previous attempt failed.
 
 Error:
@@ -1336,8 +1331,7 @@ Original instructions:
 {instructions or "None"}
 
 Propose corrected configurations as JSON keyed by target.
-"""
-                    )
+""")
                     try:
                         if ensemble:
                             resp = await call_ensemble_api(

@@ -5,6 +5,7 @@ Intent Parser Module - Extracts requirements and features from README documents.
 LAZY LOADING STRATEGY:
 ...
 """
+
 import asyncio
 import concurrent.futures
 import datetime  # <-- FIX: Added missing import
@@ -31,7 +32,6 @@ from dotenv import load_dotenv
 from langdetect import DetectorFactory, LangDetectException, detect
 from prometheus_client import Counter, Gauge, Histogram
 from pydantic import BaseModel, Field, field_validator
-
 
 # PDF processing libraries
 try:

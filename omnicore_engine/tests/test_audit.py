@@ -120,7 +120,6 @@ from unittest.mock import patch
 from omnicore_engine.audit import ExplainAudit
 from omnicore_engine.database import Database
 
-
 # NOTE: Previously duplicated test definitions that used incorrect SQLAlchemy URL format
 # (str(tmp_path / "test.db") instead of proper sqlite+aiosqlite:/// URLs) have been removed.
 # The first test_audit_entry function defined earlier in this file (starting around line 62)

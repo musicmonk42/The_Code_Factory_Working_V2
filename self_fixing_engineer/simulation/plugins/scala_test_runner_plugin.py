@@ -685,15 +685,13 @@ if __name__ == "__main__":
             with open(
                 os.path.join(temp_dir, dummy_src_rel), "w", encoding="utf-8"
             ) as f:
-                f.write(
-                    """
+                f.write("""
 package com.example.app
 
 class Calculator {
   def add(a: Int, b: Int): Int = a + b
 }
-"""
-                )
+""")
             # Create a dummy Scala test file
             dummy_test_rel = os.path.join(
                 "src", "test", "scala", dummy_src_pkg, "CalculatorSpec.scala"
@@ -704,8 +702,7 @@ class Calculator {
             with open(
                 os.path.join(temp_dir, dummy_test_rel), "w", encoding="utf-8"
             ) as f:
-                f.write(
-                    """
+                f.write("""
 package com.example.app
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -717,8 +714,7 @@ class CalculatorSpec extends AnyFunSuite with Matchers {
     calculator.add(1, 2) shouldBe 3
   }
 }
-"""
-                )
+""")
             temp_coverage_rel = os.path.join(
                 "atco_artifacts", "coverage_reports", "scala_coverage_output.xml"
             )
