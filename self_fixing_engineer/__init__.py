@@ -94,7 +94,7 @@ def _setup_module_alias(module_name: str) -> None:
             "Unexpected error setting up alias for module '%s': %s",
             module_name,
             e,
-            exc_info=False,  # Don't show full traceback for expected issues
+            exc_info=True,  # Keep full traceback for unexpected errors
         )
 
 
