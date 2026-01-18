@@ -127,14 +127,15 @@ def __getattr__(name):
     This allows 'from arbiter import HumanInLoop' to work while preventing
     circular dependency issues at module initialization time.
     """
-    if name == "HumanInLoop":
-        result = _get_human_loop()
+    lazy_imports = {
+        "HumanInLoop": _get_human_loop,
+        "HumanInLoopConfig": _get_human_loop_config,
+    }
+    
+    if name in lazy_imports:
+        result = lazy_imports[name]()
         if result is None:
             raise ImportError(f"Cannot import name '{name}' from 'arbiter'")
         return result
-    elif name == "HumanInLoopConfig":
-        result = _get_human_loop_config()
-        if result is None:
-            raise ImportError(f"Cannot import name '{name}' from 'arbiter'")
-        return result
+    
     raise AttributeError(f"module 'arbiter' has no attribute '{name}'")
