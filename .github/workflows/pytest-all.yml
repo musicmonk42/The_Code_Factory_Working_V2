@@ -118,6 +118,8 @@ jobs:
           # Install common test/runtime extras that may be missing
           pip install --no-cache-dir -c .github/constraints.txt PyYAML httpx PyJWT || true
           pip install --no-cache-dir -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
+          # Install optional dependencies that are commonly needed
+          pip install --no-cache-dir -c .github/constraints.txt deap hiredis || echo "WARNING: Some optional deps failed"
           # Install pytest plugins
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest-cov \
@@ -169,7 +171,7 @@ jobs:
           # The pyproject.toml already configures all test paths in [tool.pytest.ini_options]
           # The conftest.py sets up Python paths correctly
           pytest \
-            -n auto \
+            -n 2 \
             --maxfail=50 \
             --timeout=300 \
             --cov=generator \
