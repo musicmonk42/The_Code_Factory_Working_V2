@@ -153,9 +153,8 @@ jobs:
           echo "=== Python path ==="
           python -c "import sys; print('\n'.join(sys.path))"
           
-          echo "=== Testing imports ==="
+          echo "=== Testing conftest import ==="
           python -c "import conftest; print('conftest OK')" || echo "conftest import failed"
-          python -c "import test_cleanup_old_docs; print('test_cleanup_old_docs OK')" || echo "test import failed"
           
           echo "=== Pytest collection preview ==="
           pytest --collect-only -q 2>&1 | head -50
@@ -182,10 +181,9 @@ jobs:
           fi
           
           # Run pytest from repository root with all configured test paths
-          # The pyproject.toml already configures all test paths in [tool.pytest.ini_options]
+          # The pyproject.toml testpaths already configures all test paths including root directory
           # The conftest.py sets up Python paths correctly
           pytest \
-            . \
             -n 2 \
             --maxfail=50 \
             --timeout=300 \
