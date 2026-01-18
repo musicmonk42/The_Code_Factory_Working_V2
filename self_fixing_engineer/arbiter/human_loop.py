@@ -780,7 +780,7 @@ class HumanInLoop:
         try:
             from arbiter.arbiter import PermissionManager
             from arbiter.config import ArbiterConfig
-            
+
             permission_mgr = PermissionManager(ArbiterConfig())
             return permission_mgr.check_permission(role, permission)
         except ImportError as e:

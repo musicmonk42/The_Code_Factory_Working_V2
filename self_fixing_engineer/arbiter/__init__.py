@@ -61,21 +61,26 @@ try:
 except ImportError:
     FeedbackManager = None
 
+
 def _get_human_loop():
     """Lazy import HumanInLoop to avoid circular imports."""
     try:
         from .human_loop import HumanInLoop
+
         return HumanInLoop
     except ImportError:
         return None
+
 
 def _get_human_loop_config():
     """Lazy import HumanInLoopConfig to avoid circular imports."""
     try:
         from .human_loop import HumanInLoopConfig
+
         return HumanInLoopConfig
     except ImportError:
         return None
+
 
 try:
     from .config import ArbiterConfig
