@@ -395,6 +395,18 @@ COVERAGE_GAPS = _get_or_create_counter(
     ["language", "instance_id"],
 )
 
+# --- Critique Agent Metrics ---
+CRITIQUE_PROMPT_BUILDS = _get_or_create_counter(
+    "critique_prompt_builds_total",
+    "Total number of critique prompt builds",
+    ["prompt_type", "language"],
+)
+CRITIQUE_PROMPT_LATENCY = _get_or_create_histogram(
+    "critique_prompt_latency_seconds",
+    "Latency of critique prompt generation",
+    ["prompt_type", "language"],
+)
+
 # --- Resilient Queuing Metrics ---
 FAILED_EXPORT_QUEUE_SIZE = _get_or_create_gauge(
     "runner_failed_export_queue_size", "Current size of failed export retry queue", []
