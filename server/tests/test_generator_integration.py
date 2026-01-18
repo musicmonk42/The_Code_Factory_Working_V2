@@ -25,19 +25,21 @@ def client():
 @pytest.fixture
 def sample_job():
     """Create a sample job for testing."""
+    from datetime import datetime
+    
     job = Job(
-        job_id="test-job-123",
-        status=JobStatus.CREATED,
-        title="Test Job",
-        description="Test job for integration tests",
+        id="test-job-123",
+        status=JobStatus.PENDING,
         input_files=[],
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
         metadata={},
     )
-    jobs_db[job.job_id] = job
+    jobs_db[job.id] = job
     yield job
     # Cleanup
-    if job.job_id in jobs_db:
-        del jobs_db[job.job_id]
+    if job.id in jobs_db:
+        del jobs_db[job.id]
 
 
 class TestGeneratorFileUpload:
@@ -51,7 +53,7 @@ class TestGeneratorFileUpload:
         ]
 
         response = client.post(
-            f"/api/generator/{sample_job.job_id}/upload",
+            f"/api/generator/{sample_job.id}/upload",
             files=files,
         )
 
@@ -71,7 +73,7 @@ class TestGeneratorFileUpload:
         ]
 
         response = client.post(
-            f"/api/generator/{sample_job.job_id}/upload",
+            f"/api/generator/{sample_job.id}/upload",
             files=files,
         )
 
@@ -89,7 +91,7 @@ class TestGeneratorFileUpload:
         ]
 
         response = client.post(
-            f"/api/generator/{sample_job.job_id}/upload",
+            f"/api/generator/{sample_job.id}/upload",
             files=files,
         )
 
@@ -103,7 +105,7 @@ class TestGeneratorFileUpload:
     def test_upload_no_files(self, client, sample_job):
         """Test error handling when no files are provided."""
         response = client.post(
-            f"/api/generator/{sample_job.job_id}/upload",
+            f"/api/generator/{sample_job.id}/upload",
             files=[],
         )
 
@@ -132,30 +134,28 @@ class TestClarifierIntegration:
     ):
         """Test the clarify requirements endpoint."""
         # Setup: Create a README file for the job
-        job_dir = tmp_path / sample_job.job_id
+        job_dir = tmp_path / sample_job.id
         job_dir.mkdir(parents=True)
         readme_path = job_dir / "README.md"
         readme_path.write_text("# Test Project\nAmbiguous requirements here")
         
-        # Mock the uploads directory
-        with patch("server.routers.generator.f", side_effect=FileNotFoundError):
-            # Add the file to job's input_files
-            sample_job.input_files.append("README.md")
-            
-            # Mock the clarify_requirements method
-            mock_clarify.return_value = {
-                "job_id": sample_job.job_id,
-                "status": "clarification_initiated",
-                "ambiguities_detected": 2,
-            }
+        # Add the file to job's input_files
+        sample_job.input_files.append("README.md")
+        
+        # Mock the clarify_requirements method
+        mock_clarify.return_value = {
+            "job_id": sample_job.id,
+            "status": "clarification_initiated",
+            "ambiguities_detected": 2,
+        }
 
-            # For this test, we'll mock file reading
-            with patch("builtins.open", create=True) as mock_open:
-                mock_open.return_value.__enter__.return_value.read.return_value = (
-                    "# Test Project\nAmbiguous requirements"
-                )
-                
-                response = client.post(f"/api/generator/{sample_job.job_id}/clarify")
+        # Mock file reading
+        with patch("builtins.open", create=True) as mock_open:
+            mock_open.return_value.__enter__.return_value.read.return_value = (
+                "# Test Project\nAmbiguous requirements"
+            )
+            
+            response = client.post(f"/api/generator/{sample_job.id}/clarify")
 
         # We expect 200 even if file is not found due to mocking
         # In real scenario, we'd check for proper clarification initiation
@@ -164,7 +164,7 @@ class TestClarifierIntegration:
     def test_clarify_without_readme(self, client, sample_job):
         """Test clarification fails gracefully without README."""
         # No files uploaded
-        response = client.post(f"/api/generator/{sample_job.job_id}/clarify")
+        response = client.post(f"/api/generator/{sample_job.id}/clarify")
 
         assert response.status_code == 400
         assert "No README content found" in response.json()["detail"]
@@ -175,7 +175,7 @@ class TestClarifierIntegration:
     ):
         """Test getting clarification feedback."""
         mock_feedback.return_value = {
-            "job_id": sample_job.job_id,
+            "job_id": sample_job.id,
             "status": "waiting_for_response",
             "questions": [
                 {"id": "q1", "text": "What database do you want to use?"}
@@ -183,12 +183,12 @@ class TestClarifierIntegration:
         }
 
         response = client.get(
-            f"/api/generator/{sample_job.job_id}/clarification/feedback"
+            f"/api/generator/{sample_job.id}/clarification/feedback"
         )
 
         assert response.status_code == 200
         data = response.json()
-        assert data["job_id"] == sample_job.job_id
+        assert data["job_id"] == sample_job.id
         assert "questions" in data
 
     @patch("server.services.generator_service.GeneratorService.submit_clarification_response")
@@ -197,13 +197,13 @@ class TestClarifierIntegration:
     ):
         """Test submitting a clarification response."""
         mock_submit.return_value = {
-            "job_id": sample_job.job_id,
+            "job_id": sample_job.id,
             "question_id": "q1",
             "status": "response_submitted",
         }
 
         response = client.post(
-            f"/api/generator/{sample_job.job_id}/clarification/respond",
+            f"/api/generator/{sample_job.id}/clarification/respond",
             params={"question_id": "q1", "response": "PostgreSQL"},
         )
 
@@ -219,12 +219,12 @@ class TestGeneratorStatusAndLogs:
     def test_get_generator_status(self, mock_status, client, sample_job):
         """Test getting generator status."""
         mock_status.return_value = {
-            "job_id": sample_job.job_id,
+            "job_id": sample_job.id,
             "stage": "code_generation",
             "progress": 75.0,
         }
 
-        response = client.get(f"/api/generator/{sample_job.job_id}/status")
+        response = client.get(f"/api/generator/{sample_job.id}/status")
 
         assert response.status_code == 200
         data = response.json()
@@ -243,13 +243,13 @@ class TestGeneratorStatusAndLogs:
         ]
 
         response = client.get(
-            f"/api/generator/{sample_job.job_id}/logs",
+            f"/api/generator/{sample_job.id}/logs",
             params={"limit": 50},
         )
 
         assert response.status_code == 200
         data = response.json()
-        assert data["job_id"] == sample_job.job_id
+        assert data["job_id"] == sample_job.id
         assert len(data["logs"]) > 0
         assert data["count"] == len(data["logs"])
 

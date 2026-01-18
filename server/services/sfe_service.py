@@ -256,7 +256,7 @@ class SFEService:
             >>> # Route through OmniCore to SFE meta-learning
             >>> # insights = await omnicore.query_sfe_insights(job_id)
         """
-        logger.debug(f"Fetching learning insights{' for job ' + job_id if job_id else ''}")
+        logger.debug(f"Fetching learning insights{f' for job {job_id}' if job_id else ''}")
 
         # Route through OmniCore
         if self.omnicore_service:

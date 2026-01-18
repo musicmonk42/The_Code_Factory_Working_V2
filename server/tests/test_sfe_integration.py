@@ -24,19 +24,21 @@ def client():
 @pytest.fixture
 def sample_job():
     """Create a sample job for testing."""
+    from datetime import datetime
+    
     job = Job(
-        job_id="test-sfe-job-456",
+        id="test-sfe-job-456",
         status=JobStatus.RUNNING,
-        title="Test SFE Job",
-        description="Test job for SFE integration tests",
         input_files=["main.py", "test_main.py"],
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
         metadata={},
     )
-    jobs_db[job.job_id] = job
+    jobs_db[job.id] = job
     yield job
     # Cleanup
-    if job.job_id in jobs_db:
-        del jobs_db[job.job_id]
+    if job.id in jobs_db:
+        del jobs_db[job.id]
 
 
 class TestSFEStatus:
@@ -46,7 +48,7 @@ class TestSFEStatus:
     def test_get_sfe_status(self, mock_status, client, sample_job):
         """Test getting detailed SFE status."""
         mock_status.return_value = {
-            "job_id": sample_job.job_id,
+            "job_id": sample_job.id,
             "status": "analyzing",
             "current_operation": "scanning_codebase",
             "progress_percentage": 45.0,
@@ -56,11 +58,11 @@ class TestSFEStatus:
             ],
         }
 
-        response = client.get(f"/api/sfe/{sample_job.job_id}/status")
+        response = client.get(f"/api/sfe/{sample_job.id}/status")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["job_id"] == sample_job.job_id
+        assert data["job_id"] == sample_job.id
         assert data["status"] == "analyzing"
         assert "current_operation" in data
         assert "progress_percentage" in data
@@ -95,14 +97,14 @@ class TestSFELogs:
             },
         ]
 
-        response = client.get(f"/api/sfe/{sample_job.job_id}/logs")
+        response = client.get(f"/api/sfe/{sample_job.id}/logs")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["job_id"] == sample_job.job_id
+        assert data["job_id"] == sample_job.id
         assert len(data["logs"]) == 2
         assert data["count"] == 2
-        mock_logs.assert_called_once_with(sample_job.job_id, limit=100, level=None)
+        mock_logs.assert_called_once_with(sample_job.id, limit=100, level=None)
 
     @patch("server.services.sfe_service.SFEService.get_sfe_logs")
     def test_get_sfe_logs_with_limit(self, mock_logs, client, sample_job):
@@ -110,12 +112,12 @@ class TestSFELogs:
         mock_logs.return_value = []
 
         response = client.get(
-            f"/api/sfe/{sample_job.job_id}/logs",
+            f"/api/sfe/{sample_job.id}/logs",
             params={"limit": 50},
         )
 
         assert response.status_code == 200
-        mock_logs.assert_called_once_with(sample_job.job_id, limit=50, level=None)
+        mock_logs.assert_called_once_with(sample_job.id, limit=50, level=None)
 
     @patch("server.services.sfe_service.SFEService.get_sfe_logs")
     def test_get_sfe_logs_with_level_filter(self, mock_logs, client, sample_job):
@@ -130,7 +132,7 @@ class TestSFELogs:
         ]
 
         response = client.get(
-            f"/api/sfe/{sample_job.job_id}/logs",
+            f"/api/sfe/{sample_job.id}/logs",
             params={"level": "ERROR"},
         )
 
@@ -138,7 +140,7 @@ class TestSFELogs:
         data = response.json()
         assert len(data["logs"]) == 1
         assert data["logs"][0]["level"] == "ERROR"
-        mock_logs.assert_called_once_with(sample_job.job_id, limit=100, level="ERROR")
+        mock_logs.assert_called_once_with(sample_job.id, limit=100, level="ERROR")
 
     def test_get_sfe_logs_job_not_found(self, client):
         """Test error handling for non-existent job."""
@@ -155,13 +157,13 @@ class TestSFEInteraction:
     def test_pause_command(self, mock_interact, client, sample_job):
         """Test sending pause command to SFE."""
         mock_interact.return_value = {
-            "job_id": sample_job.job_id,
+            "job_id": sample_job.id,
             "command": "pause",
             "status": "command_executed",
         }
 
         response = client.post(
-            f"/api/sfe/{sample_job.job_id}/interact",
+            f"/api/sfe/{sample_job.id}/interact",
             params={"command": "pause", "params": {}},
         )
 
@@ -175,13 +177,13 @@ class TestSFEInteraction:
     def test_resume_command(self, mock_interact, client, sample_job):
         """Test sending resume command to SFE."""
         mock_interact.return_value = {
-            "job_id": sample_job.job_id,
+            "job_id": sample_job.id,
             "command": "resume",
             "status": "command_executed",
         }
 
         response = client.post(
-            f"/api/sfe/{sample_job.job_id}/interact",
+            f"/api/sfe/{sample_job.id}/interact",
             params={"command": "resume"},
         )
 
@@ -193,13 +195,13 @@ class TestSFEInteraction:
     def test_analyze_file_command(self, mock_interact, client, sample_job):
         """Test sending analyze_file command with parameters."""
         mock_interact.return_value = {
-            "job_id": sample_job.job_id,
+            "job_id": sample_job.id,
             "command": "analyze_file",
             "status": "command_executed",
         }
 
         response = client.post(
-            f"/api/sfe/{sample_job.job_id}/interact",
+            f"/api/sfe/{sample_job.id}/interact",
             params={
                 "command": "analyze_file",
                 "params": {"file_path": "src/main.py"},
@@ -211,7 +213,7 @@ class TestSFEInteraction:
     def test_invalid_command(self, client, sample_job):
         """Test error handling for invalid command."""
         response = client.post(
-            f"/api/sfe/{sample_job.job_id}/interact",
+            f"/api/sfe/{sample_job.id}/interact",
             params={"command": "invalid_command"},
         )
 
