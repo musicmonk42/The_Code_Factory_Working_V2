@@ -61,11 +61,21 @@ try:
 except ImportError:
     FeedbackManager = None
 
-try:
-    from .human_loop import HumanInLoop, HumanInLoopConfig
-except ImportError:
-    HumanInLoop = None
-    HumanInLoopConfig = None
+def _get_human_loop():
+    """Lazy import HumanInLoop to avoid circular imports."""
+    try:
+        from .human_loop import HumanInLoop
+        return HumanInLoop
+    except ImportError:
+        return None
+
+def _get_human_loop_config():
+    """Lazy import HumanInLoopConfig to avoid circular imports."""
+    try:
+        from .human_loop import HumanInLoopConfig
+        return HumanInLoopConfig
+    except ImportError:
+        return None
 
 try:
     from .config import ArbiterConfig
@@ -87,8 +97,8 @@ def get_component_status():
         "Arbiter": Arbiter is not None,
         "ArbiterArena": ArbiterArena is not None,
         "FeedbackManager": FeedbackManager is not None,
-        "HumanInLoop": HumanInLoop is not None,
-        "HumanInLoopConfig": HumanInLoopConfig is not None,
+        "HumanInLoop": _get_human_loop() is not None,
+        "HumanInLoopConfig": _get_human_loop_config() is not None,
         "ArbiterConfig": ArbiterConfig is not None,
         "Database": Database is not None,
     }
@@ -109,3 +119,22 @@ __all__ = [
     "ArbiterConfig",
     "get_component_status",
 ]
+
+
+def __getattr__(name):
+    """
+    Lazy loading of HumanInLoop and HumanInLoopConfig to avoid circular imports.
+    This allows 'from arbiter import HumanInLoop' to work while preventing
+    circular dependency issues at module initialization time.
+    """
+    if name == "HumanInLoop":
+        result = _get_human_loop()
+        if result is None:
+            raise ImportError(f"Cannot import name '{name}' from 'arbiter'")
+        return result
+    elif name == "HumanInLoopConfig":
+        result = _get_human_loop_config()
+        if result is None:
+            raise ImportError(f"Cannot import name '{name}' from 'arbiter'")
+        return result
+    raise AttributeError(f"module 'arbiter' has no attribute '{name}'")
