@@ -18,5 +18,5 @@ google-ai-generativelanguage==0.6.15
 # Circuit breaker pattern library - required by arbiter modules
 circuitbreaker>=1.4.0
 
-# Retry library - updated to resolve version warnings
-tenacity>=9.1.2
+# Retry library - must match requirements.txt for chromadb compatibility
+tenacity>=8.2.3,<10.0.0
