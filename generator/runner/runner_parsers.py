@@ -1680,6 +1680,75 @@ async def parse_coverage_html(file_path: Path) -> Dict[str, Any]:
     return results
 
 
+# --- Language Detection and Translation Utilities ---
+
+
+def detect_language(code_files: Union[Dict[str, str], str]) -> str:
+    """
+    Detects primary language based on file extensions in code_files.
+    
+    Args:
+        code_files: Either a dictionary mapping filenames to content, or a string filename
+        
+    Returns:
+        String representing the detected language (e.g., 'python', 'javascript', 'go')
+        Defaults to 'python' if detection fails
+    """
+    # Handle string input (single filename)
+    if isinstance(code_files, str):
+        code_files = {code_files: ""}
+    
+    # Extract file extensions from the keys
+    file_extensions = set(Path(f).suffix.lower() for f in code_files.keys())
+    
+    # Check for common language extensions
+    if ".py" in file_extensions:
+        logger.info(f"Detected language 'python' based on file extensions: {file_extensions}")
+        return "python"
+    if ".js" in file_extensions or ".ts" in file_extensions or ".jsx" in file_extensions or ".tsx" in file_extensions:
+        logger.info(f"Detected language 'javascript' based on file extensions: {file_extensions}")
+        return "javascript"
+    if ".go" in file_extensions:
+        logger.info(f"Detected language 'go' based on file extensions: {file_extensions}")
+        return "go"
+    if ".java" in file_extensions:
+        logger.info(f"Detected language 'java' based on file extensions: {file_extensions}")
+        return "java"
+    if ".rs" in file_extensions:
+        logger.info(f"Detected language 'rust' based on file extensions: {file_extensions}")
+        return "rust"
+    if ".cpp" in file_extensions or ".cc" in file_extensions or ".cxx" in file_extensions or ".hpp" in file_extensions:
+        logger.info(f"Detected language 'cpp' based on file extensions: {file_extensions}")
+        return "cpp"
+    if ".c" in file_extensions or ".h" in file_extensions:
+        logger.info(f"Detected language 'c' based on file extensions: {file_extensions}")
+        return "c"
+    
+    # Default to python if no recognized extensions
+    logger.warning(
+        f"Could not detect a supported language from extensions: {file_extensions}. Defaulting to 'python'."
+    )
+    return "python"
+
+
+async def translate_text(text: str, target_lang: str = "en") -> str:
+    """
+    Stub function for text translation.
+    
+    In a full implementation, this would translate text to the target language.
+    For now, it returns the text unchanged.
+    
+    Args:
+        text: The text to translate
+        target_lang: The target language code (e.g., 'en', 'es', 'fr')
+        
+    Returns:
+        The translated text (currently just returns the input text)
+    """
+    logger.info(f"translate_text called with target_lang={target_lang} (stub implementation)")
+    return text
+
+
 # --- Main execution for internal testing (Optional) ---
 if __name__ == "__main__":
     import tempfile

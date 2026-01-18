@@ -774,7 +774,8 @@ class HumanInLoop:
 
     def check_permission(self, role: str, permission: str) -> bool:
         """Checks if a user role has a specific permission."""
-        from arbiter import PermissionManager
+        # Import directly from submodules to avoid circular import through __init__.py
+        from arbiter.arbiter import PermissionManager
         from arbiter.config import ArbiterConfig
 
         permission_mgr = PermissionManager(ArbiterConfig())
