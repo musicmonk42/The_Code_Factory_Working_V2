@@ -134,8 +134,8 @@ package-dir = {"" = "."}
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["arbiter*", "simulation*", "guardrails*", "test_generation*", "intent_capture*", "agent_orchestration*", "envs*", "mesh*", "plugins*", "self_healing_import_fixer*", "refactor_agent*", "contracts*"]
-exclude = ["tests*", "*.tests*", "docs*"]
+include = ["self_fixing_engineer*"]
+exclude = ["tests*", "*.tests*", "docs*", "test_checkpoints*"]
 
 [tool.black]
 line-length = 88
