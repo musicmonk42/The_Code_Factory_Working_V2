@@ -168,9 +168,12 @@ jobs:
           pytest --collect-only -q 2>&1 | tee collection.log || true
           
           # Count collected tests
-          # grep -c always outputs a count, even when it's 0 (but returns exit code 1)
-          # Redirect stderr to suppress "no matches" warnings
-          TEST_COUNT=$(grep -c "<Function\|<Method" collection.log 2>/dev/null) || TEST_COUNT=0
+          # More robust test counting that handles pytest output format better
+          TEST_COUNT=$(grep -E "^[[:space:]]*(test_.*\.py::|.*::test_)" collection.log 2>/dev/null | wc -l) || TEST_COUNT=0
+          # Also try alternative counting method
+          if [ "$TEST_COUNT" -eq 0 ]; then
+            TEST_COUNT=$(grep -c "<Function\|<Method\|test session starts" collection.log 2>/dev/null) || TEST_COUNT=0
+          fi
           echo "Found $TEST_COUNT test items"
           
           # Check if TEST_COUNT is a valid number and greater than 0
