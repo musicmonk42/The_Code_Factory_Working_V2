@@ -10,7 +10,7 @@ import signal
 import threading
 from datetime import datetime, timedelta
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import aiohttp
@@ -20,6 +20,10 @@ from fastapi.responses import JSONResponse
 
 # REMOVED: Direct import from prometheus_client (PromCounter, PromGauge, REGISTRY)
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+# Type checking imports - only used for type hints, not at runtime
+if TYPE_CHECKING:
+    from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
 
 __all__ = ["ArbiterArena", "run_arena", "run_arena_async"]
 
@@ -69,7 +73,8 @@ from arbiter.codebase_analyzer import CodebaseAnalyzer
 # Import core components with ABSOLUTE PATHS
 from arbiter.config import ArbiterConfig
 from arbiter.feedback import FeedbackManager
-from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+# REMOVED: from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+# Using lazy import to avoid circular dependencies
 from arbiter.logging_utils import PIIRedactorFilter
 
 # NEW: Import metric creation helpers from arbiter.metrics
@@ -261,6 +266,9 @@ class ArbiterArena:
             config=self.settings,
             log_file=os.path.join(self.settings.REPORTS_DIRECTORY, "feedback_log.json"),
         )
+
+        # Lazy import to avoid circular dependencies
+        from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
 
         hitl_config = HumanInLoopConfig(
             DATABASE_URL=self.settings.DB_PATH,

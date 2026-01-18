@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple
 
 import networkx as nx
 import numpy as np  # Using numpy for array-based prioritization
@@ -37,13 +37,18 @@ from arbiter.config import ArbiterConfig
 # from arbiter.knowledge_graph import KnowledgeGraph
 from arbiter.explainable_reasoner import ExplainableReasoner
 from arbiter.feedback import FeedbackManager
-from arbiter.human_loop import HumanInLoop
+# REMOVED: from arbiter.human_loop import HumanInLoop
+# Using lazy import to avoid circular dependencies
 from arbiter.monitoring import Monitor
 from arbiter.policy import PolicyEngine
 from arbiter.utils import get_system_metrics_async
 from circuitbreaker import circuit
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import WebSocket, WebSocketDisconnect
+
+# Type checking imports - only used for type hints, not at runtime
+if TYPE_CHECKING:
+    from arbiter.human_loop import HumanInLoop
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from arbiter.arbiter_array_backend import ConcreteArrayBackend as ArrayBackend
@@ -65,7 +70,7 @@ class SFECoreEngine:
     policy_engine: PolicyEngine
     bug_manager: BugManager
     monitor: Monitor
-    human_in_loop: HumanInLoop
+    human_in_loop: HumanInLoop  # TYPE_CHECKING import allows this without circular dependency
     plugin_registry: PLUGIN_REGISTRY
     notification_service: Any
     audit: Any
@@ -371,6 +376,9 @@ class DecisionOptimizer:
             if sfe_core_engine and hasattr(sfe_core_engine, "monitor")
             else None
         )
+        # Lazy import to avoid circular dependencies
+        from arbiter.human_loop import HumanInLoop
+        
         self.human_in_loop: Optional[HumanInLoop] = (
             sfe_core_engine.human_in_loop
             if sfe_core_engine and hasattr(sfe_core_engine, "human_in_loop")

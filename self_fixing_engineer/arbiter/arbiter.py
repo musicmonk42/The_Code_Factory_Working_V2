@@ -16,7 +16,7 @@ from collections import deque
 from datetime import datetime, timezone
 from functools import wraps
 from logging.handlers import RotatingFileHandler
-from typing import Any, Callable, ClassVar, Coroutine, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Coroutine, Dict, List, Optional, Set
 
 import aiohttp
 import httpx
@@ -223,13 +223,18 @@ if os.getenv("SENTRY_DSN") and SENTRY_AVAILABLE and sentry_sdk:
         environment=os.getenv("ENV", "production"),
     )
 
+# Type checking imports - only used for type hints, not at runtime
+if TYPE_CHECKING:
+    from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+
 # Assuming these are available in the project structure
 try:
     from arbiter.agent_state import AgentState as AgentStateModel
     from arbiter.agent_state import Base
     from arbiter.config import ArbiterConfig
     from arbiter.feedback import FeedbackManager
-    from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+    # REMOVED: from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+    # Using TYPE_CHECKING and lazy import to avoid circular dependencies
     from arbiter.monitoring import Monitor as BaseMonitor
     from arbiter.utils import get_system_metrics_async
 
@@ -244,8 +249,7 @@ except ImportError as e:
     Base = declarative_base()
     AgentStateModel = object
     BaseMonitor = object
-    HumanInLoop = object
-    HumanInLoopConfig = None
+    # HumanInLoop and HumanInLoopConfig will be imported lazily at runtime
     ArbiterConfig = object
     get_system_metrics_async = None
 
@@ -1328,7 +1332,7 @@ class Arbiter:
         port: Optional[int] = None,
         peer_ports: Optional[List[int]] = None,
         feedback_manager: Optional[FeedbackManager] = None,
-        human_in_loop: Optional[HumanInLoop] = None,
+        human_in_loop: Optional[HumanInLoop] = None,  # TYPE_CHECKING import allows this
         monitor: Optional[Monitor] = None,
         intent_capture_engine: Optional[Any] = None,
         test_generation_engine: Optional[Any] = None,
@@ -1377,6 +1381,17 @@ class Arbiter:
         )
 
         # Fixed HumanInLoop initialization with proper config
+        # Lazy import to avoid circular dependencies
+        if ARBITER_PACKAGE_AVAILABLE:
+            try:
+                from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+            except ImportError:
+                HumanInLoop = None
+                HumanInLoopConfig = None
+        else:
+            HumanInLoop = None
+            HumanInLoopConfig = None
+            
         if (
             ARBITER_PACKAGE_AVAILABLE
             and HumanInLoop is not None
