@@ -38,7 +38,7 @@ from .docgen_response_validator import (
 # These are imported in docgen_agent.py and need to be accessible for mocking
 try:
     import tiktoken
-    from runner.llm_client import call_ensemble_api, call_llm_api
+    from runner.llm_client import call_ensemble_api, call_llm_api, CircuitBreaker
     from runner.summarize_utils import call_summarizer, ensemble_summarizers
 except ImportError:
     # If dependencies aren't available (e.g., in test environment with mocks),
