@@ -132,9 +132,38 @@ Documentation = "https://your-org.github.io/self_fixing_engineer/"
 # The conflicting section has been removed from here.
 
 # This NEW section tells setuptools how to find your packages
+[tool.setuptools]
+# Explicitly list all packages for discovery
+packages = [
+    "arbiter",
+    "arbiter.arbiter_growth",
+    "arbiter.bug_manager",
+    "arbiter.explainable_reasoner",
+    "arbiter.knowledge_graph",
+    "arbiter.learner",
+    "arbiter.meta_learning_orchestrator",
+    "arbiter.models",
+    "arbiter.plugins",
+    "arbiter.policy",
+    "simulation",
+    "simulation.runners",
+    "guardrails",
+    "test_generation",
+    "test_generation.orchestrator",
+    "test_generation.gen_agent",
+    "intent_capture",
+    "agent_orchestration",
+    "envs",
+    "mesh",
+    "plugins",
+    "self_healing_import_fixer",
+    "self_healing_import_fixer.analyzer",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["arbiter*"]
+include = ["arbiter*", "simulation*", "guardrails*", "test_generation*", "intent_capture*", "agent_orchestration*", "envs*", "mesh*", "plugins*", "self_healing_import_fixer*"]
+exclude = ["tests*", "*.tests*", "docs*"]
 
 [tool.black]
 line-length = 88

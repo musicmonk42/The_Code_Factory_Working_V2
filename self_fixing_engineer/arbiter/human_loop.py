@@ -776,12 +776,18 @@ class HumanInLoop:
 
     def check_permission(self, role: str, permission: str) -> bool:
         """Checks if a user role has a specific permission."""
-        # Import directly from submodules to avoid circular import through __init__.py
-        from arbiter.arbiter import PermissionManager
-        from arbiter.config import ArbiterConfig
-
-        permission_mgr = PermissionManager(ArbiterConfig())
-        return permission_mgr.check_permission(role, permission)
+        # Lazy import to avoid circular dependency
+        try:
+            from arbiter.arbiter import PermissionManager
+            from arbiter.config import ArbiterConfig
+            
+            permission_mgr = PermissionManager(ArbiterConfig())
+            return permission_mgr.check_permission(role, permission)
+        except ImportError as e:
+            # Fallback if circular import still exists
+            self.logger.warning(f"Permission check failed due to import error: {e}")
+            # Conservative default: deny permission if we can't verify
+            return False
 
     async def _handle_hook(
         self,
