@@ -53,6 +53,7 @@ except ImportError:
         from arbiter_plugin_registry import PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY
         from arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind
     except ImportError:
+        logging.debug("arbiter package not found; using mock config and registry.")
 
         class ArbiterConfig:
             def __init__(self):
@@ -66,9 +67,8 @@ except ImportError:
         class ArbiterPlugInKind(str, Enum):
             pass
 
-    ARBITER_PLUGIN_REGISTRY = {}
-    assistant_pkg_path = []
-    print("arbiter package not found. Using mock config and registry.")
+        ARBITER_PLUGIN_REGISTRY = {}
+        assistant_pkg_path = []
 
 
 try:
