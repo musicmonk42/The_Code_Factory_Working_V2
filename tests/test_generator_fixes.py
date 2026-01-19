@@ -129,10 +129,8 @@ def test_llm_client_structure():
         import ast
         import inspect
 
-        # Use proper path resolution relative to this script
-        llm_client_path = (
-            Path(__file__).parent.parent / "generator" / "runner" / "llm_client.py"
-        )
+        # Use project_root that's already defined at the top
+        llm_client_path = project_root / "generator" / "runner" / "llm_client.py"
         
         # Skip if file doesn't exist
         if not llm_client_path.exists():
