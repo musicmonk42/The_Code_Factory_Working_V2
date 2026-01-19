@@ -33,6 +33,8 @@ def _create_mock_module(name):
         - As a callable: mock.function()
         - As an attribute chain: mock.sub.module.attr
         - As a context manager: with mock.context():
+        - As an iterable: for item in mock
+        - As __mro_entries__ for class inheritance
         """
 
         def __call__(self, *args, **kwargs):
@@ -48,6 +50,16 @@ def _create_mock_module(name):
 
         def __exit__(self, *args):
             pass
+
+        def __iter__(self):
+            # Return an empty iterator to support "for x in mock" patterns
+            return iter(())
+
+        def __mro_entries__(self, bases):
+            # Return empty tuple when used as a base class in type() or types.new_class()
+            # The 'bases' parameter is the tuple of base classes passed to the class creation
+            # This fixes: "__mro_entries__ must return a tuple" errors
+            return ()
 
     mock_module = ModuleType(name)
     mock_module.__file__ = f"<mocked {name}>"
