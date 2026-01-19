@@ -349,18 +349,25 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
                 # TODO: Consider using packaging.version.parse() for proper version constraint validation
                 # to support complex version specifiers like ">=1.0,<2.0", "~=1.0", "!=1.0"
                 if ver:
-                    # Validate common version patterns
-                    if not any(ver.startswith(prefix) for prefix in ['>=', '<=', '==', '!=', '~=', '>', '<', '']):
-                        logger.warning(f"Unsupported version specifier format: {ver}. Treating as '>={ver}'")
+                    # Validate common version patterns - check if format is recognized
+                    recognized_prefixes = ['>=', '<=', '==', '!=', '~=', '>', '<']
+                    if not any(ver.startswith(prefix) for prefix in recognized_prefixes):
+                        logger.warning(
+                            f"Version specifier '{ver}' for package '{pkg}' doesn't use a recognized operator. "
+                            f"Assuming '>={ver}'"
+                        )
                         ver = f">={ver}"
-                logger.debug(f"Dependency {pkg} version {installed_version} checked against requirement {ver}")
+                    
+                    # Note: Actual version comparison would require packaging library
+                    # For now, we only check if the package exists and log the requirement
+                    logger.debug(
+                        f"Dependency {pkg} found (version {installed_version}). "
+                        f"Required: {ver}. Full validation requires packaging library."
+                    )
+                else:
+                    logger.debug(f"Dependency {pkg} found (version {installed_version}). Any version accepted.")
             except importlib_metadata.PackageNotFoundError as e:
                 # Preserve specific package information for better debugging
-                dep_error = {
-                    "package": pkg,
-                    "required_version": ver if ver else "any",
-                    "error": f"Package not found"
-                }
                 raise importlib_metadata.PackageNotFoundError(
                     f"Package '{pkg}' (required version: {ver or 'any'}) not found"
                 ) from e
