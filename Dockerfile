@@ -61,7 +61,7 @@ RUN set -e; \
         echo "Installing dependencies from requirements.txt..."; \
         if ! pip install --no-cache-dir -r requirements.txt; then \
             echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host"; \
-            if ! pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt; then \
+            if ! pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org --trusted-host github.com -r requirements.txt; then \
                 echo "ERROR: Failed to install dependencies from requirements.txt"; \
                 exit 1; \
             fi; \
@@ -71,7 +71,7 @@ RUN set -e; \
         echo "Installing dependencies from pyproject.toml..."; \
         if ! pip install --no-cache-dir .; then \
             echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host"; \
-            if ! pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org .; then \
+            if ! pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org --trusted-host github.com .; then \
                 echo "ERROR: Failed to install dependencies from pyproject.toml"; \
                 exit 1; \
             fi; \
