@@ -24,6 +24,7 @@ Examples:
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -54,8 +55,8 @@ def parse_args():
     parser.add_argument(
         "--port",
         type=int,
-        default=8000,
-        help="Port to bind to (default: 8000)",
+        default=int(os.environ.get("PORT", 8000)),
+        help="Port to bind to (default: 8000 or PORT env var)",
     )
 
     parser.add_argument(
