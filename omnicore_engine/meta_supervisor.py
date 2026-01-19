@@ -158,6 +158,54 @@ if not logger.handlers:
 
 MAX_ITERATIONS = 1000
 
+# Feature names for plugin metrics extraction - must match prediction model's expected input size (20 features)
+PLUGIN_FEATURE_NAMES = [
+    "error_rate",
+    "execution_time_avg",
+    "execution_time_max",
+    "execution_time_min",
+    "executions",
+    "errors",
+    "success_rate",
+    "latency_p50",
+    "latency_p90",
+    "latency_p99",
+    "memory_usage",
+    "cpu_usage",
+    "queue_depth",
+    "retry_count",
+    "timeout_count",
+    "active_connections",
+    "throughput",
+    "error_rate_trend",
+    "load_factor",
+    "health_score",
+]
+
+# Default values for features (used when stat is not available)
+PLUGIN_FEATURE_DEFAULTS = {
+    "error_rate": 0.0,
+    "execution_time_avg": 0.0,
+    "execution_time_max": 0.0,
+    "execution_time_min": 0.0,
+    "executions": 0.0,
+    "errors": 0.0,
+    "success_rate": 1.0,
+    "latency_p50": 0.0,
+    "latency_p90": 0.0,
+    "latency_p99": 0.0,
+    "memory_usage": 0.0,
+    "cpu_usage": 0.0,
+    "queue_depth": 0.0,
+    "retry_count": 0.0,
+    "timeout_count": 0.0,
+    "active_connections": 0.0,
+    "throughput": 0.0,
+    "error_rate_trend": 0.0,
+    "load_factor": 0.0,
+    "health_score": 1.0,
+}
+
 
 def validate_model_input(features: np.ndarray) -> np.ndarray:
     """
@@ -2058,8 +2106,10 @@ class MetaSupervisor:
             for metric_family in counter.collect():
                 for sample in metric_family.samples:
                     # Sum up the counter values (which might have multiple labels)
-                    if sample.name.endswith('_total') or sample.name == counter._name:
-                        total += sample.value
+                    # Use endswith('_total') which is the standard Prometheus counter naming convention
+                    if sample.name.endswith('_total') or sample.name.endswith('_created'):
+                        continue  # Skip _created timestamps
+                    total += sample.value
             return total
         except Exception as e:
             self.logger.warning(f"Failed to get counter value: {e}")
@@ -2069,7 +2119,7 @@ class MetaSupervisor:
         """
         Extracts relevant features from plugin statistics for use in predictive models.
         Features include error rate, execution time, and additional metrics.
-        Returns a 20-element feature vector to match the prediction model's expected input size.
+        Returns a feature vector matching PLUGIN_FEATURE_NAMES length to match prediction model's expected input size.
         """
         # Handle case where stats might be a list instead of dict
         if isinstance(stats, list):
@@ -2080,28 +2130,10 @@ class MetaSupervisor:
         elif not isinstance(stats, dict):
             stats = {}
         
-        # Ensure consistent feature vector length (20 features) to match prediction model input
+        # Build feature vector using defined feature names and defaults for consistency
         features = [
-            stats.get("error_rate", 0.0),
-            stats.get("execution_time_avg", 0.0),  # Use _avg from Histogram in metrics.py
-            stats.get("execution_time_max", 0.0),
-            stats.get("execution_time_min", 0.0),
-            stats.get("executions", 0.0),
-            stats.get("errors", 0.0),
-            stats.get("success_rate", 1.0),
-            stats.get("latency_p50", 0.0),
-            stats.get("latency_p90", 0.0),
-            stats.get("latency_p99", 0.0),
-            stats.get("memory_usage", 0.0),
-            stats.get("cpu_usage", 0.0),
-            stats.get("queue_depth", 0.0),
-            stats.get("retry_count", 0.0),
-            stats.get("timeout_count", 0.0),
-            stats.get("active_connections", 0.0),
-            stats.get("throughput", 0.0),
-            stats.get("error_rate_trend", 0.0),
-            stats.get("load_factor", 0.0),
-            stats.get("health_score", 1.0),
+            stats.get(feature_name, PLUGIN_FEATURE_DEFAULTS[feature_name])
+            for feature_name in PLUGIN_FEATURE_NAMES
         ]
         return np.array(features, dtype=np.float32)
 
