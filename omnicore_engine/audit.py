@@ -479,7 +479,7 @@ class AuditProofExporter:
 
             merkle_root_hex = None
             if self.merkle_tree:
-                merkle_root_hex = self.merkle_tree.get_merkle_root()
+                merkle_root_hex = self.merkle_tree.get_root()
 
             decryption_key_value = (
                 settings.ENCRYPTION_KEY.get_secret_value() if allowed else None
@@ -899,7 +899,7 @@ class ExplainAudit:
                 current_merkle_root = None
                 if self.system_audit_merkle_tree:
                     current_merkle_root = (
-                        self.system_audit_merkle_tree.get_merkle_root()
+                        self.system_audit_merkle_tree.get_root()
                     )
 
                 if kind in {
@@ -1068,7 +1068,7 @@ class ExplainAudit:
                 current_merkle_root = None
                 if self.system_audit_merkle_tree:
                     current_merkle_root = (
-                        self.system_audit_merkle_tree.get_merkle_root()
+                        self.system_audit_merkle_tree.get_root()
                     )
 
                 if kind in {
@@ -1228,7 +1228,7 @@ class ExplainAudit:
                     self.system_audit_merkle_tree.add_leaf(audit_leaf_content)
                     self.system_audit_merkle_tree._recalculate_root()
                     logger.debug(
-                        f"Merkle tree updated for record {record.uuid}. New root: {self.system_audit_merkle_tree.get_merkle_root()[:10]}..."
+                        f"Merkle tree updated for record {record.uuid}. New root: {self.system_audit_merkle_tree.get_root()[:10]}..."
                     )
 
                 await self._db_client.save_audit_record(record.model_dump())
@@ -1626,7 +1626,7 @@ class ExplainAudit:
                                 json.dumps(details, default=safe_serialize).encode()
                             ).hexdigest(),
                             "merkle_root": (
-                                self.system_audit_merkle_tree.get_merkle_root()
+                                self.system_audit_merkle_tree.get_root()
                                 if self.system_audit_merkle_tree
                                 else "N/A"
                             ),

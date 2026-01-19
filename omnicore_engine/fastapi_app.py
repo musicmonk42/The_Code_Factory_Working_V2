@@ -41,6 +41,7 @@ from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
 from prometheus_client import make_asgi_app
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # Corrected imports to use the centralized OmniCore Engine singletons
@@ -428,6 +429,11 @@ except ImportError as e:
             return self._mock_root
 
         def get_merkle_root(self) -> str:
+            """Legacy method name for compatibility."""
+            return self._mock_root.hex()
+        
+        def get_root(self) -> str:
+            """Get the Merkle root as a hex string."""
             return self._mock_root.hex()
 
         def make_tree(self):
@@ -471,21 +477,10 @@ arena: Optional[ArbiterArena] = None
 simulation_module: Optional[UnifiedSimulationModule] = None
 _db_engine = None
 system_audit_merkle_tree: MerkleTree = None
-app = FastAPI(
-    title="OmniCore Omega Pro Engine API",
-    description="Universal orchestration engine with audit and AI integration",
-    version=settings.LOG_LEVEL,
-    docs_url=None,
-    redoc_url=None,
-)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.mount("/metrics", make_asgi_app())
+
+# Note: app is defined after the lifespan function below
+# Middlewares and routes are also configured after app definition
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
 
 
@@ -633,8 +628,10 @@ plugin_upload_lock = asyncio.Lock()
 # Use ENCRYPTION_KEY_BYTES which is properly initialized by ArbiterConfig
 # The ArbiterConfig singleton initializes this during __new__, so it should always be available
 try:
-    encrypter = Fernet(settings.ENCRYPTION_KEY_BYTES)
-except (AttributeError, ValueError) as e:
+    # Ensure we have a valid key - if empty bytes, generate one
+    key_bytes = settings.ENCRYPTION_KEY_BYTES if settings.ENCRYPTION_KEY_BYTES else Fernet.generate_key()
+    encrypter = Fernet(key_bytes)
+except (AttributeError, ValueError, Exception) as e:
     logger.error(
         f"Failed to initialize Fernet encrypter: {e}. Generating temporary key for testing."
     )
@@ -642,10 +639,15 @@ except (AttributeError, ValueError) as e:
 meta_supervisor_instance = None
 
 
-@app.on_event("startup")
-async def startup_event_fastapi():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for FastAPI application startup and shutdown.
+    Replaces deprecated @app.on_event decorators.
+    """
     global chatbot_arbiter, arena, system_audit_merkle_tree, meta_supervisor_instance, simulation_module
-
+    
+    # Startup
     await omnicore_engine.initialize()
 
     # Initialize simulation module with proper database and message bus adapters
@@ -735,7 +737,7 @@ async def startup_event_fastapi():
             )
             system_audit_merkle_tree.make_tree()
             logger.info(
-                f"System audit Merkle tree initialized. Initial root: {system_audit_merkle_tree.get_merkle_root()}"
+                f"System audit Merkle tree initialized. Initial root: {system_audit_merkle_tree.get_root()}"
             )
         else:
             system_audit_merkle_tree = MerkleTree()
@@ -809,10 +811,10 @@ async def startup_event_fastapi():
         logger.critical(f"FastAPI startup failed: {e}", exc_info=True)
         raise
 
+    # Yield control to the application
+    yield
 
-@app.on_event("shutdown")
-async def shutdown_event_fastapi():
-
+    # Shutdown
     if simulation_module:
         await simulation_module.shutdown()
         logger.info("UnifiedSimulationModule shutdown complete.")
@@ -828,6 +830,26 @@ async def shutdown_event_fastapi():
         await meta_supervisor_instance.stop()
         logger.info("MetaSupervisor services stopped.")
     logger.info("FastAPI app shutdown complete.")
+
+
+app = FastAPI(
+    title="OmniCore Omega Pro Engine API",
+    description="Universal orchestration engine with audit and AI integration",
+    version=settings.LOG_LEVEL,
+    docs_url=None,
+    redoc_url=None,
+    lifespan=lifespan,
+)
+
+# Configure middlewares
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.mount("/metrics", make_asgi_app())
 
 
 @app.get("/docs", include_in_schema=False)
