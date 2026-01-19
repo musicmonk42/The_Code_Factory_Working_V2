@@ -434,10 +434,35 @@ except ImportError as e:
             self._recalculate_root()
 
     class UnifiedSimulationModule:
+        """Mock UnifiedSimulationModule for fallback when real module is unavailable.
+
+        This mock class provides minimal interface compatibility with the real
+        UnifiedSimulationModule to allow the application to start and run basic
+        operations even when the simulation module cannot be imported.
+        """
+
         def __init__(self, *args, **kwargs):
+            """Initialize the mock simulation module.
+
+            Args:
+                *args: Variable length argument list (ignored in mock).
+                **kwargs: Arbitrary keyword arguments (ignored in mock).
+            """
             pass
 
         async def initialize(self):
+            """Initialize the simulation module asynchronously.
+
+            This is a no-op in the mock implementation.
+            """
+            pass
+
+        async def shutdown(self):
+            """Shutdown the simulation module gracefully.
+
+            This is a no-op in the mock implementation, but is required for
+            compatibility with the application shutdown lifecycle.
+            """
             pass
 
 

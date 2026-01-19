@@ -13,7 +13,7 @@ scrape_configs:
   - job_name: 'generator'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['generator:8001']
+      - targets: ['codefactory:9090']
         labels:
           service: 'generator'
           component: 'api'
@@ -21,7 +21,7 @@ scrape_configs:
   - job_name: 'omnicore'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['omnicore:8001']
+      - targets: ['codefactory:9090']
         labels:
           service: 'omnicore'
           component: 'engine'

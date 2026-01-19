@@ -39,6 +39,7 @@ def _create_fallback_settings():
         decision_optimizer_config={},
         engine_type="simulation",
         encryption_key_bytes=b"",
+        ENCRYPTION_KEY_BYTES=b"",  # Uppercase version for consistent access
         API_HOST="0.0.0.0",
         API_PORT=8000,
     )
@@ -313,6 +314,23 @@ class MerkleTree:
             current_level = next_level
         self.root = current_level[0]
         self.logger.debug(f"Merkle root recalculated: {self.root[:10]}...")
+
+    def get_merkle_root(self) -> str:
+        """Returns the Merkle root as a hex string.
+
+        This method provides a standardized interface for retrieving the Merkle tree root,
+        which is used for audit trail integrity verification.
+
+        Returns:
+            str: The Merkle root hash as a hexadecimal string. Returns an empty string
+                 if the tree is empty and has no root.
+
+        Note:
+            This is the recommended method for accessing the Merkle root. While the `.root`
+            property can be accessed directly, this method provides a more explicit and
+            self-documenting interface.
+        """
+        return self.root if self.root else ""
 
     def verify_proof(
         self, leaf_data: Union[str, bytes], root: str, proof: List[str]
