@@ -11,7 +11,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, ClassVar, Dict, List, Optional, Tuple
 
-import aiofiles
+# Optional imports - make aiofiles optional since it's only used in refresh()
+try:
+    import aiofiles
+    AIOFILES_AVAILABLE = True
+except ImportError:
+    AIOFILES_AVAILABLE = False
+    aiofiles = None
+
 import pydantic
 import yaml
 from cryptography.fernet import Fernet, InvalidToken
@@ -868,11 +875,17 @@ class ArbiterConfig(BaseSettings):
                 persona_file_path = os.path.join(
                     os.path.dirname(os.path.abspath(__file__)), "personas.json"
                 )
-                if os.path.exists(persona_file_path):
+                if os.path.exists(persona_file_path) and AIOFILES_AVAILABLE:
                     async with aiofiles.open(
                         persona_file_path, "r", encoding="utf-8"
                     ) as f:
                         personas = json.loads(await f.read())
+                        if isinstance(personas, dict):
+                            self.PERSONAS = personas
+                elif os.path.exists(persona_file_path):
+                    # Fallback to sync file reading if aiofiles not available
+                    with open(persona_file_path, "r", encoding="utf-8") as f:
+                        personas = json.load(f)
                         if isinstance(personas, dict):
                             self.PERSONAS = personas
 
