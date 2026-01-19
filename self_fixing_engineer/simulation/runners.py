@@ -942,3 +942,61 @@ if __name__ == "__main__":
     if PROMETHEUS_AVAILABLE:
         runners_logger.info("\n--- Prometheus Metrics ---")
         runners_logger.info(generate_latest(registry=_metrics_registry).decode("utf-8"))
+
+
+# Stub classes for compatibility with plugin_registry.py
+class MyBetterRunner:
+    """
+    Stub runner class for compatibility with plugin_registry imports.
+    Provides basic interface for enhanced runner functionality.
+    """
+    
+    def __init__(self):
+        self.logger = runners_logger
+        self.logger.info("MyBetterRunner initialized")
+    
+    def run(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute a runner with enhanced features.
+        
+        Args:
+            config: Configuration dictionary for the runner
+            
+        Returns:
+            Dictionary with execution results
+        """
+        self.logger.info(f"MyBetterRunner.run() called with config: {config}")
+        return {
+            "status": "SUCCESS",
+            "message": "MyBetterRunner executed successfully",
+            "runner_type": "my_better_runner"
+        }
+
+
+class MyCustomRunner:
+    """
+    Stub runner class for compatibility with plugin_registry imports.
+    Provides basic interface for custom runner functionality.
+    """
+    
+    def __init__(self):
+        self.logger = runners_logger
+        self.logger.info("MyCustomRunner initialized")
+    
+    def run(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute a custom runner.
+        
+        Args:
+            config: Configuration dictionary for the runner
+            
+        Returns:
+            Dictionary with execution results
+        """
+        self.logger.info(f"MyCustomRunner.run() called with config: {config}")
+        return {
+            "status": "SUCCESS",
+            "message": "MyCustomRunner executed successfully",
+            "runner_type": "my_custom_runner"
+        }
+

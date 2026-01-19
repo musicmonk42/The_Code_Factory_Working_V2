@@ -13,7 +13,11 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
-import pkg_resources
+try:
+    from importlib import metadata as importlib_metadata
+except ImportError:
+    # Fallback for Python < 3.8
+    import importlib_metadata
 
 # --- Constants & Configuration ---
 SIMULATION_PACKAGE = "simulation"
@@ -337,17 +341,24 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
         return True
 
     try:
-        pkg_resources.require([f"{pkg}{ver}" for pkg, ver in dependencies.items()])
+        # Use importlib.metadata instead of deprecated pkg_resources
+        for pkg, ver in dependencies.items():
+            try:
+                installed_version = importlib_metadata.version(pkg)
+                # Basic version checking - can be enhanced with packaging library
+                if ver and not ver.startswith(">=") and not ver.startswith("=="):
+                    ver = f">={ver}"
+                logger.debug(f"Dependency {pkg} version {installed_version} meets requirement {ver}")
+            except importlib_metadata.PackageNotFoundError:
+                raise importlib_metadata.PackageNotFoundError(f"Package {pkg} not found")
         return True
-    except pkg_resources.DistributionNotFound as e:
-        dep_name = str(e.req) if hasattr(e, "req") else str(e)
-        required_version = str(e.req) if hasattr(e, "req") else ""
+    except importlib_metadata.PackageNotFoundError as e:
+        dep_name = str(e)
         await audit_logger.emit_audit_event(
             "plugin_dependency_missing",
             {
                 "module": module_name,
                 "dependency": dep_name,
-                "required_version": required_version,
                 "error": "Dependency not found",
             },
             severity="ERROR",

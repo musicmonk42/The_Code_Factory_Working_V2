@@ -1,0 +1,26 @@
+{
+  "description": "Module allowlist for simulation registry security",
+  "version": "1.0",
+  "modules": {
+    "simulation.plugins": {
+      "enabled": true,
+      "description": "Core simulation plugins",
+      "allowed_operations": ["load", "execute", "register"]
+    },
+    "self_fixing_engineer": {
+      "enabled": true,
+      "description": "Self-fixing engineer modules",
+      "allowed_operations": ["load", "execute"]
+    },
+    "omnicore_engine": {
+      "enabled": true,
+      "description": "OmniCore engine modules",
+      "allowed_operations": ["load", "execute"]
+    }
+  },
+  "global_settings": {
+    "strict_mode": false,
+    "allow_dynamic_loading": true,
+    "audit_all_loads": true
+  }
+}
