@@ -219,7 +219,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # FIXED: Enabled AgentError handler to return HTTP 500 for server errors
 # AgentError represents server-side issues, not client errors (400).
 # This follows HTTP status code best practices.
-@app.exception_handler(AgentError)
+# NOTE: This function is registered via app.add_exception_handler() in create_app()
 async def agent_error_handler(request: Request, exc: AgentError):
     """
     Handle AgentError exceptions with HTTP 500 status.

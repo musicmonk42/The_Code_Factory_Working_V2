@@ -6,7 +6,7 @@ import os
 import sys
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -29,6 +29,9 @@ from pydantic import BaseModel, Field, validator
 from tenacity import retry, stop_after_attempt, wait_exponential
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+
+# Set up module logger for import-time logging
+logger = logging.getLogger(__name__)
 
 # Try to import LLMClient
 try:
