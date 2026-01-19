@@ -427,7 +427,9 @@ class Database:
         # Initialize PolicyEngine if available
         if PolicyEngine is not None:
             try:
-                self.policy_engine = PolicyEngine(arbiter_instance=None)
+                # Get the config settings for PolicyEngine
+                config = _get_settings()
+                self.policy_engine = PolicyEngine(arbiter_instance=None, config=config)
             except Exception as e:
                 logger.warning(f"Failed to initialize PolicyEngine: {e}")
                 self.policy_engine = None

@@ -1,0 +1,18 @@
+{
+  "allowed_hosts": [
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0"
+  ],
+  "allowed_origins": [
+    "http://localhost:*",
+    "http://127.0.0.1:*"
+  ],
+  "allowed_ips": [],
+  "blocked_ips": [],
+  "rate_limits": {
+    "default": 100,
+    "authenticated": 1000
+  },
+  "description": "Default allowlist configuration for OmniCore Engine"
+}

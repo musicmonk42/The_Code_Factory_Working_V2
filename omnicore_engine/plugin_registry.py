@@ -1165,6 +1165,16 @@ class PluginWatcher:
         self.logger = logging.getLogger("PluginWatcher")
 
     def start(self):
+        # Ensure the directory exists before starting the observer
+        import os
+        if not os.path.exists(self.directory):
+            self.logger.warning(f"Plugin directory does not exist, creating: {self.directory}")
+            try:
+                os.makedirs(self.directory, exist_ok=True)
+            except Exception as e:
+                self.logger.error(f"Failed to create plugin directory {self.directory}: {e}")
+                return
+        
         self.logger.info(f"Starting to watch directory: {self.directory}")
         self._observer.schedule(self._handler, path=self.directory, recursive=False)
         self._observer.start()
