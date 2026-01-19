@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 # Import the cleanup module
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cleanup_old_docs import (
     get_file_age_days,
     should_exclude_path,
