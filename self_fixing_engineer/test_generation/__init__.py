@@ -52,14 +52,13 @@ try:
     sys.modules[__name__ + ".audit_log"] = arbiter_audit_log
     from arbiter.audit_log import audit_logger
 except Exception as e:
-    logger.warning(
-        "Warning: Arbiter audit_log import failed (%s). Using stub audit_logger. "
-        "Some logging features will be disabled.",
+    logger.debug(
+        "Arbiter audit_log import failed (%s); using stub audit_logger.",
         e,
     )
 
     async def _stub_log_event(event_type, data, critical=False, **kwargs):
-        log_level = logging.CRITICAL if critical else logging.WARNING
+        log_level = logging.CRITICAL if critical else logging.DEBUG
         # Use root logger to ensure output even if `logger` is reconfigured
         logging.getLogger().log(
             log_level,
@@ -76,7 +75,7 @@ try:
     _audit_mod.AuditLogger = _AuditLogger
     sys.modules[__name__ + ".audit_log"] = _audit_mod
 except ImportError as e:
-    logger.warning(f"Failed to create synthetic audit_log submodule: {e}")
+    logger.debug(f"Failed to create synthetic audit_log submodule: {e}")
 
 
 # Define stubs for testing purposes (only used if imports fail)
@@ -126,8 +125,8 @@ try:
     try:
         # Check for presence of __version__ first
         if not hasattr(_utils, "__version__"):
-            logger.warning(
-                "Warning: utils module has no __version__ attribute. Skipping version check."
+            logger.debug(
+                "utils module has no __version__ attribute; skipping version check."
             )
         else:
             try:
@@ -137,18 +136,18 @@ try:
                     logger.critical(error_msg)
                     sys.exit(1)
             except PackageNotFoundError:
-                logger.warning(
-                    "Warning: test_generation.utils not installed as a package; skipping version check."
+                logger.debug(
+                    "test_generation.utils not installed as a package; skipping version check."
                 )
     except AttributeError:
         # This catch is for cases where getattr fails for some reason
-        logger.warning(
-            "Warning: Could not check utils version due to AttributeError. Skipping version check."
+        logger.debug(
+            "Could not check utils version due to AttributeError; skipping version check."
         )
 
 except ImportError as e:
-    logger.warning(
-        f"Warning: Failed to import a core component: {e}. Using stubs for testing."
+    logger.debug(
+        f"Failed to import a core component: {e}; using stubs for testing."
     )
 
 
@@ -278,13 +277,13 @@ try:
             # ✨ make `test_generation.gen_plugins` resolvable via attribute access
             setattr(sys.modules[__name__], "gen_plugins", mod)  # <-- add this
         else:
-            logging.getLogger(__name__).warning(
+            logging.getLogger(__name__).debug(
                 "gen_plugins source file not found (looked for %s and %s)",
                 _src_normal,
                 _src_weird,
             )
 except Exception as _e:
-    logging.getLogger(__name__).warning("Plugin shim load failed: %s", _e)
+    logging.getLogger(__name__).debug("Plugin shim load failed: %s", _e)
 
 # Create a lightweight alias package: test_generation.gen_agent
 _ga_pkg = __name__ + ".gen_agent"

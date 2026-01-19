@@ -65,19 +65,19 @@ try:
             RICH_AVAILABLE = True
         else:
             RICH_AVAILABLE = False
-            logging.getLogger(__name__).warning(
-                "Warning: Rich version < 14.0.0 detected. Rich console output will be disabled."
+            logging.getLogger(__name__).debug(
+                "Rich version < 14.0.0 detected; console output disabled."
             )
     except PackageNotFoundError:
         RICH_AVAILABLE = False
-        logging.getLogger(__name__).warning(
-            "Warning: 'rich' not installed. Rich console output will be disabled."
+        logging.getLogger(__name__).debug(
+            "'rich' not installed; console output disabled."
         )
 except ImportError:
     RICH_AVAILABLE = False
     Console = None
-    logging.getLogger(__name__).warning(
-        "Warning: 'rich' not available. Rich console output will be disabled."
+    logging.getLogger(__name__).debug(
+        "'rich' not available; console output disabled."
     )
 
 
@@ -297,8 +297,8 @@ except ImportError:
     def retry_if_exception_type(*args, **kwargs):
         return None
 
-    logging.getLogger(__name__).warning(
-        "Warning: 'tenacity' not available. Retries will be disabled."
+    logging.getLogger(__name__).debug(
+        "'tenacity' not available; retries disabled."
     )
 
 # --- Optional PyTorch for ML-based fault injection ---
@@ -308,9 +308,8 @@ try:
     TORCH_AVAILABLE = True
 except Exception as e:  # <-- FIX: Broadened to catch OS/DLL loading errors.
     TORCH_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        f"Warning: 'torch' not available or failed to initialize ({e}). "
-        "ML-based fault injection will be disabled."
+    logging.getLogger(__name__).debug(
+        f"'torch' not available ({e}); ML-based fault injection disabled."
     )
 
 # --- IMPORT THE CANONICAL AUDIT LOGGER ---
@@ -319,12 +318,12 @@ try:
 
     AUDIT_LOGGER_AVAILABLE = True
 except Exception as e:
-    logging.getLogger(__name__).warning(
-        f"Warning: Arbiter audit_log import failed ({e}). Using stub."
+    logging.getLogger(__name__).debug(
+        f"Arbiter audit_log import failed ({e}); using stub."
     )
 
     async def _stub_log_event(event_type=None, details=None, critical=False, **kwargs):
-        logging.getLogger(__name__).warning(
+        logging.getLogger(__name__).debug(
             f"Stub audit_logger invoked for event '{event_type}' with details: {details}"
         )
 
