@@ -155,6 +155,7 @@ class MessageFilter:
 # Import shared implementations from simulation_module instead of duplicating
 try:
     from simulation.simulation_module import (
+        CircuitBreaker,
         Database,
         ShardedMessageBus,
         ExplainableReasonerPlugin,
@@ -173,6 +174,13 @@ except ImportError as e:
     )
 
     # Fallback implementations if simulation_module is unavailable
+    class CircuitBreaker:
+        """Fallback CircuitBreaker - see simulation_module.py for full implementation."""
+
+        def __init__(self, *_args, **_kwargs):
+            """Accept any arguments for compatibility."""
+            pass
+
     class Database:
         """Fallback Database - see simulation_module.py for full implementation."""
 
