@@ -869,6 +869,23 @@ async def custom_redoc_html():
     return get_redoc_html(openapi_url=app.openapi_url, title=app.title + " - ReDoc")
 
 
+@app.get("/health")
+async def root_health_check():
+    """
+    Root-level health check endpoint for container orchestration and load balancers.
+    
+    This endpoint is separate from /api/health to provide a simple, fast health check
+    at the root level that container orchestrators (Docker, Kubernetes, Railway) expect.
+    
+    Returns:
+        dict: Health status with status and timestamp
+    """
+    return {
+        "status": "healthy",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+
+
 class ChatRequest(BaseModel):
     user_id: str
     message: str
