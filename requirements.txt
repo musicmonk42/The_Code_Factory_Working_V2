@@ -99,7 +99,7 @@ Farama-Notifications==0.0.4
 fastapi==0.116.1
 fastapi-cache2==0.2.2
 fastapi-csrf-protect==1.0.7
-feast==0.53.0
+feast==0.54.1
 ffmpeg==1.4
 filelock==3.19.1
 flake8==7.3.0
@@ -362,7 +362,7 @@ stevedore==5.5.0
 structlog==25.5.0
 sympy==1.14.0
 tabulate==0.9.0
-tenacity>=9.1.2,<10.0.0
+tenacity>=8.2.3,<9
 termcolor==3.2.0
 textual==6.5.0
 thinc==8.3.10
