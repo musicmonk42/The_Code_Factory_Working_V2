@@ -1065,9 +1065,10 @@ class MetaSupervisor:
         self.logger.info("Inspecting test results for regressions.")
         try:
             test_metrics = get_test_metrics()
-            if test_metrics["failures"] > self.thresholds["test_failure"]:
+            failures = test_metrics.get("failures", 0)
+            if failures > self.thresholds["test_failure"]:
                 self.logger.warning(
-                    f"High test failures ({test_metrics['failures']}). Running auto-repair."
+                    f"High test failures ({failures}). Running auto-repair."
                 )
                 # run_all_tests is currently a sync function. Call it in a thread.
                 results = await asyncio.to_thread(run_all_tests, auto_repair=True)
@@ -1092,12 +1093,16 @@ class MetaSupervisor:
                     # else:
                     #     self.logger.info("Proactive test plugin synthesis is disabled by settings.")
 
-                explanation = await self.explainer.explain(
-                    {
-                        "action": "test_repair",
-                        "reason": f"Failures exceeded threshold ({test_metrics['failures']})",
-                    }
-                )
+                if self.explainer is not None:
+                    explanation = await self.explainer.explain(
+                        {
+                            "action": "test_repair",
+                            "reason": f"Failures exceeded threshold ({failures})",
+                        }
+                    )
+                else:
+                    explanation = {"explanation": "Explainer not available"}
+                
                 await self._rate_limited_operation(
                     self._record_audit_event,
                     "auto_test_repair",
@@ -1106,7 +1111,7 @@ class MetaSupervisor:
                 )
             else:
                 self.logger.info(
-                    f"Test failures are within acceptable limits ({test_metrics['failures']})."
+                    f"Test failures are within acceptable limits ({failures})."
                 )
         except Exception as e:
             self.logger.error(f"Test inspection failed: {e}", exc_info=True)
@@ -1188,6 +1193,11 @@ class MetaSupervisor:
             f"Detecting ethical drift for change: {change.get('user_id', 'N/A')} - {change.get('new_value', 'N/A')}"
         )
         try:
+            # Check if PolicyEngine is available
+            if self.policy_engine is None:
+                self.logger.warning("PolicyEngine not available, skipping ethical drift detection")
+                return False
+            
             # PolicyEngine evaluates if the change is "allowed" ethically
             # Assuming 'should_auto_learn' returns (bool, reason_string)
             allowed, reason = await self._rate_limited_operation(
@@ -2033,6 +2043,15 @@ class MetaSupervisor:
         Extracts relevant features from plugin statistics for use in predictive models.
         Features include error rate and execution time.
         """
+        # Handle case where stats might be a list instead of dict
+        if isinstance(stats, list):
+            if stats and isinstance(stats[0], dict):
+                stats = stats[0]
+            else:
+                stats = {}
+        elif not isinstance(stats, dict):
+            stats = {}
+        
         # Ensure consistent feature vector length and order
         features = [
             stats.get("error_rate", 0.0),
@@ -2054,12 +2073,19 @@ class MetaSupervisor:
         test_metrics = get_test_metrics()
 
         # Aggregate plugin metrics
-        total_plugin_errors = sum(
-            m.get("error_rate", 0) for m in plugin_metrics_raw.values()
-        )
-        total_plugin_executions = sum(
-            m.get("executions", 0) for m in plugin_metrics_raw.values()
-        )
+        total_plugin_errors = 0
+        total_plugin_executions = 0
+        
+        for m in plugin_metrics_raw.values():
+            if isinstance(m, dict):
+                total_plugin_errors += m.get("error_rate", 0)
+                total_plugin_executions += m.get("executions", 0)
+            elif isinstance(m, list):
+                for item in m:
+                    if isinstance(item, dict):
+                        total_plugin_errors += item.get("error_rate", 0)
+                        total_plugin_executions += item.get("executions", 0)
+        
         avg_plugin_error_rate = total_plugin_errors / max(1, total_plugin_executions)
 
         # Test metrics
@@ -2234,21 +2260,25 @@ class MetaSupervisor:
             }
 
             # Get an AI explanation for the current status
-            explanation = await self.explainer.explain(
-                {
-                    "action": "status_publish",
-                    "current_system_state_summary": {
-                        "plugin_errors_summary": status_report["plugins_status"],
-                        "test_failures": status_report["tests_status"].get(
-                            "failures", 0
-                        ),
-                        "thresholds": status_report["current_thresholds"],
-                    },
-                }
-            )
-            status_report["explanation"] = explanation.get(
-                "explanation", "No explanation provided."
-            )  # Add AI explanation to report
+            if self.explainer is not None:
+                explanation = await self.explainer.explain(
+                    {
+                        "action": "status_publish",
+                        "current_system_state_summary": {
+                            "plugin_errors_summary": status_report["plugins_status"],
+                            "test_failures": status_report["tests_status"].get(
+                                "failures", 0
+                            ),
+                            "thresholds": status_report["current_thresholds"],
+                        },
+                    }
+                )
+                status_report["explanation"] = explanation.get(
+                    "explanation", "No explanation provided."
+                )  # Add AI explanation to report
+            else:
+                status_report["explanation"] = "Explainer not available"
+                self.logger.warning("Explainer not available, skipping explanation generation")
 
             API_REQUESTS.labels(
                 endpoint="meta_supervisor_status"
