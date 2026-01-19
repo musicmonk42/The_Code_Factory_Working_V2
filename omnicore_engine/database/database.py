@@ -567,10 +567,27 @@ class Database:
             raise
 
     def _create_mock_policy_engine(self):
-        """Create a mock policy engine that always allows operations."""
+        """
+        Create a mock policy engine that always allows operations.
+        
+        WARNING: This is a fallback for development/testing only.
+        In production, ensure PolicyEngine is properly initialized with ArbiterConfig.
+        Mock usage is logged for security audit purposes.
+        """
+        logger.warning(
+            "MockPolicyEngine is in use. All policy checks will be bypassed. "
+            "This is acceptable for development/testing but should be avoided in production. "
+            "Ensure ARBITER configuration is properly set in production environments."
+        )
+        
         class MockPolicyEngine:
             async def should_auto_learn(self, *args, **kwargs):
-                return True, "Mock Policy: Always allowed"
+                # Log each call for audit purposes
+                logger.debug(
+                    f"MockPolicyEngine: Allowing operation. Args: {args[0:2] if args else 'none'}"
+                )
+                return True, "Mock Policy: Always allowed (development/testing mode)"
+        
         return MockPolicyEngine()
 
     async def create_tables(self):
@@ -1742,7 +1759,13 @@ class Database:
                     return result_data
                 return None
             except Exception as e:
+                # Track error count
                 DB_ERRORS.labels(operation="get_agent_state").inc()
+                # Track error timing (operation duration before failure)
+                error_duration = time.time() - start_time
+                DB_LATENCY_LOCAL.labels(operation="get_agent_state_error").observe(
+                    error_duration
+                )
                 await self.feedback_manager.record_feedback(
                     user_id=agent_id,
                     feedback_type=FeedbackType.BUG_REPORT,
@@ -1750,6 +1773,7 @@ class Database:
                         "type": "db_error",
                         "operation": "get_agent_state",
                         "error": str(e),
+                        "duration_seconds": error_duration,
                     },
                 )
                 raise
