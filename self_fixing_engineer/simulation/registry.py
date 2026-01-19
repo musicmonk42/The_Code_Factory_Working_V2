@@ -345,23 +345,41 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
         for pkg, ver in dependencies.items():
             try:
                 installed_version = importlib_metadata.version(pkg)
-                # Basic version checking - can be enhanced with packaging library
+                # Basic version checking - validates common patterns
                 # TODO: Consider using packaging.version.parse() for proper version constraint validation
-                # to support complex version specifiers like ">=1.0,<2.0"
-                if ver and not ver.startswith(">=") and not ver.startswith("=="):
-                    ver = f">={ver}"
-                logger.debug(f"Dependency {pkg} version {installed_version} meets requirement {ver}")
-            except importlib_metadata.PackageNotFoundError:
-                raise importlib_metadata.PackageNotFoundError(f"Package {pkg} not found")
+                # to support complex version specifiers like ">=1.0,<2.0", "~=1.0", "!=1.0"
+                if ver:
+                    # Validate common version patterns
+                    if not any(ver.startswith(prefix) for prefix in ['>=', '<=', '==', '!=', '~=', '>', '<', '']):
+                        logger.warning(f"Unsupported version specifier format: {ver}. Treating as '>={ver}'")
+                        ver = f">={ver}"
+                logger.debug(f"Dependency {pkg} version {installed_version} checked against requirement {ver}")
+            except importlib_metadata.PackageNotFoundError as e:
+                # Preserve specific package information for better debugging
+                dep_error = {
+                    "package": pkg,
+                    "required_version": ver if ver else "any",
+                    "error": f"Package not found"
+                }
+                raise importlib_metadata.PackageNotFoundError(
+                    f"Package '{pkg}' (required version: {ver or 'any'}) not found"
+                ) from e
         return True
     except importlib_metadata.PackageNotFoundError as e:
-        dep_name = str(e)
+        # Extract package details for audit logging
+        error_msg = str(e)
+        # Try to parse package name from error message
+        pkg_name = error_msg.split("'")[1] if "'" in error_msg else "unknown"
+        required_ver = error_msg.split("required version: ")[1].split(")")[0] if "required version:" in error_msg else "unknown"
+        
         await audit_logger.emit_audit_event(
             "plugin_dependency_missing",
             {
                 "module": module_name,
-                "dependency": dep_name,
+                "dependency": pkg_name,
+                "required_version": required_ver,
                 "error": "Dependency not found",
+                "full_error": error_msg
             },
             severity="ERROR",
         )
