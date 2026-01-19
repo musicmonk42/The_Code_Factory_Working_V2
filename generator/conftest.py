@@ -53,10 +53,11 @@ def _create_mock_module(name):
 
         def __iter__(self):
             # Return an empty iterator to support "for x in mock" patterns
-            return iter([])
+            return iter(())
 
         def __mro_entries__(self, bases):
-            # Return empty tuple when used as a base class in type()
+            # Return empty tuple when used as a base class in type() or types.new_class()
+            # The 'bases' parameter is the tuple of base classes passed to the class creation
             # This fixes: "__mro_entries__ must return a tuple" errors
             return ()
 
