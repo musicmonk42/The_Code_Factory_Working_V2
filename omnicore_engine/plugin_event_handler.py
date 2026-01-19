@@ -25,12 +25,20 @@ def _create_fallback_settings():
 
 def _get_settings():
     """Lazy import + defensive instantiation of settings."""
+    ArbiterConfig = None
     try:
-        from arbiter.config import ArbiterConfig
-    except ImportError as e:
-        logging.warning(
-            "Could not import arbiter.config; using fallback settings. Import error: %s",
-            e,
+        # Try the full canonical path first (preferred)
+        from self_fixing_engineer.arbiter.config import ArbiterConfig
+    except ImportError:
+        try:
+            # Fall back to aliased path for backward compatibility
+            from arbiter.config import ArbiterConfig
+        except ImportError:
+            pass
+    
+    if ArbiterConfig is None:
+        logging.debug(
+            "arbiter.config not available; using fallback settings."
         )
         return _create_fallback_settings()
 

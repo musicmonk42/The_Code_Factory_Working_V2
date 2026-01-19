@@ -259,24 +259,25 @@ try:
     # Migrated from pkg_resources to importlib.metadata
     try:
         ten_version = version("tenacity")
-        if Version(ten_version) >= Version("9.1.2"):
+        # tenacity 8.x+ has all the features we need (retry, stop_after_attempt, wait_exponential)
+        if Version(ten_version) >= Version("8.0.0"):
             from tenacity import retry, stop_after_attempt, wait_exponential
 
             TENACITY_AVAILABLE = True
         else:
             TENACITY_AVAILABLE = False
-            logging.getLogger(__name__).warning(
-                "Warning: tenacity version < 9.1.2 detected. Retries may be disabled."
+            logging.getLogger(__name__).debug(
+                "tenacity version < 8.0.0 detected; retries unavailable."
             )
     except PackageNotFoundError:
         TENACITY_AVAILABLE = False
-        logging.getLogger(__name__).warning(
-            "Warning: 'tenacity' not available. Retries will be disabled."
+        logging.getLogger(__name__).debug(
+            "'tenacity' not available; retries unavailable."
         )
     except Exception:
         TENACITY_AVAILABLE = False
-        logging.getLogger(__name__).warning(
-            "Warning: tenacity has no __version__ attribute. Retries may be disabled."
+        logging.getLogger(__name__).debug(
+            "tenacity version check failed; retries unavailable."
         )
 except ImportError:
     TENACITY_AVAILABLE = False

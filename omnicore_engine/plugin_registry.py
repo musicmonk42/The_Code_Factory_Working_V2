@@ -41,23 +41,30 @@ import signal
 
 # Corrected imports to use centralized config and new package structure
 try:
-    from arbiter import __path__ as assistant_pkg_path
-    from arbiter.config import ArbiterConfig
-    from arbiter_plugin_registry import PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY
-    from arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind
+    from self_fixing_engineer.arbiter import __path__ as assistant_pkg_path
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind
 except ImportError:
+    try:
+        # Fall back to aliased path for backward compatibility
+        from arbiter import __path__ as assistant_pkg_path
+        from arbiter.config import ArbiterConfig
+        from arbiter_plugin_registry import PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY
+        from arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind
+    except ImportError:
 
-    class ArbiterConfig:
-        def __init__(self):
-            self.PLUGIN_REGISTRY = {}
-            self.log_level = "INFO"
-            self.PLUGIN_DIR = "plugins"
-            self.PLUGIN_EXECUTION_TIMEOUT = 30
-            self.PLUGINS_ENABLED = True
-            self.PLUGIN_SIGNING_KEY = "insecure_default_key"
+        class ArbiterConfig:
+            def __init__(self):
+                self.PLUGIN_REGISTRY = {}
+                self.log_level = "INFO"
+                self.PLUGIN_DIR = "plugins"
+                self.PLUGIN_EXECUTION_TIMEOUT = 30
+                self.PLUGINS_ENABLED = True
+                self.PLUGIN_SIGNING_KEY = "insecure_default_key"
 
-    class ArbiterPlugInKind(str, Enum):
-        pass
+        class ArbiterPlugInKind(str, Enum):
+            pass
 
     ARBITER_PLUGIN_REGISTRY = {}
     assistant_pkg_path = []
