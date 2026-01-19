@@ -45,7 +45,8 @@ COPY requirements.txt* master_requirements.txt* ./
 # to handle corporate proxies and development environments with SSL inspection.
 RUN pip install --upgrade pip setuptools wheel || \
     (echo "WARNING: pip upgrade failed with SSL verification, retrying with --trusted-host" && \
-     pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip setuptools wheel)
+     pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip setuptools wheel) || \
+    (echo "ERROR: Failed to upgrade pip, setuptools, and wheel" && exit 1)
 
 # Install unified platform dependencies
 # Note: All three modules (generator, omnicore_engine, self_fixing_engineer) share
@@ -53,18 +54,31 @@ RUN pip install --upgrade pip setuptools wheel || \
 # Note: --trusted-host bypasses SSL verification as a fallback for environments with
 # SSL inspection/MITM proxies. Production builds with proper SSL should use the primary path.
 ARG SKIP_HEAVY_DEPS=0
-RUN if [ "$SKIP_HEAVY_DEPS" = "1" ]; then \
+RUN set -e; \
+    if [ "$SKIP_HEAVY_DEPS" = "1" ]; then \
         echo "Skipping heavy dependencies for CI build"; \
     elif [ -f requirements.txt ]; then \
-        pip install --no-cache-dir -r requirements.txt || \
-        (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
-         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt); \
+        echo "Installing dependencies from requirements.txt..."; \
+        if ! pip install --no-cache-dir -r requirements.txt; then \
+            echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host"; \
+            if ! pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org --trusted-host github.com -r requirements.txt; then \
+                echo "ERROR: Failed to install dependencies from requirements.txt"; \
+                exit 1; \
+            fi; \
+        fi; \
+        echo "Dependencies installed successfully"; \
     elif [ -f pyproject.toml ]; then \
-        pip install --no-cache-dir . || \
-        (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
-         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org .); \
+        echo "Installing dependencies from pyproject.toml..."; \
+        if ! pip install --no-cache-dir .; then \
+            echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host"; \
+            if ! pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org --trusted-host github.com .; then \
+                echo "ERROR: Failed to install dependencies from pyproject.toml"; \
+                exit 1; \
+            fi; \
+        fi; \
+        echo "Dependencies installed successfully"; \
     else \
-        echo "No requirements.txt or pyproject.toml found. Skipping dependency install."; \
+        echo "WARNING: No requirements.txt or pyproject.toml found. Skipping dependency install."; \
     fi; \
     # Clean up pip cache, temp files, and package caches to free disk space
     rm -rf /root/.cache/* /tmp/* /var/tmp/* || true; \
@@ -75,6 +89,19 @@ RUN if [ "$SKIP_HEAVY_DEPS" = "1" ]; then \
     # Enhanced cleanup to reduce size of files being copied to runtime stage
     find /opt/venv -type d \( -name 'tests' -o -name 'test' \) -prune -exec rm -rf {} + 2>/dev/null || true; \
     find /opt/venv -path '*/pip/_vendor/*' -prune -exec rm -rf {} + 2>/dev/null || true
+
+# Verify critical dependencies are installed and importable
+# This ensures the container will actually start successfully
+RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
+        echo "Verifying critical dependencies..."; \
+        python -c "import uvicorn; print(f'✓ uvicorn {uvicorn.__version__} is installed')" || \
+        (echo "ERROR: uvicorn is not importable. Dependencies were not installed correctly." && exit 1); \
+        python -c "import fastapi; print(f'✓ fastapi {fastapi.__version__} is installed')" || \
+        (echo "ERROR: fastapi is not importable. Dependencies were not installed correctly." && exit 1); \
+        echo "✓ All critical dependencies verified successfully"; \
+    else \
+        echo "Skipping dependency verification for CI build"; \
+    fi
 
 # Copy the rest of the application
 COPY . /app
