@@ -64,17 +64,17 @@ except ImportError:
             def __getattr__(self, name):
                 defaults = {
                     "MESSAGE_BUS_GUARDIAN_CHECK_INTERVAL": 30,
-                "MESSAGE_BUS_GUARDIAN_FAILURE_THRESHOLD": 5,
-                "MESSAGE_BUS_GUARDIAN_HEALING_TIMEOUT": 300,
-                "MESSAGE_BUS_GUARDIAN_ALERT_RETRIES": 3,
-                "MESSAGE_BUS_GUARDIAN_ALERT_BASE_DELAY": 0.5,
-                "MESSAGE_BUS_GUARDIAN_ALERT_MAX_DELAY": 10.0,
-                "MESSAGE_BUS_GUARDIAN_ALERT_JITTER": 0.3,
-                "ENABLE_CRITICAL_FAILURES": True,
-                "ALERT_WEBHOOK_URL": None,
-                "ENABLE_METRICS": True,
-            }
-            return defaults.get(name, None)
+                    "MESSAGE_BUS_GUARDIAN_FAILURE_THRESHOLD": 5,
+                    "MESSAGE_BUS_GUARDIAN_HEALING_TIMEOUT": 300,
+                    "MESSAGE_BUS_GUARDIAN_ALERT_RETRIES": 3,
+                    "MESSAGE_BUS_GUARDIAN_ALERT_BASE_DELAY": 0.5,
+                    "MESSAGE_BUS_GUARDIAN_ALERT_MAX_DELAY": 10.0,
+                    "MESSAGE_BUS_GUARDIAN_ALERT_JITTER": 0.3,
+                    "ENABLE_CRITICAL_FAILURES": True,
+                    "ALERT_WEBHOOK_URL": None,
+                    "ENABLE_METRICS": True,
+                }
+                return defaults.get(name, None)
 
     settings = MockConfig()
 
