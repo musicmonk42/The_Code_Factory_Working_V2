@@ -5,7 +5,6 @@ import os
 import re
 import shutil
 import traceback
-import warnings
 from abc import ABC, abstractmethod
 from asyncio import Lock
 from dataclasses import dataclass
@@ -171,11 +170,11 @@ if os.getenv("AUDIT_ENABLED", "true").lower() == "false":
     logger.info("Audit logging is disabled by environment configuration.")
 else:
     if not AUDIT_LOGGER_AVAILABLE:
-        warnings.warn(
-            "test_generation.orchestrator.audit is not installed. Running with fallback logger.",
-            RuntimeWarning,
+        # Use logger.warning instead of warnings.warn to avoid repeated stderr output.
+        # The fallback logger is a valid runtime configuration, not an error condition.
+        logger.warning(
+            "test_generation.orchestrator.audit is not available. Running with fallback logger."
         )
-        logger.critical("Audit logging unavailable - using fallback.")
 
         class _FallbackAuditLogger:
             def __init__(self):
