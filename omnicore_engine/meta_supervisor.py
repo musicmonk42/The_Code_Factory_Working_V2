@@ -16,8 +16,8 @@ try:
     import torch
 except (ImportError, OSError):
     torch = None
-    logging.getLogger(__name__).warning(
-        "torch not available. ML-based optimization features will be disabled."
+    logging.getLogger(__name__).debug(
+        "torch not available; ML-based optimization features disabled."
     )
 
 try:
@@ -981,6 +981,25 @@ class MetaSupervisor:
             if not plugin_metrics:
                 self.logger.info("No plugin metrics available for inspection.")
                 return
+
+            # Validate that plugin_metrics contains proper dict-like stats
+            # get_plugin_metrics() returns raw Prometheus collectors, not processed stats
+            # We need to handle this gracefully
+            valid_metrics = {}
+            for plugin_id, stats in plugin_metrics.items():
+                if isinstance(stats, dict):
+                    valid_metrics[plugin_id] = stats
+                else:
+                    # Skip non-dict values (e.g., Prometheus collector objects or lists)
+                    self.logger.debug(
+                        f"Skipping plugin_id '{plugin_id}': stats is not a dict (got {type(stats).__name__})"
+                    )
+
+            if not valid_metrics:
+                self.logger.debug("No valid plugin stats available for inspection after filtering.")
+                return
+
+            plugin_metrics = valid_metrics
 
             # Prepare features for the prediction model
             # Assuming _extract_plugin_features returns a numpy array for each plugin's stats

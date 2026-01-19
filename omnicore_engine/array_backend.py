@@ -506,47 +506,8 @@ class ArrayBackend:
     Unified array backend class with support for multiple backends.
     """
 
-    def array(self, data: Any, dtype: Optional[Any] = None) -> Any:
-        """
-        Creates an array from input data using the current backend.
-        Args:
-            data (Any): Input data.
-            dtype (Optional[Any]): Desired data type.
-        Returns:
-            Any: Array-like object.
-        """
-        sanitized = sanitize_array_input(data)
-        if dtype:
-            return self.xp.array(sanitized, dtype=dtype)
-        return self.xp.array(sanitized)
-
-    def zeros(
-        self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None
-    ) -> Any:
-        """
-        Creates an array of zeros with the given shape and data type.
-        Args:
-            shape (Union[int, Tuple[int, ...]]): Shape of the array.
-            dtype (Optional[Any]): Desired data type.
-        Returns:
-            Any: Array-like object filled with zeros.
-        """
-        validate_array_size(shape)
-        return self.xp.zeros(shape, dtype=dtype)
-
-    def ones(
-        self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None
-    ) -> Any:
-        """
-        Creates an array of ones with the given shape and data type.
-        Args:
-            shape (Union[int, Tuple[int, ...]]): Shape of the array.
-            dtype (Optional[Any]): Desired data type.
-        Returns:
-            Any: Array-like object filled with ones.
-        """
-        validate_array_size(shape)
-        return self.xp.ones(shape, dtype=dtype)
+    # Note: array, zeros, ones and other basic methods are defined later in this class
+    # with comprehensive implementations including benchmarking and backend-specific handling
 
     def full(
         self,
@@ -1543,12 +1504,12 @@ class ArrayBackend:
         )
         return NeuromorphicModule()
 
-    def array(self, d: Any, t: Optional[Any] = None) -> Any:
+    def array(self, d: Any, dtype: Optional[Any] = None) -> Any:
         """
         Creates an array using the current backend.
         Args:
             d (Any): Data to create the array from.
-            t (Optional[Any]): Desired data type (e.g., np.float32, torch.float32).
+            dtype (Optional[Any]): Desired data type (e.g., np.float32, torch.float32).
         Returns:
             Any: An array-like object from the current backend.
         """
@@ -1558,25 +1519,25 @@ class ArrayBackend:
             self.benchmarker.run_benchmark(
                 self.xp,
                 "array_creation",
-                lambda: self.xp.array(validated_data, dtype=t),
+                lambda: self.xp.array(validated_data, dtype=dtype),
             )
 
         if self.mode == "torch" and TORCH_AVAILABLE:
-            return self.xp.tensor(validated_data, dtype=t)
+            return self.xp.tensor(validated_data, dtype=dtype)
         if hasattr(self.xp, "array"):
-            return self.xp.array(validated_data, dtype=t)
+            return self.xp.array(validated_data, dtype=dtype)
 
         self.logger.warning(
             f"Array creation not directly supported by current backend ({self.mode}), falling back to NumPy."
         )
-        return np.array(validated_data, dtype=t)
+        return np.array(validated_data, dtype=dtype)
 
-    def zeros(self, s: Union[int, Tuple[int, ...]], t: Optional[Any] = None) -> Any:
+    def zeros(self, s: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None) -> Any:
         """
         Creates a zero-filled array of a given shape using the current backend.
         Args:
             s (Union[int, Tuple[int, ...]]): Shape of the array.
-            t (Optional[Any]): Desired data type.
+            dtype (Optional[Any]): Desired data type.
         Returns:
             Any: A zero-filled array-like object from the current backend.
         """
@@ -1584,20 +1545,20 @@ class ArrayBackend:
 
         if self.enable_benchmarking:
             self.benchmarker.run_benchmark(
-                self.xp, "zeros_creation", lambda: self.xp.zeros(s, dtype=t)
+                self.xp, "zeros_creation", lambda: self.xp.zeros(s, dtype=dtype)
             )
 
         if self.mode == "dask" and DASK_AVAILABLE:
-            return self.xp.zeros(s, dtype=t)
+            return self.xp.zeros(s, dtype=dtype)
         elif hasattr(self.xp, "zeros"):
             if self.mode == "torch" and TORCH_AVAILABLE:
-                return self.xp.zeros(s, dtype=t)
-            return self.xp.zeros(s, dtype=t)
+                return self.xp.zeros(s, dtype=dtype)
+            return self.xp.zeros(s, dtype=dtype)
 
         self.logger.warning(
             f"Zeros creation not directly supported by current backend ({self.mode}), falling back to NumPy."
         )
-        return np.zeros(s, dtype=t)
+        return np.zeros(s, dtype=dtype)
 
     def normal(
         self,
