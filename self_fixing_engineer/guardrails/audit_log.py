@@ -1768,7 +1768,8 @@ if __name__ == "__main__":
                 else:
                     print("Test 2 FAILED: Local audit chain verification failed.")
 
-                if isinstance(_dlt_client_instance, get_SimpleDLTClient()):
+                _simple_dlt_cls = get_SimpleDLTClient()
+                if _simple_dlt_cls and isinstance(_dlt_client_instance, _simple_dlt_cls):
                     print(
                         f"\nSimple DLT Client Chain Contents (for 'deployment:start'): {json.dumps(_dlt_client_instance.chain.get('audit_deployment:start'), indent=2)}"
                     )
