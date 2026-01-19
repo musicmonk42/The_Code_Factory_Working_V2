@@ -941,9 +941,11 @@ def trace_operation(operation_name: str = None):
     return decorator
 
 
-# Initialize on module import if not in test
-if Environment.current() != Environment.TESTING:
-    _config = OpenTelemetryConfig.get_instance()
+# DO NOT initialize on module import - this causes heavy operations at import time
+# and can lead to "CPU time limit exceeded" errors in resource-constrained environments.
+# The _config will be lazily initialized when get_tracer() is first called.
+# if Environment.current() != Environment.TESTING:
+#     _config = OpenTelemetryConfig.get_instance()
 
 __all__ = [
     "OpenTelemetryConfig",

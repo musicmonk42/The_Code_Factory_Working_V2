@@ -11,7 +11,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, ClassVar, Dict, List, Optional, Tuple
 
-import aiofiles
+# Optional imports - make aiofiles optional since it's only used in refresh()
+try:
+    import aiofiles
+    AIOFILES_AVAILABLE = True
+except ImportError:
+    AIOFILES_AVAILABLE = False
+    aiofiles = None
+
 import pydantic
 import yaml
 from cryptography.fernet import Fernet, InvalidToken
@@ -35,9 +42,47 @@ else:
         pass  # Dummy for v1
 
 
-from arbiter.otel_config import get_tracer
+# Lazy import to avoid heavy initialization at module import time
+# We defer importing get_tracer until it's actually needed to prevent
+# triggering OpenTelemetry initialization at module import time.
 
-tracer = get_tracer(__name__)
+_tracer_cache = None  # Cache for the tracer instance
+
+
+def _get_tracer():
+    """
+    Lazy loader for OpenTelemetry tracer to avoid import-time initialization.
+    
+    Returns a cached tracer instance to avoid repeated imports.
+    Falls back to NoOpTracer if OpenTelemetry is not available.
+    """
+    global _tracer_cache
+    
+    if _tracer_cache is not None:
+        return _tracer_cache
+    
+    try:
+        from arbiter.otel_config import get_tracer
+        _tracer_cache = get_tracer(__name__)
+        return _tracer_cache
+    except Exception:
+        # Import NoOpTracer if available, otherwise create a minimal one
+        try:
+            from arbiter.otel_config import NoOpTracer
+            _tracer_cache = NoOpTracer()
+            return _tracer_cache
+        except ImportError:
+            # Minimal no-op tracer as last resort
+            from contextlib import contextmanager
+            
+            @contextmanager
+            def noop_span(name):
+                yield type('NoOpSpan', (), {})()
+            
+            _tracer_cache = type('NoOpTracer', (), {
+                'start_as_current_span': noop_span
+            })()
+            return _tracer_cache
 
 
 # Mock/Plausholder imports for a self-contained fix
@@ -839,7 +884,9 @@ class ArbiterConfig(BaseSettings):
         Raises:
             ValueError: If configuration validation fails.
         """
-        with tracer.start_as_current_span("config_refresh"):
+        # Get tracer lazily to avoid import-time initialization
+        _tracer = _get_tracer()
+        with _tracer.start_as_current_span("config_refresh"):
             try:
                 new_config = ArbiterConfig()
                 for field in self.model_fields:
@@ -849,11 +896,17 @@ class ArbiterConfig(BaseSettings):
                 persona_file_path = os.path.join(
                     os.path.dirname(os.path.abspath(__file__)), "personas.json"
                 )
-                if os.path.exists(persona_file_path):
+                if os.path.exists(persona_file_path) and AIOFILES_AVAILABLE:
                     async with aiofiles.open(
                         persona_file_path, "r", encoding="utf-8"
                     ) as f:
                         personas = json.loads(await f.read())
+                        if isinstance(personas, dict):
+                            self.PERSONAS = personas
+                elif os.path.exists(persona_file_path):
+                    # Fallback to sync file reading if aiofiles not available
+                    with open(persona_file_path, "r", encoding="utf-8") as f:
+                        personas = json.load(f)
                         if isinstance(personas, dict):
                             self.PERSONAS = personas
 
