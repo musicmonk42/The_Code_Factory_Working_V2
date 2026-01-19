@@ -132,7 +132,7 @@ def test_cleanup_script_help():
     """Test that the cleanup script can show help without errors."""
     import subprocess
 
-    script_path = Path(__file__).parent / "cleanup_old_docs.py"
+    script_path = Path(__file__).parent.parent / "cleanup_old_docs.py"
     result = subprocess.run(
         [sys.executable, str(script_path), "--help"], capture_output=True, text=True
     )
@@ -159,41 +159,3 @@ def test_cleanup_script_dry_run():
 
         print("✓ Dry-run test passed (file not deleted)")
 
-
-def main():
-    """Run all tests."""
-    print("Running cleanup_old_docs.py tests...\n")
-
-    tests = [
-        test_file_age_calculation,
-        test_exclude_important_files,
-        test_exclude_directories,
-        test_find_old_audit_files,
-        test_file_patterns,
-        test_cleanup_script_help,
-        test_cleanup_script_dry_run,
-    ]
-
-    passed = 0
-    failed = 0
-
-    for test in tests:
-        try:
-            test()
-            passed += 1
-        except AssertionError as e:
-            print(f"✗ {test.__name__} failed: {e}")
-            failed += 1
-        except Exception as e:
-            print(f"✗ {test.__name__} error: {e}")
-            failed += 1
-
-    print(f"\n{'='*60}")
-    print(f"Test Results: {passed} passed, {failed} failed")
-    print(f"{'='*60}\n")
-
-    return 0 if failed == 0 else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())
