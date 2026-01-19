@@ -10,11 +10,13 @@ This document describes the port allocation and configuration for the Code Facto
 |---------|------|-------------|---------------------|
 | FastAPI Main API | 8000 | Main application API endpoint | `API_PORT` (default: 8000) |
 | Application Metrics | 8001 | Application-level metrics endpoint | `METRICS_PORT` (default: 8001) |
-| **Prometheus Metrics Server** | **9090** | Prometheus HTTP server for metrics | `PROMETHEUS_PORT` (default: 9090) |
-| Prometheus Server | 9090 | Prometheus monitoring server | - |
+| **Prometheus Metrics HTTP Server** | **9090** | HTTP server exposing metrics in Prometheus format | `PROMETHEUS_PORT` (default: 9090) |
+| External Prometheus Server | 9090 | Prometheus monitoring server (scrapes from above) | - |
 | Grafana | 3000 | Grafana visualization dashboard | - |
 | Redis | 6379 | Redis message bus and cache | - |
 | PostgreSQL | 5432 | PostgreSQL database (optional) | - |
+
+**Note**: The Prometheus Metrics HTTP Server (running inside the application container) and the external Prometheus Server (running in its own container) both use port 9090 but on different containers/hosts, so there is no conflict.
 
 ## Changes Made
 

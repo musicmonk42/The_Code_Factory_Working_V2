@@ -38,6 +38,7 @@ def _create_fallback_settings():
         knowledge_graph_config={},
         decision_optimizer_config={},
         engine_type="simulation",
+        # Both versions provided for backward compatibility with different access patterns
         encryption_key_bytes=b"",
         ENCRYPTION_KEY_BYTES=b"",  # Uppercase version for consistent access
         API_HOST="0.0.0.0",
