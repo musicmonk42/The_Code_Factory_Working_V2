@@ -2359,9 +2359,10 @@ class Database:
                                 decrypted = old_encrypter.decrypt(
                                     agent.inventory_v2.encode("utf-8")
                                 )
+                                # encrypt() already returns a string, no need to decode
                                 agent.inventory_v2 = self.encrypter.encrypt(
                                     decrypted
-                                ).decode("utf-8")
+                                )
                             except InvalidToken:
                                 logger.error(
                                     f"Failed to decrypt inventory for agent {agent.name}. Skipping re-encryption."
@@ -2372,9 +2373,10 @@ class Database:
                                 decrypted = old_encrypter.decrypt(
                                     agent.language_v2.encode("utf-8")
                                 )
+                                # encrypt() already returns a string, no need to decode
                                 agent.language_v2 = self.encrypter.encrypt(
                                     decrypted
-                                ).decode("utf-8")
+                                )
                             except InvalidToken:
                                 logger.error(
                                     f"Failed to decrypt language for agent {agent.name}. Skipping re-encryption."
@@ -2385,9 +2387,10 @@ class Database:
                                 decrypted = old_encrypter.decrypt(
                                     agent.memory_v2.encode("utf-8")
                                 )
+                                # encrypt() already returns a string, no need to decode
                                 agent.memory_v2 = self.encrypter.encrypt(
                                     decrypted
-                                ).decode("utf-8")
+                                )
                             except InvalidToken:
                                 logger.error(
                                     f"Failed to decrypt memory for agent {agent.name}. Skipping re-encryption."
@@ -2398,9 +2401,10 @@ class Database:
                                 decrypted = old_encrypter.decrypt(
                                     agent.personality_v2.encode("utf-8")
                                 )
+                                # encrypt() already returns a string, no need to decode
                                 agent.personality_v2 = self.encrypter.encrypt(
                                     decrypted
-                                ).decode("utf-8")
+                                )
                             except InvalidToken:
                                 logger.error(
                                     f"Failed to decrypt personality for agent {agent.name}. Skipping re-encryption."
@@ -2411,9 +2415,10 @@ class Database:
                                 decrypted = old_encrypter.decrypt(
                                     agent.custom_attributes_v2.encode("utf-8")
                                 )
+                                # encrypt() already returns a string, no need to decode
                                 agent.custom_attributes_v2 = self.encrypter.encrypt(
                                     decrypted
-                                ).decode("utf-8")
+                                )
                             except InvalidToken:
                                 logger.error(
                                     f"Failed to decrypt custom attributes for agent {agent.name}. Skipping re-encryption."
