@@ -48,6 +48,17 @@ from typing import Any, Callable, Dict, List, Optional
 import psutil
 
 
+# Set up sandbox logger early for use in module-level functions
+sandbox_logger = logging.getLogger("simulation.sandbox")
+sandbox_logger.setLevel(logging.INFO)
+if not sandbox_logger.hasHandlers():
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+    )
+    sandbox_logger.addHandler(handler)
+
+
 # Function to alert operators - properly implement this for your environment
 def alert_operator(message: str, level: str = "ERROR"):
     """
@@ -516,15 +527,6 @@ DEFAULT_CONTAINER_USER = "1000:1000"
 SAFE_IMAGE_WHITELIST = {"python:3.9-slim", "python:3.10-slim", "alpine/git"}
 SAFE_COMMAND_WHITELIST = {"python", "pytest", "bash", "sh", "git", "echo"}
 ALLOW_PRIVILEGED_CONTAINERS_GLOBAL = False
-
-sandbox_logger = logging.getLogger("simulation.sandbox")
-sandbox_logger.setLevel(logging.INFO)
-if not sandbox_logger.hasHandlers():
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
-    )
-    sandbox_logger.addHandler(handler)
 
 
 if PYDANTIC_AVAILABLE:
