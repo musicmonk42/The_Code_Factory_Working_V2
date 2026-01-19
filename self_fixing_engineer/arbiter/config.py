@@ -43,25 +43,46 @@ else:
 
 
 # Lazy import to avoid heavy initialization at module import time
-# from arbiter.otel_config import get_tracer
-# tracer = get_tracer(__name__)
+# We defer importing get_tracer until it's actually needed to prevent
+# triggering OpenTelemetry initialization at module import time.
 
-# Use a lazy tracer getter to defer import until actually needed
+_tracer_cache = None  # Cache for the tracer instance
+
+
 def _get_tracer():
-    """Lazy loader for OpenTelemetry tracer to avoid import-time initialization."""
+    """
+    Lazy loader for OpenTelemetry tracer to avoid import-time initialization.
+    
+    Returns a cached tracer instance to avoid repeated imports.
+    Falls back to NoOpTracer if OpenTelemetry is not available.
+    """
+    global _tracer_cache
+    
+    if _tracer_cache is not None:
+        return _tracer_cache
+    
     try:
         from arbiter.otel_config import get_tracer
-        return get_tracer(__name__)
+        _tracer_cache = get_tracer(__name__)
+        return _tracer_cache
     except Exception:
-        # Return a no-op tracer if OpenTelemetry is not available
-        return type('NoOpTracer', (), {
-            'start_as_current_span': lambda self, name: type('NoOpSpan', (), {
-                '__enter__': lambda s: s,
-                '__exit__': lambda s, *args: None
+        # Import NoOpTracer if available, otherwise create a minimal one
+        try:
+            from arbiter.otel_config import NoOpTracer
+            _tracer_cache = NoOpTracer()
+            return _tracer_cache
+        except ImportError:
+            # Minimal no-op tracer as last resort
+            from contextlib import contextmanager
+            
+            @contextmanager
+            def noop_span(name):
+                yield type('NoOpSpan', (), {})()
+            
+            _tracer_cache = type('NoOpTracer', (), {
+                'start_as_current_span': noop_span
             })()
-        })()
-
-tracer = None  # Will be lazily initialized when first accessed
+            return _tracer_cache
 
 
 # Mock/Plausholder imports for a self-contained fix
@@ -864,7 +885,7 @@ class ArbiterConfig(BaseSettings):
             ValueError: If configuration validation fails.
         """
         # Get tracer lazily to avoid import-time initialization
-        _tracer = _get_tracer() if tracer is None else tracer
+        _tracer = _get_tracer()
         with _tracer.start_as_current_span("config_refresh"):
             try:
                 new_config = ArbiterConfig()
