@@ -20,3 +20,11 @@ circuitbreaker>=1.4.0
 
 # Retry library - must match requirements.txt for chromadb compatibility
 tenacity>=8.2.3,<10.0.0
+
+# Pytest and pytest plugins - required for test execution
+# Version constraints ensure compatibility with Python 3.11 and prevent conflicts
+pytest>=7.4.0,<9.0.0
+pytest-xdist>=3.3.0,<4.0.0
+pytest-cov>=4.1.0,<6.0.0
+pytest-timeout>=2.1.0,<3.0.0
+pytest-asyncio>=0.21.0,<2.0.0
