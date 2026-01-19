@@ -10,21 +10,16 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'generator'
+  # Note: In the unified platform architecture, both generator and omnicore modules
+  # run in the same container and expose metrics on the same endpoint.
+  # This configuration maintains separate job definitions for future microservices split.
+  - job_name: 'codefactory-platform'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['generator:8001']
+      - targets: ['codefactory:9090']
         labels:
-          service: 'generator'
-          component: 'api'
-
-  - job_name: 'omnicore'
-    metrics_path: '/metrics'
-    static_configs:
-      - targets: ['omnicore:8001']
-        labels:
-          service: 'omnicore'
-          component: 'engine'
+          service: 'codefactory'
+          component: 'unified-platform'
 
   - job_name: 'redis'
     static_configs:

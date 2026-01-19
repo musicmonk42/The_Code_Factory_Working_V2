@@ -48,9 +48,11 @@ services:
       - REDIS_URL=redis://redis:6379
       - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
       - AUDIT_LOG_PATH=/app/audit_trail.log
+      - PROMETHEUS_PORT=9090  # Prometheus metrics HTTP server port
     ports:
       - "8000:8000"  # Main API endpoint
       - "8001:8001"  # Metrics port
+      - "9090:9090"  # Prometheus metrics HTTP server
     volumes:
       - .:/app
       - platform-output:/app/output

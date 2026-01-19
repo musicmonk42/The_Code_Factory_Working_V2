@@ -114,8 +114,9 @@ docker-up: ## Start all services with Docker Compose
 	@echo "$(GREEN)Services started!$(NC)"
 	@echo "$(YELLOW)Generator: http://localhost:8000$(NC)"
 	@echo "$(YELLOW)OmniCore: http://localhost:8001$(NC)"
+	@echo "$(YELLOW)OmniCore Prometheus Metrics: http://localhost:9090/metrics$(NC)"
 	@echo "$(YELLOW)Grafana: http://localhost:3000$(NC)"
-	@echo "$(YELLOW)Prometheus: http://localhost:9090$(NC)"
+	@echo "$(YELLOW)Prometheus Server: http://localhost:9090$(NC)"
 
 docker-down: ## Stop all Docker Compose services
 	@echo "$(BLUE)Stopping Docker Compose services...$(NC)"

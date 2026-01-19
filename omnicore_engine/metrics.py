@@ -155,7 +155,8 @@ except ImportError:
 # --- Prometheus HTTP Server Startup (optional) ---
 try:
     # Use a port from environment variables or settings, if available
-    port = int(os.getenv("PROMETHEUS_PORT", 8000))
+    # Default port 9090 to avoid conflict with FastAPI on port 8000
+    port = int(os.getenv("PROMETHEUS_PORT", 9090))
     start_http_server(port)
     logger.info(f"Prometheus metrics server started on port {port}")
 except OSError:
