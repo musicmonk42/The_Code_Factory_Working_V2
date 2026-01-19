@@ -160,7 +160,7 @@ try:
     RADON_AVAILABLE = True
 except ImportError as e:
     RADON_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (radon)")
+    logging.debug(f"Optional dependency missing: {e} (radon)")
 
 try:
     from mypy.api import run as mypy_run
@@ -168,7 +168,7 @@ try:
     MYPY_AVAILABLE = True
 except ImportError as e:
     MYPY_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (mypy)")
+    logging.debug(f"Optional dependency missing: {e} (mypy)")
 
 try:
     from bandit.core import config as bandit_config_mod
@@ -177,7 +177,7 @@ try:
     BANDIT_AVAILABLE = True
 except ImportError as e:
     BANDIT_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (bandit)")
+    logging.debug(f"Optional dependency missing: {e} (bandit)")
 
 try:
     from coverage import Coverage
@@ -185,7 +185,7 @@ try:
     COVERAGE_AVAILABLE = True
 except ImportError as e:
     COVERAGE_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (coverage)")
+    logging.debug(f"Optional dependency missing: {e} (coverage)")
     Coverage = None
 
 try:
@@ -194,7 +194,7 @@ try:
     SAFETY_AVAILABLE = True
 except ImportError as e:
     SAFETY_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (safety)")
+    logging.debug(f"Optional dependency missing: {e} (safety)")
 
 try:
     import pylint
@@ -202,7 +202,7 @@ try:
     PYLINT_AVAILABLE = True
 except ImportError as e:
     PYLINT_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (pylint)")
+    logging.debug(f"Optional dependency missing: {e} (pylint)")
 
 
 tracer = get_tracer(__name__)

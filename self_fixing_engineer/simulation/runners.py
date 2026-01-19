@@ -150,8 +150,8 @@ except ImportError:
     ClientError = None
     DLT_LOGGER_AVAILABLE = False
     DLTLogger = None
-    runners_logger.warning(
-        "DLT/Boto3 not available. Audit logging and secure credential handling will be disabled."
+    runners_logger.debug(
+        "DLT/Boto3 not available; audit logging and secure credential handling disabled."
     )
 
 try:

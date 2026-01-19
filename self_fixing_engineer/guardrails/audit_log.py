@@ -327,8 +327,8 @@ try:
     logger.info("Loaded config from app.config.")
 except (ImportError, AttributeError):
     config = MockConfig()
-    logger.warning(
-        "Using MockConfig for audit_log.py. Please ensure app.config is set up correctly in production."
+    logger.debug(
+        "app.config not available; using MockConfig for audit_log.py."
     )
 except Exception as e:
     config = MockConfig()

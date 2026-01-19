@@ -20,8 +20,8 @@ try:
 
     _REDIS_AVAILABLE = True
 except ImportError:
-    # Use standard library logging for initial import failure
-    logging.warning("Redis dependencies not found. RedisBridge will be unavailable.")
+    # Use debug level since redis is an optional dependency
+    logging.debug("Redis dependencies not found. RedisBridge will be unavailable.")
     redis = None
     Redis = None
     PubSub = None

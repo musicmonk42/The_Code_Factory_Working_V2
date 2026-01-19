@@ -365,7 +365,8 @@ try:
     AIOHTTP_AVAILABLE = True
     try:
         ten_version = version("tenacity")
-        if Version(ten_version) >= Version("9.0.0"):
+        # tenacity 8.x+ has all the features we need (retry, stop_after_attempt, wait_exponential)
+        if Version(ten_version) >= Version("8.0.0"):
             from tenacity import retry, stop_after_attempt, wait_exponential
 
             TENACITY_AVAILABLE = True
@@ -373,12 +374,12 @@ try:
             RETRY_STOP = stop_after_attempt(3)
             RETRY_WAIT = wait_exponential(multiplier=1, min=2, max=10)
         else:
-            logger.warning("Warning: tenacity version < 9.0.0. Retries disabled.")
+            logger.debug("tenacity version < 8.0.0; retries unavailable.")
     except PackageNotFoundError:
-        logger.warning("Warning: tenacity not found. Retries disabled.")
+        logger.debug("tenacity not found; retries unavailable.")
     except Exception as e:
-        logger.warning(
-            f"Warning: An error occurred during tenacity version check: {e}. Retries disabled."
+        logger.debug(
+            f"Error during tenacity version check: {e}; retries unavailable."
         )
 except ImportError:
     logger.warning(
@@ -391,8 +392,8 @@ except ImportError:
 
 # Define fallback retry decorator if tenacity is not available
 if not TENACITY_AVAILABLE:
-    logger.warning(
-        "Tenacity is not available or version is too old. Retries will be disabled."
+    logger.debug(
+        "Tenacity unavailable; using no-op retry decorator."
     )
 
     def retry(*args, **kwargs):

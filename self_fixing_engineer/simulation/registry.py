@@ -73,8 +73,8 @@ def get_audit_logger() -> AuditLogger:
         module = importlib.import_module("test_generation.audit_log")
         return DltAuditLogger(module.emit_audit_event)
     except (ImportError, AttributeError):
-        logger.warning(
-            "test_generation.audit_log not available. Using fallback audit logger."
+        logger.debug(
+            "test_generation.audit_log not available; using fallback audit logger."
         )
         return FallbackAuditLogger()
 
@@ -196,7 +196,7 @@ class LangChainOutputRefiner(OutputRefiner):
                 self.chat = ChatOpenAI(model="gpt-4o-mini", temperature=0.0)
             except Exception as e:
                 # Handle the case where initialization fails (e.g., missing API key)
-                logger.warning(f"Failed to initialize LangChain: {e}. Using fallback.")
+                logger.debug(f"LangChain initialization skipped: {e}")
                 self.chat = None
 
     async def refine(self, plugin_name: str, output: str) -> str:
@@ -251,8 +251,8 @@ def get_output_refiner() -> OutputRefiner:
     """Initialize output refiner with fallback."""
     refiner = LangChainOutputRefiner()
     if refiner.chat is None:
-        logger.warning(
-            "LangChainOutputRefiner not initialized. Returning NoOpOutputRefiner."
+        logger.debug(
+            "LangChainOutputRefiner not initialized; using NoOpOutputRefiner."
         )
         return NoOpOutputRefiner()
     return refiner

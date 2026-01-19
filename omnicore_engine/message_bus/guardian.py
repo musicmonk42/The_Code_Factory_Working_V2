@@ -49,15 +49,21 @@ if TYPE_CHECKING:
 #  External config (ArbiterConfig) – mock fallback if missing
 # --------------------------------------------------------------------------- #
 try:
-    from arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
 
     settings = ArbiterConfig()
-except ImportError:  # pragma: no cover
+except ImportError:
+    try:
+        # Fall back to aliased path for backward compatibility
+        from arbiter.config import ArbiterConfig
 
-    class MockConfig:
-        def __getattr__(self, name):
-            defaults = {
-                "MESSAGE_BUS_GUARDIAN_CHECK_INTERVAL": 30,
+        settings = ArbiterConfig()
+    except ImportError:  # pragma: no cover
+
+        class MockConfig:
+            def __getattr__(self, name):
+                defaults = {
+                    "MESSAGE_BUS_GUARDIAN_CHECK_INTERVAL": 30,
                 "MESSAGE_BUS_GUARDIAN_FAILURE_THRESHOLD": 5,
                 "MESSAGE_BUS_GUARDIAN_HEALING_TIMEOUT": 300,
                 "MESSAGE_BUS_GUARDIAN_ALERT_RETRIES": 3,

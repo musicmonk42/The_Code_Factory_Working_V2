@@ -39,8 +39,8 @@ from langchain_core.prompts import PromptTemplate
 try:
     from langchain_community.chat_models import ChatXAI
 except ImportError:
-    logging.getLogger(__name__).warning(
-        "Warning: ChatXAI not found in langchain_community. This provider will not be available."
+    logging.getLogger(__name__).debug(
+        "ChatXAI not found in langchain_community; provider unavailable."
     )
     ChatXAI = None
 
@@ -50,8 +50,8 @@ from langchain_openai import ChatOpenAI
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
 except ImportError:
-    logging.getLogger(__name__).warning(
-        "Warning: langchain_google_genai not found. Google LLM provider via LangChain will not be available."
+    logging.getLogger(__name__).debug(
+        "langchain_google_genai not found; Google LLM provider unavailable."
     )
     ChatGoogleGenerativeAI = None
 

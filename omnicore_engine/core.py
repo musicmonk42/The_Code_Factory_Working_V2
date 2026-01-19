@@ -48,12 +48,20 @@ def _create_fallback_settings():
 
 def _get_settings():
     """Lazy import + defensive instantiation of settings."""
+    ArbiterConfig = None
     try:
-        from arbiter.config import ArbiterConfig
-    except ImportError as e:
-        logging.warning(
-            "Could not import arbiter.config; using fallback settings. Import error: %s",
-            e,
+        # Try the full canonical path first (preferred)
+        from self_fixing_engineer.arbiter.config import ArbiterConfig
+    except ImportError:
+        try:
+            # Fall back to aliased path for backward compatibility
+            from arbiter.config import ArbiterConfig
+        except ImportError:
+            pass
+    
+    if ArbiterConfig is None:
+        logging.debug(
+            "arbiter.config not available; using fallback settings."
         )
         return _create_fallback_settings()
 
@@ -496,48 +504,68 @@ class OmniCoreEngine:
         SQLiteStorageBackend = None
 
         try:
-            from arbiter.arbiter_growth.arbiter_growth_manager import (
+            from self_fixing_engineer.arbiter.arbiter_growth.arbiter_growth_manager import (
                 ArbiterGrowthManager,
             )
-        except ImportError as e:
-            self.logger.warning(
-                f"ArbiterGrowthManager not available: {e}. Growth management features will be unavailable."
-            )
+        except ImportError:
+            try:
+                from arbiter.arbiter_growth.arbiter_growth_manager import (
+                    ArbiterGrowthManager,
+                )
+            except ImportError as e:
+                self.logger.debug(
+                    f"ArbiterGrowthManager not available: {e}"
+                )
 
         try:
-            from arbiter.decision_optimizer import DecisionOptimizer
-        except ImportError as e:
-            self.logger.warning(
-                f"DecisionOptimizer not available: {e}. Decision optimization features will be unavailable."
-            )
+            from self_fixing_engineer.arbiter.decision_optimizer import DecisionOptimizer
+        except ImportError:
+            try:
+                from arbiter.decision_optimizer import DecisionOptimizer
+            except ImportError as e:
+                self.logger.debug(
+                    f"DecisionOptimizer not available: {e}"
+                )
 
         try:
-            from arbiter.explainable_reasoner import ExplainableReasonerPlugin
-        except ImportError as e:
-            self.logger.warning(
-                f"ExplainableReasonerPlugin not available: {e}. Explainable AI features will be unavailable."
-            )
+            from self_fixing_engineer.arbiter.explainable_reasoner import ExplainableReasonerPlugin
+        except ImportError:
+            try:
+                from arbiter.explainable_reasoner import ExplainableReasonerPlugin
+            except ImportError as e:
+                self.logger.debug(
+                    f"ExplainableReasonerPlugin not available: {e}"
+                )
 
         try:
-            from arbiter.feedback import FeedbackManager
-        except ImportError as e:
-            self.logger.warning(
-                f"FeedbackManager not available: {e}. Feedback features will be unavailable."
-            )
+            from self_fixing_engineer.arbiter.feedback import FeedbackManager
+        except ImportError:
+            try:
+                from arbiter.feedback import FeedbackManager
+            except ImportError as e:
+                self.logger.debug(
+                    f"FeedbackManager not available: {e}"
+                )
 
         try:
-            from arbiter.knowledge_graph import KnowledgeGraph
-        except ImportError as e:
-            self.logger.warning(
-                f"KnowledgeGraph not available: {e}. Knowledge graph features will be unavailable."
-            )
+            from self_fixing_engineer.arbiter.knowledge_graph import KnowledgeGraph
+        except ImportError:
+            try:
+                from arbiter.knowledge_graph import KnowledgeGraph
+            except ImportError as e:
+                self.logger.debug(
+                    f"KnowledgeGraph not available: {e}"
+                )
 
         try:
-            from arbiter.arbiter_growth.storage_backends import SQLiteStorageBackend
-        except ImportError as e:
-            self.logger.warning(
-                f"SQLiteStorageBackend not available: {e}. SQLite storage backend will be unavailable."
-            )
+            from self_fixing_engineer.arbiter.arbiter_growth.storage_backends import SQLiteStorageBackend
+        except ImportError:
+            try:
+                from arbiter.arbiter_growth.storage_backends import SQLiteStorageBackend
+            except ImportError as e:
+                self.logger.debug(
+                    f"SQLiteStorageBackend not available: {e}"
+                )
 
         try:
             if KnowledgeGraph is not None:
