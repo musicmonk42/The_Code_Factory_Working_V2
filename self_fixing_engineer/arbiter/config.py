@@ -35,9 +35,26 @@ else:
         pass  # Dummy for v1
 
 
-from arbiter.otel_config import get_tracer
+# Lazy import to avoid heavy initialization at module import time
+# from arbiter.otel_config import get_tracer
+# tracer = get_tracer(__name__)
 
-tracer = get_tracer(__name__)
+# Use a lazy tracer getter to defer import until actually needed
+def _get_tracer():
+    """Lazy loader for OpenTelemetry tracer to avoid import-time initialization."""
+    try:
+        from arbiter.otel_config import get_tracer
+        return get_tracer(__name__)
+    except Exception:
+        # Return a no-op tracer if OpenTelemetry is not available
+        return type('NoOpTracer', (), {
+            'start_as_current_span': lambda self, name: type('NoOpSpan', (), {
+                '__enter__': lambda s: s,
+                '__exit__': lambda s, *args: None
+            })()
+        })()
+
+tracer = None  # Will be lazily initialized when first accessed
 
 
 # Mock/Plausholder imports for a self-contained fix
@@ -839,7 +856,9 @@ class ArbiterConfig(BaseSettings):
         Raises:
             ValueError: If configuration validation fails.
         """
-        with tracer.start_as_current_span("config_refresh"):
+        # Get tracer lazily to avoid import-time initialization
+        _tracer = _get_tracer() if tracer is None else tracer
+        with _tracer.start_as_current_span("config_refresh"):
             try:
                 new_config = ArbiterConfig()
                 for field in self.model_fields:
