@@ -431,10 +431,6 @@ except ImportError as e:
         def get_merkle_root(self) -> str:
             """Legacy method name for compatibility."""
             return self._mock_root.hex()
-        
-        def get_root(self) -> str:
-            """Get the Merkle root as a hex string."""
-            return self._mock_root.hex()
 
         def make_tree(self):
             self._recalculate_root()
@@ -533,33 +529,6 @@ rate_limiter = RateLimiter(
     max_calls=100, per_seconds=60
 )  # Default: 100 calls per minute
 
-
-# Add authentication middleware
-@app.middleware("http")
-async def security_middleware(request: Request, call_next):
-    # Rate limiting
-    client_ip = request.client.host
-    if not rate_limiter.is_allowed(client_ip):
-        return JSONResponse(status_code=429, content={"error": "Rate limit exceeded"})
-
-    # Add security headers
-    response = await call_next(request)
-    for header, value in security_config.SECURITY_HEADERS.items():
-        response.headers[header] = value
-
-    return response
-
-
-app.add_middleware(SizeLimitMiddleware)
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["*.yourdomain.com", "localhost", "127.0.0.1", "testserver"],
-)
-
-
-@app.exception_handler(CsrfProtectError)
-def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError):
-    return JSONResponse(status_code=403, content={"error": "CSRF validation failed"})
 
 
 @CsrfProtect.load_config
@@ -849,6 +818,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add security middleware
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    # Rate limiting
+    client_ip = request.client.host
+    if not rate_limiter.is_allowed(client_ip):
+        return JSONResponse(status_code=429, content={"error": "Rate limit exceeded"})
+
+    # Add security headers
+    response = await call_next(request)
+    for header, value in security_config.SECURITY_HEADERS.items():
+        response.headers[header] = value
+
+    return response
+
+
+app.add_middleware(SizeLimitMiddleware)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*.yourdomain.com", "localhost", "127.0.0.1", "testserver"],
+)
+
+
+@app.exception_handler(CsrfProtectError)
+def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError):
+    return JSONResponse(status_code=403, content={"error": "CSRF validation failed"})
+
 app.mount("/metrics", make_asgi_app())
 
 

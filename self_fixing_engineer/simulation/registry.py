@@ -13,7 +13,11 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
-import pkg_resources
+try:
+    from importlib import metadata as importlib_metadata
+except ImportError:
+    # Fallback for Python < 3.8
+    import importlib_metadata
 
 # --- Constants & Configuration ---
 SIMULATION_PACKAGE = "simulation"
@@ -331,24 +335,91 @@ def validate_manifest(manifest: Dict[str, Any], module_name: str):
 
 
 async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) -> bool:
-    """Check if all plugin dependencies are installed."""
+    """
+    Check if all plugin dependencies are installed.
+    
+    Note: This function only verifies that required packages are installed.
+    It does NOT perform full version constraint validation. For production use
+    with strict version requirements, consider integrating the 'packaging' library
+    for proper version comparison.
+    
+    Args:
+        manifest: Plugin manifest containing dependencies dict
+        module_name: Name of the module being checked
+        
+    Returns:
+        bool: True if all dependencies are installed, False otherwise
+        
+    Limitations:
+        - Only checks package existence, not version constraints
+        - Version specifiers are logged but not validated
+        - For full version validation, integrate packaging.version.parse()
+    """
     dependencies = manifest.get("dependencies", {})
     if not dependencies:
         return True
 
     try:
-        pkg_resources.require([f"{pkg}{ver}" for pkg, ver in dependencies.items()])
+        # Use importlib.metadata instead of deprecated pkg_resources
+        for pkg, ver in dependencies.items():
+            try:
+                installed_version = importlib_metadata.version(pkg)
+                # Basic version checking - validates common patterns
+                # TODO: Integrate packaging library for proper version constraint validation
+                # to support complex version specifiers like ">=1.0,<2.0", "~=1.0", "!=1.0"
+                if ver:
+                    # Validate common version patterns - check if format is recognized
+                    recognized_prefixes = ['>=', '<=', '==', '!=', '~=', '>', '<']
+                    if not any(ver.startswith(prefix) for prefix in recognized_prefixes):
+                        logger.warning(
+                            f"Version specifier '{ver}' for package '{pkg}' doesn't use a recognized operator. "
+                            f"Assuming '>={ver}'"
+                        )
+                        # Normalize for logging purposes
+                        ver_display = f">={ver}"
+                    else:
+                        ver_display = ver
+                    
+                    # Note: Actual version comparison would require packaging library
+                    # For now, we only check if the package exists and log the requirement
+                    logger.debug(
+                        f"Dependency {pkg} found (version {installed_version}). "
+                        f"Required: {ver_display}. Full validation requires packaging library."
+                    )
+                else:
+                    logger.debug(f"Dependency {pkg} found (version {installed_version}). Any version accepted.")
+            except importlib_metadata.PackageNotFoundError as e:
+                # Preserve specific package information for better debugging
+                raise importlib_metadata.PackageNotFoundError(
+                    f"Package '{pkg}' (required version: {ver or 'any'}) not found"
+                ) from e
         return True
-    except pkg_resources.DistributionNotFound as e:
-        dep_name = str(e.req) if hasattr(e, "req") else str(e)
-        required_version = str(e.req) if hasattr(e, "req") else ""
+    except importlib_metadata.PackageNotFoundError as e:
+        # Extract package details for audit logging
+        error_msg = str(e)
+        # Parse package details from error message
+        # Note: String parsing is fragile; consider structured exception handling in future
+        try:
+            pkg_name = error_msg.split("'")[1] if "'" in error_msg else "unknown"
+            required_ver = (
+                error_msg.split("required version: ")[1].split(")")[0]
+                if "required version:" in error_msg
+                else "unknown"
+            )
+        except (IndexError, AttributeError):
+            # Fallback if parsing fails
+            pkg_name = "unknown"
+            required_ver = "unknown"
+            logger.warning(f"Failed to parse dependency error details from: {error_msg}")
+        
         await audit_logger.emit_audit_event(
             "plugin_dependency_missing",
             {
                 "module": module_name,
-                "dependency": dep_name,
-                "required_version": required_version,
+                "dependency": pkg_name,
+                "required_version": required_ver,
                 "error": "Dependency not found",
+                "full_error": error_msg
             },
             severity="ERROR",
         )

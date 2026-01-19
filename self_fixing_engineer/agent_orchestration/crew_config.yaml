@@ -117,7 +117,7 @@ compliance_controls:
   RA-5:
     name: Vulnerability Scanning
     description: Scans for vulnerabilities in information systems and applications.
-    status: implemented
+    status: enforced
     required: true
 
 agents:
@@ -183,7 +183,7 @@ agents:
     skills_ref: configdb://skills/simulation
     compliance_controls:
       - id: RA-5
-        status: implemented
+        status: enforced
       - id: CM-2
         status: enforced
 
