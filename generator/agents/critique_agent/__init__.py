@@ -7,7 +7,12 @@ All core services (LLM, Security, Execution) now delegate to the runner package.
 """
 
 # --- 5. Unified LLM Client (from runner) ---
-from runner.llm_client import call_ensemble_api, call_llm_api, shutdown_llm_client, CircuitBreaker
+from runner.llm_client import (
+    call_ensemble_api,
+    call_llm_api,
+    shutdown_llm_client,
+    CircuitBreaker,
+)
 
 # --- 1. Imports from Core Orchestration (critique_agent.py) ---
 from .critique_agent import (  # Main Agent Function; Configuration and Base Classes; Metrics (must be defined in critique_agent.py before exporting)

@@ -60,10 +60,10 @@ def _setup_module_alias(module_name: str) -> None:
         _init_logger.debug(
             "Module alias '%s' already exists (existing module: %s), skipping",
             module_name,
-            getattr(existing, '__name__', 'unknown')
+            getattr(existing, "__name__", "unknown"),
         )
         return
-        
+
     try:
         # Import the module dynamically
         full_module_name = f"{__name__}.{module_name}"
