@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.meta_supervisor import (
     MetaSupervisor,
+    _create_fallback_settings,
     _is_anomalous,
     validate_model_input,
     validate_training_data,
@@ -901,11 +902,8 @@ class TestAsyncLambdaFixes:
             "TestAgent", "test_action", "test_user", {}
         )
 
-    @pytest.mark.asyncio
-    async def test_fallback_settings_include_db_retry_config(self):
+    def test_fallback_settings_include_db_retry_config(self):
         """Test that fallback settings include DB_RETRY_ATTEMPTS and DB_RETRY_DELAY"""
-        from omnicore_engine.meta_supervisor import _create_fallback_settings
-
         settings = _create_fallback_settings()
 
         assert hasattr(settings, "DB_RETRY_ATTEMPTS")

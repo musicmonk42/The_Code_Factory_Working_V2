@@ -347,7 +347,7 @@ class MerkleTree:
             This is an alias for get_merkle_root() provided for API compatibility.
             Both methods return the same value and can be used interchangeably.
         """
-        return self.root if self.root else ""
+        return self.get_merkle_root()
 
     def verify_proof(
         self, leaf_data: Union[str, bytes], root: str, proof: List[str]
