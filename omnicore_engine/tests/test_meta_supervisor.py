@@ -812,5 +812,107 @@ class TestMetaPolicies:
             assert result == False
 
 
+class TestAsyncLambdaFixes:
+    """Test that async methods are properly awaited without lambda wrappers"""
+
+    @pytest.mark.asyncio
+    async def test_rate_limited_operation_with_async_method(self):
+        """Test _rate_limited_operation properly awaits async methods passed directly"""
+        supervisor = MetaSupervisor(interval=60)
+        
+        # Mock the database to avoid initialization issues
+        supervisor.db = Mock()
+        supervisor.db.AsyncSessionLocal = Mock()
+
+        # Mock an async method
+        async def mock_async_method(param1, param2):
+            await asyncio.sleep(0.01)
+            return {"result": f"{param1}_{param2}"}
+
+        # Test that passing the method directly works
+        result = await supervisor._rate_limited_operation(
+            mock_async_method, "value1", "value2"
+        )
+
+        assert result == {"result": "value1_value2"}
+
+    @pytest.mark.asyncio
+    async def test_db_get_preferences_without_lambda(self):
+        """Test that db.get_preferences works when called without lambda wrapper"""
+        supervisor = MetaSupervisor(interval=60)
+        
+        # Mock the database
+        supervisor.db = Mock()
+        supervisor.db.get_preferences = AsyncMock(return_value={"test": "data"})
+
+        # Test that the method can be called directly through rate_limited_operation
+        result = await supervisor._rate_limited_operation(
+            supervisor.db.get_preferences, user_id="test_user"
+        )
+
+        assert result == {"test": "data"}
+        supervisor.db.get_preferences.assert_called_once_with(user_id="test_user")
+
+    @pytest.mark.asyncio
+    async def test_record_audit_event_without_lambda(self):
+        """Test that _record_audit_event works when called without lambda wrapper"""
+        supervisor = MetaSupervisor(interval=60)
+        
+        # Mock dependencies
+        supervisor.db = Mock()
+        supervisor._record_audit_event = AsyncMock()
+
+        # Test that the method can be called directly
+        await supervisor._rate_limited_operation(
+            supervisor._record_audit_event,
+            "test_kind",
+            "test_name",
+            {"test": "details"},
+        )
+
+        # Verify it was called with correct args
+        supervisor._record_audit_event.assert_called_once_with(
+            "test_kind", "test_name", {"test": "details"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_policy_engine_should_auto_learn_without_lambda(self):
+        """Test that policy_engine.should_auto_learn works without lambda wrapper"""
+        supervisor = MetaSupervisor(interval=60)
+        
+        # Mock policy engine with async method
+        supervisor.policy_engine = Mock()
+        supervisor.policy_engine.should_auto_learn = AsyncMock(
+            return_value=(True, "Allowed")
+        )
+
+        # Test calling through rate_limited_operation
+        allowed, reason = await supervisor._rate_limited_operation(
+            supervisor.policy_engine.should_auto_learn,
+            "TestAgent",
+            "test_action",
+            "test_user",
+            {},
+        )
+
+        assert allowed == True
+        assert reason == "Allowed"
+        supervisor.policy_engine.should_auto_learn.assert_called_once_with(
+            "TestAgent", "test_action", "test_user", {}
+        )
+
+    @pytest.mark.asyncio
+    async def test_fallback_settings_include_db_retry_config(self):
+        """Test that fallback settings include DB_RETRY_ATTEMPTS and DB_RETRY_DELAY"""
+        from omnicore_engine.meta_supervisor import _create_fallback_settings
+
+        settings = _create_fallback_settings()
+
+        assert hasattr(settings, "DB_RETRY_ATTEMPTS")
+        assert hasattr(settings, "DB_RETRY_DELAY")
+        assert settings.DB_RETRY_ATTEMPTS == 3
+        assert settings.DB_RETRY_DELAY == 0.1
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--asyncio-mode=auto"])
