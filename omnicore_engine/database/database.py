@@ -617,21 +617,41 @@ class Database:
             # Run migrations separately outside DDL transaction
             try:
                 from alembic import command, config
+                from alembic.util.exc import CommandError
 
                 alembic_cfg = config.Config()
                 Path(__file__).parent
                 project_root = Path(__file__).parent.parent
-                alembic_cfg.set_main_option(
-                    "script_location", str(project_root / "migrations")
-                )
-                alembic_cfg.set_main_option("sqlalchemy.url", self.db_path)
-                command.upgrade(alembic_cfg, "head")
-                logger.info("Schema migrations applied successfully (via Alembic).")
+                migrations_path = project_root / "migrations"
+                
+                # Check if migrations directory exists before attempting to run migrations
+                if not migrations_path.exists():
+                    logger.warning(
+                        f"Migrations directory not found at {migrations_path}. "
+                        "Skipping Alembic migrations. Tables will be created from models."
+                    )
+                else:
+                    alembic_cfg.set_main_option(
+                        "script_location", str(migrations_path)
+                    )
+                    alembic_cfg.set_main_option("sqlalchemy.url", self.db_path)
+                    command.upgrade(alembic_cfg, "head")
+                    logger.info("Schema migrations applied successfully (via Alembic).")
             except ImportError:
                 logger.warning("Alembic is not installed. Skipping schema migrations.")
+            except CommandError as e:
+                # CommandError includes issues like missing migrations directory
+                logger.warning(
+                    f"Alembic CommandError encountered: {e}. "
+                    "Skipping migrations. Tables will be created from models."
+                )
             except Exception as e:
-                logger.critical(f"Failed to apply migrations: {e}", exc_info=True)
-                raise RuntimeError(f"Failed to apply database migrations: {e}") from e
+                # Log other migration errors as warnings but don't fail startup
+                logger.warning(
+                    f"Failed to apply migrations: {e}. "
+                    "Continuing with table creation from models.",
+                    exc_info=True
+                )
 
             logger.info("Database tables ensured (created/verified asynchronously).")
         except sqlalchemy.exc.SQLAlchemyError as e:
