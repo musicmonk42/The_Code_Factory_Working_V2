@@ -77,8 +77,8 @@ try:
 except ImportError:
     pybreaker = None
     PYBREAKER_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        "Warning: pybreaker not found. Circuit breaker for model reloading is disabled."
+    logging.getLogger(__name__).debug(
+        "pybreaker not found; circuit breaker for model reloading is disabled."
     )
 try:
     import redis.asyncio as aioredis
@@ -87,8 +87,8 @@ try:
 except ImportError:
     aioredis = None
     REDIS_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        "Warning: redis.asyncio not found. Redis history manager is disabled."
+    logging.getLogger(__name__).debug(
+        "redis.asyncio not found; Redis history manager is disabled."
     )
 try:
     import asyncpg
@@ -97,8 +97,8 @@ try:
 except ImportError:
     asyncpg = None
     POSTGRES_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        "Warning: asyncpg not found. Postgres history manager is disabled."
+    logging.getLogger(__name__).debug(
+        "asyncpg not found; Postgres history manager is disabled."
     )
 try:
     import httpx

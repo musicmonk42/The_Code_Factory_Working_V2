@@ -113,8 +113,8 @@ try:
     RAY_AVAILABLE = True
 except ImportError:
     RAY_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        "Ray not found. Distributed ingestion unavailable."
+    logging.getLogger(__name__).debug(
+        "Ray not found; distributed ingestion unavailable."
     )
 
 try:
@@ -123,8 +123,8 @@ try:
     SCIPY_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        "Scipy not found. Statistical drift detection unavailable."
+    logging.getLogger(__name__).debug(
+        "Scipy not found; statistical drift detection unavailable."
     )
 
 try:
@@ -133,8 +133,8 @@ try:
     GX_AVAILABLE = True
 except ImportError:
     GX_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        "great-expectations not found. Feature validation unavailable."
+    logging.getLogger(__name__).debug(
+        "great-expectations not found; feature validation unavailable."
     )
 
 # For Secrets Manager
@@ -145,8 +145,8 @@ try:
     BOTO3_AVAILABLE = True
 except ImportError:
     BOTO3_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        "Boto3 not found. Secrets Manager integration unavailable."
+    logging.getLogger(__name__).debug(
+        "Boto3 not found; Secrets Manager integration unavailable."
     )
 
 # For redaction storage
@@ -156,8 +156,8 @@ try:
     POSTGRES_AVAILABLE = True
 except ImportError:
     POSTGRES_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        "postgres_client.py not found. Redaction storage unavailable."
+    logging.getLogger(__name__).debug(
+        "postgres_client.py not found; redaction storage unavailable."
     )
 
     # Placeholder for local testing if PostgresClient is not installed
@@ -181,8 +181,8 @@ try:
     AUDIT_LEDGER_AVAILABLE = True
 except ImportError:
     AUDIT_LEDGER_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        "audit_ledger_client.py not found. Audit logging unavailable."
+    logging.getLogger(__name__).debug(
+        "audit_ledger_client.py not found; audit logging unavailable."
     )
 
     class AuditLedgerClient:

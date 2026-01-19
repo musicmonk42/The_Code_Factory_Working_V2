@@ -31,8 +31,8 @@ except ImportError:
     import logging
 
     logger = logging.getLogger(__name__)
-    logger.warning(
-        "Warning: arbiter.models.multi_modal_schemas not found. Using dummy MultiModalData/Schemas for standalone mode."
+    logger.debug(
+        "arbiter.models.multi_modal_schemas not found; using dummy MultiModalData/Schemas."
     )
 
     class MultiModalData(BaseModel):

@@ -55,7 +55,7 @@ try:
     GYM_AVAILABLE = True
 except ImportError as e:
     GYM_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (gymnasium)")
+    logging.debug(f"Optional dependency missing: {e} (gymnasium)")
 try:
     from stable_baselines3 import PPO
     from stable_baselines3.common.env_util import make_vec_env
@@ -65,7 +65,7 @@ try:
     STABLE_BASELINES3_AVAILABLE = True
 except ImportError as e:
     STABLE_BASELINES3_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (stable_baselines3)")
+    logging.debug(f"Optional dependency missing: {e} (stable_baselines3)")
     PPO = None
     make_vec_env = None
     evaluate_policy = None
@@ -77,7 +77,7 @@ try:
     SKLEARN_AVAILABLE = True
 except ImportError as e:
     SKLEARN_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (sklearn)")
+    logging.debug(f"Optional dependency missing: {e} (sklearn)")
     LogisticRegression = None
     train_test_split = None
 try:
@@ -86,7 +86,7 @@ try:
     UVLOOP_AVAILABLE = True
 except ImportError as e:
     UVLOOP_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (uvloop)")
+    logging.debug(f"Optional dependency missing: {e} (uvloop)")
 
 try:
     import sentry_sdk
@@ -95,7 +95,7 @@ try:
 except ImportError as e:
     SENTRY_AVAILABLE = False
     sentry_sdk = None
-    logging.warning(f"Optional dependency missing: {e} (sentry_sdk)")
+    logging.debug(f"Optional dependency missing: {e} (sentry_sdk)")
 
 try:
     import redis.asyncio as redis
@@ -103,7 +103,7 @@ try:
     AIOREDIS_AVAILABLE = True
 except ImportError as e:
     AIOREDIS_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (aioredis)")
+    logging.debug(f"Optional dependency missing: {e} (aioredis)")
 
 
 # --- Pydantic Configuration Management ---
@@ -284,23 +284,23 @@ try:
     ENVS_AVAILABLE = True
 except ImportError as e:
     ENVS_AVAILABLE = False
-    logging.warning(f"Optional dependency missing: {e} (envs)")
+    logging.debug(f"Optional dependency missing: {e} (envs)")
     BaseCodeHealthEnv = object
 
 try:
     from envs.evolution import evolve_configs
 except ImportError as e:
-    logging.warning(f"Optional dependency missing: {e} (evolution)")
+    logging.debug(f"Optional dependency missing: {e} (evolution)")
 
     def evolve_configs(*args, **kwargs):
-        logging.warning("evolve_configs called but evolution module not available")
+        logging.debug("evolve_configs called but evolution module not available")
         return None
 
 
 try:
     from arbiter.models.postgres_client import PostgresClient
 except ImportError as e:
-    logging.warning(f"Optional dependency missing: {e} (PostgresClient)")
+    logging.debug(f"Optional dependency missing: {e} (PostgresClient)")
 
     class PostgresClient:
         """
@@ -328,7 +328,7 @@ except ImportError as e:
 try:
     from arbiter.plugins.multi_modal_plugin import MultiModalPlugin
 except ImportError as e:
-    logging.warning(f"Optional dependency missing: {e} (MultiModalPlugin)")
+    logging.debug(f"Optional dependency missing: {e} (MultiModalPlugin)")
 
     class MultiModalPlugin:
         """Fallback stub for MultiModalPlugin when dependencies are not available."""
@@ -339,7 +339,7 @@ except ImportError as e:
 try:
     from arbiter.models.knowledge_graph_db import Neo4jKnowledgeGraph
 except ImportError as e:
-    logging.warning(f"Optional dependency missing: {e} (Neo4jKnowledgeGraph)")
+    logging.debug(f"Optional dependency missing: {e} (Neo4jKnowledgeGraph)")
 
     class Neo4jKnowledgeGraph:
         """
@@ -367,7 +367,7 @@ except ImportError as e:
 try:
     from arbiter.codebase_analyzer import CodebaseAnalyzer as CodeAnalyzer
 except ImportError as e:
-    logging.warning(f"Optional dependency missing: {e} (CodebaseAnalyzer)")
+    logging.debug(f"Optional dependency missing: {e} (CodebaseAnalyzer)")
 
     class CodeAnalyzer:
         pass

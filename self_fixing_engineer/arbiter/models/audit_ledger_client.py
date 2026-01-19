@@ -106,8 +106,8 @@ try:
 except (ImportError, AttributeError) as e:
     # AttributeError catches the gnosis package bug with string.join
     MULTI_SIG_AVAILABLE: Final[bool] = False
-    logging.getLogger(__name__).warning(
-        f"gnosis-py library not available or has import errors ({type(e).__name__}: {e}). Multi-sig support will be disabled."
+    logging.getLogger(__name__).debug(
+        f"gnosis-py library not available ({type(e).__name__}); multi-sig support disabled."
     )
 
 # Import postgres_client for off-chain redaction flagging
@@ -117,8 +117,8 @@ try:
     POSTGRES_CLIENT_AVAILABLE: Final[bool] = True
 except ImportError:
     POSTGRES_CLIENT_AVAILABLE: Final[bool] = False
-    logging.getLogger(__name__).warning(
-        "postgres_client.py not found. Redaction flagging will be disabled."
+    logging.getLogger(__name__).debug(
+        "postgres_client.py not found; redaction flagging disabled."
     )
 
 
@@ -126,8 +126,8 @@ except ImportError:
 try:
     from omnicore_engine.audit import ExplainAudit
 except ImportError:
-    logging.getLogger(__name__).warning(
-        "omnicore_engine.audit.ExplainAudit not found. Using mock implementation."
+    logging.getLogger(__name__).debug(
+        "omnicore_engine.audit.ExplainAudit not found; using mock implementation."
     )
 
     class ExplainAudit:  # type: ignore
@@ -145,8 +145,8 @@ try:
 except ImportError:
     HYPERLEDGER_FABRIC_AVAILABLE: Final[bool] = False
 if not HYPERLEDGER_FABRIC_AVAILABLE:
-    logging.getLogger(__name__).warning(
-        "Hyperledger Fabric SDK is not supported in this version. Operations will raise NotImplementedError."
+    logging.getLogger(__name__).debug(
+        "Hyperledger Fabric SDK not supported; operations will raise NotImplementedError."
     )
 
 # AWS SDK for Secrets Manager

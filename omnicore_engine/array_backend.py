@@ -143,9 +143,9 @@ try:
 
         HAS_QISKIT = True
     except ImportError:
-        logging.warning("Modern qiskit_aer not found. Quantum backend will be limited.")
+        logging.debug("Modern qiskit_aer not found. Quantum backend will be limited.")
 except ImportError:
-    logging.warning("Qiskit not found. Quantum backend will be unavailable.")
+    logging.debug("Qiskit not found. Quantum backend will be unavailable.")
 
 HAS_NENGO_LOIHI = False
 try:
@@ -153,7 +153,7 @@ try:
 
     HAS_NENGO_LOIHI = True
 except ImportError:
-    logging.warning("NengoLoihi not found. Neuromorphic backend will be unavailable.")
+    logging.debug("NengoLoihi not found. Neuromorphic backend will be unavailable.")
 
 
 # Lazy logger initialization to avoid import-time side effects

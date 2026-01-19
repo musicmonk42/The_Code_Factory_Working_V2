@@ -26,8 +26,8 @@ try:
 
     MULTI_MODAL_SCHEMAS_AVAILABLE = True
 except ImportError:
-    logging.getLogger(__name__).warning(
-        "Warning: arbiter.models.multi_modal_schemas not found. Using dummy MultiModalData/Schemas for standalone mode."
+    logging.getLogger(__name__).debug(
+        "arbiter.models.multi_modal_schemas not found; using dummy MultiModalData/Schemas."
     )
 
     # Dummy MultiModalData if schema not available
