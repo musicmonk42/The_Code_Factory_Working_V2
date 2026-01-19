@@ -685,6 +685,7 @@ class MetaSupervisor:
             time_period=settings.SUPERVISOR_RATE_LIMIT_PERIOD,
         )
         self.logger = logger
+        self._start_time = time.time()  # Initialize start time for metrics calculation
 
         # Feature flags for proactive hooks (default to False, can be enabled via settings)
         self.enable_proactive_model_retraining = getattr(
@@ -816,6 +817,9 @@ class MetaSupervisor:
                 config_result = await self._rate_limited_operation(
                     self.db.get_preferences, user_id="recent_config_changes"
                 )
+                # Defensive: ensure config_result is not a coroutine
+                if asyncio.iscoroutine(config_result):
+                    config_result = await config_result
                 if config_result is None:
                     config_result = {}
                 self.cached_config_changes = config_result.get(
@@ -901,11 +905,11 @@ class MetaSupervisor:
                 retry=retry_if_exception_type(tuple(retry_exceptions)),
             )
             async def execute_with_retry():
-                return (
-                    await operation(*args, **kwargs)
-                    if asyncio.iscoroutinefunction(operation)
-                    else operation(*args, **kwargs)
-                )
+                result = operation(*args, **kwargs)
+                # Ensure coroutines are awaited
+                if asyncio.iscoroutine(result):
+                    return await result
+                return result
 
             return await execute_with_retry()
 
