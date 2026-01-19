@@ -1093,12 +1093,16 @@ class MetaSupervisor:
                     # else:
                     #     self.logger.info("Proactive test plugin synthesis is disabled by settings.")
 
-                explanation = await self.explainer.explain(
-                    {
-                        "action": "test_repair",
-                        "reason": f"Failures exceeded threshold ({test_metrics['failures']})",
-                    }
-                )
+                if self.explainer is not None:
+                    explanation = await self.explainer.explain(
+                        {
+                            "action": "test_repair",
+                            "reason": f"Failures exceeded threshold ({failures})",
+                        }
+                    )
+                else:
+                    explanation = {"explanation": "Explainer not available"}
+                
                 await self._rate_limited_operation(
                     self._record_audit_event,
                     "auto_test_repair",
@@ -1107,7 +1111,7 @@ class MetaSupervisor:
                 )
             else:
                 self.logger.info(
-                    f"Test failures are within acceptable limits ({test_metrics['failures']})."
+                    f"Test failures are within acceptable limits ({failures})."
                 )
         except Exception as e:
             self.logger.error(f"Test inspection failed: {e}", exc_info=True)
@@ -2274,7 +2278,7 @@ class MetaSupervisor:
                 )  # Add AI explanation to report
             else:
                 status_report["explanation"] = "Explainer not available"
-                self.logger.warning("Explainer not initialized, skipping explanation generation")
+                self.logger.warning("Explainer not available, skipping explanation generation")
 
             API_REQUESTS.labels(
                 endpoint="meta_supervisor_status"
