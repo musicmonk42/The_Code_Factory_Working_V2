@@ -333,6 +333,22 @@ class MerkleTree:
         """
         return self.root if self.root else ""
 
+    def get_root(self) -> str:
+        """Returns the Merkle root as a hex string.
+        
+        This method provides compatibility with code that expects a get_root() interface.
+        It is functionally equivalent to get_merkle_root().
+        
+        Returns:
+            str: The Merkle root hash as a hexadecimal string. Returns an empty string
+                 if the tree is empty and has no root.
+        
+        Note:
+            This is an alias for get_merkle_root() provided for API compatibility.
+            Both methods return the same value and can be used interchangeably.
+        """
+        return self.root if self.root else ""
+
     def verify_proof(
         self, leaf_data: Union[str, bytes], root: str, proof: List[str]
     ) -> bool:

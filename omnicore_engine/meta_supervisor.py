@@ -89,6 +89,8 @@ def _create_fallback_settings():
         SUPERVISOR_PERFORMANCE_THRESHOLD=0.5,
         AUDIT_LOG_RETENTION_DAYS=30,
         REDIS_URL="redis://localhost:6379/0",
+        DB_RETRY_ATTEMPTS=3,
+        DB_RETRY_DELAY=0.1,
     )
 
 
@@ -812,9 +814,10 @@ class MetaSupervisor:
                 # Use db.get_preferences as the source for config changes if a dedicated table isn't present
                 # Assuming 'config_changes' are stored as preferences under a specific user_id like "system_config_changes"
                 config_result = await self._rate_limited_operation(
-                    lambda: self.db.get_preferences(user_id="recent_config_changes")
-                    or {}
+                    self.db.get_preferences, user_id="recent_config_changes"
                 )
+                if config_result is None:
+                    config_result = {}
                 self.cached_config_changes = config_result.get(
                     "changes", []
                 )  # Expects a dict like {"changes": [...]}
@@ -845,11 +848,10 @@ class MetaSupervisor:
                 error_str = str(ex)
                 error_traceback = traceback.format_exc()
                 await self._rate_limited_operation(
-                    lambda: self._record_audit_event(
-                        "supervisor_run_loop_error",
-                        "run_loop",
-                        {"error": error_str, "traceback": error_traceback},
-                    )
+                    self._record_audit_event,
+                    "supervisor_run_loop_error",
+                    "run_loop",
+                    {"error": error_str, "traceback": error_traceback},
                 )
 
             # Calculate sleep duration to maintain interval
@@ -995,15 +997,14 @@ class MetaSupervisor:
                             }
                         )
                         await self._rate_limited_operation(
-                            lambda: self._record_audit_event(
-                                "plugin_hot_swap_predicted",
-                                plugin_id,
-                                {
-                                    "stats": stats,
-                                    "prediction_prob": float(current_failure_prob),
-                                    "explanation": explanation,
-                                },
-                            )
+                            self._record_audit_event,
+                            "plugin_hot_swap_predicted",
+                            plugin_id,
+                            {
+                                "stats": stats,
+                                "prediction_prob": float(current_failure_prob),
+                                "explanation": explanation,
+                            },
                         )
                     except Exception as hot_swap_e:
                         self.logger.error(
@@ -1029,11 +1030,10 @@ class MetaSupervisor:
                             }
                         )
                         await self._rate_limited_operation(
-                            lambda: self._record_audit_event(
-                                "plugin_hot_swap",
-                                plugin_id,
-                                {"stats": stats, "explanation": explanation},
-                            )
+                            self._record_audit_event,
+                            "plugin_hot_swap",
+                            plugin_id,
+                            {"stats": stats, "explanation": explanation},
                         )
                     except Exception as hot_swap_e:
                         self.logger.error(
@@ -1095,11 +1095,10 @@ class MetaSupervisor:
                     }
                 )
                 await self._rate_limited_operation(
-                    lambda: self._record_audit_event(
-                        "auto_test_repair",
-                        "test_harness",
-                        {"metrics": test_metrics, "explanation": explanation},
-                    )
+                    self._record_audit_event,
+                    "auto_test_repair",
+                    "test_harness",
+                    {"metrics": test_metrics, "explanation": explanation},
                 )
             else:
                 self.logger.info(
@@ -1158,11 +1157,10 @@ class MetaSupervisor:
                         }
                     )
                     await self._rate_limited_operation(
-                        lambda: self._record_audit_event(
-                            "config_rollback",
-                            change.get("user_id", "system"),
-                            {"change": change, "explanation": explanation},
-                        )
+                        self._record_audit_event,
+                        "config_rollback",
+                        change.get("user_id", "system"),
+                        {"change": change, "explanation": explanation},
                     )
                 else:
                     self.logger.debug(
@@ -1189,12 +1187,11 @@ class MetaSupervisor:
             # PolicyEngine evaluates if the change is "allowed" ethically
             # Assuming 'should_auto_learn' returns (bool, reason_string)
             allowed, reason = await self._rate_limited_operation(
-                lambda: self.policy_engine.should_auto_learn(
-                    "MetaSupervisor",
-                    "config_change_ethical_check",
-                    change.get("user_id", "system"),
-                    change.get("new_value", {}),
-                )
+                self.policy_engine.should_auto_learn,
+                "MetaSupervisor",
+                "config_change_ethical_check",
+                change.get("user_id", "system"),
+                change.get("new_value", {}),
             )
             if not allowed:
                 self.logger.warning(
@@ -1205,12 +1202,11 @@ class MetaSupervisor:
             # KnowledgeGraph can infer ethical impact of a change by adding it as a fact
             # Assuming add_fact returns a dict including 'ethical_impact'
             impact_analysis = await self._rate_limited_operation(
-                lambda: self.knowledge_graph.add_fact(
-                    "ConfigChangeEthicalImpact",
-                    str(uuid.uuid4()),
-                    change,
-                    source="meta_supervisor",
-                )
+                self.knowledge_graph.add_fact,
+                "ConfigChangeEthicalImpact",
+                str(uuid.uuid4()),
+                change,
+                source="meta_supervisor",
             )
             ethical_impact_score = impact_analysis.get("ethical_impact", 0)
 
@@ -1297,10 +1293,10 @@ class MetaSupervisor:
                 self.logger.info("Initiating model retraining cycle.")
                 # Query audit records for training data (e.g., supervisor's own actions and their outcomes)
                 audit_records = await self._rate_limited_operation(
-                    lambda: self.db.query_audit_records(
-                        filters={"kind": "meta_supervisor"}, limit=2000
-                    )  # Get more data
-                )
+                    self.db.query_audit_records,
+                    filters={"kind": "meta_supervisor"},
+                    limit=2000,
+                )  # Get more data
                 test_metrics = (
                     get_test_metrics()
                 )  # Current test metrics for reward signal
@@ -1376,9 +1372,10 @@ class MetaSupervisor:
                     }
                 )
                 await self._rate_limited_operation(
-                    lambda: self._record_audit_event(
-                        "model_retrain", "meta_supervisor", {"explanation": explanation}
-                    )
+                    self._record_audit_event,
+                    "model_retrain",
+                    "meta_supervisor",
+                    {"explanation": explanation},
                 )
 
             except Exception as e:
@@ -1417,9 +1414,9 @@ class MetaSupervisor:
                     "timestamp": time.time(),
                 }
                 await self._rate_limited_operation(
-                    lambda: self.db.save_preferences(
-                        user_id=f"meta_supervisor_models_{version}", value=model_data
-                    )
+                    self.db.save_preferences,
+                    user_id=f"meta_supervisor_models_{version}",
+                    value=model_data,
                 )
                 self.logger.info(f"Saved model states with version {version}.")
             else:
@@ -1450,9 +1447,8 @@ class MetaSupervisor:
                 model_data = None
                 if version:
                     model_data = await self._rate_limited_operation(
-                        lambda: self.db.get_preferences(
-                            user_id=f"meta_supervisor_models_{version}"
-                        )
+                        self.db.get_preferences,
+                        user_id=f"meta_supervisor_models_{version}",
                     )
                 else:
                     # Logic to retrieve the latest model version from preferences
@@ -1554,9 +1550,10 @@ class MetaSupervisor:
                 }
             )
             await self._rate_limited_operation(
-                lambda: self._record_audit_event(
-                    "self_reload", "meta_supervisor", {"explanation": explanation}
-                )
+                self._record_audit_event,
+                "self_reload",
+                "meta_supervisor",
+                {"explanation": explanation},
             )
             self.logger.info("New MetaSupervisor instance launched successfully.")
         except Exception as e:
@@ -1622,9 +1619,11 @@ class MetaSupervisor:
         try:
             # Policy check for authorization to set meta-policies
             allowed, reason = await self._rate_limited_operation(
-                lambda: self.policy_engine.should_auto_learn(
-                    "MetaSupervisor", "set_meta_policy", user_id, policy
-                )
+                self.policy_engine.should_auto_learn,
+                "MetaSupervisor",
+                "set_meta_policy",
+                user_id,
+                policy,
             )
             if not allowed:
                 self.logger.warning(
@@ -1635,20 +1634,19 @@ class MetaSupervisor:
             # Update internal meta-policies and persist them to DB
             self.meta_policies.update(policy)
             await self._rate_limited_operation(
-                lambda: self.db.save_preferences(
-                    user_id="meta_policies", value=self.meta_policies
-                )
+                self.db.save_preferences,
+                user_id="meta_policies",
+                value=self.meta_policies,
             )
 
             explanation = await self.explainer.explain(
                 {"action": "set_meta_policy", "policy": policy, "set_by": user_id}
             )
             await self._rate_limited_operation(
-                lambda: self._record_audit_event(
-                    "set_meta_policy",
-                    user_id,
-                    {"policy": policy, "explanation": explanation},
-                )
+                self._record_audit_event,
+                "set_meta_policy",
+                user_id,
+                {"policy": policy, "explanation": explanation},
             )
             self.logger.info(f"Meta-policy successfully set for user {user_id}.")
             return True
@@ -1703,12 +1701,11 @@ class MetaSupervisor:
         try:
             # Query relevant audit records to inform the report
             audit_records = await self._rate_limited_operation(
-                lambda: self.db.query_audit_records(
-                    filters={
-                        "kind": ["meta_supervisor", "config_rollback", "policy_denial"]
-                    },
-                    limit=500,
-                )
+                self.db.query_audit_records,
+                filters={
+                    "kind": ["meta_supervisor", "config_rollback", "policy_denial"]
+                },
+                limit=500,
             )
 
             lessons = []
@@ -1765,11 +1762,10 @@ class MetaSupervisor:
             )  # Add explanation to the report
 
             await self._rate_limited_operation(
-                lambda: self._record_audit_event(
-                    "mentor_report",
-                    "meta_supervisor",
-                    {"report": report, "explanation": explanation},
-                )
+                self._record_audit_event,
+                "mentor_report",
+                "meta_supervisor",
+                {"report": report, "explanation": explanation},
             )
             self.logger.info("Mentor report generated successfully.")
             return report
@@ -1872,10 +1868,9 @@ class MetaSupervisor:
 
             # Query audit records older than cutoff for summary and archiving
             audit_records_to_cleanup = await self._rate_limited_operation(
-                lambda: self.db.query_audit_records(
-                    filters={"ts_end": cutoff_timestamp}
-                )  # Query all kinds
-            )
+                self.db.query_audit_records,
+                filters={"ts_end": cutoff_timestamp},
+            )  # Query all kinds
 
             if not audit_records_to_cleanup:
                 self.logger.info("No old audit records found for cleanup.")
@@ -1902,11 +1897,10 @@ class MetaSupervisor:
             snapshot_id = str(uuid.uuid4())
             # Save a snapshot of the summary
             await self._rate_limited_operation(
-                lambda: self.db.snapshot_audit_state(
-                    snapshot_id=snapshot_id,
-                    state=json.dumps(summary, default=safe_serialize),
-                    user_id="meta_supervisor_cleanup",
-                )
+                self.db.snapshot_audit_state,
+                snapshot_id=snapshot_id,
+                state=json.dumps(summary, default=safe_serialize),
+                user_id="meta_supervisor_cleanup",
             )
 
             # Delete the cleaned up records from the active audit table
@@ -1933,11 +1927,10 @@ class MetaSupervisor:
                 }
             )
             await self._rate_limited_operation(
-                lambda: self._record_audit_event(
-                    "audit_cleanup",
-                    "meta_supervisor",
-                    {"summary": summary, "explanation": explanation},
-                )
+                self._record_audit_event,
+                "audit_cleanup",
+                "meta_supervisor",
+                {"summary": summary, "explanation": explanation},
             )
         except Exception as e:
             self.logger.error(f"Audit log cleanup failed: {e}", exc_info=True)
@@ -2196,9 +2189,9 @@ class MetaSupervisor:
         try:
             # Query audit records specifically logged by MetaSupervisor
             audit_records = await self._rate_limited_operation(
-                lambda: self.db.query_audit_records(
-                    filters={"agent_id": "meta_supervisor"}, limit=200
-                )
+                self.db.query_audit_records,
+                filters={"agent_id": "meta_supervisor"},
+                limit=200,
             )
             if not audit_records:
                 self.logger.warning(
