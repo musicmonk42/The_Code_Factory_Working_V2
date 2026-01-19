@@ -64,11 +64,12 @@ services:
     command: python -m uvicorn omnicore_engine.fastapi_app:app --host 0.0.0.0 --port 8000
 
   # Prometheus for metrics (optional)
+  # Note: Running on different port (9091) to avoid conflict with app's Prometheus metrics server
   prometheus:
     image: prom/prometheus:latest
     container_name: codefactory-prometheus
     ports:
-      - "9090:9090"
+      - "9091:9090"  # Map host 9091 to container 9090 to avoid conflict
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
