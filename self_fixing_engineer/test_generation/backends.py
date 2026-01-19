@@ -1373,3 +1373,40 @@ class GoBackend:
         )
 
         return success, error_msg, generated_file_path
+
+
+class MyBackend:
+    """
+    A minimal test generation backend for testing purposes.
+    This is a stub backend that can be used for plugin registry tests.
+    """
+
+    def __init__(self, config: Dict[str, Any] = None, project_root: str = "."):
+        """Initialize MyBackend with optional config and project root."""
+        self.config = config or {}
+        self.project_root = os.path.abspath(project_root)
+
+    def reload_config(self, new_config: Dict[str, Any]):
+        """Reload configuration."""
+        self.config = new_config
+        logger.info("MyBackend config reloaded.")
+
+    async def generate_tests(
+        self, target: str, output_path_relative: str, params: Dict[str, Any]
+    ) -> Tuple[bool, str, Optional[str]]:
+        """
+        Generate tests (stub implementation).
+
+        Args:
+            target: The target to generate tests for.
+            output_path_relative: The relative path to the output directory.
+            params: Additional parameters.
+
+        Returns:
+            A tuple containing:
+            - A boolean indicating if generation was successful.
+            - A string with an error message, if any.
+            - The relative path to the generated test file, if successful.
+        """
+        # Stub implementation that returns success
+        return True, "", None

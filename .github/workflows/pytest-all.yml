@@ -127,7 +127,8 @@ jobs:
             pytest-xdist \
             pytest-asyncio \
             tomli_w \
-            typing-extensions
+            typing-extensions \
+            hypothesis
           # Force-reinstall OpenTelemetry packages to ensure correct versions
           pip install --force-reinstall -c .github/constraints.txt \
             opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
