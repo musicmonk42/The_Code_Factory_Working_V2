@@ -9,8 +9,7 @@ dockerfilePath = "Dockerfile"
 [deploy]
 # Start command for the FastAPI server (server.main:app)
 # Railway provides the PORT environment variable dynamically
-# Falls back to 8000 if PORT is not set (for local testing)
-startCommand = "python -m uvicorn server.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+startCommand = "python -m uvicorn server.main:app --host 0.0.0.0 --port $PORT"
 
 # Health check configuration
 # The /health endpoint returns JSON with system status

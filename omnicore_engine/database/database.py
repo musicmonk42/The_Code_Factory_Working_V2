@@ -620,7 +620,6 @@ class Database:
                 from alembic.util.exc import CommandError
 
                 alembic_cfg = config.Config()
-                Path(__file__).parent
                 project_root = Path(__file__).parent.parent
                 migrations_path = project_root / "migrations"
                 
