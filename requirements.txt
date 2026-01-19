@@ -30,6 +30,7 @@ azure-core==1.35.0
 azure-identity==1.24.0
 azure-monitor-ingestion==1.1.0
 azure-monitor-query==2.0.0
+alembic>=1.13.0,<2.0.0
 backoff==2.2.1
 backports-datetime-fromisoformat==2.0.3
 bandit==1.8.6
@@ -68,6 +69,7 @@ cymem==2.0.11
 cytoolz==1.0.1
 dask==2025.9.0
 dataclasses-json==0.6.7
+deap>=1.4.0,<2.0.0
 deepdiff==8.6.1
 defusedxml==0.7.1
 Deprecated==1.2.18
@@ -277,6 +279,7 @@ propcache==0.4.1
 proto-plus==1.26.1
 protobuf==5.29.5
 psutil==7.1.3
+psycopg2-binary>=2.9.0,<3.0.0
 py-cpuinfo==9.0.0
 pyarrow==17.0.0
 pyasn1==0.6.1
@@ -337,6 +340,7 @@ sarif-om==1.0.4
 scikit-learn==1.7.2
 scipy==1.13.1
 semantic-version==2.10.0
+sentry-sdk>=2.0.0,<3.0.0
 sentence-transformers==5.1.2
 setproctitle==1.3.7
 shellingham==1.5.4
