@@ -16,7 +16,17 @@ from collections import deque
 from datetime import datetime, timezone
 from functools import wraps
 from logging.handlers import RotatingFileHandler
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Coroutine, Dict, List, Optional, Set
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ClassVar,
+    Coroutine,
+    Dict,
+    List,
+    Optional,
+    Set,
+)
 
 import aiohttp
 import httpx
@@ -234,6 +244,7 @@ try:
     from arbiter.agent_state import Base
     from arbiter.config import ArbiterConfig
     from arbiter.feedback import FeedbackManager
+
     # REMOVED: from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
     # Using TYPE_CHECKING and lazy import to avoid circular dependencies
     from arbiter.monitoring import Monitor as BaseMonitor
@@ -1333,7 +1344,9 @@ class Arbiter:
         port: Optional[int] = None,
         peer_ports: Optional[List[int]] = None,
         feedback_manager: Optional[FeedbackManager] = None,
-        human_in_loop: Optional["HumanInLoop"] = None,  # Forward reference for TYPE_CHECKING import
+        human_in_loop: Optional[
+            "HumanInLoop"
+        ] = None,  # Forward reference for TYPE_CHECKING import
         monitor: Optional[Monitor] = None,
         intent_capture_engine: Optional[Any] = None,
         test_generation_engine: Optional[Any] = None,
@@ -1392,7 +1405,7 @@ class Arbiter:
         else:
             HumanInLoop = None
             HumanInLoopConfig = None
-            
+
         if (
             ARBITER_PACKAGE_AVAILABLE
             and HumanInLoop is not None

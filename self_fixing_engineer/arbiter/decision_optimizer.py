@@ -37,6 +37,7 @@ from arbiter.config import ArbiterConfig
 # from arbiter.knowledge_graph import KnowledgeGraph
 from arbiter.explainable_reasoner import ExplainableReasoner
 from arbiter.feedback import FeedbackManager
+
 # REMOVED: from arbiter.human_loop import HumanInLoop
 # Using lazy import to avoid circular dependencies
 from arbiter.monitoring import Monitor
@@ -70,7 +71,9 @@ class SFECoreEngine:
     policy_engine: PolicyEngine
     bug_manager: BugManager
     monitor: Monitor
-    human_in_loop: HumanInLoop  # TYPE_CHECKING import allows this without circular dependency
+    human_in_loop: (
+        HumanInLoop  # TYPE_CHECKING import allows this without circular dependency
+    )
     plugin_registry: PLUGIN_REGISTRY
     notification_service: Any
     audit: Any
@@ -378,7 +381,7 @@ class DecisionOptimizer:
         )
         # Lazy import to avoid circular dependencies
         from arbiter.human_loop import HumanInLoop
-        
+
         self.human_in_loop: Optional[HumanInLoop] = (
             sfe_core_engine.human_in_loop
             if sfe_core_engine and hasattr(sfe_core_engine, "human_in_loop")
