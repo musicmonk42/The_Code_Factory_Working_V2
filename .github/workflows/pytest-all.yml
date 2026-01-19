@@ -167,25 +167,32 @@ jobs:
           echo "=== Collecting tests ==="
           pytest --collect-only -q 2>&1 | tee collection.log || true
           
-          # Count collected tests
-          # More robust test counting that handles pytest output format better
-          TEST_COUNT=$(grep -E "^[[:space:]]*(test_.*\.py::|.*::test_)" collection.log 2>/dev/null | wc -l) || TEST_COUNT=0
-          # Also try alternative counting method
+          # Count collected tests - FIX: Use pytest's native output parsing
+          # pytest --collect-only -q outputs one line per test, plus summary lines
+          # We count lines that don't start with '=' or contain 'error' (case-insensitive)
+          TEST_COUNT=$(grep -v '^=' collection.log | grep -v -i 'error' | grep -v '^$' | grep '::' | wc -l)
+          
+          # Alternative: parse the summary line "X selected" if available
           if [ "$TEST_COUNT" -eq 0 ]; then
-            TEST_COUNT=$(grep -c "<Function\|<Method\|test session starts" collection.log 2>/dev/null) || TEST_COUNT=0
+            SUMMARY_COUNT=$(grep -oP '\d+(?= selected)' collection.log 2>/dev/null | head -1)
+            if [ -n "$SUMMARY_COUNT" ] && [ "$SUMMARY_COUNT" -gt 0 ]; then
+              TEST_COUNT=$SUMMARY_COUNT
+            fi
           fi
+          
           echo "Found $TEST_COUNT test items"
           
           # Check if TEST_COUNT is a valid number and greater than 0
           if ! [[ "$TEST_COUNT" =~ ^[0-9]+$ ]] || [ "$TEST_COUNT" -eq 0 ]; then
             echo "ERROR: No tests collected! Showing collection errors:"
             cat collection.log
+            echo ""
+            echo "=== Attempting verbose collection to diagnose ==="
+            pytest --collect-only -v 2>&1 | head -100
             exit 1
           fi
           
           # Run pytest from repository root with all configured test paths
-          # The pyproject.toml testpaths already configures all test paths including root directory
-          # The conftest.py sets up Python paths correctly
           pytest \
             -n 2 \
             --maxfail=50 \
