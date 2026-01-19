@@ -838,7 +838,15 @@ async def security_middleware(request: Request, call_next):
 app.add_middleware(SizeLimitMiddleware)
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["*.yourdomain.com", "localhost", "127.0.0.1", "testserver"],
+    allowed_hosts=[
+        "*.yourdomain.com",
+        "localhost",
+        "127.0.0.1",
+        "testserver",
+        # Railway deployment domains for healthcheck and public access
+        "*.railway.app",
+        "*.up.railway.app",
+    ],
 )
 
 
