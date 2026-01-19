@@ -319,6 +319,50 @@ class TestMerkleTree:
         with pytest.raises(ValueError, match="Leaf not found"):
             tree.get_proof(b"non_existent_leaf")
 
+    def test_get_root_empty_tree(self):
+        """Test get_root() returns empty string for empty tree"""
+        tree = MerkleTree()
+        assert tree.get_root() == ""
+
+    def test_get_root_with_data(self):
+        """Test get_root() returns root hash when tree has data"""
+        tree = MerkleTree()
+        tree.add_leaf(b"test_data")
+        
+        root = tree.get_root()
+        assert root != ""
+        assert isinstance(root, str)
+        assert root == tree.root
+        assert root == tree.get_merkle_root()
+
+    def test_get_root_matches_get_merkle_root(self):
+        """Test get_root() is equivalent to get_merkle_root()"""
+        tree = MerkleTree()
+        
+        # Empty tree
+        assert tree.get_root() == tree.get_merkle_root()
+        
+        # Add leaves
+        for i in range(5):
+            tree.add_leaf(f"data_{i}".encode())
+            assert tree.get_root() == tree.get_merkle_root()
+            assert tree.get_root() == tree.root
+
+    def test_get_root_returns_hex_string(self):
+        """Test get_root() returns a valid hex string"""
+        tree = MerkleTree()
+        tree.add_leaf(b"test_data")
+        
+        root = tree.get_root()
+        # Should be a hex string (can be decoded from hex)
+        try:
+            bytes.fromhex(root)
+            is_hex = True
+        except ValueError:
+            is_hex = False
+        
+        assert is_hex, "get_root() should return a hex string"
+
 
 class TestOmniCoreEngine:
     """Test OmniCoreEngine class"""
