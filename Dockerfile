@@ -78,8 +78,7 @@ RUN set -e; \
         fi; \
         echo "Dependencies installed successfully"; \
     else \
-        echo "ERROR: No requirements.txt or pyproject.toml found"; \
-        exit 1; \
+        echo "WARNING: No requirements.txt or pyproject.toml found. Skipping dependency install."; \
     fi; \
     # Clean up pip cache, temp files, and package caches to free disk space
     rm -rf /root/.cache/* /tmp/* /var/tmp/* || true; \
