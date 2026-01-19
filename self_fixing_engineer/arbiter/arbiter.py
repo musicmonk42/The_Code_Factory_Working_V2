@@ -226,12 +226,20 @@ class MyArbiterConfig(BaseSettings):
 
 
 # --- Sentry Integration ---
-if os.getenv("SENTRY_DSN") and SENTRY_AVAILABLE and sentry_sdk:
-    sentry_sdk.init(
-        dsn=os.getenv("SENTRY_DSN"),
-        traces_sample_rate=1.0,
-        environment=os.getenv("ENV", "production"),
-    )
+# Deferred to avoid module-level initialization overhead
+_sentry_initialized = False
+
+
+def _init_sentry():
+    """Initialize Sentry SDK if configured. Called lazily on first Arbiter instantiation."""
+    global _sentry_initialized
+    if not _sentry_initialized and os.getenv("SENTRY_DSN") and SENTRY_AVAILABLE and sentry_sdk:
+        sentry_sdk.init(
+            dsn=os.getenv("SENTRY_DSN"),
+            traces_sample_rate=1.0,
+            environment=os.getenv("ENV", "production"),
+        )
+        _sentry_initialized = True
 
 # Type checking imports - only used for type hints, not at runtime
 # Use string forward references in annotations (e.g., Optional["HumanInLoop"])
@@ -399,12 +407,23 @@ class EventLogModel(Base):
 
 
 # --- Production-Ready Monitor ---
-event_counter = get_or_create_counter(
-    "events_total", "Total events logged", ("agent", "event_type")
-)
-plugin_execution_time = get_or_create_summary(
-    "plugin_execution_seconds", "Time spent executing plugins", ("plugin",)
-)
+# Deferred to avoid module-level initialization overhead
+_metrics_initialized = False
+event_counter = None
+plugin_execution_time = None
+
+
+def _init_metrics():
+    """Initialize Prometheus metrics lazily. Called on first Arbiter instantiation."""
+    global _metrics_initialized, event_counter, plugin_execution_time
+    if not _metrics_initialized:
+        event_counter = get_or_create_counter(
+            "events_total", "Total events logged", ("agent", "event_type")
+        )
+        plugin_execution_time = get_or_create_summary(
+            "plugin_execution_seconds", "Time spent executing plugins", ("plugin",)
+        )
+        _metrics_initialized = True
 
 
 class Monitor:
@@ -427,9 +446,10 @@ class Monitor:
             "description": event.get("description", ""),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        event_counter.labels(
-            agent=event_data["agent"], event_type=event_data["type"]
-        ).inc()
+        if event_counter is not None:
+            event_counter.labels(
+                agent=event_data["agent"], event_type=event_data["type"]
+            ).inc()
 
         try:
             with open(self.log_file, "a") as f:
@@ -1003,20 +1023,31 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 # --- Prometheus Metrics Setup ---
-action_counter = get_or_create_counter(
-    "actions_total", "Total actions executed", ("agent", "action")
-)
-energy_gauge = get_or_create_gauge("energy", "Current energy level", ("agent",))
-memory_gauge = get_or_create_gauge(
-    "memory_items", "Number of items in agent memory", ("agent",)
-)
-db_health_gauge = get_or_create_gauge(
-    "db_health", "Database health status (1=healthy, 0=unhealthy)"
-)
-rl_reward_gauge = get_or_create_gauge("rl_reward", "Reward from RL steps", ("agent",))
-plugin_execution_time = get_or_create_summary(
-    "plugin_execution_seconds", "Time spent executing plugins", ("plugin",)
-)
+# Deferred to avoid module-level initialization overhead
+_additional_metrics_initialized = False
+action_counter = None
+energy_gauge = None
+memory_gauge = None
+db_health_gauge = None
+rl_reward_gauge = None
+
+
+def _init_additional_metrics():
+    """Initialize additional Prometheus metrics lazily."""
+    global _additional_metrics_initialized, action_counter, energy_gauge, memory_gauge, db_health_gauge, rl_reward_gauge
+    if not _additional_metrics_initialized:
+        action_counter = get_or_create_counter(
+            "actions_total", "Total actions executed", ("agent", "action")
+        )
+        energy_gauge = get_or_create_gauge("energy", "Current energy level", ("agent",))
+        memory_gauge = get_or_create_gauge(
+            "memory_items", "Number of items in agent memory", ("agent",)
+        )
+        db_health_gauge = get_or_create_gauge(
+            "db_health", "Database health status (1=healthy, 0=unhealthy)"
+        )
+        rl_reward_gauge = get_or_create_gauge("rl_reward", "Reward from RL steps", ("agent",))
+        _additional_metrics_initialized = True
 
 
 # --- Permission Manager ---
@@ -1358,6 +1389,12 @@ class Arbiter:
         message_queue_service: Optional[Any] = None,
         **kwargs,
     ):
+        # Initialize deferred module-level components
+        _init_sentry()
+        _init_metrics()
+        _init_additional_metrics()
+        _register_default_plugins()
+        
         self.settings = settings
         self.name = name
         self.world_size = world_size
@@ -1696,9 +1733,10 @@ class Arbiter:
                         result = await plugin_instance(**payload)
                     else:
                         result = plugin_instance(**payload)
-                plugin_execution_time.labels(plugin="generate_tests").observe(
-                    time.time() - start_time
-                )
+                if plugin_execution_time is not None:
+                    plugin_execution_time.labels(plugin="generate_tests").observe(
+                        time.time() - start_time
+                    )
             return (
                 result
                 if isinstance(result, dict)
@@ -1807,7 +1845,8 @@ class Arbiter:
                                     observation, deterministic=True
                                 )
                                 observation, reward, done, info = vec_env.step(action)
-                                rl_reward_gauge.labels(agent=self.name).set(reward[0])
+                                if rl_reward_gauge is not None:
+                                    rl_reward_gauge.labels(agent=self.name).set(reward[0])
                                 self.log_event(
                                     f"RL step complete. Reward: {reward[0]}",
                                     "rl_step_complete",
@@ -2000,7 +2039,8 @@ class Arbiter:
         action = decision.get("action")
         outcome = {"status": "success", "action_taken": action}
         self.log_event(f"Executing action: {action}", "execute_action")
-        action_counter.labels(agent=self.name, action=action).inc()
+        if action_counter is not None:
+            action_counter.labels(agent=self.name, action=action).inc()
 
         with sentry_sdk.push_scope() as scope:
             scope.set_tag("agent", self.name)
@@ -2134,7 +2174,8 @@ class Arbiter:
                             "explanation", "No explanation provided."
                         )
 
-                energy_gauge.labels(agent=self.name).set(self.state_manager.energy)
+                if energy_gauge is not None:
+                    energy_gauge.labels(agent=self.name).set(self.state_manager.energy)
                 await self.state_manager.batch_save_state()
             except (
                 httpx.RequestError,
@@ -2273,7 +2314,8 @@ class Arbiter:
         self.log_event(
             f"Logged social event: '{event}' with '{with_whom}'", "social_event"
         )
-        memory_gauge.labels(agent=self.name).set(len(self.state_manager.memory))
+        if memory_gauge is not None:
+            memory_gauge.labels(agent=self.name).set(len(self.state_manager.memory))
 
     async def sync_with_explorer(self, explorer_knowledge: Dict[str, Any]):
         """Syncs knowledge from the explorer into the agent's memory."""
@@ -2292,7 +2334,8 @@ class Arbiter:
         self.log_event(
             f"Synced explorer knowledge: {explorer_knowledge}", "explorer_sync"
         )
-        memory_gauge.labels(agent=self.name).set(len(self.state_manager.memory))
+        if memory_gauge is not None:
+            memory_gauge.labels(agent=self.name).set(len(self.state_manager.memory))
 
     async def start_async_services(self):
         """Initializes and loads the agent's state and plugins."""
@@ -2874,8 +2917,10 @@ class Arbiter:
                 "monitor_report": self.monitor.generate_reports(),
             }
         self.log_event("Status requested", "status_check")
-        energy_gauge.labels(agent=self.name).set(self.state_manager.energy)
-        memory_gauge.labels(agent=self.name).set(len(self.state_manager.memory))
+        if energy_gauge is not None:
+            energy_gauge.labels(agent=self.name).set(self.state_manager.energy)
+        if memory_gauge is not None:
+            memory_gauge.labels(agent=self.name).set(len(self.state_manager.memory))
         await self.push_metrics()
         return status
 
@@ -2895,9 +2940,10 @@ class Arbiter:
             explanation_result = await self.explainable_reasoner.execute(
                 "explain", *args, **kwargs
             )
-            plugin_execution_time.labels(plugin="explainable_reasoner").observe(
-                time.time() - start_time
-            )
+            if plugin_execution_time is not None:
+                plugin_execution_time.labels(plugin="explainable_reasoner").observe(
+                    time.time() - start_time
+                )
             return explanation_result.get("explanation", str(explanation_result))
         else:
             return {"error": "Explainable Reasoner not available."}
@@ -3494,21 +3540,30 @@ class Arbiter:
 
 
 # --- Plugin Registration ---
-# Only register if not already registered to avoid duplicate registration error
-if not PLUGIN_REGISTRY.get_metadata(PlugInKind.GROWTH_MANAGER, "arbiter_growth"):
-    PLUGIN_REGISTRY.register_instance(
-        PlugInKind.GROWTH_MANAGER,
-        "arbiter_growth",
-        ArbiterGrowthManager(),
-        version="1.0.0",
-    )
-if not PLUGIN_REGISTRY.get_metadata(PlugInKind.AI_ASSISTANT, "explainable_reasoner"):
-    PLUGIN_REGISTRY.register_instance(
-        PlugInKind.AI_ASSISTANT,
-        "explainable_reasoner",
-        ExplainableReasoner(),
-        version="1.0.0",
-    )
+# Deferred to avoid module-level initialization overhead
+_plugins_registered = False
+
+
+def _register_default_plugins():
+    """Register default plugins. Called on first Arbiter instantiation."""
+    global _plugins_registered
+    if not _plugins_registered:
+        # Only register if not already registered to avoid duplicate registration error
+        if not PLUGIN_REGISTRY.get_metadata(PlugInKind.GROWTH_MANAGER, "arbiter_growth"):
+            PLUGIN_REGISTRY.register_instance(
+                PlugInKind.GROWTH_MANAGER,
+                "arbiter_growth",
+                ArbiterGrowthManager(),
+                version="1.0.0",
+            )
+        if not PLUGIN_REGISTRY.get_metadata(PlugInKind.AI_ASSISTANT, "explainable_reasoner"):
+            PLUGIN_REGISTRY.register_instance(
+                PlugInKind.AI_ASSISTANT,
+                "explainable_reasoner",
+                ExplainableReasoner(),
+                version="1.0.0",
+            )
+        _plugins_registered = True
 
 
 # --- Main Application Logic ---
