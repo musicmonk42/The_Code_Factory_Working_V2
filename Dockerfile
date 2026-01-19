@@ -110,18 +110,8 @@ COPY --from=builder --chown=appuser:appuser /app /app
 
 USER appuser
 
-# The generator README indicates a FastAPI server at :8000 via deploy_llm_call
+# The FastAPI server runs on port 8000
 EXPOSE 8000
 
-# Start the API server if present; otherwise provide a helpful fallback
-# Tries (in order): generator.deploy_llm_call, deploy_llm_call, or prints help.
-CMD ["/bin/sh", "-c", "\
-  if [ -f generator/deploy_llm_call.py ]; then \
-    python -m generator.deploy_llm_call --server; \
-  elif [ -f deploy_llm_call.py ]; then \
-    python -m deploy_llm_call --server; \
-  else \
-    echo 'No server entrypoint found (deploy_llm_call). Override CMD or adjust paths.' && \
-    python -c 'import sys; print(\"Repo mounted at /app. Try: python -m generator.deploy_llm_call --server\")'; \
-  fi \
-"]
+# Start the FastAPI server using uvicorn
+CMD ["python", "-m", "uvicorn", "generator.main.api:api", "--host", "0.0.0.0", "--port", "8000"]
