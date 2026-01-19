@@ -146,7 +146,7 @@ jobs:
           python -c "import pytest_cov; print('pytest-cov OK')"
           python -c "import pytest_asyncio; print('pytest-asyncio OK')"
           python -c "import pytest_timeout; print('pytest-timeout OK')"
-          python -c "import pytest_xdist; print('pytest-xdist OK')"
+          python -c "import xdist; print('pytest-xdist OK')"
           python -c "import aiofiles; print('aiofiles OK')"
           python -c "import tiktoken; print('tiktoken OK')"
           python -c "import aiohttp; print('aiohttp OK')"
