@@ -158,6 +158,54 @@ if not logger.handlers:
 
 MAX_ITERATIONS = 1000
 
+# Feature names for plugin metrics extraction - must match prediction model's expected input size (20 features)
+PLUGIN_FEATURE_NAMES = [
+    "error_rate",
+    "execution_time_avg",
+    "execution_time_max",
+    "execution_time_min",
+    "executions",
+    "errors",
+    "success_rate",
+    "latency_p50",
+    "latency_p90",
+    "latency_p99",
+    "memory_usage",
+    "cpu_usage",
+    "queue_depth",
+    "retry_count",
+    "timeout_count",
+    "active_connections",
+    "throughput",
+    "error_rate_trend",
+    "load_factor",
+    "health_score",
+]
+
+# Default values for features (used when stat is not available)
+PLUGIN_FEATURE_DEFAULTS = {
+    "error_rate": 0.0,
+    "execution_time_avg": 0.0,
+    "execution_time_max": 0.0,
+    "execution_time_min": 0.0,
+    "executions": 0.0,
+    "errors": 0.0,
+    "success_rate": 1.0,
+    "latency_p50": 0.0,
+    "latency_p90": 0.0,
+    "latency_p99": 0.0,
+    "memory_usage": 0.0,
+    "cpu_usage": 0.0,
+    "queue_depth": 0.0,
+    "retry_count": 0.0,
+    "timeout_count": 0.0,
+    "active_connections": 0.0,
+    "throughput": 0.0,
+    "error_rate_trend": 0.0,
+    "load_factor": 0.0,
+    "health_score": 1.0,
+}
+
 
 def validate_model_input(features: np.ndarray) -> np.ndarray:
     """
@@ -968,8 +1016,10 @@ class MetaSupervisor:
                     )  # Set to zeros to avoid proactive hot-swap
 
             for i, (plugin_id, stats) in enumerate(plugin_metrics.items()):
-                plugin_id.split(":")[1]  # Assuming plugin_id is "kind:name"
-                plugin_id.split(":")[0]
+                # Safely parse plugin_id - handle cases where colon separator is missing
+                plugin_id_parts = plugin_id.split(":")
+                plugin_name = plugin_id_parts[1] if len(plugin_id_parts) > 1 else plugin_id_parts[0]
+                plugin_kind = plugin_id_parts[0] if len(plugin_id_parts) > 1 else "unknown"
 
                 current_failure_prob = (
                     failure_probs[i] if failure_probs is not None else 0.0
@@ -2038,10 +2088,38 @@ class MetaSupervisor:
         )
         self.logger.info("Optimized thresholds saved.")
 
+    def _get_counter_value(self, counter) -> float:
+        """
+        Safely gets the current value from a Prometheus Counter using the official public API.
+        
+        The prometheus_client library doesn't expose a direct ._value attribute in newer versions.
+        Instead, we use the .collect() method to retrieve metric samples and sum their values.
+        
+        Args:
+            counter: A Prometheus Counter metric object.
+            
+        Returns:
+            float: The total count value of the counter across all labels.
+        """
+        try:
+            total = 0.0
+            for metric_family in counter.collect():
+                for sample in metric_family.samples:
+                    # Sum up the counter values (which might have multiple labels)
+                    # Use endswith('_total') which is the standard Prometheus counter naming convention
+                    if sample.name.endswith('_total') or sample.name.endswith('_created'):
+                        continue  # Skip _created timestamps
+                    total += sample.value
+            return total
+        except Exception as e:
+            self.logger.warning(f"Failed to get counter value: {e}")
+            return 0.0
+
     def _extract_plugin_features(self, stats: Dict) -> np.ndarray:
         """
         Extracts relevant features from plugin statistics for use in predictive models.
-        Features include error rate and execution time.
+        Features include error rate, execution time, and additional metrics.
+        Returns a feature vector matching PLUGIN_FEATURE_NAMES length to match prediction model's expected input size.
         """
         # Handle case where stats might be a list instead of dict
         if isinstance(stats, list):
@@ -2052,13 +2130,10 @@ class MetaSupervisor:
         elif not isinstance(stats, dict):
             stats = {}
         
-        # Ensure consistent feature vector length and order
+        # Build feature vector using defined feature names and defaults for consistency
         features = [
-            stats.get("error_rate", 0.0),
-            stats.get(
-                "execution_time_avg", 0.0
-            ),  # Use _avg from Histogram in metrics.py
-            # Add other relevant stats as features (e.g., memory usage, CPU usage)
+            stats.get(feature_name, PLUGIN_FEATURE_DEFAULTS[feature_name])
+            for feature_name in PLUGIN_FEATURE_NAMES
         ]
         return np.array(features, dtype=np.float32)
 
@@ -2097,6 +2172,11 @@ class MetaSupervisor:
         num_config_changes = len(self.cached_config_changes)
 
         # Construct feature vector for system state
+        # Use the official Prometheus API to get metric values
+        api_request_count = self._get_counter_value(API_REQUESTS)
+        elapsed_time = time.time() - self._start_time if hasattr(self, "_start_time") else 1
+        api_requests_per_sec = api_request_count / max(1, elapsed_time)
+        
         system_state_features = [
             avg_plugin_error_rate,
             test_failure_rate,
@@ -2104,12 +2184,8 @@ class MetaSupervisor:
             self.thresholds["plugin_error"],
             self.thresholds["test_failure"],
             self.thresholds["ethics_drift"],
-            # Add more relevant system-wide metrics (e.g., overall API error rate, resource utilization)
-            API_REQUESTS._value
-            / max(
-                1,
-                (time.time() - self._start_time if hasattr(self, "_start_time") else 1),
-            ),  # Example: API reqs per second since start
+            # API requests per second since start
+            api_requests_per_sec,
             0.0,
             0.0,
             0.0,  # Fillers to match expected input size for RL model (10 features)
