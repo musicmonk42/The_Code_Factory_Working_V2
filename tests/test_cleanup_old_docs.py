@@ -132,7 +132,7 @@ def test_cleanup_script_help():
     """Test that the cleanup script can show help without errors."""
     import subprocess
 
-    script_path = Path(__file__).parent / "cleanup_old_docs.py"
+    script_path = Path(__file__).parent.parent / "cleanup_old_docs.py"
     result = subprocess.run(
         [sys.executable, str(script_path), "--help"], capture_output=True, text=True
     )
