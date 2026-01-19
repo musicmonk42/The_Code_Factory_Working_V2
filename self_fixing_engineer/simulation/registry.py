@@ -346,6 +346,8 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
             try:
                 installed_version = importlib_metadata.version(pkg)
                 # Basic version checking - can be enhanced with packaging library
+                # TODO: Consider using packaging.version.parse() for proper version constraint validation
+                # to support complex version specifiers like ">=1.0,<2.0"
                 if ver and not ver.startswith(">=") and not ver.startswith("=="):
                     ver = f">={ver}"
                 logger.debug(f"Dependency {pkg} version {installed_version} meets requirement {ver}")
