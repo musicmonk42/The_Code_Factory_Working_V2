@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator, ConfigDict, field_serializer
 
 
 class EventType(str, Enum):
@@ -40,11 +40,18 @@ class LearningRecord(BaseModel):
     event_type: EventType = Field(..., description="Type of event recorded")
     lineage_id: Optional[str] = Field(None, description="Lineage tracking identifier")
 
-    class Config:
-        frozen = True
-        extra = "forbid"
-        json_encoders = {datetime: lambda dt: dt.isoformat()}
-        use_enum_values = True  # Serialize enums as their values
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        use_enum_values=True,  # Serialize enums as their values
+    )
+
+    @field_serializer('*', when_used='json')
+    def serialize_datetime(self, value: Any) -> Any:
+        """Serialize datetime objects to ISO format strings."""
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
 
 class ModelVersion(BaseModel):
@@ -74,11 +81,18 @@ class ModelVersion(BaseModel):
         default_factory=dict, description="Additional metadata"
     )
 
-    class Config:
-        frozen = True
-        extra = "forbid"
-        json_encoders = {datetime: lambda dt: dt.isoformat()}
-        use_enum_values = True  # Serialize enums as their values
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        use_enum_values=True,  # Serialize enums as their values
+    )
+
+    @field_serializer('*', when_used='json')
+    def serialize_datetime(self, value: Any) -> Any:
+        """Serialize datetime objects to ISO format strings."""
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
     @model_validator(mode="after")
     def validate_metrics_and_status(self) -> "ModelVersion":

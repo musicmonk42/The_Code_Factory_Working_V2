@@ -34,7 +34,7 @@ from opentelemetry import trace
 from prometheus_client import Counter, Histogram
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic import ValidationError as PydanticValidationError
-from pydantic import field_validator
+from pydantic import field_validator, field_serializer
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -258,10 +258,16 @@ class WorkflowOutput(BaseModel):
     timestamp: str = Field(..., description="Execution timestamp in ISO format")
 
     model_config = ConfigDict(
-        json_encoders={datetime: lambda v: v.isoformat()},
         extra="forbid",
         populate_by_name=True,
     )
+
+    @field_serializer('*', when_used='json')
+    def serialize_datetime(self, value: Any) -> Any:
+        """Serialize datetime objects to ISO format strings."""
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
 
 # PII redaction
