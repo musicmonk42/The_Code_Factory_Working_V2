@@ -19,8 +19,8 @@ google-ai-generativelanguage==0.6.15
 circuitbreaker>=1.4.0
 
 # Retry library - must match requirements.txt for chromadb compatibility
-# Updated to >=9.1.2 to fix "tenacity version < 9.1.2 detected" warning
-tenacity>=9.1.2,<10.0.0
+# Updated to >=8.2.3,<9.0.0 to satisfy feast requirement (tenacity<9)
+tenacity>=8.2.3,<9.0.0
 
 # Pytest and pytest plugins - required for test execution
 # Version constraints ensure compatibility with Python 3.11 and prevent conflicts
