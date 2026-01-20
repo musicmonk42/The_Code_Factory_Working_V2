@@ -939,6 +939,19 @@ async def load_audit_trail(
         yield entry
 
 
+async def emit_audit_event(
+    event_type: str,
+    details: Dict[str, Any],
+    user_id: Optional[str] = None,
+    critical: bool = False,
+    omnicore_url: Optional[str] = None,
+):
+    """Emit an audit event to the tamper-evident log."""
+    return await audit_logger.emit_audit_event(
+        event_type, details, user_id, critical, omnicore_url
+    )
+
+
 # --- Example Usage ---
 if __name__ == "__main__":
 
