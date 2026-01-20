@@ -285,7 +285,7 @@ async def delete_job(job_id: str) -> SuccessResponse:
     return SuccessResponse(
         success=True,
         message=f"Job {job_id} deleted successfully",
-        data={"deleted_files": job_dir.exists() == False},
+        data={"deleted_files": not job_dir.exists()},
     )
 
 

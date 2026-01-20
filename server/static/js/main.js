@@ -914,11 +914,17 @@ async function publishMessage() {
     const payloadText = document.getElementById('message-payload').value;
     const priority = parseInt(document.getElementById('message-priority').value);
     
+    // Validate topic
+    if (!topic || !/^[a-zA-Z0-9_-]+$/.test(topic)) {
+        showError('Invalid topic name. Use only alphanumeric characters, hyphens, and underscores.');
+        return;
+    }
+    
     let payload = {};
     try {
         payload = JSON.parse(payloadText);
     } catch (error) {
-        showError('Invalid JSON payload');
+        showError('Invalid JSON payload: ' + error.message);
         return;
     }
     
@@ -1245,10 +1251,12 @@ async function stopArbiter() {
 }
 
 async function configureArbiter() {
+    // Use a simple inline prompt for now - can be enhanced with modal later
     const config = prompt('Enter Arbiter configuration (JSON):');
     if (!config) return;
     
     try {
+        JSON.parse(config); // Validate JSON before sending
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -1357,6 +1365,12 @@ function showSubscribe() {
     const topic = prompt('Enter topic to subscribe to:');
     if (!topic) return;
     
+    // Basic validation
+    if (!/^[a-zA-Z0-9_-]+$/.test(topic)) {
+        showError('Invalid topic name. Use only alphanumeric characters, hyphens, and underscores.');
+        return;
+    }
+    
     fetch(`${API_BASE}/omnicore/message-bus/subscribe`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -1369,6 +1383,12 @@ function showSubscribe() {
 function showInstallPlugin() {
     const pluginName = prompt('Enter plugin name to install:');
     if (!pluginName) return;
+    
+    // Basic validation
+    if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
+        showError('Invalid plugin name.');
+        return;
+    }
     
     fetch(`${API_BASE}/omnicore/plugins/install`, {
         method: 'POST',
@@ -1383,18 +1403,32 @@ function showRateLimit() {
     const limit = prompt('Enter rate limit (requests per minute):');
     if (!limit) return;
     
+    const limitNum = parseInt(limit);
+    if (isNaN(limitNum) || limitNum < 1 || limitNum > 10000) {
+        showError('Invalid rate limit. Enter a number between 1 and 10000.');
+        return;
+    }
+    
     fetch(`${API_BASE}/omnicore/rate-limits/configure`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({limit: parseInt(limit), window_seconds: 60})
+        body: JSON.stringify({limit: limitNum, window_seconds: 60})
     })
-    .then(() => showSuccess(`Rate limit configured: ${limit}/min`))
+    .then(() => showSuccess(`Rate limit configured: ${limitNum}/min`))
     .catch(err => showError('Configuration failed: ' + err.message));
 }
 
 function showSIEMConfig() {
     const endpoint = prompt('Enter SIEM endpoint URL:');
     if (!endpoint) return;
+    
+    // Basic URL validation
+    try {
+        new URL(endpoint);
+    } catch {
+        showError('Invalid URL format.');
+        return;
+    }
     
     fetch(`${API_BASE}/sfe/siem/configure`, {
         method: 'POST',
