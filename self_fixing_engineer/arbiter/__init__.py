@@ -16,7 +16,9 @@ This package provides:
 # Database component
 try:
     from .database import Database
-except ImportError:
+except ImportError as e:
+    import sys
+    print(f"WARNING: Failed to import arbiter.database module: {e}", file=sys.stderr)
     # Mock Database for testing when actual implementation isn't available
     class Database:
         """Mock Database implementation for testing."""
@@ -47,18 +49,24 @@ except ImportError:
 try:
     from . import arbiter
     from .arbiter import Arbiter
-except ImportError:
+except ImportError as e:
+    import sys
+    print(f"WARNING: Failed to import arbiter.arbiter module: {e}", file=sys.stderr)
     arbiter = None
     Arbiter = None
 
 try:
     from .arena import ArbiterArena
-except ImportError:
+except ImportError as e:
+    import sys
+    print(f"WARNING: Failed to import arbiter.arena module: {e}", file=sys.stderr)
     ArbiterArena = None
 
 try:
     from .feedback import FeedbackManager
-except ImportError:
+except ImportError as e:
+    import sys
+    print(f"WARNING: Failed to import arbiter.feedback module: {e}", file=sys.stderr)
     FeedbackManager = None
 
 
@@ -84,7 +92,9 @@ def _get_human_loop_config():
 
 try:
     from .config import ArbiterConfig
-except ImportError:
+except ImportError as e:
+    import sys
+    print(f"WARNING: Failed to import arbiter.config module: {e}", file=sys.stderr)
     ArbiterConfig = None
 
 

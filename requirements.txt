@@ -414,7 +414,9 @@ zstandard==0.25.0
 nest-asyncio==1.6.0
 xattr==1.1.0
 python-pkcs11==0.7.0
-libvirt-python==12.0.0
+# libvirt-python==12.0.0  # COMMENTED OUT: Requires system packages (libvirt-dev, pkg-config)
+                          # Install system deps first: apt-get install -y libvirt-dev pkg-config
+                          # Then uncomment this line if libvirt functionality is needed
 paramiko==3.5.0
 fastavro==1.10.2
 faiss-cpu==1.9.0.post1
