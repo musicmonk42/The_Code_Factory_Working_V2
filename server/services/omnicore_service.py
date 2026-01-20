@@ -350,26 +350,6 @@ class OmniCoreService:
             return {"status": "error", "message": f"Unknown action: {action}"}
     
     async def _run_codegen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute code generation agent.
-        
-        Args:
-            job_id: Job identifier
-            payload: Parameters including requirements, language, framework
-        
-        Returns:
-            Dict with status and generated files information
-        """
-        if not self.agents_available["codegen"]:
-            error_msg = (
-                "Codegen agent is not available. "
-                "Check that dependencies are installed and LLM provider is configured."
-            )
-            logger.error(error_msg)
-            return {
-                "status": "error",
-                "message": error_msg,
-                "agent_available": False,
         """Execute code generation agent."""
         # Check if agent is available
         loader = get_agent_loader()
@@ -438,23 +418,6 @@ class OmniCoreService:
             }
     
     async def _run_testgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute test generation agent.
-        
-        Args:
-            job_id: Job identifier
-            payload: Parameters including code_path, test_type, coverage_target
-        
-        Returns:
-            Dict with status and test generation results
-        """
-        available, error_msg = self._check_agent_available("testgen")
-        if not available:
-            logger.error(error_msg)
-            return {
-                "status": "error",
-                "message": error_msg,
-                "agent_available": False,
         """Execute test generation agent."""
         # Check if agent is available
         loader = get_agent_loader()
@@ -521,23 +484,6 @@ class OmniCoreService:
             }
     
     async def _run_deploy(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute deployment configuration generation.
-        
-        Args:
-            job_id: Job identifier
-            payload: Parameters including code_path, platform, include_ci_cd
-        
-        Returns:
-            Dict with status and deployment configuration results
-        """
-        available, error_msg = self._check_agent_available("deploy")
-        if not available:
-            logger.error(error_msg)
-            return {
-                "status": "error",
-                "message": error_msg,
-                "agent_available": False,
         """Execute deployment configuration generation."""
         # Check if agent is available
         loader = get_agent_loader()
@@ -587,23 +533,6 @@ class OmniCoreService:
             }
     
     async def _run_docgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute documentation generation.
-        
-        Args:
-            job_id: Job identifier
-            payload: Parameters including code_path, doc_type, format
-        
-        Returns:
-            Dict with status and documentation generation results
-        """
-        available, error_msg = self._check_agent_available("docgen")
-        if not available:
-            logger.error(error_msg)
-            return {
-                "status": "error",
-                "message": error_msg,
-                "agent_available": False,
         """Execute documentation generation."""
         # Check if agent is available
         loader = get_agent_loader()
@@ -654,23 +583,6 @@ class OmniCoreService:
             }
     
     async def _run_critique(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute critique/security scanning.
-        
-        Args:
-            job_id: Job identifier
-            payload: Parameters including code_path, scan_types, auto_fix
-        
-        Returns:
-            Dict with status and critique/security scanning results
-        """
-        available, error_msg = self._check_agent_available("critique")
-        if not available:
-            logger.error(error_msg)
-            return {
-                "status": "error",
-                "message": error_msg,
-                "agent_available": False,
         """Execute critique/security scanning."""
         # Check if agent is available
         loader = get_agent_loader()

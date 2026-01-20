@@ -92,13 +92,30 @@ RUN set -e; \
 
 # Verify critical dependencies are installed and importable
 # This ensures the container will actually start successfully
+# Following fail-fast principle: catch dependency issues at build time, not runtime
 RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
+        echo "========================================"; \
         echo "Verifying critical dependencies..."; \
+        echo "========================================"; \
         python -c "import uvicorn; print(f'✓ uvicorn {uvicorn.__version__} is installed')" || \
         (echo "ERROR: uvicorn is not importable. Dependencies were not installed correctly." && exit 1); \
         python -c "import fastapi; print(f'✓ fastapi {fastapi.__version__} is installed')" || \
         (echo "ERROR: fastapi is not importable. Dependencies were not installed correctly." && exit 1); \
+        python -c "import asyncpg; print(f'✓ asyncpg {asyncpg.__version__} is installed')" || \
+        (echo "ERROR: asyncpg is not importable. Check SSL/network during pip install." && exit 1); \
+        python -c "import defusedxml; print('✓ defusedxml is installed')" || \
+        (echo "ERROR: defusedxml is not importable. Check SSL/network during pip install." && exit 1); \
+        python -c "import web3; print(f'✓ web3 {web3.__version__} is installed')" || \
+        (echo "ERROR: web3 is not importable. Check SSL/network during pip install." && exit 1); \
+        python -c "import aiohttp; print(f'✓ aiohttp {aiohttp.__version__} is installed')" || \
+        (echo "ERROR: aiohttp is not importable. Check SSL/network during pip install." && exit 1); \
+        python -c "import redis; print(f'✓ redis {redis.__version__} is installed')" || \
+        (echo "ERROR: redis is not importable. Check SSL/network during pip install." && exit 1); \
+        python -c "import sqlalchemy; print(f'✓ sqlalchemy {sqlalchemy.__version__} is installed')" || \
+        (echo "ERROR: sqlalchemy is not importable. Check SSL/network during pip install." && exit 1); \
+        echo "========================================"; \
         echo "✓ All critical dependencies verified successfully"; \
+        echo "========================================"; \
     else \
         echo "Skipping dependency verification for CI build"; \
     fi
