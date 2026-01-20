@@ -1480,10 +1480,6 @@ async function startClarification() {
         return;
     }
     
-    // Generate or use provided job ID
-    currentClarifierJobId = jobIdInput || `clarify-${Date.now()}`;
-    document.getElementById('clarifier-job-id').value = currentClarifierJobId;
-    
     // Update status
     updateClarifierStatus('Processing...', 'active');
     
@@ -1496,6 +1492,30 @@ async function startClarification() {
     addClarifierMessage('user', requirements, 'Initial Requirements');
     
     try {
+        // Create a job first if jobIdInput is empty, or validate existing job ID
+        if (!jobIdInput) {
+            // Create a new job
+            const jobResponse = await fetch(`${API_BASE}/jobs/`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    description: 'Clarification session',
+                    metadata: { source: 'clarifier' }
+                })
+            });
+            
+            if (!jobResponse.ok) {
+                throw new Error(`Failed to create job: ${jobResponse.status}`);
+            }
+            
+            const job = await jobResponse.json();
+            currentClarifierJobId = job.id;
+            document.getElementById('clarifier-job-id').value = currentClarifierJobId;
+        } else {
+            // Use provided job ID
+            currentClarifierJobId = jobIdInput;
+        }
+        
         // Call clarifier API
         const response = await fetch(`${API_BASE}/generator/${currentClarifierJobId}/clarify`, {
             method: 'POST',
