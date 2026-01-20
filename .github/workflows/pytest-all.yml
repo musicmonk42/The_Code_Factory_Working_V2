@@ -118,7 +118,7 @@ jobs:
           }
           # Verify arbiter is importable with timeout protection and detailed error reporting
           echo "=== Attempting to import arbiter ==="
-          timeout 10s python -c 'import sys; from self_fixing_engineer import arbiter; arbiter_file = getattr(arbiter, "__file__", "unknown"); print(f"✓ arbiter imported from {arbiter_file}"); print(f"✓ Contents: {str(dir(arbiter)[:10])}")' || {
+          timeout 10s python -c 'import sys; from self_fixing_engineer import arbiter; arbiter_file = getattr(arbiter, "__file__", "unknown"); print(f"✓ arbiter imported from {arbiter_file}"); print(f"✓ Module attributes: {list(dir(arbiter)[:10])}")' || {
             echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
             echo "This may indicate heavy import-time initialization or missing dependencies."
             exit 1
