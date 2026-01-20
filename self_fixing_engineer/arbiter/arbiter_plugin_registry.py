@@ -308,13 +308,19 @@ class PluginRegistry:
                     )
                     # Don't load any existing plugins in test mode or when skipping validation
                     cls._instance._persist_path = persist_path
-                    if is_testing:
+                    
+                    # Log appropriate message based on which condition is set
+                    if is_testing and skip_validation:
+                        logger.info(
+                            f"Test mode with SKIP_IMPORT_TIME_VALIDATION: Using temporary plugin file {persist_path}, skipping plugin loading"
+                        )
+                    elif is_testing:
                         logger.info(
                             f"Test mode: Using temporary plugin file: {persist_path}"
                         )
-                    if skip_validation:
+                    else:
                         logger.info(
-                            f"SKIP_IMPORT_TIME_VALIDATION set: Skipping persisted plugin loading at import time"
+                            "SKIP_IMPORT_TIME_VALIDATION set: Skipping persisted plugin loading at import time"
                         )
                 else:
                     cls._instance._persist_path = persist_path
