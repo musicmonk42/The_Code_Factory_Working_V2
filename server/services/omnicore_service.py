@@ -162,26 +162,22 @@ class OmniCoreService:
         
         if use_llm_clarifier:
             try:
-                from generator.clarifier.clarifier_llm import GrokLLM, LLMProvider
+                from generator.clarifier.clarifier_llm import GrokLLM
                 self._clarifier_llm_class = GrokLLM
-                self._clarifier_provider_class = LLMProvider
                 self.agents_available["clarifier"] = True
                 logger.info("✓ LLM-based clarifier loaded successfully")
             except ImportError as e:
                 logger.warning(f"LLM clarifier unavailable, will use rule-based: {e}")
                 self._clarifier_llm_class = None
-                self._clarifier_provider_class = None
                 # Rule-based clarifier is always available as fallback
                 self.agents_available["clarifier"] = True
             except Exception as e:
                 logger.error(f"Unexpected error loading LLM clarifier: {e}", exc_info=True)
                 self._clarifier_llm_class = None
-                self._clarifier_provider_class = None
                 self.agents_available["clarifier"] = True
         else:
             logger.info("Using rule-based clarifier (LLM clarifier not configured)")
             self._clarifier_llm_class = None
-            self._clarifier_provider_class = None
             self.agents_available["clarifier"] = True
     
     def _build_llm_config(self) -> Dict[str, Any]:
@@ -694,10 +690,16 @@ class OmniCoreService:
                 try:
                     # Build LLM config for clarifier
                     llm_config = self._build_llm_config()
-                    provider = self._clarifier_provider_class[llm_config["backend"]]
                     
-                    # Initialize LLM-based clarifier
-                    clarifier = self._clarifier_llm_class(provider=provider)
+                    # Initialize LLM-based clarifier with API key from config
+                    api_key = None
+                    if self.llm_config:
+                        api_key = self.llm_config.get_provider_api_key(llm_config["backend"])
+                    
+                    clarifier = self._clarifier_llm_class(
+                        api_key=api_key,
+                        model=llm_config.get("model", {}).get(llm_config["backend"], "grok-1")
+                    )
                     
                     # Generate questions using LLM (async call)
                     questions = await clarifier.generate_clarification_questions(
