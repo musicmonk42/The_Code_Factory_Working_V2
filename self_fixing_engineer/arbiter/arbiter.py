@@ -28,6 +28,10 @@ from typing import (
     Set,
 )
 
+# TYPE_CHECKING imports to avoid circular dependencies while maintaining type safety
+if TYPE_CHECKING:
+    from simulation.simulation_module import UnifiedSimulationModule
+
 import aiohttp
 import httpx
 import numpy as np
@@ -1382,7 +1386,7 @@ class Arbiter:
         monitor: Optional[Monitor] = None,
         intent_capture_engine: Optional[Any] = None,
         test_generation_engine: Optional[Any] = None,
-        simulation_engine: Optional[Any] = None,  # Changed from UnifiedSimulationModule to avoid circular import
+        simulation_engine: Optional["UnifiedSimulationModule"] = None,  # String literal for TYPE_CHECKING
         code_health_env: Optional[BaseCodeHealthEnv] = None,
         audit_log_manager: Optional[Any] = None,
         engines: Optional[Dict[str, Any]] = None,

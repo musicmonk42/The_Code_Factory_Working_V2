@@ -79,6 +79,7 @@ _PRESIDIO_ANALYZER_ENGINE: Optional[Any] = None
 _PRESIDIO_ANONYMIZER_ENGINE: Optional[Any] = None
 _PRESIDIO_AVAILABLE: bool = False
 _PRESIDIO_LOAD_ATTEMPTED: bool = False  # Track if we've already tried loading
+_PRESIDIO_NLP_MODE: bool = False  # Track if NLP engine is actually available (not just regex)
 
 # --- FIX: REMOVED ALL METRICS IMPORTS AND FALLBACKS ---
 # The logic for NoOpCounter and _get_metric has been removed.
@@ -91,15 +92,16 @@ def _load_presidio_engine() -> bool:
     Load presidio engine without auto-downloading models that cause SystemExit.
     
     This function implements enterprise-grade error handling with graceful degradation:
-    1. Try with lightweight en_core_web_sm model first
+    1. Try with configurable spaCy model (default: en_core_web_sm)
     2. Fall back to regex-only mode if model unavailable
     3. Catch SystemExit to prevent application crashes
     4. Never crash - always return boolean status
+    5. Track NLP availability separately from basic availability
     
     Returns:
         bool: True if Presidio is available (with or without NLP), False otherwise
     """
-    global _PRESIDIO_ANALYZER_ENGINE, _PRESIDIO_ANONYMIZER_ENGINE, _PRESIDIO_AVAILABLE, _PRESIDIO_LOAD_ATTEMPTED
+    global _PRESIDIO_ANALYZER_ENGINE, _PRESIDIO_ANONYMIZER_ENGINE, _PRESIDIO_AVAILABLE, _PRESIDIO_LOAD_ATTEMPTED, _PRESIDIO_NLP_MODE
     
     # Return cached result if already loaded successfully
     if _PRESIDIO_AVAILABLE:
@@ -135,21 +137,25 @@ def _load_presidio_engine() -> bool:
         # Prevent auto-download warnings that can trigger SystemExit
         os.environ['SPACY_WARNING_IGNORE'] = 'W007'
         
-        # Try with small model first (en_core_web_sm), fallback to regex-only
+        # Enterprise-grade: Make model configurable via environment
+        model_name = os.getenv('PRESIDIO_SPACY_MODEL', 'en_core_web_sm')
+        
+        # Try with configured model (default: small), fallback to regex-only
         # Using smaller model reduces memory footprint and startup time
         configuration = {
             "nlp_engine_name": "spacy",
-            "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}]
+            "models": [{"lang_code": "en", "model_name": model_name}]
         }
         
         try:
-            # Attempt to create NLP engine with small model
+            # Attempt to create NLP engine with configured model
             provider = NlpEngineProvider(nlp_configuration=configuration)
             nlp_engine = provider.create_engine()
             _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(nlp_engine=nlp_engine)
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
-            logger.info("Presidio analyzer loaded successfully with en_core_web_sm model")
+            _PRESIDIO_NLP_MODE = True  # Full NLP mode available
+            logger.info(f"Presidio analyzer loaded successfully with {model_name} model (full NLP mode)")
             return True
             
         except SystemExit as se:
@@ -163,6 +169,8 @@ def _load_presidio_engine() -> bool:
             _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(nlp_engine=None)
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
+            _PRESIDIO_NLP_MODE = False  # Degraded to regex-only mode
+            logger.info("Presidio running in REGEX-ONLY mode (NLP unavailable)")
             return True
             
         except Exception as model_error:
@@ -175,6 +183,8 @@ def _load_presidio_engine() -> bool:
             _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(nlp_engine=None)
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
+            _PRESIDIO_NLP_MODE = False  # Degraded to regex-only mode
+            logger.info("Presidio running in REGEX-ONLY mode (NLP failed to load)")
             return True
             
     except ImportError as ie:

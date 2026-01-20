@@ -170,13 +170,24 @@ class ScrubFilter(logging.Filter):
             if getattr(record, "msg", None):
                 try:
                     record.msg = scrub_text(str(record.msg))
-                except SystemExit:
+                except SystemExit as se:
                     # CRITICAL: Don't let SystemExit from model downloads kill the app
                     # This is the primary defense against presidio/spacy crashes
+                    # Log at debug level to aid troubleshooting without spam
+                    if logger:
+                        logger.debug(
+                            f"SystemExit caught in log filter (code {se.code}). "
+                            "Message scrubbing skipped for this record."
+                        )
                     pass  # Leave msg unchanged if scrubbing fails
-                except Exception:
+                except Exception as e:
                     # Gracefully handle any scrubbing failures
                     # Better to log unscrubbed than to crash
+                    if logger:
+                        logger.debug(
+                            f"Log message scrubbing failed ({type(e).__name__}). "
+                            "Logging message unscrubbed."
+                        )
                     pass
             
             # Scrub exception info if present
