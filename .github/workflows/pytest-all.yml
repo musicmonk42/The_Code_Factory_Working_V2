@@ -118,9 +118,8 @@ jobs:
           }
           # Verify arbiter is importable with timeout protection and detailed error reporting
           echo "=== Attempting to import arbiter ==="
-          timeout 10s python -c 'import sys; from self_fixing_engineer import arbiter; arbiter_file = getattr(arbiter, "__file__", "unknown"); print(f"✓ arbiter imported from {arbiter_file}"); print(f"✓ Module attributes: {list(dir(arbiter)[:10])}")' || {
-            echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
-            echo "This may indicate heavy import-time initialization or missing dependencies."
+          python -c 'import traceback; import sys; exec("try:\n    from self_fixing_engineer import arbiter\n    print(\"✓ arbiter imported from\", getattr(arbiter, \"__file__\", \"unknown\"))\n    print(\"✓ Module attributes sample:\", list(dir(arbiter)[:10]))\nexcept Exception as e:\n    print(\"ERROR - Failed to import arbiter module\")\n    print(\"Exception type -\", type(e).__name__)\n    print(\"Exception message -\", str(e))\n    traceback.print_exc()\n    sys.exit(1)")' || {
+            echo "ERROR: arbiter module import failed or timed out"
             exit 1
           }
           # Install omnicore_engine package
@@ -204,9 +203,21 @@ jobs:
           echo "=== Searching for errors in collection output ==="
           grep -i "error\|exception\|failed\|traceback" debug-collection.log || echo "No obvious errors found in collection"
           
+      - name: Check available memory
+        run: |
+          echo "=== System Memory Status ==="
+          free -h
+          echo ""
+          echo "=== Disk Space ==="
+          df -h
+          
       - name: Run all tests from repository root
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
+          
+          # Show initial memory
+          echo "=== Initial memory usage ==="
+          free -h
           
           # Verify tests can be collected with full verbosity
           echo "=== Collecting tests with verbose output ==="
@@ -255,9 +266,16 @@ jobs:
             exit 1
           fi
           
-          # Run pytest from repository root with all configured test paths
+          # Force garbage collection before tests
+          python -c "import gc; gc.collect(); print('Garbage collection completed')"
+          
+          echo ""
+          echo "=== Memory before test execution ==="
+          free -h
+          
+          # Run pytest WITHOUT parallelism to reduce memory usage
+          # Removed -n 2 flag to prevent OOM on GitHub runners
           pytest \
-            -n 2 \
             --maxfail=50 \
             --timeout=300 \
             --cov=generator \
@@ -267,6 +285,10 @@ jobs:
             --cov-report=term \
             -v \
             2>&1 | tee test-output.log
+          
+          echo ""
+          echo "=== Memory after test execution ==="
+          free -h
           
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

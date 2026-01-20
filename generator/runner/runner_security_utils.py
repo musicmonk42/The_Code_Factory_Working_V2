@@ -22,8 +22,8 @@ try:
     import xattr  # type: ignore[import] # For metadata (compliance expiration)
 except Exception:
     xattr = None
-    logging.warning(
-        "Warning: 'xattr' library not found. Extended attributes for compliance will not be set."
+    logging.info(
+        "'xattr' library not found. Extended attributes for compliance will not be set."
     )
 
 # --- REFACTOR FIX: Corrected imports ---
@@ -244,7 +244,7 @@ try:
 except ImportError:
     hvac = None
     HAS_VAULT = False
-    logger.warning("hvac not found. Hashicorp Vault integration will be unavailable.")
+    logger.info("hvac not found. Hashicorp Vault integration will be unavailable.")
 
 try:
     import boto3  # AWS (add to reqs: boto3)
@@ -254,7 +254,7 @@ try:
 except ImportError:
     boto3 = None
     HAS_BOTO3 = False
-    logger.warning(
+    logger.info(
         "boto3 not found. AWS Secrets Manager/KMS integration will be unavailable."
     )
 
@@ -267,7 +267,7 @@ try:
 except ImportError:
     pkcs11 = None
     HAS_PKCS11 = False
-    logger.warning("python-pkcs11 not found. HSM integration will be unavailable.")
+    logger.info("python-pkcs11 not found. HSM integration will be unavailable.")
 
 
 # --- Regex Redactors (Default fallback and custom patterns) ---

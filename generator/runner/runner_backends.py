@@ -79,7 +79,7 @@ try:
     _tracer = trace.get_tracer(__name__)
 except ImportError:
     _tracer = None
-    logger.warning(
+    logger.info(
         "OpenTelemetry not installed. Tracing will be disabled in runner_backends."
     )
 
@@ -99,7 +99,7 @@ except ImportError:
     ImageNotFound = None
     DockerAPIError = None
     docker = None
-    logger.warning("docker library not found. DockerBackend will be unavailable.")
+    logger.info("docker library not found. DockerBackend will be unavailable.")
 
 try:
     import kubernetes.client as k8s_client
@@ -112,7 +112,7 @@ except ImportError:
     k8s_client = None
     k8s_config = None
     K8sApiException = None
-    logger.warning(
+    logger.info(
         "kubernetes library not found. KubernetesBackend will be unavailable."
     )
 
@@ -125,7 +125,7 @@ except ImportError:
     HAS_BOTO3 = False
     boto3 = None
     BotoClientError = None
-    logger.warning("boto3 not found. LambdaBackend will be unavailable.")
+    logger.info("boto3 not found. LambdaBackend will be unavailable.")
 
 try:
     import libvirt
@@ -134,7 +134,7 @@ try:
 except ImportError:
     HAS_LIBVIRT = False
     libvirt = None
-    logger.warning("libvirt library not found. LibvirtBackend will be unavailable.")
+    logger.info("libvirt library not found. LibvirtBackend will be unavailable.")
 
 try:
     import paramiko
@@ -143,7 +143,7 @@ try:
 except ImportError:
     HAS_PARAMIKO = False
     paramiko = None
-    logger.warning("paramiko library not found. SSHBackend will be unavailable.")
+    logger.info("paramiko library not found. SSHBackend will be unavailable.")
 
 # --- FIX: MOVED DEFINITIONS UP ---
 # These definitions must appear *before* the imports below them that
