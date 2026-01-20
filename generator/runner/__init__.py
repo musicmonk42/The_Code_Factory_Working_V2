@@ -223,9 +223,29 @@ try:
     __all__.append("tracer")
 except ImportError:
     # Create a no-op tracer for testing environments
-    from opentelemetry import trace
+    try:
+        from opentelemetry import trace
 
-    tracer = trace.get_tracer(__name__)
+        tracer = trace.get_tracer(__name__)
+    except ImportError:
+        # Fallback: create a minimal no-op tracer stub
+        class _NoOpSpan:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def set_attribute(self, *args, **kwargs):
+                pass
+            def add_event(self, *args, **kwargs):
+                pass
+
+        class _NoOpTracer:
+            def start_as_current_span(self, name, **kwargs):
+                return _NoOpSpan()
+            def start_span(self, name, **kwargs):
+                return _NoOpSpan()
+
+        tracer = _NoOpTracer()
     __all__.append("tracer")
 
 # --- Backwards compatibility aliases ---

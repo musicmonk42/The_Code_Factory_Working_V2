@@ -1417,7 +1417,7 @@ class CritiqueAgent:
         code_files: Dict[str, str],
         test_files: Optional[Dict[str, str]] = None,
         requirements: Optional[Dict[str, Any]] = None,
-        user_story: str = "",
+        state_summary: str = "",
         config: Optional[CritiqueConfig] = None,
     ) -> Dict[str, Any]:
         """
@@ -1427,7 +1427,7 @@ class CritiqueAgent:
             code_files: Dictionary mapping filenames to code content.
             test_files: Optional dictionary mapping test filenames to content.
             requirements: Optional requirements specification.
-            user_story: User story or context for the critique.
+            state_summary: State summary or context for the critique.
             config: Optional config override for this run.
 
         Returns:
@@ -1437,7 +1437,7 @@ class CritiqueAgent:
             code_files=code_files,
             test_files=test_files or {},
             requirements=requirements or {},
-            user_story=user_story,
+            state_summary=state_summary,
             config=config or self.config,
         )
 
