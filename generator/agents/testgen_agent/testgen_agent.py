@@ -47,20 +47,76 @@ import tiktoken
 from opentelemetry.trace import Status, StatusCode  # For OpenTelemetry tracing
 
 # Presidio: REQUIRED for PII/secret scrubbing.
+# Lazy-load to prevent module-level initialization issues with SpaCy model downloads
 try:
     from presidio_analyzer import AnalyzerEngine
     from presidio_anonymizer import AnonymizerEngine
 
     HAS_PRESIDIO = True
-    # Initialize at module level for efficiency
-    _presidio_analyzer = AnalyzerEngine()
-    _presidio_anonymizer = AnonymizerEngine()
-except (ImportError, OSError):
+    # Lazy initialization - will be created on first use instead of at module load time
+    _presidio_analyzer = None
+    _presidio_anonymizer = None
+except (ImportError, OSError) as e:
     HAS_PRESIDIO = False
     AnalyzerEngine = None
     AnonymizerEngine = None
     _presidio_analyzer = None
     _presidio_anonymizer = None
+    import logging
+    logging.getLogger(__name__).warning(
+        f"Presidio not available for PII detection: {e}. "
+        "Install presidio-analyzer and presidio-anonymizer for PII scrubbing support."
+    )
+
+
+def _get_presidio_analyzer():
+    """
+    Lazy initialization of Presidio AnalyzerEngine.
+    
+    This prevents SpaCy model download at module import time, which can cause
+    SystemExit if pip is broken or network is unavailable.
+    
+    Returns:
+        AnalyzerEngine instance or None if Presidio is not available
+    """
+    global _presidio_analyzer
+    if not HAS_PRESIDIO:
+        return None
+    if _presidio_analyzer is None:
+        try:
+            _presidio_analyzer = AnalyzerEngine()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(
+                f"Failed to initialize Presidio AnalyzerEngine: {e}. "
+                "PII detection will be disabled."
+            )
+            return None
+    return _presidio_analyzer
+
+
+def _get_presidio_anonymizer():
+    """
+    Lazy initialization of Presidio AnonymizerEngine.
+    
+    Returns:
+        AnonymizerEngine instance or None if Presidio is not available
+    """
+    global _presidio_anonymizer
+    if not HAS_PRESIDIO:
+        return None
+    if _presidio_anonymizer is None:
+        try:
+            _presidio_anonymizer = AnonymizerEngine()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(
+                f"Failed to initialize Presidio AnonymizerEngine: {e}. "
+                "PII anonymization will be disabled."
+            )
+            return None
+    return _presidio_anonymizer
+
 from runner.llm_client import call_ensemble_api
 from runner.runner_errors import LLMError
 
@@ -157,6 +213,14 @@ def scrub_text(text: str) -> str:
             "Please install presidio-analyzer and presidio-anonymizer."
         )
 
+    analyzer = _get_presidio_analyzer()
+    anonymizer = _get_presidio_anonymizer()
+    
+    if analyzer is None or anonymizer is None:
+        raise RuntimeError(
+            "Failed to initialize Presidio engines. PII/secret scrubbing cannot proceed."
+        )
+
     try:
         entities = [
             "PERSON",
@@ -171,10 +235,10 @@ def scrub_text(text: str) -> str:
             "API_KEY",
         ]
 
-        results = _presidio_analyzer.analyze(
+        results = analyzer.analyze(
             text=text, entities=entities, language="en"
         )
-        scrubbed_content = _presidio_anonymizer.anonymize(
+        scrubbed_content = anonymizer.anonymize(
             text=text,
             analyzer_results=results,
             anonymizers={"DEFAULT": {"type": "replace", "new_value": "[REDACTED]"}},

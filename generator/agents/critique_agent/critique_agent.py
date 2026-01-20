@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 from dotenv import load_dotenv
 from opentelemetry import metrics, trace
 from prometheus_client import Counter, Gauge, Histogram
-from pydantic import BaseModel, Field, ValidationError, root_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 # --- CORE RUNNER & SHARED UTILITY IMPORTS (ENFORCED) ---
 try:
@@ -228,7 +228,8 @@ class CritiqueConfig(BaseModel):
     # Expected by tests: must exist and be >= 1 (or normalized)
     max_parallel_steps: int = 4
 
-    @root_validator(skip_on_failure=True)
+    @model_validator(mode='before')
+    @classmethod
     def _normalize_and_validate(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """
         Enforce the "no silent footguns" contract used by tests:
