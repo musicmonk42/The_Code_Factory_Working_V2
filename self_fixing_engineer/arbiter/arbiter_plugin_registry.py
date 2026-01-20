@@ -1309,11 +1309,16 @@ def __getattr__(name: str) -> Any:
     Module-level __getattr__ for lazy loading of registry-related attributes.
     This allows 'from arbiter_plugin_registry import registry' to work
     while deferring initialization until first access.
+    
+    Note: Accessing PLUGIN_REGISTRY returns a fresh snapshot of the registry
+    state on each access, ensuring up-to-date data. This differs from the
+    original implementation which created a static snapshot at import time.
     """
     if name == "registry":
         return get_registry()
     elif name == "PLUGIN_REGISTRY":
         # For backwards compatibility, expose the plugins dictionary
         # Note: This is a deep copy to prevent external modification
+        # Returns a fresh snapshot on each access to ensure up-to-date data
         return get_registry().list_plugins()
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
