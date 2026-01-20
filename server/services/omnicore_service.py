@@ -9,6 +9,8 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from server.utils.agent_loader import get_agent_loader
+
 logger = logging.getLogger(__name__)
 
 # In-memory storage for clarification sessions
@@ -139,6 +141,18 @@ class OmniCoreService:
     
     async def _run_codegen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute code generation agent."""
+        # Check if agent is available
+        loader = get_agent_loader()
+        if not loader.is_agent_available('codegen'):
+            error = loader.get_agent_error('codegen')
+            error_msg = error.error_message if error else "Codegen agent not available"
+            logger.error(f"Codegen agent unavailable for job {job_id}: {error_msg}")
+            return {
+                "status": "error",
+                "message": f"Codegen agent not available: {error_msg}",
+                "missing_dependencies": error.missing_dependencies if error else [],
+            }
+        
         try:
             from generator.agents.codegen_agent.codegen_agent import generate_code
             from pathlib import Path
@@ -188,12 +202,6 @@ class OmniCoreService:
                 "files_count": len(generated_files),
             }
             
-        except ImportError as e:
-            logger.error(f"Failed to import codegen agent: {e}")
-            return {
-                "status": "error",
-                "message": f"Codegen agent not available: {e}",
-            }
         except Exception as e:
             logger.error(f"Error running codegen agent: {e}", exc_info=True)
             return {
@@ -203,6 +211,18 @@ class OmniCoreService:
     
     async def _run_testgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute test generation agent."""
+        # Check if agent is available
+        loader = get_agent_loader()
+        if not loader.is_agent_available('testgen'):
+            error = loader.get_agent_error('testgen')
+            error_msg = error.error_message if error else "Testgen agent not available"
+            logger.error(f"Testgen agent unavailable for job {job_id}: {error_msg}")
+            return {
+                "status": "error",
+                "message": f"Testgen agent not available: {error_msg}",
+                "missing_dependencies": error.missing_dependencies if error else [],
+            }
+        
         try:
             from generator.agents.testgen_agent.testgen_agent import TestgenAgent, Policy
             from pathlib import Path
@@ -248,12 +268,6 @@ class OmniCoreService:
                 "report": result.get("report", ""),
             }
             
-        except ImportError as e:
-            logger.error(f"Failed to import testgen agent: {e}")
-            return {
-                "status": "error",
-                "message": f"Testgen agent not available: {e}",
-            }
         except Exception as e:
             logger.error(f"Error running testgen agent: {e}", exc_info=True)
             return {
@@ -263,6 +277,18 @@ class OmniCoreService:
     
     async def _run_deploy(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute deployment configuration generation."""
+        # Check if agent is available
+        loader = get_agent_loader()
+        if not loader.is_agent_available('deploy'):
+            error = loader.get_agent_error('deploy')
+            error_msg = error.error_message if error else "Deploy agent not available"
+            logger.warning(f"Deploy agent unavailable for job {job_id}: {error_msg}")
+            return {
+                "status": "error",
+                "message": f"Deploy agent not available: {error_msg}",
+                "missing_dependencies": error.missing_dependencies if error else [],
+            }
+        
         try:
             from generator.agents.deploy_agent.deploy_agent import DeployAgent
             from pathlib import Path
@@ -292,12 +318,6 @@ class OmniCoreService:
             
             return result
             
-        except ImportError as e:
-            logger.error(f"Failed to import deploy agent: {e}")
-            return {
-                "status": "error",
-                "message": f"Deploy agent not available: {e}",
-            }
         except Exception as e:
             logger.error(f"Error running deploy agent: {e}", exc_info=True)
             return {
@@ -307,6 +327,18 @@ class OmniCoreService:
     
     async def _run_docgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute documentation generation."""
+        # Check if agent is available
+        loader = get_agent_loader()
+        if not loader.is_agent_available('docgen'):
+            error = loader.get_agent_error('docgen')
+            error_msg = error.error_message if error else "Docgen agent not available"
+            logger.warning(f"Docgen agent unavailable for job {job_id}: {error_msg}")
+            return {
+                "status": "error",
+                "message": f"Docgen agent not available: {error_msg}",
+                "missing_dependencies": error.missing_dependencies if error else [],
+            }
+        
         try:
             from generator.agents.docgen_agent.docgen_agent import DocgenAgent
             from pathlib import Path
@@ -334,12 +366,6 @@ class OmniCoreService:
             
             return result
             
-        except ImportError as e:
-            logger.error(f"Failed to import docgen agent: {e}")
-            return {
-                "status": "error",
-                "message": f"Docgen agent not available: {e}",
-            }
         except Exception as e:
             logger.error(f"Error running docgen agent: {e}", exc_info=True)
             return {
@@ -349,6 +375,18 @@ class OmniCoreService:
     
     async def _run_critique(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute critique/security scanning."""
+        # Check if agent is available
+        loader = get_agent_loader()
+        if not loader.is_agent_available('critique'):
+            error = loader.get_agent_error('critique')
+            error_msg = error.error_message if error else "Critique agent not available"
+            logger.warning(f"Critique agent unavailable for job {job_id}: {error_msg}")
+            return {
+                "status": "error",
+                "message": f"Critique agent not available: {error_msg}",
+                "missing_dependencies": error.missing_dependencies if error else [],
+            }
+        
         try:
             from generator.agents.critique_agent.critique_agent import CritiqueAgent
             from pathlib import Path
@@ -376,12 +414,6 @@ class OmniCoreService:
             
             return result
             
-        except ImportError as e:
-            logger.error(f"Failed to import critique agent: {e}")
-            return {
-                "status": "error",
-                "message": f"Critique agent not available: {e}",
-            }
         except Exception as e:
             logger.error(f"Error running critique agent: {e}", exc_info=True)
             return {
