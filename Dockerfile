@@ -140,5 +140,5 @@ USER appuser
 # The FastAPI server runs on port 8000, Prometheus metrics on port 9090
 EXPOSE 8000 9090
 
-# Start the unified platform API (OmniCore Engine orchestrates all modules)
-CMD ["python", "-m", "uvicorn", "omnicore_engine.fastapi_app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start the unified platform API server
+CMD ["python", "-m", "uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8000"]
