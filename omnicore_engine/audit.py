@@ -34,6 +34,7 @@ except ImportError:
             self.AUDIT_FLUSH_INTERVAL = 1.0
             self.AUDIT_BLOCKCHAIN_ENABLED = False
             self.WEB3_PROVIDER_URL = None
+            self.PLUGINS_ENABLED = True
 
 
 def _create_fallback_settings():

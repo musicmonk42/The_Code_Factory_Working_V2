@@ -32,6 +32,7 @@ except ImportError:
     class ArbiterConfig:
         def __init__(self):
             self.ROLE_MAP = {"admin": 3, "user": 1}
+            self.PLUGINS_ENABLED = True
 
     class PermissionManager:
         def __init__(self, config):

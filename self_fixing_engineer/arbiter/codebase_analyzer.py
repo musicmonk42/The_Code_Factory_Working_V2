@@ -134,7 +134,7 @@ except ImportError:
 
     class ArbiterConfig:
         def __init__(self):
-            pass
+            self.PLUGINS_ENABLED = True
 
     # Mock get_tracer if otel_config is missing
     class MockTracer:

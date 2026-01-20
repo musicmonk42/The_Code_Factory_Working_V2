@@ -30,6 +30,7 @@ except ImportError as e:
             self.DB_PATH = "sqlite:///./omnicore.db"
             self.API_HOST = "0.0.0.0"
             self.API_PORT = 8000
+            self.PLUGINS_ENABLED = True
 
 
 try:

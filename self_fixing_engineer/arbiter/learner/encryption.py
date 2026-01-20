@@ -42,6 +42,7 @@ class ArbiterConfig:
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "openai")
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "dummy_llm_key")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    PLUGINS_ENABLED: bool = True
 
     @classmethod
     def load_keys(cls):

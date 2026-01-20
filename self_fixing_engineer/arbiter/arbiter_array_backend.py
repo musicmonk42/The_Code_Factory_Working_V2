@@ -172,6 +172,7 @@ except ImportError:
         REDIS_MAX_CONNECTIONS = 50
         ENCRYPTION_KEY = ""
         DATABASE_URL = "postgresql://user:password@host:port/database"
+        PLUGINS_ENABLED = True
 
         class MockSecret:
             def get_secret_value(self):
