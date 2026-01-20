@@ -123,9 +123,18 @@ class RegulatoryAuditLogger:
             temp_audit_dir = Path(tempfile.gettempdir()) / "analyzer_audit"
             self.audit_dir = temp_audit_dir
         else:
-            self.audit_dir = Path(
-                self.config.get("audit_dir", "/var/log/analyzer_audit")
-            )
+            # Priority order for audit directory:
+            # 1. Environment variable AUDIT_LOG_DIR
+            # 2. Config value
+            # 3. Default /var/log/analyzer_audit with fallbacks
+            audit_dir_env = os.getenv("AUDIT_LOG_DIR")
+            if audit_dir_env:
+                self.audit_dir = Path(audit_dir_env)
+            elif "audit_dir" in self.config:
+                self.audit_dir = Path(self.config["audit_dir"])
+            else:
+                # Try /var/log/analyzer_audit first, with fallbacks for containerized environments
+                self.audit_dir = self._determine_audit_directory()
 
         self.primary_log = self.audit_dir / "audit.log"
         self.integrity_file = self.audit_dir / "integrity.json"
@@ -143,6 +152,51 @@ class RegulatoryAuditLogger:
         # Log system startup (critical event) - a proper fix is to not do this in __init__,
         # but to have a separate async init method.
         self._startup_logged = False
+
+    def _determine_audit_directory(self) -> Path:
+        """
+        Determine the audit directory with fallback support for containerized environments.
+        
+        Try directories in order:
+        1. /var/log/analyzer_audit (production default)
+        2. /app/logs/analyzer_audit (containerized fallback)
+        3. /tmp/analyzer_audit (last resort)
+        
+        Returns:
+            Path: The first writable directory found
+        """
+        # List of candidate directories in priority order
+        candidate_dirs = [
+            Path("/var/log/analyzer_audit"),  # Production default
+            Path("/app/logs/analyzer_audit"),  # Container-friendly location
+            Path(tempfile.gettempdir()) / "analyzer_audit",  # Last resort
+        ]
+        
+        for candidate in candidate_dirs:
+            # Try to create the directory to test writability
+            try:
+                candidate.mkdir(parents=True, exist_ok=True, mode=0o700)
+                # Test that we can actually write to it
+                test_file = candidate / ".write_test"
+                test_file.touch()
+                test_file.unlink()
+                
+                # If we got here, this directory is writable
+                if candidate != candidate_dirs[0]:
+                    # Log when using fallback directory
+                    logger.warning(
+                        f"Using fallback audit directory: {candidate} "
+                        f"(preferred /var/log/analyzer_audit not writable)"
+                    )
+                return candidate
+            except (PermissionError, OSError) as e:
+                # This candidate didn't work, try the next one
+                logger.debug(f"Cannot use {candidate} for audit logs: {e}")
+                continue
+        
+        # If we get here, none of the directories worked
+        # Return the last one anyway and let the initialization handle the error
+        return candidate_dirs[-1]
 
     def log_event(self, event_type: str, **kwargs):
         """

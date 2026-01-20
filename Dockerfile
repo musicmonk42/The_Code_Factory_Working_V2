@@ -168,7 +168,9 @@ RUN useradd -m -u 10001 appuser
 WORKDIR /app
 
 # Create directories and set ownership BEFORE copying files
-RUN mkdir -p /opt/venv /app && chown appuser:appuser /opt/venv /app
+# Create audit log directory for regulatory compliance logging
+RUN mkdir -p /opt/venv /app /var/log/analyzer_audit /app/logs/analyzer_audit && \
+    chown appuser:appuser /opt/venv /app /var/log/analyzer_audit /app/logs/analyzer_audit
 
 # Bring in the venv and application source with proper ownership during copy
 COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
