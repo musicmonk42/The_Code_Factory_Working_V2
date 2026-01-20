@@ -442,6 +442,7 @@ def _create_mock_module(name):
         mock_module.BaseModel = BaseModel
         mock_module.Field = Field
         mock_module.field_validator = lambda *args, **kwargs: lambda f: f
+        mock_module.field_serializer = lambda *args, **kwargs: lambda f: f
         mock_module.model_validator = lambda *args, **kwargs: lambda f: f
         mock_module.root_validator = lambda *args, **kwargs: lambda f: f
         mock_module.validator = lambda *args, **kwargs: lambda f: f
