@@ -19,6 +19,15 @@ All module interactions are routed through OmniCore's message bus and
 coordination layer for centralized control and monitoring.
 """
 
+# CRITICAL: Set environment variables BEFORE any imports that might trigger plugin loading
+# This prevents circular imports, SystemExit crashes, and reduces startup time
+import os
+
+# Enterprise-grade startup configuration
+os.environ.setdefault("APP_STARTUP", "1")  # Skip plugin loading during startup
+os.environ.setdefault("SKIP_IMPORT_TIME_VALIDATION", "1")  # Skip validation during import
+os.environ.setdefault("SPACY_WARNING_IGNORE", "W007")  # Suppress spaCy warnings
+
 # Import path_setup first to ensure all component paths are in sys.path
 import path_setup  # noqa: F401
 

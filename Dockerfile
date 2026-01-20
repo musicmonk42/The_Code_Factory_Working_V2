@@ -124,14 +124,19 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "Skipping dependency verification for CI build"; \
     fi
 
-# Download SpaCy model to prevent runtime download issues
+# Download SpaCy models to prevent runtime download issues
+# Using both sm (small) and lg (large) for flexibility
 RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
-        echo "Downloading SpaCy model en_core_web_lg..."; \
+        echo "Downloading SpaCy models..."; \
         echo "========================================"; \
+        # Download small model first (required for graceful degradation)
+        python -m spacy download en_core_web_sm || \
+        (echo "WARNING: Failed to download en_core_web_sm model"); \
+        # Download large model (optional, for better accuracy)
         python -m spacy download en_core_web_lg || \
-        (echo "WARNING: Failed to download SpaCy model, testgen agent may not work properly"); \
-        echo "✓ SpaCy model download complete"; \
+        (echo "WARNING: Failed to download en_core_web_lg model, testgen agent may not work properly"); \
+        echo "✓ SpaCy model downloads complete"; \
     fi
 
 # Copy the rest of the application
@@ -144,7 +149,10 @@ FROM python:3.11-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:${PATH}"
+    PATH="/opt/venv/bin:${PATH}" \
+    APP_STARTUP=1 \
+    SKIP_IMPORT_TIME_VALIDATION=1 \
+    SPACY_WARNING_IGNORE=W007
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support

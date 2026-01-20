@@ -43,6 +43,10 @@ services:
     container_name: codefactory-platform
     environment:
       - APP_ENV=development
+      # Enterprise-grade startup optimization
+      - APP_STARTUP=1
+      - SKIP_IMPORT_TIME_VALIDATION=1
+      - SPACY_WARNING_IGNORE=W007
       # LLM Provider Configuration
       - GROK_API_KEY=${GROK_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}

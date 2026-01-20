@@ -28,6 +28,10 @@ from typing import (
     Set,
 )
 
+# TYPE_CHECKING imports to avoid circular dependencies while maintaining type safety
+if TYPE_CHECKING:
+    from simulation.simulation_module import UnifiedSimulationModule
+
 import aiohttp
 import httpx
 import numpy as np
@@ -276,7 +280,8 @@ except ImportError as e:
 
 from arbiter.arbiter_plugin_registry import PluginBase, PlugInKind
 from arbiter.arbiter_plugin_registry import registry as PLUGIN_REGISTRY
-from simulation.simulation_module import UnifiedSimulationModule
+# REMOVED: from simulation.simulation_module import UnifiedSimulationModule
+# This import causes a circular dependency chain. Will be loaded lazily in __init__
 
 try:
     from envs.code_health_env import CodeHealthEnv as BaseCodeHealthEnv
@@ -1381,7 +1386,7 @@ class Arbiter:
         monitor: Optional[Monitor] = None,
         intent_capture_engine: Optional[Any] = None,
         test_generation_engine: Optional[Any] = None,
-        simulation_engine: Optional[UnifiedSimulationModule] = None,
+        simulation_engine: Optional["UnifiedSimulationModule"] = None,  # String literal for TYPE_CHECKING
         code_health_env: Optional[BaseCodeHealthEnv] = None,
         audit_log_manager: Optional[Any] = None,
         engines: Optional[Dict[str, Any]] = None,
@@ -1476,7 +1481,30 @@ class Arbiter:
             self.human_in_loop = None
 
         self.engines = engines or {}
-        self.simulation_engine = self.engines.get("simulation")
+        
+        # Lazy import to avoid circular dependency with simulation module
+        # Only load if simulation_engine not provided and not in engines
+        if simulation_engine is None and not self.engines.get("simulation"):
+            try:
+                # Import at runtime to break circular dependency chain:
+                # arbiter.py -> simulation.simulation_module -> omnicore_engine.engines 
+                # -> generator.agents -> docgen_agent -> arbiter.models.common
+                from simulation.simulation_module import UnifiedSimulationModule
+                # Note: We don't auto-instantiate - leave it to caller or lazy loading
+                logger.debug(
+                    f"[{name}] UnifiedSimulationModule available for lazy instantiation"
+                )
+            except ImportError as e:
+                logging.getLogger(__name__).warning(
+                    f"[{name}] UnifiedSimulationModule not available: {e}"
+                )
+            except Exception as e:
+                logging.getLogger(__name__).error(
+                    f"[{name}] Error importing UnifiedSimulationModule: {e}",
+                    exc_info=True
+                )
+        
+        self.simulation_engine = self.engines.get("simulation") or simulation_engine
         self.test_generation_engine = self.engines.get("test_generation")
         self.generator_engine = self.engines.get("generator")
         self.code_health_env = self.engines.get("code_health_env")

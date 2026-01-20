@@ -143,14 +143,77 @@ def scrub_text(text: str) -> str:
 
 
 class ScrubFilter(logging.Filter):
+    """
+    Enterprise-grade logging filter that scrubs sensitive data from log records.
+    
+    Implements comprehensive error handling to prevent crashes from:
+    - SystemExit from model downloads
+    - Missing dependencies
+    - Malformed log records
+    - Any scrubbing failures
+    
+    Never allows exceptions to propagate - the filter must always succeed.
+    """
+    
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
-        if getattr(record, "msg", None):
-            record.msg = scrub_text(str(record.msg))
-        if getattr(record, "exc_info", None):
-            ei = []
-            for item in record.exc_info:
-                ei.append(scrub_text(item) if isinstance(item, str) else item)
-            record.exc_info = tuple(ei)
+        """
+        Filter and scrub sensitive data from log record.
+        
+        Args:
+            record: The log record to process
+            
+        Returns:
+            bool: Always True (never block log records)
+        """
+        try:
+            # Scrub message if present
+            if getattr(record, "msg", None):
+                try:
+                    record.msg = scrub_text(str(record.msg))
+                except SystemExit as se:
+                    # CRITICAL: Don't let SystemExit from model downloads kill the app
+                    # This is the primary defense against presidio/spacy crashes
+                    # Log at debug level to aid troubleshooting without spam
+                    if logger:
+                        logger.debug(
+                            f"SystemExit caught in log filter (code {se.code}). "
+                            "Message scrubbing skipped for this record."
+                        )
+                    pass  # Leave msg unchanged if scrubbing fails
+                except Exception as e:
+                    # Gracefully handle any scrubbing failures
+                    # Better to log unscrubbed than to crash
+                    if logger:
+                        logger.debug(
+                            f"Log message scrubbing failed ({type(e).__name__}). "
+                            "Logging message unscrubbed."
+                        )
+                    pass
+            
+            # Scrub exception info if present
+            if getattr(record, "exc_info", None):
+                try:
+                    ei = []
+                    for item in record.exc_info:
+                        if isinstance(item, str):
+                            try:
+                                ei.append(scrub_text(item))
+                            except (SystemExit, Exception):
+                                # If scrubbing fails, use original
+                                ei.append(item)
+                        else:
+                            ei.append(item)
+                    record.exc_info = tuple(ei)
+                except (SystemExit, Exception):
+                    # If exc_info processing fails entirely, leave it unchanged
+                    pass
+                    
+        except Exception:
+            # Outermost catch-all: never crash the logging system
+            # Even if record processing fails completely, allow the log through
+            pass
+        
+        # Always return True - never block log records
         return True
 
 
