@@ -1505,14 +1505,19 @@ async function startClarification() {
             });
             
             if (!jobResponse.ok) {
-                throw new Error(`Failed to create job: ${jobResponse.status}`);
+                const errorText = await jobResponse.text();
+                throw new Error(`Failed to create clarification job: HTTP ${jobResponse.status} - ${errorText}`);
             }
             
             const job = await jobResponse.json();
             currentClarifierJobId = job.id;
             document.getElementById('clarifier-job-id').value = currentClarifierJobId;
         } else {
-            // Use provided job ID
+            // Validate provided job ID exists
+            const validateResponse = await fetch(`${API_BASE}/jobs/${jobIdInput}`);
+            if (!validateResponse.ok) {
+                throw new Error(`Job ID '${jobIdInput}' not found. Please create a job first or leave the field empty to auto-generate.`);
+            }
             currentClarifierJobId = jobIdInput;
         }
         
