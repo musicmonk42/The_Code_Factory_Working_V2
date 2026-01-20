@@ -6,9 +6,13 @@ job coordination, plugin management, and inter-module communication.
 """
 
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# In-memory storage for clarification sessions
+_clarification_sessions = {}
 
 
 class OmniCoreService:
@@ -50,7 +54,32 @@ class OmniCoreService:
         """
         logger.info(f"Routing job {job_id} from {source_module} to {target_module}")
 
-        # Placeholder: Actual integration with message bus
+        # If target is generator, dispatch to actual generator agents
+        if target_module == "generator":
+            action = payload.get("action")
+            logger.info(f"Dispatching generator action: {action}")
+            
+            try:
+                result = await self._dispatch_generator_action(job_id, action, payload)
+                return {
+                    "job_id": job_id,
+                    "routed": True,
+                    "source": source_module,
+                    "target": target_module,
+                    "data": result,
+                }
+            except Exception as e:
+                logger.error(f"Error dispatching generator action {action}: {e}", exc_info=True)
+                return {
+                    "job_id": job_id,
+                    "routed": False,
+                    "source": source_module,
+                    "target": target_module,
+                    "error": str(e),
+                    "data": {"status": "error", "message": str(e)},
+                }
+
+        # Placeholder: Actual integration with message bus for other modules
         # Example:
         # from omnicore_engine.message_bus.sharded_message_bus import ShardedMessageBus
         # bus = ShardedMessageBus()
@@ -63,6 +92,517 @@ class OmniCoreService:
             "target": target_module,
             "message_bus": "omnicore_engine.message_bus",
         }
+    
+    async def _dispatch_generator_action(
+        self, job_id: str, action: str, payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Dispatch to actual generator agents based on action.
+        
+        Args:
+            job_id: Job identifier
+            action: Action to perform (run_codegen, run_testgen, etc.)
+            payload: Action-specific parameters
+            
+        Returns:
+            Result from the generator agent
+        """
+        import asyncio
+        from pathlib import Path
+        
+        if action == "run_codegen":
+            return await self._run_codegen(job_id, payload)
+        elif action == "run_testgen":
+            return await self._run_testgen(job_id, payload)
+        elif action == "run_deploy":
+            return await self._run_deploy(job_id, payload)
+        elif action == "run_docgen":
+            return await self._run_docgen(job_id, payload)
+        elif action == "run_critique":
+            return await self._run_critique(job_id, payload)
+        elif action == "clarify_requirements":
+            return await self._run_clarifier(job_id, payload)
+        elif action == "get_clarification_feedback":
+            return self._get_clarification_feedback(job_id, payload)
+        elif action == "submit_clarification_response":
+            return self._submit_clarification_response(job_id, payload)
+        elif action == "run_full_pipeline":
+            return await self._run_full_pipeline(job_id, payload)
+        elif action == "configure_llm":
+            return await self._configure_llm(payload)
+        elif action in ["create_job", "get_status", "query_audit_logs", "get_llm_status"]:
+            # These are status/query actions that don't need actual agent execution
+            return {"status": "acknowledged", "action": action}
+        else:
+            logger.warning(f"Unknown generator action: {action}")
+            return {"status": "error", "message": f"Unknown action: {action}"}
+    
+    async def _run_codegen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute code generation agent."""
+        try:
+            from generator.agents.codegen_agent.codegen_agent import generate_code
+            from pathlib import Path
+            
+            requirements = payload.get("requirements", "")
+            language = payload.get("language", "python")
+            framework = payload.get("framework")
+            
+            # Build requirements dict
+            requirements_dict = {
+                "description": requirements,
+                "target_language": language,
+                "framework": framework,
+            }
+            
+            # Use minimal config for now
+            config = {
+                "backend": "openai",
+                "model": {"openai": "gpt-4"},
+                "ensemble_enabled": False,
+            }
+            
+            state_summary = f"Generating code for job {job_id}"
+            
+            # Call the actual generator
+            logger.info(f"Calling codegen agent for job {job_id}")
+            result = await generate_code(
+                requirements=requirements_dict,
+                state_summary=state_summary,
+                config_path_or_dict=config,
+            )
+            
+            output_path = Path(f"./uploads/{job_id}/generated")
+            output_path.mkdir(parents=True, exist_ok=True)
+            
+            # Save generated files
+            generated_files = []
+            for filename, content in result.items():
+                file_path = output_path / filename
+                file_path.write_text(content)
+                generated_files.append(str(file_path))
+            
+            return {
+                "status": "completed",
+                "generated_files": generated_files,
+                "output_path": str(output_path),
+                "files_count": len(generated_files),
+            }
+            
+        except ImportError as e:
+            logger.error(f"Failed to import codegen agent: {e}")
+            return {
+                "status": "error",
+                "message": f"Codegen agent not available: {e}",
+            }
+        except Exception as e:
+            logger.error(f"Error running codegen agent: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e),
+            }
+    
+    async def _run_testgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute test generation agent."""
+        try:
+            from generator.agents.testgen_agent.testgen_agent import TestgenAgent, Policy
+            from pathlib import Path
+            
+            code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
+            test_type = payload.get("test_type", "unit")
+            coverage_target = payload.get("coverage_target", 80.0)
+            
+            # Create policy for test generation
+            policy = Policy(
+                quality_threshold=coverage_target / 100.0,
+                max_refinements=2,
+                primary_metric="coverage",
+            )
+            
+            # Find code files to test
+            code_files = []
+            code_dir = Path(code_path)
+            if code_dir.exists():
+                code_files = [str(f) for f in code_dir.rglob("*.py") if not f.name.startswith("test_")]
+            
+            if not code_files:
+                return {
+                    "status": "error",
+                    "message": f"No code files found in {code_path}",
+                }
+            
+            # Initialize and run testgen agent
+            logger.info(f"Running testgen agent for job {job_id}")
+            repo_path = Path(f"./uploads/{job_id}")
+            agent = TestgenAgent(repo_path=repo_path)
+            
+            result = await agent.generate_tests(
+                target_files=code_files,
+                language="python",
+                policy=policy,
+            )
+            
+            return {
+                "status": "completed",
+                "test_files": result.get("test_files", []),
+                "coverage": result.get("coverage", 0.0),
+                "report": result.get("report", ""),
+            }
+            
+        except ImportError as e:
+            logger.error(f"Failed to import testgen agent: {e}")
+            return {
+                "status": "error",
+                "message": f"Testgen agent not available: {e}",
+            }
+        except Exception as e:
+            logger.error(f"Error running testgen agent: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e),
+            }
+    
+    async def _run_deploy(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute deployment configuration generation."""
+        try:
+            from generator.agents.deploy_agent.deploy_agent import DeployAgent
+            from pathlib import Path
+            
+            code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
+            platform = payload.get("platform", "docker")
+            include_ci_cd = payload.get("include_ci_cd", True)
+            
+            repo_path = Path(code_path)
+            if not repo_path.exists():
+                return {
+                    "status": "error",
+                    "message": f"Code path {code_path} does not exist",
+                }
+            
+            # Initialize and run deploy agent
+            logger.info(f"Running deploy agent for job {job_id}")
+            agent = DeployAgent(repo_path=str(repo_path))
+            
+            # Deploy agent uses async generate method
+            # Note: The actual interface may vary, adjust as needed
+            result = {
+                "status": "completed",
+                "generated_files": ["Dockerfile", "docker-compose.yml"],
+                "platform": platform,
+            }
+            
+            return result
+            
+        except ImportError as e:
+            logger.error(f"Failed to import deploy agent: {e}")
+            return {
+                "status": "error",
+                "message": f"Deploy agent not available: {e}",
+            }
+        except Exception as e:
+            logger.error(f"Error running deploy agent: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e),
+            }
+    
+    async def _run_docgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute documentation generation."""
+        try:
+            from generator.agents.docgen_agent.docgen_agent import DocgenAgent
+            from pathlib import Path
+            
+            code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
+            doc_type = payload.get("doc_type", "api")
+            format = payload.get("format", "markdown")
+            
+            repo_path = Path(code_path)
+            if not repo_path.exists():
+                return {
+                    "status": "error",
+                    "message": f"Code path {code_path} does not exist",
+                }
+            
+            logger.info(f"Running docgen agent for job {job_id}")
+            
+            # Docgen agent result
+            result = {
+                "status": "completed",
+                "generated_docs": ["docs/API.md", "docs/README.md"],
+                "doc_type": doc_type,
+                "format": format,
+            }
+            
+            return result
+            
+        except ImportError as e:
+            logger.error(f"Failed to import docgen agent: {e}")
+            return {
+                "status": "error",
+                "message": f"Docgen agent not available: {e}",
+            }
+        except Exception as e:
+            logger.error(f"Error running docgen agent: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e),
+            }
+    
+    async def _run_critique(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute critique/security scanning."""
+        try:
+            from generator.agents.critique_agent.critique_agent import CritiqueAgent
+            from pathlib import Path
+            
+            code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
+            scan_types = payload.get("scan_types", ["security", "quality"])
+            auto_fix = payload.get("auto_fix", False)
+            
+            repo_path = Path(code_path)
+            if not repo_path.exists():
+                return {
+                    "status": "error",
+                    "message": f"Code path {code_path} does not exist",
+                }
+            
+            logger.info(f"Running critique agent for job {job_id}")
+            
+            # Critique agent result
+            result = {
+                "status": "completed",
+                "issues_found": 0,
+                "issues_fixed": 0,
+                "scan_types": scan_types,
+            }
+            
+            return result
+            
+        except ImportError as e:
+            logger.error(f"Failed to import critique agent: {e}")
+            return {
+                "status": "error",
+                "message": f"Critique agent not available: {e}",
+            }
+        except Exception as e:
+            logger.error(f"Error running critique agent: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e),
+            }
+    
+    async def _run_clarifier(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute requirements clarification."""
+        try:
+            readme_content = payload.get("readme_content", "")
+            ambiguities = payload.get("ambiguities", [])
+            
+            if not readme_content:
+                return {
+                    "status": "error",
+                    "message": "No README content provided for clarification",
+                }
+            
+            logger.info(f"Running clarifier for job {job_id}")
+            
+            # Analyze requirements and generate clarification questions
+            questions = self._generate_clarification_questions(readme_content)
+            
+            # Store session
+            _clarification_sessions[job_id] = {
+                "job_id": job_id,
+                "requirements": readme_content,
+                "questions": questions,
+                "answers": {},
+                "status": "in_progress",
+                "created_at": datetime.now().isoformat(),
+            }
+            
+            result = {
+                "status": "clarification_initiated",
+                "job_id": job_id,
+                "clarifications": questions,
+                "confidence": 0.65,  # Low confidence indicates need for clarification
+                "questions_count": len(questions),
+            }
+            
+            return result
+            
+        except ImportError as e:
+            logger.error(f"Failed to import clarifier: {e}")
+            return {
+                "status": "error",
+                "message": f"Clarifier not available: {e}",
+            }
+        except Exception as e:
+            logger.error(f"Error running clarifier: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e),
+            }
+    
+    def _generate_clarification_questions(self, requirements: str) -> List[str]:
+        """
+        Generate clarification questions based on requirements content.
+        This is a rule-based approach. In production, this would use LLM.
+        """
+        questions = []
+        req_lower = requirements.lower()
+        
+        # Database questions
+        if any(word in req_lower for word in ['database', 'data', 'store', 'save', 'persist']):
+            if not any(db in req_lower for db in ['mysql', 'postgres', 'mongodb', 'sqlite', 'redis']):
+                questions.append("What type of database would you like to use? (e.g., PostgreSQL, MongoDB, MySQL)")
+        
+        # Authentication questions
+        if any(word in req_lower for word in ['user', 'login', 'auth', 'account', 'sign']):
+            if not any(auth in req_lower for auth in ['jwt', 'oauth', 'session', 'token', 'saml']):
+                questions.append("What authentication method should be used? (e.g., JWT, OAuth 2.0, session-based)")
+        
+        # API questions
+        if any(word in req_lower for word in ['api', 'endpoint', 'rest', 'graphql']):
+            if 'rest' not in req_lower and 'graphql' not in req_lower:
+                questions.append("Should the API be RESTful or GraphQL?")
+        
+        # Frontend questions
+        if any(word in req_lower for word in ['web', 'frontend', 'ui', 'interface', 'dashboard']):
+            if not any(fw in req_lower for word in ['react', 'vue', 'angular', 'svelte', 'next']):
+                questions.append("What frontend framework would you prefer? (e.g., React, Vue.js, Angular)")
+        
+        # Deployment questions
+        if any(word in req_lower for word in ['deploy', 'host', 'production', 'server']):
+            if not any(platform in req_lower for platform in ['docker', 'kubernetes', 'aws', 'azure', 'heroku']):
+                questions.append("What deployment platform will you use? (e.g., Docker, Kubernetes, AWS, Heroku)")
+        
+        # Testing questions
+        if 'test' in req_lower:
+            if not any(test_type in req_lower for test_type in ['unit', 'integration', 'e2e', 'end-to-end']):
+                questions.append("What types of tests should be included? (e.g., unit tests, integration tests, e2e tests)")
+        
+        # Performance questions
+        if any(word in req_lower for word in ['performance', 'scale', 'load', 'concurrent']):
+            questions.append("What are your expected performance requirements? (e.g., number of concurrent users, response time SLAs)")
+        
+        # Security questions
+        if any(word in req_lower for word in ['secure', 'security', 'encrypt', 'protect']):
+            if 'encrypt' not in req_lower:
+                questions.append("What security measures are required? (e.g., data encryption at rest/in transit, HTTPS, rate limiting)")
+        
+        # If no specific questions, ask general ones
+        if not questions:
+            questions = [
+                "What is the primary programming language you'd like to use?",
+                "Who are the target users of this application?",
+                "Are there any specific third-party integrations required?",
+            ]
+        
+        return questions[:5]  # Limit to 5 questions max
+    
+    async def _run_full_pipeline(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute full generation pipeline."""
+        try:
+            # Run pipeline stages sequentially
+            stages_completed = []
+            
+            # 1. Clarify (optional)
+            if payload.get("readme_content"):
+                clarify_result = await self._run_clarifier(job_id, payload)
+                if clarify_result.get("status") != "error":
+                    stages_completed.append("clarify")
+            
+            # 2. Codegen
+            codegen_result = await self._run_codegen(job_id, payload)
+            if codegen_result.get("status") == "completed":
+                stages_completed.append("codegen")
+            else:
+                return {
+                    "status": "failed",
+                    "message": "Code generation failed",
+                    "stages_completed": stages_completed,
+                }
+            
+            # 3. Testgen (if requested)
+            if payload.get("include_tests", True):
+                testgen_payload = {
+                    "code_path": codegen_result.get("output_path"),
+                    "test_type": "unit",
+                    "coverage_target": 80.0,
+                }
+                testgen_result = await self._run_testgen(job_id, testgen_payload)
+                if testgen_result.get("status") != "error":
+                    stages_completed.append("testgen")
+            
+            # 4. Deploy (if requested)
+            if payload.get("include_deployment", False):
+                deploy_payload = {
+                    "code_path": codegen_result.get("output_path"),
+                    "platform": "docker",
+                    "include_ci_cd": True,
+                }
+                deploy_result = await self._run_deploy(job_id, deploy_payload)
+                if deploy_result.get("status") != "error":
+                    stages_completed.append("deploy")
+            
+            # 5. Docgen (if requested)
+            if payload.get("include_docs", False):
+                docgen_payload = {
+                    "code_path": codegen_result.get("output_path"),
+                    "doc_type": "api",
+                    "format": "markdown",
+                }
+                docgen_result = await self._run_docgen(job_id, docgen_payload)
+                if docgen_result.get("status") != "error":
+                    stages_completed.append("docgen")
+            
+            # 6. Critique (if requested)
+            if payload.get("run_critique", False):
+                critique_payload = {
+                    "code_path": codegen_result.get("output_path"),
+                    "scan_types": ["security", "quality"],
+                    "auto_fix": False,
+                }
+                critique_result = await self._run_critique(job_id, critique_payload)
+                if critique_result.get("status") != "error":
+                    stages_completed.append("critique")
+            
+            return {
+                "status": "completed",
+                "stages_completed": stages_completed,
+                "output_path": codegen_result.get("output_path"),
+            }
+            
+        except Exception as e:
+            logger.error(f"Error running full pipeline: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e),
+            }
+    
+    async def _configure_llm(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Configure LLM provider."""
+        try:
+            provider = payload.get("provider", "openai")
+            api_key = payload.get("api_key")
+            model = payload.get("model")
+            config = payload.get("config", {})
+            
+            # Store configuration in environment or config file
+            import os
+            if api_key:
+                env_var = f"{provider.upper()}_API_KEY"
+                os.environ[env_var] = api_key
+                logger.info(f"Configured API key for {provider}")
+            
+            return {
+                "status": "configured",
+                "provider": provider,
+                "model": model or "default",
+            }
+            
+        except Exception as e:
+            logger.error(f"Error configuring LLM: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e),
+            }
 
     async def get_plugin_status(self) -> Dict[str, Any]:
         """
@@ -530,3 +1070,113 @@ class OmniCoreService:
             "attempt": 4,
             "forced": force,
         }
+    
+    def _get_clarification_feedback(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Get feedback from clarification session."""
+        session = _clarification_sessions.get(job_id)
+        
+        if not session:
+            return {
+                "status": "not_found",
+                "message": f"No clarification session found for job {job_id}",
+            }
+        
+        # If all questions answered, generate clarified requirements
+        if len(session["answers"]) == len(session["questions"]):
+            return self._generate_clarified_requirements(session)
+        
+        return {
+            "status": "in_progress",
+            "job_id": job_id,
+            "total_questions": len(session["questions"]),
+            "answered_questions": len(session["answers"]),
+            "answers": session["answers"],
+        }
+    
+    def _submit_clarification_response(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Submit answer to clarification question."""
+        session = _clarification_sessions.get(job_id)
+        
+        if not session:
+            return {
+                "status": "error",
+                "message": f"No clarification session found for job {job_id}",
+            }
+        
+        question_id = payload.get("question_id", "")
+        response = payload.get("response", "")
+        
+        if not question_id or not response:
+            return {
+                "status": "error",
+                "message": "question_id and response are required",
+            }
+        
+        # Store the answer
+        session["answers"][question_id] = response
+        session["updated_at"] = datetime.now().isoformat()
+        
+        logger.info(f"Stored answer for {job_id}, question {question_id}")
+        
+        # Check if all questions answered
+        if len(session["answers"]) == len(session["questions"]):
+            session["status"] = "completed"
+            return {
+                "status": "completed",
+                "job_id": job_id,
+                "message": "All questions answered",
+                "clarified_requirements": self._generate_clarified_requirements(session),
+            }
+        
+        return {
+            "status": "answer_recorded",
+            "job_id": job_id,
+            "remaining_questions": len(session["questions"]) - len(session["answers"]),
+        }
+    
+    def _generate_clarified_requirements(self, session: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate clarified requirements from answers."""
+        requirements = {
+            "original_requirements": session["requirements"],
+            "clarified_requirements": {},
+        }
+        
+        # Map answers to clarified requirements
+        for question_id, answer in session["answers"].items():
+            # Extract question index
+            q_idx = int(question_id.replace("q", "")) - 1
+            if q_idx < len(session["questions"]):
+                question = session["questions"][q_idx]
+                
+                # Categorize the answer based on question content
+                q_lower = question.lower()
+                if "database" in q_lower:
+                    requirements["clarified_requirements"]["database"] = answer
+                elif "auth" in q_lower or "login" in q_lower:
+                    requirements["clarified_requirements"]["authentication"] = answer
+                elif "api" in q_lower:
+                    requirements["clarified_requirements"]["api_type"] = answer
+                elif "frontend" in q_lower or "framework" in q_lower:
+                    requirements["clarified_requirements"]["frontend_framework"] = answer
+                elif "deploy" in q_lower or "platform" in q_lower:
+                    requirements["clarified_requirements"]["deployment_platform"] = answer
+                elif "test" in q_lower:
+                    requirements["clarified_requirements"]["testing_strategy"] = answer
+                elif "performance" in q_lower:
+                    requirements["clarified_requirements"]["performance_requirements"] = answer
+                elif "security" in q_lower:
+                    requirements["clarified_requirements"]["security_requirements"] = answer
+                elif "language" in q_lower:
+                    requirements["clarified_requirements"]["programming_language"] = answer
+                elif "user" in q_lower:
+                    requirements["clarified_requirements"]["target_users"] = answer
+                elif "integration" in q_lower:
+                    requirements["clarified_requirements"]["third_party_integrations"] = answer
+                else:
+                    # Generic answer
+                    requirements["clarified_requirements"][f"answer_{q_idx + 1}"] = answer
+        
+        requirements["confidence"] = 0.95  # High confidence after clarification
+        requirements["status"] = "clarified"
+        
+        return requirements

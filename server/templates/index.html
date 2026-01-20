@@ -30,6 +30,7 @@
             <li><a href="#dashboard" class="active" data-view="dashboard">Dashboard</a></li>
             <li><a href="#jobs" data-view="jobs">Jobs</a></li>
             <li><a href="#generator" data-view="generator">Generator</a></li>
+            <li><a href="#clarifier" data-view="clarifier">Clarifier</a></li>
             <li><a href="#omnicore" data-view="omnicore">OmniCore</a></li>
             <li><a href="#sfe" data-view="sfe">Self-Fixing Engineer</a></li>
             <li><a href="#arbiter" data-view="arbiter">Arbiter & Arena</a></li>
@@ -137,6 +138,109 @@
 
             <div class="jobs-list" id="jobs-list">
                 <p class="loading">Loading jobs...</p>
+            </div>
+        </section>
+
+        <!-- Clarifier View -->
+        <section id="clarifier-view" class="view">
+            <h2>Requirements Clarifier</h2>
+            <p class="section-description">Interactive AI-powered clarification of ambiguous requirements</p>
+            
+            <div class="clarifier-container">
+                <!-- Input Section -->
+                <div class="clarifier-input-section">
+                    <h3>📝 Enter Your Requirements</h3>
+                    <div class="form-group">
+                        <label for="clarifier-job-id">Job ID (optional):</label>
+                        <input type="text" id="clarifier-job-id" placeholder="Auto-generated if empty">
+                    </div>
+                    <div class="form-group">
+                        <label for="clarifier-requirements">Requirements / README Content:</label>
+                        <textarea 
+                            id="clarifier-requirements" 
+                            rows="10" 
+                            placeholder="Enter your project requirements, user stories, or README content here...
+
+Example:
+Build a web application for managing tasks.
+Users should be able to create, edit, and delete tasks.
+Include a dashboard with analytics.
+Support multiple users.
+"></textarea>
+                    </div>
+                    <div class="clarifier-actions">
+                        <button class="btn btn-primary" onclick="startClarification()">
+                            🚀 Start Clarification
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearClarifier()">
+                            🗑️ Clear
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Conversation Section -->
+                <div class="clarifier-conversation-section">
+                    <h3>💬 Clarification Conversation</h3>
+                    <div class="clarifier-status" id="clarifier-status">
+                        <span class="status-indicator">●</span>
+                        <span class="status-text">Ready</span>
+                    </div>
+                    
+                    <div class="conversation-container" id="clarifier-conversation">
+                        <div class="conversation-empty">
+                            <p>👋 Enter your requirements above and click "Start Clarification" to begin the interactive clarification process.</p>
+                            <p class="help-text">The AI will ask questions to resolve ambiguities and ensure clear requirements.</p>
+                        </div>
+                    </div>
+
+                    <!-- Answer Input (Hidden initially) -->
+                    <div class="answer-section" id="answer-section" style="display: none;">
+                        <div class="form-group">
+                            <label for="clarifier-answer">Your Answer:</label>
+                            <textarea 
+                                id="clarifier-answer" 
+                                rows="3" 
+                                placeholder="Type your answer here..."></textarea>
+                        </div>
+                        <div class="answer-actions">
+                            <button class="btn btn-primary" onclick="submitAnswer()">
+                                ✅ Submit Answer
+                            </button>
+                            <button class="btn btn-secondary" onclick="skipQuestion()">
+                                ⏭️ Skip Question
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div class="clarifier-results-section">
+                    <h3>📋 Clarified Requirements</h3>
+                    <div class="results-container" id="clarifier-results">
+                        <div class="results-empty">
+                            <p>Clarified requirements will appear here once the conversation is complete.</p>
+                        </div>
+                    </div>
+                    <div class="results-actions" id="results-actions" style="display: none;">
+                        <button class="btn btn-primary" onclick="proceedToGeneration()">
+                            ▶️ Proceed to Code Generation
+                        </button>
+                        <button class="btn btn-secondary" onclick="exportClarifiedRequirements()">
+                            💾 Export Requirements
+                        </button>
+                        <button class="btn btn-secondary" onclick="restartClarification()">
+                            🔄 Start New Clarification
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Session History -->
+            <div class="clarifier-history">
+                <h3>📚 Recent Clarification Sessions</h3>
+                <div class="history-list" id="clarifier-history">
+                    <p class="no-data">No previous sessions</p>
+                </div>
             </div>
         </section>
 

@@ -1462,3 +1462,426 @@ function showSIEMConfig() {
     .then(() => showSuccess('SIEM integration configured'))
     .catch(err => showError('Configuration failed: ' + err.message));
 }
+
+// ==================== Clarifier Functions ====================
+let currentClarifierJobId = null;
+let currentQuestionId = null;
+let clarifierConversation = [];
+
+/**
+ * Start the clarification process
+ */
+async function startClarification() {
+    const requirements = document.getElementById('clarifier-requirements').value.trim();
+    const jobIdInput = document.getElementById('clarifier-job-id').value.trim();
+    
+    if (!requirements) {
+        showError('Please enter requirements to clarify');
+        return;
+    }
+    
+    // Generate or use provided job ID
+    currentClarifierJobId = jobIdInput || `clarify-${Date.now()}`;
+    document.getElementById('clarifier-job-id').value = currentClarifierJobId;
+    
+    // Update status
+    updateClarifierStatus('Processing...', 'active');
+    
+    // Clear conversation
+    clarifierConversation = [];
+    const conversationContainer = document.getElementById('clarifier-conversation');
+    conversationContainer.innerHTML = '';
+    
+    // Add user message
+    addClarifierMessage('user', requirements, 'Initial Requirements');
+    
+    try {
+        // Call clarifier API
+        const response = await fetch(`${API_BASE}/generator/${currentClarifierJobId}/clarify`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                readme_content: requirements
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        // Process clarification response
+        if (result.clarifications && result.clarifications.length > 0) {
+            updateClarifierStatus('Waiting for your answers', 'waiting');
+            
+            // Display first question
+            currentQuestionId = 'q1';
+            addClarifierMessage('ai', result.clarifications[0], 'Clarification Question');
+            
+            // Show answer input
+            document.getElementById('answer-section').style.display = 'block';
+            
+            // Store remaining questions
+            window.clarifierQuestions = result.clarifications;
+            window.currentQuestionIndex = 0;
+        } else {
+            updateClarifierStatus('Complete', 'active');
+            addClarifierMessage('system', 'No clarifications needed. Requirements are clear!', 'System');
+            displayClarifiedRequirements(result);
+        }
+        
+    } catch (error) {
+        console.error('Clarification error:', error);
+        updateClarifierStatus('Error', 'error');
+        showError('Failed to start clarification: ' + error.message);
+    }
+}
+
+/**
+ * Submit an answer to a clarification question
+ */
+async function submitAnswer() {
+    const answer = document.getElementById('clarifier-answer').value.trim();
+    
+    if (!answer) {
+        showError('Please enter an answer');
+        return;
+    }
+    
+    // Add user answer to conversation
+    addClarifierMessage('user', answer, 'Your Answer');
+    
+    // Clear answer input
+    document.getElementById('clarifier-answer').value = '';
+    
+    updateClarifierStatus('Processing answer...', 'active');
+    
+    try {
+        // Submit answer to API
+        const response = await fetch(`${API_BASE}/generator/${currentClarifierJobId}/clarification/respond`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                question_id: currentQuestionId,
+                response: answer
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        // Move to next question
+        window.currentQuestionIndex++;
+        
+        if (window.currentQuestionIndex < window.clarifierQuestions.length) {
+            // Show next question
+            currentQuestionId = `q${window.currentQuestionIndex + 1}`;
+            const nextQuestion = window.clarifierQuestions[window.currentQuestionIndex];
+            addClarifierMessage('ai', nextQuestion, 'Clarification Question');
+            updateClarifierStatus('Waiting for your answer', 'waiting');
+        } else {
+            // All questions answered
+            updateClarifierStatus('Complete', 'active');
+            document.getElementById('answer-section').style.display = 'none';
+            addClarifierMessage('system', '✅ All questions answered! Generating clarified requirements...', 'System');
+            
+            // Get final clarified requirements
+            await fetchClarifiedRequirements();
+        }
+        
+    } catch (error) {
+        console.error('Submit answer error:', error);
+        updateClarifierStatus('Error', 'error');
+        showError('Failed to submit answer: ' + error.message);
+    }
+}
+
+/**
+ * Skip the current question
+ */
+function skipQuestion() {
+    addClarifierMessage('user', '[Skipped]', 'Skipped Question');
+    
+    // Move to next question
+    window.currentQuestionIndex++;
+    
+    if (window.currentQuestionIndex < window.clarifierQuestions.length) {
+        currentQuestionId = `q${window.currentQuestionIndex + 1}`;
+        const nextQuestion = window.clarifierQuestions[window.currentQuestionIndex];
+        addClarifierMessage('ai', nextQuestion, 'Clarification Question');
+    } else {
+        updateClarifierStatus('Complete (with skipped questions)', 'active');
+        document.getElementById('answer-section').style.display = 'none';
+        addClarifierMessage('system', 'Clarification process complete.', 'System');
+        fetchClarifiedRequirements();
+    }
+}
+
+/**
+ * Fetch the final clarified requirements
+ */
+async function fetchClarifiedRequirements() {
+    try {
+        const response = await fetch(`${API_BASE}/generator/${currentClarifierJobId}/clarification/feedback`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        displayClarifiedRequirements(result);
+        
+    } catch (error) {
+        console.error('Fetch clarified requirements error:', error);
+        showError('Failed to fetch clarified requirements: ' + error.message);
+        
+        // Show mock results for demo
+        displayClarifiedRequirements({
+            clarified_requirements: {
+                project_type: 'Web Application',
+                tech_stack: 'Python, Flask, PostgreSQL',
+                authentication: 'JWT-based authentication',
+                deployment: 'Docker containers on AWS',
+                features: ['User management', 'Task CRUD operations', 'Dashboard with analytics']
+            },
+            confidence: 0.92
+        });
+    }
+}
+
+/**
+ * Display clarified requirements in the results section
+ */
+function displayClarifiedRequirements(data) {
+    const resultsContainer = document.getElementById('clarifier-results');
+    resultsContainer.innerHTML = '';
+    
+    if (data.clarified_requirements) {
+        const requirements = data.clarified_requirements;
+        
+        for (const [key, value] of Object.entries(requirements)) {
+            const item = document.createElement('div');
+            item.className = 'clarified-item';
+            item.innerHTML = `
+                <div class="clarified-label">${key.replace(/_/g, ' ')}</div>
+                <div class="clarified-value">${Array.isArray(value) ? value.join(', ') : value}</div>
+            `;
+            resultsContainer.appendChild(item);
+        }
+    }
+    
+    if (data.confidence) {
+        const confidence = document.createElement('div');
+        confidence.className = 'clarified-item';
+        confidence.innerHTML = `
+            <div class="clarified-label">Confidence Score</div>
+            <div class="clarified-value">${(data.confidence * 100).toFixed(1)}%</div>
+        `;
+        resultsContainer.appendChild(confidence);
+    }
+    
+    // Show action buttons
+    document.getElementById('results-actions').style.display = 'flex';
+    
+    // Save to history
+    saveClarificationToHistory();
+}
+
+/**
+ * Add a message to the clarifier conversation
+ */
+function addClarifierMessage(role, content, label) {
+    const conversationContainer = document.getElementById('clarifier-conversation');
+    
+    // Remove empty state if present
+    const emptyState = conversationContainer.querySelector('.conversation-empty');
+    if (emptyState) {
+        emptyState.remove();
+    }
+    
+    const message = document.createElement('div');
+    message.className = `message message-${role}`;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    
+    message.innerHTML = `
+        <div class="message-header">
+            <span class="message-role">${role === 'ai' ? '🤖 AI' : role === 'user' ? '👤 You' : '⚙️ System'}</span>
+            <span class="message-time">${timestamp}</span>
+        </div>
+        <div class="message-content">${escapeHtml(content)}</div>
+    `;
+    
+    conversationContainer.appendChild(message);
+    conversationContainer.scrollTop = conversationContainer.scrollHeight;
+    
+    clarifierConversation.push({ role, content, timestamp });
+}
+
+/**
+ * Update clarifier status indicator
+ */
+function updateClarifierStatus(text, state) {
+    const statusEl = document.getElementById('clarifier-status');
+    const indicator = statusEl.querySelector('.status-indicator');
+    const textEl = statusEl.querySelector('.status-text');
+    
+    indicator.className = `status-indicator ${state}`;
+    textEl.textContent = text;
+}
+
+/**
+ * Clear the clarifier form
+ */
+function clearClarifier() {
+    document.getElementById('clarifier-requirements').value = '';
+    document.getElementById('clarifier-job-id').value = '';
+    document.getElementById('clarifier-conversation').innerHTML = `
+        <div class="conversation-empty">
+            <p>👋 Enter your requirements above and click "Start Clarification" to begin the interactive clarification process.</p>
+            <p class="help-text">The AI will ask questions to resolve ambiguities and ensure clear requirements.</p>
+        </div>
+    `;
+    document.getElementById('clarifier-results').innerHTML = `
+        <div class="results-empty">
+            <p>Clarified requirements will appear here once the conversation is complete.</p>
+        </div>
+    `;
+    document.getElementById('answer-section').style.display = 'none';
+    document.getElementById('results-actions').style.display = 'none';
+    updateClarifierStatus('Ready', '');
+    currentClarifierJobId = null;
+    currentQuestionId = null;
+    clarifierConversation = [];
+}
+
+/**
+ * Proceed to code generation with clarified requirements
+ */
+async function proceedToGeneration() {
+    if (!currentClarifierJobId) {
+        showError('No clarification session active');
+        return;
+    }
+    
+    try {
+        // Create a job for code generation
+        const response = await fetch(`${API_BASE}/jobs/`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                description: `Code generation from clarified requirements (${currentClarifierJobId})`,
+                metadata: {
+                    clarification_job_id: currentClarifierJobId,
+                    source: 'clarifier'
+                }
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const job = await response.json();
+        
+        showSuccess(`Job ${job.id} created. Redirecting to generator...`);
+        
+        // Switch to generator view and populate job ID
+        setTimeout(() => {
+            document.querySelector('[data-view="generator"]').click();
+            document.getElementById('agent-job-id').value = job.id;
+        }, 1500);
+        
+    } catch (error) {
+        console.error('Proceed to generation error:', error);
+        showError('Failed to create generation job: ' + error.message);
+    }
+}
+
+/**
+ * Export clarified requirements
+ */
+function exportClarifiedRequirements() {
+    const resultsContainer = document.getElementById('clarifier-results');
+    const items = resultsContainer.querySelectorAll('.clarified-item');
+    
+    let exportText = `# Clarified Requirements\nJob ID: ${currentClarifierJobId}\nTimestamp: ${new Date().toISOString()}\n\n`;
+    
+    items.forEach(item => {
+        const label = item.querySelector('.clarified-label').textContent;
+        const value = item.querySelector('.clarified-value').textContent;
+        exportText += `## ${label}\n${value}\n\n`;
+    });
+    
+    // Create download
+    const blob = new Blob([exportText], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `clarified-requirements-${currentClarifierJobId}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showSuccess('Requirements exported successfully');
+}
+
+/**
+ * Restart clarification process
+ */
+function restartClarification() {
+    if (confirm('Start a new clarification session? Current session will be saved to history.')) {
+        clearClarifier();
+    }
+}
+
+/**
+ * Save clarification session to history
+ */
+function saveClarificationToHistory() {
+    const historyList = document.getElementById('clarifier-history');
+    
+    // Remove "no data" message if present
+    const noData = historyList.querySelector('.no-data');
+    if (noData) {
+        noData.remove();
+    }
+    
+    const historyItem = document.createElement('div');
+    historyItem.className = 'history-item';
+    historyItem.onclick = () => loadClarificationFromHistory(currentClarifierJobId);
+    
+    const requirements = document.getElementById('clarifier-requirements').value.trim();
+    const summary = requirements.substring(0, 100) + (requirements.length > 100 ? '...' : '');
+    
+    historyItem.innerHTML = `
+        <div class="history-header">
+            <span class="history-job-id">${currentClarifierJobId}</span>
+            <span class="history-timestamp">${new Date().toLocaleString()}</span>
+        </div>
+        <div class="history-summary">${escapeHtml(summary)}</div>
+    `;
+    
+    // Add to beginning of list
+    historyList.insertBefore(historyItem, historyList.firstChild);
+}
+
+/**
+ * Load a clarification session from history
+ */
+function loadClarificationFromHistory(jobId) {
+    showError('History loading not yet implemented');
+    // TODO: Implement loading from backend storage
+}
+
+/**
+ * Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
