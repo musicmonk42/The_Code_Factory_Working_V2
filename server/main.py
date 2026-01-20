@@ -268,7 +268,14 @@ async def health_check() -> HealthResponse:
     )
 
 
-@app.get("/ready", tags=["Health"], status_code=200, responses={503: {"model": ReadinessResponse}})
+@app.get(
+    "/ready",
+    tags=["Health"],
+    responses={
+        200: {"model": ReadinessResponse, "description": "Application is ready"},
+        503: {"model": ReadinessResponse, "description": "Application is not ready"}
+    }
+)
 async def readiness_check(response: Response) -> ReadinessResponse:
     """
     Readiness check endpoint.

@@ -335,9 +335,16 @@ class AgentLoader:
         This method initiates agent loading in a background task, allowing the
         HTTP server to start accepting connections immediately.
         
+        **IMPORTANT**: This method must be called from an async context (e.g., during
+        FastAPI application lifespan startup). It will raise RuntimeError if called
+        outside an async context.
+        
         Args:
             agents_to_load: List of (agent_type, module_path, import_names) tuples.
                           If None, loads a default set of agents.
+                          
+        Raises:
+            RuntimeError: If called outside an async context
         """
         if self._loading_started:
             logger.warning("Background agent loading already started")
@@ -381,31 +388,32 @@ class AgentLoader:
                 self._loading_error = str(e)
                 self._loading_completed = True  # Mark as completed even on error
         
-        # Try to create the background task
-        # This will work if we're already in an async context (e.g., during app lifespan)
+        # Create the background task - must be in async context
         try:
             self._loading_task = asyncio.create_task(load_agents_async())
             logger.info("Background agent loading task created")
-        except RuntimeError:
-            # Not in an async context, need to get or create event loop
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                # No event loop running, create one for this task
-                logger.info("No event loop found, creating task for future execution")
-                # Store the coroutine for later execution
-                self._loading_task = load_agents_async()
-            else:
-                # Event loop exists, create task
-                self._loading_task = loop.create_task(load_agents_async())
-                logger.info("Background agent loading task created using existing loop")
+        except RuntimeError as e:
+            # Not in an async context - this is an error
+            logger.error("start_background_loading must be called from an async context")
+            self._loading_started = False  # Reset since we failed
+            raise RuntimeError(
+                "start_background_loading must be called from an async context "
+                "(e.g., during FastAPI application lifespan)"
+            ) from e
     
     def is_loading(self) -> bool:
         """
         Check if agents are currently being loaded in the background.
         
+        Note: This method checks two boolean flags (_loading_started and _loading_completed)
+        without synchronization. While there is a theoretical race condition if these flags
+        are modified during the check, this is acceptable for our use case because:
+        1. The flags are only set once (started -> True, completed -> True)
+        2. The worst case is a brief inconsistency during state transition
+        3. This is only used for informational/status purposes, not critical logic
+        
         Returns:
-            True if background loading is in progress
+            True if background loading is in progress, False otherwise
         """
         return self._loading_started and not self._loading_completed
     

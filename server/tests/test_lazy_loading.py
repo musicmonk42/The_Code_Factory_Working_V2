@@ -57,15 +57,15 @@ class TestBackgroundAgentLoading:
         assert isinstance(status['loading_completed'], bool)
     
     def test_background_loading_can_be_started(self):
-        """Test that background loading can be started."""
+        """Test that background loading requires async context."""
         loader = AgentLoader()
         
-        # Start background loading with empty list
-        loader.start_background_loading([])
+        # Calling outside async context should raise RuntimeError
+        with pytest.raises(RuntimeError, match="must be called from an async context"):
+            loader.start_background_loading([])
         
-        # Check that loading was started
-        assert loader._loading_started
-        assert loader._loading_task is not None
+        # Should not have started loading
+        assert not loader._loading_started
 
 
 class TestSchemas:
