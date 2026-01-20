@@ -370,3 +370,376 @@ class GeneratorService:
             "generated_files": ["main.py", "config.py", "tests/test_main.py"],
             "status": "completed",
         }
+
+    async def run_codegen_agent(
+        self, job_id: str, requirements: str, language: str, framework: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Run the codegen agent directly via OmniCore.
+
+        Args:
+            job_id: Unique job identifier
+            requirements: Natural language requirements
+            language: Target programming language
+            framework: Optional framework specification
+
+        Returns:
+            Code generation results
+        """
+        logger.info(f"Running codegen agent for job {job_id} via OmniCore")
+
+        if self.omnicore_service:
+            payload = {
+                "action": "run_codegen",
+                "job_id": job_id,
+                "requirements": requirements,
+                "language": language,
+                "framework": framework,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        return {
+            "job_id": job_id,
+            "status": "completed",
+            "generated_files": ["main.py"],
+            "output_path": f"./uploads/{job_id}/generated",
+        }
+
+    async def run_testgen_agent(
+        self, job_id: str, code_path: str, test_type: str, coverage_target: float
+    ) -> Dict[str, Any]:
+        """
+        Run the testgen agent to generate tests via OmniCore.
+
+        Args:
+            job_id: Unique job identifier
+            code_path: Path to code to test
+            test_type: Type of tests (unit, integration, e2e)
+            coverage_target: Target code coverage percentage
+
+        Returns:
+            Test generation results
+        """
+        logger.info(f"Running testgen agent for job {job_id} via OmniCore")
+
+        if self.omnicore_service:
+            payload = {
+                "action": "run_testgen",
+                "job_id": job_id,
+                "code_path": code_path,
+                "test_type": test_type,
+                "coverage_target": coverage_target,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        return {
+            "job_id": job_id,
+            "status": "completed",
+            "generated_tests": ["tests/test_main.py"],
+            "coverage": coverage_target,
+        }
+
+    async def run_deploy_agent(
+        self, job_id: str, code_path: str, platform: str, include_ci_cd: bool
+    ) -> Dict[str, Any]:
+        """
+        Run the deploy agent to generate deployment configs via OmniCore.
+
+        Args:
+            job_id: Unique job identifier
+            code_path: Path to application code
+            platform: Deployment platform (docker, kubernetes, aws)
+            include_ci_cd: Whether to include CI/CD configuration
+
+        Returns:
+            Deployment configuration results
+        """
+        logger.info(f"Running deploy agent for job {job_id} via OmniCore")
+
+        if self.omnicore_service:
+            payload = {
+                "action": "run_deploy",
+                "job_id": job_id,
+                "code_path": code_path,
+                "platform": platform,
+                "include_ci_cd": include_ci_cd,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        return {
+            "job_id": job_id,
+            "status": "completed",
+            "generated_files": ["Dockerfile", "docker-compose.yml"],
+            "platform": platform,
+        }
+
+    async def run_docgen_agent(
+        self, job_id: str, code_path: str, doc_type: str, format: str
+    ) -> Dict[str, Any]:
+        """
+        Run the docgen agent to generate documentation via OmniCore.
+
+        Args:
+            job_id: Unique job identifier
+            code_path: Path to code to document
+            doc_type: Documentation type (api, user, developer)
+            format: Output format (markdown, html, pdf)
+
+        Returns:
+            Documentation generation results
+        """
+        logger.info(f"Running docgen agent for job {job_id} via OmniCore")
+
+        if self.omnicore_service:
+            payload = {
+                "action": "run_docgen",
+                "job_id": job_id,
+                "code_path": code_path,
+                "doc_type": doc_type,
+                "format": format,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        return {
+            "job_id": job_id,
+            "status": "completed",
+            "generated_docs": ["docs/API.md", "docs/README.md"],
+            "doc_type": doc_type,
+        }
+
+    async def run_critique_agent(
+        self, job_id: str, code_path: str, scan_types: List[str], auto_fix: bool
+    ) -> Dict[str, Any]:
+        """
+        Run the critique agent for security/quality scanning via OmniCore.
+
+        Args:
+            job_id: Unique job identifier
+            code_path: Path to code to analyze
+            scan_types: Types of scans (security, quality, performance)
+            auto_fix: Whether to automatically apply fixes
+
+        Returns:
+            Critique analysis results
+        """
+        logger.info(f"Running critique agent for job {job_id} via OmniCore")
+
+        if self.omnicore_service:
+            payload = {
+                "action": "run_critique",
+                "job_id": job_id,
+                "code_path": code_path,
+                "scan_types": scan_types,
+                "auto_fix": auto_fix,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        return {
+            "job_id": job_id,
+            "status": "completed",
+            "issues_found": 5,
+            "issues_fixed": 3 if auto_fix else 0,
+            "scan_types": scan_types,
+        }
+
+    async def run_full_pipeline(
+        self,
+        job_id: str,
+        readme_content: str,
+        language: str,
+        include_tests: bool,
+        include_deployment: bool,
+        include_docs: bool,
+        run_critique: bool,
+    ) -> Dict[str, Any]:
+        """
+        Run the full generation pipeline via OmniCore.
+
+        Args:
+            job_id: Unique job identifier
+            readme_content: README/requirements content
+            language: Target programming language
+            include_tests: Whether to generate tests
+            include_deployment: Whether to generate deployment configs
+            include_docs: Whether to generate documentation
+            run_critique: Whether to run security/quality checks
+
+        Returns:
+            Full pipeline execution results
+        """
+        logger.info(f"Running full generation pipeline for job {job_id} via OmniCore")
+
+        if self.omnicore_service:
+            payload = {
+                "action": "run_full_pipeline",
+                "job_id": job_id,
+                "readme_content": readme_content,
+                "language": language,
+                "include_tests": include_tests,
+                "include_deployment": include_deployment,
+                "include_docs": include_docs,
+                "run_critique": run_critique,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        return {
+            "job_id": job_id,
+            "status": "completed",
+            "stages_completed": ["clarify", "codegen", "testgen", "deploy", "docgen", "critique"],
+            "output_path": f"./uploads/{job_id}/output",
+        }
+
+    async def configure_llm_provider(
+        self, provider: str, api_key: Optional[str], model: Optional[str], config: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Configure LLM provider for generator via OmniCore.
+
+        Args:
+            provider: LLM provider name
+            api_key: API key for provider
+            model: Specific model to use
+            config: Additional configuration
+
+        Returns:
+            Configuration result
+        """
+        logger.info(f"Configuring LLM provider {provider} via OmniCore")
+
+        if self.omnicore_service:
+            payload = {
+                "action": "configure_llm",
+                "provider": provider,
+                "api_key": api_key,
+                "model": model,
+                "config": config or {},
+            }
+            result = await self.omnicore_service.route_job(
+                job_id="llm_config",
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        return {
+            "status": "configured",
+            "provider": provider,
+            "model": model or "default",
+        }
+
+    async def get_llm_provider_status(self) -> Dict[str, Any]:
+        """
+        Get status of configured LLM providers via OmniCore.
+
+        Returns:
+            LLM provider status information
+        """
+        logger.info("Fetching LLM provider status via OmniCore")
+
+        if self.omnicore_service:
+            payload = {"action": "get_llm_status"}
+            result = await self.omnicore_service.route_job(
+                job_id="llm_status",
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        return {
+            "active_provider": "openai",
+            "available_providers": ["openai", "anthropic", "google", "xai", "ollama"],
+            "provider_configs": {
+                "openai": {"model": "gpt-4", "configured": True},
+                "anthropic": {"model": "claude-3-opus", "configured": False},
+            },
+        }
+
+    async def query_audit_logs(
+        self,
+        start_time: Optional[str],
+        end_time: Optional[str],
+        event_type: Optional[str],
+        job_id: Optional[str],
+        limit: int,
+    ) -> Dict[str, Any]:
+        """
+        Query generator audit logs via OmniCore.
+
+        Args:
+            start_time: Start timestamp
+            end_time: End timestamp
+            event_type: Filter by event type
+            job_id: Filter by job ID
+            limit: Max results
+
+        Returns:
+            Audit log entries
+        """
+        logger.info("Querying generator audit logs via OmniCore")
+
+        if self.omnicore_service:
+            payload = {
+                "action": "query_audit_logs",
+                "start_time": start_time,
+                "end_time": end_time,
+                "event_type": event_type,
+                "job_id": job_id,
+                "limit": limit,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id or "audit_query",
+                source_module="api",
+                target_module="generator",
+                payload=payload,
+            )
+            return result.get("data", {})
+
+        return {
+            "logs": [
+                {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "event_type": "code_generated",
+                    "job_id": job_id or "test",
+                    "details": {},
+                }
+            ],
+            "count": 1,
+        }
