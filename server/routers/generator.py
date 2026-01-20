@@ -10,7 +10,19 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from server.schemas import GeneratorStatus, JobStatus, LogsResponse, SuccessResponse
+from server.schemas import (
+    CodegenRequest,
+    CritiqueRequest,
+    DeployRequest,
+    DocgenRequest,
+    GeneratorStatus,
+    JobStatus,
+    LLMConfigRequest,
+    LogsResponse,
+    PipelineRequest,
+    SuccessResponse,
+    TestgenRequest,
+)
 from server.services import GeneratorService
 from server.storage import jobs_db
 
@@ -323,7 +335,7 @@ async def submit_clarification_response(
 @router.post("/{job_id}/codegen")
 async def run_codegen(
     job_id: str,
-    request: "CodegenRequest",
+    request: CodegenRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -348,7 +360,6 @@ async def run_codegen(
     **Errors:**
     - 404: Job not found
     """
-    from server.schemas import CodegenRequest
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
@@ -366,7 +377,7 @@ async def run_codegen(
 @router.post("/{job_id}/testgen")
 async def run_testgen(
     job_id: str,
-    request: "TestgenRequest",
+    request: TestgenRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -389,7 +400,6 @@ async def run_testgen(
     **Errors:**
     - 404: Job not found
     """
-    from server.schemas import TestgenRequest
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
@@ -407,7 +417,7 @@ async def run_testgen(
 @router.post("/{job_id}/deploy")
 async def run_deploy(
     job_id: str,
-    request: "DeployRequest",
+    request: DeployRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -430,7 +440,6 @@ async def run_deploy(
     **Errors:**
     - 404: Job not found
     """
-    from server.schemas import DeployRequest
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
@@ -448,7 +457,7 @@ async def run_deploy(
 @router.post("/{job_id}/docgen")
 async def run_docgen(
     job_id: str,
-    request: "DocgenRequest",
+    request: DocgenRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -471,7 +480,6 @@ async def run_docgen(
     **Errors:**
     - 404: Job not found
     """
-    from server.schemas import DocgenRequest
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
@@ -489,7 +497,7 @@ async def run_docgen(
 @router.post("/{job_id}/critique")
 async def run_critique(
     job_id: str,
-    request: "CritiqueRequest",
+    request: CritiqueRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -512,7 +520,6 @@ async def run_critique(
     **Errors:**
     - 404: Job not found
     """
-    from server.schemas import CritiqueRequest
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
@@ -530,7 +537,7 @@ async def run_critique(
 @router.post("/{job_id}/pipeline")
 async def run_full_pipeline(
     job_id: str,
-    request: "PipelineRequest",
+    request: PipelineRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -556,7 +563,6 @@ async def run_full_pipeline(
     **Errors:**
     - 404: Job not found
     """
-    from server.schemas import PipelineRequest
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
@@ -576,7 +582,7 @@ async def run_full_pipeline(
 
 @router.post("/llm/configure")
 async def configure_llm_provider(
-    request: "LLMConfigRequest",
+    request: LLMConfigRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -593,7 +599,6 @@ async def configure_llm_provider(
     **Returns:**
     - Configuration confirmation
     """
-    from server.schemas import LLMConfigRequest
     result = await generator_service.configure_llm_provider(
         provider=request.provider.value,
         api_key=request.api_key,

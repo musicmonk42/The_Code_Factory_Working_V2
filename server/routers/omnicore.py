@@ -5,9 +5,20 @@ Handles engine coordination, plugin management, and system-level operations.
 """
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from server.schemas import (
+    CircuitBreakerResetRequest,
+    DatabaseExportRequest,
+    DatabaseQueryRequest,
+    MessageBusPublishRequest,
+    MessageBusSubscribeRequest,
+    PluginInstallRequest,
+    PluginReloadRequest,
+    RateLimitConfigRequest,
+)
 from server.services import OmniCoreService
 from server.storage import jobs_db
 
@@ -152,7 +163,7 @@ async def trigger_workflow(
 
 @router.post("/message-bus/publish")
 async def publish_message(
-    request: "MessageBusPublishRequest",
+    request: MessageBusPublishRequest,
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ):
     """
@@ -169,7 +180,6 @@ async def publish_message(
     **Returns:**
     - Publication confirmation with message ID
     """
-    from server.schemas import MessageBusPublishRequest
     result = await omnicore_service.publish_message(
         topic=request.topic,
         payload=request.payload,
@@ -183,7 +193,7 @@ async def publish_message(
 
 @router.post("/message-bus/subscribe")
 async def subscribe_to_topic(
-    request: "MessageBusSubscribeRequest",
+    request: MessageBusSubscribeRequest,
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ):
     """
@@ -199,7 +209,6 @@ async def subscribe_to_topic(
     **Returns:**
     - Subscription confirmation with subscription ID
     """
-    from server.schemas import MessageBusSubscribeRequest
     result = await omnicore_service.subscribe_to_topic(
         topic=request.topic,
         callback_url=request.callback_url,
@@ -229,7 +238,7 @@ async def list_topics(
 @router.post("/plugins/{plugin_id}/reload")
 async def reload_plugin(
     plugin_id: str,
-    request: "PluginReloadRequest",
+    request: PluginReloadRequest,
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ):
     """
@@ -246,7 +255,6 @@ async def reload_plugin(
     **Returns:**
     - Reload result
     """
-    from server.schemas import PluginReloadRequest
     result = await omnicore_service.reload_plugin(
         plugin_id=plugin_id,
         force=request.force,
@@ -290,7 +298,7 @@ async def browse_marketplace(
 
 @router.post("/plugins/install")
 async def install_plugin(
-    request: "PluginInstallRequest",
+    request: PluginInstallRequest,
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ):
     """
@@ -307,7 +315,6 @@ async def install_plugin(
     **Returns:**
     - Installation result
     """
-    from server.schemas import PluginInstallRequest
     result = await omnicore_service.install_plugin(
         plugin_name=request.plugin_name,
         version=request.version,
@@ -321,7 +328,7 @@ async def install_plugin(
 
 @router.post("/database/query")
 async def query_database(
-    request: "DatabaseQueryRequest",
+    request: DatabaseQueryRequest,
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ):
     """
@@ -337,7 +344,6 @@ async def query_database(
     **Returns:**
     - Query results
     """
-    from server.schemas import DatabaseQueryRequest
     result = await omnicore_service.query_database(
         query_type=request.query_type,
         filters=request.filters,
@@ -349,7 +355,7 @@ async def query_database(
 
 @router.post("/database/export")
 async def export_database(
-    request: "DatabaseExportRequest",
+    request: DatabaseExportRequest,
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ):
     """
@@ -365,7 +371,6 @@ async def export_database(
     **Returns:**
     - Export result with download path
     """
-    from server.schemas import DatabaseExportRequest
     result = await omnicore_service.export_database(
         export_type=request.export_type,
         format=request.format,
@@ -416,7 +421,7 @@ async def reset_circuit_breaker(
 
 @router.post("/rate-limits/configure")
 async def configure_rate_limit(
-    request: "RateLimitConfigRequest",
+    request: RateLimitConfigRequest,
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ):
     """
@@ -432,7 +437,6 @@ async def configure_rate_limit(
     **Returns:**
     - Configuration result
     """
-    from server.schemas import RateLimitConfigRequest
     result = await omnicore_service.configure_rate_limit(
         endpoint=request.endpoint,
         requests_per_second=request.requests_per_second,

@@ -12,12 +12,24 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from server.schemas import (
+    ArbiterControlRequest,
+    ArenaCompetitionRequest,
+    BugAnalysisRequest,
+    BugDetectionRequest,
+    BugPrioritizationRequest,
+    CodebaseAnalysisRequest,
+    ComplianceCheckRequest,
     Fix,
     FixApplyRequest,
     FixProposal,
     FixReviewRequest,
     FixStatus,
+    ImportFixRequest,
+    KnowledgeGraphQuery,
+    KnowledgeGraphUpdate,
     RollbackRequest,
+    SandboxExecutionRequest,
+    SIEMConfigRequest,
     SuccessResponse,
 )
 from server.services import SFEService
@@ -478,7 +490,7 @@ async def interact_with_sfe(
 
 @router.post("/arbiter/control")
 async def control_arbiter(
-    request: "ArbiterControlRequest",
+    request: ArbiterControlRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -494,7 +506,6 @@ async def control_arbiter(
     **Returns:**
     - Arbiter control result
     """
-    from server.schemas import ArbiterControlRequest
     result = await sfe_service.control_arbiter(
         command=request.command.value,
         job_id=request.job_id,
@@ -507,7 +518,7 @@ async def control_arbiter(
 
 @router.post("/arena/compete")
 async def trigger_arena_competition(
-    request: "ArenaCompetitionRequest",
+    request: ArenaCompetitionRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -525,7 +536,6 @@ async def trigger_arena_competition(
     **Returns:**
     - Competition results with winner
     """
-    from server.schemas import ArenaCompetitionRequest
     result = await sfe_service.trigger_arena_competition(
         problem_type=request.problem_type,
         code_path=request.code_path,
@@ -540,7 +550,7 @@ async def trigger_arena_competition(
 
 @router.post("/bugs/detect")
 async def detect_bugs(
-    request: "BugDetectionRequest",
+    request: BugDetectionRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -556,7 +566,6 @@ async def detect_bugs(
     **Returns:**
     - Bug detection results
     """
-    from server.schemas import BugDetectionRequest
     result = await sfe_service.detect_bugs(
         code_path=request.code_path,
         scan_depth=request.scan_depth,
@@ -570,7 +579,7 @@ async def detect_bugs(
 @router.post("/bugs/{bug_id}/analyze")
 async def analyze_bug(
     bug_id: str,
-    request: "BugAnalysisRequest",
+    request: BugAnalysisRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -588,7 +597,6 @@ async def analyze_bug(
     **Returns:**
     - Bug analysis results
     """
-    from server.schemas import BugAnalysisRequest
     result = await sfe_service.analyze_bug(
         bug_id=bug_id,
         include_root_cause=request.include_root_cause,
@@ -602,7 +610,7 @@ async def analyze_bug(
 @router.post("/{job_id}/bugs/prioritize")
 async def prioritize_bugs(
     job_id: str,
-    request: "BugPrioritizationRequest",
+    request: BugPrioritizationRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -622,7 +630,6 @@ async def prioritize_bugs(
     **Errors:**
     - 404: Job not found
     """
-    from server.schemas import BugPrioritizationRequest
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
@@ -637,7 +644,7 @@ async def prioritize_bugs(
 
 @router.post("/codebase/analyze")
 async def deep_analyze_codebase(
-    request: "CodebaseAnalysisRequest",
+    request: CodebaseAnalysisRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -653,7 +660,6 @@ async def deep_analyze_codebase(
     **Returns:**
     - Analysis results
     """
-    from server.schemas import CodebaseAnalysisRequest
     result = await sfe_service.deep_analyze_codebase(
         code_path=request.code_path,
         analysis_types=request.analysis_type,
@@ -666,7 +672,7 @@ async def deep_analyze_codebase(
 
 @router.post("/knowledge-graph/query")
 async def query_knowledge_graph(
-    request: "KnowledgeGraphQuery",
+    request: KnowledgeGraphQuery,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -683,7 +689,6 @@ async def query_knowledge_graph(
     **Returns:**
     - Query results
     """
-    from server.schemas import KnowledgeGraphQuery
     result = await sfe_service.query_knowledge_graph(
         query_type=request.query_type,
         query=request.query,
@@ -696,7 +701,7 @@ async def query_knowledge_graph(
 
 @router.post("/knowledge-graph/update")
 async def update_knowledge_graph(
-    request: "KnowledgeGraphUpdate",
+    request: KnowledgeGraphUpdate,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -712,7 +717,6 @@ async def update_knowledge_graph(
     **Returns:**
     - Update result
     """
-    from server.schemas import KnowledgeGraphUpdate
     result = await sfe_service.update_knowledge_graph(
         operation=request.operation,
         entity_type=request.entity_type,
@@ -725,7 +729,7 @@ async def update_knowledge_graph(
 
 @router.post("/sandbox/execute")
 async def execute_in_sandbox(
-    request: "SandboxExecutionRequest",
+    request: SandboxExecutionRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -742,7 +746,6 @@ async def execute_in_sandbox(
     **Returns:**
     - Execution results
     """
-    from server.schemas import SandboxExecutionRequest
     result = await sfe_service.execute_in_sandbox(
         code=request.code,
         language=request.language,
@@ -755,7 +758,7 @@ async def execute_in_sandbox(
 
 @router.post("/compliance/check")
 async def check_compliance(
-    request: "ComplianceCheckRequest",
+    request: ComplianceCheckRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -771,7 +774,6 @@ async def check_compliance(
     **Returns:**
     - Compliance check results
     """
-    from server.schemas import ComplianceCheckRequest
     result = await sfe_service.check_compliance(
         code_path=request.code_path,
         standards=request.standards,
@@ -816,7 +818,7 @@ async def query_dlt_audit(
 
 @router.post("/siem/configure")
 async def configure_siem(
-    request: "SIEMConfigRequest",
+    request: SIEMConfigRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -833,7 +835,6 @@ async def configure_siem(
     **Returns:**
     - Configuration result
     """
-    from server.schemas import SIEMConfigRequest
     result = await sfe_service.configure_siem(
         siem_type=request.siem_type,
         endpoint=request.endpoint,
@@ -868,7 +869,7 @@ async def get_rl_environment_status(
 
 @router.post("/imports/fix")
 async def fix_imports(
-    request: "ImportFixRequest",
+    request: ImportFixRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -884,7 +885,6 @@ async def fix_imports(
     **Returns:**
     - Import fix results
     """
-    from server.schemas import ImportFixRequest
     result = await sfe_service.fix_imports(
         code_path=request.code_path,
         auto_install=request.auto_install,
