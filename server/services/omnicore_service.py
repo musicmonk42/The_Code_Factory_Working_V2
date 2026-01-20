@@ -17,6 +17,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from server.utils.agent_loader import get_agent_loader
+
 logger = logging.getLogger(__name__)
 
 # Import configuration
@@ -368,6 +370,17 @@ class OmniCoreService:
                 "status": "error",
                 "message": error_msg,
                 "agent_available": False,
+        """Execute code generation agent."""
+        # Check if agent is available
+        loader = get_agent_loader()
+        if not loader.is_agent_available('codegen'):
+            error = loader.get_agent_error('codegen')
+            error_msg = error.error_message if error else "Codegen agent not available"
+            logger.error(f"Codegen agent unavailable for job {job_id}: {error_msg}")
+            return {
+                "status": "error",
+                "message": f"Codegen agent not available: {error_msg}",
+                "missing_dependencies": error.missing_dependencies if error else [],
             }
         
         try:
@@ -442,6 +455,17 @@ class OmniCoreService:
                 "status": "error",
                 "message": error_msg,
                 "agent_available": False,
+        """Execute test generation agent."""
+        # Check if agent is available
+        loader = get_agent_loader()
+        if not loader.is_agent_available('testgen'):
+            error = loader.get_agent_error('testgen')
+            error_msg = error.error_message if error else "Testgen agent not available"
+            logger.error(f"Testgen agent unavailable for job {job_id}: {error_msg}")
+            return {
+                "status": "error",
+                "message": f"Testgen agent not available: {error_msg}",
+                "missing_dependencies": error.missing_dependencies if error else [],
             }
         
         try:
@@ -514,6 +538,17 @@ class OmniCoreService:
                 "status": "error",
                 "message": error_msg,
                 "agent_available": False,
+        """Execute deployment configuration generation."""
+        # Check if agent is available
+        loader = get_agent_loader()
+        if not loader.is_agent_available('deploy'):
+            error = loader.get_agent_error('deploy')
+            error_msg = error.error_message if error else "Deploy agent not available"
+            logger.warning(f"Deploy agent unavailable for job {job_id}: {error_msg}")
+            return {
+                "status": "error",
+                "message": f"Deploy agent not available: {error_msg}",
+                "missing_dependencies": error.missing_dependencies if error else [],
             }
         
         try:
@@ -569,6 +604,17 @@ class OmniCoreService:
                 "status": "error",
                 "message": error_msg,
                 "agent_available": False,
+        """Execute documentation generation."""
+        # Check if agent is available
+        loader = get_agent_loader()
+        if not loader.is_agent_available('docgen'):
+            error = loader.get_agent_error('docgen')
+            error_msg = error.error_message if error else "Docgen agent not available"
+            logger.warning(f"Docgen agent unavailable for job {job_id}: {error_msg}")
+            return {
+                "status": "error",
+                "message": f"Docgen agent not available: {error_msg}",
+                "missing_dependencies": error.missing_dependencies if error else [],
             }
         
         try:
@@ -625,6 +671,17 @@ class OmniCoreService:
                 "status": "error",
                 "message": error_msg,
                 "agent_available": False,
+        """Execute critique/security scanning."""
+        # Check if agent is available
+        loader = get_agent_loader()
+        if not loader.is_agent_available('critique'):
+            error = loader.get_agent_error('critique')
+            error_msg = error.error_message if error else "Critique agent not available"
+            logger.warning(f"Critique agent unavailable for job {job_id}: {error_msg}")
+            return {
+                "status": "error",
+                "message": f"Critique agent not available: {error_msg}",
+                "missing_dependencies": error.missing_dependencies if error else [],
             }
         
         try:
