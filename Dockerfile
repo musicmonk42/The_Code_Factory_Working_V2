@@ -137,8 +137,9 @@ COPY --from=builder --chown=appuser:appuser /app /app
 
 USER appuser
 
-# The FastAPI server runs on port 8000, Prometheus metrics on port 9090
+# The FastAPI server runs on port 8000 (or PORT env var), Prometheus metrics on port 9090
 EXPOSE 8000 9090
 
 # Start the unified platform API server
-CMD ["python", "-m", "uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use PORT environment variable if set (Railway, Heroku, etc.), otherwise default to 8000
+CMD sh -c "python -m uvicorn server.main:app --host 0.0.0.0 --port ${PORT:-8000}"

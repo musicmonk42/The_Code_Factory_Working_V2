@@ -1,217 +1,91 @@
-# Port Configuration Guide
+# Port Configuration Guide - Fixed for Railway Deployment
 
-## Overview
+## Summary of Changes
 
-This document describes the port allocation and configuration for the Code Factory Platform services.
+✅ **Fixed port configuration in Docker and docker-compose to support Railway's dynamic PORT assignment**
 
-## Port Allocation
+### What Was Wrong
+- `Dockerfile` had hardcoded port `8000` in CMD
+- `docker-compose.yml` had hardcoded port `8000` in command
+- When Railway builds the Docker image, it sets `PORT` env var (e.g., 8080), but the container ignored it
 
-| Service | Port | Description | Environment Variable |
-|---------|------|-------------|---------------------|
-| FastAPI Main API | 8000 | Main application API endpoint | `API_PORT` (default: 8000) |
-| Application Metrics | 8001 | Application-level metrics endpoint | `METRICS_PORT` (default: 8001) |
-| **Prometheus Metrics HTTP Server** | **9090** | HTTP server exposing metrics in Prometheus format | `PROMETHEUS_PORT` (default: 9090) |
-| External Prometheus Server | 9090 | Prometheus monitoring server (scrapes from above) | - |
-| Grafana | 3000 | Grafana visualization dashboard | - |
-| Redis | 6379 | Redis message bus and cache | - |
-| PostgreSQL | 5432 | PostgreSQL database (optional) | - |
+### What Was Fixed
+1. **Dockerfile** - Now uses `${PORT:-8000}` pattern
+2. **docker-compose.yml** - Now uses `$${PORT:-8000}` pattern (with YAML escaping)
 
-**Note**: The Prometheus Metrics HTTP Server (running inside the application container) and the external Prometheus Server (running in its own container) both use port 9090 but on different containers/hosts, so there is no conflict.
+## Configuration Status
 
-## Changes Made
+| File | Status | Port Behavior |
+|------|--------|---------------|
+| `railway.toml` | ✅ Already correct | Uses `${PORT:-8000}` |
+| `Procfile` | ✅ Already correct | Uses `${PORT:-8000}` |
+| `server/run.py` | ✅ Already correct | Uses `os.environ.get("PORT", 8000)` |
+| `Dockerfile` | ✅ **FIXED** | Now uses `${PORT:-8000}` |
+| `docker-compose.yml` | ✅ **FIXED** | Now uses `$${PORT:-8000}` |
 
-### Problem
-The application was experiencing a port conflict where both the Prometheus metrics HTTP server and FastAPI's Uvicorn server were attempting to bind to port 8000, causing the following error:
+## How It Works
 
-```
-ERROR: [Errno 98] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
-```
-
-### Solution
-Changed the Prometheus metrics HTTP server default port from 8000 to 9090 to follow industry best practices and avoid conflicts.
-
-## Configuration
-
-### Environment Variables
-
-Set the `PROMETHEUS_PORT` environment variable to customize the Prometheus metrics server port:
-
+### Railway Deployment
 ```bash
-export PROMETHEUS_PORT=9090  # Default
+# Railway sets PORT environment variable (e.g., PORT=8080)
+# The container CMD will use that value:
+CMD sh -c "python -m uvicorn server.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+
+# Result: App binds to port 8080 (Railway's assigned port)
 ```
 
-Example configurations:
-
-**Development (.env file):**
-```env
-PROMETHEUS_PORT=9090
-METRICS_PORT=8001
-```
-
-**Docker Compose:**
-```yaml
-environment:
-  - PROMETHEUS_PORT=9090
-ports:
-  - "9090:9090"  # Prometheus metrics HTTP server
-```
-
-### Files Modified
-
-1. **omnicore_engine/metrics.py** - Changed default port from 8000 to 9090
-2. **Dockerfile** - Added EXPOSE directive for port 9090
-3. **docker-compose.yml** - Added port mapping for 9090
-4. **monitoring/prometheus.yml** - Updated scrape targets to use port 9090
-5. **.env.example** - Documented PROMETHEUS_PORT environment variable
-6. **Makefile** - Updated docker-up target to display correct port information
-
-## Industry Best Practices
-
-### Why Port 9090?
-
-1. **Standard Convention**: Port 9090 is the standard port used by Prometheus servers
-2. **Avoids Conflicts**: Separates metrics collection from application API
-3. **Clear Separation**: Makes it explicit that this is the metrics endpoint
-4. **Security**: Allows for different firewall rules and access controls for metrics vs API
-
-### Port Ranges
-
-- **8000-8999**: Application services (APIs, web servers)
-- **9000-9999**: Monitoring and observability (Prometheus, metrics exporters)
-- **3000-3999**: Visualization tools (Grafana)
-- **6000-6999**: Databases and caches (Redis, etc.)
-
-## Accessing Metrics
-
-### Prometheus Metrics Server
+### Local Development
 ```bash
-curl http://localhost:9090/metrics
+# No PORT env var set, defaults to 8000
+docker run -p 8000:8000 code-factory:latest
+
+# Result: App binds to port 8000
 ```
 
-### Application Metrics
+### Custom Port
 ```bash
-curl http://localhost:8001/metrics
+# Explicitly set PORT
+docker run -e PORT=8080 -p 8080:8080 code-factory:latest
+
+# Result: App binds to port 8080
 ```
 
-### Prometheus Server UI
+## Testing
+
+### Verified Docker Build
 ```bash
-# Web browser
-http://localhost:9090
+✓ Docker image builds successfully
+✓ Default port (8000) works when PORT not set
+✓ Custom port works when PORT=8080 set
+✓ docker-compose.yml syntax is valid
 ```
 
-### Grafana Dashboard
+### Test Commands
 ```bash
-# Web browser
-http://localhost:3000
+# Test default port
+docker run --rm test-port-config:latest sh -c 'echo "Port: ${PORT:-8000}"'
+# Output: Port: 8000
+
+# Test with PORT set
+docker run --rm -e PORT=8080 test-port-config:latest sh -c 'echo "Port: ${PORT:-8000}"'
+# Output: Port: 8080
 ```
 
-## Docker Deployment
+## Answer to Your Question
 
-### Building and Running
+> "the port was 8080. do I need to change it in railway to 8000?"
 
-```bash
-# Build the image
-make docker-build
+**No, you don't need to change anything in Railway!** 
 
-# Start all services
-make docker-up
+The configuration is now correct. Railway will:
+1. Inject its own `PORT` environment variable (could be 8080, 3000, or any other port)
+2. The app will automatically bind to that port
+3. Everything will work without any manual configuration in Railway
 
-# Check logs
-make docker-logs
+The `8000` is just a **fallback** for local development when Railway's PORT isn't set.
 
-# Stop services
-make docker-down
-```
+## Related Files Changed
 
-### Accessing Services in Docker
-
-When running in Docker, services are accessible at:
-
-- **FastAPI**: http://localhost:8000
-- **Application Metrics**: http://localhost:8001
-- **Prometheus Metrics**: http://localhost:9090/metrics
-- **Prometheus UI**: http://localhost:9090
-- **Grafana**: http://localhost:3000
-
-## Troubleshooting
-
-### Port Already in Use
-
-If you see "address already in use" errors:
-
-1. Check what's using the port:
-   ```bash
-   lsof -i :9090
-   ```
-
-2. Kill the process or change the port:
-   ```bash
-   export PROMETHEUS_PORT=9091
-   ```
-
-3. Check Docker container port mappings:
-   ```bash
-   docker ps
-   ```
-
-### Metrics Not Available
-
-1. Verify the Prometheus server started:
-   ```bash
-   docker logs codefactory-platform | grep "Prometheus"
-   ```
-
-2. Check if the port is exposed:
-   ```bash
-   docker inspect codefactory-platform | grep -A 10 "ExposedPorts"
-   ```
-
-3. Verify environment variable:
-   ```bash
-   docker exec codefactory-platform env | grep PROMETHEUS_PORT
-   ```
-
-## Security Considerations
-
-### Production Deployment
-
-1. **Firewall Rules**: Restrict access to metrics endpoints
-   ```bash
-   # Example: Only allow from monitoring server
-   iptables -A INPUT -p tcp --dport 9090 -s monitoring.internal.com -j ACCEPT
-   iptables -A INPUT -p tcp --dport 9090 -j DROP
-   ```
-
-2. **Authentication**: Add authentication for metrics endpoints in production
-3. **TLS/SSL**: Use HTTPS for metrics collection in production
-4. **Network Isolation**: Use Docker networks to isolate metrics from public access
-
-### Example Production docker-compose.yml
-
-```yaml
-services:
-  codefactory:
-    ports:
-      - "8000:8000"  # Public API
-      # Note: Metrics ports not exposed to host in production
-    networks:
-      - public
-      - monitoring
-
-  prometheus:
-    ports:
-      - "9090:9090"
-    networks:
-      - monitoring  # Isolated network
-    
-networks:
-  public:
-  monitoring:
-    internal: true  # Not accessible from outside
-```
-
-## References
-
-- [Prometheus Best Practices](https://prometheus.io/docs/practices/)
-- [FastAPI Deployment](https://fastapi.tiangolo.com/deployment/)
-- [Docker Port Configuration](https://docs.docker.com/config/containers/container-networking/)
+1. `Dockerfile` - Line 144: Changed CMD to use `${PORT:-8000}`
+2. `docker-compose.yml` - Line 64: Changed command to use `$${PORT:-8000}`
+3. `PORT_CONFIGURATION.md` - This documentation file

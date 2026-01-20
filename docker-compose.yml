@@ -61,7 +61,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
     # Default command runs the unified platform API server
-    command: python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
+    # Use PORT environment variable if set, otherwise default to 8000
+    command: sh -c "python -m uvicorn server.main:app --host 0.0.0.0 --port $${PORT:-8000}"
 
   # Prometheus for metrics (optional)
   # Note: Running on different port (9091) to avoid conflict with app's Prometheus metrics server
