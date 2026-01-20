@@ -14,7 +14,7 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -179,7 +179,7 @@ class LLMProviderConfig(BaseSettings):
         """
         return self.get_provider_api_key(provider) is not None
     
-    def get_available_providers(self) -> list[str]:
+    def get_available_providers(self) -> List[str]:
         """
         Get list of providers that have API keys configured.
         
@@ -360,7 +360,7 @@ def get_server_config() -> ServerConfig:
     return ServerConfig()
 
 
-def validate_configuration() -> dict[str, any]:
+def validate_configuration() -> Dict[str, Any]:
     """
     Validate the overall configuration and return status.
     

@@ -15,7 +15,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +219,7 @@ class OmniCoreService:
         
         return config
     
-    def _check_agent_available(self, agent_name: str) -> tuple[bool, Optional[str]]:
+    def _check_agent_available(self, agent_name: str) -> Tuple[bool, Optional[str]]:
         """
         Check if an agent is available and return error message if not.
         
@@ -769,7 +769,7 @@ class OmniCoreService:
         
         # Frontend questions
         if any(word in req_lower for word in ['web', 'frontend', 'ui', 'interface', 'dashboard']):
-            if not any(fw in req_lower for word in ['react', 'vue', 'angular', 'svelte', 'next']):
+            if not any(fw in req_lower for fw in ['react', 'vue', 'angular', 'svelte', 'next']):
                 questions.append("What frontend framework would you prefer? (e.g., React, Vue.js, Angular)")
         
         # Deployment questions
