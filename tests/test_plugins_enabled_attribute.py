@@ -63,9 +63,12 @@ class TestPluginsEnabledAttribute:
         with open("omnicore_engine/plugin_registry.py", 'r') as f:
             content = f.read()
         
-        # Check for defensive check pattern
-        assert "# DEFENSIVE CHECK" in content or "getattr(config, 'PLUGINS_ENABLED'" in content, \
-            "plugin_registry.py should have defensive check for PLUGINS_ENABLED"
+        # Check for defensive check pattern - require BOTH comment AND getattr
+        assert "# DEFENSIVE CHECK" in content, \
+            "plugin_registry.py should have defensive check comment for documentation"
+        
+        assert "getattr(config, 'PLUGINS_ENABLED'" in content, \
+            "plugin_registry.py should use getattr for safe attribute access"
         
         # Verify getattr usage with default
         assert "getattr(config, 'PLUGINS_ENABLED', True)" in content, \
