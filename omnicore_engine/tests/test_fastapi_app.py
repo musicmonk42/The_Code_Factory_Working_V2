@@ -152,9 +152,19 @@ class TestSecurityMiddleware:
 class TestHealthEndpoint:
     """Test health check endpoint"""
 
+    def test_root_health_check(self):
+        """Test root /health endpoint for container orchestration"""
+        client = TestClient(app)
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy"
+        assert "timestamp" in data
+
     @patch("omnicore_engine.fastapi_app.omnicore_engine")
-    def test_health_check(self, mock_engine):
-        """Test /health endpoint"""
+    def test_api_health_check(self, mock_engine):
+        """Test /api/health endpoint"""
         mock_engine.health_check = AsyncMock(
             return_value={
                 "status": "healthy",
