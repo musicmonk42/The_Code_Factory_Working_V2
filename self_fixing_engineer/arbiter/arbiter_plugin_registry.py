@@ -296,18 +296,26 @@ class PluginRegistry:
                 }
 
                 # Check for test mode and use a temp file if testing
-                if os.getenv("TESTING", "false").lower() == "true":
+                skip_validation = os.getenv("SKIP_IMPORT_TIME_VALIDATION", "0") == "1"
+                is_testing = os.getenv("TESTING", "false").lower() == "true"
+                
+                if is_testing or skip_validation:
                     import tempfile
 
                     temp_dir = tempfile.gettempdir()
                     persist_path = os.path.join(
                         temp_dir, f"test_plugins_{os.getpid()}.json"
                     )
-                    # Don't load any existing plugins in test mode
+                    # Don't load any existing plugins in test mode or when skipping validation
                     cls._instance._persist_path = persist_path
-                    logger.info(
-                        f"Test mode: Using temporary plugin file: {persist_path}"
-                    )
+                    if is_testing:
+                        logger.info(
+                            f"Test mode: Using temporary plugin file: {persist_path}"
+                        )
+                    if skip_validation:
+                        logger.info(
+                            f"SKIP_IMPORT_TIME_VALIDATION set: Skipping persisted plugin loading at import time"
+                        )
                 else:
                     cls._instance._persist_path = persist_path
                     cls._instance._load_persisted_plugins()
