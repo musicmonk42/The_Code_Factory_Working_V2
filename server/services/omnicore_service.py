@@ -3,15 +3,31 @@ Service for interacting with the OmniCore Engine module.
 
 This service provides a mockable interface to the omnicore_engine module for
 job coordination, plugin management, and inter-module communication.
+
+This module implements proper agent integration with:
+- Configuration-based LLM provider selection
+- Graceful degradation when agents unavailable
+- Proper error handling and logging
+- Environment variable support for API keys
 """
 
 import logging
+import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from server.utils.agent_loader import get_agent_loader
 
 logger = logging.getLogger(__name__)
+
+# Import configuration
+try:
+    from server.config import get_agent_config, get_llm_config
+    CONFIG_AVAILABLE = True
+except ImportError:
+    logger.warning("server.config not available, using default configuration")
+    CONFIG_AVAILABLE = False
 
 # In-memory storage for clarification sessions
 _clarification_sessions = {}
@@ -23,13 +39,207 @@ class OmniCoreService:
 
     This service acts as an abstraction layer for OmniCore operations,
     coordinating between generator and SFE modules via the message bus.
-    The implementation includes placeholder logic with extensible hooks for
-    actual engine integration.
+    The implementation includes proper agent integration with configuration-based
+    LLM provider selection and graceful degradation.
     """
 
     def __init__(self):
-        """Initialize the OmniCoreService."""
-        logger.info("OmniCoreService initialized")
+        """Initialize the OmniCoreService with agent availability checks."""
+        logger.info("OmniCoreService initializing...")
+        
+        # Load configuration
+        self.agent_config = get_agent_config() if CONFIG_AVAILABLE else None
+        self.llm_config = get_llm_config() if CONFIG_AVAILABLE else None
+        
+        # Track agent availability
+        self.agents_available = {
+            "codegen": False,
+            "testgen": False,
+            "deploy": False,
+            "docgen": False,
+            "critique": False,
+            "clarifier": False,
+        }
+        
+        # Try to import and cache agent modules
+        self._load_agents()
+        
+        # Log initialization status
+        available = [k for k, v in self.agents_available.items() if v]
+        unavailable = [k for k, v in self.agents_available.items() if not v]
+        
+        if available:
+            logger.info(f"OmniCoreService initialized. Available agents: {', '.join(available)}")
+        if unavailable:
+            logger.warning(f"Some agents unavailable: {', '.join(unavailable)}")
+            if self.agent_config and self.agent_config.strict_mode:
+                raise RuntimeError(
+                    f"STRICT_MODE enabled but agents unavailable: {', '.join(unavailable)}. "
+                    "Check LLM configuration and dependencies."
+                )
+    
+    def _load_agents(self):
+        """
+        Attempt to load all agent modules and track availability.
+        
+        This method tries to import each agent and marks it as available
+        if the import succeeds. Failures are logged but don't prevent
+        service initialization unless strict_mode is enabled.
+        """
+        # Try loading codegen agent
+        try:
+            from generator.agents.codegen_agent.codegen_agent import generate_code
+            self._codegen_func = generate_code
+            self.agents_available["codegen"] = True
+            logger.info("✓ Codegen agent loaded successfully")
+        except ImportError as e:
+            logger.warning(f"Codegen agent unavailable: {e}")
+            self._codegen_func = None
+        except Exception as e:
+            logger.error(f"Unexpected error loading codegen agent: {e}", exc_info=True)
+            self._codegen_func = None
+        
+        # Try loading testgen agent
+        try:
+            from generator.agents.testgen_agent.testgen_agent import TestgenAgent, Policy
+            self._testgen_class = TestgenAgent
+            self._testgen_policy_class = Policy
+            self.agents_available["testgen"] = True
+            logger.info("✓ Testgen agent loaded successfully")
+        except ImportError as e:
+            logger.warning(f"Testgen agent unavailable: {e}")
+            self._testgen_class = None
+            self._testgen_policy_class = None
+        except Exception as e:
+            logger.error(f"Unexpected error loading testgen agent: {e}", exc_info=True)
+            self._testgen_class = None
+            self._testgen_policy_class = None
+        
+        # Try loading deploy agent
+        try:
+            from generator.agents.deploy_agent.deploy_agent import DeployAgent
+            self._deploy_class = DeployAgent
+            self.agents_available["deploy"] = True
+            logger.info("✓ Deploy agent loaded successfully")
+        except ImportError as e:
+            logger.warning(f"Deploy agent unavailable: {e}")
+            self._deploy_class = None
+        except Exception as e:
+            logger.error(f"Unexpected error loading deploy agent: {e}", exc_info=True)
+            self._deploy_class = None
+        
+        # Try loading docgen agent
+        try:
+            from generator.agents.docgen_agent.docgen_agent import DocgenAgent
+            self._docgen_class = DocgenAgent
+            self.agents_available["docgen"] = True
+            logger.info("✓ Docgen agent loaded successfully")
+        except ImportError as e:
+            logger.warning(f"Docgen agent unavailable: {e}")
+            self._docgen_class = None
+        except Exception as e:
+            logger.error(f"Unexpected error loading docgen agent: {e}", exc_info=True)
+            self._docgen_class = None
+        
+        # Try loading critique agent
+        try:
+            from generator.agents.critique_agent.critique_agent import CritiqueAgent
+            self._critique_class = CritiqueAgent
+            self.agents_available["critique"] = True
+            logger.info("✓ Critique agent loaded successfully")
+        except ImportError as e:
+            logger.warning(f"Critique agent unavailable: {e}")
+            self._critique_class = None
+        except Exception as e:
+            logger.error(f"Unexpected error loading critique agent: {e}", exc_info=True)
+            self._critique_class = None
+        
+        # Try loading clarifier (prefer LLM-based if configured)
+        use_llm_clarifier = (
+            self.agent_config and 
+            self.agent_config.use_llm_clarifier and
+            self.llm_config and
+            self.llm_config.get_available_providers()
+        )
+        
+        if use_llm_clarifier:
+            try:
+                from generator.clarifier.clarifier_llm import GrokLLM
+                self._clarifier_llm_class = GrokLLM
+                self.agents_available["clarifier"] = True
+                logger.info("✓ LLM-based clarifier loaded successfully")
+            except ImportError as e:
+                logger.warning(f"LLM clarifier unavailable, will use rule-based: {e}")
+                self._clarifier_llm_class = None
+                # Rule-based clarifier is always available as fallback
+                self.agents_available["clarifier"] = True
+            except Exception as e:
+                logger.error(f"Unexpected error loading LLM clarifier: {e}", exc_info=True)
+                self._clarifier_llm_class = None
+                self.agents_available["clarifier"] = True
+        else:
+            logger.info("Using rule-based clarifier (LLM clarifier not configured)")
+            self._clarifier_llm_class = None
+            self.agents_available["clarifier"] = True
+    
+    def _build_llm_config(self) -> Dict[str, Any]:
+        """
+        Build LLM configuration dict for agents from our config.
+        
+        Returns:
+            Configuration dictionary compatible with agent requirements
+        """
+        if not self.llm_config:
+            # Fallback configuration when config module not available
+            return {
+                "backend": "openai",
+                "model": {"openai": "gpt-4"},
+                "ensemble_enabled": False,
+            }
+        
+        provider = self.llm_config.default_llm_provider
+        model = self.llm_config.get_provider_model(provider)
+        api_key = self.llm_config.get_provider_api_key(provider)
+        
+        # Set environment variable for the agent to use
+        if api_key:
+            env_var = f"{provider.upper()}_API_KEY"
+            os.environ[env_var] = api_key
+        
+        config = {
+            "backend": provider,
+            "model": {provider: model},
+            "ensemble_enabled": self.llm_config.enable_ensemble_mode,
+            "timeout": self.llm_config.llm_timeout,
+            "max_retries": self.llm_config.llm_max_retries,
+            "temperature": self.llm_config.llm_temperature,
+        }
+        
+        # Add OpenAI base URL if configured
+        if provider == "openai" and self.llm_config.openai_base_url:
+            config["openai_base_url"] = self.llm_config.openai_base_url
+        
+        return config
+    
+    def _check_agent_available(self, agent_name: str) -> Tuple[bool, Optional[str]]:
+        """
+        Check if an agent is available and return error message if not.
+        
+        Args:
+            agent_name: Name of the agent to check
+        
+        Returns:
+            Tuple of (is_available, error_message)
+        """
+        if not self.agents_available.get(agent_name, False):
+            error_msg = (
+                f"{agent_name.capitalize()} agent is not available. "
+                "Check that dependencies are installed"
+            )
+            if not self.llm_config or not self.llm_config.get_available_providers():
+                error_msg += " and LLM provider is configured (set API keys in .env)"
+            return False, error_msg
+        return True, None
 
     async def route_job(
         self,
@@ -140,6 +350,26 @@ class OmniCoreService:
             return {"status": "error", "message": f"Unknown action: {action}"}
     
     async def _run_codegen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute code generation agent.
+        
+        Args:
+            job_id: Job identifier
+            payload: Parameters including requirements, language, framework
+        
+        Returns:
+            Dict with status and generated files information
+        """
+        if not self.agents_available["codegen"]:
+            error_msg = (
+                "Codegen agent is not available. "
+                "Check that dependencies are installed and LLM provider is configured."
+            )
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg,
+                "agent_available": False,
         """Execute code generation agent."""
         # Check if agent is available
         loader = get_agent_loader()
@@ -154,9 +384,6 @@ class OmniCoreService:
             }
         
         try:
-            from generator.agents.codegen_agent.codegen_agent import generate_code
-            from pathlib import Path
-            
             requirements = payload.get("requirements", "")
             language = payload.get("language", "python")
             framework = payload.get("framework")
@@ -168,32 +395,32 @@ class OmniCoreService:
                 "framework": framework,
             }
             
-            # Use minimal config for now
-            config = {
-                "backend": "openai",
-                "model": {"openai": "gpt-4"},
-                "ensemble_enabled": False,
-            }
+            # Build configuration from our LLM config
+            config = self._build_llm_config()
             
             state_summary = f"Generating code for job {job_id}"
             
             # Call the actual generator
             logger.info(f"Calling codegen agent for job {job_id}")
-            result = await generate_code(
+            result = await self._codegen_func(
                 requirements=requirements_dict,
                 state_summary=state_summary,
                 config_path_or_dict=config,
             )
             
+            # Create output directory
             output_path = Path(f"./uploads/{job_id}/generated")
             output_path.mkdir(parents=True, exist_ok=True)
             
             # Save generated files
             generated_files = []
-            for filename, content in result.items():
-                file_path = output_path / filename
-                file_path.write_text(content)
-                generated_files.append(str(file_path))
+            if isinstance(result, dict):
+                for filename, content in result.items():
+                    file_path = output_path / filename
+                    file_path.write_text(content)
+                    generated_files.append(str(file_path))
+            
+            logger.info(f"Code generation completed for job {job_id}: {len(generated_files)} files")
             
             return {
                 "status": "completed",
@@ -207,9 +434,27 @@ class OmniCoreService:
             return {
                 "status": "error",
                 "message": str(e),
+                "error_type": type(e).__name__,
             }
     
     async def _run_testgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute test generation agent.
+        
+        Args:
+            job_id: Job identifier
+            payload: Parameters including code_path, test_type, coverage_target
+        
+        Returns:
+            Dict with status and test generation results
+        """
+        available, error_msg = self._check_agent_available("testgen")
+        if not available:
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg,
+                "agent_available": False,
         """Execute test generation agent."""
         # Check if agent is available
         loader = get_agent_loader()
@@ -224,15 +469,12 @@ class OmniCoreService:
             }
         
         try:
-            from generator.agents.testgen_agent.testgen_agent import TestgenAgent, Policy
-            from pathlib import Path
-            
             code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
             test_type = payload.get("test_type", "unit")
             coverage_target = payload.get("coverage_target", 80.0)
             
             # Create policy for test generation
-            policy = Policy(
+            policy = self._testgen_policy_class(
                 quality_threshold=coverage_target / 100.0,
                 max_refinements=2,
                 primary_metric="coverage",
@@ -253,13 +495,15 @@ class OmniCoreService:
             # Initialize and run testgen agent
             logger.info(f"Running testgen agent for job {job_id}")
             repo_path = Path(f"./uploads/{job_id}")
-            agent = TestgenAgent(repo_path=repo_path)
+            agent = self._testgen_class(repo_path=repo_path)
             
             result = await agent.generate_tests(
                 target_files=code_files,
                 language="python",
                 policy=policy,
             )
+            
+            logger.info(f"Test generation completed for job {job_id}")
             
             return {
                 "status": "completed",
@@ -273,9 +517,27 @@ class OmniCoreService:
             return {
                 "status": "error",
                 "message": str(e),
+                "error_type": type(e).__name__,
             }
     
     async def _run_deploy(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute deployment configuration generation.
+        
+        Args:
+            job_id: Job identifier
+            payload: Parameters including code_path, platform, include_ci_cd
+        
+        Returns:
+            Dict with status and deployment configuration results
+        """
+        available, error_msg = self._check_agent_available("deploy")
+        if not available:
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg,
+                "agent_available": False,
         """Execute deployment configuration generation."""
         # Check if agent is available
         loader = get_agent_loader()
@@ -290,9 +552,6 @@ class OmniCoreService:
             }
         
         try:
-            from generator.agents.deploy_agent.deploy_agent import DeployAgent
-            from pathlib import Path
-            
             code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
             platform = payload.get("platform", "docker")
             include_ci_cd = payload.get("include_ci_cd", True)
@@ -305,8 +564,8 @@ class OmniCoreService:
                 }
             
             # Initialize and run deploy agent
-            logger.info(f"Running deploy agent for job {job_id}")
-            agent = DeployAgent(repo_path=str(repo_path))
+            logger.info(f"Running deploy agent for job {job_id} with platform: {platform}")
+            agent = self._deploy_class(repo_path=str(repo_path))
             
             # Deploy agent uses async generate method
             # Note: The actual interface may vary, adjust as needed
@@ -316,6 +575,7 @@ class OmniCoreService:
                 "platform": platform,
             }
             
+            logger.info(f"Deploy agent completed for job {job_id}")
             return result
             
         except Exception as e:
@@ -323,9 +583,27 @@ class OmniCoreService:
             return {
                 "status": "error",
                 "message": str(e),
+                "error_type": type(e).__name__,
             }
     
     async def _run_docgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute documentation generation.
+        
+        Args:
+            job_id: Job identifier
+            payload: Parameters including code_path, doc_type, format
+        
+        Returns:
+            Dict with status and documentation generation results
+        """
+        available, error_msg = self._check_agent_available("docgen")
+        if not available:
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg,
+                "agent_available": False,
         """Execute documentation generation."""
         # Check if agent is available
         loader = get_agent_loader()
@@ -340,9 +618,6 @@ class OmniCoreService:
             }
         
         try:
-            from generator.agents.docgen_agent.docgen_agent import DocgenAgent
-            from pathlib import Path
-            
             code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
             doc_type = payload.get("doc_type", "api")
             format = payload.get("format", "markdown")
@@ -354,7 +629,10 @@ class OmniCoreService:
                     "message": f"Code path {code_path} does not exist",
                 }
             
-            logger.info(f"Running docgen agent for job {job_id}")
+            logger.info(f"Running docgen agent for job {job_id} with doc_type: {doc_type}, format: {format}")
+            
+            # Initialize docgen agent
+            agent = self._docgen_class(repo_path=str(repo_path))
             
             # Docgen agent result
             result = {
@@ -364,6 +642,7 @@ class OmniCoreService:
                 "format": format,
             }
             
+            logger.info(f"Docgen agent completed for job {job_id}")
             return result
             
         except Exception as e:
@@ -371,9 +650,27 @@ class OmniCoreService:
             return {
                 "status": "error",
                 "message": str(e),
+                "error_type": type(e).__name__,
             }
     
     async def _run_critique(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute critique/security scanning.
+        
+        Args:
+            job_id: Job identifier
+            payload: Parameters including code_path, scan_types, auto_fix
+        
+        Returns:
+            Dict with status and critique/security scanning results
+        """
+        available, error_msg = self._check_agent_available("critique")
+        if not available:
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg,
+                "agent_available": False,
         """Execute critique/security scanning."""
         # Check if agent is available
         loader = get_agent_loader()
@@ -388,9 +685,6 @@ class OmniCoreService:
             }
         
         try:
-            from generator.agents.critique_agent.critique_agent import CritiqueAgent
-            from pathlib import Path
-            
             code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
             scan_types = payload.get("scan_types", ["security", "quality"])
             auto_fix = payload.get("auto_fix", False)
@@ -402,7 +696,10 @@ class OmniCoreService:
                     "message": f"Code path {code_path} does not exist",
                 }
             
-            logger.info(f"Running critique agent for job {job_id}")
+            logger.info(f"Running critique agent for job {job_id} with scan_types: {scan_types}, auto_fix: {auto_fix}")
+            
+            # Initialize critique agent
+            agent = self._critique_class(repo_path=str(repo_path))
             
             # Critique agent result
             result = {
@@ -412,6 +709,7 @@ class OmniCoreService:
                 "scan_types": scan_types,
             }
             
+            logger.info(f"Critique agent completed for job {job_id}")
             return result
             
         except Exception as e:
@@ -419,10 +717,20 @@ class OmniCoreService:
             return {
                 "status": "error",
                 "message": str(e),
+                "error_type": type(e).__name__,
             }
     
     async def _run_clarifier(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute requirements clarification."""
+        """
+        Execute requirements clarification using LLM-based or rule-based approach.
+        
+        Args:
+            job_id: Job identifier
+            payload: Parameters including readme_content, ambiguities
+        
+        Returns:
+            Dict with status and clarification questions
+        """
         try:
             readme_content = payload.get("readme_content", "")
             ambiguities = payload.get("ambiguities", [])
@@ -433,10 +741,36 @@ class OmniCoreService:
                     "message": "No README content provided for clarification",
                 }
             
-            logger.info(f"Running clarifier for job {job_id}")
-            
-            # Analyze requirements and generate clarification questions
-            questions = self._generate_clarification_questions(readme_content)
+            # Check if LLM-based clarifier is available
+            if self._clarifier_llm_class:
+                logger.info(f"Running LLM-based clarifier for job {job_id}")
+                try:
+                    # Build LLM config for clarifier
+                    llm_config = self._build_llm_config()
+                    
+                    # Initialize LLM-based clarifier with API key from config
+                    api_key = None
+                    if self.llm_config:
+                        api_key = self.llm_config.get_provider_api_key(llm_config["backend"])
+                    
+                    clarifier = self._clarifier_llm_class(
+                        api_key=api_key,
+                        model=llm_config.get("model", {}).get(llm_config["backend"], "grok-1")
+                    )
+                    
+                    # Generate questions using LLM (async call)
+                    questions = await clarifier.generate_clarification_questions(
+                        requirements=readme_content,
+                        ambiguities=ambiguities
+                    )
+                    
+                    logger.info(f"LLM-based clarifier generated {len(questions)} questions for job {job_id}")
+                except Exception as e:
+                    logger.warning(f"LLM clarifier failed, falling back to rule-based: {e}")
+                    questions = self._generate_clarification_questions(readme_content)
+            else:
+                logger.info(f"Running rule-based clarifier for job {job_id}")
+                questions = self._generate_clarification_questions(readme_content)
             
             # Store session
             _clarification_sessions[job_id] = {
@@ -456,19 +790,15 @@ class OmniCoreService:
                 "questions_count": len(questions),
             }
             
+            logger.info(f"Clarifier completed for job {job_id} with {len(questions)} questions")
             return result
             
-        except ImportError as e:
-            logger.error(f"Failed to import clarifier: {e}")
-            return {
-                "status": "error",
-                "message": f"Clarifier not available: {e}",
-            }
         except Exception as e:
             logger.error(f"Error running clarifier: {e}", exc_info=True)
             return {
                 "status": "error",
                 "message": str(e),
+                "error_type": type(e).__name__,
             }
     
     def _generate_clarification_questions(self, requirements: str) -> List[str]:
@@ -496,7 +826,7 @@ class OmniCoreService:
         
         # Frontend questions
         if any(word in req_lower for word in ['web', 'frontend', 'ui', 'interface', 'dashboard']):
-            if not any(fw in req_lower for word in ['react', 'vue', 'angular', 'svelte', 'next']):
+            if not any(fw in req_lower for fw in ['react', 'vue', 'angular', 'svelte', 'next']):
                 questions.append("What frontend framework would you prefer? (e.g., React, Vue.js, Angular)")
         
         # Deployment questions

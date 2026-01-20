@@ -43,11 +43,21 @@ services:
     container_name: codefactory-platform
     environment:
       - APP_ENV=development
+      # LLM Provider Configuration
       - GROK_API_KEY=${GROK_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-openai}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-300}
+      - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-3}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
+      # Infrastructure
       - REDIS_URL=redis://redis:6379
+      # Self-Fixing Engineer
       - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
       - AUDIT_LOG_PATH=/app/audit_trail.log
+      # Metrics
       - PROMETHEUS_PORT=9090  # Prometheus metrics HTTP server port
     ports:
       - "8000:8000"  # Main API endpoint
