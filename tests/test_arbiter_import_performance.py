@@ -48,9 +48,6 @@ def test_arbiter_class_import():
         if Arbiter is None:
             pytest.skip("Arbiter class import requires additional dependencies")
         
-        # Verify the class is available
-        assert Arbiter is not None, "Arbiter class should be importable"
-        
         print(f"✓ Arbiter class imported in {elapsed_time:.2f} seconds")
     except ImportError:
         # If Arbiter can't be imported due to missing dependencies, that's OK

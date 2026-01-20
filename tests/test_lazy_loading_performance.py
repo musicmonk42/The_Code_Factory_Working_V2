@@ -46,9 +46,9 @@ def test_lazy_module_aliasing():
     # Import self_fixing_engineer - should NOT load submodules
     import self_fixing_engineer
     
-    # Verify submodules are not loaded yet
-    assert 'arbiter' not in sys.modules or sys.modules['arbiter'] is None
-    assert 'simulation' not in sys.modules or sys.modules['simulation'] is None
+    # Verify submodules are not loaded yet (or are None if loaded with fallback)
+    assert 'arbiter' not in sys.modules or sys.modules.get('arbiter') is None
+    assert 'simulation' not in sys.modules or sys.modules.get('simulation') is None
     
     # Now access arbiter - should trigger lazy load
     start_time = time.time()

@@ -97,10 +97,6 @@ class EventBus:
 
 # Don't initialize onboard-related attributes at module level
 # They will be loaded lazily via __getattr__ when first accessed
-# onboard = None
-# OnboardConfig = None
-# ONBOARD_DEFAULTS = None
-# CORE_VERSION = None
 main_runner_logger = None
 
 # test helper: make unittest.mock.patch available as a builtin for the test suite
