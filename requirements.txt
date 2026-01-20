@@ -418,5 +418,5 @@ python-pkcs11==0.7.0
                           # Install system deps first: apt-get install -y libvirt-dev pkg-config
                           # Then uncomment this line if libvirt functionality is needed
 paramiko==3.5.0
-fastavro==1.10.2
+fastavro==1.11.1
 faiss-cpu==1.9.0.post1
