@@ -19,11 +19,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Install build tools for any packages that need compiling
 # Update ca-certificates first to avoid SSL issues with pip
+# pkg-config is required for libvirt-python build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
  && apt-get install -y --no-install-recommends \
-    build-essential git libmagic1 libvirt-dev \
+    build-essential git libmagic1 libvirt-dev pkg-config \
  && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment for dependencies

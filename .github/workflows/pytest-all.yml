@@ -76,6 +76,13 @@ jobs:
           sudo apt-get install -y redis-tools
           redis-cli --version
           
+      - name: Install system dependencies for Python packages
+        run: |
+          # Install system dependencies required by Python packages
+          # libvirt-dev and pkg-config: required by libvirt-python (if enabled)
+          sudo apt-get update
+          sudo apt-get install -y libvirt-dev pkg-config
+          
       - name: Wait for Redis to be ready
         run: |
           # Wait loop to ensure Redis service is fully available before running tests
@@ -109,10 +116,11 @@ jobs:
             echo "ERROR: Failed to install self_fixing_engineer package"
             exit 1
           }
-          # Verify arbiter is importable with timeout protection
-          timeout 10s python -c "from self_fixing_engineer import arbiter; print('arbiter imported from', arbiter.__file__)" || {
+          # Verify arbiter is importable with timeout protection and detailed error reporting
+          echo "=== Attempting to import arbiter ==="
+          timeout 10s python -c 'import sys; from self_fixing_engineer import arbiter; arbiter_file = getattr(arbiter, "__file__", "unknown"); print(f"✓ arbiter imported from {arbiter_file}"); print(f"✓ Module attributes: {list(dir(arbiter)[:10])}")' || {
             echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
-            echo "This may indicate heavy import-time initialization. Check module __init__.py files."
+            echo "This may indicate heavy import-time initialization or missing dependencies."
             exit 1
           }
           # Install omnicore_engine package
