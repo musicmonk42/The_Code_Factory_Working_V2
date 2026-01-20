@@ -710,10 +710,16 @@ async function viewJobFiles(jobId) {
         const response = await fetch(`${API_BASE}/jobs/${jobId}/files`);
         const data = await response.json();
         
-        let fileList = 'Generated Files:\n\n';
+        if (data.files.length === 0) {
+            alert('No files generated yet for this job.');
+            return;
+        }
+        
+        let fileList = `Generated Files (${data.count}):\n\n`;
         data.files.forEach(file => {
-            fileList += `📄 ${file.name} (${formatFileSize(file.size)})\n`;
+            fileList += `📄 ${file.path} (${file.size_human})\n`;
         });
+        fileList += `\nTotal size: ${(data.total_size / 1024).toFixed(2)} KB`;
         alert(fileList);
     } catch (error) {
         showError('Failed to load files: ' + error.message);
@@ -1257,7 +1263,13 @@ async function configureArbiter() {
     
     let parsedConfig;
     try {
-        parsedConfig = JSON.parse(config); // Validate and store parsed JSON
+        parsedConfig = JSON.parse(config);
+    } catch (error) {
+        showError('Invalid JSON format: ' + error.message);
+        return;
+    }
+    
+    try {
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -1265,7 +1277,7 @@ async function configureArbiter() {
         });
         showSuccess('Arbiter configured');
     } catch (error) {
-        showError('Configuration failed: ' + error.message);
+        showError('Configuration request failed: ' + error.message);
     }
 }
 
