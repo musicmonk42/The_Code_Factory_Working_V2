@@ -82,6 +82,7 @@ except ImportError:
             # Generate a proper Fernet key for testing
             self.ENCRYPTION_KEY = Fernet.generate_key().decode()
             self.DATABASE_URL = "sqlite:///monitor.db"
+            self.PLUGINS_ENABLED = True
 
     class PIIRedactorFilter(logging.Filter):
         def filter(self, record):

@@ -938,7 +938,9 @@ class PluginRegistry:
         entrypoints: Dict[str, Callable] = None,
     ):
         config = ArbiterConfig()
-        if not config.PLUGINS_ENABLED:
+        # DEFENSIVE CHECK: Handle missing PLUGINS_ENABLED attribute
+        plugins_enabled = getattr(config, 'PLUGINS_ENABLED', True)  # Default to True if missing
+        if not plugins_enabled:
             raise ValueError("Plugins are disabled in ArbiterConfig")
 
         # SECURITY: Use lock to prevent race conditions during concurrent plugin registration
