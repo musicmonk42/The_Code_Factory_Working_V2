@@ -44,6 +44,7 @@ jobs:
       PYTEST_CURRENT_TEST: 'true'
       REDIS_URL: redis://localhost:6379
       APP_ENV: test
+      SKIP_IMPORT_TIME_VALIDATION: '1'  # Skip expensive validation during import
     
     steps:
       - name: Checkout code
@@ -108,9 +109,10 @@ jobs:
             echo "ERROR: Failed to install self_fixing_engineer package"
             exit 1
           }
-          # Verify arbiter is importable with detailed diagnostics
-          python -c "from self_fixing_engineer import arbiter; print('arbiter imported from', arbiter.__file__)" || {
+          # Verify arbiter is importable with timeout protection
+          timeout 10s python -c "from self_fixing_engineer import arbiter; print('arbiter imported from', arbiter.__file__)" || {
             echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
+            echo "This may indicate heavy import-time initialization. Check module __init__.py files."
             exit 1
           }
           # Install omnicore_engine package

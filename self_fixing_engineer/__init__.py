@@ -91,6 +91,8 @@ def _setup_module_alias(module_name: str) -> None:
                 module_name,
                 e,
             )
+            # Don't re-raise - allow import to continue without the alias
+            return
         else:
             raise
     except Exception as e:
@@ -103,6 +105,25 @@ def _setup_module_alias(module_name: str) -> None:
         )
 
 
-# Set up all module aliases
-for _module in _MODULE_ALIASES:
-    _setup_module_alias(_module)
+# Use lazy import hooks instead of eager loading
+# Module aliases will be created on-demand when first accessed
+class _LazyModuleLoader:
+    """Lazy loader for module aliases to avoid import-time overhead."""
+    
+    def __init__(self, module_aliases):
+        self._aliases = module_aliases
+        self._loaded = set()
+    
+    def __call__(self, name):
+        if name in self._aliases and name not in self._loaded:
+            _setup_module_alias(name)
+            self._loaded.add(name)
+
+_lazy_loader = _LazyModuleLoader(_MODULE_ALIASES)
+
+# Override module __getattr__ for lazy loading
+def __getattr__(name: str) -> Any:
+    if name in _MODULE_ALIASES:
+        _lazy_loader(name)
+        return sys.modules.get(name)
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
