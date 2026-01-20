@@ -280,7 +280,7 @@ def _create_dummy_metric():
     return DummyMetric()
 
 
-def _get_or_create_metric(metric_class, name, description, labelnames=None):
+def _get_or_create_metric(metric_class, name, description, labelnames=None, **kwargs):
     """
     Safely get or create a Prometheus metric, handling duplicate registration.
 
@@ -293,6 +293,7 @@ def _get_or_create_metric(metric_class, name, description, labelnames=None):
         name: Metric name (should be unique across the application)
         description: Human-readable metric description
         labelnames: Optional list of label names for the metric
+        **kwargs: Additional metric-specific keyword arguments
 
     Returns:
         The metric instance (either newly created or existing)
@@ -303,9 +304,9 @@ def _get_or_create_metric(metric_class, name, description, labelnames=None):
     try:
         # Attempt to create the metric
         if labelnames:
-            return metric_class(name, description, labelnames)
+            return metric_class(name, description, labelnames, **kwargs)
         else:
-            return metric_class(name, description)
+            return metric_class(name, description, **kwargs)
     except ValueError as e:
         if "Duplicated timeseries" in str(e):
             # Metric already exists in registry, retrieve it

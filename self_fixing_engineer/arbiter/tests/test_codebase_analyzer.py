@@ -401,16 +401,17 @@ def test_idempotent_metric_registration():
     # Save original modules
     original_modules = {
         k: v for k, v in sys.modules.items() 
-        if 'codebase_analyzer' in k or 'prometheus' in k
+        if 'codebase_analyzer' in k or 'arbiter.codebase_analyzer' in k or 'prometheus' in k
     }
     
     try:
         # Remove the module from cache to force re-import
-        if 'codebase_analyzer' in sys.modules:
-            del sys.modules['codebase_analyzer']
+        for key in ['codebase_analyzer', 'arbiter.codebase_analyzer']:
+            if key in sys.modules:
+                del sys.modules[key]
         
-        # First import
-        import codebase_analyzer as ca1
+        # First import using absolute path as per existing pattern
+        from arbiter import codebase_analyzer as ca1
         assert hasattr(ca1, 'analyzer_ops_total')
         assert hasattr(ca1, 'analyzer_errors_total')
         
@@ -419,10 +420,12 @@ def test_idempotent_metric_registration():
         errors_total_1 = ca1.analyzer_errors_total
         
         # Remove from cache again
-        del sys.modules['codebase_analyzer']
+        for key in ['codebase_analyzer', 'arbiter.codebase_analyzer']:
+            if key in sys.modules:
+                del sys.modules[key]
         
         # Second import - this should use idempotent registration
-        import codebase_analyzer as ca2
+        from arbiter import codebase_analyzer as ca2
         assert hasattr(ca2, 'analyzer_ops_total')
         assert hasattr(ca2, 'analyzer_errors_total')
         
@@ -437,14 +440,14 @@ def test_idempotent_metric_registration():
     finally:
         # Restore original modules to avoid side effects
         for key in list(sys.modules.keys()):
-            if 'codebase_analyzer' in key and key not in original_modules:
+            if ('codebase_analyzer' in key or 'arbiter.codebase_analyzer' in key) and key not in original_modules:
                 del sys.modules[key]
         sys.modules.update(original_modules)
 
 
 def test_create_dummy_metric():
     """Test that _create_dummy_metric returns a functional no-op metric."""
-    from codebase_analyzer import _create_dummy_metric
+    from arbiter.codebase_analyzer import _create_dummy_metric
     
     dummy = _create_dummy_metric()
     
@@ -471,7 +474,7 @@ def test_create_dummy_metric():
 
 def test_get_or_create_metric():
     """Test that _get_or_create_metric handles duplicate registration gracefully."""
-    from codebase_analyzer import _get_or_create_metric
+    from arbiter.codebase_analyzer import _get_or_create_metric
     from prometheus_client import Counter, Gauge, REGISTRY
     
     # Create a unique metric name to avoid conflicts with other tests
