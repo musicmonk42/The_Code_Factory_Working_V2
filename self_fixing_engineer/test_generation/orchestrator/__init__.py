@@ -40,9 +40,21 @@ except ImportError as e:
         pass
 
 
+# Import and alias the GenerationOrchestrator as TestGenerationOrchestrator
+try:
+    from .orchestrator import GenerationOrchestrator as TestGenerationOrchestrator
+except ImportError as e:
+    logger.warning(
+        f"Failed to import GenerationOrchestrator: {e}. "
+        "TestGenerationOrchestrator will not be available."
+    )
+    TestGenerationOrchestrator = None
+
+
 # Define the public API for this package
 __all__ = [
     "sanitize_path",
     "validate_path",
     "PathError",
+    "TestGenerationOrchestrator",
 ]

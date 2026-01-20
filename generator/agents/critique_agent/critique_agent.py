@@ -1384,6 +1384,81 @@ async def orchestrate_critique_pipeline(
         return results
 
 
+class CritiqueAgent:
+    """
+    The orchestrator for automated code critique and quality analysis.
+    Wraps the orchestrate_critique_pipeline function with a class-based interface
+    for consistency with other generator agents.
+    """
+
+    def __init__(
+        self,
+        repo_path: Optional[str] = None,
+        config: Optional[CritiqueConfig] = None,
+        **kwargs,
+    ):
+        """
+        Initialize the CritiqueAgent.
+
+        Args:
+            repo_path: Optional path to the repository being critiqued.
+            config: Optional CritiqueConfig for pipeline configuration.
+            **kwargs: Additional configuration options.
+        """
+        self.repo_path = repo_path
+        self.config = config or CritiqueConfig()
+        self.kwargs = kwargs
+        logging.getLogger(__name__).info(
+            f"CritiqueAgent initialized for repo: {repo_path}"
+        )
+
+    async def run(
+        self,
+        code_files: Dict[str, str],
+        test_files: Optional[Dict[str, str]] = None,
+        requirements: Optional[Dict[str, Any]] = None,
+        state_summary: str = "",
+        config: Optional[CritiqueConfig] = None,
+    ) -> Dict[str, Any]:
+        """
+        Run the critique pipeline on the provided code.
+
+        Args:
+            code_files: Dictionary mapping filenames to code content.
+            test_files: Optional dictionary mapping test filenames to content.
+            requirements: Optional requirements specification.
+            state_summary: State summary or context for the critique.
+            config: Optional config override for this run.
+
+        Returns:
+            Dictionary containing critique results.
+        """
+        return await orchestrate_critique_pipeline(
+            code_files=code_files,
+            test_files=test_files or {},
+            requirements=requirements or {},
+            state_summary=state_summary,
+            config=config or self.config,
+        )
+
+    async def critique(
+        self,
+        code_files: Dict[str, str],
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """
+        Convenience method to run critique with minimal parameters.
+
+        Args:
+            code_files: Dictionary mapping filenames to code content.
+            **kwargs: Additional arguments passed to run().
+
+        Returns:
+            Dictionary containing critique results.
+        """
+        return await self.run(code_files=code_files, **kwargs)
+
+
 if __name__ == "__main__":
     import argparse
 

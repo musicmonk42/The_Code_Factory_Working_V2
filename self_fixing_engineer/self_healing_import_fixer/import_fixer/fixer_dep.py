@@ -14,7 +14,16 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
 
-import tomli_w  # For writing pyproject.toml
+# Optional: tomli_w for writing pyproject.toml
+try:
+    import tomli_w
+    _tomli_w_available = True
+except ImportError:
+    tomli_w = None
+    _tomli_w_available = False
+    logging.warning(
+        "tomli_w not available. pyproject.toml modification features disabled."
+    )
 
 # Prefer stdlib tomllib when available
 try:
@@ -1129,7 +1138,14 @@ async def heal_dependencies(
     original_pyproject_text = (
         pyproject_original_content.decode("utf-8") if pyproject_original_content else ""
     )
-    pyproject_new_content = tomli_w.dumps(proposed_pyproject_data)
+    if _tomli_w_available:
+        pyproject_new_content = tomli_w.dumps(proposed_pyproject_data)
+    else:
+        # Fallback: cannot generate pyproject diff without tomli_w
+        logging.warning(
+            "tomli_w not available - skipping pyproject.toml diff generation"
+        )
+        pyproject_new_content = original_pyproject_text
     if pyproject_new_content != original_pyproject_text:
         pyproject_diff = difflib.unified_diff(
             original_pyproject_text.splitlines(keepends=True),

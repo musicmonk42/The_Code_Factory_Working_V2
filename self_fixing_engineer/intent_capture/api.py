@@ -524,6 +524,9 @@ def create_app() -> FastAPI:
 # Use a multi-stage Dockerfile for a slim, secure image. Deploy with Helm to Kubernetes,
 # ensuring livenessProbe and readinessProbe are configured for a /health endpoint.
 
+# Module-level app instance for import compatibility
+app = create_app()
+
 if __name__ == "__main__":
     import uvicorn
 

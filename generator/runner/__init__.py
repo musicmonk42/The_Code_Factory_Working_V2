@@ -213,6 +213,7 @@ __all__ = [
     "register_summarizer",  # Added summarizer registration function
     "run_tests_in_sandbox",  # NEW: Export for testgen_validator
     "run_stress_tests",  # NEW: Export for testgen_validator
+    "runner_metrics",  # NEW: Export for metrics module access
 ]
 
 # Import tracer for OpenTelemetry support
@@ -222,9 +223,29 @@ try:
     __all__.append("tracer")
 except ImportError:
     # Create a no-op tracer for testing environments
-    from opentelemetry import trace
+    try:
+        from opentelemetry import trace
 
-    tracer = trace.get_tracer(__name__)
+        tracer = trace.get_tracer(__name__)
+    except ImportError:
+        # Fallback: create a minimal no-op tracer stub
+        class _NoOpSpan:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def set_attribute(self, *args, **kwargs):
+                pass
+            def add_event(self, *args, **kwargs):
+                pass
+
+        class _NoOpTracer:
+            def start_as_current_span(self, name, **kwargs):
+                return _NoOpSpan()
+            def start_span(self, name, **kwargs):
+                return _NoOpSpan()
+
+        tracer = _NoOpTracer()
     __all__.append("tracer")
 
 # --- Backwards compatibility aliases ---
@@ -321,6 +342,9 @@ if _runner_metrics is not None and "runner.metrics" not in _sys.modules:
 # NEW: Allows `from runner.providers import ...` to resolve to the providers subpackage
 if _runner_providers is not None and "runner.providers" not in _sys.modules:
     _sys.modules["runner.providers"] = _runner_providers
+
+# Public aliases for direct module imports (e.g., from generator.runner import runner_metrics)
+runner_metrics = _runner_metrics
 
 
 # --- Import hook to support runner.providers imports ---
