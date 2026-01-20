@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, Final, List, Optional, Set, Type
+from typing import Any, Callable, Dict, List, Optional, Set, Type
 from unittest.mock import MagicMock
 
 from networkx import DiGraph, has_path
@@ -1261,7 +1261,7 @@ def register(kind: PlugInKind, name: str, version: str, author: str):
             def execute(self, *args, **kwargs) -> Any:
                 return func(*args, **kwargs)
 
-        registry.register_instance(
+        get_registry().register_instance(
             kind=kind,
             name=name,
             instance=FunctionPlugin(),
@@ -1276,9 +1276,37 @@ def register(kind: PlugInKind, name: str, version: str, author: str):
     return decorator
 
 
-# Singleton instance
-registry = PluginRegistry()
+# Lazy singleton instance - DO NOT instantiate at module import time
+_registry_instance: Optional[PluginRegistry] = None
 
-# For backwards compatibility, expose the plugins dictionary via a module-level constant.
-# Note: This is a deep copy to prevent external modification.
-PLUGIN_REGISTRY: Final[Dict[PlugInKind, Dict[str, Any]]] = registry.list_plugins()
+
+def get_registry() -> PluginRegistry:
+    """
+    Get the singleton PluginRegistry instance.
+    Lazy initialization ensures the registry is only created when first accessed,
+    avoiding heavy import-time initialization.
+    
+    Returns:
+        The singleton PluginRegistry instance.
+    """
+    global _registry_instance
+    if _registry_instance is None:
+        _registry_instance = PluginRegistry()
+    return _registry_instance
+
+
+# Backwards compatibility: expose registry as a module-level variable
+# This uses a property-like pattern via __getattr__ to maintain lazy loading
+def __getattr__(name: str) -> Any:
+    """
+    Module-level __getattr__ for lazy loading of registry-related attributes.
+    This allows 'from arbiter_plugin_registry import registry' to work
+    while deferring initialization until first access.
+    """
+    if name == "registry":
+        return get_registry()
+    elif name == "PLUGIN_REGISTRY":
+        # For backwards compatibility, expose the plugins dictionary
+        # Note: This is a deep copy to prevent external modification
+        return get_registry().list_plugins()
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
