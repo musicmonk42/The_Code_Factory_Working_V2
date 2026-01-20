@@ -914,9 +914,9 @@ async function publishMessage() {
     const payloadText = document.getElementById('message-payload').value;
     const priority = parseInt(document.getElementById('message-priority').value);
     
-    // Validate topic
-    if (!topic || !/^[a-zA-Z0-9_-]+$/.test(topic)) {
-        showError('Invalid topic name. Use only alphanumeric characters, hyphens, and underscores.');
+    // Strict topic validation with length limit
+    if (!topic || topic.length > 100 || !/^[a-zA-Z0-9_-]+$/.test(topic)) {
+        showError('Invalid topic name. Use only alphanumeric characters, hyphens, and underscores (max 100 chars).');
         return;
     }
     
@@ -1255,12 +1255,13 @@ async function configureArbiter() {
     const config = prompt('Enter Arbiter configuration (JSON):');
     if (!config) return;
     
+    let parsedConfig;
     try {
-        JSON.parse(config); // Validate JSON before sending
+        parsedConfig = JSON.parse(config); // Validate and store parsed JSON
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({action: 'configure', config: JSON.parse(config)})
+            body: JSON.stringify({action: 'configure', config: parsedConfig})
         });
         showSuccess('Arbiter configured');
     } catch (error) {
@@ -1365,9 +1366,9 @@ function showSubscribe() {
     const topic = prompt('Enter topic to subscribe to:');
     if (!topic) return;
     
-    // Basic validation
-    if (!/^[a-zA-Z0-9_-]+$/.test(topic)) {
-        showError('Invalid topic name. Use only alphanumeric characters, hyphens, and underscores.');
+    // Strict validation with anchors and length limit
+    if (topic.length > 100 || !/^[a-zA-Z0-9_-]+$/.test(topic)) {
+        showError('Invalid topic name. Use only alphanumeric characters, hyphens, and underscores (max 100 chars).');
         return;
     }
     
@@ -1384,9 +1385,9 @@ function showInstallPlugin() {
     const pluginName = prompt('Enter plugin name to install:');
     if (!pluginName) return;
     
-    // Basic validation
-    if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
-        showError('Invalid plugin name.');
+    // Strict validation with length limit
+    if (pluginName.length > 50 || !/^[a-zA-Z0-9_-]{3,50}$/.test(pluginName)) {
+        showError('Invalid plugin name. Use 3-50 alphanumeric characters, hyphens, or underscores.');
         return;
     }
     
@@ -1404,8 +1405,8 @@ function showRateLimit() {
     if (!limit) return;
     
     const limitNum = parseInt(limit);
-    if (isNaN(limitNum) || limitNum < 1 || limitNum > 10000) {
-        showError('Invalid rate limit. Enter a number between 1 and 10000.');
+    if (isNaN(limitNum) || limitNum < 1 || limitNum > 10000 || !Number.isSafeInteger(limitNum)) {
+        showError('Invalid rate limit. Enter a whole number between 1 and 10000.');
         return;
     }
     
@@ -1422,9 +1423,20 @@ function showSIEMConfig() {
     const endpoint = prompt('Enter SIEM endpoint URL:');
     if (!endpoint) return;
     
-    // Basic URL validation
+    // Enhanced URL validation
     try {
-        new URL(endpoint);
+        const url = new URL(endpoint);
+        // Only allow http/https protocols
+        if (!['http:', 'https:'].includes(url.protocol)) {
+            showError('Only HTTP/HTTPS protocols are allowed.');
+            return;
+        }
+        // Prevent localhost and internal IPs
+        if (url.hostname === 'localhost' || url.hostname.startsWith('127.') || 
+            url.hostname.startsWith('192.168.') || url.hostname.startsWith('10.')) {
+            showError('Cannot use localhost or internal IP addresses.');
+            return;
+        }
     } catch {
         showError('Invalid URL format.');
         return;
