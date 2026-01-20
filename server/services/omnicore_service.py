@@ -6,9 +6,13 @@ job coordination, plugin management, and inter-module communication.
 """
 
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# In-memory storage for clarification sessions
+_clarification_sessions = {}
 
 
 class OmniCoreService:
@@ -118,12 +122,15 @@ class OmniCoreService:
             return await self._run_critique(job_id, payload)
         elif action == "clarify_requirements":
             return await self._run_clarifier(job_id, payload)
+        elif action == "get_clarification_feedback":
+            return self._get_clarification_feedback(job_id, payload)
+        elif action == "submit_clarification_response":
+            return self._submit_clarification_response(job_id, payload)
         elif action == "run_full_pipeline":
             return await self._run_full_pipeline(job_id, payload)
         elif action == "configure_llm":
             return await self._configure_llm(payload)
-        elif action in ["create_job", "get_status", "get_clarification_feedback", 
-                       "submit_clarification_response", "query_audit_logs", "get_llm_status"]:
+        elif action in ["create_job", "get_status", "query_audit_logs", "get_llm_status"]:
             # These are status/query actions that don't need actual agent execution
             return {"status": "acknowledged", "action": action}
         else:
@@ -385,8 +392,6 @@ class OmniCoreService:
     async def _run_clarifier(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute requirements clarification."""
         try:
-            from generator.clarifier.clarifier import Clarifier
-            
             readme_content = payload.get("readme_content", "")
             ambiguities = payload.get("ambiguities", [])
             
@@ -398,14 +403,25 @@ class OmniCoreService:
             
             logger.info(f"Running clarifier for job {job_id}")
             
-            # Clarifier needs significant setup, return placeholder for now
+            # Analyze requirements and generate clarification questions
+            questions = self._generate_clarification_questions(readme_content)
+            
+            # Store session
+            _clarification_sessions[job_id] = {
+                "job_id": job_id,
+                "requirements": readme_content,
+                "questions": questions,
+                "answers": {},
+                "status": "in_progress",
+                "created_at": datetime.now().isoformat(),
+            }
+            
             result = {
                 "status": "clarification_initiated",
-                "clarifications": [
-                    "Need to specify database type",
-                    "Authentication method not specified",
-                ],
-                "confidence": 0.85,
+                "job_id": job_id,
+                "clarifications": questions,
+                "confidence": 0.65,  # Low confidence indicates need for clarification
+                "questions_count": len(questions),
             }
             
             return result
@@ -422,6 +438,63 @@ class OmniCoreService:
                 "status": "error",
                 "message": str(e),
             }
+    
+    def _generate_clarification_questions(self, requirements: str) -> List[str]:
+        """
+        Generate clarification questions based on requirements content.
+        This is a rule-based approach. In production, this would use LLM.
+        """
+        questions = []
+        req_lower = requirements.lower()
+        
+        # Database questions
+        if any(word in req_lower for word in ['database', 'data', 'store', 'save', 'persist']):
+            if not any(db in req_lower for db in ['mysql', 'postgres', 'mongodb', 'sqlite', 'redis']):
+                questions.append("What type of database would you like to use? (e.g., PostgreSQL, MongoDB, MySQL)")
+        
+        # Authentication questions
+        if any(word in req_lower for word in ['user', 'login', 'auth', 'account', 'sign']):
+            if not any(auth in req_lower for auth in ['jwt', 'oauth', 'session', 'token', 'saml']):
+                questions.append("What authentication method should be used? (e.g., JWT, OAuth 2.0, session-based)")
+        
+        # API questions
+        if any(word in req_lower for word in ['api', 'endpoint', 'rest', 'graphql']):
+            if 'rest' not in req_lower and 'graphql' not in req_lower:
+                questions.append("Should the API be RESTful or GraphQL?")
+        
+        # Frontend questions
+        if any(word in req_lower for word in ['web', 'frontend', 'ui', 'interface', 'dashboard']):
+            if not any(fw in req_lower for word in ['react', 'vue', 'angular', 'svelte', 'next']):
+                questions.append("What frontend framework would you prefer? (e.g., React, Vue.js, Angular)")
+        
+        # Deployment questions
+        if any(word in req_lower for word in ['deploy', 'host', 'production', 'server']):
+            if not any(platform in req_lower for platform in ['docker', 'kubernetes', 'aws', 'azure', 'heroku']):
+                questions.append("What deployment platform will you use? (e.g., Docker, Kubernetes, AWS, Heroku)")
+        
+        # Testing questions
+        if 'test' in req_lower:
+            if not any(test_type in req_lower for test_type in ['unit', 'integration', 'e2e', 'end-to-end']):
+                questions.append("What types of tests should be included? (e.g., unit tests, integration tests, e2e tests)")
+        
+        # Performance questions
+        if any(word in req_lower for word in ['performance', 'scale', 'load', 'concurrent']):
+            questions.append("What are your expected performance requirements? (e.g., number of concurrent users, response time SLAs)")
+        
+        # Security questions
+        if any(word in req_lower for word in ['secure', 'security', 'encrypt', 'protect']):
+            if 'encrypt' not in req_lower:
+                questions.append("What security measures are required? (e.g., data encryption at rest/in transit, HTTPS, rate limiting)")
+        
+        # If no specific questions, ask general ones
+        if not questions:
+            questions = [
+                "What is the primary programming language you'd like to use?",
+                "Who are the target users of this application?",
+                "Are there any specific third-party integrations required?",
+            ]
+        
+        return questions[:5]  # Limit to 5 questions max
     
     async def _run_full_pipeline(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute full generation pipeline."""
@@ -997,3 +1070,113 @@ class OmniCoreService:
             "attempt": 4,
             "forced": force,
         }
+    
+    def _get_clarification_feedback(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Get feedback from clarification session."""
+        session = _clarification_sessions.get(job_id)
+        
+        if not session:
+            return {
+                "status": "not_found",
+                "message": f"No clarification session found for job {job_id}",
+            }
+        
+        # If all questions answered, generate clarified requirements
+        if len(session["answers"]) == len(session["questions"]):
+            return self._generate_clarified_requirements(session)
+        
+        return {
+            "status": "in_progress",
+            "job_id": job_id,
+            "total_questions": len(session["questions"]),
+            "answered_questions": len(session["answers"]),
+            "answers": session["answers"],
+        }
+    
+    def _submit_clarification_response(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Submit answer to clarification question."""
+        session = _clarification_sessions.get(job_id)
+        
+        if not session:
+            return {
+                "status": "error",
+                "message": f"No clarification session found for job {job_id}",
+            }
+        
+        question_id = payload.get("question_id", "")
+        response = payload.get("response", "")
+        
+        if not question_id or not response:
+            return {
+                "status": "error",
+                "message": "question_id and response are required",
+            }
+        
+        # Store the answer
+        session["answers"][question_id] = response
+        session["updated_at"] = datetime.now().isoformat()
+        
+        logger.info(f"Stored answer for {job_id}, question {question_id}")
+        
+        # Check if all questions answered
+        if len(session["answers"]) == len(session["questions"]):
+            session["status"] = "completed"
+            return {
+                "status": "completed",
+                "job_id": job_id,
+                "message": "All questions answered",
+                "clarified_requirements": self._generate_clarified_requirements(session),
+            }
+        
+        return {
+            "status": "answer_recorded",
+            "job_id": job_id,
+            "remaining_questions": len(session["questions"]) - len(session["answers"]),
+        }
+    
+    def _generate_clarified_requirements(self, session: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate clarified requirements from answers."""
+        requirements = {
+            "original_requirements": session["requirements"],
+            "clarified_requirements": {},
+        }
+        
+        # Map answers to clarified requirements
+        for question_id, answer in session["answers"].items():
+            # Extract question index
+            q_idx = int(question_id.replace("q", "")) - 1
+            if q_idx < len(session["questions"]):
+                question = session["questions"][q_idx]
+                
+                # Categorize the answer based on question content
+                q_lower = question.lower()
+                if "database" in q_lower:
+                    requirements["clarified_requirements"]["database"] = answer
+                elif "auth" in q_lower or "login" in q_lower:
+                    requirements["clarified_requirements"]["authentication"] = answer
+                elif "api" in q_lower:
+                    requirements["clarified_requirements"]["api_type"] = answer
+                elif "frontend" in q_lower or "framework" in q_lower:
+                    requirements["clarified_requirements"]["frontend_framework"] = answer
+                elif "deploy" in q_lower or "platform" in q_lower:
+                    requirements["clarified_requirements"]["deployment_platform"] = answer
+                elif "test" in q_lower:
+                    requirements["clarified_requirements"]["testing_strategy"] = answer
+                elif "performance" in q_lower:
+                    requirements["clarified_requirements"]["performance_requirements"] = answer
+                elif "security" in q_lower:
+                    requirements["clarified_requirements"]["security_requirements"] = answer
+                elif "language" in q_lower:
+                    requirements["clarified_requirements"]["programming_language"] = answer
+                elif "user" in q_lower:
+                    requirements["clarified_requirements"]["target_users"] = answer
+                elif "integration" in q_lower:
+                    requirements["clarified_requirements"]["third_party_integrations"] = answer
+                else:
+                    # Generic answer
+                    requirements["clarified_requirements"][f"answer_{q_idx + 1}"] = answer
+        
+        requirements["confidence"] = 0.95  # High confidence after clarification
+        requirements["status"] = "clarified"
+        
+        return requirements
