@@ -50,12 +50,18 @@ except ImportError:
     VideoFileClip = None
 
 try:
-    from PyPDF2 import PdfReader
+    from pypdf import PdfReader
 
     PDF_PROCESSING_AVAILABLE = True
 except ImportError:
     PDF_PROCESSING_AVAILABLE = False
-    PdfReader = None
+    try:
+        # Fallback to PyPDF2 for backwards compatibility
+        from PyPDF2 import PdfReader
+        
+        PDF_PROCESSING_AVAILABLE = True
+    except ImportError:
+        PdfReader = None
 
 from .config import Config, MultiModalData
 
@@ -109,7 +115,7 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
         if not self._video_processing_available:
             self._logger.warning("moviepy not found. Video processing is disabled.")
         if not self._pdf_processing_available:
-            self._logger.warning("PyPDF2 not found. PDF processing is disabled.")
+            self._logger.warning("pypdf/PyPDF2 not found. PDF processing is disabled.")
 
         # Redis for caching
         self.redis_client = None

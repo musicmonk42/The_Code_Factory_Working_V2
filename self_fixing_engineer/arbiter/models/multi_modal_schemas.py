@@ -65,9 +65,6 @@ class BaseConfig(BaseModel):
     """
 
     model_config = ConfigDict(
-        json_encoders={
-            datetime: lambda v: v.isoformat(),
-        },
         arbitrary_types_allowed=True,
         extra="forbid",
         alias_generator=to_camel,  # Apply camelCase alias generator
@@ -75,6 +72,14 @@ class BaseConfig(BaseModel):
         use_enum_values=True,
         validate_assignment=True,
     )
+
+    # Use field_serializer for datetime fields instead of deprecated json_encoders
+    @field_serializer('*', when_used='json')
+    def serialize_datetime(self, value: Any) -> Any:
+        """Serialize datetime objects to ISO format strings."""
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
     @field_validator("*", mode="before")
     @classmethod

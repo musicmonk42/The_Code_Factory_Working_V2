@@ -23,12 +23,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
  && apt-get install -y --no-install-recommends \
-    build-essential git \
+    build-essential git libmagic1 libvirt-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment for dependencies
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
+
+# Fix pip to ensure pip._vendor.packaging is available
+RUN python -m ensurepip --upgrade && python -m pip install --upgrade pip
 
 WORKDIR /app
 
@@ -120,6 +123,16 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "Skipping dependency verification for CI build"; \
     fi
 
+# Download SpaCy model to prevent runtime download issues
+RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
+        echo "========================================"; \
+        echo "Downloading SpaCy model en_core_web_lg..."; \
+        echo "========================================"; \
+        python -m spacy download en_core_web_lg || \
+        (echo "WARNING: Failed to download SpaCy model, testgen agent may not work properly"); \
+        echo "✓ SpaCy model download complete"; \
+    fi
+
 # Copy the rest of the application
 COPY . /app
 
@@ -137,7 +150,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
- && apt-get install -y --no-install-recommends curl \
+ && apt-get install -y --no-install-recommends curl git libmagic1 \
  && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

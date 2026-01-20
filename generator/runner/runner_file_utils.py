@@ -163,12 +163,20 @@ except ImportError:
     )
 
 try:
-    import PyPDF2  # For PDF text (add to reqs: PyPDF2)
+    from pypdf import PdfReader as PyPDF2_PdfReader  # Modern pypdf library
 
     HAS_PDF = True
 except ImportError:
-    HAS_PDF = False
-    logger.warning("PyPDF2 not found. PDF text extraction will be disabled.")
+    try:
+        # Fallback to PyPDF2 for backwards compatibility
+        import PyPDF2
+        PyPDF2_PdfReader = PyPDF2.PdfReader
+        
+        HAS_PDF = True
+    except ImportError:
+        HAS_PDF = False
+        PyPDF2_PdfReader = None
+        logger.warning("pypdf/PyPDF2 not found. PDF text extraction will be disabled.")
 
 try:
     import pandas as pd  # For CSV/Excel (add to reqs: pandas, openpyxl)
@@ -410,12 +418,12 @@ if HAS_PDF:
 
     @register_file_handler("application/pdf", [".pdf"])
     async def load_pdf_file(filepath: Path) -> str:
-        """Loads text from a PDF file using PyPDF2."""
+        """Loads text from a PDF file using pypdf/PyPDF2."""
         try:
-            # PyPDF2 requires sync file handle, aiofiles.open is async. We use to_thread for the entire blocking op.
+            # PyPDF2/pypdf requires sync file handle, aiofiles.open is async. We use to_thread for the entire blocking op.
             def _extract_pdf_text_sync():
                 with open(filepath, "rb") as f:
-                    reader = PyPDF2.PdfReader(f)
+                    reader = PyPDF2_PdfReader(f)
                     extracted_text = []
                     for page in reader.pages:
                         extracted_text.append(page.extract_text())
@@ -1198,8 +1206,8 @@ class TestFileUtils(unittest.TestCase):
 
     async def test_load_pdf_file(self):
         if not HAS_PDF:
-            self.skipTest("PyPDF2 not installed, skipping PDF test.")
-        # This requires a real PDF file. Mocking PyPDF2 is complex.
+            self.skipTest("pypdf/PyPDF2 not installed, skipping PDF test.")
+        # This requires a real PDF file. Mocking pypdf/PyPDF2 is complex.
         # For this test, we check that the handler is registered.
         self.assertIn("application/pdf", FILE_HANDLERS)
 

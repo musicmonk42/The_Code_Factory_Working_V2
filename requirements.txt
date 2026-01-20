@@ -296,7 +296,7 @@ Pygments==2.19.2
 PyJWT==2.10.1
 pyOpenSSL==25.1.0
 pyparsing==3.2.5
-PyPDF2==3.0.1
+pypdf==5.1.0
 pdfplumber>=0.5.28
 PyPika==0.48.9
 pyproject_hooks==1.2.0
@@ -409,3 +409,12 @@ xxhash==3.6.0
 yarl==1.22.0
 zipp==3.23.0
 zstandard==0.25.0
+
+# Additional dependencies for application startup fixes
+nest-asyncio==1.6.0
+xattr==1.1.0
+python-pkcs11==0.7.0
+libvirt-python==10.11.0
+paramiko==3.5.0
+fastavro==1.10.2
+faiss-cpu==1.9.0.post1

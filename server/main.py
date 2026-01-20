@@ -19,6 +19,9 @@ All module interactions are routed through OmniCore's message bus and
 coordination layer for centralized control and monitoring.
 """
 
+# Import path_setup first to ensure all component paths are in sys.path
+import path_setup  # noqa: F401
+
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime

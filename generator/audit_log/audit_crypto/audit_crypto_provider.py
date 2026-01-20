@@ -15,6 +15,18 @@ from abc import ABC, abstractmethod
 from types import SimpleNamespace  # Used for fallbacks
 from typing import Any, Awaitable, Callable, Dict, Optional, Set
 
+# Allow nested event loops for compatibility with FastAPI lifespan
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+    HAS_NEST_ASYNCIO = True
+except ImportError:
+    HAS_NEST_ASYNCIO = False
+    logging.getLogger(__name__).warning(
+        "nest-asyncio not available. AsyncIO nested event loops may fail. "
+        "Install with: pip install nest-asyncio"
+    )
+
 # Core cryptography primitives
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
@@ -368,18 +380,48 @@ class SoftwareCryptoProvider(CryptoProvider):
         # --- End Delayed Import ---
 
         # --- START PATCH 2: Fix __init__ master key fetch ---
-        # Fetch master key synchronously via asyncio.run so tests observe the accessor being called.
+        # Fetch master key in a way that's compatible with running event loops
+        master_key = None
         try:
-            master_key = asyncio.run(self._fetch_master_key_safely())
-        except RuntimeError:
-            # In case we're already in a running loop (tests patch asyncio.run though), fallback:
-            loop = asyncio.new_event_loop()
-            try:
-                asyncio.set_event_loop(loop)
+            # Try to get the current event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We're in a running event loop (e.g., FastAPI lifespan)
+                # Create a task and run it synchronously using nest_asyncio if available
+                if HAS_NEST_ASYNCIO:
+                    # nest_asyncio allows us to use asyncio.run() in a running loop
+                    master_key = asyncio.run(self._fetch_master_key_safely())
+                else:
+                    # Fallback: create a new thread to run the async function
+                    import concurrent.futures
+                    import threading
+                    
+                    def run_in_thread():
+                        new_loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(new_loop)
+                        try:
+                            return new_loop.run_until_complete(self._fetch_master_key_safely())
+                        finally:
+                            new_loop.close()
+                    
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(run_in_thread)
+                        master_key = future.result(timeout=5.0)
+            else:
+                # No running loop, safe to use run_until_complete
                 master_key = loop.run_until_complete(self._fetch_master_key_safely())
-            finally:
-                asyncio.set_event_loop(None)
-                loop.close()
+        except RuntimeError as e:
+            # No event loop exists, create one
+            if "no running event loop" in str(e).lower() or "no current event loop" in str(e).lower():
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    master_key = loop.run_until_complete(self._fetch_master_key_safely())
+                finally:
+                    asyncio.set_event_loop(None)
+                    loop.close()
+            else:
+                raise
 
         if not master_key:
             self.logger.critical(
