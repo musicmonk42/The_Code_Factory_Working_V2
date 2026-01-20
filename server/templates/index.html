@@ -30,7 +30,9 @@
             <li><a href="#dashboard" class="active" data-view="dashboard">Dashboard</a></li>
             <li><a href="#jobs" data-view="jobs">Jobs</a></li>
             <li><a href="#generator" data-view="generator">Generator</a></li>
+            <li><a href="#omnicore" data-view="omnicore">OmniCore</a></li>
             <li><a href="#sfe" data-view="sfe">Self-Fixing Engineer</a></li>
+            <li><a href="#arbiter" data-view="arbiter">Arbiter & Arena</a></li>
             <li><a href="#fixes" data-view="fixes">Fixes</a></li>
             <li><a href="#system" data-view="system">System Status</a></li>
         </ul>
@@ -155,6 +157,32 @@
                 <button id="upload-files-btn" class="btn btn-primary" disabled>Upload Files</button>
             </div>
 
+            <div class="generator-agents">
+                <h3>Advanced Agent Operations</h3>
+                <div class="agent-controls">
+                    <div class="input-group">
+                        <label for="agent-job-id">Job ID:</label>
+                        <input type="text" id="agent-job-id" placeholder="Enter job ID">
+                    </div>
+                    <div class="agent-buttons">
+                        <button class="btn btn-primary" onclick="runAgentPipeline()">🚀 Full Pipeline</button>
+                        <button class="btn btn-secondary" onclick="runCodegen()">💻 Code Generation</button>
+                        <button class="btn btn-secondary" onclick="runTestgen()">🧪 Test Generation</button>
+                        <button class="btn btn-secondary" onclick="runDocgen()">📚 Documentation</button>
+                        <button class="btn btn-secondary" onclick="runDeploy()">🚢 Deployment Config</button>
+                        <button class="btn btn-secondary" onclick="runCritique()">🔍 Critique & Scan</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="llm-config">
+                <h3>LLM Configuration</h3>
+                <div class="config-controls">
+                    <button class="btn btn-secondary" onclick="showLLMConfig()">⚙️ Configure Providers</button>
+                    <button class="btn btn-secondary" onclick="getLLMStatus()">📊 Provider Status</button>
+                </div>
+            </div>
+
             <div class="generator-status" id="generator-status">
                 <h3>Recent Generation Jobs</h3>
                 <div class="status-list" id="generator-jobs-list">
@@ -163,16 +191,64 @@
             </div>
         </section>
 
+        <!-- OmniCore View -->
+        <section id="omnicore-view" class="view">
+            <h2>OmniCore Control Panel</h2>
+            
+            <div class="omnicore-section">
+                <h3>Message Bus Control</h3>
+                <div class="message-bus-controls">
+                    <button class="btn btn-primary" onclick="showPublishMessage()">📤 Publish Message</button>
+                    <button class="btn btn-secondary" onclick="showSubscribe()">📥 Subscribe to Topic</button>
+                    <button class="btn btn-secondary" onclick="listTopics()">📋 List Topics</button>
+                </div>
+            </div>
+
+            <div class="omnicore-section">
+                <h3>Plugin Management</h3>
+                <div class="plugin-controls">
+                    <button class="btn btn-primary" onclick="listPlugins()">🔌 List Plugins</button>
+                    <button class="btn btn-secondary" onclick="browseMarketplace()">🛒 Browse Marketplace</button>
+                    <button class="btn btn-secondary" onclick="showInstallPlugin()">⬇️ Install Plugin</button>
+                </div>
+                <div id="plugins-list" class="content-area"></div>
+            </div>
+
+            <div class="omnicore-section">
+                <h3>Database Operations</h3>
+                <div class="db-controls">
+                    <button class="btn btn-primary" onclick="showDatabaseQuery()">💾 Query Database</button>
+                    <button class="btn btn-secondary" onclick="exportDatabase()">📦 Export Database</button>
+                </div>
+            </div>
+
+            <div class="omnicore-section">
+                <h3>Resilience & Monitoring</h3>
+                <div class="resilience-controls">
+                    <button class="btn btn-primary" onclick="listCircuitBreakers()">⚡ Circuit Breakers</button>
+                    <button class="btn btn-secondary" onclick="showRateLimit()">⏱️ Rate Limits</button>
+                    <button class="btn btn-secondary" onclick="listDeadLetterQueue()">💀 Dead Letter Queue</button>
+                </div>
+                <div id="circuit-breakers-list" class="content-area"></div>
+            </div>
+        </section>
+
         <!-- Self-Fixing Engineer View -->
         <section id="sfe-view" class="view">
             <h2>Self-Fixing Engineer</h2>
             
             <div class="sfe-controls">
-                <h3>Code Analysis</h3>
+                <h3>Code Analysis & Bug Detection</h3>
                 <div class="input-group">
                     <label for="analyze-job-id">Job ID:</label>
                     <input type="text" id="analyze-job-id" placeholder="Enter job ID to analyze">
                     <button id="analyze-btn" class="btn btn-primary">Analyze Code</button>
+                </div>
+                <div class="analysis-buttons">
+                    <button class="btn btn-secondary" onclick="detectBugs()">🐛 Detect Bugs</button>
+                    <button class="btn btn-secondary" onclick="analyzeCodebase()">📊 Deep Codebase Analysis</button>
+                    <button class="btn btn-secondary" onclick="prioritizeBugs()">⚖️ Prioritize Bugs</button>
+                    <button class="btn btn-secondary" onclick="fixImports()">📦 Auto-Fix Imports</button>
                 </div>
             </div>
 
@@ -183,11 +259,71 @@
                 </div>
             </div>
 
+            <div class="sfe-advanced">
+                <h3>Advanced Operations</h3>
+                <div class="advanced-buttons">
+                    <button class="btn btn-secondary" onclick="showKnowledgeGraph()">🧠 Knowledge Graph Query</button>
+                    <button class="btn btn-secondary" onclick="showSandboxExec()">🏖️ Sandbox Execution</button>
+                    <button class="btn btn-secondary" onclick="checkCompliance()">✅ Compliance Check</button>
+                    <button class="btn btn-secondary" onclick="queryDLT()">🔗 DLT Audit Logs</button>
+                    <button class="btn btn-secondary" onclick="showSIEMConfig()">🔐 SIEM Configuration</button>
+                </div>
+            </div>
+
             <div class="insights-section">
                 <h3>Meta-Learning Insights</h3>
                 <button id="load-insights-btn" class="btn btn-secondary">Load Insights</button>
                 <div class="insights-content" id="insights-content">
                     <p class="no-data">Click to load insights</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Arbiter & Arena View -->
+        <section id="arbiter-view" class="view">
+            <h2>Arbiter AI & Arena Competition</h2>
+            
+            <div class="arbiter-control">
+                <h3>Arbiter Control Panel</h3>
+                <div class="arbiter-buttons">
+                    <button class="btn btn-primary" onclick="startArbiter()">▶️ Start Arbiter</button>
+                    <button class="btn btn-secondary" onclick="stopArbiter()">⏹️ Stop Arbiter</button>
+                    <button class="btn btn-secondary" onclick="configureArbiter()">⚙️ Configure Arbiter</button>
+                    <button class="btn btn-secondary" onclick="getArbiterStatus()">📊 Arbiter Status</button>
+                </div>
+            </div>
+
+            <div class="arena-section">
+                <h3>Arena Competition</h3>
+                <div class="arena-config">
+                    <div class="form-group">
+                        <label for="problem-type">Problem Type:</label>
+                        <select id="problem-type">
+                            <option value="bug_fix">Bug Fix</option>
+                            <option value="feature_implementation">Feature Implementation</option>
+                            <option value="optimization">Optimization</option>
+                            <option value="refactoring">Refactoring</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="code-path">Code Path:</label>
+                        <input type="text" id="code-path" placeholder="/path/to/code">
+                    </div>
+                    <div class="form-group">
+                        <label for="arena-rounds">Rounds:</label>
+                        <input type="number" id="arena-rounds" value="3" min="1" max="10">
+                    </div>
+                    <button class="btn btn-primary" onclick="triggerCompetition()">🏟️ Start Competition</button>
+                </div>
+                <div id="arena-results" class="content-area"></div>
+            </div>
+
+            <div class="rl-section">
+                <h3>Reinforcement Learning</h3>
+                <div class="input-group">
+                    <label for="rl-env-id">Environment ID:</label>
+                    <input type="text" id="rl-env-id" placeholder="Enter environment ID">
+                    <button class="btn btn-secondary" onclick="getRLStatus()">📊 RL Environment Status</button>
                 </div>
             </div>
         </section>
@@ -272,6 +408,134 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary modal-cancel">Cancel</button>
                 <button class="btn btn-primary" id="submit-job">Create Job</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for LLM Configuration -->
+    <div id="llm-config-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Configure LLM Provider</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="llm-provider">Provider:</label>
+                    <select id="llm-provider">
+                        <option value="openai">OpenAI</option>
+                        <option value="anthropic">Anthropic</option>
+                        <option value="local">Local Model</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="llm-model">Model Name:</label>
+                    <input type="text" id="llm-model" placeholder="gpt-4">
+                </div>
+                <div class="form-group">
+                    <label for="llm-api-key">API Key:</label>
+                    <input type="password" id="llm-api-key" placeholder="sk-...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel">Cancel</button>
+                <button class="btn btn-primary" onclick="submitLLMConfig()">Configure</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Message Publishing -->
+    <div id="publish-message-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Publish Message to Bus</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="message-topic">Topic:</label>
+                    <input type="text" id="message-topic" placeholder="generator">
+                </div>
+                <div class="form-group">
+                    <label for="message-payload">Payload (JSON):</label>
+                    <textarea id="message-payload" rows="5" placeholder='{"action": "generate", "job_id": "123"}'></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="message-priority">Priority (1-10):</label>
+                    <input type="number" id="message-priority" value="5" min="1" max="10">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel">Cancel</button>
+                <button class="btn btn-primary" onclick="publishMessage()">Publish</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Database Query -->
+    <div id="db-query-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Database Query</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="db-query">Query:</label>
+                    <textarea id="db-query" rows="6" placeholder="SELECT * FROM jobs WHERE status = 'completed'"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel">Cancel</button>
+                <button class="btn btn-primary" onclick="executeQuery()">Execute Query</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Knowledge Graph -->
+    <div id="knowledge-graph-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Knowledge Graph Query</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="kg-query">Query:</label>
+                    <input type="text" id="kg-query" placeholder="MATCH (n:Function) RETURN n">
+                </div>
+                <div class="form-group">
+                    <label for="kg-depth">Max Depth:</label>
+                    <input type="number" id="kg-depth" value="2" min="1" max="5">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel">Cancel</button>
+                <button class="btn btn-primary" onclick="queryKnowledgeGraph()">Query</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Sandbox Execution -->
+    <div id="sandbox-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Sandbox Code Execution</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="sandbox-code">Code:</label>
+                    <textarea id="sandbox-code" rows="8" placeholder="def hello():\n    return 'Hello World'"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="sandbox-timeout">Timeout (seconds):</label>
+                    <input type="number" id="sandbox-timeout" value="30" min="1" max="300">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel">Cancel</button>
+                <button class="btn btn-primary" onclick="executeSandbox()">Execute</button>
             </div>
         </div>
     </div>

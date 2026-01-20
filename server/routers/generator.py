@@ -39,6 +39,87 @@ def get_generator_service() -> GeneratorService:
     return GeneratorService(omnicore_service=omnicore)
 
 
+@router.post("/llm/configure")
+async def configure_llm_provider(
+    request: LLMConfigRequest,
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Configure LLM provider for generator.
+
+    Switches between or configures LLM providers (OpenAI, Anthropic, Google, xAI, Ollama).
+
+    **Request Body:**
+    - provider: LLM provider to configure
+    - api_key: API key (if required)
+    - model: Specific model to use
+    - config: Additional provider configuration
+
+    **Returns:**
+    - Configuration confirmation
+    """
+    result = await generator_service.configure_llm_provider(
+        provider=request.provider.value,
+        api_key=request.api_key,
+        model=request.model,
+        config=request.config,
+    )
+
+    logger.info(f"LLM provider configured: {request.provider.value}")
+    return result
+
+
+@router.get("/llm/status")
+async def get_llm_status(
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Get status of configured LLM providers.
+
+    Returns information about available and configured LLM providers.
+
+    **Returns:**
+    - LLM provider status including active provider and configurations
+    """
+    status = await generator_service.get_llm_provider_status()
+    return status
+
+
+@router.get("/audit/logs")
+async def query_audit_logs(
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    event_type: Optional[str] = None,
+    job_id: Optional[str] = None,
+    limit: int = 100,
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Query generator audit logs.
+
+    Retrieves audit trail from the generator module.
+
+    **Query Parameters:**
+    - start_time: Start timestamp (ISO 8601)
+    - end_time: End timestamp (ISO 8601)
+    - event_type: Filter by event type
+    - job_id: Filter by job ID
+    - limit: Maximum number of results (default: 100, max: 1000)
+
+    **Returns:**
+    - Audit log entries
+    """
+    result = await generator_service.query_audit_logs(
+        start_time=start_time,
+        end_time=end_time,
+        event_type=event_type,
+        job_id=job_id,
+        limit=min(limit, 1000),
+    )
+
+    return result
+
+
 @router.post("/{job_id}/upload", response_model=SuccessResponse)
 async def upload_files(
     job_id: str,
@@ -580,82 +661,3 @@ async def run_full_pipeline(
     return result
 
 
-@router.post("/llm/configure")
-async def configure_llm_provider(
-    request: LLMConfigRequest,
-    generator_service: GeneratorService = Depends(get_generator_service),
-):
-    """
-    Configure LLM provider for generator.
-
-    Switches between or configures LLM providers (OpenAI, Anthropic, Google, xAI, Ollama).
-
-    **Request Body:**
-    - provider: LLM provider to configure
-    - api_key: API key (if required)
-    - model: Specific model to use
-    - config: Additional provider configuration
-
-    **Returns:**
-    - Configuration confirmation
-    """
-    result = await generator_service.configure_llm_provider(
-        provider=request.provider.value,
-        api_key=request.api_key,
-        model=request.model,
-        config=request.config,
-    )
-
-    logger.info(f"LLM provider configured: {request.provider.value}")
-    return result
-
-
-@router.get("/llm/status")
-async def get_llm_status(
-    generator_service: GeneratorService = Depends(get_generator_service),
-):
-    """
-    Get status of configured LLM providers.
-
-    Returns information about available and configured LLM providers.
-
-    **Returns:**
-    - LLM provider status including active provider and configurations
-    """
-    status = await generator_service.get_llm_provider_status()
-    return status
-
-
-@router.get("/audit/logs")
-async def query_audit_logs(
-    start_time: Optional[str] = None,
-    end_time: Optional[str] = None,
-    event_type: Optional[str] = None,
-    job_id: Optional[str] = None,
-    limit: int = 100,
-    generator_service: GeneratorService = Depends(get_generator_service),
-):
-    """
-    Query generator audit logs.
-
-    Retrieves audit trail from the generator module.
-
-    **Query Parameters:**
-    - start_time: Start timestamp (ISO 8601)
-    - end_time: End timestamp (ISO 8601)
-    - event_type: Filter by event type
-    - job_id: Filter by job ID
-    - limit: Maximum number of results (default: 100, max: 1000)
-
-    **Returns:**
-    - Audit log entries
-    """
-    result = await generator_service.query_audit_logs(
-        start_time=start_time,
-        end_time=end_time,
-        event_type=event_type,
-        job_id=job_id,
-        limit=min(limit, 1000),
-    )
-
-    return result
