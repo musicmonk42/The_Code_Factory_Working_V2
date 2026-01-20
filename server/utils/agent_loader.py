@@ -381,9 +381,24 @@ class AgentLoader:
                 self._loading_error = str(e)
                 self._loading_completed = True  # Mark as completed even on error
         
-        # Create the background task
-        self._loading_task = asyncio.create_task(load_agents_async())
-        logger.info("Background agent loading task created")
+        # Try to create the background task
+        # This will work if we're already in an async context (e.g., during app lifespan)
+        try:
+            self._loading_task = asyncio.create_task(load_agents_async())
+            logger.info("Background agent loading task created")
+        except RuntimeError:
+            # Not in an async context, need to get or create event loop
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # No event loop running, create one for this task
+                logger.info("No event loop found, creating task for future execution")
+                # Store the coroutine for later execution
+                self._loading_task = load_agents_async()
+            else:
+                # Event loop exists, create task
+                self._loading_task = loop.create_task(load_agents_async())
+                logger.info("Background agent loading task created using existing loop")
     
     def is_loading(self) -> bool:
         """
