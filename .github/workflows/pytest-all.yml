@@ -118,24 +118,11 @@ jobs:
           }
           # Verify arbiter is importable with timeout protection and detailed error reporting
           echo "=== Attempting to import arbiter ==="
-          timeout 10s python -c "
-import sys
-try:
-    from self_fixing_engineer import arbiter
-    if arbiter is None:
-        print('ERROR: arbiter module is None')
-        sys.exit(1)
-    arbiter_file = getattr(arbiter, '__file__', 'unknown')
-    print(f'✓ arbiter imported successfully from {arbiter_file}')
-    print(f'✓ arbiter module contents: {dir(arbiter)[:10]}...')  # Show first 10 attributes
-except Exception as e:
-    print(f'ERROR importing arbiter: {e}')
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-" || {
+          timeout 10s python -c 'import sys; from self_fixing_engineer import arbiter; arbiter_file = getattr(arbiter, "__file__", "unknown"); print(f"✓ arbiter imported from {arbiter_file}"); print(f"✓ Contents: {dir(arbiter)[:10]}...")' || {
             echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
             echo "This may indicate heavy import-time initialization or missing dependencies."
+            echo "Attempting detailed diagnostics..."
+            python -c 'import sys, traceback; exec("try:\n    from self_fixing_engineer import arbiter\n    if arbiter is None:\n        print(\"ERROR: arbiter is None\")\n        sys.exit(1)\nexcept Exception as e:\n    print(f\"ERROR: {e}\")\n    traceback.print_exc()\n    sys.exit(1)")'
             exit 1
           }
           # Install omnicore_engine package
