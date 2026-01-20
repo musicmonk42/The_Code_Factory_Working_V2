@@ -1278,6 +1278,7 @@ def register(kind: PlugInKind, name: str, version: str, author: str):
 
 # Lazy singleton instance - DO NOT instantiate at module import time
 _registry_instance: Optional[PluginRegistry] = None
+_registry_lock = threading.Lock()
 
 
 def get_registry() -> PluginRegistry:
@@ -1286,12 +1287,18 @@ def get_registry() -> PluginRegistry:
     Lazy initialization ensures the registry is only created when first accessed,
     avoiding heavy import-time initialization.
     
+    This function is thread-safe and ensures only one instance is created.
+    
     Returns:
         The singleton PluginRegistry instance.
     """
     global _registry_instance
     if _registry_instance is None:
-        _registry_instance = PluginRegistry()
+        # Use a module-level lock for thread-safe lazy initialization
+        with _registry_lock:
+            # Double-check pattern to avoid race conditions
+            if _registry_instance is None:
+                _registry_instance = PluginRegistry()
     return _registry_instance
 
 
