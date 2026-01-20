@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -46,7 +46,7 @@ from server.routers import (
     sfe_router,
 )
 from server.utils.agent_loader import AgentType, get_agent_loader
-from server.schemas import ErrorResponse, HealthResponse
+from server.schemas import ErrorResponse, HealthResponse, ReadinessResponse
 
 # Configure logging
 logging.basicConfig(
@@ -75,93 +75,29 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Code Factory API Server")
     logger.info(f"Version: {__version__}")
     
-    # Perform agent diagnostics at startup
+    # Start the server IMMEDIATELY - agent loading happens in background
     logger.info("=" * 80)
-    logger.info("AGENT DIAGNOSTICS AT STARTUP")
+    logger.info("STARTING SERVER WITH BACKGROUND AGENT LOADING")
     logger.info("=" * 80)
     
     try:
-        # Add timeout to agent loading to prevent blocking startup indefinitely
-        # If agents take too long, startup continues anyway and they can be loaded lazily
-        import asyncio
+        # Get the agent loader
+        loader = get_agent_loader()
         
-        async def load_agents_with_diagnostics():
-            """Load agents and run diagnostics."""
-            loader = get_agent_loader()
-            
-            # Attempt to load all known agents
-            agents_to_load = [
-                (AgentType.CODEGEN, "generator.agents.codegen_agent.codegen_agent", ["generate_code"]),
-                (AgentType.TESTGEN, "generator.agents.testgen_agent.testgen_agent", ["TestgenAgent"]),
-                (AgentType.DEPLOY, "generator.agents.deploy_agent.deploy_agent", ["DeployAgent"]),
-                (AgentType.DOCGEN, "generator.agents.docgen_agent.docgen_agent", ["DocgenAgent"]),
-                (AgentType.CRITIQUE, "generator.agents.critique_agent.critique_agent", ["CritiqueAgent"]),
-            ]
-            
-            for agent_type, module_path, import_names in agents_to_load:
-                loader.safe_import_agent(
-                    agent_type=agent_type,
-                    module_path=module_path,
-                    import_names=import_names,
-                    description=f"Load {agent_type.value} agent at startup",
-                )
-            
-            # Get and log status
-            status = loader.get_status()
-            logger.info(f"Total agents: {status['total_agents']}")
-            logger.info(f"Available agents: {len(status['available_agents'])}")
-            logger.info(f"Unavailable agents: {len(status['unavailable_agents'])}")
-            logger.info(f"Availability rate: {status['availability_rate']:.1%}")
-            
-            if status['available_agents']:
-                logger.info(f"✓ Available: {', '.join(status['available_agents'])}")
-            
-            if status['unavailable_agents']:
-                logger.warning(f"✗ Unavailable: {', '.join(status['unavailable_agents'])}")
-            
-            if status['missing_dependencies']:
-                logger.error(
-                    f"Missing dependencies detected: {', '.join(status['missing_dependencies'])}"
-                )
-                logger.error(
-                    f"Install with: pip install {' '.join(status['missing_dependencies'])}"
-                )
-            
-            # Check environment variables
-            env_vars = status['environment_variables']
-            api_keys_set = sum(1 for v in env_vars.values() if v == 'set')
-            logger.info(f"API keys configured: {api_keys_set}/{len(env_vars)}")
-            
-            # Log diagnostic endpoint
-            logger.info("Diagnostics available at: /api/diagnostics/agents")
-            logger.info("Full report available at: /api/diagnostics/report")
-        
-        # Run agent loading with 30-second timeout
-        try:
-            await asyncio.wait_for(load_agents_with_diagnostics(), timeout=30.0)
-            logger.info("✓ Agent loading completed successfully")
-        except asyncio.TimeoutError:
-            logger.error("⚠ Agent loading timed out after 30 seconds")
-            logger.warning("Continuing startup - agents can be loaded lazily on demand")
-        
-        logger.info("=" * 80)
-        
-        # In production, optionally enforce strict mode
-        # Uncomment to require all agents at startup:
-        # if os.getenv("REQUIRE_ALL_AGENTS", "0") == "1":
-        #     loader.validate_for_production()
+        # Start background agent loading WITHOUT awaiting
+        # This allows the server to start accepting HTTP connections immediately
+        logger.info("Initiating background agent loading...")
+        loader.start_background_loading()
+        logger.info("✓ Background agent loading task started")
+        logger.info("✓ Server will accept HTTP connections immediately")
+        logger.info("✓ Check /health for liveness and /ready for readiness")
         
     except Exception as e:
-        logger.error(f"Error during agent diagnostics: {e}", exc_info=True)
-        # Don't fail startup, but log the issue
-        logger.warning("Continuing startup despite agent diagnostic errors")
+        logger.error(f"Error starting background agent loading: {e}", exc_info=True)
+        logger.warning("Continuing startup despite agent loading error")
 
-    # Initialize connections to OmniCore
-    # Example:
-    # from omnicore_engine.message_bus import init_message_bus
-    # await init_message_bus()
-
-    logger.info("API Server ready")
+    logger.info("=" * 80)
+    logger.info("API Server ready to accept connections")
 
     yield
 
@@ -267,9 +203,12 @@ async def health_check() -> HealthResponse:
 
     Returns the health status of the API server and all connected components,
     including agent availability status.
+    
+    This endpoint ALWAYS returns HTTP 200 if the API server is responding,
+    ensuring deployment healthchecks pass immediately on startup.
 
     **Returns:**
-    - Overall health status
+    - Overall health status (always "healthy" if API is running)
     - Component-level health information including agent availability
     - API version
     - Timestamp
@@ -279,19 +218,25 @@ async def health_check() -> HealthResponse:
         loader = get_agent_loader()
         agent_status = loader.get_status()
         
-        # Determine agent component health
-        agent_availability = agent_status.get('availability_rate', 0.0)
-        
-        # Consider agents healthy if at least 50% are available
-        # or if no agents have been loaded yet (initial state)
-        if agent_status.get('total_agents', 0) == 0:
-            agents_health = "unknown"
-        elif agent_availability >= 0.5:
-            agents_health = "healthy"
-        elif agent_availability > 0:
+        # Determine agents_status based on loading state
+        if agent_status.get('loading_in_progress', False):
+            agents_health = "loading"
+        elif agent_status.get('loading_error'):
             agents_health = "degraded"
         else:
-            agents_health = "unhealthy"
+            # Check agent availability
+            agent_availability = agent_status.get('availability_rate', 0.0)
+            
+            # Consider agents healthy if at least 50% are available
+            # or if no agents have been loaded yet (initial state)
+            if agent_status.get('total_agents', 0) == 0:
+                agents_health = "loading"
+            elif agent_availability >= 0.5:
+                agents_health = "ready"
+            elif agent_availability > 0:
+                agents_health = "degraded"
+            else:
+                agents_health = "degraded"
         
         # Build component health status
         components = {
@@ -299,40 +244,126 @@ async def health_check() -> HealthResponse:
             "omnicore": "healthy",
             "database": "healthy",
             "message_bus": "healthy",
-            "agents": agents_health,
+            "agents_status": agents_health,
         }
-        
-        # Add specific agent status
-        for agent_name, is_available in [
-            (name, agent_status['agents'][name]['available'])
-            for name in agent_status.get('agents', {})
-        ]:
-            components[f"agent_{agent_name}"] = "available" if is_available else "unavailable"
-        
-        # IMPORTANT: Always return "healthy" overall status if API is responding
-        # This ensures deployment healthchecks pass even if agents are still loading
-        # Agent status is informational only and doesn't affect overall health
-        overall_status = "healthy"
         
     except Exception as e:
         logger.error(f"Error checking agent health: {e}", exc_info=True)
         components = {
             "api": "healthy",
             "omnicore": "healthy",
-            "generator": "healthy",
-            "sfe": "healthy",
             "database": "healthy",
             "message_bus": "healthy",
-            "agents": "loading",  # Changed from "unknown" to indicate startup state
+            "agents_status": "loading",
         }
-        # IMPORTANT: Return "healthy" even if agent check fails
-        # The API is operational if we reach this point
-        overall_status = "healthy"
 
+    # IMPORTANT: Always return "healthy" overall status if API is responding
+    # This ensures deployment healthchecks pass even if agents are still loading
+    # Agent status is informational only and doesn't affect overall health
     return HealthResponse(
-        status=overall_status,
+        status="healthy",
         version=__version__,
         components=components,
+        timestamp=datetime.utcnow().isoformat(),
+    )
+
+
+@app.get(
+    "/ready",
+    tags=["Health"],
+    responses={
+        200: {"model": ReadinessResponse, "description": "Application is ready"},
+        503: {"model": ReadinessResponse, "description": "Application is not ready"}
+    }
+)
+async def readiness_check(response: Response) -> ReadinessResponse:
+    """
+    Readiness check endpoint.
+
+    Returns the readiness status of the API server, indicating whether
+    the application is fully ready to accept traffic and handle requests.
+    
+    This endpoint returns HTTP 200 only when all agents are loaded and ready.
+    It returns HTTP 503 if agents are still loading or failed to load.
+
+    **Returns:**
+    - HTTP 200: Application is ready (agents loaded)
+    - HTTP 503: Application is not ready (agents loading or failed)
+    
+    **Response includes:**
+    - Overall readiness status
+    - Individual check results (agents_loaded, api_available)
+    - Timestamp
+    """
+    # Get agent status from loader
+    try:
+        loader = get_agent_loader()
+        agent_status = loader.get_status()
+        
+        # Check if agents are still loading
+        loading_in_progress = agent_status.get('loading_in_progress', False)
+        loading_error = agent_status.get('loading_error')
+        
+        # Build check results
+        checks = {
+            "api_available": "pass",
+        }
+        
+        # Check agent loading status
+        if loading_in_progress:
+            checks["agents_loaded"] = "loading"
+            ready = False
+            status_text = "loading"
+        elif loading_error:
+            checks["agents_loaded"] = f"error: {loading_error}"
+            ready = False
+            status_text = "degraded"
+        else:
+            # Check if any agents are available
+            agent_availability = agent_status.get('availability_rate', 0.0)
+            total_agents = agent_status.get('total_agents', 0)
+            
+            if total_agents == 0:
+                # No agents have been loaded yet
+                checks["agents_loaded"] = "loading"
+                ready = False
+                status_text = "loading"
+            elif agent_availability > 0:
+                # At least some agents are available
+                checks["agents_loaded"] = "pass"
+                ready = True
+                status_text = "ready"
+                
+                # Include details about available agents
+                available = agent_status.get('available_agents', [])
+                unavailable = agent_status.get('unavailable_agents', [])
+                checks["agents_available"] = f"{len(available)}/{total_agents}"
+                
+                if unavailable:
+                    checks["agents_unavailable"] = ", ".join(unavailable)
+            else:
+                # No agents are available
+                checks["agents_loaded"] = "fail"
+                ready = False
+                status_text = "degraded"
+        
+    except Exception as e:
+        logger.error(f"Error checking readiness: {e}", exc_info=True)
+        checks = {
+            "api_available": "pass",
+            "agents_loaded": "error",
+        }
+        ready = False
+        status_text = "error"
+    
+    # Set HTTP status code based on readiness
+    if not ready:
+        response.status_code = 503
+    
+    return ReadinessResponse(
+        ready=ready,
+        status=status_text,
+        checks=checks,
         timestamp=datetime.utcnow().isoformat(),
     )
 

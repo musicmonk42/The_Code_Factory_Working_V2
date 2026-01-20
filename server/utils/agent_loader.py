@@ -118,6 +118,12 @@ class AgentLoader:
             "COHERE_API_KEY",
         }
         
+        # Background loading support
+        self._loading_task: Optional[Any] = None
+        self._loading_started: bool = False
+        self._loading_completed: bool = False
+        self._loading_error: Optional[str] = None
+        
         self._initialized = True
         logger.info("AgentLoader initialized")
     
@@ -322,6 +328,95 @@ class AgentLoader:
         
         return issues
     
+    def start_background_loading(self, agents_to_load: Optional[List[Tuple[AgentType, str, List[str]]]] = None):
+        """
+        Start background loading of agents without blocking.
+        
+        This method initiates agent loading in a background task, allowing the
+        HTTP server to start accepting connections immediately.
+        
+        **IMPORTANT**: This method must be called from an async context (e.g., during
+        FastAPI application lifespan startup). It will raise RuntimeError if called
+        outside an async context.
+        
+        Args:
+            agents_to_load: List of (agent_type, module_path, import_names) tuples.
+                          If None, loads a default set of agents.
+                          
+        Raises:
+            RuntimeError: If called outside an async context
+        """
+        if self._loading_started:
+            logger.warning("Background agent loading already started")
+            return
+        
+        self._loading_started = True
+        
+        # Default agents to load
+        if agents_to_load is None:
+            agents_to_load = [
+                (AgentType.CODEGEN, "generator.agents.codegen_agent.codegen_agent", ["generate_code"]),
+                (AgentType.TESTGEN, "generator.agents.testgen_agent.testgen_agent", ["TestgenAgent"]),
+                (AgentType.DEPLOY, "generator.agents.deploy_agent.deploy_agent", ["DeployAgent"]),
+                (AgentType.DOCGEN, "generator.agents.docgen_agent.docgen_agent", ["DocgenAgent"]),
+                (AgentType.CRITIQUE, "generator.agents.critique_agent.critique_agent", ["CritiqueAgent"]),
+            ]
+        
+        import asyncio
+        
+        async def load_agents_async():
+            """Load agents asynchronously."""
+            logger.info("Starting background agent loading")
+            try:
+                for agent_type, module_path, import_names in agents_to_load:
+                    self.safe_import_agent(
+                        agent_type=agent_type,
+                        module_path=module_path,
+                        import_names=import_names,
+                        description=f"Background load {agent_type.value} agent",
+                    )
+                
+                self._loading_completed = True
+                logger.info("✓ Background agent loading completed successfully")
+                
+                # Log summary
+                status = self.get_status()
+                logger.info(f"Loaded {len(status['available_agents'])}/{status['total_agents']} agents")
+                
+            except Exception as e:
+                logger.error(f"Error during background agent loading: {e}", exc_info=True)
+                self._loading_error = str(e)
+                self._loading_completed = True  # Mark as completed even on error
+        
+        # Create the background task - must be in async context
+        try:
+            self._loading_task = asyncio.create_task(load_agents_async())
+            logger.info("Background agent loading task created")
+        except RuntimeError as e:
+            # Not in an async context - this is an error
+            logger.error("start_background_loading must be called from an async context")
+            self._loading_started = False  # Reset since we failed
+            raise RuntimeError(
+                "start_background_loading must be called from an async context "
+                "(e.g., during FastAPI application lifespan)"
+            ) from e
+    
+    def is_loading(self) -> bool:
+        """
+        Check if agents are currently being loaded in the background.
+        
+        Note: This method checks two boolean flags (_loading_started and _loading_completed)
+        without synchronization. While there is a theoretical race condition if these flags
+        are modified during the check, this is acceptable for our use case because:
+        1. The flags are only set once (started -> True, completed -> True)
+        2. The worst case is a brief inconsistency during state transition
+        3. This is only used for informational/status purposes, not critical logic
+        
+        Returns:
+            True if background loading is in progress, False otherwise
+        """
+        return self._loading_started and not self._loading_completed
+    
     def is_agent_available(self, agent_type: str) -> bool:
         """
         Check if an agent is available for use.
@@ -377,6 +472,9 @@ class AgentLoader:
             "startup_time": self._startup_time,
             "strict_mode": self._strict_mode,
             "debug_mode": self._debug_mode,
+            "loading_in_progress": self.is_loading(),
+            "loading_completed": self._loading_completed,
+            "loading_error": self._loading_error,
             "total_agents": len(self._agent_status),
             "available_agents": available_agents,
             "unavailable_agents": unavailable_agents,

@@ -42,6 +42,15 @@ class HealthResponse(BaseModel):
     timestamp: str = Field(..., description="Health check timestamp (ISO 8601)")
 
 
+class ReadinessResponse(BaseModel):
+    """Readiness check response."""
+
+    ready: bool = Field(..., description="Whether the application is ready to accept traffic")
+    status: str = Field(..., description="Overall readiness status")
+    checks: Dict[str, str] = Field(..., description="Individual readiness check results")
+    timestamp: str = Field(..., description="Readiness check timestamp (ISO 8601)")
+
+
 class PaginationParams(BaseModel):
     """Pagination parameters for list endpoints."""
 
