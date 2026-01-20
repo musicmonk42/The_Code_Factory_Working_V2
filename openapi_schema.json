@@ -1,0 +1,5131 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Code Factory Platform API",
+    "description": "\n    **The Code Factory Platform** - Enterprise-grade HTTP API for automated \n    software development and maintenance.\n\n    This API provides comprehensive access to all platform capabilities:\n    \n    ## Core Features\n    \n    * **Job Management**: Create, monitor, and manage generation jobs\n    * **File Upload**: Upload README files and other inputs for code generation\n    * **Progress Tracking**: Real-time per-stage progress monitoring\n    * **Error Detection**: Automated error detection via Self-Fixing Engineer\n    * **Fix Management**: Propose, review, apply, and rollback fixes\n    * **Real-time Events**: WebSocket and SSE streaming for live updates\n    * **Module Integration**: Unified access to Generator, OmniCore, and SFE\n    \n    ## Architecture\n    \n    All operations are centrally coordinated through **OmniCore Engine**, which\n    manages:\n    - Inter-module communication via message bus\n    - Job routing and workflow orchestration\n    - Plugin management and extensibility\n    - Audit logging and metrics collection\n    \n    ## Getting Started\n    \n    1. Create a job: `POST /api/jobs/`\n    2. Upload files: `POST /api/generator/{job_id}/upload`\n    3. Monitor progress: `GET /api/jobs/{job_id}/progress`\n    4. View errors: `GET /api/sfe/{job_id}/errors`\n    5. Apply fixes: `POST /api/sfe/fixes/{fix_id}/apply`\n    \n    ## Real-time Updates\n    \n    Subscribe to real-time events:\n    - WebSocket: `ws://host/api/events/ws`\n    - SSE: `GET /api/events/sse?job_id={job_id}`\n    ",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health Check",
+        "description": "Health check endpoint.\n\nReturns the health status of the API server and all connected components.\n\n**Returns:**\n- Overall health status\n- Component-level health information\n- API version\n- Timestamp",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Root"
+        ],
+        "summary": "Root",
+        "description": "API root endpoint / Web UI.\n\nServes the A.S.E web interface or provides API information in JSON format\nbased on the Accept header.\n\n**Returns:**\n- HTML: A.S.E Web Interface (if Accept: text/html)\n- JSON: API information and links (default)",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/": {
+      "post": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Create Job",
+        "description": "Create a new job.\n\nCreates a new job entry in the system. Files can be uploaded separately\nvia the upload endpoint.\n\n**Request Body:**\n- description: Optional job description\n- metadata: Additional job metadata\n\n**Returns:**\n- Job object with unique ID and initial status",
+        "operationId": "create_job_api_jobs__post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "List Jobs",
+        "description": "List all jobs with optional filtering and pagination.\n\n**Query Parameters:**\n- status: Filter jobs by status (pending/running/completed/failed/cancelled)\n- page: Page number (1-indexed)\n- per_page: Items per page (max 100)\n\n**Returns:**\n- Paginated list of jobs with total count",
+        "operationId": "list_jobs_api_jobs__get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/JobStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            },
+            "description": "Filter by status"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Page number",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "Page number"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Items per page",
+              "default": 20,
+              "title": "Per Page"
+            },
+            "description": "Items per page"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Get Job",
+        "description": "Get detailed information about a specific job.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Returns:**\n- Complete job information\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_job_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Cancel Job",
+        "description": "Cancel a running job.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Returns:**\n- Success confirmation\n\n**Errors:**\n- 404: Job not found\n- 400: Job cannot be cancelled (already completed/failed)",
+        "operationId": "cancel_job_api_jobs__job_id__delete",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/progress": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Get Job Progress",
+        "description": "Get detailed progress information for a job across all pipeline stages.\n\nThis endpoint provides per-stage progress tracking including:\n- Generator clarification and generation stages\n- OmniCore processing stage\n- SFE analysis and fixing stages\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Returns:**\n- Detailed progress with per-stage breakdown\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_job_progress_api_jobs__job_id__progress_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobProgress"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/upload": {
+      "post": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Upload Files",
+        "description": "Upload files for a generator job.\n\nAccepts multiple files including:\n- README.md or other markdown files with requirements\n- Test files (*.test.js, *_test.py, *.spec.ts, etc.)\n- Configuration files\n- Documentation files\n\nTriggers job creation in the generator module via OmniCore.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Request Body:**\n- files: List of files to upload (multipart/form-data)\n\n**Returns:**\n- Success confirmation with uploaded file details\n\n**Errors:**\n- 404: Job not found\n- 400: No files provided",
+        "operationId": "upload_files_api_generator__job_id__upload_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_files_api_generator__job_id__upload_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/status": {
+      "get": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Get Generator Status",
+        "description": "Get generator-specific status for a job.\n\nReturns detailed status from the generator module including:\n- Current generation stage\n- Progress percentage\n- Recent log messages\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Returns:**\n- Generator status information\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_generator_status_api_generator__job_id__status_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratorStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/logs": {
+      "get": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Get Generator Logs",
+        "description": "Get logs from the generator module for a specific job.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Query Parameters:**\n- limit: Maximum number of log entries (default: 100)\n\n**Returns:**\n- List of log entries\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_generator_logs_api_generator__job_id__logs_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/clarify": {
+      "post": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Clarify Requirements",
+        "description": "Trigger the clarifier to analyze and clarify requirements.\n\nInitiates the clarification process through OmniCore, which routes\nthe request to the generator's clarifier module. The clarifier uses\nLLM-based analysis and interactive user feedback to resolve ambiguities\nin requirements.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Returns:**\n- Clarification initiation status and detected ambiguities\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "clarify_requirements_api_generator__job_id__clarify_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/clarification/feedback": {
+      "get": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Get Clarification Feedback",
+        "description": "Get feedback from the clarifier's interactive process.\n\nRetrieves the current status of clarification, including questions\nasked to users, responses received, and overall progress. This enables\nmonitoring the clarification feedback loop through OmniCore.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Query Parameters:**\n- interaction_id: Optional specific interaction ID to query\n\n**Returns:**\n- Clarification feedback status and interaction history\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_clarification_feedback_api_generator__job_id__clarification_feedback_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "interaction_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Interaction Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/clarification/respond": {
+      "post": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Submit Clarification Response",
+        "description": "Submit a response to a clarification question.\n\nAllows users to provide answers to clarification questions through\nthe API. The response is routed through OmniCore to the clarifier\nmodule for processing.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Request Body:**\n- question_id: ID of the question being answered\n- response: User's response to the question\n\n**Returns:**\n- Response submission confirmation\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "submit_clarification_response_api_generator__job_id__clarification_respond_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "question_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Question Id"
+            }
+          },
+          {
+            "name": "response",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Response"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/codegen": {
+      "post": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Run Codegen",
+        "description": "Run the code generation agent directly.\n\nTriggers the codegen agent to generate source code from requirements\nvia OmniCore message bus routing.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Request Body:**\n- requirements: Natural language requirements\n- language: Target programming language\n- framework: Optional framework specification\n- include_tests: Whether to generate tests alongside code\n- metadata: Additional metadata\n\n**Returns:**\n- Code generation results with output paths\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "run_codegen_api_generator__job_id__codegen_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodegenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/testgen": {
+      "post": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Run Testgen",
+        "description": "Run the test generation agent.\n\nTriggers the testgen agent to create comprehensive tests for generated code.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Request Body:**\n- code_path: Path to code files to test\n- test_type: Type of tests (unit, integration, e2e)\n- coverage_target: Target code coverage percentage\n- metadata: Additional metadata\n\n**Returns:**\n- Test generation results\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "run_testgen_api_generator__job_id__testgen_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestgenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/deploy": {
+      "post": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Run Deploy",
+        "description": "Run the deployment configuration generation agent.\n\nGenerates Docker, Kubernetes, or cloud platform deployment configurations.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Request Body:**\n- code_path: Path to application code\n- platform: Deployment platform (docker, kubernetes, aws)\n- include_ci_cd: Whether to include CI/CD configuration\n- metadata: Additional metadata\n\n**Returns:**\n- Deployment configuration results\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "run_deploy_api_generator__job_id__deploy_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeployRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/docgen": {
+      "post": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Run Docgen",
+        "description": "Run the documentation generation agent.\n\nGenerates API documentation, user guides, or developer documentation.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Request Body:**\n- code_path: Path to code to document\n- doc_type: Documentation type (api, user, developer)\n- format: Output format (markdown, html, pdf)\n- metadata: Additional metadata\n\n**Returns:**\n- Documentation generation results\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "run_docgen_api_generator__job_id__docgen_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocgenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/critique": {
+      "post": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Run Critique",
+        "description": "Run the critique agent for security and quality scanning.\n\nPerforms security scanning, code quality analysis, and performance checks.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Request Body:**\n- code_path: Path to code to analyze\n- scan_types: Types of scans (security, quality, performance)\n- auto_fix: Whether to automatically apply fixes\n- metadata: Additional metadata\n\n**Returns:**\n- Critique analysis results\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "run_critique_api_generator__job_id__critique_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CritiqueRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/{job_id}/pipeline": {
+      "post": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Run Full Pipeline",
+        "description": "Run the full generation pipeline.\n\nOrchestrates the complete generation workflow: clarify \u2192 codegen \u2192 testgen \u2192 deploy \u2192 docgen \u2192 critique.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Request Body:**\n- readme_content: README/requirements content\n- language: Target programming language\n- include_tests: Whether to generate tests\n- include_deployment: Whether to generate deployment configs\n- include_docs: Whether to generate documentation\n- run_critique: Whether to run security/quality checks\n- metadata: Additional metadata\n\n**Returns:**\n- Full pipeline execution results\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "run_full_pipeline_api_generator__job_id__pipeline_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/llm/configure": {
+      "post": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Configure Llm Provider",
+        "description": "Configure LLM provider for generator.\n\nSwitches between or configures LLM providers (OpenAI, Anthropic, Google, xAI, Ollama).\n\n**Request Body:**\n- provider: LLM provider to configure\n- api_key: API key (if required)\n- model: Specific model to use\n- config: Additional provider configuration\n\n**Returns:**\n- Configuration confirmation",
+        "operationId": "configure_llm_provider_api_generator_llm_configure_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LLMConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/llm/status": {
+      "get": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Get Llm Status",
+        "description": "Get status of configured LLM providers.\n\nReturns information about available and configured LLM providers.\n\n**Returns:**\n- LLM provider status including active provider and configurations",
+        "operationId": "get_llm_status_api_generator_llm_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generator/audit/logs": {
+      "get": {
+        "tags": [
+          "Generator"
+        ],
+        "summary": "Query Audit Logs",
+        "description": "Query generator audit logs.\n\nRetrieves audit trail from the generator module.\n\n**Query Parameters:**\n- start_time: Start timestamp (ISO 8601)\n- end_time: End timestamp (ISO 8601)\n- event_type: Filter by event type\n- job_id: Filter by job ID\n- limit: Maximum number of results (default: 100, max: 1000)\n\n**Returns:**\n- Audit log entries",
+        "operationId": "query_audit_logs_api_generator_audit_logs_get",
+        "parameters": [
+          {
+            "name": "start_time",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Time"
+            }
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Time"
+            }
+          },
+          {
+            "name": "event_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/plugins": {
+      "get": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Get Plugins",
+        "description": "Get status of registered plugins.\n\nReturns information about all plugins registered with the OmniCore Engine,\nincluding their active status and capabilities.\n\n**Returns:**\n- Plugin registry information",
+        "operationId": "get_plugins_api_omnicore_plugins_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/{job_id}/metrics": {
+      "get": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Get Job Metrics",
+        "description": "Get OmniCore metrics for a specific job.\n\nReturns detailed metrics collected by the OmniCore Engine for a job,\nincluding processing time, resource usage, and performance indicators.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Returns:**\n- Job metrics from OmniCore\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_job_metrics_api_omnicore__job_id__metrics_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/{job_id}/audit": {
+      "get": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Get Audit Trail",
+        "description": "Get audit trail for a job.\n\nReturns the tamper-evident audit trail from the OmniCore Engine,\nshowing all actions and state changes for the job.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Query Parameters:**\n- limit: Maximum number of audit entries (default: 100)\n\n**Returns:**\n- List of audit trail entries\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_audit_trail_api_omnicore__job_id__audit_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/system-health": {
+      "get": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Get System Health",
+        "description": "Get detailed system health from OmniCore perspective.\n\nReturns detailed health status of all OmniCore components including:\n- Message bus\n- Database\n- Plugin registry\n- Module connectivity\n\nThis endpoint provides more granular health information than the main /health endpoint.\n\n**Returns:**\n- Detailed system health information",
+        "operationId": "get_system_health_api_omnicore_system_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/{job_id}/workflow/{workflow_name}": {
+      "post": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Trigger Workflow",
+        "description": "Trigger a specific workflow for a job.\n\nInitiates a named workflow in the OmniCore Engine for the specified job.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n- workflow_name: Name of the workflow to trigger\n\n**Returns:**\n- Workflow execution status\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "trigger_workflow_api_omnicore__job_id__workflow__workflow_name__post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "workflow_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workflow Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/message-bus/publish": {
+      "post": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Publish Message",
+        "description": "Publish message to message bus.\n\nAllows direct publishing of messages to the OmniCore message bus for inter-module communication.\n\n**Request Body:**\n- topic: Message topic/channel\n- payload: Message payload\n- priority: Message priority (1-10)\n- ttl: Time-to-live in seconds\n\n**Returns:**\n- Publication confirmation with message ID",
+        "operationId": "publish_message_api_omnicore_message_bus_publish_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageBusPublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/message-bus/subscribe": {
+      "post": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Subscribe To Topic",
+        "description": "Subscribe to message bus topic.\n\nCreates a subscription to receive messages from a specific topic.\n\n**Request Body:**\n- topic: Topic to subscribe to\n- callback_url: Optional webhook URL for message delivery\n- filters: Optional message filters\n\n**Returns:**\n- Subscription confirmation with subscription ID",
+        "operationId": "subscribe_to_topic_api_omnicore_message_bus_subscribe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageBusSubscribeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/message-bus/topics": {
+      "get": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "List Topics",
+        "description": "List all message bus topics.\n\nReturns available topics and their statistics (subscriber count, message count).\n\n**Returns:**\n- Topics list and statistics",
+        "operationId": "list_topics_api_omnicore_message_bus_topics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/plugins/{plugin_id}/reload": {
+      "post": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Reload Plugin",
+        "description": "Hot-reload a plugin.\n\nDynamically reloads a plugin without restarting the server.\n\n**Path Parameters:**\n- plugin_id: Plugin identifier to reload\n\n**Request Body:**\n- force: Force reload even if errors\n\n**Returns:**\n- Reload result",
+        "operationId": "reload_plugin_api_omnicore_plugins__plugin_id__reload_post",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plugin Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginReloadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/plugins/marketplace": {
+      "get": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Browse Marketplace",
+        "description": "Browse plugin marketplace.\n\nLists available plugins from the marketplace with filtering and search.\n\n**Query Parameters:**\n- category: Filter by plugin category\n- search: Search term\n- sort: Sort by (popularity, date, name)\n- limit: Maximum results (default: 20, max: 100)\n\n**Returns:**\n- Plugin listings",
+        "operationId": "browse_marketplace_api_omnicore_plugins_marketplace_get",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "popularity",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/plugins/install": {
+      "post": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Install Plugin",
+        "description": "Install a plugin.\n\nInstalls a plugin from the marketplace or custom source.\n\n**Request Body:**\n- plugin_name: Plugin name\n- version: Specific version (latest if omitted)\n- source: Installation source\n- config: Plugin configuration\n\n**Returns:**\n- Installation result",
+        "operationId": "install_plugin_api_omnicore_plugins_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginInstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/database/query": {
+      "post": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Query Database",
+        "description": "Query OmniCore database.\n\nAllows querying of OmniCore's internal state database.\n\n**Request Body:**\n- query_type: Query type (jobs, audit, metrics)\n- filters: Query filters\n- limit: Maximum results\n\n**Returns:**\n- Query results",
+        "operationId": "query_database_api_omnicore_database_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/database/export": {
+      "post": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Export Database",
+        "description": "Export database state.\n\nExports OmniCore database to file for backup or analysis.\n\n**Request Body:**\n- export_type: Export type (full, incremental)\n- format: Export format (json, csv, sql)\n- include_audit: Include audit logs\n\n**Returns:**\n- Export result with download path",
+        "operationId": "export_database_api_omnicore_database_export_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/circuit-breakers": {
+      "get": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Get Circuit Breakers",
+        "description": "Get status of all circuit breakers.\n\nReturns the status of all registered circuit breakers.\n\n**Returns:**\n- Circuit breaker statuses",
+        "operationId": "get_circuit_breakers_api_omnicore_circuit_breakers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/circuit-breakers/{name}/reset": {
+      "post": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Reset Circuit Breaker",
+        "description": "Reset a circuit breaker.\n\nResets a circuit breaker to closed state.\n\n**Path Parameters:**\n- name: Circuit breaker name\n\n**Returns:**\n- Reset result",
+        "operationId": "reset_circuit_breaker_api_omnicore_circuit_breakers__name__reset_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/rate-limits/configure": {
+      "post": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Configure Rate Limit",
+        "description": "Configure rate limits.\n\nSets rate limiting configuration for endpoints or services.\n\n**Request Body:**\n- endpoint: Endpoint or service to limit\n- requests_per_second: Requests per second\n- burst_size: Burst capacity\n\n**Returns:**\n- Configuration result",
+        "operationId": "configure_rate_limit_api_omnicore_rate_limits_configure_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RateLimitConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/dead-letter-queue": {
+      "get": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Query Dead Letter Queue",
+        "description": "Query dead letter queue.\n\nRetrieves failed messages from the dead letter queue.\n\n**Query Parameters:**\n- start_time: Start timestamp (ISO 8601)\n- end_time: End timestamp (ISO 8601)\n- topic: Filter by topic\n- limit: Maximum results\n\n**Returns:**\n- Failed messages",
+        "operationId": "query_dead_letter_queue_api_omnicore_dead_letter_queue_get",
+        "parameters": [
+          {
+            "name": "start_time",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Time"
+            }
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Time"
+            }
+          },
+          {
+            "name": "topic",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Topic"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/omnicore/dead-letter-queue/{message_id}/retry": {
+      "post": {
+        "tags": [
+          "OmniCore Engine"
+        ],
+        "summary": "Retry Message",
+        "description": "Retry failed message.\n\nRetries a message from the dead letter queue.\n\n**Path Parameters:**\n- message_id: Message ID to retry\n\n**Query Parameters:**\n- force: Force retry even if max attempts reached\n\n**Returns:**\n- Retry result",
+        "operationId": "retry_message_api_omnicore_dead_letter_queue__message_id__retry_post",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Force"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/{job_id}/analyze": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Analyze Code",
+        "description": "Analyze code for potential issues.\n\nRuns the SFE codebase analyzer to detect errors, code smells,\nand potential improvements.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Returns:**\n- Analysis results with detected issues\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "analyze_code_api_sfe__job_id__analyze_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/{job_id}/errors": {
+      "get": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Get Errors",
+        "description": "Get all detected errors for a job.\n\nReturns errors detected by the SFE bug manager during analysis.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Returns:**\n- List of detected errors with details\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_errors_api_sfe__job_id__errors_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/errors/{error_id}/propose-fix": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Propose Fix",
+        "description": "Propose a fix for a detected error.\n\nUses Arbiter AI to analyze the error and propose an automated fix.\n\n**Path Parameters:**\n- error_id: Error identifier\n\n**Returns:**\n- Fix proposal with proposed changes\n\n**Errors:**\n- 404: Error not found",
+        "operationId": "propose_fix_api_sfe_errors__error_id__propose_fix_post",
+        "parameters": [
+          {
+            "name": "error_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Error Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixProposal"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/fixes/{fix_id}": {
+      "get": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Get Fix",
+        "description": "Get details of a specific fix.\n\n**Path Parameters:**\n- fix_id: Fix identifier\n\n**Returns:**\n- Complete fix information\n\n**Errors:**\n- 404: Fix not found",
+        "operationId": "get_fix_api_sfe_fixes__fix_id__get",
+        "parameters": [
+          {
+            "name": "fix_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Fix Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fix"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/fixes/{fix_id}/review": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Review Fix",
+        "description": "Review a proposed fix (approve or reject).\n\n**Path Parameters:**\n- fix_id: Fix identifier\n\n**Request Body:**\n- approved: Whether the fix is approved\n- comments: Optional review comments\n\n**Returns:**\n- Updated fix information\n\n**Errors:**\n- 404: Fix not found",
+        "operationId": "review_fix_api_sfe_fixes__fix_id__review_post",
+        "parameters": [
+          {
+            "name": "fix_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Fix Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FixReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fix"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/fixes/{fix_id}/apply": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Apply Fix",
+        "description": "Apply an approved fix.\n\nApplies the fix to the codebase, optionally in dry-run mode.\n\n**Path Parameters:**\n- fix_id: Fix identifier\n\n**Request Body:**\n- force: Force application even if conditions aren't met\n- dry_run: Simulate application without making changes\n\n**Returns:**\n- Application result\n\n**Errors:**\n- 404: Fix not found\n- 400: Fix not approved or already applied",
+        "operationId": "apply_fix_api_sfe_fixes__fix_id__apply_post",
+        "parameters": [
+          {
+            "name": "fix_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Fix Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FixApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/fixes/{fix_id}/rollback": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Rollback Fix",
+        "description": "Rollback an applied fix.\n\nReverts changes made by a previously applied fix.\n\n**Path Parameters:**\n- fix_id: Fix identifier\n\n**Request Body:**\n- reason: Optional reason for rollback\n\n**Returns:**\n- Rollback result\n\n**Errors:**\n- 404: Fix not found\n- 400: Fix not applied",
+        "operationId": "rollback_fix_api_sfe_fixes__fix_id__rollback_post",
+        "parameters": [
+          {
+            "name": "fix_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Fix Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/{job_id}/metrics": {
+      "get": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Get Sfe Metrics",
+        "description": "Get SFE metrics for a job.\n\nReturns metrics about errors detected, fixes proposed and applied.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Returns:**\n- SFE metrics\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_sfe_metrics_api_sfe__job_id__metrics_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/insights": {
+      "get": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Get Learning Insights",
+        "description": "Get meta-learning insights from SFE.\n\nReturns insights from the meta-learning orchestrator about\ncommon patterns, success rates, and learned behaviors.\n\n**Query Parameters:**\n- job_id: Optional job ID to filter insights (if omitted, returns global insights)\n\n**Returns:**\n- Learning insights (global or job-specific)\n\n**Note:**\nThis endpoint does not require job_id validation since it can return\nglobal insights across all jobs or filtered insights for a specific job.",
+        "operationId": "get_learning_insights_api_sfe_insights_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional job ID to filter insights",
+              "title": "Job Id"
+            },
+            "description": "Optional job ID to filter insights"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/{job_id}/status": {
+      "get": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Get Sfe Status",
+        "description": "Get detailed real-time status of SFE activities for a job.\n\nProvides comprehensive monitoring of what SFE is doing, including:\n- Current operations and progress\n- Recent activity history\n- Resource usage\n- Operation queue status\n\nRoutes the request through OmniCore to the self_fixing_engineer module\nto get accurate real-time information about SFE's current state.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Returns:**\n- Detailed SFE status information\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_sfe_status_api_sfe__job_id__status_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/{job_id}/logs": {
+      "get": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Get Sfe Logs",
+        "description": "Get real-time logs from SFE for a specific job.\n\nRetrieves logs from the self_fixing_engineer module via OmniCore,\nenabling real-time monitoring and debugging of SFE operations.\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Query Parameters:**\n- limit: Maximum number of log entries (default: 100, max: 1000)\n- level: Optional log level filter (ERROR, WARNING, INFO, DEBUG)\n\n**Returns:**\n- List of SFE log entries with timestamps and details\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "get_sfe_logs_api_sfe__job_id__logs_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Maximum number of log entries",
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Maximum number of log entries"
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by log level (ERROR, WARNING, INFO, DEBUG)",
+              "title": "Level"
+            },
+            "description": "Filter by log level (ERROR, WARNING, INFO, DEBUG)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/{job_id}/interact": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Interact With Sfe",
+        "description": "Send interactive commands to SFE for a job.\n\nAllows direct interaction with the self_fixing_engineer module through\nOmniCore's message bus. Supported commands include:\n- pause: Pause current SFE operations\n- resume: Resume paused operations\n- analyze_file: Request analysis of a specific file\n- reanalyze: Trigger complete reanalysis\n- adjust_priority: Adjust fix priority thresholds\n\n**Path Parameters:**\n- job_id: Unique job identifier\n\n**Request Body:**\n- command: Command to send to SFE\n- params: Command-specific parameters\n\n**Returns:**\n- Command execution result with status\n\n**Errors:**\n- 404: Job not found\n- 400: Invalid command or parameters",
+        "operationId": "interact_with_sfe_api_sfe__job_id__interact_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "command",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Command"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "default": {},
+                "title": "Params"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/arbiter/control": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Control Arbiter",
+        "description": "Control Arbiter AI.\n\nStart, stop, pause, resume, or configure the Arbiter AI system.\n\n**Request Body:**\n- command: Command to execute (start, stop, pause, resume, configure, status)\n- job_id: Optional job ID\n- config: Optional configuration\n\n**Returns:**\n- Arbiter control result",
+        "operationId": "control_arbiter_api_sfe_arbiter_control_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArbiterControlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/arena/compete": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Trigger Arena Competition",
+        "description": "Trigger arena agent competition.\n\nInitiates a competition between AI agents to solve a problem, with the best solution selected.\n\n**Request Body:**\n- problem_type: Type of problem (bug_fix, optimization, refactor)\n- code_path: Path to code for competition\n- agents: Optional specific agents to compete\n- rounds: Number of competition rounds\n- evaluation_criteria: Evaluation criteria\n\n**Returns:**\n- Competition results with winner",
+        "operationId": "trigger_arena_competition_api_sfe_arena_compete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArenaCompetitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/bugs/detect": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Detect Bugs",
+        "description": "Detect bugs in code.\n\nPerforms comprehensive bug detection using the Bug Manager.\n\n**Request Body:**\n- code_path: Path to code to analyze\n- scan_depth: Scan depth (quick, standard, deep)\n- include_potential: Include potential issues\n\n**Returns:**\n- Bug detection results",
+        "operationId": "detect_bugs_api_sfe_bugs_detect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BugDetectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/bugs/{bug_id}/analyze": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Analyze Bug",
+        "description": "Analyze a specific bug.\n\nPerforms detailed analysis including root cause and fix suggestions.\n\n**Path Parameters:**\n- bug_id: Bug identifier\n\n**Request Body:**\n- include_root_cause: Perform root cause analysis\n- suggest_fixes: Generate fix suggestions\n\n**Returns:**\n- Bug analysis results",
+        "operationId": "analyze_bug_api_sfe_bugs__bug_id__analyze_post",
+        "parameters": [
+          {
+            "name": "bug_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bug Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BugAnalysisRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/{job_id}/bugs/prioritize": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Prioritize Bugs",
+        "description": "Prioritize bugs for a job.\n\nOrders bugs by importance based on severity, impact, and effort.\n\n**Path Parameters:**\n- job_id: Job identifier\n\n**Request Body:**\n- criteria: Prioritization criteria\n\n**Returns:**\n- Prioritized bug list\n\n**Errors:**\n- 404: Job not found",
+        "operationId": "prioritize_bugs_api_sfe__job_id__bugs_prioritize_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BugPrioritizationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/codebase/analyze": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Deep Analyze Codebase",
+        "description": "Perform deep codebase analysis.\n\nComprehensive analysis of code structure, dependencies, complexity, and quality.\n\n**Request Body:**\n- code_path: Path to codebase\n- analysis_types: Types of analysis (structure, dependencies, complexity, quality)\n- generate_report: Generate detailed report\n\n**Returns:**\n- Analysis results",
+        "operationId": "deep_analyze_codebase_api_sfe_codebase_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodebaseAnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/knowledge-graph/query": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Query Knowledge Graph",
+        "description": "Query knowledge graph.\n\nQueries the SFE knowledge graph for entities, relationships, or patterns.\n\n**Request Body:**\n- query_type: Query type (entity, relationship, pattern)\n- query: Query string or pattern\n- depth: Traversal depth\n- limit: Maximum results\n\n**Returns:**\n- Query results",
+        "operationId": "query_knowledge_graph_api_sfe_knowledge_graph_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeGraphQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/knowledge-graph/update": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Update Knowledge Graph",
+        "description": "Update knowledge graph.\n\nAdds, updates, or deletes entities in the knowledge graph.\n\n**Request Body:**\n- operation: Operation (add_node, add_edge, update, delete)\n- entity_type: Entity type\n- entity_data: Entity data\n\n**Returns:**\n- Update result",
+        "operationId": "update_knowledge_graph_api_sfe_knowledge_graph_update_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeGraphUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/sandbox/execute": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Execute In Sandbox",
+        "description": "Execute code in sandbox.\n\nRuns code in a secure sandboxed environment with resource limits.\n\n**Request Body:**\n- code: Code to execute\n- language: Programming language\n- timeout: Execution timeout (seconds)\n- resource_limits: Resource limits (memory, cpu)\n\n**Returns:**\n- Execution results",
+        "operationId": "execute_in_sandbox_api_sfe_sandbox_execute_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SandboxExecutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/compliance/check": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Check Compliance",
+        "description": "Check compliance standards.\n\nValidates code against compliance standards (SOC2, HIPAA, GDPR, etc.).\n\n**Request Body:**\n- code_path: Path to code to check\n- standards: Compliance standards to check\n- generate_report: Generate compliance report\n\n**Returns:**\n- Compliance check results",
+        "operationId": "check_compliance_api_sfe_compliance_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComplianceCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/dlt/audit": {
+      "get": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Query Dlt Audit",
+        "description": "Query DLT/blockchain audit logs.\n\nRetrieves audit transactions from the distributed ledger.\n\n**Query Parameters:**\n- start_block: Starting block number\n- end_block: Ending block number\n- transaction_type: Filter by transaction type\n- limit: Maximum results\n\n**Returns:**\n- Audit transactions",
+        "operationId": "query_dlt_audit_api_sfe_dlt_audit_get",
+        "parameters": [
+          {
+            "name": "start_block",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Block"
+            }
+          },
+          {
+            "name": "end_block",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Block"
+            }
+          },
+          {
+            "name": "transaction_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Transaction Type"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/siem/configure": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Configure Siem",
+        "description": "Configure SIEM integration.\n\nSets up integration with SIEM systems (Splunk, QRadar, Sentinel).\n\n**Request Body:**\n- siem_type: SIEM type (splunk, qradar, sentinel)\n- endpoint: SIEM endpoint URL\n- api_key: SIEM API key\n- export_config: Export configuration\n\n**Returns:**\n- Configuration result",
+        "operationId": "configure_siem_api_sfe_siem_configure_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SIEMConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/rl/environment/{environment_id}/status": {
+      "get": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Get Rl Environment Status",
+        "description": "Get RL environment status.\n\nReturns status of reinforcement learning environment.\n\n**Path Parameters:**\n- environment_id: Environment identifier\n\n**Returns:**\n- Environment status and metrics",
+        "operationId": "get_rl_environment_status_api_sfe_rl_environment__environment_id__status_get",
+        "parameters": [
+          {
+            "name": "environment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Environment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sfe/imports/fix": {
+      "post": {
+        "tags": [
+          "Self-Fixing Engineer"
+        ],
+        "summary": "Fix Imports",
+        "description": "Fix import issues.\n\nAutomatically fixes import errors and style issues.\n\n**Request Body:**\n- code_path: Path to code with import issues\n- auto_install: Auto-install missing packages\n- fix_style: Fix import style issues\n\n**Returns:**\n- Import fix results",
+        "operationId": "fix_imports_api_sfe_imports_fix_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportFixRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fixes/": {
+      "get": {
+        "tags": [
+          "Fixes"
+        ],
+        "summary": "List Fixes",
+        "description": "List all fixes with optional filtering.\n\nQuery fixes across all modules through OmniCore's centralized tracking.\n\n**Query Parameters:**\n- job_id: Filter fixes by job ID\n- status: Filter fixes by status\n\n**Returns:**\n- List of fixes matching the criteria",
+        "operationId": "list_fixes_api_fixes__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by job ID",
+              "title": "Job Id"
+            },
+            "description": "Filter by job ID"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/FixStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            },
+            "description": "Filter by status"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Fix"
+                  },
+                  "title": "Response List Fixes Api Fixes  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fixes/{fix_id}": {
+      "get": {
+        "tags": [
+          "Fixes"
+        ],
+        "summary": "Get Fix Detail",
+        "description": "Get detailed information about a specific fix.\n\n**Path Parameters:**\n- fix_id: Unique fix identifier\n\n**Returns:**\n- Complete fix information\n\n**Errors:**\n- 404: Fix not found",
+        "operationId": "get_fix_detail_api_fixes__fix_id__get",
+        "parameters": [
+          {
+            "name": "fix_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Fix Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fix"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sse": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Sse Endpoint",
+        "description": "Server-Sent Events (SSE) endpoint for real-time event streaming.\n\nStreams events from OmniCore's message bus. Optionally filter by job_id.\n\n**Query Parameters:**\n- job_id: Optional job ID to filter events\n\n**Returns:**\n- SSE stream of events\n\n**Usage:**\n```javascript\nconst eventSource = new EventSource('/api/events/sse?job_id=123');\neventSource.addEventListener('job_updated', (event) => {\n    const data = JSON.parse(event.data);\n    console.log('Job update:', data);\n});\n```",
+        "operationId": "sse_endpoint_api_events_sse_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ArbiterCommand": {
+        "type": "string",
+        "enum": [
+          "start",
+          "stop",
+          "pause",
+          "resume",
+          "configure",
+          "status"
+        ],
+        "title": "ArbiterCommand",
+        "description": "Arbiter AI commands."
+      },
+      "ArbiterControlRequest": {
+        "properties": {
+          "command": {
+            "$ref": "#/components/schemas/ArbiterCommand",
+            "description": "Command to execute"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id",
+            "description": "Job ID (if applicable)"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config",
+            "description": "Configuration for command"
+          }
+        },
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "title": "ArbiterControlRequest",
+        "description": "Request to control Arbiter AI."
+      },
+      "ArenaCompetitionRequest": {
+        "properties": {
+          "problem_type": {
+            "type": "string",
+            "title": "Problem Type",
+            "description": "Type of problem (bug_fix, optimization, refactor)"
+          },
+          "code_path": {
+            "type": "string",
+            "title": "Code Path",
+            "description": "Path to code for competition"
+          },
+          "agents": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agents",
+            "description": "Specific agents to compete"
+          },
+          "rounds": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Rounds",
+            "description": "Number of competition rounds",
+            "default": 3
+          },
+          "evaluation_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evaluation Criteria",
+            "description": "Evaluation criteria",
+            "default": [
+              "correctness",
+              "performance",
+              "maintainability"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "problem_type",
+          "code_path"
+        ],
+        "title": "ArenaCompetitionRequest",
+        "description": "Request to trigger arena competition."
+      },
+      "Body_upload_files_api_generator__job_id__upload_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Files to upload (e.g., README.md, test files)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_upload_files_api_generator__job_id__upload_post"
+      },
+      "BugAnalysisRequest": {
+        "properties": {
+          "bug_id": {
+            "type": "string",
+            "title": "Bug Id",
+            "description": "Bug identifier"
+          },
+          "include_root_cause": {
+            "type": "boolean",
+            "title": "Include Root Cause",
+            "description": "Perform root cause analysis",
+            "default": true
+          },
+          "suggest_fixes": {
+            "type": "boolean",
+            "title": "Suggest Fixes",
+            "description": "Generate fix suggestions",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "bug_id"
+        ],
+        "title": "BugAnalysisRequest",
+        "description": "Request for bug analysis."
+      },
+      "BugDetectionRequest": {
+        "properties": {
+          "code_path": {
+            "type": "string",
+            "title": "Code Path",
+            "description": "Path to code to analyze"
+          },
+          "scan_depth": {
+            "type": "string",
+            "title": "Scan Depth",
+            "description": "Scan depth (quick, standard, deep)",
+            "default": "standard"
+          },
+          "include_potential": {
+            "type": "boolean",
+            "title": "Include Potential",
+            "description": "Include potential issues",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "code_path"
+        ],
+        "title": "BugDetectionRequest",
+        "description": "Request for bug detection."
+      },
+      "BugPrioritizationRequest": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "description": "Job identifier"
+          },
+          "criteria": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Criteria",
+            "description": "Prioritization criteria (severity, impact, effort)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "BugPrioritizationRequest",
+        "description": "Request to prioritize bugs."
+      },
+      "CodebaseAnalysisRequest": {
+        "properties": {
+          "code_path": {
+            "type": "string",
+            "title": "Code Path",
+            "description": "Path to codebase"
+          },
+          "analysis_type": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Analysis Type",
+            "description": "Types of analysis to perform",
+            "default": [
+              "structure",
+              "dependencies",
+              "complexity",
+              "quality"
+            ]
+          },
+          "generate_report": {
+            "type": "boolean",
+            "title": "Generate Report",
+            "description": "Generate detailed report",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "code_path"
+        ],
+        "title": "CodebaseAnalysisRequest",
+        "description": "Request for deep codebase analysis."
+      },
+      "CodegenRequest": {
+        "properties": {
+          "requirements": {
+            "type": "string",
+            "title": "Requirements",
+            "description": "Natural language requirements"
+          },
+          "language": {
+            "$ref": "#/components/schemas/GenerationLanguage",
+            "description": "Target language",
+            "default": "python"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework",
+            "description": "Optional framework (e.g., FastAPI, React)"
+          },
+          "include_tests": {
+            "type": "boolean",
+            "title": "Include Tests",
+            "description": "Generate tests alongside code",
+            "default": true
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata",
+            "description": "Additional metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "requirements"
+        ],
+        "title": "CodegenRequest",
+        "description": "Request for code generation."
+      },
+      "ComplianceCheckRequest": {
+        "properties": {
+          "code_path": {
+            "type": "string",
+            "title": "Code Path",
+            "description": "Path to code to check"
+          },
+          "standards": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Standards",
+            "description": "Compliance standards to check",
+            "default": [
+              "SOC2",
+              "HIPAA",
+              "GDPR"
+            ]
+          },
+          "generate_report": {
+            "type": "boolean",
+            "title": "Generate Report",
+            "description": "Generate compliance report",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "code_path"
+        ],
+        "title": "ComplianceCheckRequest",
+        "description": "Request for compliance checking."
+      },
+      "CritiqueRequest": {
+        "properties": {
+          "code_path": {
+            "type": "string",
+            "title": "Code Path",
+            "description": "Path to code to analyze"
+          },
+          "scan_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scan Types",
+            "description": "Types of scans to run",
+            "default": [
+              "security",
+              "quality",
+              "performance"
+            ]
+          },
+          "auto_fix": {
+            "type": "boolean",
+            "title": "Auto Fix",
+            "description": "Automatically apply fixes",
+            "default": false
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata",
+            "description": "Additional metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code_path"
+        ],
+        "title": "CritiqueRequest",
+        "description": "Request for security/code critique."
+      },
+      "DatabaseExportRequest": {
+        "properties": {
+          "export_type": {
+            "type": "string",
+            "title": "Export Type",
+            "description": "Export type (full, incremental)",
+            "default": "full"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format",
+            "description": "Export format (json, csv, sql)",
+            "default": "json"
+          },
+          "include_audit": {
+            "type": "boolean",
+            "title": "Include Audit",
+            "description": "Include audit logs",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "DatabaseExportRequest",
+        "description": "Request to export database state."
+      },
+      "DatabaseQueryRequest": {
+        "properties": {
+          "query_type": {
+            "type": "string",
+            "title": "Query Type",
+            "description": "Query type (jobs, audit, metrics)"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters",
+            "description": "Query filters"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Max results",
+            "default": 100
+          }
+        },
+        "type": "object",
+        "required": [
+          "query_type"
+        ],
+        "title": "DatabaseQueryRequest",
+        "description": "Request to query OmniCore database."
+      },
+      "DeployRequest": {
+        "properties": {
+          "code_path": {
+            "type": "string",
+            "title": "Code Path",
+            "description": "Path to application code"
+          },
+          "platform": {
+            "type": "string",
+            "title": "Platform",
+            "description": "Deployment platform (docker, kubernetes, aws)",
+            "default": "docker"
+          },
+          "include_ci_cd": {
+            "type": "boolean",
+            "title": "Include Ci Cd",
+            "description": "Include CI/CD configuration",
+            "default": true
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata",
+            "description": "Additional metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code_path"
+        ],
+        "title": "DeployRequest",
+        "description": "Request for deployment configuration generation."
+      },
+      "DocgenRequest": {
+        "properties": {
+          "code_path": {
+            "type": "string",
+            "title": "Code Path",
+            "description": "Path to code to document"
+          },
+          "doc_type": {
+            "type": "string",
+            "title": "Doc Type",
+            "description": "Documentation type (api, user, developer)",
+            "default": "api"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format",
+            "description": "Output format (markdown, html, pdf)",
+            "default": "markdown"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata",
+            "description": "Additional metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code_path"
+        ],
+        "title": "DocgenRequest",
+        "description": "Request for documentation generation."
+      },
+      "Fix": {
+        "properties": {
+          "fix_id": {
+            "type": "string",
+            "title": "Fix Id",
+            "description": "Unique fix identifier"
+          },
+          "error_id": {
+            "type": "string",
+            "title": "Error Id",
+            "description": "Associated error identifier"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id",
+            "description": "Associated job ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FixStatus",
+            "description": "Current fix status"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Fix description"
+          },
+          "proposed_changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Proposed Changes",
+            "description": "List of proposed changes"
+          },
+          "applied_changes": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Changes",
+            "description": "Changes that were actually applied"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Fix confidence score (0-1)",
+            "default": 0.0
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning",
+            "description": "Reasoning behind the fix"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Fix creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Last update timestamp"
+          },
+          "applied_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied At",
+            "description": "Application timestamp"
+          },
+          "rolled_back_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rolled Back At",
+            "description": "Rollback timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fix_id",
+          "error_id",
+          "status",
+          "description",
+          "proposed_changes",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Fix",
+        "description": "Complete fix information including status and history."
+      },
+      "FixApplyRequest": {
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "description": "Force application even if conditions aren't met",
+            "default": false
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "description": "Simulate application without making changes",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "FixApplyRequest",
+        "description": "Request to apply a fix."
+      },
+      "FixProposal": {
+        "properties": {
+          "fix_id": {
+            "type": "string",
+            "title": "Fix Id",
+            "description": "Unique fix identifier"
+          },
+          "error_id": {
+            "type": "string",
+            "title": "Error Id",
+            "description": "Associated error identifier"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id",
+            "description": "Associated job ID"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Fix description"
+          },
+          "proposed_changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Proposed Changes",
+            "description": "List of proposed changes"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Fix confidence score (0-1)",
+            "default": 0.0
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning",
+            "description": "Reasoning behind the fix"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Proposal creation timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fix_id",
+          "error_id",
+          "description",
+          "proposed_changes",
+          "created_at"
+        ],
+        "title": "FixProposal",
+        "description": "A proposed fix for an error."
+      },
+      "FixReviewRequest": {
+        "properties": {
+          "approved": {
+            "type": "boolean",
+            "title": "Approved",
+            "description": "Whether the fix is approved"
+          },
+          "comments": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comments",
+            "description": "Review comments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "approved"
+        ],
+        "title": "FixReviewRequest",
+        "description": "Request to review a fix."
+      },
+      "FixStatus": {
+        "type": "string",
+        "enum": [
+          "proposed",
+          "under_review",
+          "approved",
+          "rejected",
+          "applied",
+          "rolled_back",
+          "failed"
+        ],
+        "title": "FixStatus",
+        "description": "Status of a fix."
+      },
+      "GenerationLanguage": {
+        "type": "string",
+        "enum": [
+          "python",
+          "javascript",
+          "typescript",
+          "go",
+          "java",
+          "rust"
+        ],
+        "title": "GenerationLanguage",
+        "description": "Supported programming languages."
+      },
+      "GeneratorStatus": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "description": "Unique job identifier"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Current generation stage"
+          },
+          "progress_percent": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Progress Percent",
+            "description": "Progress percentage",
+            "default": 0.0
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Current status"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Status message"
+          },
+          "artifacts_generated": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Artifacts Generated",
+            "description": "List of generated artifacts"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Last update timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "stage",
+          "status",
+          "updated_at"
+        ],
+        "title": "GeneratorStatus",
+        "description": "Generator-specific status information."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Health status (healthy/unhealthy)"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "API version"
+          },
+          "components": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Components",
+            "description": "Component health statuses"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp",
+            "description": "Health check timestamp (ISO 8601)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "components",
+          "timestamp"
+        ],
+        "title": "HealthResponse",
+        "description": "Health check response."
+      },
+      "ImportFixRequest": {
+        "properties": {
+          "code_path": {
+            "type": "string",
+            "title": "Code Path",
+            "description": "Path to code with import issues"
+          },
+          "auto_install": {
+            "type": "boolean",
+            "title": "Auto Install",
+            "description": "Auto-install missing packages",
+            "default": false
+          },
+          "fix_style": {
+            "type": "boolean",
+            "title": "Fix Style",
+            "description": "Fix import style issues",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "code_path"
+        ],
+        "title": "ImportFixRequest",
+        "description": "Request to fix imports."
+      },
+      "Job": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique job identifier"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus",
+            "description": "Job execution status"
+          },
+          "current_stage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobStage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current active stage"
+          },
+          "input_files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Input Files",
+            "description": "List of input file names"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Job creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Last update timestamp"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "Job completion timestamp"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "description": "Additional job metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Job",
+        "description": "Complete job information."
+      },
+      "JobCreateRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Optional job description"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "description": "Additional job metadata"
+          }
+        },
+        "type": "object",
+        "title": "JobCreateRequest",
+        "description": "Request to create a new job."
+      },
+      "JobListResponse": {
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            },
+            "type": "array",
+            "title": "Jobs",
+            "description": "List of jobs"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of jobs"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Current page number"
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page",
+            "description": "Items per page"
+          },
+          "total_pages": {
+            "type": "integer",
+            "title": "Total Pages",
+            "description": "Total number of pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jobs",
+          "total",
+          "page",
+          "per_page",
+          "total_pages"
+        ],
+        "title": "JobListResponse",
+        "description": "Response for listing jobs."
+      },
+      "JobProgress": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "description": "Unique job identifier"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus",
+            "description": "Overall job status"
+          },
+          "current_stage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobStage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current active stage"
+          },
+          "overall_progress": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Overall Progress",
+            "description": "Overall progress percentage",
+            "default": 0.0
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageProgress"
+            },
+            "type": "array",
+            "title": "Stages",
+            "description": "Progress for each stage"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Job creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Last update timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobProgress",
+        "description": "Overall job progress with per-stage details."
+      },
+      "JobStage": {
+        "type": "string",
+        "enum": [
+          "upload",
+          "generator_clarification",
+          "generator_generation",
+          "omnicore_processing",
+          "sfe_analysis",
+          "sfe_fixing",
+          "completed"
+        ],
+        "title": "JobStage",
+        "description": "Pipeline stages for a job."
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "JobStatus",
+        "description": "Job execution status."
+      },
+      "KnowledgeGraphQuery": {
+        "properties": {
+          "query_type": {
+            "type": "string",
+            "title": "Query Type",
+            "description": "Query type (entity, relationship, pattern)"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "Query string or pattern"
+          },
+          "depth": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Depth",
+            "description": "Traversal depth",
+            "default": 1
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Max results",
+            "default": 100
+          }
+        },
+        "type": "object",
+        "required": [
+          "query_type",
+          "query"
+        ],
+        "title": "KnowledgeGraphQuery",
+        "description": "Query for knowledge graph."
+      },
+      "KnowledgeGraphUpdate": {
+        "properties": {
+          "operation": {
+            "type": "string",
+            "title": "Operation",
+            "description": "Operation (add_node, add_edge, update, delete)"
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type",
+            "description": "Entity type"
+          },
+          "entity_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Entity Data",
+            "description": "Entity data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operation",
+          "entity_type",
+          "entity_data"
+        ],
+        "title": "KnowledgeGraphUpdate",
+        "description": "Update to knowledge graph."
+      },
+      "LLMConfigRequest": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/LLMProvider",
+            "description": "LLM provider to configure"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key",
+            "description": "API key (if required)"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "Specific model to use"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config",
+            "description": "Additional provider config"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "LLMConfigRequest",
+        "description": "Request to configure LLM provider."
+      },
+      "LLMProvider": {
+        "type": "string",
+        "enum": [
+          "openai",
+          "anthropic",
+          "google",
+          "xai",
+          "ollama"
+        ],
+        "title": "LLMProvider",
+        "description": "Supported LLM providers."
+      },
+      "LogEntry": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "Log timestamp"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level",
+            "description": "Log level (INFO, WARNING, ERROR, etc.)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Log message"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "Log source/module"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "level",
+          "message"
+        ],
+        "title": "LogEntry",
+        "description": "Single log entry."
+      },
+      "LogsResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "description": "Job identifier"
+          },
+          "logs": {
+            "items": {
+              "$ref": "#/components/schemas/LogEntry"
+            },
+            "type": "array",
+            "title": "Logs",
+            "description": "List of log entries"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "description": "Number of log entries returned"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "logs",
+          "count"
+        ],
+        "title": "LogsResponse",
+        "description": "Response for logs endpoint."
+      },
+      "MessageBusPublishRequest": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "title": "Topic",
+            "description": "Message topic/channel"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload",
+            "description": "Message payload"
+          },
+          "priority": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Priority",
+            "description": "Message priority (1-10)",
+            "default": 5
+          },
+          "ttl": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl",
+            "description": "Time-to-live in seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "topic",
+          "payload"
+        ],
+        "title": "MessageBusPublishRequest",
+        "description": "Request to publish message to bus."
+      },
+      "MessageBusSubscribeRequest": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "title": "Topic",
+            "description": "Topic to subscribe to"
+          },
+          "callback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Url",
+            "description": "Optional webhook URL"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters",
+            "description": "Message filters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "topic"
+        ],
+        "title": "MessageBusSubscribeRequest",
+        "description": "Request to subscribe to message bus topic."
+      },
+      "PipelineRequest": {
+        "properties": {
+          "readme_content": {
+            "type": "string",
+            "title": "Readme Content",
+            "description": "README/requirements content"
+          },
+          "language": {
+            "$ref": "#/components/schemas/GenerationLanguage",
+            "description": "Target language",
+            "default": "python"
+          },
+          "include_tests": {
+            "type": "boolean",
+            "title": "Include Tests",
+            "description": "Generate tests",
+            "default": true
+          },
+          "include_deployment": {
+            "type": "boolean",
+            "title": "Include Deployment",
+            "description": "Generate deployment configs",
+            "default": true
+          },
+          "include_docs": {
+            "type": "boolean",
+            "title": "Include Docs",
+            "description": "Generate documentation",
+            "default": true
+          },
+          "run_critique": {
+            "type": "boolean",
+            "title": "Run Critique",
+            "description": "Run security/quality checks",
+            "default": true
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata",
+            "description": "Additional metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "readme_content"
+        ],
+        "title": "PipelineRequest",
+        "description": "Request for full generation pipeline."
+      },
+      "PluginInstallRequest": {
+        "properties": {
+          "plugin_name": {
+            "type": "string",
+            "title": "Plugin Name",
+            "description": "Plugin name"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "Specific version (latest if omitted)"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Installation source",
+            "default": "marketplace"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config",
+            "description": "Plugin configuration"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plugin_name"
+        ],
+        "title": "PluginInstallRequest",
+        "description": "Request to install a plugin."
+      },
+      "PluginReloadRequest": {
+        "properties": {
+          "plugin_id": {
+            "type": "string",
+            "title": "Plugin Id",
+            "description": "Plugin identifier to reload"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "description": "Force reload even if errors",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "plugin_id"
+        ],
+        "title": "PluginReloadRequest",
+        "description": "Request to reload a plugin."
+      },
+      "RateLimitConfigRequest": {
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint",
+            "description": "Endpoint or service to limit"
+          },
+          "requests_per_second": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Requests Per Second",
+            "description": "Requests per second"
+          },
+          "burst_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Burst Size",
+            "description": "Burst capacity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "endpoint",
+          "requests_per_second"
+        ],
+        "title": "RateLimitConfigRequest",
+        "description": "Request to configure rate limits."
+      },
+      "RollbackRequest": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Reason for rollback"
+          }
+        },
+        "type": "object",
+        "title": "RollbackRequest",
+        "description": "Request to rollback a fix."
+      },
+      "SIEMConfigRequest": {
+        "properties": {
+          "siem_type": {
+            "type": "string",
+            "title": "Siem Type",
+            "description": "SIEM type (splunk, qradar, sentinel)"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint",
+            "description": "SIEM endpoint URL"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key",
+            "description": "SIEM API key"
+          },
+          "export_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Export Config",
+            "description": "Export configuration"
+          }
+        },
+        "type": "object",
+        "required": [
+          "siem_type",
+          "endpoint",
+          "export_config"
+        ],
+        "title": "SIEMConfigRequest",
+        "description": "Request to configure SIEM integration."
+      },
+      "SandboxExecutionRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Code to execute"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "Programming language",
+            "default": "python"
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 300.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Execution timeout (seconds)",
+            "default": 30
+          },
+          "resource_limits": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Limits",
+            "description": "Resource limits (memory, cpu)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "SandboxExecutionRequest",
+        "description": "Request to execute code in sandbox."
+      },
+      "StageProgress": {
+        "properties": {
+          "stage": {
+            "$ref": "#/components/schemas/JobStage",
+            "description": "Stage identifier"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus",
+            "description": "Stage execution status"
+          },
+          "progress_percent": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Progress Percent",
+            "description": "Progress percentage (0-100)",
+            "default": 0.0
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Current stage message"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At",
+            "description": "Stage start timestamp"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "Stage completion timestamp"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Error message if stage failed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "status"
+        ],
+        "title": "StageProgress",
+        "description": "Progress information for a specific stage."
+      },
+      "SuccessResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "Operation success indicator",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Success message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data",
+            "description": "Optional response data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "SuccessResponse",
+        "description": "Generic success response."
+      },
+      "TestgenRequest": {
+        "properties": {
+          "code_path": {
+            "type": "string",
+            "title": "Code Path",
+            "description": "Path to code files to test"
+          },
+          "test_type": {
+            "type": "string",
+            "title": "Test Type",
+            "description": "Test type (unit, integration, e2e)",
+            "default": "unit"
+          },
+          "coverage_target": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Coverage Target",
+            "description": "Target coverage percentage",
+            "default": 80.0
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata",
+            "description": "Additional metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code_path"
+        ],
+        "title": "TestgenRequest",
+        "description": "Request for test generation."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

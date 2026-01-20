@@ -12,12 +12,24 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from server.schemas import (
+    ArbiterControlRequest,
+    ArenaCompetitionRequest,
+    BugAnalysisRequest,
+    BugDetectionRequest,
+    BugPrioritizationRequest,
+    CodebaseAnalysisRequest,
+    ComplianceCheckRequest,
     Fix,
     FixApplyRequest,
     FixProposal,
     FixReviewRequest,
     FixStatus,
+    ImportFixRequest,
+    KnowledgeGraphQuery,
+    KnowledgeGraphUpdate,
     RollbackRequest,
+    SandboxExecutionRequest,
+    SIEMConfigRequest,
     SuccessResponse,
 )
 from server.services import SFEService
@@ -473,4 +485,411 @@ async def interact_with_sfe(
     result = await sfe_service.interact_with_sfe(job_id, command, params)
 
     logger.info(f"SFE command '{command}' executed for job {job_id}")
+    return result
+
+
+@router.post("/arbiter/control")
+async def control_arbiter(
+    request: ArbiterControlRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Control Arbiter AI.
+
+    Start, stop, pause, resume, or configure the Arbiter AI system.
+
+    **Request Body:**
+    - command: Command to execute (start, stop, pause, resume, configure, status)
+    - job_id: Optional job ID
+    - config: Optional configuration
+
+    **Returns:**
+    - Arbiter control result
+    """
+    result = await sfe_service.control_arbiter(
+        command=request.command.value,
+        job_id=request.job_id,
+        config=request.config,
+    )
+
+    logger.info(f"Arbiter control command executed: {request.command.value}")
+    return result
+
+
+@router.post("/arena/compete")
+async def trigger_arena_competition(
+    request: ArenaCompetitionRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Trigger arena agent competition.
+
+    Initiates a competition between AI agents to solve a problem, with the best solution selected.
+
+    **Request Body:**
+    - problem_type: Type of problem (bug_fix, optimization, refactor)
+    - code_path: Path to code for competition
+    - agents: Optional specific agents to compete
+    - rounds: Number of competition rounds
+    - evaluation_criteria: Evaluation criteria
+
+    **Returns:**
+    - Competition results with winner
+    """
+    result = await sfe_service.trigger_arena_competition(
+        problem_type=request.problem_type,
+        code_path=request.code_path,
+        agents=request.agents,
+        rounds=request.rounds,
+        evaluation_criteria=request.evaluation_criteria,
+    )
+
+    logger.info(f"Arena competition triggered for {request.problem_type}")
+    return result
+
+
+@router.post("/bugs/detect")
+async def detect_bugs(
+    request: BugDetectionRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Detect bugs in code.
+
+    Performs comprehensive bug detection using the Bug Manager.
+
+    **Request Body:**
+    - code_path: Path to code to analyze
+    - scan_depth: Scan depth (quick, standard, deep)
+    - include_potential: Include potential issues
+
+    **Returns:**
+    - Bug detection results
+    """
+    result = await sfe_service.detect_bugs(
+        code_path=request.code_path,
+        scan_depth=request.scan_depth,
+        include_potential=request.include_potential,
+    )
+
+    logger.info(f"Bug detection completed for {request.code_path}")
+    return result
+
+
+@router.post("/bugs/{bug_id}/analyze")
+async def analyze_bug(
+    bug_id: str,
+    request: BugAnalysisRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Analyze a specific bug.
+
+    Performs detailed analysis including root cause and fix suggestions.
+
+    **Path Parameters:**
+    - bug_id: Bug identifier
+
+    **Request Body:**
+    - include_root_cause: Perform root cause analysis
+    - suggest_fixes: Generate fix suggestions
+
+    **Returns:**
+    - Bug analysis results
+    """
+    result = await sfe_service.analyze_bug(
+        bug_id=bug_id,
+        include_root_cause=request.include_root_cause,
+        suggest_fixes=request.suggest_fixes,
+    )
+
+    logger.info(f"Bug {bug_id} analyzed")
+    return result
+
+
+@router.post("/{job_id}/bugs/prioritize")
+async def prioritize_bugs(
+    job_id: str,
+    request: BugPrioritizationRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Prioritize bugs for a job.
+
+    Orders bugs by importance based on severity, impact, and effort.
+
+    **Path Parameters:**
+    - job_id: Job identifier
+
+    **Request Body:**
+    - criteria: Prioritization criteria
+
+    **Returns:**
+    - Prioritized bug list
+
+    **Errors:**
+    - 404: Job not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    result = await sfe_service.prioritize_bugs(
+        job_id=job_id,
+        criteria=request.criteria,
+    )
+
+    logger.info(f"Bugs prioritized for job {job_id}")
+    return result
+
+
+@router.post("/codebase/analyze")
+async def deep_analyze_codebase(
+    request: CodebaseAnalysisRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Perform deep codebase analysis.
+
+    Comprehensive analysis of code structure, dependencies, complexity, and quality.
+
+    **Request Body:**
+    - code_path: Path to codebase
+    - analysis_types: Types of analysis (structure, dependencies, complexity, quality)
+    - generate_report: Generate detailed report
+
+    **Returns:**
+    - Analysis results
+    """
+    result = await sfe_service.deep_analyze_codebase(
+        code_path=request.code_path,
+        analysis_types=request.analysis_type,
+        generate_report=request.generate_report,
+    )
+
+    logger.info(f"Deep codebase analysis completed for {request.code_path}")
+    return result
+
+
+@router.post("/knowledge-graph/query")
+async def query_knowledge_graph(
+    request: KnowledgeGraphQuery,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Query knowledge graph.
+
+    Queries the SFE knowledge graph for entities, relationships, or patterns.
+
+    **Request Body:**
+    - query_type: Query type (entity, relationship, pattern)
+    - query: Query string or pattern
+    - depth: Traversal depth
+    - limit: Maximum results
+
+    **Returns:**
+    - Query results
+    """
+    result = await sfe_service.query_knowledge_graph(
+        query_type=request.query_type,
+        query=request.query,
+        depth=request.depth,
+        limit=request.limit,
+    )
+
+    return result
+
+
+@router.post("/knowledge-graph/update")
+async def update_knowledge_graph(
+    request: KnowledgeGraphUpdate,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Update knowledge graph.
+
+    Adds, updates, or deletes entities in the knowledge graph.
+
+    **Request Body:**
+    - operation: Operation (add_node, add_edge, update, delete)
+    - entity_type: Entity type
+    - entity_data: Entity data
+
+    **Returns:**
+    - Update result
+    """
+    result = await sfe_service.update_knowledge_graph(
+        operation=request.operation,
+        entity_type=request.entity_type,
+        entity_data=request.entity_data,
+    )
+
+    logger.info(f"Knowledge graph updated: {request.operation}")
+    return result
+
+
+@router.post("/sandbox/execute")
+async def execute_in_sandbox(
+    request: SandboxExecutionRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Execute code in sandbox.
+
+    Runs code in a secure sandboxed environment with resource limits.
+
+    **Request Body:**
+    - code: Code to execute
+    - language: Programming language
+    - timeout: Execution timeout (seconds)
+    - resource_limits: Resource limits (memory, cpu)
+
+    **Returns:**
+    - Execution results
+    """
+    result = await sfe_service.execute_in_sandbox(
+        code=request.code,
+        language=request.language,
+        timeout=request.timeout,
+        resource_limits=request.resource_limits,
+    )
+
+    return result
+
+
+@router.post("/compliance/check")
+async def check_compliance(
+    request: ComplianceCheckRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Check compliance standards.
+
+    Validates code against compliance standards (SOC2, HIPAA, GDPR, etc.).
+
+    **Request Body:**
+    - code_path: Path to code to check
+    - standards: Compliance standards to check
+    - generate_report: Generate compliance report
+
+    **Returns:**
+    - Compliance check results
+    """
+    result = await sfe_service.check_compliance(
+        code_path=request.code_path,
+        standards=request.standards,
+        generate_report=request.generate_report,
+    )
+
+    logger.info(f"Compliance check completed for {request.code_path}")
+    return result
+
+
+@router.get("/dlt/audit")
+async def query_dlt_audit(
+    start_block: Optional[int] = None,
+    end_block: Optional[int] = None,
+    transaction_type: Optional[str] = None,
+    limit: int = 100,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Query DLT/blockchain audit logs.
+
+    Retrieves audit transactions from the distributed ledger.
+
+    **Query Parameters:**
+    - start_block: Starting block number
+    - end_block: Ending block number
+    - transaction_type: Filter by transaction type
+    - limit: Maximum results
+
+    **Returns:**
+    - Audit transactions
+    """
+    result = await sfe_service.query_dlt_audit(
+        start_block=start_block,
+        end_block=end_block,
+        transaction_type=transaction_type,
+        limit=min(limit, 1000),
+    )
+
+    return result
+
+
+@router.post("/siem/configure")
+async def configure_siem(
+    request: SIEMConfigRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Configure SIEM integration.
+
+    Sets up integration with SIEM systems (Splunk, QRadar, Sentinel).
+
+    **Request Body:**
+    - siem_type: SIEM type (splunk, qradar, sentinel)
+    - endpoint: SIEM endpoint URL
+    - api_key: SIEM API key
+    - export_config: Export configuration
+
+    **Returns:**
+    - Configuration result
+    """
+    result = await sfe_service.configure_siem(
+        siem_type=request.siem_type,
+        endpoint=request.endpoint,
+        api_key=request.api_key,
+        export_config=request.export_config,
+    )
+
+    logger.info(f"SIEM integration configured: {request.siem_type}")
+    return result
+
+
+@router.get("/rl/environment/{environment_id}/status")
+async def get_rl_environment_status(
+    environment_id: str,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Get RL environment status.
+
+    Returns status of reinforcement learning environment.
+
+    **Path Parameters:**
+    - environment_id: Environment identifier
+
+    **Returns:**
+    - Environment status and metrics
+    """
+    result = await sfe_service.get_rl_environment_status(environment_id)
+
+    return result
+
+
+@router.post("/imports/fix")
+async def fix_imports(
+    request: ImportFixRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Fix import issues.
+
+    Automatically fixes import errors and style issues.
+
+    **Request Body:**
+    - code_path: Path to code with import issues
+    - auto_install: Auto-install missing packages
+    - fix_style: Fix import style issues
+
+    **Returns:**
+    - Import fix results
+    """
+    result = await sfe_service.fix_imports(
+        code_path=request.code_path,
+        auto_install=request.auto_install,
+        fix_style=request.fix_style,
+    )
+
+    logger.info(f"Imports fixed for {request.code_path}")
     return result

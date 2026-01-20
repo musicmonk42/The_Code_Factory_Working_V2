@@ -33,6 +33,7 @@ from fastapi.templating import Jinja2Templates
 
 from server import __version__
 from server.routers import (
+    api_keys_router,
     events_router,
     fixes_router,
     generator_router,
@@ -251,6 +252,7 @@ async def root(request: Request):
 
 
 # Include routers with /api prefix
+app.include_router(api_keys_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
 app.include_router(generator_router, prefix="/api")
 app.include_router(omnicore_router, prefix="/api")

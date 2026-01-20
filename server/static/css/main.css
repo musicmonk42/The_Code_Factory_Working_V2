@@ -627,3 +627,73 @@ h3 {
         grid-template-columns: 1fr;
     }
 }
+
+/* New UI Sections */
+.omnicore-section, .sfe-advanced, .arbiter-control, .arena-section, .rl-section, 
+.generator-agents, .llm-config {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+.content-area {
+    background: var(--background);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: var(--spacing-md);
+    margin-top: var(--spacing-md);
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.input-group {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+}
+
+.input-group input[type="text"],
+.input-group input[type="number"] {
+    flex: 1;
+    padding: var(--spacing-sm);
+    background: var(--background);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-family: var(--font-family);
+}
+
+.agent-buttons, .analysis-buttons, .advanced-buttons, .arbiter-buttons,
+.message-bus-controls, .plugin-controls, .db-controls, .resilience-controls,
+.config-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+    margin-top: var(--spacing-md);
+}
+
+.agent-controls, .arena-config {
+    margin-top: var(--spacing-md);
+}
+
+.arena-config .form-group {
+    margin-bottom: var(--spacing-md);
+}
+
+.status-open {
+    background: rgba(255, 68, 68, 0.2);
+    color: var(--error);
+}
+
+.status-closed {
+    background: rgba(0, 204, 136, 0.2);
+    color: var(--success);
+}
+
+.status-half-open {
+    background: rgba(255, 170, 0, 0.2);
+    color: var(--warning);
+}

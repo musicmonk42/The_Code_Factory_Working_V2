@@ -10,7 +10,19 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from server.schemas import GeneratorStatus, JobStatus, LogsResponse, SuccessResponse
+from server.schemas import (
+    CodegenRequest,
+    CritiqueRequest,
+    DeployRequest,
+    DocgenRequest,
+    GeneratorStatus,
+    JobStatus,
+    LLMConfigRequest,
+    LogsResponse,
+    PipelineRequest,
+    SuccessResponse,
+    TestgenRequest,
+)
 from server.services import GeneratorService
 from server.storage import jobs_db
 
@@ -25,6 +37,87 @@ def get_generator_service() -> GeneratorService:
 
     omnicore = get_omnicore_service()
     return GeneratorService(omnicore_service=omnicore)
+
+
+@router.post("/llm/configure")
+async def configure_llm_provider(
+    request: LLMConfigRequest,
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Configure LLM provider for generator.
+
+    Switches between or configures LLM providers (OpenAI, Anthropic, Google, xAI, Ollama).
+
+    **Request Body:**
+    - provider: LLM provider to configure
+    - api_key: API key (if required)
+    - model: Specific model to use
+    - config: Additional provider configuration
+
+    **Returns:**
+    - Configuration confirmation
+    """
+    result = await generator_service.configure_llm_provider(
+        provider=request.provider.value,
+        api_key=request.api_key,
+        model=request.model,
+        config=request.config,
+    )
+
+    logger.info(f"LLM provider configured: {request.provider.value}")
+    return result
+
+
+@router.get("/llm/status")
+async def get_llm_status(
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Get status of configured LLM providers.
+
+    Returns information about available and configured LLM providers.
+
+    **Returns:**
+    - LLM provider status including active provider and configurations
+    """
+    status = await generator_service.get_llm_provider_status()
+    return status
+
+
+@router.get("/audit/logs")
+async def query_audit_logs(
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    event_type: Optional[str] = None,
+    job_id: Optional[str] = None,
+    limit: int = 100,
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Query generator audit logs.
+
+    Retrieves audit trail from the generator module.
+
+    **Query Parameters:**
+    - start_time: Start timestamp (ISO 8601)
+    - end_time: End timestamp (ISO 8601)
+    - event_type: Filter by event type
+    - job_id: Filter by job ID
+    - limit: Maximum number of results (default: 100, max: 1000)
+
+    **Returns:**
+    - Audit log entries
+    """
+    result = await generator_service.query_audit_logs(
+        start_time=start_time,
+        end_time=end_time,
+        event_type=event_type,
+        job_id=job_id,
+        limit=min(limit, 1000),
+    )
+
+    return result
 
 
 @router.post("/{job_id}/upload", response_model=SuccessResponse)
@@ -318,3 +411,253 @@ async def submit_clarification_response(
 
     logger.info(f"Clarification response submitted for job {job_id}, question {question_id}")
     return result
+
+
+@router.post("/{job_id}/codegen")
+async def run_codegen(
+    job_id: str,
+    request: CodegenRequest,
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Run the code generation agent directly.
+
+    Triggers the codegen agent to generate source code from requirements
+    via OmniCore message bus routing.
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Request Body:**
+    - requirements: Natural language requirements
+    - language: Target programming language
+    - framework: Optional framework specification
+    - include_tests: Whether to generate tests alongside code
+    - metadata: Additional metadata
+
+    **Returns:**
+    - Code generation results with output paths
+
+    **Errors:**
+    - 404: Job not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    result = await generator_service.run_codegen_agent(
+        job_id=job_id,
+        requirements=request.requirements,
+        language=request.language.value,
+        framework=request.framework,
+    )
+
+    logger.info(f"Codegen agent executed for job {job_id}")
+    return result
+
+
+@router.post("/{job_id}/testgen")
+async def run_testgen(
+    job_id: str,
+    request: TestgenRequest,
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Run the test generation agent.
+
+    Triggers the testgen agent to create comprehensive tests for generated code.
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Request Body:**
+    - code_path: Path to code files to test
+    - test_type: Type of tests (unit, integration, e2e)
+    - coverage_target: Target code coverage percentage
+    - metadata: Additional metadata
+
+    **Returns:**
+    - Test generation results
+
+    **Errors:**
+    - 404: Job not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    result = await generator_service.run_testgen_agent(
+        job_id=job_id,
+        code_path=request.code_path,
+        test_type=request.test_type,
+        coverage_target=request.coverage_target,
+    )
+
+    logger.info(f"Testgen agent executed for job {job_id}")
+    return result
+
+
+@router.post("/{job_id}/deploy")
+async def run_deploy(
+    job_id: str,
+    request: DeployRequest,
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Run the deployment configuration generation agent.
+
+    Generates Docker, Kubernetes, or cloud platform deployment configurations.
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Request Body:**
+    - code_path: Path to application code
+    - platform: Deployment platform (docker, kubernetes, aws)
+    - include_ci_cd: Whether to include CI/CD configuration
+    - metadata: Additional metadata
+
+    **Returns:**
+    - Deployment configuration results
+
+    **Errors:**
+    - 404: Job not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    result = await generator_service.run_deploy_agent(
+        job_id=job_id,
+        code_path=request.code_path,
+        platform=request.platform,
+        include_ci_cd=request.include_ci_cd,
+    )
+
+    logger.info(f"Deploy agent executed for job {job_id}")
+    return result
+
+
+@router.post("/{job_id}/docgen")
+async def run_docgen(
+    job_id: str,
+    request: DocgenRequest,
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Run the documentation generation agent.
+
+    Generates API documentation, user guides, or developer documentation.
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Request Body:**
+    - code_path: Path to code to document
+    - doc_type: Documentation type (api, user, developer)
+    - format: Output format (markdown, html, pdf)
+    - metadata: Additional metadata
+
+    **Returns:**
+    - Documentation generation results
+
+    **Errors:**
+    - 404: Job not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    result = await generator_service.run_docgen_agent(
+        job_id=job_id,
+        code_path=request.code_path,
+        doc_type=request.doc_type,
+        format=request.format,
+    )
+
+    logger.info(f"Docgen agent executed for job {job_id}")
+    return result
+
+
+@router.post("/{job_id}/critique")
+async def run_critique(
+    job_id: str,
+    request: CritiqueRequest,
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Run the critique agent for security and quality scanning.
+
+    Performs security scanning, code quality analysis, and performance checks.
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Request Body:**
+    - code_path: Path to code to analyze
+    - scan_types: Types of scans (security, quality, performance)
+    - auto_fix: Whether to automatically apply fixes
+    - metadata: Additional metadata
+
+    **Returns:**
+    - Critique analysis results
+
+    **Errors:**
+    - 404: Job not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    result = await generator_service.run_critique_agent(
+        job_id=job_id,
+        code_path=request.code_path,
+        scan_types=request.scan_types,
+        auto_fix=request.auto_fix,
+    )
+
+    logger.info(f"Critique agent executed for job {job_id}")
+    return result
+
+
+@router.post("/{job_id}/pipeline")
+async def run_full_pipeline(
+    job_id: str,
+    request: PipelineRequest,
+    generator_service: GeneratorService = Depends(get_generator_service),
+):
+    """
+    Run the full generation pipeline.
+
+    Orchestrates the complete generation workflow: clarify → codegen → testgen → deploy → docgen → critique.
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Request Body:**
+    - readme_content: README/requirements content
+    - language: Target programming language
+    - include_tests: Whether to generate tests
+    - include_deployment: Whether to generate deployment configs
+    - include_docs: Whether to generate documentation
+    - run_critique: Whether to run security/quality checks
+    - metadata: Additional metadata
+
+    **Returns:**
+    - Full pipeline execution results
+
+    **Errors:**
+    - 404: Job not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    result = await generator_service.run_full_pipeline(
+        job_id=job_id,
+        readme_content=request.readme_content,
+        language=request.language.value,
+        include_tests=request.include_tests,
+        include_deployment=request.include_deployment,
+        include_docs=request.include_docs,
+        run_critique=request.run_critique,
+    )
+
+    logger.info(f"Full pipeline executed for job {job_id}")
+    return result
+
+
