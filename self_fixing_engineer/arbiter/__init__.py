@@ -8,45 +8,11 @@ This package provides:
 - HumanInLoop: Human-in-the-loop approval workflows
 - HumanInLoopConfig: Configuration for human-in-the-loop features
 - ArbiterConfig: Core configuration management
-- Database: Database abstraction layer
 """
 
 import sys
 
 # Import and expose main components that tests and other modules expect
-
-# Database component
-try:
-    from .database import Database
-except ImportError as e:
-    print(f"WARNING: Failed to import arbiter.database module: {e}", file=sys.stderr)
-    # Mock Database for testing when actual implementation isn't available
-    class Database:
-        """Mock Database implementation for testing."""
-
-        def __init__(self, *args, **kwargs):
-            self.connection = None
-            self.is_connected = False
-
-        async def connect(self):
-            self.is_connected = True
-            return True
-
-        async def disconnect(self):
-            self.is_connected = False
-            return True
-
-        async def execute(self, query, params=None):
-            return {"status": "ok", "rows": []}
-
-        async def fetch_one(self, query, params=None):
-            return {"id": 1, "data": "mock"}
-
-        async def fetch_all(self, query, params=None):
-            return [{"id": 1, "data": "mock"}]
-
-
-# Import other components that might be needed
 try:
     from . import arbiter
     from .arbiter import Arbiter
@@ -112,7 +78,6 @@ def get_component_status():
         "HumanInLoop": _get_human_loop() is not None,
         "HumanInLoopConfig": _get_human_loop_config() is not None,
         "ArbiterConfig": ArbiterConfig is not None,
-        "Database": Database is not None,
     }
 
 
@@ -121,7 +86,6 @@ __version__ = "1.0.0"
 
 # Export all main components
 __all__ = [
-    "Database",
     "arbiter",
     "Arbiter",
     "ArbiterArena",
