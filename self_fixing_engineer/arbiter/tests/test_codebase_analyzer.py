@@ -385,3 +385,129 @@ def test_filter_baseline(temp_dir):
         # Expected until implementation is fixed - baseline is loaded as list
         # but _filter_baseline expects dict
         pass
+
+
+# Test idempotent metric registration
+def test_idempotent_metric_registration():
+    """
+    Test that Prometheus metrics can be registered multiple times without errors.
+    
+    This tests the fix for the "Duplicated timeseries in CollectorRegistry" error
+    that occurred when multiple modules attempted to register the same metric names.
+    """
+    import importlib
+    import sys
+    
+    # Save original modules
+    original_modules = {
+        k: v for k, v in sys.modules.items() 
+        if 'codebase_analyzer' in k or 'arbiter.codebase_analyzer' in k or 'prometheus' in k
+    }
+    
+    try:
+        # Remove the module from cache to force re-import
+        for key in ['codebase_analyzer', 'arbiter.codebase_analyzer']:
+            if key in sys.modules:
+                del sys.modules[key]
+        
+        # First import using absolute path as per existing pattern
+        from arbiter import codebase_analyzer as ca1
+        assert hasattr(ca1, 'analyzer_ops_total')
+        assert hasattr(ca1, 'analyzer_errors_total')
+        
+        # Store references to first import
+        ops_total_1 = ca1.analyzer_ops_total
+        errors_total_1 = ca1.analyzer_errors_total
+        
+        # Remove from cache again
+        for key in ['codebase_analyzer', 'arbiter.codebase_analyzer']:
+            if key in sys.modules:
+                del sys.modules[key]
+        
+        # Second import - this should use idempotent registration
+        from arbiter import codebase_analyzer as ca2
+        assert hasattr(ca2, 'analyzer_ops_total')
+        assert hasattr(ca2, 'analyzer_errors_total')
+        
+        # The metrics should work (either be the same instance or functional dummies)
+        # Test that we can call methods without errors
+        try:
+            ca2.analyzer_ops_total.labels(operation='test')
+            ca2.analyzer_errors_total.labels(error_type='test')
+        except Exception as e:
+            pytest.fail(f"Metric methods should be callable: {e}")
+            
+    finally:
+        # Restore original modules to avoid side effects
+        for key in list(sys.modules.keys()):
+            if ('codebase_analyzer' in key or 'arbiter.codebase_analyzer' in key) and key not in original_modules:
+                del sys.modules[key]
+        sys.modules.update(original_modules)
+
+
+def test_create_dummy_metric():
+    """Test that _create_dummy_metric returns a functional no-op metric."""
+    from arbiter.codebase_analyzer import _create_dummy_metric
+    
+    dummy = _create_dummy_metric()
+    
+    # Test all metric methods exist and don't raise errors
+    assert hasattr(dummy, 'labels')
+    assert hasattr(dummy, 'inc')
+    assert hasattr(dummy, 'dec')
+    assert hasattr(dummy, 'observe')
+    assert hasattr(dummy, 'set')
+    assert hasattr(dummy, 'DEFAULT_BUCKETS')
+    
+    # Test method chaining works
+    chained = dummy.labels(test='value')
+    assert chained is dummy
+    
+    # Test all methods can be called without errors
+    dummy.inc()
+    dummy.inc(5)
+    dummy.dec()
+    dummy.dec(3)
+    dummy.observe(1.5)
+    dummy.set(42)
+
+
+def test_get_or_create_metric():
+    """Test that _get_or_create_metric handles duplicate registration gracefully."""
+    from arbiter.codebase_analyzer import _get_or_create_metric
+    from prometheus_client import Counter, Gauge, REGISTRY
+    
+    # Create a unique metric name to avoid conflicts with other tests
+    metric_name = f"test_metric_{id(test_get_or_create_metric)}"
+    
+    try:
+        # First call should create the metric
+        metric1 = _get_or_create_metric(
+            Counter, metric_name, "Test metric", ["label1"]
+        )
+        assert metric1 is not None
+        
+        # Second call with same name should return existing or dummy
+        metric2 = _get_or_create_metric(
+            Counter, metric_name, "Test metric", ["label1"]
+        )
+        assert metric2 is not None
+        
+        # Both should be callable
+        try:
+            metric1.labels(label1='value')
+            metric2.labels(label1='value')
+        except Exception as e:
+            pytest.fail(f"Metrics should be callable: {e}")
+            
+    finally:
+        # Clean up - unregister the test metric
+        try:
+            collectors_to_remove = []
+            for collector in list(REGISTRY._collector_to_names.keys()):
+                if hasattr(collector, '_name') and collector._name == metric_name:
+                    collectors_to_remove.append(collector)
+            for collector in collectors_to_remove:
+                REGISTRY.unregister(collector)
+        except Exception:
+            pass  # Ignore cleanup errors

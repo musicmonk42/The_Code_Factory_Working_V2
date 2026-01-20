@@ -19,7 +19,7 @@ import aiofiles
 import toml
 import typer
 import yaml
-from prometheus_client import Counter
+from prometheus_client import Counter, REGISTRY
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -220,12 +220,118 @@ if not logger.handlers:
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
-# Prometheus Metrics
-analyzer_ops_total = Counter(
-    "analyzer_ops_total", "Total analyzer operations", ["operation"]
+# Prometheus Metrics - Idempotent Registration
+
+
+def _create_dummy_metric():
+    """
+    Create a no-op dummy metric for graceful degradation.
+
+    Returns a metric-like object that implements all standard metric operations
+    but does nothing. This is used when a metric cannot be registered or retrieved
+    from the registry, ensuring the application continues to function without errors.
+
+    Returns:
+        DummyMetric: A no-op metric implementation
+    """
+
+    class DummyMetric:
+        """No-op metric implementation for fallback scenarios."""
+
+        # Include DEFAULT_BUCKETS for Histogram compatibility
+        DEFAULT_BUCKETS = (
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.075,
+            0.1,
+            0.25,
+            0.5,
+            0.75,
+            1.0,
+            2.5,
+            5.0,
+            7.5,
+            10.0,
+            float("inf"),
+        )
+
+        def labels(self, **kwargs):
+            """Return self to support method chaining."""
+            return self
+
+        def inc(self, amount=1):
+            """No-op increment operation."""
+            pass
+
+        def dec(self, amount=1):
+            """No-op decrement operation."""
+            pass
+
+        def observe(self, amount):
+            """No-op observe operation for histograms."""
+            pass
+
+        def set(self, value):
+            """No-op set operation for gauges."""
+            pass
+
+    return DummyMetric()
+
+
+def _get_or_create_metric(metric_class, name, description, labelnames=None, **kwargs):
+    """
+    Safely get or create a Prometheus metric, handling duplicate registration.
+
+    This function implements idempotent metric registration to prevent
+    'Duplicated timeseries in CollectorRegistry' errors when modules
+    are imported multiple times or in different contexts.
+
+    Args:
+        metric_class: The metric class (Counter, Gauge, Histogram, etc.)
+        name: Metric name (should be unique across the application)
+        description: Human-readable metric description
+        labelnames: Optional list of label names for the metric
+        **kwargs: Additional metric-specific keyword arguments
+
+    Returns:
+        The metric instance (either newly created or existing)
+
+    Raises:
+        ValueError: If a non-duplicate registration error occurs
+    """
+    try:
+        # Attempt to create the metric
+        if labelnames:
+            return metric_class(name, description, labelnames, **kwargs)
+        else:
+            return metric_class(name, description, **kwargs)
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            # Metric already exists in registry, retrieve it
+            for collector in list(REGISTRY._collector_to_names.keys()):
+                if hasattr(collector, "_name") and collector._name == name:
+                    logger.debug(
+                        f"Metric '{name}' already registered, reusing existing instance"
+                    )
+                    return collector
+            # If we can't find the metric in registry, log and return dummy
+            logger.warning(
+                f"Metric '{name}' registered but couldn't retrieve, using dummy"
+            )
+            return _create_dummy_metric()
+        else:
+            # Re-raise if it's a different error
+            raise
+
+
+# Initialize metrics using idempotent registration
+analyzer_ops_total = _get_or_create_metric(
+    Counter, "analyzer_ops_total", "Total analyzer operations", ["operation"]
 )
-analyzer_errors_total = Counter(
-    "analyzer_errors_total", "Total analyzer errors", ["error_type"]
+analyzer_errors_total = _get_or_create_metric(
+    Counter, "analyzer_errors_total", "Total analyzer errors", ["error_type"]
 )
 
 
