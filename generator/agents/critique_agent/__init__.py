@@ -21,6 +21,7 @@ from .critique_agent import (  # Main Agent Function; Configuration and Base Cla
     CRITIQUE_LATENCY,
     CRITIQUE_STEPS,
     CRITIQUE_VULNERABILITIES_FOUND,
+    CritiqueAgent,
     CritiqueConfig,
     LanguageCritiquePlugin,
     get_plugin,
@@ -48,6 +49,7 @@ __all__ = [
     # Main Orchestration
     "orchestrate_critique_pipeline",
     "get_plugin",
+    "CritiqueAgent",
     # Configuration
     "CritiqueConfig",
     "PromptConfig",

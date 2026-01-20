@@ -213,6 +213,7 @@ __all__ = [
     "register_summarizer",  # Added summarizer registration function
     "run_tests_in_sandbox",  # NEW: Export for testgen_validator
     "run_stress_tests",  # NEW: Export for testgen_validator
+    "runner_metrics",  # NEW: Export for metrics module access
 ]
 
 # Import tracer for OpenTelemetry support
@@ -321,6 +322,9 @@ if _runner_metrics is not None and "runner.metrics" not in _sys.modules:
 # NEW: Allows `from runner.providers import ...` to resolve to the providers subpackage
 if _runner_providers is not None and "runner.providers" not in _sys.modules:
     _sys.modules["runner.providers"] = _runner_providers
+
+# Public aliases for direct module imports (e.g., from generator.runner import runner_metrics)
+runner_metrics = _runner_metrics
 
 
 # --- Import hook to support runner.providers imports ---
