@@ -279,9 +279,24 @@ except ImportError as e:
 
 
 from arbiter.arbiter_plugin_registry import PluginBase, PlugInKind
-from arbiter.arbiter_plugin_registry import registry as PLUGIN_REGISTRY
+# REMOVED: from arbiter.arbiter_plugin_registry import registry as PLUGIN_REGISTRY
+# Replaced with lazy getter to avoid import-time initialization overhead
 # REMOVED: from simulation.simulation_module import UnifiedSimulationModule
 # This import causes a circular dependency chain. Will be loaded lazily in __init__
+
+def _get_plugin_registry():
+    """
+    Lazy-load plugin registry to avoid import-time initialization.
+    
+    Returns the singleton PluginRegistry instance, creating it only when first accessed.
+    This prevents heavy initialization (plugin loading, metrics, async operations) 
+    from executing during module import.
+    
+    Returns:
+        PluginRegistry: The singleton plugin registry instance
+    """
+    from arbiter.arbiter_plugin_registry import get_registry
+    return get_registry()
 
 try:
     from envs.code_health_env import CodeHealthEnv as BaseCodeHealthEnv
@@ -1546,7 +1561,7 @@ class Arbiter:
         self.peer_listener_task = None
         self.redis_pool = None
 
-        self.growth_manager = PLUGIN_REGISTRY.get(
+        self.growth_manager = _get_plugin_registry().get(
             PlugInKind.GROWTH_MANAGER, "arbiter_growth"
         )
         if self.growth_manager:
@@ -1555,10 +1570,10 @@ class Arbiter:
                 f"[{self.name}] ArbiterGrowthManager initialized for Arbiter"
             )
 
-        self.benchmarking_engine = PLUGIN_REGISTRY.get(
+        self.benchmarking_engine = _get_plugin_registry().get(
             PlugInKind.CORE_SERVICE, "benchmarking"
         )
-        self.explainable_reasoner = PLUGIN_REGISTRY.get(
+        self.explainable_reasoner = _get_plugin_registry().get(
             PlugInKind.AI_ASSISTANT, "explainable_reasoner"
         )
 
@@ -1720,7 +1735,7 @@ class Arbiter:
             possible_kinds = list(PlugInKind.__members__.values())
             for kind in possible_kinds:
                 try:
-                    candidate = PLUGIN_REGISTRY.get_plugin(kind, plugin_name)
+                    candidate = _get_plugin_registry().get_plugin(kind, plugin_name)
                     if candidate:
                         plugin_instance = candidate
                         break
@@ -2390,7 +2405,7 @@ class Arbiter:
         self.role = self.state_manager.role
         self.agent_type = self.state_manager.agent_type
 
-        growth_manager_plugin = PLUGIN_REGISTRY.get(PlugInKind.GROWTH_MANAGER, {}).get(
+        growth_manager_plugin = _get_plugin_registry().get(PlugInKind.GROWTH_MANAGER, {}).get(
             "arbiter_growth"
         )
         if not growth_manager_plugin:
@@ -2401,10 +2416,10 @@ class Arbiter:
         self.growth_manager = growth_manager_plugin
         self.growth_manager.arbiter_name = self.name
 
-        self.benchmarking_engine = PLUGIN_REGISTRY.get(PlugInKind.CORE_SERVICE, {}).get(
+        self.benchmarking_engine = _get_plugin_registry().get(PlugInKind.CORE_SERVICE, {}).get(
             "benchmarking"
         )
-        self.explainable_reasoner = PLUGIN_REGISTRY.get(
+        self.explainable_reasoner = _get_plugin_registry().get(
             PlugInKind.AI_ASSISTANT, {}
         ).get("explainable_reasoner")
 
@@ -2826,7 +2841,7 @@ class Arbiter:
             "filter_companies",
         )
 
-        company_data_plugin = PLUGIN_REGISTRY.get(PlugInKind.CORE_SERVICE, {}).get(
+        company_data_plugin = _get_plugin_registry().get(PlugInKind.CORE_SERVICE, {}).get(
             "company_data"
         )
 
@@ -3576,16 +3591,17 @@ def _register_default_plugins():
     """Register default plugins. Called on first Arbiter instantiation."""
     global _plugins_registered
     if not _plugins_registered:
+        registry = _get_plugin_registry()
         # Only register if not already registered to avoid duplicate registration error
-        if not PLUGIN_REGISTRY.get_metadata(PlugInKind.GROWTH_MANAGER, "arbiter_growth"):
-            PLUGIN_REGISTRY.register_instance(
+        if not registry.get_metadata(PlugInKind.GROWTH_MANAGER, "arbiter_growth"):
+            registry.register_instance(
                 PlugInKind.GROWTH_MANAGER,
                 "arbiter_growth",
                 ArbiterGrowthManager(),
                 version="1.0.0",
             )
-        if not PLUGIN_REGISTRY.get_metadata(PlugInKind.AI_ASSISTANT, "explainable_reasoner"):
-            PLUGIN_REGISTRY.register_instance(
+        if not registry.get_metadata(PlugInKind.AI_ASSISTANT, "explainable_reasoner"):
+            registry.register_instance(
                 PlugInKind.AI_ASSISTANT,
                 "explainable_reasoner",
                 ExplainableReasoner(),

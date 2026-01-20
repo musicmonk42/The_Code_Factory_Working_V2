@@ -675,8 +675,10 @@ class PluginRegistry:
                             )
                         )
                     except RuntimeError:
-                        logger.info(
-                            "No running event loop; skipping OmniCore registration."
+                        # No event loop during import - this is expected and safe to skip
+                        logger.debug(
+                            f"No event loop available during registration of [{kind.value}:{name}]. "
+                            "OmniCore registration will be deferred."
                         )
                 return plugin_class
 
@@ -754,7 +756,11 @@ class PluginRegistry:
                     )
                 )
             except RuntimeError:
-                logger.info("No running event loop; skipping OmniCore registration.")
+                # No event loop during import - this is expected and safe to skip
+                logger.debug(
+                    f"No event loop available during registration of [{kind.value}:{name}]. "
+                    "OmniCore registration will be deferred."
+                )
 
     def get(self, kind: PlugInKind, name: str) -> Any:
         """Retrieves a plugin class or instance."""
