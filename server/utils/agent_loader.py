@@ -45,6 +45,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 logger = logging.getLogger(__name__)
 
 
+# Environment variable constants
+ENV_VAR_TRUE = "1"
+ENV_VAR_FALSE = "0"
+
+
 class AgentType(str, Enum):
     """Enumeration of available agent types."""
     CODEGEN = "codegen"
@@ -101,8 +106,8 @@ class AgentLoader:
         self._agent_status: Dict[str, AgentStatus] = {}
         self._import_attempts: Dict[str, int] = {}
         self._startup_time = datetime.utcnow().isoformat()
-        self._strict_mode = os.getenv("GENERATOR_STRICT_MODE", "0") == "1"
-        self._debug_mode = os.getenv("DEBUG", "0") == "1"
+        self._strict_mode = os.getenv("GENERATOR_STRICT_MODE", ENV_VAR_FALSE) == ENV_VAR_TRUE
+        self._debug_mode = os.getenv("DEBUG", ENV_VAR_FALSE) == ENV_VAR_TRUE
         
         # Track required environment variables
         self._required_env_vars: Set[str] = set()
@@ -500,15 +505,35 @@ class AgentLoader:
         """
         Validate that all required agents are available for production use.
         
+        This method is designed for use in production deployment validation
+        and health checks. By default, it validates ALL known agents, but you
+        can specify a subset of required agents for more flexible validation.
+        
+        **Production Deployment Example:**
+        ```python
+        # Validate only critical agents
+        loader.validate_for_production(['codegen', 'testgen'])
+        
+        # Validate all agents (strict mode)
+        loader.validate_for_production()
+        ```
+        
         Args:
             required_agents: List of agent names that must be available.
-                           If None, all known agents are considered required.
+                           If None (default), validates ALL known agents.
+                           Pass an empty list to skip validation.
                            
         Returns:
             True if all required agents are available
             
         Raises:
-            RuntimeError: If any required agent is unavailable
+            RuntimeError: If any required agent is unavailable.
+                        The error message includes a full diagnostic report.
+        
+        Note:
+            For more flexible deployments where some agents are optional,
+            call this with a specific list of required agents rather than
+            relying on the default behavior of validating all agents.
         """
         if required_agents is None:
             required_agents = [agent.value for agent in AgentType]

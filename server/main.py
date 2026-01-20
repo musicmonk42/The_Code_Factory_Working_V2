@@ -259,8 +259,6 @@ async def health_check() -> HealthResponse:
     """
     # Get agent status from loader
     try:
-        from server.utils.agent_loader import get_agent_loader
-        
         loader = get_agent_loader()
         agent_status = loader.get_status()
         
