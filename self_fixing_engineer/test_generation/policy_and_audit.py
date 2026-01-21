@@ -152,19 +152,38 @@ class Configuration:
 
 # --- Safe Import of arbiter.audit_log and Fallback Logger ---
 AUDIT_LOGGER_AVAILABLE = False
-try:
-    from test_generation.orchestrator.audit import audit_event as _real_audit_event
+_real_audit_event = None
 
+def _get_real_audit_event():
+    """Lazy import to avoid circular dependency with orchestrator"""
+    global _real_audit_event
+    if _real_audit_event is None:
+        try:
+            from test_generation.orchestrator.audit import audit_event
+            _real_audit_event = audit_event
+        except ImportError:
+            return None
+    return _real_audit_event
+
+try:
+    # Test if the import is available by attempting lazy load
+    # Don't actually import at module level
     class _RealAuditLogger:
         async def log_event(
             self, event_type: str, details: Dict[str, Any], critical: bool = False
         ):
-            await _real_audit_event(event_type, details, critical=critical)
+            audit_fn = _get_real_audit_event()
+            if audit_fn:
+                await audit_fn(event_type, details, critical=critical)
+            else:
+                # Fallback to logger if import fails
+                logger.warning(f"Audit event not available: {event_type}")
 
     AUDIT_LOGGER_AVAILABLE = True
-except Exception:  # <-- FIX: Broadened exception handling
+except Exception as e:
     AUDIT_LOGGER_AVAILABLE = False
-    _real_audit_event = None
+    # Note: Don't set _real_audit_event to None here - lazy import may succeed later
+    logger.debug(f"Real audit logger setup failed: {e}")
 
 if os.getenv("AUDIT_ENABLED", "true").lower() == "false":
     logger.info("Audit logging is disabled by environment configuration.")
