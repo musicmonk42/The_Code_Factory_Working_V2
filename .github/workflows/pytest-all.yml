@@ -40,6 +40,8 @@ jobs:
     
     env:
       TESTING: '1'
+      CI: '1'  # Add this to skip audit background thread
+      SKIP_AUDIT_INIT: '1'  # Explicitly skip audit logger initialization
       OTEL_SDK_DISABLED: '1'
       PYTEST_CURRENT_TEST: 'true'
       REDIS_URL: redis://localhost:6379
@@ -118,7 +120,7 @@ jobs:
           }
           # Verify arbiter is importable with timeout protection and detailed error reporting
           echo "=== Attempting to import arbiter ==="
-          timeout 15s python -c 'import traceback; import sys; exec("try:\n    from self_fixing_engineer import arbiter\n    print(\"✓ arbiter imported from\", getattr(arbiter, \"__file__\", \"unknown\"))\n    print(\"✓ Module attributes sample:\", list(dir(arbiter)[:10]))\nexcept Exception as e:\n    print(\"ERROR - Failed to import arbiter module\")\n    print(\"Exception type -\", type(e).__name__)\n    print(\"Exception message -\", str(e))\n    traceback.print_exc()\n    sys.exit(1)")' || {
+          timeout 15s python -c 'import traceback; import sys; exec("try:\n    from self_fixing_engineer import arbiter\n    print(\"✓ arbiter imported from\", getattr(arbiter, \"__file__\", \"unknown\"))\n    print(\"✓ Module attributes sample:\", list(dir(arbiter))[:10])\nexcept Exception as e:\n    print(\"ERROR - Failed to import arbiter module\")\n    print(\"Exception type -\", type(e).__name__)\n    print(\"Exception message -\", str(e))\n    traceback.print_exc()\n    sys.exit(1)")' || {
             echo "ERROR: arbiter module import failed or timed out after 15 seconds"
             exit 1
           }

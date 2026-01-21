@@ -709,15 +709,26 @@ def get_audit_logger() -> RegulatoryAuditLogger:
             if _audit_logger_instance is None:
                 _audit_logger_instance = RegulatoryAuditLogger()
 
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(_audit_logger_instance.log_startup())
-                except RuntimeError:
+                # Skip background thread initialization in CI environments
+                # to prevent thread exhaustion during import-time checks
+                skip_init = (
+                    os.getenv('CI') in ('1', 'true', 'True', 'TRUE') or 
+                    os.getenv('GITHUB_ACTIONS') in ('1', 'true', 'True', 'TRUE') or 
+                    os.getenv('SKIP_AUDIT_INIT') in ('1', 'true', 'True', 'TRUE')
+                )
+                
+                if not skip_init:
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(_audit_logger_instance.log_startup())
+                    except RuntimeError:
 
-                    def run_init_log():
-                        asyncio.run(_audit_logger_instance.log_startup())
+                        def run_init_log():
+                            asyncio.run(_audit_logger_instance.log_startup())
 
-                    threading.Thread(target=run_init_log).start()
+                        threading.Thread(target=run_init_log, daemon=True).start()
+                else:
+                    logger.info("Skipping audit logger background initialization (CI environment detected)")
     return _audit_logger_instance
 
 
