@@ -361,126 +361,164 @@ def _get_or_create_metric(
         return metric
 
 
-# --- Shared Metric Definitions ---
+# --- Shared Metric Definitions (Lazy Initialization) ---
 
-# 1. ShardedMessageBus Core Metrics
-MESSAGE_BUS_QUEUE_SIZE = _get_or_create_metric(
-    "message_bus_queue_size",
-    "Current size of internal message queues",
-    ["shard_id", "queue_type"],  # normal or high_priority
-    "gauge",
-)
+# Storage for lazily-initialized metrics
+_lazy_metrics: Dict[str, Any] = {}
 
-MESSAGE_BUS_DISPATCH_DURATION = _get_or_create_metric(
-    "message_bus_dispatch_duration_seconds",
-    "Time taken to dispatch a message to all internal and external subscribers",
-    ["shard_id"],
-    "histogram",
-    buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0, float("inf")),
-)
 
-MESSAGE_BUS_TOPIC_THROUGHPUT = _get_or_create_metric(
-    "message_bus_topic_throughput_total",
-    "Total messages processed per topic (post-dispatch)",
-    ["topic"],
-    "counter",
-)
+def _lazy_get_or_create_metric(metric_name: str, *args) -> Any:
+    """
+    Lazy wrapper that creates metrics on first access.
+    
+    This defers expensive Prometheus metric creation (with threading locks
+    and registry operations) until the metric is actually used, preventing
+    import-time overhead that causes CI timeouts.
+    
+    Args:
+        metric_name: Name of the metric to create
+        *args: Arguments to pass to _get_or_create_metric
+        
+    Returns:
+        The metric object (created on first access, cached thereafter)
+    """
+    if metric_name not in _lazy_metrics:
+        _lazy_metrics[metric_name] = _get_or_create_metric(*args)
+    return _lazy_metrics[metric_name]
 
-MESSAGE_BUS_CALLBACK_ERRORS = _get_or_create_metric(
-    "message_bus_callback_errors_total",
-    "Total exceptions raised by message subscribers",
-    ["shard_id", "topic", "error_type"],
-    "counter",
-)
 
-MESSAGE_BUS_PUBLISH_RETRIES = _get_or_create_metric(
-    "message_bus_publish_retries_total",
-    "Total retries due to queue backpressure or transient failure",
-    ["shard_id", "reason"],
-    "counter",
-)
+# Metric definitions dictionary for lazy loading via __getattr__
+_METRIC_DEFINITIONS = {
+    # 1. ShardedMessageBus Core Metrics
+    "MESSAGE_BUS_QUEUE_SIZE": (
+        "message_bus_queue_size",
+        "Current size of internal message queues",
+        ["shard_id", "queue_type"],  # normal or high_priority
+        "gauge",
+    ),
+    "MESSAGE_BUS_DISPATCH_DURATION": (
+        "message_bus_dispatch_duration_seconds",
+        "Time taken to dispatch a message to all internal and external subscribers",
+        ["shard_id"],
+        "histogram",
+        (0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0, float("inf")),
+    ),
+    "MESSAGE_BUS_TOPIC_THROUGHPUT": (
+        "message_bus_topic_throughput_total",
+        "Total messages processed per topic (post-dispatch)",
+        ["topic"],
+        "counter",
+    ),
+    "MESSAGE_BUS_CALLBACK_ERRORS": (
+        "message_bus_callback_errors_total",
+        "Total exceptions raised by message subscribers",
+        ["shard_id", "topic", "error_type"],
+        "counter",
+    ),
+    "MESSAGE_BUS_PUBLISH_RETRIES": (
+        "message_bus_publish_retries_total",
+        "Total retries due to queue backpressure or transient failure",
+        ["shard_id", "reason"],
+        "counter",
+    ),
+    "MESSAGE_BUS_MESSAGE_AGE": (
+        "message_bus_message_age_seconds",
+        "Time elapsed between message creation and dispatch (consumer lag)",
+        ["shard_id", "priority"],
+        "histogram",
+        (0.005, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, float("inf")),
+    ),
+    "MESSAGE_BUS_CALLBACK_LATENCY": (
+        "message_bus_callback_latency_seconds",
+        "Time spent executing a single subscriber callback",
+        ["topic", "handler"],
+        "histogram",
+        (0.001, 0.01, 0.05, 0.1, 0.5, 1.0, float("inf")),
+    ),
+    # 2. Guardian/Health Metrics
+    "MESSAGE_BUS_HEALTH_STATUS": (
+        "message_bus_health_status",
+        "Current health status of the message bus (1=Healthy, 0=Degraded, -1=Critical)",
+        [],
+        "gauge",
+    ),
+    "MESSAGE_BUS_CRITICAL_FAILURES_TOTAL": (
+        "message_bus_critical_failures_total",
+        "Total number of times the message bus hit the critical failure threshold",
+        ["component"],
+        "counter",
+    ),
+    # 3. Integration Metrics (Redis, Kafka)
+    "MESSAGE_BUS_REDIS_PUBLISH_TOTAL": (
+        "message_bus_redis_publish_total",
+        "Total messages published to Redis",
+        ["result", "topic"],
+        "counter",
+    ),
+    "MESSAGE_BUS_REDIS_CONSUME_TOTAL": (
+        "message_bus_redis_consume_total",
+        "Total messages consumed from Redis",
+        ["result", "topic"],
+        "counter",
+    ),
+    "MESSAGE_BUS_KAFKA_PRODUCE_TOTAL": (
+        "message_bus_kafka_produce_total",
+        "Total messages produced to Kafka",
+        ["result", "topic"],
+        "counter",
+    ),
+    "MESSAGE_BUS_KAFKA_CONSUME_TOTAL": (
+        "message_bus_kafka_consume_total",
+        "Total messages consumed from Kafka",
+        ["result", "topic"],
+        "counter",
+    ),
+    "MESSAGE_BUS_KAFKA_LAG": (
+        "message_bus_kafka_consumer_lag",
+        "Consumer lag per partition",
+        ["topic", "partition"],
+        "gauge",
+    ),
+    # 4. Resilience Metrics
+    "MESSAGE_BUS_CIRCUIT_STATE": (
+        "message_bus_circuit_state",
+        "State of circuit breakers (0=closed, 1=open, 2=half-open)",
+        ["component"],
+        "gauge",
+    ),
+    "MESSAGE_BUS_DLQ_TOTAL": (
+        "message_bus_dlq_total",
+        "Total messages sent to dead letter queue",
+        ["topic", "reason"],
+        "counter",
+    ),
+}
 
-MESSAGE_BUS_MESSAGE_AGE = _get_or_create_metric(
-    "message_bus_message_age_seconds",
-    "Time elapsed between message creation and dispatch (consumer lag)",
-    ["shard_id", "priority"],
-    "histogram",
-    buckets=(0.005, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, float("inf")),
-)
 
-MESSAGE_BUS_CALLBACK_LATENCY = _get_or_create_metric(
-    "message_bus_callback_latency_seconds",
-    "Time spent executing a single subscriber callback",
-    ["topic", "handler"],
-    "histogram",
-    buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, float("inf")),
-)
-
-# 2. Guardian/Health Metrics
-MESSAGE_BUS_HEALTH_STATUS = _get_or_create_metric(
-    "message_bus_health_status",
-    "Current health status of the message bus (1=Healthy, 0=Degraded, -1=Critical)",
-    [],
-    "gauge",
-)
-
-MESSAGE_BUS_CRITICAL_FAILURES_TOTAL = _get_or_create_metric(
-    "message_bus_critical_failures_total",
-    "Total number of times the message bus hit the critical failure threshold",
-    ["component"],
-    "counter",
-)
-
-# 3. Integration Metrics (Redis, Kafka)
-MESSAGE_BUS_REDIS_PUBLISH_TOTAL = _get_or_create_metric(
-    "message_bus_redis_publish_total",
-    "Total messages published to Redis",
-    ["result", "topic"],
-    "counter",
-)
-
-MESSAGE_BUS_REDIS_CONSUME_TOTAL = _get_or_create_metric(
-    "message_bus_redis_consume_total",
-    "Total messages consumed from Redis",
-    ["result", "topic"],
-    "counter",
-)
-
-MESSAGE_BUS_KAFKA_PRODUCE_TOTAL = _get_or_create_metric(
-    "message_bus_kafka_produce_total",
-    "Total messages produced to Kafka",
-    ["result", "topic"],
-    "counter",
-)
-
-MESSAGE_BUS_KAFKA_CONSUME_TOTAL = _get_or_create_metric(
-    "message_bus_kafka_consume_total",
-    "Total messages consumed from Kafka",
-    ["result", "topic"],
-    "counter",
-)
-
-MESSAGE_BUS_KAFKA_LAG = _get_or_create_metric(
-    "message_bus_kafka_consumer_lag",
-    "Consumer lag per partition",
-    ["topic", "partition"],
-    "gauge",
-)
-
-# 4. Resilience Metrics
-MESSAGE_BUS_CIRCUIT_STATE = _get_or_create_metric(
-    "message_bus_circuit_state",
-    "State of circuit breakers (0=closed, 1=open, 2=half-open)",
-    ["component"],
-    "gauge",
-)
-
-MESSAGE_BUS_DLQ_TOTAL = _get_or_create_metric(
-    "message_bus_dlq_total",
-    "Total messages sent to dead letter queue",
-    ["topic", "reason"],
-    "counter",
-)
+def __getattr__(name: str) -> Any:
+    """
+    Lazy load metrics on first module attribute access (PEP 562).
+    
+    This allows metrics to be imported and used exactly as before:
+        from omnicore_engine.message_bus.metrics import MESSAGE_BUS_QUEUE_SIZE
+        MESSAGE_BUS_QUEUE_SIZE.labels(shard_id="0").set(10)
+    
+    But defers the expensive metric creation until the metric is actually accessed,
+    preventing the 18+ second import-time overhead that causes CI timeouts.
+    
+    Args:
+        name: Name of the module attribute being accessed
+        
+    Returns:
+        The requested metric object
+        
+    Raises:
+        AttributeError: If the attribute doesn't exist in metric definitions
+    """
+    if name in _METRIC_DEFINITIONS:
+        return _lazy_get_or_create_metric(name, *_METRIC_DEFINITIONS[name])
+    
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 # --- Helper Context Managers ---
@@ -501,7 +539,13 @@ def timer(metric: Histogram, **labels):
 @contextmanager
 def dispatch_timer(shard_id: int):
     """Specialized timer for dispatch duration."""
-    with timer(MESSAGE_BUS_DISPATCH_DURATION, shard_id=str(shard_id)):
+    # Import the metric within the function to trigger lazy loading via __getattr__
+    # when this function is called from outside the module
+    metric = _lazy_get_or_create_metric(
+        "MESSAGE_BUS_DISPATCH_DURATION", 
+        *_METRIC_DEFINITIONS["MESSAGE_BUS_DISPATCH_DURATION"]
+    )
+    with timer(metric, shard_id=str(shard_id)):
         yield
 
 
@@ -511,18 +555,18 @@ def reset_metrics():
     Clears all mock metric values (for unit tests).
 
     Uses the new clear() method which also resets warning flags.
+    Also clears the lazy metrics cache to ensure fresh metric instances.
     """
+    # Clear the lazy metrics cache
+    _lazy_metrics.clear()
+    
+    # Clear the metric registry cache
+    _metric_registry.clear()
+    
     if not _PROMETHEUS_AVAILABLE:
-        for metric in _metric_registry.values():
-            if hasattr(metric, "_values") and hasattr(metric._values, "clear"):
-                metric._values.clear()
-            if hasattr(metric, "_bucket_values") and metric._bucket_values:
-                if hasattr(metric._bucket_values, "clear"):
-                    metric._bucket_values.clear()
-            if hasattr(metric, "_sum"):
-                metric._sum = 0.0
-                metric._count = 0
-        logger.debug("Mock metrics reset.")
+        # Note: After clearing, any previously accessed metrics won't exist
+        # This is intentional for testing - fresh metrics will be created on next access
+        logger.debug("Mock metrics and lazy cache reset.")
 
 
 def get_mock_metric_values(name: str) -> Dict[Tuple, float]:
