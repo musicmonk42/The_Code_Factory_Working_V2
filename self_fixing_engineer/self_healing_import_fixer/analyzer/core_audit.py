@@ -712,9 +712,9 @@ def get_audit_logger() -> RegulatoryAuditLogger:
                 # Skip background thread initialization in CI environments
                 # to prevent thread exhaustion during import-time checks
                 skip_init = (
-                    os.getenv('CI') or 
-                    os.getenv('GITHUB_ACTIONS') or 
-                    os.getenv('SKIP_AUDIT_INIT')
+                    os.getenv('CI') in ('1', 'true', 'True', 'TRUE') or 
+                    os.getenv('GITHUB_ACTIONS') in ('1', 'true', 'True', 'TRUE') or 
+                    os.getenv('SKIP_AUDIT_INIT') in ('1', 'true', 'True', 'TRUE')
                 )
                 
                 if not skip_init:
