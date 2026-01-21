@@ -283,7 +283,8 @@ jobs:
             find tests/ -name "test_*.py" -type f || echo "No test files found"
             echo ""
             echo "=== Attempting to collect tests with verbose output ==="
-            pytest tests/ --collect-only -v || true
+            pytest tests/ --collect-only -v; DIAG_EXIT=$?
+            echo "Diagnostic collection exit code: $DIAG_EXIT"
             exit 1
           elif [ $PYTEST_EXIT -ne 0 ]; then
             echo ""
