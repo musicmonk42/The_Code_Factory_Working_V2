@@ -432,3 +432,32 @@ app.include_router(fixes_router, prefix="/api")
 app.include_router(events_router, prefix="/api")
 
 logger.info("FastAPI application configured successfully")
+
+
+# Allow running the server directly with `python -m server.main`
+if __name__ == "__main__":
+    import uvicorn
+    
+    # Get configuration from environment variables with validation
+    try:
+        port = int(os.environ.get("PORT", 8000))
+        if not (1 <= port <= 65535):
+            logger.warning(f"Invalid PORT value: {port}, must be 1-65535. Using default 8000")
+            port = 8000
+    except ValueError:
+        logger.warning(f"Invalid PORT value: {os.environ.get('PORT')}, using default 8000")
+        port = 8000
+    
+    host = os.environ.get("HOST", "0.0.0.0")
+    log_level = os.environ.get("LOG_LEVEL", "info").lower()
+    
+    logger.info(f"Starting server on {host}:{port}")
+    
+    # Run the FastAPI application
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level=log_level,
+        access_log=True,
+    )
