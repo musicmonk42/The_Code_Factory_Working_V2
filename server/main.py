@@ -438,8 +438,13 @@ logger.info("FastAPI application configured successfully")
 if __name__ == "__main__":
     import uvicorn
     
-    # Get configuration from environment variables
-    port = int(os.environ.get("PORT", 8000))
+    # Get configuration from environment variables with validation
+    try:
+        port = int(os.environ.get("PORT", 8000))
+    except ValueError:
+        logger.warning(f"Invalid PORT value: {os.environ.get('PORT')}, using default 8000")
+        port = 8000
+    
     host = os.environ.get("HOST", "0.0.0.0")
     log_level = os.environ.get("LOG_LEVEL", "info").lower()
     

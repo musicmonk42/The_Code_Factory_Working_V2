@@ -6,23 +6,66 @@
 builder = "DOCKERFILE"
 
 [deploy]
-# Start command for the unified FastAPI server (server.main)
 startCommand = "python -m server.main"
-
-# Health check configuration
-# The /health endpoint returns JSON with system status
 healthcheckPath = "/health"
 healthcheckTimeout = 300
-
-# Restart policy: only restart on failure, not on success exit
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
 [variables]
+# === Core Application ===
 APP_ENV = "production"
 DEBUG = "false"
 LOG_LEVEL = "INFO"
+
+# === LLM Configuration ===
 LLM_PROVIDER = "openai"
 LLM_MODEL = "gpt-4o-mini"
+# API Keys - Set these as secrets in Railway UI:
+# OPENAI_API_KEY (required)
+# ANTHROPIC_API_KEY (optional - for Claude)
+# GEMINI_API_KEY (optional - for Google Gemini)
+# GROK_API_KEY (optional - for xAI Grok)
+# CLAUDE_API_KEY (optional - alternative for Anthropic)
+
+# === Database Configuration ===
+# DATABASE_URL - Auto-injected by Railway PostgreSQL plugin
+# REDIS_URL - Auto-injected by Railway Redis plugin
+
+# === Kafka Configuration (disabled by default - uses Redis Streams instead) ===
+USE_KAFKA_INGESTION = "false"
+USE_KAFKA_AUDIT = "false"
+# If using external Kafka provider (e.g., Upstash, Confluent Cloud), set:
+# KAFKA_BOOTSTRAP_SERVERS = "your-kafka-cluster:9092"
+# KAFKA_SASL_USERNAME = "your-username"
+# KAFKA_SASL_PASSWORD = "your-password"
+# KAFKA_SECURITY_PROTOCOL = "SASL_SSL"
+# KAFKA_TOPIC = "meta_learning_events"
+# KAFKA_DLQ_TOPIC = "meta_learning_dlq"
+# KAFKA_CLIENT_ID = "code-factory"
+# EVENT_HMAC_KEY = "your-hmac-key"
+
+# === Neo4j Configuration (optional - for knowledge graph features) ===
+# NEO4J_URL = "bolt://your-neo4j-host:7687"
+# NEO4J_USER = "neo4j"
+# NEO4J_PASSWORD = "your-password"
+
+# === Security Secrets ===
+# Generate these using Railway's ${{secret()}} syntax or set manually:
+# SECRET_KEY = "${{secret()}}"
+# JWT_SECRET_KEY = "${{secret()}}"
+# ENCRYPTION_KEY = "32-byte-base64-fernet-key"
+# AGENTIC_AUDIT_HMAC_KEY = "your-audit-hmac-key"
+
+# === Observability ===
+# SENTRY_DSN = "https://your-sentry-dsn"
+# OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel-collector:4317"
+# METRICS_PORT = "9090"
+
+# === Performance ===
 WORKER_COUNT = "4"
 MAX_CONCURRENT_TASKS = "50"
+
+# === File Paths (use defaults or customize) ===
+# AUDIT_LOG_PATH = "/app/logs/audit.log"
+# AUDIT_DLQ_PATH = "/app/logs/audit_dlq.jsonl"
