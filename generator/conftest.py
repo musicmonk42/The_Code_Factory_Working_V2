@@ -1499,18 +1499,21 @@ def import_timeout(seconds=10):
 # ---- Pytest fixture to trigger lazy mock setup ----
 # This ensures optional dependency mocks are set up once per test session
 # when tests actually run, not at conftest import time.
-# CHANGED: autouse=False to prevent triggering during collection phase
 
 try:
     import pytest
 
-    @pytest.fixture(scope="session", autouse=False)
+    @pytest.fixture(scope="session", autouse=True)
     def _ensure_optional_mocks():
         """
         Ensure optional dependency mocks are set up once per test session.
-        This fixture must be explicitly requested by tests that need mocks.
-        Changed from autouse=True to autouse=False to prevent pytest from
-        triggering expensive mock setup during the collection phase.
+        This fixture is automatically used by all tests (autouse=True) and runs
+        once per session (scope="session") to set up the mocks lazily.
+        
+        Note: This fixture runs AFTER test collection, not during conftest import.
+        The expensive OpenTelemetry setup has been moved to _create_opentelemetry_stubs()
+        and is only called if needed. Additionally, in CI environments, import attempts
+        are skipped entirely in favor of lightweight stub creation.
         """
         _setup_optional_dependency_mocks()
         yield
