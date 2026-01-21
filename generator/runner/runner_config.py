@@ -259,6 +259,10 @@ class RunnerConfig(BaseModel):
         None,
         description="Environment variable for log signing key (HMAC) or private key PEM path (RSA/ECDSA).",
     )
+    audit_signing_key_id: Optional[str] = Field(
+        None,
+        description="Key ID for the V0 audit crypto system used to sign audit log entries. Required in production (non-DEV_MODE).",
+    )
 
     # --- Pydantic V2 Validators ---
 
@@ -796,6 +800,7 @@ def load_config(
         "RUNNER_LOG_SIGNING_ENABLED": "log_signing_enabled",
         "RUNNER_LOG_SIGNING_ALGO": "log_signing_algo",
         "RUNNER_LOG_SIGNING_KEY_ENV_VAR": "log_signing_key_env_var",
+        "RUNNER_AUDIT_SIGNING_KEY_ID": "audit_signing_key_id",
     }
     for env_key, field_name in env_map.items():
         if env_val := os.getenv(env_key):
@@ -919,6 +924,7 @@ def load_config(
                 "log_signing_enabled": d.get("log_signing_enabled", True),
                 "log_signing_algo": d.get("log_signing_algo", "hmac"),
                 "log_signing_key_env_var": d.get("log_signing_key_env_var", None),
+                "audit_signing_key_id": d.get("audit_signing_key_id", None),
                 "version": 4,
             },
         }
