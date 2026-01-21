@@ -631,6 +631,13 @@ class RegulatoryAuditLogger:
 
     def _start_integrity_monitor(self):
         """Start continuous integrity monitoring thread."""
+        
+        # Skip in CI/test environments to prevent thread exhaustion
+        if (os.getenv('CI') in ('1', 'true', 'True', 'TRUE') or 
+            os.getenv('GITHUB_ACTIONS') in ('1', 'true', 'True', 'TRUE') or
+            os.getenv('TESTING') == '1'):
+            logger.info("Skipping integrity monitor thread (CI/test environment detected)")
+            return
 
         def monitor_loop():
             # A dedicated event loop for the thread

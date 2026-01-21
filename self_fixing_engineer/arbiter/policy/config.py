@@ -20,6 +20,7 @@ import threading
 import time
 import warnings
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import redis.asyncio as redis
 
@@ -493,9 +494,22 @@ class ArbiterConfig(BaseSettings):
 
     @model_validator(mode="after")
     def validate_redis_url(self):
+        # Skip Redis connection validation in CI/test environments
+        if (os.getenv('CI') in ('1', 'true', 'True', 'TRUE') or 
+            os.getenv('GITHUB_ACTIONS') in ('1', 'true', 'True', 'TRUE') or
+            os.getenv('TESTING') == '1' or
+            os.getenv('ENVIRONMENT') == 'test'):
+            logger.info("Skipping Redis URL connection validation (CI/test environment detected)")
+            if self.REDIS_URL:
+                # Basic URL format validation without connection
+                try:
+                    parsed = urlparse(self.REDIS_URL)
+                    if parsed.scheme not in ('redis', 'rediss'):
+                        logger.warning(f"Invalid Redis scheme: {parsed.scheme}")
+                except Exception as e:
+                    logger.warning(f"Redis URL format validation failed: {e}")
+            return self
 
-        if os.getenv("ENVIRONMENT") == "test":
-            return self  # Skip ping in tests
         url = self.REDIS_URL
         if url:
             start_time = time.time()
