@@ -539,9 +539,13 @@ def timer(metric: Histogram, **labels):
 @contextmanager
 def dispatch_timer(shard_id: int):
     """Specialized timer for dispatch duration."""
-    # Access the lazy-loaded metric via __getattr__
-    dispatch_duration_metric = __getattr__("MESSAGE_BUS_DISPATCH_DURATION")
-    with timer(dispatch_duration_metric, shard_id=str(shard_id)):
+    # Import the metric within the function to trigger lazy loading via __getattr__
+    # when this function is called from outside the module
+    metric = _lazy_get_or_create_metric(
+        "MESSAGE_BUS_DISPATCH_DURATION", 
+        *_METRIC_DEFINITIONS["MESSAGE_BUS_DISPATCH_DURATION"]
+    )
+    with timer(metric, shard_id=str(shard_id)):
         yield
 
 
@@ -551,18 +555,18 @@ def reset_metrics():
     Clears all mock metric values (for unit tests).
 
     Uses the new clear() method which also resets warning flags.
+    Also clears the lazy metrics cache to ensure fresh metric instances.
     """
+    # Clear the lazy metrics cache
+    _lazy_metrics.clear()
+    
+    # Clear the metric registry cache
+    _metric_registry.clear()
+    
     if not _PROMETHEUS_AVAILABLE:
-        for metric in _metric_registry.values():
-            if hasattr(metric, "_values") and hasattr(metric._values, "clear"):
-                metric._values.clear()
-            if hasattr(metric, "_bucket_values") and metric._bucket_values:
-                if hasattr(metric._bucket_values, "clear"):
-                    metric._bucket_values.clear()
-            if hasattr(metric, "_sum"):
-                metric._sum = 0.0
-                metric._count = 0
-        logger.debug("Mock metrics reset.")
+        # Note: After clearing, any previously accessed metrics won't exist
+        # This is intentional for testing - fresh metrics will be created on next access
+        logger.debug("Mock metrics and lazy cache reset.")
 
 
 def get_mock_metric_values(name: str) -> Dict[Tuple, float]:
