@@ -182,7 +182,7 @@ try:
     AUDIT_LOGGER_AVAILABLE = True
 except Exception as e:
     AUDIT_LOGGER_AVAILABLE = False
-    _real_audit_event = None
+    # Note: Don't set _real_audit_event to None here - lazy import may succeed later
     logger.debug(f"Real audit logger setup failed: {e}")
 
 if os.getenv("AUDIT_ENABLED", "true").lower() == "false":
