@@ -897,6 +897,20 @@ _OPTIONAL_DEPENDENCIES = [
 _mocks_initialized = False
 
 
+def _create_parent_modules(dep):
+    """
+    Create parent module stubs for dotted package names.
+    For example, for 'google.cloud.storage', creates stubs for 'google' and 'google.cloud'.
+    """
+    if "." in dep:
+        parts = dep.split(".")
+        for i in range(1, len(parts)):
+            parent_name = ".".join(parts[:i])
+            if parent_name not in sys.modules:
+                parent_mock = _create_mock_module(parent_name)
+                sys.modules[parent_name] = parent_mock
+
+
 def _create_opentelemetry_stubs():
     """
     Create comprehensive OpenTelemetry stubs.
@@ -1254,7 +1268,10 @@ def _setup_optional_dependency_mocks():
         return
     
     # CI environment fast path: Skip expensive import attempts in CI
-    is_ci = os.environ.get("CI") == "1" or os.environ.get("GITHUB_ACTIONS") == "true"
+    # Handle various truthy values for robustness
+    ci_value = os.environ.get("CI", "").lower()
+    github_actions_value = os.environ.get("GITHUB_ACTIONS", "").lower()
+    is_ci = ci_value in ("1", "true", "yes") or github_actions_value in ("1", "true", "yes")
     
     for dep in _OPTIONAL_DEPENDENCIES:
         if dep not in sys.modules:
@@ -1273,13 +1290,7 @@ def _setup_optional_dependency_mocks():
                 sys.modules[dep] = mock_module
                 
                 # Handle parent modules for dotted packages
-                if "." in dep:
-                    parts = dep.split(".")
-                    for i in range(1, len(parts)):
-                        parent_name = ".".join(parts[:i])
-                        if parent_name not in sys.modules:
-                            parent_mock = _create_mock_module(parent_name)
-                            sys.modules[parent_name] = parent_mock
+                _create_parent_modules(dep)
             else:
                 # Non-CI: Try to import, fallback to mock on failure
                 try:
@@ -1291,13 +1302,7 @@ def _setup_optional_dependency_mocks():
                     sys.modules[dep] = mock_module
 
                     # For packages that are commonly accessed as submodules, create parent stubs
-                    if "." in dep:
-                        parts = dep.split(".")
-                        for i in range(1, len(parts)):
-                            parent_name = ".".join(parts[:i])
-                            if parent_name not in sys.modules:
-                                parent_mock = _create_mock_module(parent_name)
-                                sys.modules[parent_name] = parent_mock
+                    _create_parent_modules(dep)
 
                     # Special handling for packages that need specific submodules
                     if dep == "watchdog":
@@ -1355,14 +1360,7 @@ def _setup_optional_dependency_mocks():
                     # Catch any other errors and create a mock
                     mock_module = _create_mock_module(dep)
                     sys.modules[dep] = mock_module
-
-                    if "." in dep:
-                        parts = dep.split(".")
-                        for i in range(1, len(parts)):
-                            parent_name = ".".join(parts[:i])
-                            if parent_name not in sys.modules:
-                                parent_mock = _create_mock_module(parent_name)
-                                sys.modules[parent_name] = parent_mock
+                    _create_parent_modules(dep)
     
     # Mark as initialized
     _mocks_initialized = True
