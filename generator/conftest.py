@@ -892,89 +892,108 @@ _OPTIONAL_DEPENDENCIES = [
     "botocore.exceptions",  # AWS SDK exceptions
 ]
 
-for dep in _OPTIONAL_DEPENDENCIES:
-    if dep not in sys.modules:
-        try:
-            __import__(dep)
-        except (ImportError, OSError):
-            # Create a more sophisticated mock that handles submodule access
-            # Catch ImportError (not installed) and OSError (DLL errors on Windows)
-            mock_module = _create_mock_module(dep)
-            sys.modules[dep] = mock_module
+# Flag to track if mocks have been set up (to avoid duplicate work)
+_mocks_initialized = False
 
-            # For packages that are commonly accessed as submodules, create parent stubs
-            if "." in dep:
-                parts = dep.split(".")
-                for i in range(1, len(parts)):
-                    parent_name = ".".join(parts[:i])
-                    if parent_name not in sys.modules:
-                        parent_mock = _create_mock_module(parent_name)
-                        sys.modules[parent_name] = parent_mock
 
-            # Special handling for packages that need specific submodules
-            if dep == "watchdog":
-                # Create watchdog.events submodule
-                watchdog_events = _create_mock_module("watchdog.events")
-                sys.modules["watchdog.events"] = watchdog_events
+def _setup_optional_dependency_mocks():
+    """
+    Setup mocks for optional dependencies. Called lazily when needed.
+    This function is called by the _ensure_optional_mocks fixture to defer
+    expensive mock setup until tests actually run.
+    """
+    global _mocks_initialized
+    
+    # Skip if already initialized
+    if _mocks_initialized:
+        return
+    
+    for dep in _OPTIONAL_DEPENDENCIES:
+        if dep not in sys.modules:
+            try:
+                __import__(dep)
+            except (ImportError, OSError):
+                # Create a more sophisticated mock that handles submodule access
+                # Catch ImportError (not installed) and OSError (DLL errors on Windows)
+                mock_module = _create_mock_module(dep)
+                sys.modules[dep] = mock_module
 
-                # Add FileSystemEventHandler class
-                class FileSystemEventHandler:
-                    def on_modified(self, event):
-                        pass
+                # For packages that are commonly accessed as submodules, create parent stubs
+                if "." in dep:
+                    parts = dep.split(".")
+                    for i in range(1, len(parts)):
+                        parent_name = ".".join(parts[:i])
+                        if parent_name not in sys.modules:
+                            parent_mock = _create_mock_module(parent_name)
+                            sys.modules[parent_name] = parent_mock
 
-                    def on_created(self, event):
-                        pass
+                # Special handling for packages that need specific submodules
+                if dep == "watchdog":
+                    # Create watchdog.events submodule
+                    watchdog_events = _create_mock_module("watchdog.events")
+                    sys.modules["watchdog.events"] = watchdog_events
 
-                    def on_deleted(self, event):
-                        pass
+                    # Add FileSystemEventHandler class
+                    class FileSystemEventHandler:
+                        def on_modified(self, event):
+                            pass
 
-                watchdog_events.FileSystemEventHandler = FileSystemEventHandler
-                mock_module.events = watchdog_events
+                        def on_created(self, event):
+                            pass
 
-                # Create watchdog.observers submodule
-                watchdog_observers = _create_mock_module("watchdog.observers")
-                sys.modules["watchdog.observers"] = watchdog_observers
+                        def on_deleted(self, event):
+                            pass
 
-                # Add Observer class
-                class Observer:
-                    def __init__(self):
-                        pass
+                    watchdog_events.FileSystemEventHandler = FileSystemEventHandler
+                    mock_module.events = watchdog_events
 
-                    def schedule(self, *args, **kwargs):
-                        pass
+                    # Create watchdog.observers submodule
+                    watchdog_observers = _create_mock_module("watchdog.observers")
+                    sys.modules["watchdog.observers"] = watchdog_observers
 
-                    def start(self):
-                        pass
+                    # Add Observer class
+                    class Observer:
+                        def __init__(self):
+                            pass
 
-                    def stop(self):
-                        pass
+                        def schedule(self, *args, **kwargs):
+                            pass
 
-                    def join(self):
-                        pass
+                        def start(self):
+                            pass
 
-                watchdog_observers.Observer = Observer
-                mock_module.observers = watchdog_observers
-            elif dep == "defusedxml":
-                # Create defusedxml.ElementTree submodule
-                defusedxml_et = _create_mock_module("defusedxml.ElementTree")
-                sys.modules["defusedxml.ElementTree"] = defusedxml_et
-                mock_module.ElementTree = defusedxml_et
-                # Add common ElementTree functions
-                defusedxml_et.parse = lambda *args, **kwargs: None
-                defusedxml_et.fromstring = lambda *args, **kwargs: None
-                defusedxml_et.XML = lambda *args, **kwargs: None
-        except Exception:
-            # Catch any other errors and create a mock
-            mock_module = _create_mock_module(dep)
-            sys.modules[dep] = mock_module
+                        def stop(self):
+                            pass
 
-            if "." in dep:
-                parts = dep.split(".")
-                for i in range(1, len(parts)):
-                    parent_name = ".".join(parts[:i])
-                    if parent_name not in sys.modules:
-                        parent_mock = _create_mock_module(parent_name)
-                        sys.modules[parent_name] = parent_mock
+                        def join(self):
+                            pass
+
+                    watchdog_observers.Observer = Observer
+                    mock_module.observers = watchdog_observers
+                elif dep == "defusedxml":
+                    # Create defusedxml.ElementTree submodule
+                    defusedxml_et = _create_mock_module("defusedxml.ElementTree")
+                    sys.modules["defusedxml.ElementTree"] = defusedxml_et
+                    mock_module.ElementTree = defusedxml_et
+                    # Add common ElementTree functions
+                    defusedxml_et.parse = lambda *args, **kwargs: None
+                    defusedxml_et.fromstring = lambda *args, **kwargs: None
+                    defusedxml_et.XML = lambda *args, **kwargs: None
+            except Exception:
+                # Catch any other errors and create a mock
+                mock_module = _create_mock_module(dep)
+                sys.modules[dep] = mock_module
+
+                if "." in dep:
+                    parts = dep.split(".")
+                    for i in range(1, len(parts)):
+                        parent_name = ".".join(parts[:i])
+                        if parent_name not in sys.modules:
+                            parent_mock = _create_mock_module(parent_name)
+                            sys.modules[parent_name] = parent_mock
+    
+    # Mark as initialized
+    _mocks_initialized = True
 
 # Add the generator directory to sys.path
 generator_root = Path(__file__).parent.resolve()
@@ -1449,3 +1468,27 @@ if "opentelemetry" not in sys.modules:
         sys.modules["opentelemetry.exporter.otlp.proto.grpc.trace_exporter"] = (
             exporter_otlp_proto_grpc_trace_exporter_module
         )
+
+
+# ---- Pytest fixture to trigger lazy mock setup ----
+# This ensures optional dependency mocks are set up once per test session
+# when tests actually run, not at conftest import time.
+
+try:
+    import pytest
+
+    @pytest.fixture(scope="session", autouse=True)
+    def _ensure_optional_mocks():
+        """
+        Ensure optional dependency mocks are set up once per test session.
+        This fixture is automatically used by all tests (autouse=True) and runs
+        once per session (scope="session") to set up the mocks lazily.
+        """
+        _setup_optional_dependency_mocks()
+        yield
+
+except ImportError:
+    # pytest not available (e.g., when conftest is imported outside of pytest context)
+    # In this case, mocks won't be set up automatically, but can be triggered manually
+    # by calling _setup_optional_dependency_mocks() if needed
+    pass
