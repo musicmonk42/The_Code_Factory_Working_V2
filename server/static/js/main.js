@@ -761,10 +761,33 @@ async function deleteJob(jobId) {
 // ===== GENERATOR AGENT FUNCTIONS =====
 
 async function runAgentPipeline() {
-    const jobId = document.getElementById('agent-job-id').value;
+    let jobId = document.getElementById('agent-job-id').value;
+    
+    // If no job ID, create one automatically
     if (!jobId) {
-        showError('Please enter a job ID');
-        return;
+        try {
+            const createResponse = await fetch(`${API_BASE}/jobs/`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({description: 'Pipeline job', metadata: {}})
+            });
+            if (!createResponse.ok) {
+                let errorMsg = `Failed to create job (HTTP ${createResponse.status})`;
+                try {
+                    const errorData = await createResponse.json();
+                    errorMsg = 'Failed to create job: ' + (errorData.detail || errorData.message || JSON.stringify(errorData));
+                } catch (e) { /* ignore JSON parse error */ }
+                showError(errorMsg);
+                return;
+            }
+            const job = await createResponse.json();
+            jobId = job.id;
+            document.getElementById('agent-job-id').value = jobId;
+            showSuccess('Job created: ' + jobId);
+        } catch (error) {
+            showError('Failed to create job: ' + error.message);
+            return;
+        }
     }
     
     try {
@@ -772,7 +795,7 @@ async function runAgentPipeline() {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                readme_content: 'Full pipeline execution',
+                readme_content: 'Generate a Python web application with FastAPI backend',
                 language: 'python',
                 include_tests: true,
                 include_deployment: true,
@@ -780,17 +803,34 @@ async function runAgentPipeline() {
                 run_critique: true
             })
         });
-        const data = await response.json();
-        showSuccess('Pipeline started: ' + data.status);
+        
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            data = {};
+        }
+        
+        if (!response.ok) {
+            if (response.status === 404) {
+                showError('Job not found. The job may have been deleted or the server was restarted. Please create a new job first by uploading files.');
+            } else if (response.status === 422) {
+                showError('Invalid request: ' + (data.detail || JSON.stringify(data)));
+            } else {
+                showError('Pipeline failed: ' + (data.detail || data.message || `HTTP ${response.status}`));
+            }
+            return;
+        }
+        showSuccess('Pipeline started: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Pipeline failed: ' + error.message);
     }
 }
 
 async function runCodegen() {
-    const jobId = document.getElementById('agent-job-id').value;
+    let jobId = document.getElementById('agent-job-id').value;
     if (!jobId) {
-        showError('Please enter a job ID');
+        showError('Please enter a job ID or create one by clicking Full Pipeline first');
         return;
     }
     
@@ -799,12 +839,21 @@ async function runCodegen() {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                readme_content: 'Generate code from requirements',
-                language: 'python'
+                requirements: 'Generate a Python web application with REST API endpoints',
+                language: 'python',
+                include_tests: true
             })
         });
         const data = await response.json();
-        showSuccess('Code generation started');
+        if (!response.ok) {
+            if (response.status === 404) {
+                showError('Job not found. Please create a job first by clicking Full Pipeline or uploading files.');
+            } else {
+                showError('Code generation failed: ' + (data.detail || data.message || 'Unknown error'));
+            }
+            return;
+        }
+        showSuccess('Code generation started: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Code generation failed: ' + error.message);
     }
@@ -812,15 +861,28 @@ async function runCodegen() {
 
 async function runTestgen() {
     const jobId = document.getElementById('agent-job-id').value;
-    if (!jobId) return showError('Please enter a job ID');
+    if (!jobId) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
     
     try {
         const response = await fetch(`${API_BASE}/generator/${jobId}/testgen`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({target_files: [], framework: 'pytest'})
+            body: JSON.stringify({
+                code_path: './uploads/' + jobId + '/generated',
+                test_type: 'unit',
+                coverage_target: 80.0
+            })
         });
-        showSuccess('Test generation started');
+        const data = await response.json();
+        if (!response.ok) {
+            if (response.status === 404) {
+                showError('Job not found. Please create a job first.');
+            } else {
+                showError('Test generation failed: ' + (data.detail || data.message || 'Unknown error'));
+            }
+            return;
+        }
+        showSuccess('Test generation started: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Test generation failed: ' + error.message);
     }
@@ -828,15 +890,28 @@ async function runTestgen() {
 
 async function runDocgen() {
     const jobId = document.getElementById('agent-job-id').value;
-    if (!jobId) return showError('Please enter a job ID');
+    if (!jobId) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
     
     try {
         const response = await fetch(`${API_BASE}/generator/${jobId}/docgen`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({target_files: [], format: 'markdown'})
+            body: JSON.stringify({
+                code_path: './uploads/' + jobId + '/generated',
+                doc_type: 'api',
+                format: 'markdown'
+            })
         });
-        showSuccess('Documentation generation started');
+        const data = await response.json();
+        if (!response.ok) {
+            if (response.status === 404) {
+                showError('Job not found. Please create a job first.');
+            } else {
+                showError('Documentation generation failed: ' + (data.detail || data.message || 'Unknown error'));
+            }
+            return;
+        }
+        showSuccess('Documentation generation started: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Documentation generation failed: ' + error.message);
     }
@@ -844,15 +919,28 @@ async function runDocgen() {
 
 async function runDeploy() {
     const jobId = document.getElementById('agent-job-id').value;
-    if (!jobId) return showError('Please enter a job ID');
+    if (!jobId) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
     
     try {
         const response = await fetch(`${API_BASE}/generator/${jobId}/deploy`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({platform: 'docker', include_ci_cd: true})
+            body: JSON.stringify({
+                code_path: './uploads/' + jobId + '/generated',
+                platform: 'docker',
+                include_ci_cd: true
+            })
         });
-        showSuccess('Deployment config generation started');
+        const data = await response.json();
+        if (!response.ok) {
+            if (response.status === 404) {
+                showError('Job not found. Please create a job first.');
+            } else {
+                showError('Deployment generation failed: ' + (data.detail || data.message || 'Unknown error'));
+            }
+            return;
+        }
+        showSuccess('Deployment config generation started: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Deployment generation failed: ' + error.message);
     }
@@ -860,16 +948,28 @@ async function runDeploy() {
 
 async function runCritique() {
     const jobId = document.getElementById('agent-job-id').value;
-    if (!jobId) return showError('Please enter a job ID');
+    if (!jobId) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
     
     try {
         const response = await fetch(`${API_BASE}/generator/${jobId}/critique`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({target_files: [], check_security: true, check_quality: true})
+            body: JSON.stringify({
+                code_path: './uploads/' + jobId + '/generated',
+                scan_types: ['security', 'quality', 'performance'],
+                auto_fix: false
+            })
         });
         const data = await response.json();
-        alert(`Critique complete:\nIssues found: ${data.issues_found}\nSecurity: ${data.security_score}/100\nQuality: ${data.quality_score}/100`);
+        if (!response.ok) {
+            if (response.status === 404) {
+                showError('Job not found. Please create a job first.');
+            } else {
+                showError('Critique failed: ' + (data.detail || data.message || 'Unknown error'));
+            }
+            return;
+        }
+        showSuccess(`Critique complete: ${data.issues_found || 0} issues found, ${data.issues_fixed || 0} fixed`);
     } catch (error) {
         showError('Critique failed: ' + error.message);
     }
