@@ -882,7 +882,7 @@ from contextlib import contextmanager
 
 
 @contextmanager
-def import_timeout(seconds=10):
+def import_timeout(seconds=30):  # Increased from 10 to 30 for CI environments
     """
     Context manager to timeout expensive imports in tests.
     Prevents CPU limit exceeded errors in CI environments.
