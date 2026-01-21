@@ -18,6 +18,14 @@ In the **Variables** tab, add:
 | `OPENAI_API_KEY` | Your OpenAI API key | ✅ Yes |
 | `SECRET_KEY` | `${{secret()}}` or generate manually | ✅ Yes |
 | `JWT_SECRET_KEY` | `${{secret()}}` or generate manually | ✅ Yes |
+| `AGENTIC_AUDIT_HMAC_KEY` | Generate with command below | ✅ Yes |
+
+**Generate AGENTIC_AUDIT_HMAC_KEY:**
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+> **⚠️ CRITICAL**: `AGENTIC_AUDIT_HMAC_KEY` is **required** for production audit logging. Without it, the application will fail at runtime when attempting to log security events. Use Railway's `${{secret()}}` syntax or set a manually generated secret.
 
 ### 4. Optional Configuration
 
@@ -72,6 +80,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `OPENAI_API_KEY` | OpenAI API key | - |
 | `SECRET_KEY` | Application secret | - |
 | `JWT_SECRET_KEY` | JWT signing secret | - |
+| `AGENTIC_AUDIT_HMAC_KEY` | Audit log signing key (REQUIRED) | - |
 
 ### Database (Auto-injected)
 | Variable | Description | Source |
@@ -103,6 +112,22 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `MAX_CONCURRENT_TASKS` | Max concurrent tasks | `50` |
 
 ## Troubleshooting
+
+### Critical: Audit Logging Error
+**Error**: `FATAL: log_audit_event called for 'security_redact' but no signing key is configured and not in DEV_MODE`
+
+**Cause**: The audit logging system requires `AGENTIC_AUDIT_HMAC_KEY` to sign security events in production.
+
+**Solution**:
+1. Generate a secure key:
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+2. Add it to Railway Variables:
+   - Go to your project → Variables tab
+   - Add `AGENTIC_AUDIT_HMAC_KEY` with the generated value
+   - Or use Railway's secret syntax: `${{secret()}}`
+3. Redeploy the application
 
 ### Health Check Failing
 - Ensure `/health` endpoint is accessible
