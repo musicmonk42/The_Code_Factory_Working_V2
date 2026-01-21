@@ -912,101 +912,7 @@ def import_timeout(seconds=10):
 # This ensures optional dependency mocks are set up once per test session
 # when tests actually run, not at conftest import time.
 
-    "torch", "sentence_transformers", "transformers", "spacy",
-    "presidio_analyzer", "presidio_anonymizer", "networkx", "tiktoken",
-    "defusedxml", "openai", "chromadb", "anthropic", "dotenv", "backoff",
-    "hypothesis", "psutil", "xattr", "hvac", "pkcs11", "python-pkcs11",
-    "faiss", "dynaconf", "watchdog", "aiofiles", "aiohttp",
-    "prometheus_client", "aiokafka", "kafka", "redis", "sqlalchemy",
-    "pydantic", "pydantic_core", "pydantic-settings", "pydantic_settings",
-    "pytest_asyncio", "pytest-asyncio", "grpc", "grpcio", "fastapi",
-    "uvicorn", "faker", "httpx", "tenacity", "freezegun", "typer",
-    "numpy", "docutils", "nltk", "beautifulsoup4", "bs4", "git",
-    "gitpython", "filelock", "sphinx", "lxml", "langchain", "aiosqlite",
-    "google.cloud.storage", "google.cloud", "google.protobuf",
-    "azure.storage.blob", "azure.storage.blob.aio", "azure.core.exceptions",
-    "boto3", "botocore.exceptions",
-]
-
-# Set up mocks WITHOUT expensive __import__() attempts
-# Only create mocks for dependencies that aren't already in sys.modules
-for dep in _OPTIONAL_DEPENDENCIES:
-    if dep not in sys.modules:
-        # Create mock immediately without trying to import
-        mock_module = _create_mock_module(dep)
-        sys.modules[dep] = mock_module
-
-        # For packages that are commonly accessed as submodules, create parent stubs
-        if "." in dep:
-            parts = dep.split(".")
-            for i in range(1, len(parts)):
-                parent_name = ".".join(parts[:i])
-                if parent_name not in sys.modules:
-                    parent_mock = _create_mock_module(parent_name)
-                    sys.modules[parent_name] = parent_mock
-
-        # Special handling for packages that need specific submodules
-        if dep == "watchdog":
-            # Create watchdog.events submodule
-            watchdog_events = _create_mock_module("watchdog.events")
-            sys.modules["watchdog.events"] = watchdog_events
-
-            # Add FileSystemEventHandler class
-            class FileSystemEventHandler:
-                def on_modified(self, event):
-                    pass
-
-                def on_created(self, event):
-                    pass
-
-                def on_deleted(self, event):
-                    pass
-
-            watchdog_events.FileSystemEventHandler = FileSystemEventHandler
-            mock_module.events = watchdog_events
-
-            # Create watchdog.observers submodule
-            watchdog_observers = _create_mock_module("watchdog.observers")
-            sys.modules["watchdog.observers"] = watchdog_observers
-
-            # Add Observer class
-            class Observer:
-                def __init__(self):
-                    pass
-
-                def schedule(self, *args, **kwargs):
-                    pass
-
-                def start(self):
-                    pass
-
-                def stop(self):
-                    pass
-
-                def join(self):
-                    pass
-
-            watchdog_observers.Observer = Observer
-            mock_module.observers = watchdog_observers
-        elif dep == "defusedxml":
-            # Create defusedxml.ElementTree submodule
-            defusedxml_et = _create_mock_module("defusedxml.ElementTree")
-            sys.modules["defusedxml.ElementTree"] = defusedxml_et
-            mock_module.ElementTree = defusedxml_et
-            # Add common ElementTree functions
-            defusedxml_et.parse = lambda *args, **kwargs: None
-            defusedxml_et.fromstring = lambda *args, **kwargs: None
-            defusedxml_et.XML = lambda *args, **kwargs: None
-        elif dep in ("grpc", "grpcio"):
-            # Create grpc.aio submodule for async gRPC (handle both grpc and grpcio idempotently)
-            if "grpc.aio" not in sys.modules:
-                grpc_aio = _create_mock_module("grpc.aio")
-                sys.modules["grpc.aio"] = grpc_aio
-                mock_module.aio = grpc_aio
-                # insecure_channel will be handled by __getattr__
-
-
-# ---- Optional: Pytest fixture for any additional test setup ----
+# ---- Pytest fixture for lazy mock initialization ----
 try:
     import pytest
 
@@ -1018,12 +924,9 @@ try:
         once per session (scope="session") to set up the mocks lazily.
         
         Note: This fixture runs AFTER test collection, not during conftest import.
-        The expensive OpenTelemetry setup has been moved to _create_opentelemetry_stubs()
-        and is only called if needed. Additionally, in CI environments, import attempts
-        are skipped entirely in favor of lightweight stub creation.
-        Optional pytest fixture for any additional test setup.
-        Mocks are already set up at module level, so this is just a placeholder.
         """
+        # Setup mocks when tests actually run, not at import time
+        _setup_optional_dependency_mocks()
         yield
 
 except ImportError:
