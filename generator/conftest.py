@@ -312,6 +312,16 @@ _OPTIONAL_DEPENDENCIES = [
 _mocks_initialized = False
 
 
+def _is_ci_environment():
+    """
+    Check if running in a CI environment.
+    Returns True if CI or GITHUB_ACTIONS environment variables are set to truthy values.
+    """
+    ci_value = os.environ.get("CI", "").lower()
+    github_actions_value = os.environ.get("GITHUB_ACTIONS", "").lower()
+    return ci_value in ("1", "true", "yes") or github_actions_value in ("1", "true", "yes")
+
+
 def _create_parent_modules(dep):
     """
     Create parent module stubs for dotted package names.
@@ -673,8 +683,7 @@ def _create_opentelemetry_stubs():
 # ---- Early CI mock initialization ----
 # In CI environments, set up mocks immediately to avoid timeout during test collection.
 # This code runs at module level, right after all helper functions are defined.
-if os.environ.get("CI", "").lower() in ("1", "true", "yes") or \
-   os.environ.get("GITHUB_ACTIONS", "").lower() in ("1", "true", "yes"):
+if _is_ci_environment():
     if not _mocks_initialized:
         _mocks_initialized = True  # Prevent double initialization
         for dep in _OPTIONAL_DEPENDENCIES:
@@ -702,10 +711,7 @@ def _setup_optional_dependency_mocks():
         return
     
     # CI environment fast path: Skip expensive import attempts in CI
-    # Handle various truthy values for robustness
-    ci_value = os.environ.get("CI", "").lower()
-    github_actions_value = os.environ.get("GITHUB_ACTIONS", "").lower()
-    is_ci = ci_value in ("1", "true", "yes") or github_actions_value in ("1", "true", "yes")
+    is_ci = _is_ci_environment()
     
     for dep in _OPTIONAL_DEPENDENCIES:
         if dep not in sys.modules:
@@ -953,11 +959,7 @@ try:
         """
         # In CI, mocks are already set up during conftest import
         # to avoid timeout during test collection
-        ci_value = os.environ.get("CI", "").lower()
-        github_actions_value = os.environ.get("GITHUB_ACTIONS", "").lower()
-        is_ci = ci_value in ("1", "true", "yes") or github_actions_value in ("1", "true", "yes")
-        
-        if not is_ci:
+        if not _is_ci_environment():
             # Non-CI: Setup mocks when tests actually run, not at import time
             _setup_optional_dependency_mocks()
         yield
