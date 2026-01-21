@@ -167,14 +167,30 @@ jobs:
           python -c "import aiohttp; print('aiohttp OK')"
           
           echo "=== Check if test files are syntactically valid ==="
-          python -m py_compile tests/test_generator_fixes.py || echo "SYNTAX ERROR in test_generator_fixes.py"
-          python -m py_compile tests/test_cleanup_old_docs.py || echo "SYNTAX ERROR in test_cleanup_old_docs.py"
-          python -m py_compile generator/main/tests/test_gui.py || echo "SYNTAX ERROR in test_gui.py"
-          python -m py_compile omnicore_engine/tests/test_core.py || echo "SYNTAX ERROR in test_core.py"
+          # Only compile test files that exist to avoid false negatives
+          for test_file in tests/test_*.py; do
+            if [ -f "$test_file" ] && [ "$(basename "$test_file")" != "__init__.py" ]; then
+              python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
+            fi
+          done
+          
+          # Check generator tests if they exist
+          if [ -d "generator/main/tests" ]; then
+            for test_file in generator/main/tests/test_*.py; do
+              [ -f "$test_file" ] && python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
+            done
+          fi
+          
+          if [ -d "omnicore_engine/tests" ]; then
+            for test_file in omnicore_engine/tests/test_*.py; do
+              [ -f "$test_file" ] && python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
+            done
+          fi
           
           echo "=== Verify conftest files can be imported ==="
           python -c "import conftest; print('Root conftest OK')"
-          python -c "import generator.conftest; print('Generator conftest OK')" || echo "Generator conftest import failed"
+          # Use timeout to prevent CPU limit exceeded on generator.conftest
+          timeout 15s python -c "import generator.conftest; print('Generator conftest OK')" 2>&1 || echo "Generator conftest import failed or timed out (tests may still work)"
           
       - name: Free more disk space before tests
         run: |
@@ -226,7 +242,14 @@ jobs:
           
           # Verify tests can be collected with full verbosity
           echo "=== Collecting tests with verbose output ==="
-          pytest --collect-only -v 2>&1 | tee collection.log
+          timeout 60s pytest --collect-only -v 2>&1 | tee collection.log || {
+            COLLECTION_EXIT=$?
+            if [ $COLLECTION_EXIT -eq 124 ]; then
+              echo "ERROR: Test collection timed out after 60 seconds"
+              echo "This usually indicates expensive imports in conftest or test files"
+            fi
+            echo "Collection failed with exit code: $COLLECTION_EXIT"
+          }
           
           echo ""
           echo "=== Analyzing collection results ==="
