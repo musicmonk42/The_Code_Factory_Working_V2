@@ -94,12 +94,21 @@ def _setup_module_alias(module_name: str) -> None:
             # Try to still set up the alias if the module was partially imported
             full_module_name = f"{__name__}.{module_name}"
             if full_module_name in sys.modules:
-                sys.modules[module_name] = sys.modules[full_module_name]
-                _init_logger.debug(
-                    "Module alias created despite thread error: '%s' -> '%s'",
-                    module_name,
-                    full_module_name,
-                )
+                partial_module = sys.modules[full_module_name]
+                # Only create alias if the module appears to be properly initialized
+                # (has __file__ attribute which all properly loaded modules have)
+                if hasattr(partial_module, '__file__') or hasattr(partial_module, '__path__'):
+                    sys.modules[module_name] = partial_module
+                    _init_logger.debug(
+                        "Module alias created despite thread error: '%s' -> '%s'",
+                        module_name,
+                        full_module_name,
+                    )
+                else:
+                    _init_logger.debug(
+                        "Skipping alias for '%s' - module appears incomplete",
+                        module_name,
+                    )
             return
         else:
             raise
