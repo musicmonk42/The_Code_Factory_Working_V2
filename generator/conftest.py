@@ -890,10 +890,355 @@ _OPTIONAL_DEPENDENCIES = [
     "azure.core.exceptions",  # Azure exceptions
     "boto3",  # AWS SDK
     "botocore.exceptions",  # AWS SDK exceptions
+    "opentelemetry",  # OpenTelemetry - requires special handling, see _create_opentelemetry_stubs()
 ]
 
 # Flag to track if mocks have been set up (to avoid duplicate work)
 _mocks_initialized = False
+
+
+def _create_opentelemetry_stubs():
+    """
+    Create comprehensive OpenTelemetry stubs.
+    This is separated into its own function because OpenTelemetry requires special handling
+    with specific methods that must exist and be callable, not just module stubs.
+    """
+    import importlib.util
+
+    # Create a no-op tracer
+    class _NoOpTracer:
+        def start_as_current_span(self, name, **kwargs):
+            from contextlib import nullcontext
+
+            return nullcontext()
+
+    # Create a no-op span
+    class _NoOpSpan:
+        def set_attribute(self, *args, **kwargs):
+            pass
+
+        def add_event(self, *args, **kwargs):
+            pass
+
+        def set_status(self, *args, **kwargs):
+            pass
+
+        def record_exception(self, *args, **kwargs):
+            pass
+
+    # Create Status and StatusCode classes
+    class Status:
+        def __init__(self, status_code, description=""):
+            self.status_code = status_code
+            self.description = description
+
+    class StatusCode:
+        OK = "OK"
+        ERROR = "ERROR"
+        UNSET = "UNSET"
+
+    # Create trace module with all required methods
+    trace_module = ModuleType("opentelemetry.trace")
+    trace_module.__file__ = "<mocked opentelemetry.trace>"
+    trace_module.__path__ = []
+    trace_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.trace", loader=None
+    )
+    trace_module.get_tracer = lambda *args, **kwargs: _NoOpTracer()
+    trace_module.get_current_span = lambda: _NoOpSpan()
+    trace_module.get_tracer_provider = lambda: None
+    trace_module.set_tracer_provider = lambda *args, **kwargs: None
+    trace_module.Status = Status
+    trace_module.StatusCode = StatusCode
+
+    # Create trace.status submodule
+    trace_status_module = ModuleType("opentelemetry.trace.status")
+    trace_status_module.__file__ = "<mocked opentelemetry.trace.status>"
+    trace_status_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.trace.status", loader=None
+    )
+    trace_status_module.Status = Status
+    trace_status_module.StatusCode = StatusCode
+    trace_module.status = trace_status_module
+
+    # Create metrics module
+    class _NoOpMeter:
+        def create_counter(self, *args, **kwargs):
+            class _NoOpCounter:
+                def add(self, *args, **kwargs):
+                    pass
+
+            return _NoOpCounter()
+
+        def create_histogram(self, *args, **kwargs):
+            class _NoOpHistogram:
+                def record(self, *args, **kwargs):
+                    pass
+
+            return _NoOpHistogram()
+
+    metrics_module = ModuleType("opentelemetry.metrics")
+    metrics_module.__file__ = "<mocked opentelemetry.metrics>"
+    metrics_module.__path__ = []
+    metrics_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.metrics", loader=None
+    )
+    metrics_module.get_meter = lambda *args, **kwargs: _NoOpMeter()
+    metrics_module.get_meter_provider = lambda: None
+    metrics_module.set_meter_provider = lambda *args, **kwargs: None
+
+    # Create main opentelemetry module
+    otel_module = ModuleType("opentelemetry")
+    otel_module.__file__ = "<mocked opentelemetry>"
+    otel_module.__path__ = []
+    otel_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry", loader=None
+    )
+    otel_module.trace = trace_module
+    otel_module.metrics = metrics_module
+
+    # Create instrumentation module
+    instrumentation_module = ModuleType("opentelemetry.instrumentation")
+    instrumentation_module.__file__ = "<mocked opentelemetry.instrumentation>"
+    instrumentation_module.__path__ = []  # This is required for submodule imports
+    instrumentation_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.instrumentation", loader=None
+    )
+    otel_module.instrumentation = instrumentation_module
+
+    # Create common instrumentation submodules
+    instrumentation_fastapi = ModuleType("opentelemetry.instrumentation.fastapi")
+    instrumentation_fastapi.__file__ = (
+        "<mocked opentelemetry.instrumentation.fastapi>"
+    )
+    instrumentation_fastapi.__path__ = []
+    instrumentation_fastapi.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.instrumentation.fastapi", loader=None
+    )
+
+    class FastAPIInstrumentor:
+        @classmethod
+        def instrument_app(cls, *args, **kwargs):
+            pass
+
+    instrumentation_fastapi.FastAPIInstrumentor = FastAPIInstrumentor
+
+    # Create grpc instrumentation module
+    instrumentation_grpc = ModuleType("opentelemetry.instrumentation.grpc")
+    instrumentation_grpc.__file__ = "<mocked opentelemetry.instrumentation.grpc>"
+    instrumentation_grpc.__path__ = []
+    instrumentation_grpc.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.instrumentation.grpc", loader=None
+    )
+
+    class GrpcAioInstrumentor:
+        @classmethod
+        def instrument(cls, *args, **kwargs):
+            pass
+
+    instrumentation_grpc.GrpcAioInstrumentor = GrpcAioInstrumentor
+
+    # Create a local mock getattr function
+    class _MockCallable:
+        """Mock callable for module attributes."""
+
+        def __call__(self, *args, **kwargs):
+            return self
+
+        def __getattr__(self, attr):
+            return _MockCallable()
+
+    def _local_mock_getattr(attr_name):
+        """Return a mock object for any attribute access."""
+        return _MockCallable()
+
+    # Create instrumentation.utils module (required by instrumentation._semconv)
+    instrumentation_utils = ModuleType("opentelemetry.instrumentation.utils")
+    instrumentation_utils.__file__ = "<mocked opentelemetry.instrumentation.utils>"
+    instrumentation_utils.__path__ = []
+    instrumentation_utils.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.instrumentation.utils", loader=None
+    )
+    instrumentation_utils.http_status_to_status_code = lambda *args, **kwargs: None
+    instrumentation_utils.__getattr__ = _local_mock_getattr
+
+    # Create instrumentation._semconv module (required by instrumentation.fastapi)
+    instrumentation_semconv = ModuleType("opentelemetry.instrumentation._semconv")
+    instrumentation_semconv.__file__ = (
+        "<mocked opentelemetry.instrumentation._semconv>"
+    )
+    instrumentation_semconv.__path__ = []
+    instrumentation_semconv.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.instrumentation._semconv", loader=None
+    )
+    instrumentation_semconv.__getattr__ = _local_mock_getattr
+
+    # Create sdk modules
+    sdk_module = ModuleType("opentelemetry.sdk")
+    sdk_module.__file__ = "<mocked opentelemetry.sdk>"
+    sdk_module.__path__ = []  # Parent module for submodules
+    sdk_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.sdk", loader=None
+    )
+    otel_module.sdk = sdk_module
+
+    sdk_trace_module = ModuleType("opentelemetry.sdk.trace")
+    sdk_trace_module.__file__ = "<mocked opentelemetry.sdk.trace>"
+    sdk_trace_module.__path__ = []  # Parent module for submodules
+    sdk_trace_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.sdk.trace", loader=None
+    )
+    sdk_trace_module.TracerProvider = lambda *args, **kwargs: None
+    sdk_module.trace = sdk_trace_module
+
+    sdk_trace_export_module = ModuleType("opentelemetry.sdk.trace.export")
+    sdk_trace_export_module.__file__ = "<mocked opentelemetry.sdk.trace.export>"
+    sdk_trace_export_module.__path__ = []
+    sdk_trace_export_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.sdk.trace.export", loader=None
+    )
+    sdk_trace_export_module.ConsoleSpanExporter = lambda *args, **kwargs: None
+    sdk_trace_export_module.SimpleSpanProcessor = lambda *args, **kwargs: None
+    sdk_trace_export_module.BatchSpanProcessor = lambda *args, **kwargs: None
+    sdk_trace_module.export = sdk_trace_export_module
+
+    sdk_resources_module = ModuleType("opentelemetry.sdk.resources")
+    sdk_resources_module.__file__ = "<mocked opentelemetry.sdk.resources>"
+    sdk_resources_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.sdk.resources", loader=None
+    )
+    sdk_resources_module.Resource = lambda **kwargs: None
+    sdk_module.resources = sdk_resources_module
+
+    # Create exporter modules
+    exporter_module = ModuleType("opentelemetry.exporter")
+    exporter_module.__file__ = "<mocked opentelemetry.exporter>"
+    exporter_module.__path__ = []
+    exporter_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.exporter", loader=None
+    )
+    otel_module.exporter = exporter_module
+
+    exporter_jaeger_module = ModuleType("opentelemetry.exporter.jaeger")
+    exporter_jaeger_module.__file__ = "<mocked opentelemetry.exporter.jaeger>"
+    exporter_jaeger_module.__path__ = []
+    exporter_jaeger_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.exporter.jaeger", loader=None
+    )
+    exporter_module.jaeger = exporter_jaeger_module
+
+    exporter_jaeger_thrift_module = ModuleType(
+        "opentelemetry.exporter.jaeger.thrift"
+    )
+    exporter_jaeger_thrift_module.__file__ = (
+        "<mocked opentelemetry.exporter.jaeger.thrift>"
+    )
+    exporter_jaeger_thrift_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.exporter.jaeger.thrift", loader=None
+    )
+    exporter_jaeger_thrift_module.JaegerExporter = lambda *args, **kwargs: None
+    exporter_jaeger_module.thrift = exporter_jaeger_thrift_module
+
+    exporter_otlp_module = ModuleType("opentelemetry.exporter.otlp")
+    exporter_otlp_module.__file__ = "<mocked opentelemetry.exporter.otlp>"
+    exporter_otlp_module.__path__ = []
+    exporter_otlp_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.exporter.otlp", loader=None
+    )
+    exporter_module.otlp = exporter_otlp_module
+
+    exporter_otlp_proto_module = ModuleType("opentelemetry.exporter.otlp.proto")
+    exporter_otlp_proto_module.__file__ = (
+        "<mocked opentelemetry.exporter.otlp.proto>"
+    )
+    exporter_otlp_proto_module.__path__ = []
+    exporter_otlp_proto_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.exporter.otlp.proto", loader=None
+    )
+    exporter_otlp_module.proto = exporter_otlp_proto_module
+
+    exporter_otlp_proto_grpc_module = ModuleType(
+        "opentelemetry.exporter.otlp.proto.grpc"
+    )
+    exporter_otlp_proto_grpc_module.__file__ = (
+        "<mocked opentelemetry.exporter.otlp.proto.grpc>"
+    )
+    exporter_otlp_proto_grpc_module.__path__ = []
+    exporter_otlp_proto_grpc_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.exporter.otlp.proto.grpc", loader=None
+    )
+    exporter_otlp_proto_module.grpc = exporter_otlp_proto_grpc_module
+
+    exporter_otlp_proto_grpc_trace_exporter_module = ModuleType(
+        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter"
+    )
+    exporter_otlp_proto_grpc_trace_exporter_module.__file__ = (
+        "<mocked opentelemetry.exporter.otlp.proto.grpc.trace_exporter>"
+    )
+    exporter_otlp_proto_grpc_trace_exporter_module.__spec__ = (
+        importlib.util.spec_from_loader(
+            "opentelemetry.exporter.otlp.proto.grpc.trace_exporter", loader=None
+        )
+    )
+    exporter_otlp_proto_grpc_trace_exporter_module.OTLPSpanExporter = (
+        lambda *args, **kwargs: None
+    )
+    exporter_otlp_proto_grpc_module.trace_exporter = (
+        exporter_otlp_proto_grpc_trace_exporter_module
+    )
+
+    sdk_trace_sampling_module = ModuleType("opentelemetry.sdk.trace.sampling")
+    sdk_trace_sampling_module.__file__ = "<mocked opentelemetry.sdk.trace.sampling>"
+    sdk_trace_sampling_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.sdk.trace.sampling", loader=None
+    )
+    sdk_trace_sampling_module.ParentBased = lambda *args, **kwargs: None
+    sdk_trace_sampling_module.TraceIdRatioBased = lambda *args, **kwargs: None
+    sdk_trace_sampling_module.ALWAYS_ON = lambda *args, **kwargs: None
+    sdk_trace_module.sampling = sdk_trace_sampling_module
+
+    # Create propagate module
+    propagate_module = ModuleType("opentelemetry.propagate")
+    propagate_module.__file__ = "<mocked opentelemetry.propagate>"
+    propagate_module.__path__ = []
+    propagate_module.__spec__ = importlib.util.spec_from_loader(
+        "opentelemetry.propagate", loader=None
+    )
+    propagate_module.extract = lambda *args, **kwargs: {}
+    propagate_module.inject = lambda *args, **kwargs: None
+    propagate_module.get_global_textmap = lambda *args, **kwargs: None
+    propagate_module.set_global_textmap = lambda *args, **kwargs: None
+    otel_module.propagate = propagate_module
+
+    # Register modules
+    sys.modules["opentelemetry"] = otel_module
+    sys.modules["opentelemetry.trace"] = trace_module
+    sys.modules["opentelemetry.trace.status"] = trace_status_module
+    sys.modules["opentelemetry.metrics"] = metrics_module
+    sys.modules["opentelemetry.propagate"] = propagate_module
+    sys.modules["opentelemetry.instrumentation"] = instrumentation_module
+    sys.modules["opentelemetry.instrumentation.fastapi"] = instrumentation_fastapi
+    sys.modules["opentelemetry.instrumentation.grpc"] = instrumentation_grpc
+    sys.modules["opentelemetry.instrumentation.utils"] = instrumentation_utils
+    sys.modules["opentelemetry.instrumentation._semconv"] = instrumentation_semconv
+    sys.modules["opentelemetry.sdk"] = sdk_module
+    sys.modules["opentelemetry.sdk.trace"] = sdk_trace_module
+    sys.modules["opentelemetry.sdk.trace.sampling"] = sdk_trace_sampling_module
+    sys.modules["opentelemetry.sdk.trace.export"] = sdk_trace_export_module
+    sys.modules["opentelemetry.sdk.resources"] = sdk_resources_module
+    sys.modules["opentelemetry.exporter"] = exporter_module
+    sys.modules["opentelemetry.exporter.jaeger"] = exporter_jaeger_module
+    sys.modules["opentelemetry.exporter.jaeger.thrift"] = (
+        exporter_jaeger_thrift_module
+    )
+    sys.modules["opentelemetry.exporter.otlp"] = exporter_otlp_module
+    sys.modules["opentelemetry.exporter.otlp.proto"] = exporter_otlp_proto_module
+    sys.modules["opentelemetry.exporter.otlp.proto.grpc"] = (
+        exporter_otlp_proto_grpc_module
+    )
+    sys.modules["opentelemetry.exporter.otlp.proto.grpc.trace_exporter"] = (
+        exporter_otlp_proto_grpc_trace_exporter_module
+    )
 
 
 def _setup_optional_dependency_mocks():
@@ -908,17 +1253,26 @@ def _setup_optional_dependency_mocks():
     if _mocks_initialized:
         return
     
+    # CI environment fast path: Skip expensive import attempts in CI
+    is_ci = os.environ.get("CI") == "1" or os.environ.get("GITHUB_ACTIONS") == "true"
+    
     for dep in _OPTIONAL_DEPENDENCIES:
         if dep not in sys.modules:
-            try:
-                __import__(dep)
-            except (ImportError, OSError):
-                # Create a more sophisticated mock that handles submodule access
-                # Catch ImportError (not installed) and OSError (DLL errors on Windows)
+            # Special handling for opentelemetry - use dedicated stub creator
+            if dep == "opentelemetry":
+                try:
+                    __import__(dep)
+                except ImportError:
+                    _create_opentelemetry_stubs()
+                continue
+            
+            # In CI, skip expensive import attempts and use lightweight stubs
+            if is_ci:
+                # Create lightweight stub without trying to import
                 mock_module = _create_mock_module(dep)
                 sys.modules[dep] = mock_module
-
-                # For packages that are commonly accessed as submodules, create parent stubs
+                
+                # Handle parent modules for dotted packages
                 if "." in dep:
                     parts = dep.split(".")
                     for i in range(1, len(parts)):
@@ -926,71 +1280,89 @@ def _setup_optional_dependency_mocks():
                         if parent_name not in sys.modules:
                             parent_mock = _create_mock_module(parent_name)
                             sys.modules[parent_name] = parent_mock
+            else:
+                # Non-CI: Try to import, fallback to mock on failure
+                try:
+                    __import__(dep)
+                except (ImportError, OSError):
+                    # Create a more sophisticated mock that handles submodule access
+                    # Catch ImportError (not installed) and OSError (DLL errors on Windows)
+                    mock_module = _create_mock_module(dep)
+                    sys.modules[dep] = mock_module
 
-                # Special handling for packages that need specific submodules
-                if dep == "watchdog":
-                    # Create watchdog.events submodule
-                    watchdog_events = _create_mock_module("watchdog.events")
-                    sys.modules["watchdog.events"] = watchdog_events
+                    # For packages that are commonly accessed as submodules, create parent stubs
+                    if "." in dep:
+                        parts = dep.split(".")
+                        for i in range(1, len(parts)):
+                            parent_name = ".".join(parts[:i])
+                            if parent_name not in sys.modules:
+                                parent_mock = _create_mock_module(parent_name)
+                                sys.modules[parent_name] = parent_mock
 
-                    # Add FileSystemEventHandler class
-                    class FileSystemEventHandler:
-                        def on_modified(self, event):
-                            pass
+                    # Special handling for packages that need specific submodules
+                    if dep == "watchdog":
+                        # Create watchdog.events submodule
+                        watchdog_events = _create_mock_module("watchdog.events")
+                        sys.modules["watchdog.events"] = watchdog_events
 
-                        def on_created(self, event):
-                            pass
+                        # Add FileSystemEventHandler class
+                        class FileSystemEventHandler:
+                            def on_modified(self, event):
+                                pass
 
-                        def on_deleted(self, event):
-                            pass
+                            def on_created(self, event):
+                                pass
 
-                    watchdog_events.FileSystemEventHandler = FileSystemEventHandler
-                    mock_module.events = watchdog_events
+                            def on_deleted(self, event):
+                                pass
 
-                    # Create watchdog.observers submodule
-                    watchdog_observers = _create_mock_module("watchdog.observers")
-                    sys.modules["watchdog.observers"] = watchdog_observers
+                        watchdog_events.FileSystemEventHandler = FileSystemEventHandler
+                        mock_module.events = watchdog_events
 
-                    # Add Observer class
-                    class Observer:
-                        def __init__(self):
-                            pass
+                        # Create watchdog.observers submodule
+                        watchdog_observers = _create_mock_module("watchdog.observers")
+                        sys.modules["watchdog.observers"] = watchdog_observers
 
-                        def schedule(self, *args, **kwargs):
-                            pass
+                        # Add Observer class
+                        class Observer:
+                            def __init__(self):
+                                pass
 
-                        def start(self):
-                            pass
+                            def schedule(self, *args, **kwargs):
+                                pass
 
-                        def stop(self):
-                            pass
+                            def start(self):
+                                pass
 
-                        def join(self):
-                            pass
+                            def stop(self):
+                                pass
 
-                    watchdog_observers.Observer = Observer
-                    mock_module.observers = watchdog_observers
-                elif dep == "defusedxml":
-                    # Create defusedxml.ElementTree submodule
-                    defusedxml_et = _create_mock_module("defusedxml.ElementTree")
-                    sys.modules["defusedxml.ElementTree"] = defusedxml_et
-                    mock_module.ElementTree = defusedxml_et
-                    # Add common ElementTree functions
-                    defusedxml_et.parse = lambda *args, **kwargs: None
-                    defusedxml_et.fromstring = lambda *args, **kwargs: None
-                    defusedxml_et.XML = lambda *args, **kwargs: None
-            except Exception:
-                # Catch any other errors and create a mock
-                mock_module = _create_mock_module(dep)
-                sys.modules[dep] = mock_module
+                            def join(self):
+                                pass
 
-                if "." in dep:
-                    parts = dep.split(".")
-                    for i in range(1, len(parts)):
-                        parent_name = ".".join(parts[:i])
-                        if parent_name not in sys.modules:
-                            parent_mock = _create_mock_module(parent_name)
-                            sys.modules[parent_name] = parent_mock
+                        watchdog_observers.Observer = Observer
+                        mock_module.observers = watchdog_observers
+                    elif dep == "defusedxml":
+                        # Create defusedxml.ElementTree submodule
+                        defusedxml_et = _create_mock_module("defusedxml.ElementTree")
+                        sys.modules["defusedxml.ElementTree"] = defusedxml_et
+                        mock_module.ElementTree = defusedxml_et
+                        # Add common ElementTree functions
+                        defusedxml_et.parse = lambda *args, **kwargs: None
+                        defusedxml_et.fromstring = lambda *args, **kwargs: None
+                        defusedxml_et.XML = lambda *args, **kwargs: None
+                except Exception:
+                    # Catch any other errors and create a mock
+                    mock_module = _create_mock_module(dep)
+                    sys.modules[dep] = mock_module
+
+                    if "." in dep:
+                        parts = dep.split(".")
+                        for i in range(1, len(parts)):
+                            parent_name = ".".join(parts[:i])
+                            if parent_name not in sys.modules:
+                                parent_mock = _create_mock_module(parent_name)
+                                sys.modules[parent_name] = parent_mock
     
     # Mark as initialized
     _mocks_initialized = True
@@ -1124,365 +1496,21 @@ def import_timeout(seconds=10):
 # Tests that need timeout protection can use the import_timeout context manager directly.
 
 
-# ---- OpenTelemetry stub setup ----
-# OpenTelemetry requires special handling because it has specific methods that must exist
-# and be callable, not just module stubs
-if "opentelemetry" not in sys.modules:
-    try:
-        __import__("opentelemetry")
-    except ImportError:
-        # Create a complete OpenTelemetry stub with all required attributes
-        import importlib.util
-
-        # Create a no-op tracer
-        class _NoOpTracer:
-            def start_as_current_span(self, name, **kwargs):
-                from contextlib import nullcontext
-
-                return nullcontext()
-
-        # Create a no-op span
-        class _NoOpSpan:
-            def set_attribute(self, *args, **kwargs):
-                pass
-
-            def add_event(self, *args, **kwargs):
-                pass
-
-            def set_status(self, *args, **kwargs):
-                pass
-
-            def record_exception(self, *args, **kwargs):
-                pass
-
-        # Create Status and StatusCode classes
-        class Status:
-            def __init__(self, status_code, description=""):
-                self.status_code = status_code
-                self.description = description
-
-        class StatusCode:
-            OK = "OK"
-            ERROR = "ERROR"
-            UNSET = "UNSET"
-
-        # Create trace module with all required methods
-        trace_module = ModuleType("opentelemetry.trace")
-        trace_module.__file__ = "<mocked opentelemetry.trace>"
-        trace_module.__path__ = []
-        trace_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.trace", loader=None
-        )
-        trace_module.get_tracer = lambda *args, **kwargs: _NoOpTracer()
-        trace_module.get_current_span = lambda: _NoOpSpan()
-        trace_module.get_tracer_provider = lambda: None
-        trace_module.set_tracer_provider = lambda *args, **kwargs: None
-        trace_module.Status = Status
-        trace_module.StatusCode = StatusCode
-
-        # Create trace.status submodule
-        trace_status_module = ModuleType("opentelemetry.trace.status")
-        trace_status_module.__file__ = "<mocked opentelemetry.trace.status>"
-        trace_status_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.trace.status", loader=None
-        )
-        trace_status_module.Status = Status
-        trace_status_module.StatusCode = StatusCode
-        trace_module.status = trace_status_module
-
-        # Create metrics module
-        class _NoOpMeter:
-            def create_counter(self, *args, **kwargs):
-                class _NoOpCounter:
-                    def add(self, *args, **kwargs):
-                        pass
-
-                return _NoOpCounter()
-
-            def create_histogram(self, *args, **kwargs):
-                class _NoOpHistogram:
-                    def record(self, *args, **kwargs):
-                        pass
-
-                return _NoOpHistogram()
-
-        metrics_module = ModuleType("opentelemetry.metrics")
-        metrics_module.__file__ = "<mocked opentelemetry.metrics>"
-        metrics_module.__path__ = []
-        metrics_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.metrics", loader=None
-        )
-        metrics_module.get_meter = lambda *args, **kwargs: _NoOpMeter()
-        metrics_module.get_meter_provider = lambda: None
-        metrics_module.set_meter_provider = lambda *args, **kwargs: None
-
-        # Create main opentelemetry module
-        otel_module = ModuleType("opentelemetry")
-        otel_module.__file__ = "<mocked opentelemetry>"
-        otel_module.__path__ = []
-        otel_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry", loader=None
-        )
-        otel_module.trace = trace_module
-        otel_module.metrics = metrics_module
-
-        # Create instrumentation module
-        instrumentation_module = ModuleType("opentelemetry.instrumentation")
-        instrumentation_module.__file__ = "<mocked opentelemetry.instrumentation>"
-        instrumentation_module.__path__ = []  # This is required for submodule imports
-        instrumentation_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation", loader=None
-        )
-        otel_module.instrumentation = instrumentation_module
-
-        # Create common instrumentation submodules
-        instrumentation_fastapi = ModuleType("opentelemetry.instrumentation.fastapi")
-        instrumentation_fastapi.__file__ = (
-            "<mocked opentelemetry.instrumentation.fastapi>"
-        )
-        instrumentation_fastapi.__path__ = []
-        instrumentation_fastapi.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation.fastapi", loader=None
-        )
-
-        class FastAPIInstrumentor:
-            @classmethod
-            def instrument_app(cls, *args, **kwargs):
-                pass
-
-        instrumentation_fastapi.FastAPIInstrumentor = FastAPIInstrumentor
-
-        # Create grpc instrumentation module
-        instrumentation_grpc = ModuleType("opentelemetry.instrumentation.grpc")
-        instrumentation_grpc.__file__ = "<mocked opentelemetry.instrumentation.grpc>"
-        instrumentation_grpc.__path__ = []
-        instrumentation_grpc.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation.grpc", loader=None
-        )
-
-        class GrpcAioInstrumentor:
-            @classmethod
-            def instrument(cls, *args, **kwargs):
-                pass
-
-        instrumentation_grpc.GrpcAioInstrumentor = GrpcAioInstrumentor
-
-        # Create a local mock getattr function
-        class _MockCallable:
-            """Mock callable for module attributes."""
-
-            def __call__(self, *args, **kwargs):
-                return self
-
-            def __getattr__(self, attr):
-                return _MockCallable()
-
-        def _local_mock_getattr(attr_name):
-            """Return a mock object for any attribute access."""
-            return _MockCallable()
-
-        # Create instrumentation.utils module (required by instrumentation._semconv)
-        instrumentation_utils = ModuleType("opentelemetry.instrumentation.utils")
-        instrumentation_utils.__file__ = "<mocked opentelemetry.instrumentation.utils>"
-        instrumentation_utils.__path__ = []
-        instrumentation_utils.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation.utils", loader=None
-        )
-        instrumentation_utils.http_status_to_status_code = lambda *args, **kwargs: None
-        instrumentation_utils.__getattr__ = _local_mock_getattr
-
-        # Create instrumentation._semconv module (required by instrumentation.fastapi)
-        instrumentation_semconv = ModuleType("opentelemetry.instrumentation._semconv")
-        instrumentation_semconv.__file__ = (
-            "<mocked opentelemetry.instrumentation._semconv>"
-        )
-        instrumentation_semconv.__path__ = []
-        instrumentation_semconv.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation._semconv", loader=None
-        )
-        instrumentation_semconv.__getattr__ = _local_mock_getattr
-
-        # Create sdk modules
-        sdk_module = ModuleType("opentelemetry.sdk")
-        sdk_module.__file__ = "<mocked opentelemetry.sdk>"
-        sdk_module.__path__ = []  # Parent module for submodules
-        sdk_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.sdk", loader=None
-        )
-        otel_module.sdk = sdk_module
-
-        sdk_trace_module = ModuleType("opentelemetry.sdk.trace")
-        sdk_trace_module.__file__ = "<mocked opentelemetry.sdk.trace>"
-        sdk_trace_module.__path__ = []  # Parent module for submodules
-        sdk_trace_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.sdk.trace", loader=None
-        )
-        sdk_trace_module.TracerProvider = lambda *args, **kwargs: None
-        sdk_module.trace = sdk_trace_module
-
-        sdk_trace_export_module = ModuleType("opentelemetry.sdk.trace.export")
-        sdk_trace_export_module.__file__ = "<mocked opentelemetry.sdk.trace.export>"
-        sdk_trace_export_module.__path__ = []
-        sdk_trace_export_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.sdk.trace.export", loader=None
-        )
-        sdk_trace_export_module.ConsoleSpanExporter = lambda *args, **kwargs: None
-        sdk_trace_export_module.SimpleSpanProcessor = lambda *args, **kwargs: None
-        sdk_trace_export_module.BatchSpanProcessor = lambda *args, **kwargs: None
-        sdk_trace_module.export = sdk_trace_export_module
-
-        sdk_resources_module = ModuleType("opentelemetry.sdk.resources")
-        sdk_resources_module.__file__ = "<mocked opentelemetry.sdk.resources>"
-        sdk_resources_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.sdk.resources", loader=None
-        )
-        sdk_resources_module.Resource = lambda **kwargs: None
-        sdk_module.resources = sdk_resources_module
-
-        # Create exporter modules
-        exporter_module = ModuleType("opentelemetry.exporter")
-        exporter_module.__file__ = "<mocked opentelemetry.exporter>"
-        exporter_module.__path__ = []
-        exporter_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.exporter", loader=None
-        )
-        otel_module.exporter = exporter_module
-
-        exporter_jaeger_module = ModuleType("opentelemetry.exporter.jaeger")
-        exporter_jaeger_module.__file__ = "<mocked opentelemetry.exporter.jaeger>"
-        exporter_jaeger_module.__path__ = []
-        exporter_jaeger_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.exporter.jaeger", loader=None
-        )
-        exporter_module.jaeger = exporter_jaeger_module
-
-        exporter_jaeger_thrift_module = ModuleType(
-            "opentelemetry.exporter.jaeger.thrift"
-        )
-        exporter_jaeger_thrift_module.__file__ = (
-            "<mocked opentelemetry.exporter.jaeger.thrift>"
-        )
-        exporter_jaeger_thrift_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.exporter.jaeger.thrift", loader=None
-        )
-        exporter_jaeger_thrift_module.JaegerExporter = lambda *args, **kwargs: None
-        exporter_jaeger_module.thrift = exporter_jaeger_thrift_module
-
-        exporter_otlp_module = ModuleType("opentelemetry.exporter.otlp")
-        exporter_otlp_module.__file__ = "<mocked opentelemetry.exporter.otlp>"
-        exporter_otlp_module.__path__ = []
-        exporter_otlp_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.exporter.otlp", loader=None
-        )
-        exporter_module.otlp = exporter_otlp_module
-
-        exporter_otlp_proto_module = ModuleType("opentelemetry.exporter.otlp.proto")
-        exporter_otlp_proto_module.__file__ = (
-            "<mocked opentelemetry.exporter.otlp.proto>"
-        )
-        exporter_otlp_proto_module.__path__ = []
-        exporter_otlp_proto_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.exporter.otlp.proto", loader=None
-        )
-        exporter_otlp_module.proto = exporter_otlp_proto_module
-
-        exporter_otlp_proto_grpc_module = ModuleType(
-            "opentelemetry.exporter.otlp.proto.grpc"
-        )
-        exporter_otlp_proto_grpc_module.__file__ = (
-            "<mocked opentelemetry.exporter.otlp.proto.grpc>"
-        )
-        exporter_otlp_proto_grpc_module.__path__ = []
-        exporter_otlp_proto_grpc_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.exporter.otlp.proto.grpc", loader=None
-        )
-        exporter_otlp_proto_module.grpc = exporter_otlp_proto_grpc_module
-
-        exporter_otlp_proto_grpc_trace_exporter_module = ModuleType(
-            "opentelemetry.exporter.otlp.proto.grpc.trace_exporter"
-        )
-        exporter_otlp_proto_grpc_trace_exporter_module.__file__ = (
-            "<mocked opentelemetry.exporter.otlp.proto.grpc.trace_exporter>"
-        )
-        exporter_otlp_proto_grpc_trace_exporter_module.__spec__ = (
-            importlib.util.spec_from_loader(
-                "opentelemetry.exporter.otlp.proto.grpc.trace_exporter", loader=None
-            )
-        )
-        exporter_otlp_proto_grpc_trace_exporter_module.OTLPSpanExporter = (
-            lambda *args, **kwargs: None
-        )
-        exporter_otlp_proto_grpc_module.trace_exporter = (
-            exporter_otlp_proto_grpc_trace_exporter_module
-        )
-
-        sdk_trace_sampling_module = ModuleType("opentelemetry.sdk.trace.sampling")
-        sdk_trace_sampling_module.__file__ = "<mocked opentelemetry.sdk.trace.sampling>"
-        sdk_trace_sampling_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.sdk.trace.sampling", loader=None
-        )
-        sdk_trace_sampling_module.ParentBased = lambda *args, **kwargs: None
-        sdk_trace_sampling_module.TraceIdRatioBased = lambda *args, **kwargs: None
-        sdk_trace_sampling_module.ALWAYS_ON = lambda *args, **kwargs: None
-        sdk_trace_module.sampling = sdk_trace_sampling_module
-
-        # Create propagate module
-        propagate_module = ModuleType("opentelemetry.propagate")
-        propagate_module.__file__ = "<mocked opentelemetry.propagate>"
-        propagate_module.__path__ = []
-        propagate_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.propagate", loader=None
-        )
-        propagate_module.extract = lambda *args, **kwargs: {}
-        propagate_module.inject = lambda *args, **kwargs: None
-        propagate_module.get_global_textmap = lambda *args, **kwargs: None
-        propagate_module.set_global_textmap = lambda *args, **kwargs: None
-        otel_module.propagate = propagate_module
-
-        # Register modules
-        sys.modules["opentelemetry"] = otel_module
-        sys.modules["opentelemetry.trace"] = trace_module
-        sys.modules["opentelemetry.trace.status"] = trace_status_module
-        sys.modules["opentelemetry.metrics"] = metrics_module
-        sys.modules["opentelemetry.propagate"] = propagate_module
-        sys.modules["opentelemetry.instrumentation"] = instrumentation_module
-        sys.modules["opentelemetry.instrumentation.fastapi"] = instrumentation_fastapi
-        sys.modules["opentelemetry.instrumentation.grpc"] = instrumentation_grpc
-        sys.modules["opentelemetry.instrumentation.utils"] = instrumentation_utils
-        sys.modules["opentelemetry.instrumentation._semconv"] = instrumentation_semconv
-        sys.modules["opentelemetry.sdk"] = sdk_module
-        sys.modules["opentelemetry.sdk.trace"] = sdk_trace_module
-        sys.modules["opentelemetry.sdk.trace.sampling"] = sdk_trace_sampling_module
-        sys.modules["opentelemetry.sdk.trace.export"] = sdk_trace_export_module
-        sys.modules["opentelemetry.sdk.resources"] = sdk_resources_module
-        sys.modules["opentelemetry.exporter"] = exporter_module
-        sys.modules["opentelemetry.exporter.jaeger"] = exporter_jaeger_module
-        sys.modules["opentelemetry.exporter.jaeger.thrift"] = (
-            exporter_jaeger_thrift_module
-        )
-        sys.modules["opentelemetry.exporter.otlp"] = exporter_otlp_module
-        sys.modules["opentelemetry.exporter.otlp.proto"] = exporter_otlp_proto_module
-        sys.modules["opentelemetry.exporter.otlp.proto.grpc"] = (
-            exporter_otlp_proto_grpc_module
-        )
-        sys.modules["opentelemetry.exporter.otlp.proto.grpc.trace_exporter"] = (
-            exporter_otlp_proto_grpc_trace_exporter_module
-        )
-
-
 # ---- Pytest fixture to trigger lazy mock setup ----
 # This ensures optional dependency mocks are set up once per test session
 # when tests actually run, not at conftest import time.
+# CHANGED: autouse=False to prevent triggering during collection phase
 
 try:
     import pytest
 
-    @pytest.fixture(scope="session", autouse=True)
+    @pytest.fixture(scope="session", autouse=False)
     def _ensure_optional_mocks():
         """
         Ensure optional dependency mocks are set up once per test session.
-        This fixture is automatically used by all tests (autouse=True) and runs
-        once per session (scope="session") to set up the mocks lazily.
+        This fixture must be explicitly requested by tests that need mocks.
+        Changed from autouse=True to autouse=False to prevent pytest from
+        triggering expensive mock setup during the collection phase.
         """
         _setup_optional_dependency_mocks()
         yield
