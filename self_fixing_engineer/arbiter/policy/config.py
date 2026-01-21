@@ -20,6 +20,7 @@ import threading
 import time
 import warnings
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import redis.asyncio as redis
 
@@ -496,11 +497,11 @@ class ArbiterConfig(BaseSettings):
         # Skip Redis connection validation in CI/test environments
         if (os.getenv('CI') in ('1', 'true', 'True', 'TRUE') or 
             os.getenv('GITHUB_ACTIONS') in ('1', 'true', 'True', 'TRUE') or
+            os.getenv('TESTING') == '1' or
             os.getenv('ENVIRONMENT') == 'test'):
             logger.info("Skipping Redis URL connection validation (CI/test environment detected)")
             if self.REDIS_URL:
                 # Basic URL format validation without connection
-                from urllib.parse import urlparse
                 try:
                     parsed = urlparse(self.REDIS_URL)
                     if parsed.scheme not in ('redis', 'rediss'):
