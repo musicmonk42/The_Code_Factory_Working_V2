@@ -706,6 +706,7 @@ class RegulatoryAuditLogger:
 # --- Global Singleton Instance ---
 _audit_logger_instance = None
 _initialization_lock = threading.Lock()
+_background_tasks = set()  # Store background tasks to prevent GC
 
 
 def get_audit_logger() -> RegulatoryAuditLogger:
@@ -727,7 +728,11 @@ def get_audit_logger() -> RegulatoryAuditLogger:
                 if not skip_init:
                     try:
                         loop = asyncio.get_running_loop()
-                        loop.create_task(_audit_logger_instance.log_startup())
+                        # Create task and store reference to prevent GC
+                        task = loop.create_task(_audit_logger_instance.log_startup())
+                        _background_tasks.add(task)
+                        # Remove from set when done to prevent unbounded growth
+                        task.add_done_callback(_background_tasks.discard)
                     except RuntimeError:
 
                         def run_init_log():
