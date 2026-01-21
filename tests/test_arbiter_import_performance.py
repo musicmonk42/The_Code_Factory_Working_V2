@@ -76,3 +76,39 @@ def test_no_heavy_initialization_on_import():
     
     # This is just informational, not a hard assertion
     # Heavy modules might be imported but shouldn't cause initialization
+
+
+def test_arbiter_is_proper_module():
+    """
+    Test that arbiter is a proper module, not None or some other object.
+    This verifies the fix for lazy loading returning None when imports fail.
+    
+    Before the fix, when module import failed due to thread limits in CI,
+    the lazy loader returned None instead of the module, causing:
+    - dir(arbiter)[:10] to show ['__bool__', '__class__', ...] (NoneType attributes)
+    - getattr(arbiter, '__file__', 'unknown') to return 'unknown'
+    """
+    from self_fixing_engineer import arbiter
+    import types
+    
+    # Verify arbiter is a module, not None
+    assert arbiter is not None, "arbiter should not be None"
+    assert isinstance(arbiter, types.ModuleType), f"arbiter should be a module, got {type(arbiter)}"
+    
+    # Verify arbiter has __file__ attribute (modules have this, None doesn't)
+    assert hasattr(arbiter, '__file__'), "arbiter should have __file__ attribute"
+    assert arbiter.__file__ is not None, "arbiter.__file__ should not be None"
+    
+    # Verify arbiter has expected module attributes, not NoneType attributes
+    arbiter_attrs = dir(arbiter)[:10]
+    # NoneType has __bool__ as one of its first attributes, modules don't
+    assert '__bool__' not in arbiter_attrs, (
+        f"arbiter should not have NoneType attributes. First 10 attrs: {arbiter_attrs}"
+    )
+    
+    # Expected module attributes
+    assert '__doc__' in dir(arbiter), "arbiter should have __doc__"
+    assert '__name__' in dir(arbiter), "arbiter should have __name__"
+    
+    print(f"✓ arbiter is a proper module: {arbiter}")
+    print(f"✓ arbiter.__file__: {arbiter.__file__}")

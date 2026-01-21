@@ -91,7 +91,15 @@ def _setup_module_alias(module_name: str) -> None:
                 module_name,
                 e,
             )
-            # Don't re-raise - allow import to continue without the alias
+            # Try to still set up the alias if the module was partially imported
+            full_module_name = f"{__name__}.{module_name}"
+            if full_module_name in sys.modules:
+                sys.modules[module_name] = sys.modules[full_module_name]
+                _init_logger.debug(
+                    "Module alias created despite thread error: '%s' -> '%s'",
+                    module_name,
+                    full_module_name,
+                )
             return
         else:
             raise
@@ -125,5 +133,16 @@ _lazy_loader = _LazyModuleLoader(_MODULE_ALIASES)
 def __getattr__(name: str) -> Any:
     if name in _MODULE_ALIASES:
         _lazy_loader(name)
-        return sys.modules.get(name)
+        # First try to get the alias
+        result = sys.modules.get(name)
+        if result is None:
+            # Fallback to the full module path if alias wasn't set
+            full_module_name = f"{__name__}.{name}"
+            result = sys.modules.get(full_module_name)
+        if result is None:
+            raise AttributeError(
+                f"module '{__name__}' has no attribute '{name}' "
+                f"(module import may have failed)"
+            )
+        return result
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
