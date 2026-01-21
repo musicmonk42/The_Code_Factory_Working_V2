@@ -108,15 +108,15 @@ try:
     _DUMMY_LOG_ACTION_USED = False
 except ImportError:
     _DUMMY_LOG_ACTION_USED = True
-    logging.warning(
-        "audit_log.py not found or circular dependency. log_action will be a dummy function.",
-        extra={"operation": "audit_log_import_fail"},
+    logging.debug(
+        "log_action import from parent package failed, using dummy function.",
+        extra={"operation": "audit_log_import_fallback"},
     )
 
     async def real_log_action(
         *args, **kwargs
     ):  # Make dummy async to match expected signature
-        logging.info(
+        logging.debug(
             f"Dummy log_action: {args}, {kwargs}",
             extra={"operation": "dummy_log_action"},
         )

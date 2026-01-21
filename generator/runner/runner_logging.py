@@ -60,7 +60,8 @@ try:
     else:
         raise ImportError("Crypto disabled in DEV/TEST")
 except Exception:
-    logging.getLogger(__name__).warning(
+    # Use debug level for expected behavior in dev/test environments
+    logging.getLogger(__name__).debug(
         "Secure audit log signing DISABLED (DEV_MODE or TESTING). Using fallback crypto."
     )
 

@@ -67,7 +67,7 @@ except ImportError as e:
 
 from arbiter.agent_state import Base
 from arbiter.arbiter import Arbiter  # Correct import
-from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY, PlugInKind
+from arbiter.arbiter_plugin_registry import PlugInKind, get_registry
 from arbiter.codebase_analyzer import CodebaseAnalyzer
 
 # Import core components with ABSOLUTE PATHS
@@ -82,6 +82,13 @@ from arbiter.logging_utils import PIIRedactorFilter
 from arbiter.metrics import get_or_create_counter, get_or_create_gauge
 from arbiter.monitoring import Monitor
 from arbiter.otel_config import get_tracer
+
+
+# Lazy getter for PLUGIN_REGISTRY to avoid import-time initialization
+def _get_plugin_registry():
+    """Get the plugin registry lazily to avoid import-time initialization."""
+    return get_registry().list_plugins()
+
 
 tracer = get_tracer(__name__)
 
@@ -245,7 +252,8 @@ class ArbiterArena:
 
         # Initialize SimulationEngine with proper fallback
         try:
-            sim_from_registry = PLUGIN_REGISTRY.get(
+            plugin_registry = _get_plugin_registry()
+            sim_from_registry = plugin_registry.get(
                 PlugInKind.CORE_SERVICE, "simulation_module"
             )
             self.simulation_module = (
@@ -571,7 +579,7 @@ class ArbiterArena:
             from arbiter.decision_optimizer import DecisionOptimizer
 
             decision_optimizer = DecisionOptimizer(
-                plugin_registry=PLUGIN_REGISTRY,
+                plugin_registry=_get_plugin_registry(),
                 settings=self.settings,
                 logger=logger,
                 arena=self,

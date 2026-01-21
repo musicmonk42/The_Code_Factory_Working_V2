@@ -50,18 +50,19 @@ except ImportError:
     logging.warning("hvac not found. VaultSecretManager will not be available.")
 
 # Placeholder for audit_log.log_action for key use auditing
+# Use relative import from parent package to avoid circular dependency issues
 try:
-    from audit_log import log_action
+    from .. import log_action
 except ImportError:
-    logging.warning(
-        "audit_log.py not found or circular dependency. log_action will be a dummy function.",
-        extra={"operation": "audit_log_import_fail"},
+    logging.debug(
+        "log_action import from parent package failed, using dummy function.",
+        extra={"operation": "audit_log_import_fallback"},
     )
 
     async def log_action(
         *args, **kwargs
     ):  # Make dummy async to match expected signature
-        logging.info(
+        logging.debug(
             f"Dummy log_action: {args}, {kwargs}",
             extra={"operation": "dummy_log_action"},
         )
@@ -551,8 +552,9 @@ elif os.getenv("USE_HASHICORP_VAULT", "false").lower() == "true":
 else:
     # This path is for local development/testing where a real secret manager might not be configured.
     _secret_manager = DummySecretManager()
-    logger.warning(
-        "No production-ready secret manager explicitly configured. Using DummySecretManager. THIS IS NOT FOR PRODUCTION!"
+    # Use debug level for expected dev/test behavior - warning level is too noisy in CI
+    logger.debug(
+        "No production-ready secret manager configured. Using DummySecretManager for dev/test."
     )
 
 # --- Production Guardrail with Dev Mode Bypass ---
