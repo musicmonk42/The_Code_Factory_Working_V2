@@ -4,8 +4,11 @@ Audit Log Package
 This package provides secure, tamper-evident audit logging functionality.
 """
 
+import logging
+
 # Lazy import to avoid circular dependencies during module initialization
 _log_action = None
+_logger = logging.getLogger(__name__)
 
 
 def _get_log_action():
@@ -17,13 +20,16 @@ def _get_log_action():
             _log_action = _imported_log_action
         except ImportError:
             # Fallback dummy if circular dependency still occurs
-            import logging
-            logging.getLogger(__name__).debug(
-                "log_action lazy import failed, using dummy"
+            _logger.debug(
+                "log_action lazy import failed, using dummy function"
             )
 
             async def _dummy_log_action(*args, **kwargs):
-                pass
+                # Log at debug level to make it clear audit logging is bypassed
+                _logger.debug(
+                    "Dummy log_action called (audit logging bypassed): args=%s, kwargs=%s",
+                    args, kwargs
+                )
 
             _log_action = _dummy_log_action
     return _log_action
