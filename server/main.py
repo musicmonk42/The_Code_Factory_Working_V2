@@ -441,6 +441,9 @@ if __name__ == "__main__":
     # Get configuration from environment variables with validation
     try:
         port = int(os.environ.get("PORT", 8000))
+        if not (1 <= port <= 65535):
+            logger.warning(f"Invalid PORT value: {port}, must be 1-65535. Using default 8000")
+            port = 8000
     except ValueError:
         logger.warning(f"Invalid PORT value: {os.environ.get('PORT')}, using default 8000")
         port = 8000

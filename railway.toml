@@ -4,6 +4,7 @@
 
 [build]
 builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "python -m server.main"
