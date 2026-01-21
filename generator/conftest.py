@@ -311,19 +311,6 @@ _OPTIONAL_DEPENDENCIES = [
 # Flag to track if mocks have been set up (to avoid duplicate work)
 _mocks_initialized = False
 
-# ---- Early mock setup for CI environments ----
-# In CI, set up mocks immediately at module load time to avoid timeout during test collection
-# This must happen BEFORE _setup_optional_dependency_mocks() is defined, as pytest will
-# import conftest before test collection starts
-if os.environ.get("CI", "").lower() in ("1", "true", "yes") or \
-   os.environ.get("GITHUB_ACTIONS", "").lower() in ("1", "true", "yes"):
-    # Skip if already initialized
-    if not _mocks_initialized:
-        _mocks_initialized = True  # Mark as initialized to prevent double initialization
-        # Note: At this point, _create_mock_module, _create_parent_modules, and
-        # _create_opentelemetry_stubs are not yet defined. We'll skip the early setup here
-        # and ensure the _setup_optional_dependency_mocks() avoids expensive imports in CI.
-
 
 def _create_parent_modules(dep):
     """
