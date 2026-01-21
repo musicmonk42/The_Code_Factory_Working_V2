@@ -120,7 +120,7 @@ def _create_mock_module(name):
                 self._data[key] = value
 
             def __getattr__(self, name):
-                return self._data.get(name)
+                return self._data.get(name, None)
 
             def __setattr__(self, name, value):
                 if name.startswith("_"):
@@ -323,12 +323,13 @@ for dep in _OPTIONAL_DEPENDENCIES:
             defusedxml_et.parse = lambda *args, **kwargs: None
             defusedxml_et.fromstring = lambda *args, **kwargs: None
             defusedxml_et.XML = lambda *args, **kwargs: None
-        elif dep == "grpc" or dep == "grpcio":
-            # Create grpc.aio submodule for async gRPC
-            grpc_aio = _create_mock_module("grpc.aio")
-            sys.modules["grpc.aio"] = grpc_aio
-            mock_module.aio = grpc_aio
-            # insecure_channel will be handled by __getattr__
+        elif dep in ("grpc", "grpcio"):
+            # Create grpc.aio submodule for async gRPC (handle both grpc and grpcio idempotently)
+            if "grpc.aio" not in sys.modules:
+                grpc_aio = _create_mock_module("grpc.aio")
+                sys.modules["grpc.aio"] = grpc_aio
+                mock_module.aio = grpc_aio
+                # insecure_channel will be handled by __getattr__
 
 
 # ---- Optional: Pytest fixture for any additional test setup ----
