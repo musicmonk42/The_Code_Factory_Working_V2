@@ -153,16 +153,32 @@ except ImportError:
 
 
 # --- Prometheus HTTP Server Startup (optional) ---
-try:
-    # Use a port from environment variables or settings, if available
-    # Default port 9090 to avoid conflict with FastAPI on port 8000
-    port = int(os.getenv("PROMETHEUS_PORT", "9090"))
-    start_http_server(port)
-    logger.info(f"Prometheus metrics server started on port {port}")
-except OSError as e:
-    logger.warning(f"Prometheus metrics server already started or port is in use: {e}")
-except Exception as e:
-    logger.error(f"Failed to start Prometheus metrics server: {e}")
+# Skip server startup in test/CI environments to prevent import timeouts and core dumps
+_skip_server = (
+    os.getenv("TESTING", "").lower() in ("1", "true", "yes")
+    or os.getenv("OTEL_SDK_DISABLED", "").lower() in ("1", "true", "yes")
+    or os.getenv("SKIP_IMPORT_TIME_VALIDATION", "").lower() in ("1", "true", "yes")
+    or os.getenv("PYTEST_CURRENT_TEST") is not None  # pytest sets this to test path
+    or os.getenv("CI", "").lower() in ("1", "true", "yes")
+)
+
+if _skip_server:
+    logger.info(
+        "Prometheus metrics server startup skipped (test/CI environment detected)"
+    )
+else:
+    try:
+        # Use a port from environment variables or settings, if available
+        # Default port 9090 to avoid conflict with FastAPI on port 8000
+        port = int(os.getenv("PROMETHEUS_PORT", "9090"))
+        start_http_server(port)
+        logger.info(f"Prometheus metrics server started on port {port}")
+    except OSError as e:
+        logger.warning(
+            f"Prometheus metrics server already started or port is in use: {e}"
+        )
+    except Exception as e:
+        logger.error(f"Failed to start Prometheus metrics server: {e}")
 
 
 # --- Unified Metric Definitions ---
