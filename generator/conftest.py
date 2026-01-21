@@ -1032,10 +1032,17 @@ class LazyModuleAliasLoader(Loader):
     def create_module(self, spec):
         """Import the actual module and return it."""
         try:
-            # Import the actual module
-            actual_module = __import__(self.actual_name, fromlist=[''])
-            # Ensure both names point to the same module
+            # Check if the actual module is already imported
+            if self.actual_name in sys.modules:
+                # Use the existing module
+                actual_module = sys.modules[self.actual_name]
+            else:
+                # Import the actual module
+                actual_module = __import__(self.actual_name, fromlist=[''])
+            
+            # Ensure both names point to the same module in sys.modules
             sys.modules[self.alias_name] = actual_module
+            sys.modules[self.actual_name] = actual_module
             return actual_module
         except ImportError:
             # If import fails, return None (module not available)
@@ -1056,7 +1063,7 @@ if _lazy_finder not in sys.meta_path:
 
 # ---- Import timeout protection ----
 # Add timeout protection for expensive imports in tests
-# Note: pytest and related imports are done inside functions to avoid issues
+# Note: pytest imports are done inside functions to avoid issues
 # when conftest.py is imported outside of pytest context
 import signal
 import warnings
@@ -1086,37 +1093,9 @@ def import_timeout(seconds=10):
         yield
 
 
-# Define fixture if pytest is available
-try:
-    import pytest
-    
-    @pytest.fixture(scope="session", autouse=True)
-    def prevent_expensive_imports():
-        """
-        Prevent expensive module imports from timing out in CI.
-        This fixture warns but doesn't fail if imports take too long.
-        """
-        # Wrap risky imports with timeout
-        for module_name in ['generator.runner', 'generator.main', 'generator.agents']:
-            if module_name in sys.modules:
-                # Already imported
-                continue
-            
-            try:
-                with import_timeout(seconds=5):
-                    # Try importing with timeout
-                    __import__(module_name)
-            except (TimeoutError, ImportError) as e:
-                warnings.warn(
-                    f"Module {module_name} could not be imported: {e}. "
-                    f"Tests requiring this module will be skipped.",
-                    UserWarning
-                )
-        
-        yield
-except ImportError:
-    # pytest not available, skip fixture definition
-    pass
+# NOTE: The prevent_expensive_imports fixture has been removed because it was
+# defeating the purpose of lazy loading by importing modules at conftest time.
+# Tests that need timeout protection can use the import_timeout context manager directly.
 
 
 # ---- OpenTelemetry stub setup ----
