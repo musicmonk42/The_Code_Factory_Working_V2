@@ -159,13 +159,13 @@ def test_function():
         
         assert "fix_id" in result
         assert result["fix_id"] == "fix-001"
-        assert result["dry_run"] == True
-        assert result["applied"] == False
+        assert result["dry_run"] is True
+        assert result["applied"] is False
         
         # Test actual application
         result = await service.apply_fix("fix-001", dry_run=False)
         
-        assert result["applied"] == True
+        assert result["applied"] is True
         assert result["status"] == "success"
 
     @pytest.mark.asyncio
@@ -178,7 +178,7 @@ def test_function():
         
         assert "fix_id" in result
         assert result["fix_id"] == "fix-001"
-        assert result["rolled_back"] == True
+        assert result["rolled_back"] is True
         assert result["status"] == "success"
 
     @pytest.mark.asyncio

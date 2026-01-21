@@ -8,7 +8,7 @@ on jobs, errors, fixes, and platform status through OmniCore.
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -116,7 +116,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     # Convert to EventMessage format
                     event_msg = EventMessage(
                         event_type=EventType.LOG_MESSAGE,
-                        timestamp=datetime.utcnow(),
+                        timestamp=datetime.now(timezone.utc),
                         message=event.get("message", "Event received"),
                         data=event,
                         severity="info",
@@ -128,7 +128,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     # Send heartbeat if no events for 30 seconds
                     heartbeat = EventMessage(
                         event_type=EventType.PLATFORM_STATUS,
-                        timestamp=datetime.utcnow(),
+                        timestamp=datetime.now(timezone.utc),
                         message="Platform operational",
                         data={"status": "healthy"},
                         severity="info",
@@ -147,7 +147,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 await asyncio.sleep(30)
                 event = EventMessage(
                     event_type=EventType.PLATFORM_STATUS,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     message="Platform operational (fallback mode)",
                     data={"status": "healthy", "mode": "fallback"},
                     severity="info",
@@ -234,7 +234,7 @@ async def event_stream(
                 
                 event = EventMessage(
                     event_type=EventType.LOG_MESSAGE,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     job_id=job_id,
                     message=event_data.get("message", "Event update"),
                     data=event_data,
@@ -250,7 +250,7 @@ async def event_stream(
                 # Send keepalive
                 event = EventMessage(
                     event_type=EventType.PLATFORM_STATUS,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     job_id=job_id,
                     message="Keepalive",
                     data={"status": "listening"},
@@ -273,7 +273,7 @@ async def event_stream(
 
             event = EventMessage(
                 event_type=EventType.LOG_MESSAGE,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 job_id=job_id,
                 message=f"Progress update {counter} (fallback mode)",
                 data={"progress": counter, "mode": "fallback"},

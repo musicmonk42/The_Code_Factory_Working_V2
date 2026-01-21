@@ -178,7 +178,7 @@ class SFEService:
                 code_path_obj = Path(code_path)
                 if code_path_obj.is_file():
                     # Analyze single file
-                    with open(code_path_obj, 'r') as f:
+                    with open(code_path_obj, 'r', encoding='utf-8') as f:
                         code_content = f.read()
                     
                     # Perform basic analysis

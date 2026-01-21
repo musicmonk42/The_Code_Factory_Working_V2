@@ -13,7 +13,7 @@ This module implements proper agent integration with:
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -384,7 +384,7 @@ class OmniCoreService:
                     "job_id": job_id,
                     "source_module": source_module,
                     "target_module": target_module,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 
                 # Publish to message bus with priority
@@ -1206,7 +1206,7 @@ class OmniCoreService:
                     for entry in self._audit_client.buffer:
                         if isinstance(entry, dict) and job_id in entry.get("name", ""):
                             matching_entries.append({
-                                "timestamp": entry.get("timestamp", datetime.utcnow().isoformat()),
+                                "timestamp": entry.get("timestamp", datetime.now(timezone.utc).isoformat()),
                                 "action": entry.get("kind", "unknown"),
                                 "name": entry.get("name", ""),
                                 "job_id": job_id,
@@ -1226,7 +1226,7 @@ class OmniCoreService:
         logger.debug(f"Using fallback audit trail for job {job_id} (audit client not available)")
         return [
             {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "action": "job_created",
                 "job_id": job_id,
                 "module": "omnicore_engine",
@@ -1250,7 +1250,7 @@ class OmniCoreService:
         # Build health status from actual component checks
         health_status = {
             "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "components": {},
         }
         
