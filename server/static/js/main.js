@@ -772,8 +772,12 @@ async function runAgentPipeline() {
                 body: JSON.stringify({description: 'Pipeline job', metadata: {}})
             });
             if (!createResponse.ok) {
-                const errorData = await createResponse.json();
-                showError('Failed to create job: ' + (errorData.detail || 'Unknown error'));
+                let errorMsg = `Failed to create job (HTTP ${createResponse.status})`;
+                try {
+                    const errorData = await createResponse.json();
+                    errorMsg = 'Failed to create job: ' + (errorData.detail || errorData.message || JSON.stringify(errorData));
+                } catch (e) { /* ignore JSON parse error */ }
+                showError(errorMsg);
                 return;
             }
             const job = await createResponse.json();
@@ -799,14 +803,21 @@ async function runAgentPipeline() {
                 run_critique: true
             })
         });
-        const data = await response.json();
+        
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            data = {};
+        }
+        
         if (!response.ok) {
             if (response.status === 404) {
                 showError('Job not found. The job may have been deleted or the server was restarted. Please create a new job first by uploading files.');
             } else if (response.status === 422) {
                 showError('Invalid request: ' + (data.detail || JSON.stringify(data)));
             } else {
-                showError('Pipeline failed: ' + (data.detail || data.message || 'Unknown error'));
+                showError('Pipeline failed: ' + (data.detail || data.message || `HTTP ${response.status}`));
             }
             return;
         }
