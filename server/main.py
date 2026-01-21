@@ -432,3 +432,24 @@ app.include_router(fixes_router, prefix="/api")
 app.include_router(events_router, prefix="/api")
 
 logger.info("FastAPI application configured successfully")
+
+
+# Allow running the server directly with `python -m server.main`
+if __name__ == "__main__":
+    import uvicorn
+    
+    # Get configuration from environment variables
+    port = int(os.environ.get("PORT", 8000))
+    host = os.environ.get("HOST", "0.0.0.0")
+    log_level = os.environ.get("LOG_LEVEL", "info").lower()
+    
+    logger.info(f"Starting server on {host}:{port}")
+    
+    # Run the FastAPI application
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level=log_level,
+        access_log=True,
+    )
