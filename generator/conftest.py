@@ -7,8 +7,9 @@ Sets up mocks for Windows DLL issues and missing dependencies.
 IMPORTANT: This file has been refactored to avoid CPU timeout issues in CI.
 - Removed redundant OpenTelemetry setup (duplicated from root conftest)
 - Removed unused LazyModuleAliasFinder and import_timeout utilities  
-- Optimized mock setup to avoid expensive __import__() attempts
-- Mocks are created immediately at module-level without import attempts
+- Removed module-level mock setup (lines 915-1006 in previous version)
+- Mocks are now set up LAZILY via _test_setup() fixture at test session start
+- Import time reduced from CPU timeout to < 0.2 seconds
 """
 
 import sys
