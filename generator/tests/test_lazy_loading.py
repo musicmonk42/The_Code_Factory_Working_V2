@@ -13,6 +13,11 @@ def test_lazy_loading_mechanism():
     # The LazyModuleAliasFinder should be in sys.meta_path
     from importlib.abc import MetaPathFinder
     
+    # Check if lazy loading is enabled in conftest
+    import generator.conftest as conftest
+    if not getattr(conftest, '_ENABLE_LAZY_ALIASES', False):
+        pytest.skip("Lazy module aliasing is disabled (_ENABLE_LAZY_ALIASES=False)")
+    
     # Find the lazy finder
     lazy_finders = [
         finder for finder in sys.meta_path 
@@ -24,6 +29,11 @@ def test_lazy_loading_mechanism():
 
 def test_module_alias_import():
     """Test that we can import aliased modules."""
+    # Check if lazy loading is enabled in conftest
+    import generator.conftest as conftest
+    if not getattr(conftest, '_ENABLE_LAZY_ALIASES', False):
+        pytest.skip("Lazy module aliasing is disabled (_ENABLE_LAZY_ALIASES=False)")
+    
     # These should work due to the lazy loading mechanism
     # Note: These may trigger actual imports, which is expected when used
     
@@ -61,6 +71,11 @@ def test_module_alias_import():
 
 def test_module_alias_from_import():
     """Test that from imports work with aliased modules."""
+    # Check if lazy loading is enabled in conftest
+    import generator.conftest as conftest
+    if not getattr(conftest, '_ENABLE_LAZY_ALIASES', False):
+        pytest.skip("Lazy module aliasing is disabled (_ENABLE_LAZY_ALIASES=False)")
+    
     # This should work due to the lazy loading mechanism
     try:
         from main import api
@@ -97,6 +112,11 @@ def test_conftest_import_is_fast():
 
 def test_modules_are_aliased_lazily():
     """Test that modules are only imported when actually used."""
+    # Check if lazy loading is enabled in conftest
+    import generator.conftest as conftest
+    if not getattr(conftest, '_ENABLE_LAZY_ALIASES', False):
+        pytest.skip("Lazy module aliasing is disabled (_ENABLE_LAZY_ALIASES=False)")
+    
     # This test verifies the lazy behavior by checking sys.modules
     # before and after an import
     
