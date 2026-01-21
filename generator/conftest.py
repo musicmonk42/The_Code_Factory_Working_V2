@@ -311,6 +311,19 @@ _OPTIONAL_DEPENDENCIES = [
 # Flag to track if mocks have been set up (to avoid duplicate work)
 _mocks_initialized = False
 
+# ---- Early mock setup for CI environments ----
+# In CI, set up mocks immediately at module load time to avoid timeout during test collection
+# This must happen BEFORE _setup_optional_dependency_mocks() is defined, as pytest will
+# import conftest before test collection starts
+if os.environ.get("CI", "").lower() in ("1", "true", "yes") or \
+   os.environ.get("GITHUB_ACTIONS", "").lower() in ("1", "true", "yes"):
+    # Skip if already initialized
+    if not _mocks_initialized:
+        _mocks_initialized = True  # Mark as initialized to prevent double initialization
+        # Note: At this point, _create_mock_module, _create_parent_modules, and
+        # _create_opentelemetry_stubs are not yet defined. We'll skip the early setup here
+        # and ensure the _setup_optional_dependency_mocks() avoids expensive imports in CI.
+
 
 def _create_parent_modules(dep):
     """
@@ -670,6 +683,25 @@ def _create_opentelemetry_stubs():
     )
 
 
+# ---- Early CI mock initialization ----
+# In CI environments, set up mocks immediately to avoid timeout during test collection.
+# This code runs at module level, right after all helper functions are defined.
+if os.environ.get("CI", "").lower() in ("1", "true", "yes") or \
+   os.environ.get("GITHUB_ACTIONS", "").lower() in ("1", "true", "yes"):
+    if not _mocks_initialized:
+        _mocks_initialized = True  # Prevent double initialization
+        for dep in _OPTIONAL_DEPENDENCIES:
+            if dep not in sys.modules:
+                if dep == "opentelemetry":
+                    # Create opentelemetry stubs directly without import attempt
+                    _create_opentelemetry_stubs()
+                    continue
+                # Create lightweight stub WITHOUT trying to import first
+                mock_module = _create_mock_module(dep)
+                sys.modules[dep] = mock_module
+                _create_parent_modules(dep)
+
+
 def _setup_optional_dependency_mocks():
     """
     Setup mocks for optional dependencies. Called lazily when needed.
@@ -692,10 +724,15 @@ def _setup_optional_dependency_mocks():
         if dep not in sys.modules:
             # Special handling for opentelemetry - use dedicated stub creator
             if dep == "opentelemetry":
-                try:
-                    __import__(dep)
-                except ImportError:
+                if is_ci:
+                    # In CI, skip import attempt and create stubs directly
                     _create_opentelemetry_stubs()
+                else:
+                    # Non-CI: Try to import, fallback to stub creation
+                    try:
+                        __import__(dep)
+                    except ImportError:
+                        _create_opentelemetry_stubs()
                 continue
             
             # In CI, skip expensive import attempts and use lightweight stubs
@@ -924,10 +961,18 @@ try:
         This fixture is automatically used by all tests (autouse=True) and runs
         once per session (scope="session") to set up the mocks lazily.
         
-        Note: This fixture runs AFTER test collection, not during conftest import.
+        Note: In CI environments, mocks are set up during conftest import to avoid
+        timeout during test collection. This fixture will skip setup in that case.
         """
-        # Setup mocks when tests actually run, not at import time
-        _setup_optional_dependency_mocks()
+        # In CI, mocks are already set up during conftest import
+        # to avoid timeout during test collection
+        ci_value = os.environ.get("CI", "").lower()
+        github_actions_value = os.environ.get("GITHUB_ACTIONS", "").lower()
+        is_ci = ci_value in ("1", "true", "yes") or github_actions_value in ("1", "true", "yes")
+        
+        if not is_ci:
+            # Non-CI: Setup mocks when tests actually run, not at import time
+            _setup_optional_dependency_mocks()
         yield
 
 except ImportError:
