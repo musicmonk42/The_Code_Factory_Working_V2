@@ -221,7 +221,24 @@ class TamperEvidentLogger:
             return
 
         self.config = config or AuditLoggerConfig()
-        self.config.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._file_logging_available = True
+        
+        # Try to create log directory, gracefully handle permission errors
+        try:
+            self.config.log_path.parent.mkdir(parents=True, exist_ok=True)
+        except PermissionError as e:
+            logging.warning(
+                f"Cannot create audit log directory {self.config.log_path.parent}: {e}. "
+                "File-based audit logging will be disabled."
+            )
+            self._file_logging_available = False
+        except OSError as e:
+            logging.warning(
+                f"Cannot create audit log directory {self.config.log_path.parent}: {e}. "
+                "File-based audit logging will be disabled."
+            )
+            self._file_logging_available = False
+            
         self._last_hash: Optional[str] = None
         self._logger = self._setup_file_logger()
         self._dlt_client = self._setup_dlt_client()
@@ -238,25 +255,51 @@ class TamperEvidentLogger:
         self._hmac_key = None  # For future HMAC support
 
     def _setup_file_logger(self) -> logging.Logger:
-        """Configure and return the file-based logger with rotation."""
+        """Configure and return the file-based logger with rotation.
+        
+        If file logging is not available (e.g., due to permission errors),
+        returns a logger with a NullHandler that effectively discards messages.
+        """
         logger = logging.getLogger("AuditLogger")
         logger.setLevel(logging.INFO)
+        
+        # If file logging is not available, use a NullHandler
+        if not self._file_logging_available:
+            if not logger.handlers:
+                logger.addHandler(logging.NullHandler())
+            return logger
+            
         if not logger.handlers:
-            handler = SizedTimedRotatingFileHandler(
-                filename=str(self.config.log_path),
-                when=(
-                    "midnight"
-                    if self.config.rotation_type == RotationType.SIZE
-                    else self.config.rotation_type
-                ),
-                interval=self.config.rotation_interval,
-                backupCount=self.config.retention_count,
-                maxBytes=self.config.max_file_size,
-                compression_type=self.config.compression_type,
-            )
-            formatter = logging.Formatter("%(message)s")
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
+            try:
+                handler = SizedTimedRotatingFileHandler(
+                    filename=str(self.config.log_path),
+                    when=(
+                        "midnight"
+                        if self.config.rotation_type == RotationType.SIZE
+                        else self.config.rotation_type
+                    ),
+                    interval=self.config.rotation_interval,
+                    backupCount=self.config.retention_count,
+                    maxBytes=self.config.max_file_size,
+                    compression_type=self.config.compression_type,
+                )
+                formatter = logging.Formatter("%(message)s")
+                handler.setFormatter(formatter)
+                logger.addHandler(handler)
+            except PermissionError as e:
+                logging.warning(
+                    f"Cannot create audit log file {self.config.log_path}: {e}. "
+                    "File-based audit logging will be disabled."
+                )
+                self._file_logging_available = False
+                logger.addHandler(logging.NullHandler())
+            except OSError as e:
+                logging.warning(
+                    f"Cannot create audit log file {self.config.log_path}: {e}. "
+                    "File-based audit logging will be disabled."
+                )
+                self._file_logging_available = False
+                logger.addHandler(logging.NullHandler())
         return logger
 
     def _setup_dlt_client(self) -> Optional[Any]:

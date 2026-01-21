@@ -43,7 +43,11 @@ try:
     from arbiter.config import ArbiterConfig
     from arbiter.logging_utils import PIIRedactorFilter
     from arbiter.postgres_client import PostgresClient
-    from arbiter_plugin_registry import PlugInKind, registry
+    from arbiter_plugin_registry import PlugInKind, get_registry
+    
+    # Lazy getter for registry to avoid import-time initialization
+    def _get_registry():
+        return get_registry()
 except ImportError:
 
     class registry:
@@ -53,6 +57,9 @@ except ImportError:
                 return cls
 
             return decorator
+
+    def _get_registry():
+        return registry
 
     class PlugInKind:
         CORE_SERVICE = "core_service"

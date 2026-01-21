@@ -28,8 +28,12 @@ except ImportError:
     PSYCOPG2_AVAILABLE = False
     logging.warning("psycopg2 not available. PostgreSQL features will be disabled.")
 import aiosqlite
-from arbiter.arbiter_plugin_registry import PlugInKind, register
-from arbiter.arbiter_plugin_registry import registry as arbiter_registry
+from arbiter.arbiter_plugin_registry import PlugInKind, register, get_registry
+
+# Lazy-loaded registry to avoid import-time initialization
+def _get_arbiter_registry():
+    """Get the arbiter registry lazily to avoid import-time initialization."""
+    return get_registry()
 
 # Mock/Placeholder imports for a self-contained fix
 try:
@@ -39,7 +43,7 @@ try:
     from arbiter.logging_utils import PIIRedactorFilter
     from arbiter.postgres_client import PostgresClient
     from arbiter_plugin_registry import PlugInKind as MockPlugInKind
-    from arbiter_plugin_registry import registry as mock_registry
+    from arbiter_plugin_registry import get_registry as get_mock_registry
 
     DB_CLIENTS_AVAILABLE = True
 except ImportError:
@@ -955,14 +959,31 @@ async def receive_human_feedback(feedback: Dict[str, Any]) -> None:
         await manager.disconnect_db()
 
 
-# Only register if not already registered to avoid duplicate registration error
-if not arbiter_registry.get_metadata(PlugInKind.CORE_SERVICE, "feedback_manager"):
-    register(
-        kind=PlugInKind.CORE_SERVICE,
-        name="feedback_manager",
-        version="1.0.0",
-        author="Arbiter Team",
-    )(receive_human_feedback)
-    logger.info("feedback_manager plugin registered successfully")
-else:
-    logger.info("feedback_manager plugin already registered, skipping registration")
+# Deferred plugin registration to avoid import-time initialization
+_feedback_plugin_registered = False
+
+
+def _ensure_feedback_plugin_registered():
+    """Register the feedback_manager plugin if not already registered.
+    
+    This function defers plugin registration to avoid blocking during module import.
+    Call this function when the feedback functionality is actually needed.
+    """
+    global _feedback_plugin_registered
+    if _feedback_plugin_registered:
+        return
+    
+    arbiter_registry = _get_arbiter_registry()
+    # Only register if not already registered to avoid duplicate registration error
+    if not arbiter_registry.get_metadata(PlugInKind.CORE_SERVICE, "feedback_manager"):
+        register(
+            kind=PlugInKind.CORE_SERVICE,
+            name="feedback_manager",
+            version="1.0.0",
+            author="Arbiter Team",
+        )(receive_human_feedback)
+        logger.info("feedback_manager plugin registered successfully")
+    else:
+        logger.info("feedback_manager plugin already registered, skipping registration")
+    
+    _feedback_plugin_registered = True

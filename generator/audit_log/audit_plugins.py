@@ -100,27 +100,28 @@ def safe_gauge(name, description, labelnames=()):
 # --- END: FIX 1 ---
 
 # Import log_action, handle potential circular dependency
+# First try to import from the package's __init__.py (which has lazy loading)
 try:
-    # Use relative import if part of a package
-    from .audit_log import log_action as real_log_action
+    from . import log_action as real_log_action
 
     _DUMMY_LOG_ACTION_USED = False
 except ImportError:
     try:
-        from audit_log import log_action as real_log_action
+        # Fallback: try to import directly from the audit_log module
+        from .audit_log import log_action as real_log_action
 
         _DUMMY_LOG_ACTION_USED = False
     except ImportError:
         _DUMMY_LOG_ACTION_USED = True
         logger = logging.getLogger(__name__)
-        logger.warning(
-            "audit_log.py not found or circular dependency. log_action will be a dummy function."
+        logger.debug(
+            "log_action import failed, using dummy function."
         )
 
         async def real_log_action(
             *args, **kwargs
         ):  # Make dummy async to match expected signature
-            logging.info(f"Dummy log_action: {args}, {kwargs}")
+            logging.debug(f"Dummy log_action: {args}, {kwargs}")
 
 
 log_action = real_log_action

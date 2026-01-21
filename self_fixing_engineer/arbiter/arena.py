@@ -67,7 +67,7 @@ except ImportError as e:
 
 from arbiter.agent_state import Base
 from arbiter.arbiter import Arbiter  # Correct import
-from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY, PlugInKind
+from arbiter.arbiter_plugin_registry import PlugInKind, get_registry
 from arbiter.codebase_analyzer import CodebaseAnalyzer
 
 # Import core components with ABSOLUTE PATHS
@@ -82,6 +82,19 @@ from arbiter.logging_utils import PIIRedactorFilter
 from arbiter.metrics import get_or_create_counter, get_or_create_gauge
 from arbiter.monitoring import Monitor
 from arbiter.otel_config import get_tracer
+
+
+# Lazy getter for plugin registry to avoid import-time initialization
+def _get_registry():
+    """Get the plugin registry object lazily to avoid import-time initialization."""
+    return get_registry()
+
+
+# Legacy function for backwards compatibility with PLUGIN_REGISTRY dict access
+def _get_plugin_registry_dict():
+    """Get the plugin registry as a dict, for backwards compatibility."""
+    return get_registry().list_plugins()
+
 
 tracer = get_tracer(__name__)
 
@@ -245,9 +258,10 @@ class ArbiterArena:
 
         # Initialize SimulationEngine with proper fallback
         try:
-            sim_from_registry = PLUGIN_REGISTRY.get(
-                PlugInKind.CORE_SERVICE, "simulation_module"
-            )
+            plugin_registry = _get_plugin_registry_dict()
+            sim_from_registry = plugin_registry.get(
+                PlugInKind.CORE_SERVICE, {}
+            ).get("simulation_module")
             self.simulation_module = (
                 sim_from_registry if sim_from_registry else SimulationEngine()
             )
@@ -571,7 +585,7 @@ class ArbiterArena:
             from arbiter.decision_optimizer import DecisionOptimizer
 
             decision_optimizer = DecisionOptimizer(
-                plugin_registry=PLUGIN_REGISTRY,
+                plugin_registry=_get_plugin_registry_dict(),
                 settings=self.settings,
                 logger=logger,
                 arena=self,
