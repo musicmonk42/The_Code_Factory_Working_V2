@@ -13,8 +13,10 @@ def test_generator_directory_exists():
     """Test that generator directory structure is valid."""
     from pathlib import Path
 
-    # Verify the generator directory exists
-    generator_dir = Path(__file__).parent.parent
+    # Verify the generator directory exists (it's one level up from tests/)
+    tests_dir = Path(__file__).parent
+    project_root = tests_dir.parent
+    generator_dir = project_root / "generator"
     assert generator_dir.exists()
     assert generator_dir.is_dir()
     assert generator_dir.name == "generator"
