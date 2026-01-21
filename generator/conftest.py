@@ -145,12 +145,14 @@ def _create_mock_module(name):
         # Add torch.Tensor to prevent AttributeError
         mock_module.Tensor = MockCallable
     elif name == "transformers":
-        # transformers needs specific classes
+        # transformers needs specific classes and __version__ as string
+        mock_module.__version__ = "4.0.0"
         mock_module.AutoTokenizer = MockCallable()
         mock_module.AutoModel = MockCallable()
         mock_module.pipeline = MockCallable()
     elif name == "sentence_transformers":
-        # sentence_transformers needs SentenceTransformer
+        # sentence_transformers needs SentenceTransformer and __version__ as string
+        mock_module.__version__ = "2.0.0"
         mock_module.SentenceTransformer = MockCallable
     elif name == "redis":
         # redis needs Redis class with specific methods
