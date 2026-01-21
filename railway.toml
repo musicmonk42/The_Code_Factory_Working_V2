@@ -4,12 +4,10 @@
 
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
 
 [deploy]
-# Start command for the unified FastAPI server (server.main:app)
-# Railway provides the PORT environment variable dynamically
-startCommand = "sh -c 'python -m uvicorn server.main:app --host 0.0.0.0 --port ${PORT:-8000}'"
+# Start command for the unified FastAPI server (server.main)
+startCommand = "python -m server.main"
 
 # Health check configuration
 # The /health endpoint returns JSON with system status
@@ -18,4 +16,13 @@ healthcheckTimeout = 300
 
 # Restart policy: only restart on failure, not on success exit
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10
+restartPolicyMaxRetries = 3
+
+[variables]
+APP_ENV = "production"
+DEBUG = "false"
+LOG_LEVEL = "INFO"
+LLM_PROVIDER = "openai"
+LLM_MODEL = "gpt-4o-mini"
+WORKER_COUNT = "4"
+MAX_CONCURRENT_TASKS = "50"
