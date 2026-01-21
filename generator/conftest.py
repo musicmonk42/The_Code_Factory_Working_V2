@@ -1054,9 +1054,16 @@ class LazyModuleAliasLoader(Loader):
 
 
 # Install the lazy module alias finder
-_lazy_finder = LazyModuleAliasFinder()
-if _lazy_finder not in sys.meta_path:
-    sys.meta_path.insert(0, _lazy_finder)
+# DISABLED: LazyModuleAliasFinder causes CPU timeout in CI environments
+# The create_module method eagerly imports actual modules during conftest load,
+# which triggers expensive initialization code and defeats lazy loading.
+# TODO: Implement truly lazy proxy if module aliasing is needed in the future
+_ENABLE_LAZY_ALIASES = False
+
+if _ENABLE_LAZY_ALIASES:
+    _lazy_finder = LazyModuleAliasFinder()
+    if _lazy_finder not in sys.meta_path:
+        sys.meta_path.insert(0, _lazy_finder)
 
 # NOTE: Modules are now aliased lazily. They will only be imported when
 # test code actually tries to use them, not during conftest loading.

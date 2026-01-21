@@ -8,7 +8,15 @@ import sys
 import pytest
 
 
-def test_lazy_loading_mechanism():
+@pytest.fixture
+def skip_if_lazy_disabled():
+    """Fixture that skips tests if lazy module aliasing is disabled."""
+    import generator.conftest as conftest
+    if not getattr(conftest, '_ENABLE_LAZY_ALIASES', False):
+        pytest.skip("Lazy module aliasing is disabled (_ENABLE_LAZY_ALIASES=False)")
+
+
+def test_lazy_loading_mechanism(skip_if_lazy_disabled):
     """Test that lazy loading is set up correctly."""
     # The LazyModuleAliasFinder should be in sys.meta_path
     from importlib.abc import MetaPathFinder
@@ -22,7 +30,7 @@ def test_lazy_loading_mechanism():
     assert len(lazy_finders) > 0, "LazyModuleAliasFinder should be installed in sys.meta_path"
 
 
-def test_module_alias_import():
+def test_module_alias_import(skip_if_lazy_disabled):
     """Test that we can import aliased modules."""
     # These should work due to the lazy loading mechanism
     # Note: These may trigger actual imports, which is expected when used
@@ -59,7 +67,7 @@ def test_module_alias_import():
         "Module aliases should point to the same object in sys.modules"
 
 
-def test_module_alias_from_import():
+def test_module_alias_from_import(skip_if_lazy_disabled):
     """Test that from imports work with aliased modules."""
     # This should work due to the lazy loading mechanism
     try:
@@ -95,7 +103,7 @@ def test_conftest_import_is_fast():
     assert elapsed < 2.0, f"conftest import took {elapsed:.2f}s, expected < 2s"
 
 
-def test_modules_are_aliased_lazily():
+def test_modules_are_aliased_lazily(skip_if_lazy_disabled):
     """Test that modules are only imported when actually used."""
     # This test verifies the lazy behavior by checking sys.modules
     # before and after an import
