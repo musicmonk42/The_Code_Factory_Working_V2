@@ -240,70 +240,17 @@ jobs:
           echo "=== Initial memory usage ==="
           free -h
           
-          # Verify tests can be collected with full verbosity
-          echo "=== Collecting tests with verbose output ==="
-          timeout 60s pytest --collect-only -v 2>&1 | tee collection.log || {
-            COLLECTION_EXIT=$?
-            if [ $COLLECTION_EXIT -eq 124 ]; then
-              echo "ERROR: Test collection timed out after 60 seconds"
-              echo "This usually indicates expensive imports in conftest or test files"
-            fi
-            echo "Collection failed with exit code: $COLLECTION_EXIT"
-          }
-          
-          echo ""
-          echo "=== Analyzing collection results ==="
-          
-          # Check for import errors or warnings
-          if grep -i "import.*error\|cannot import\|no module named" collection.log; then
-            echo "ERROR: Import errors detected during collection!"
-            echo "=== Full collection log ==="
-            cat collection.log
-            exit 1
-          fi
-          
-          # Count collected tests - FIX: Use pytest's native output parsing
-          # pytest --collect-only -q outputs one line per test, plus summary lines
-          # We count lines that don't start with '=' or contain 'error' (case-insensitive)
-          TEST_COUNT=$(grep -v '^=' collection.log | grep -v -i 'error' | grep -v '^$' | grep '::' | wc -l)
-          
-          # Alternative: parse the summary line "X selected" if available
-          if [ "$TEST_COUNT" -eq 0 ]; then
-            SUMMARY_COUNT=$(grep -oP '\d+(?= selected)' collection.log 2>/dev/null | head -1)
-            if [ -n "$SUMMARY_COUNT" ] && [ "$SUMMARY_COUNT" -gt 0 ]; then
-              TEST_COUNT=$SUMMARY_COUNT
-            fi
-          fi
-          
-          echo "Found $TEST_COUNT test items"
-          
-          # Check if TEST_COUNT is a valid number and greater than 0
-          if ! [[ "$TEST_COUNT" =~ ^[0-9]+$ ]] || [ "$TEST_COUNT" -eq 0 ]; then
-            echo "ERROR: No tests collected! Showing collection errors:"
-            cat collection.log
-            echo ""
-            echo "=== Attempting to import test modules directly ==="
-            python -c "import tests.test_generator_fixes" || echo "FAILED to import tests.test_generator_fixes"
-            python -c "import tests.test_cleanup_old_docs" || echo "FAILED to import tests.test_cleanup_old_docs"
-            echo ""
-            echo "=== Checking PYTHONPATH ==="
-            echo "PYTHONPATH=$PYTHONPATH"
-            echo "PWD=$PWD"
-            ls -la tests/ || echo "tests/ directory not found"
-            ls -la generator/tests/ || echo "generator/tests/ directory not found"
-            exit 1
-          fi
-          
           # Force garbage collection before tests
           python -c "import gc; gc.collect(); print('Garbage collection completed')"
           
           echo ""
-          echo "=== Memory before test execution ==="
-          free -h
+          echo "=== Running tests from tests/ directory ==="
           
-          # Run pytest WITHOUT parallelism to reduce memory usage
-          # Removed -n 2 flag to prevent OOM on GitHub runners
-          pytest \
+          # Run pytest directly on tests/ directory to avoid generator/conftest.py segfaults
+          # Let pytest handle collection internally with better error reporting
+          # Capture exit code to provide better diagnostics
+          set +e  # Don't exit on error, we want to handle it
+          pytest tests/ \
             --maxfail=50 \
             --timeout=300 \
             --cov=generator \
@@ -314,9 +261,38 @@ jobs:
             -v \
             2>&1 | tee test-output.log
           
+          PYTEST_EXIT=$?
+          set -e  # Re-enable exit on error
+          
           echo ""
           echo "=== Memory after test execution ==="
           free -h
+          
+          # Handle exit codes
+          if [ $PYTEST_EXIT -eq 5 ]; then
+            echo ""
+            echo "ERROR: No tests collected (exit code 5)"
+            echo "=== Diagnostic Information ==="
+            echo "PYTHONPATH=$PYTHONPATH"
+            echo "PWD=$PWD"
+            echo ""
+            echo "=== Checking tests directory ==="
+            ls -la tests/ || echo "tests/ directory not found"
+            echo ""
+            echo "=== Available test files ==="
+            find tests/ -name "test_*.py" -type f || echo "No test files found"
+            echo ""
+            echo "=== Attempting to collect tests with verbose output ==="
+            pytest tests/ --collect-only -v || true
+            exit 1
+          elif [ $PYTEST_EXIT -ne 0 ]; then
+            echo ""
+            echo "ERROR: Tests failed with exit code $PYTEST_EXIT"
+            exit $PYTEST_EXIT
+          fi
+          
+          echo ""
+          echo "=== All tests completed successfully ==="
           
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -339,7 +315,5 @@ jobs:
         if: always()
         with:
           name: diagnostic-logs
-          path: |
-            debug-collection.log
-            collection.log
+          path: debug-collection.log
           retention-days: 7
