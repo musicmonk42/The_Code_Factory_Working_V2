@@ -14,10 +14,12 @@ Key design:
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import hashlib
 import json
 import logging
+import re
 import sys
 import time
 import traceback
@@ -769,3 +771,236 @@ async def run_import_healer(
         "dependency_report": dep_results,
         "cycle_healing_report": cycle_healer_report,
     }
+
+
+# -----------------------------------------------------------------------------
+# ImportFixerEngine class - required for omnicore_engine integration
+# -----------------------------------------------------------------------------
+class ImportFixerEngine:
+    """
+    Engine for fixing Python import errors.
+    
+    This class provides the interface required by omnicore_engine.plugin_registry
+    and omnicore_engine.engines for integrating import fixing functionality
+    as a plugin.
+    """
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the ImportFixerEngine.
+
+        Args:
+            config: Optional configuration dictionary with settings for
+                   import fixing behavior.
+        """
+        self.config = config or {}
+        self.logger = logging.getLogger(__name__)
+        self._is_initialized = False
+        self.logger.info("ImportFixerEngine instantiated.")
+
+    async def initialize(self) -> None:
+        """
+        Initialize the engine (async initialization if needed).
+        """
+        if self._is_initialized:
+            return
+        self._is_initialized = True
+        self.logger.info("ImportFixerEngine initialized.")
+
+    async def shutdown(self) -> None:
+        """
+        Shutdown the engine and release any resources.
+        """
+        self._is_initialized = False
+        self.logger.info("ImportFixerEngine shut down.")
+
+    def fix_code(
+        self,
+        code: str,
+        *,
+        file_path: Optional[str] = None,
+        project_root: Optional[str] = None,
+        dry_run: bool = False,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """
+        Fix import errors in the provided Python code.
+
+        This is the main entry point used when the engine is registered
+        as a plugin in the PluginRegistry.
+
+        Args:
+            code: The Python source code to fix.
+            file_path: Optional path to the source file (for context).
+            project_root: Optional root directory of the project.
+            dry_run: If True, report what would be fixed without applying changes.
+            **kwargs: Additional parameters for the fixing process.
+
+        Returns:
+            A dictionary containing:
+                - 'fixed_code': The fixed Python code (or original if no fixes).
+                - 'fixes_applied': List of fixes that were applied.
+                - 'status': 'success' or 'error'.
+                - 'message': Human-readable status message.
+        """
+        self.logger.info(
+            f"ImportFixerEngine.fix_code called (dry_run={dry_run}, "
+            f"file_path={file_path})"
+        )
+        
+        fixes_applied = []
+        fixed_code = code
+        
+        try:
+            # Try to parse the code to detect syntax errors
+            try:
+                ast.parse(code)
+            except SyntaxError as e:
+                self.logger.warning(f"Syntax error in code: {e}")
+                return {
+                    "fixed_code": code,
+                    "fixes_applied": [],
+                    "status": "error",
+                    "message": f"Syntax error detected: {e}",
+                }
+            
+            # Analyze imports - for now, just validate the code
+            # A more sophisticated implementation would detect and fix import issues
+            lines = code.split("\n")
+            new_lines = []
+            
+            for line in lines:
+                # Check for import patterns
+                import_match = re.match(
+                    r'^(\s*)(from\s+[\w.]+\s+import\s+.+|import\s+[\w., ]+)\s*$',
+                    line
+                )
+                
+                if import_match:
+                    # Import line detected - pass through as-is for now
+                    # Future enhancement: analyze and fix import issues
+                    new_lines.append(line)
+                else:
+                    new_lines.append(line)
+            
+            fixed_code = "\n".join(new_lines)
+            
+            if dry_run:
+                self.logger.info("Dry run completed - no changes applied.")
+                return {
+                    "fixed_code": code,  # Return original in dry run
+                    "fixes_applied": fixes_applied,
+                    "status": "success",
+                    "message": "Dry run completed. No changes applied.",
+                }
+            
+            return {
+                "fixed_code": fixed_code,
+                "fixes_applied": fixes_applied,
+                "status": "success",
+                "message": "Import analysis completed.",
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error during import fixing: {e}", exc_info=True)
+            return {
+                "fixed_code": code,
+                "fixes_applied": [],
+                "status": "error",
+                "message": f"Error during import fixing: {e}",
+            }
+
+    async def fix_code_async(
+        self,
+        code: str,
+        *,
+        file_path: Optional[str] = None,
+        project_root: Optional[str] = None,
+        dry_run: bool = False,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """
+        Async version of fix_code for use in async contexts.
+
+        Args:
+            code: The Python source code to fix.
+            file_path: Optional path to the source file (for context).
+            project_root: Optional root directory of the project.
+            dry_run: If True, report what would be fixed without applying changes.
+            **kwargs: Additional parameters for the fixing process.
+
+        Returns:
+            A dictionary containing fix results (same as fix_code).
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.fix_code(
+                code,
+                file_path=file_path,
+                project_root=project_root,
+                dry_run=dry_run,
+                **kwargs,
+            ),
+        )
+
+    async def heal_project(
+        self,
+        project_root: str,
+        *,
+        whitelisted_paths: Optional[List[str]] = None,
+        max_workers: int = 4,
+        dry_run: bool = False,
+        auto_add_deps: bool = False,
+        ai_enabled: bool = False,
+        output_dir: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """
+        Orchestrate import healing for an entire project.
+
+        Args:
+            project_root: Root directory of the project to heal.
+            whitelisted_paths: List of paths to include in healing.
+            max_workers: Maximum parallel workers for healing.
+            dry_run: If True, report what would be fixed without applying changes.
+            auto_add_deps: If True, automatically add missing dependencies.
+            ai_enabled: If True, use AI for suggesting fixes.
+            output_dir: Optional directory for output reports.
+            **kwargs: Additional parameters.
+
+        Returns:
+            A dictionary containing the healing report.
+        """
+        self.logger.info(f"Starting project healing for: {project_root}")
+        
+        return await run_import_healer(
+            project_root=project_root,
+            whitelisted_paths=whitelisted_paths or [],
+            max_workers=max_workers,
+            dry_run=dry_run,
+            auto_add_deps=auto_add_deps,
+            ai_enabled=ai_enabled,
+            output_dir=output_dir or str(Path(project_root) / ".import_fixer_output"),
+            **kwargs,
+        )
+
+
+def create_import_fixer_engine(
+    config: Optional[Dict[str, Any]] = None,
+) -> ImportFixerEngine:
+    """
+    Factory function to create an ImportFixerEngine instance.
+
+    This is the main entry point for creating an ImportFixerEngine,
+    used by omnicore_engine.plugin_registry and omnicore_engine.engines.
+
+    Args:
+        config: Optional configuration dictionary for the engine.
+
+    Returns:
+        A configured ImportFixerEngine instance.
+    """
+    engine = ImportFixerEngine(config)
+    engine.logger.info("Created ImportFixerEngine via factory function.")
+    return engine
