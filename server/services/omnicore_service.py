@@ -200,26 +200,79 @@ class OmniCoreService:
     def _build_llm_config(self) -> Dict[str, Any]:
         """
         Build LLM configuration dict for agents from our config.
+        Auto-detects available LLM provider if default is not configured.
         
         Returns:
             Configuration dictionary compatible with agent requirements
         """
         if not self.llm_config:
             # Fallback configuration when config module not available
-            return {
-                "backend": "openai",
-                "model": {"openai": "gpt-4"},
-                "ensemble_enabled": False,
-            }
+            # Try to auto-detect from environment
+            from server.config import detect_available_llm_provider, get_default_model_for_provider
+            
+            auto_provider = detect_available_llm_provider()
+            if auto_provider:
+                logger.info(f"Auto-detected LLM provider: {auto_provider}")
+                return {
+                    "backend": auto_provider,
+                    "model": {auto_provider: get_default_model_for_provider(auto_provider)},
+                    "ensemble_enabled": False,
+                }
+            else:
+                logger.warning("No LLM provider configured or auto-detected")
+                return {
+                    "backend": "openai",
+                    "model": {"openai": "gpt-4"},
+                    "ensemble_enabled": False,
+                }
         
         provider = self.llm_config.default_llm_provider
-        model = self.llm_config.get_provider_model(provider)
+        
+        # Auto-detect if the default provider is not configured
+        if not self.llm_config.is_provider_configured(provider):
+            from server.config import detect_available_llm_provider, get_default_model_for_provider
+            
+            logger.warning(
+                f"Default LLM provider '{provider}' is not configured. "
+                "Attempting auto-detection..."
+            )
+            
+            auto_provider = detect_available_llm_provider()
+            if auto_provider:
+                logger.info(f"Auto-detected LLM provider: {auto_provider}")
+                provider = auto_provider
+                # Update model to match auto-detected provider
+                model = self.llm_config.get_provider_model(provider)
+            else:
+                logger.error(
+                    "No LLM provider configured. Please set API keys in environment variables:\n"
+                    "  - OPENAI_API_KEY for OpenAI\n"
+                    "  - ANTHROPIC_API_KEY for Anthropic/Claude\n"
+                    "  - XAI_API_KEY or GROK_API_KEY for xAI/Grok\n"
+                    "  - GOOGLE_API_KEY for Google/Gemini\n"
+                    "  - OLLAMA_HOST for Ollama (local)"
+                )
+                # Use default provider anyway, might be mocked
+                model = self.llm_config.get_provider_model(provider)
+        else:
+            model = self.llm_config.get_provider_model(provider)
+            logger.info(f"Using configured LLM provider: {provider} with model: {model}")
+        
         api_key = self.llm_config.get_provider_api_key(provider)
         
         # Set environment variable for the agent to use
         if api_key:
-            env_var = f"{provider.upper()}_API_KEY"
-            os.environ[env_var] = api_key
+            # For xAI/Grok, set both XAI_API_KEY and GROK_API_KEY
+            if provider == "grok":
+                os.environ["XAI_API_KEY"] = api_key
+                os.environ["GROK_API_KEY"] = api_key
+            else:
+                env_var = f"{provider.upper()}_API_KEY"
+                os.environ[env_var] = api_key
+        
+        # For Ollama, set the host
+        if provider == "ollama" and self.llm_config.ollama_host:
+            os.environ["OLLAMA_HOST"] = self.llm_config.ollama_host
         
         config = {
             "backend": provider,
@@ -233,6 +286,10 @@ class OmniCoreService:
         # Add OpenAI base URL if configured
         if provider == "openai" and self.llm_config.openai_base_url:
             config["openai_base_url"] = self.llm_config.openai_base_url
+        
+        # Add Ollama host if configured
+        if provider == "ollama" and self.llm_config.ollama_host:
+            config["ollama_host"] = self.llm_config.ollama_host
         
         return config
     

@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 
 from server.schemas import (
     CodegenRequest,
@@ -37,6 +37,52 @@ def get_generator_service() -> GeneratorService:
 
     omnicore = get_omnicore_service()
     return GeneratorService(omnicore_service=omnicore)
+
+
+async def _trigger_pipeline_background(
+    job_id: str,
+    readme_content: str,
+    generator_service: GeneratorService,
+):
+    """
+    Background task to automatically trigger the full generation pipeline.
+    
+    Args:
+        job_id: Job ID
+        readme_content: Content of the README file
+        generator_service: GeneratorService instance
+    """
+    try:
+        logger.info(f"Auto-triggering full pipeline for job {job_id}")
+        
+        # Auto-detect language from README content (simple heuristic)
+        language = "python"  # Default to Python
+        readme_lower = readme_content.lower()
+        if "javascript" in readme_lower or "node.js" in readme_lower or "npm" in readme_lower:
+            language = "javascript"
+        elif "typescript" in readme_lower:
+            language = "typescript"
+        elif "java" in readme_lower and "javascript" not in readme_lower:
+            language = "java"
+        elif "go" in readme_lower or "golang" in readme_lower:
+            language = "go"
+        elif "rust" in readme_lower:
+            language = "rust"
+        
+        # Run full pipeline with sensible defaults
+        result = await generator_service.run_full_pipeline(
+            job_id=job_id,
+            readme_content=readme_content,
+            language=language,
+            include_tests=True,
+            include_deployment=True,
+            include_docs=True,
+            run_critique=True,
+        )
+        
+        logger.info(f"Full pipeline auto-triggered successfully for job {job_id}: {result}")
+    except Exception as e:
+        logger.error(f"Error auto-triggering pipeline for job {job_id}: {e}", exc_info=True)
 
 
 @router.post("/llm/configure")
@@ -123,6 +169,7 @@ async def query_audit_logs(
 @router.post("/{job_id}/upload", response_model=SuccessResponse)
 async def upload_files(
     job_id: str,
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(
         ..., description="Files to upload (e.g., README.md, test files)"
     ),
@@ -138,6 +185,7 @@ async def upload_files(
     - Documentation files
 
     Triggers job creation in the generator module via OmniCore.
+    After successful upload, automatically triggers the full generation pipeline.
 
     **Path Parameters:**
     - job_id: Unique job identifier
@@ -165,6 +213,7 @@ async def upload_files(
     readme_files = []
     test_files = []
     other_files = []
+    readme_content = ""
 
     for file in files:
         # Read file content
@@ -174,6 +223,12 @@ async def upload_files(
         filename_lower = file.filename.lower()
         if filename_lower.endswith('.md'):
             readme_files.append(file.filename)
+            # Store README content for pipeline trigger
+            if not readme_content and filename_lower in ['readme.md', 'readme']:
+                try:
+                    readme_content = content.decode('utf-8')
+                except UnicodeDecodeError:
+                    logger.warning(f"Could not decode {file.filename} as UTF-8")
         elif any(pattern in filename_lower for pattern in [
             'test', 'spec', '.test.', '_test.', '.spec.', '_spec.'
         ]):
@@ -206,6 +261,21 @@ async def upload_files(
     # Update job status
     job.status = JobStatus.RUNNING
     job.updated_at = datetime.utcnow()
+    
+    # Auto-trigger pipeline if README content is available
+    if readme_content:
+        logger.info(f"Auto-triggering full pipeline for job {job_id} after upload")
+        background_tasks.add_task(
+            _trigger_pipeline_background,
+            job_id=job_id,
+            readme_content=readme_content,
+            generator_service=generator_service,
+        )
+    else:
+        logger.warning(
+            f"No README.md found in uploaded files for job {job_id}. "
+            "Pipeline will not be auto-triggered."
+        )
 
     logger.info(
         f"Uploaded {len(files)} files for job {job_id}: "
@@ -214,7 +284,7 @@ async def upload_files(
 
     return SuccessResponse(
         success=True,
-        message=f"Uploaded {len(files)} files successfully",
+        message=f"Uploaded {len(files)} files successfully. Pipeline auto-triggered." if readme_content else f"Uploaded {len(files)} files successfully.",
         data={
             "uploaded_files": uploaded_files,
             "categorization": {
@@ -222,6 +292,7 @@ async def upload_files(
                 "test_files": test_files,
                 "other_files": other_files,
             },
+            "pipeline_triggered": bool(readme_content),
         },
     )
 
