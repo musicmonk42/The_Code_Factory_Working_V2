@@ -47,7 +47,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 import psutil
 
-
 # Set up sandbox logger early for use in module-level functions
 sandbox_logger = logging.getLogger("simulation.sandbox")
 sandbox_logger.setLevel(logging.INFO)

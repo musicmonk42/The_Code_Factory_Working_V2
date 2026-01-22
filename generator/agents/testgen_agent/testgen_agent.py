@@ -63,6 +63,7 @@ except (ImportError, OSError) as e:
     _presidio_analyzer = None
     _presidio_anonymizer = None
     import logging
+
     logging.getLogger(__name__).warning(
         f"Presidio not available for PII detection: {e}. "
         "Install presidio-analyzer and presidio-anonymizer for PII scrubbing support."
@@ -72,10 +73,10 @@ except (ImportError, OSError) as e:
 def _get_presidio_analyzer():
     """
     Lazy initialization of Presidio AnalyzerEngine.
-    
+
     This prevents SpaCy model download at module import time, which can cause
     SystemExit if pip is broken or network is unavailable.
-    
+
     Returns:
         AnalyzerEngine instance or None if Presidio is not available
     """
@@ -87,6 +88,7 @@ def _get_presidio_analyzer():
             _presidio_analyzer = AnalyzerEngine()
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).error(
                 f"Failed to initialize Presidio AnalyzerEngine: {e}. "
                 "PII detection will be disabled."
@@ -98,7 +100,7 @@ def _get_presidio_analyzer():
 def _get_presidio_anonymizer():
     """
     Lazy initialization of Presidio AnonymizerEngine.
-    
+
     Returns:
         AnonymizerEngine instance or None if Presidio is not available
     """
@@ -110,12 +112,14 @@ def _get_presidio_anonymizer():
             _presidio_anonymizer = AnonymizerEngine()
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).error(
                 f"Failed to initialize Presidio AnonymizerEngine: {e}. "
                 "PII anonymization will be disabled."
             )
             return None
     return _presidio_anonymizer
+
 
 from runner.llm_client import call_ensemble_api
 from runner.runner_errors import LLMError
@@ -215,7 +219,7 @@ def scrub_text(text: str) -> str:
 
     analyzer = _get_presidio_analyzer()
     anonymizer = _get_presidio_anonymizer()
-    
+
     if analyzer is None or anonymizer is None:
         raise RuntimeError(
             "Failed to initialize Presidio engines. PII/secret scrubbing cannot proceed."
@@ -235,9 +239,7 @@ def scrub_text(text: str) -> str:
             "API_KEY",
         ]
 
-        results = analyzer.analyze(
-            text=text, entities=entities, language="en"
-        )
+        results = analyzer.analyze(text=text, entities=entities, language="en")
         scrubbed_content = anonymizer.anonymize(
             text=text,
             analyzer_results=results,

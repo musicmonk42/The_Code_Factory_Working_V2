@@ -17,6 +17,7 @@ from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
 # Optional: tomli_w for writing pyproject.toml
 try:
     import tomli_w
+
     _tomli_w_available = True
 except ImportError:
     tomli_w = None

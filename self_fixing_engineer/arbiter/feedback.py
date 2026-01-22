@@ -30,10 +30,12 @@ except ImportError:
 import aiosqlite
 from arbiter.arbiter_plugin_registry import PlugInKind, register, get_registry
 
+
 # Lazy-loaded registry to avoid import-time initialization
 def _get_arbiter_registry():
     """Get the arbiter registry lazily to avoid import-time initialization."""
     return get_registry()
+
 
 # Mock/Placeholder imports for a self-contained fix
 try:
@@ -965,14 +967,14 @@ _feedback_plugin_registered = False
 
 def _ensure_feedback_plugin_registered():
     """Register the feedback_manager plugin if not already registered.
-    
+
     This function defers plugin registration to avoid blocking during module import.
     Call this function when the feedback functionality is actually needed.
     """
     global _feedback_plugin_registered
     if _feedback_plugin_registered:
         return
-    
+
     arbiter_registry = _get_arbiter_registry()
     # Only register if not already registered to avoid duplicate registration error
     if not arbiter_registry.get_metadata(PlugInKind.CORE_SERVICE, "feedback_manager"):
@@ -985,5 +987,5 @@ def _ensure_feedback_plugin_registered():
         logger.info("feedback_manager plugin registered successfully")
     else:
         logger.info("feedback_manager plugin already registered, skipping registration")
-    
+
     _feedback_plugin_registered = True

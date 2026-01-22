@@ -347,11 +347,9 @@ def _get_settings():
             from arbiter.config import ArbiterConfig
         except ImportError:
             pass
-    
+
     if ArbiterConfig is None:
-        logging.debug(
-            "arbiter.config not available; using fallback settings."
-        )
+        logging.debug("arbiter.config not available; using fallback settings.")
         return _create_fallback_settings()
 
     try:

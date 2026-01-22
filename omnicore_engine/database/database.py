@@ -73,11 +73,9 @@ def _get_settings():
             from arbiter.config import ArbiterConfig
         except ImportError:
             pass
-    
+
     if ArbiterConfig is None:
-        logging.debug(
-            "arbiter.config not available; using fallback settings."
-        )
+        logging.debug("arbiter.config not available; using fallback settings.")
         return _create_fallback_settings()
 
     try:
@@ -581,7 +579,7 @@ class Database:
     def _create_mock_policy_engine(self):
         """
         Create a mock policy engine that always allows operations.
-        
+
         WARNING: This is a fallback for development/testing only.
         In production, ensure PolicyEngine is properly initialized with ArbiterConfig.
         Mock usage is logged for security audit purposes.
@@ -591,7 +589,7 @@ class Database:
             "This is acceptable for development/testing but should be avoided in production. "
             "Ensure ARBITER configuration is properly set in production environments."
         )
-        
+
         class MockPolicyEngine:
             async def should_auto_learn(self, *args, **kwargs):
                 # Log each call for audit purposes
@@ -599,7 +597,7 @@ class Database:
                     f"MockPolicyEngine: Allowing operation. Args: {args[0:2] if args else 'none'}"
                 )
                 return True, "Mock Policy: Always allowed (development/testing mode)"
-        
+
         return MockPolicyEngine()
 
     async def create_tables(self):
@@ -622,7 +620,7 @@ class Database:
                 alembic_cfg = config.Config()
                 project_root = Path(__file__).parent.parent
                 migrations_path = project_root / "migrations"
-                
+
                 # Check if migrations directory exists before attempting to run migrations
                 if not migrations_path.exists():
                     logger.warning(
@@ -630,9 +628,7 @@ class Database:
                         "Skipping Alembic migrations. Tables will be created from models."
                     )
                 else:
-                    alembic_cfg.set_main_option(
-                        "script_location", str(migrations_path)
-                    )
+                    alembic_cfg.set_main_option("script_location", str(migrations_path))
                     alembic_cfg.set_main_option("sqlalchemy.url", self.db_path)
                     command.upgrade(alembic_cfg, "head")
                     logger.info("Schema migrations applied successfully (via Alembic).")
@@ -649,7 +645,7 @@ class Database:
                 logger.warning(
                     f"Failed to apply migrations: {e}. "
                     "Continuing with table creation from models.",
-                    exc_info=True
+                    exc_info=True,
                 )
 
             logger.info("Database tables ensured (created/verified asynchronously).")
@@ -766,35 +762,35 @@ class Database:
     def safe_encode(value: Union[str, bytes]) -> bytes:
         """
         Safely encode a value to bytes.
-        
+
         Industry-standard type-safe encoding that handles both str and bytes inputs.
-        
+
         Args:
             value: String or bytes to encode
-            
+
         Returns:
             bytes: Encoded value
         """
         if isinstance(value, bytes):
             return value
-        return value.encode('utf-8')
+        return value.encode("utf-8")
 
     @staticmethod
     def safe_decode(value: Union[str, bytes]) -> str:
         """
         Safely decode a value to string.
-        
+
         Industry-standard type-safe decoding that handles both str and bytes inputs.
-        
+
         Args:
             value: String or bytes to decode
-            
+
         Returns:
             str: Decoded string
         """
         if isinstance(value, str):
             return value
-        return value.decode('utf-8')
+        return value.decode("utf-8")
 
     def _validate_json(self, data: Any, encrypt: bool = False) -> str:
         try:
@@ -1965,7 +1961,9 @@ class Database:
                 serialized_records = [serialize_audit_record(r) for r in records]
 
                 # Issue #20 fix: Decrypt sensitive fields if requested
-                if decrypt and getattr(settings, "EXPERIMENTAL_FEATURES_ENABLED", False):
+                if decrypt and getattr(
+                    settings, "EXPERIMENTAL_FEATURES_ENABLED", False
+                ):
                     decrypted_records = []
                     for record_dict in serialized_records:
                         for field in [
@@ -2415,9 +2413,7 @@ class Database:
                                     agent.inventory_v2.encode("utf-8")
                                 )
                                 # encrypt() already returns a string, no need to decode
-                                agent.inventory_v2 = self.encrypter.encrypt(
-                                    decrypted
-                                )
+                                agent.inventory_v2 = self.encrypter.encrypt(decrypted)
                             except InvalidToken:
                                 logger.error(
                                     f"Failed to decrypt inventory for agent {agent.name}. Skipping re-encryption."
@@ -2429,9 +2425,7 @@ class Database:
                                     agent.language_v2.encode("utf-8")
                                 )
                                 # encrypt() already returns a string, no need to decode
-                                agent.language_v2 = self.encrypter.encrypt(
-                                    decrypted
-                                )
+                                agent.language_v2 = self.encrypter.encrypt(decrypted)
                             except InvalidToken:
                                 logger.error(
                                     f"Failed to decrypt language for agent {agent.name}. Skipping re-encryption."
@@ -2443,9 +2437,7 @@ class Database:
                                     agent.memory_v2.encode("utf-8")
                                 )
                                 # encrypt() already returns a string, no need to decode
-                                agent.memory_v2 = self.encrypter.encrypt(
-                                    decrypted
-                                )
+                                agent.memory_v2 = self.encrypter.encrypt(decrypted)
                             except InvalidToken:
                                 logger.error(
                                     f"Failed to decrypt memory for agent {agent.name}. Skipping re-encryption."
@@ -2457,9 +2449,7 @@ class Database:
                                     agent.personality_v2.encode("utf-8")
                                 )
                                 # encrypt() already returns a string, no need to decode
-                                agent.personality_v2 = self.encrypter.encrypt(
-                                    decrypted
-                                )
+                                agent.personality_v2 = self.encrypter.encrypt(decrypted)
                             except InvalidToken:
                                 logger.error(
                                     f"Failed to decrypt personality for agent {agent.name}. Skipping re-encryption."

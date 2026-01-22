@@ -5,7 +5,14 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field, ValidationError, model_validator, ConfigDict, field_serializer
+from pydantic import (
+    BaseModel,
+    Field,
+    ValidationError,
+    model_validator,
+    ConfigDict,
+    field_serializer,
+)
 
 
 class EventType(str, Enum):
@@ -46,7 +53,7 @@ class LearningRecord(BaseModel):
         use_enum_values=True,  # Serialize enums as their values
     )
 
-    @field_serializer('*', when_used='json')
+    @field_serializer("*", when_used="json")
     def serialize_datetime(self, value: Any) -> Any:
         """Serialize datetime objects to ISO format strings."""
         if isinstance(value, datetime):
@@ -87,7 +94,7 @@ class ModelVersion(BaseModel):
         use_enum_values=True,  # Serialize enums as their values
     )
 
-    @field_serializer('*', when_used='json')
+    @field_serializer("*", when_used="json")
     def serialize_datetime(self, value: Any) -> Any:
         """Serialize datetime objects to ISO format strings."""
         if isinstance(value, datetime):

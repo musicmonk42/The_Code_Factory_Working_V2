@@ -820,7 +820,7 @@ class TestAsyncLambdaFixes:
     async def test_rate_limited_operation_with_async_method(self):
         """Test _rate_limited_operation properly awaits async methods passed directly"""
         supervisor = MetaSupervisor(interval=60)
-        
+
         # Mock the database to avoid initialization issues
         supervisor.db = Mock()
         supervisor.db.AsyncSessionLocal = Mock()
@@ -841,7 +841,7 @@ class TestAsyncLambdaFixes:
     async def test_db_get_preferences_without_lambda(self):
         """Test that db.get_preferences works when called without lambda wrapper"""
         supervisor = MetaSupervisor(interval=60)
-        
+
         # Mock the database
         supervisor.db = Mock()
         supervisor.db.get_preferences = AsyncMock(return_value={"test": "data"})
@@ -858,7 +858,7 @@ class TestAsyncLambdaFixes:
     async def test_record_audit_event_without_lambda(self):
         """Test that _record_audit_event works when called without lambda wrapper"""
         supervisor = MetaSupervisor(interval=60)
-        
+
         # Mock dependencies
         supervisor.db = Mock()
         supervisor._record_audit_event = AsyncMock()
@@ -880,7 +880,7 @@ class TestAsyncLambdaFixes:
     async def test_policy_engine_should_auto_learn_without_lambda(self):
         """Test that policy_engine.should_auto_learn works without lambda wrapper"""
         supervisor = MetaSupervisor(interval=60)
-        
+
         # Mock policy engine with async method
         supervisor.policy_engine = Mock()
         supervisor.policy_engine.should_auto_learn = AsyncMock(

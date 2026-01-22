@@ -232,16 +232,20 @@ except ImportError:
         class _NoOpSpan:
             def __enter__(self):
                 return self
+
             def __exit__(self, *args):
                 pass
+
             def set_attribute(self, *args, **kwargs):
                 pass
+
             def add_event(self, *args, **kwargs):
                 pass
 
         class _NoOpTracer:
             def start_as_current_span(self, name, **kwargs):
                 return _NoOpSpan()
+
             def start_span(self, name, **kwargs):
                 return _NoOpSpan()
 

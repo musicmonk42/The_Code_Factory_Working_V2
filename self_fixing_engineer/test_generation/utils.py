@@ -76,9 +76,7 @@ try:
 except ImportError:
     RICH_AVAILABLE = False
     Console = None
-    logging.getLogger(__name__).debug(
-        "'rich' not available; console output disabled."
-    )
+    logging.getLogger(__name__).debug("'rich' not available; console output disabled.")
 
 
 # --- Optional aiofiles for Async File Operations ---
@@ -298,9 +296,7 @@ except ImportError:
     def retry_if_exception_type(*args, **kwargs):
         return None
 
-    logging.getLogger(__name__).debug(
-        "'tenacity' not available; retries disabled."
-    )
+    logging.getLogger(__name__).debug("'tenacity' not available; retries disabled.")
 
 # --- Optional PyTorch for ML-based fault injection ---
 try:

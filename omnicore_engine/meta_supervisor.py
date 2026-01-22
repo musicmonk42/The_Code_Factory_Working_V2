@@ -106,11 +106,9 @@ def _get_settings():
             from arbiter.config import ArbiterConfig
         except ImportError:
             pass
-    
+
     if ArbiterConfig is None:
-        logging.debug(
-            "arbiter.config not available; using fallback settings."
-        )
+        logging.debug("arbiter.config not available; using fallback settings.")
         return _create_fallback_settings()
 
     try:
@@ -996,7 +994,9 @@ class MetaSupervisor:
                     )
 
             if not valid_metrics:
-                self.logger.debug("No valid plugin stats available for inspection after filtering.")
+                self.logger.debug(
+                    "No valid plugin stats available for inspection after filtering."
+                )
                 return
 
             plugin_metrics = valid_metrics
@@ -1045,8 +1045,14 @@ class MetaSupervisor:
             for i, (plugin_id, stats) in enumerate(plugin_metrics.items()):
                 # Safely parse plugin_id - handle cases where colon separator is missing
                 plugin_id_parts = plugin_id.split(":")
-                plugin_name = plugin_id_parts[1] if len(plugin_id_parts) > 1 else plugin_id_parts[0]
-                plugin_kind = plugin_id_parts[0] if len(plugin_id_parts) > 1 else "unknown"
+                plugin_name = (
+                    plugin_id_parts[1]
+                    if len(plugin_id_parts) > 1
+                    else plugin_id_parts[0]
+                )
+                plugin_kind = (
+                    plugin_id_parts[0] if len(plugin_id_parts) > 1 else "unknown"
+                )
 
                 current_failure_prob = (
                     failure_probs[i] if failure_probs is not None else 0.0
@@ -1179,7 +1185,7 @@ class MetaSupervisor:
                     )
                 else:
                     explanation = {"explanation": "Explainer not available"}
-                
+
                 await self._rate_limited_operation(
                     self._record_audit_event,
                     "auto_test_repair",
@@ -1272,9 +1278,11 @@ class MetaSupervisor:
         try:
             # Check if PolicyEngine is available
             if self.policy_engine is None:
-                self.logger.warning("PolicyEngine not available, skipping ethical drift detection")
+                self.logger.warning(
+                    "PolicyEngine not available, skipping ethical drift detection"
+                )
                 return False
-            
+
             # PolicyEngine evaluates if the change is "allowed" ethically
             # Assuming 'should_auto_learn' returns (bool, reason_string)
             allowed, reason = await self._rate_limited_operation(
@@ -2118,13 +2126,13 @@ class MetaSupervisor:
     def _get_counter_value(self, counter) -> float:
         """
         Safely gets the current value from a Prometheus Counter using the official public API.
-        
+
         The prometheus_client library doesn't expose a direct ._value attribute in newer versions.
         Instead, we use the .collect() method to retrieve metric samples and sum their values.
-        
+
         Args:
             counter: A Prometheus Counter metric object.
-            
+
         Returns:
             float: The total count value of the counter across all labels.
         """
@@ -2134,7 +2142,9 @@ class MetaSupervisor:
                 for sample in metric_family.samples:
                     # Sum up the counter values (which might have multiple labels)
                     # Use endswith('_total') which is the standard Prometheus counter naming convention
-                    if sample.name.endswith('_total') or sample.name.endswith('_created'):
+                    if sample.name.endswith("_total") or sample.name.endswith(
+                        "_created"
+                    ):
                         continue  # Skip _created timestamps
                     total += sample.value
             return total
@@ -2156,7 +2166,7 @@ class MetaSupervisor:
                 stats = {}
         elif not isinstance(stats, dict):
             stats = {}
-        
+
         # Build feature vector using defined feature names and defaults for consistency
         features = [
             stats.get(feature_name, PLUGIN_FEATURE_DEFAULTS[feature_name])
@@ -2177,7 +2187,7 @@ class MetaSupervisor:
         # Aggregate plugin metrics
         total_plugin_errors = 0
         total_plugin_executions = 0
-        
+
         for m in plugin_metrics_raw.values():
             if isinstance(m, dict):
                 total_plugin_errors += m.get("error_rate", 0)
@@ -2187,7 +2197,7 @@ class MetaSupervisor:
                     if isinstance(item, dict):
                         total_plugin_errors += item.get("error_rate", 0)
                         total_plugin_executions += item.get("executions", 0)
-        
+
         avg_plugin_error_rate = total_plugin_errors / max(1, total_plugin_executions)
 
         # Test metrics
@@ -2201,9 +2211,11 @@ class MetaSupervisor:
         # Construct feature vector for system state
         # Use the official Prometheus API to get metric values
         api_request_count = self._get_counter_value(API_REQUESTS)
-        elapsed_time = time.time() - self._start_time if hasattr(self, "_start_time") else 1
+        elapsed_time = (
+            time.time() - self._start_time if hasattr(self, "_start_time") else 1
+        )
         api_requests_per_sec = api_request_count / max(1, elapsed_time)
-        
+
         system_state_features = [
             avg_plugin_error_rate,
             test_failure_rate,
@@ -2381,7 +2393,9 @@ class MetaSupervisor:
                 )  # Add AI explanation to report
             else:
                 status_report["explanation"] = "Explainer not available"
-                self.logger.warning("Explainer not available, skipping explanation generation")
+                self.logger.warning(
+                    "Explainer not available, skipping explanation generation"
+                )
 
             API_REQUESTS.labels(
                 endpoint="meta_supervisor_status"

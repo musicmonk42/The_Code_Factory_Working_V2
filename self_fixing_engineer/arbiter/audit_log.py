@@ -222,7 +222,7 @@ class TamperEvidentLogger:
 
         self.config = config or AuditLoggerConfig()
         self._file_logging_available = True
-        
+
         # Try to create log directory, gracefully handle permission errors
         try:
             self.config.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -238,7 +238,7 @@ class TamperEvidentLogger:
                 "File-based audit logging will be disabled."
             )
             self._file_logging_available = False
-            
+
         self._last_hash: Optional[str] = None
         self._logger = self._setup_file_logger()
         self._dlt_client = self._setup_dlt_client()
@@ -256,19 +256,19 @@ class TamperEvidentLogger:
 
     def _setup_file_logger(self) -> logging.Logger:
         """Configure and return the file-based logger with rotation.
-        
+
         If file logging is not available (e.g., due to permission errors),
         returns a logger with a NullHandler that effectively discards messages.
         """
         logger = logging.getLogger("AuditLogger")
         logger.setLevel(logging.INFO)
-        
+
         # If file logging is not available, use a NullHandler
         if not self._file_logging_available:
             if not logger.handlers:
                 logger.addHandler(logging.NullHandler())
             return logger
-            
+
         if not logger.handlers:
             try:
                 handler = SizedTimedRotatingFileHandler(

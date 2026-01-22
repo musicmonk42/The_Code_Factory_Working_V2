@@ -300,7 +300,7 @@ class PluginRegistry:
                 skip_validation = os.getenv("SKIP_IMPORT_TIME_VALIDATION", "0") == "1"
                 is_testing = os.getenv("TESTING", "false").lower() == "true"
                 is_startup = os.getenv("APP_STARTUP", "0") == "1"
-                
+
                 # Skip loading in any of these modes for faster startup
                 if is_testing or skip_validation or is_startup:
                     import tempfile
@@ -310,7 +310,7 @@ class PluginRegistry:
                         temp_dir, f"test_plugins_{os.getpid()}.json"
                     )
                     cls._instance._persist_path = persist_path
-                    
+
                     # Log appropriate message based on which condition is set
                     if is_startup:
                         logger.info(
@@ -326,7 +326,7 @@ class PluginRegistry:
                         logger.info(
                             f"Test mode: Using temporary plugin file: {persist_path}"
                         )
-                    
+
                     # Don't call _load_persisted_plugins() in these modes
                     # This reduces startup time from ~45s to <10s
                 else:
@@ -1313,9 +1313,9 @@ def get_registry() -> PluginRegistry:
     Get the singleton PluginRegistry instance.
     Lazy initialization ensures the registry is only created when first accessed,
     avoiding heavy import-time initialization.
-    
+
     This function is thread-safe and ensures only one instance is created.
-    
+
     Returns:
         The singleton PluginRegistry instance.
     """
@@ -1336,7 +1336,7 @@ def __getattr__(name: str) -> Any:
     Module-level __getattr__ for lazy loading of registry-related attributes.
     This allows 'from arbiter_plugin_registry import registry' to work
     while deferring initialization until first access.
-    
+
     Note: Accessing PLUGIN_REGISTRY returns a fresh snapshot of the registry
     state on each access, ensuring up-to-date data. This differs from the
     original implementation which created a static snapshot at import time.

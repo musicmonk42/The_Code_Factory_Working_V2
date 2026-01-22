@@ -78,11 +78,9 @@ def _get_settings():
             from arbiter.config import ArbiterConfig
         except ImportError:
             pass
-    
+
     if ArbiterConfig is None:
-        logging.debug(
-            "arbiter.config not available; using fallback settings."
-        )
+        logging.debug("arbiter.config not available; using fallback settings.")
         return _create_fallback_settings()
 
     try:
@@ -907,9 +905,7 @@ class ExplainAudit:
 
                 current_merkle_root = None
                 if self.system_audit_merkle_tree:
-                    current_merkle_root = (
-                        self.system_audit_merkle_tree.get_root()
-                    )
+                    current_merkle_root = self.system_audit_merkle_tree.get_root()
 
                 if kind in {
                     "plugin_hot_swap",
@@ -1076,9 +1072,7 @@ class ExplainAudit:
 
                 current_merkle_root = None
                 if self.system_audit_merkle_tree:
-                    current_merkle_root = (
-                        self.system_audit_merkle_tree.get_root()
-                    )
+                    current_merkle_root = self.system_audit_merkle_tree.get_root()
 
                 if kind in {
                     "plugin_hot_swap",

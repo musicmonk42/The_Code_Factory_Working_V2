@@ -113,6 +113,7 @@ except Exception:
 try:
     from . import utils as _utils
     from .backends import BackendRegistry
+
     # Defer expensive onboard import - loaded lazily via __getattr__
     from .policy_and_audit import EventBus, PolicyEngine
     from .utils import PathError
@@ -144,9 +145,7 @@ try:
         )
 
 except ImportError as e:
-    logger.debug(
-        f"Failed to import a core component: {e}; using stubs for testing."
-    )
+    logger.debug(f"Failed to import a core component: {e}; using stubs for testing.")
 
 
 def validate_project_root(project_root_str: str):
@@ -246,19 +245,22 @@ def validate_project_root(project_root_str: str):
 _project_root_path = os.getenv("PROJECT_ROOT", str(Path(__file__).parent.parent))
 _project_root_validated = False
 
+
 def _ensure_project_root_validated():
     """Validate project root on first use, not at import time."""
     global _project_root_validated
     if not _project_root_validated:
         # Only validate in production or when explicitly requested
-        if os.getenv('SKIP_IMPORT_TIME_VALIDATION') != '1':
+        if os.getenv("SKIP_IMPORT_TIME_VALIDATION") != "1":
             validate_project_root(_project_root_path)
         _project_root_validated = True
+
 
 # Export helper for code that needs validated root
 def get_validated_project_root():
     _ensure_project_root_validated()
     return _project_root_path
+
 
 import importlib.util
 import logging
@@ -315,6 +317,7 @@ if _loaded is not None:
 # Defer expensive onboard import to avoid import-time overhead
 _onboard_module_loaded = False
 
+
 def _get_onboard_module():
     """Lazy load onboard module to avoid import-time overhead."""
     global _onboard_module_loaded
@@ -324,7 +327,7 @@ def _get_onboard_module():
             from .onboard import ONBOARD_DEFAULTS as _ONBOARD_DEFAULTS
             from .onboard import OnboardConfig as _OnboardConfig
             from .onboard import onboard as _onboard
-            
+
             # Update globals in the actual module
             mod = sys.modules[__name__]
             mod.CORE_VERSION = _CORE_VERSION
@@ -336,9 +339,10 @@ def _get_onboard_module():
             logger.debug(f"Failed to import onboard module: {e}")
             # Keep the None values as fallback
 
+
 # Use __getattr__ for lazy attribute access
 def __getattr__(name: str) -> Any:
-    if name in ('onboard', 'OnboardConfig', 'ONBOARD_DEFAULTS', 'CORE_VERSION'):
+    if name in ("onboard", "OnboardConfig", "ONBOARD_DEFAULTS", "CORE_VERSION"):
         _get_onboard_module()
         # Return the value from module's namespace
         mod = sys.modules[__name__]

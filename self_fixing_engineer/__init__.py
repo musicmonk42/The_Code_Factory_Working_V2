@@ -97,7 +97,9 @@ def _setup_module_alias(module_name: str) -> None:
                 partial_module = sys.modules[full_module_name]
                 # Only create alias if the module appears to be properly initialized
                 # (has __file__ attribute which all properly loaded modules have)
-                if hasattr(partial_module, '__file__') or hasattr(partial_module, '__path__'):
+                if hasattr(partial_module, "__file__") or hasattr(
+                    partial_module, "__path__"
+                ):
                     sys.modules[module_name] = partial_module
                     _init_logger.debug(
                         "Module alias created despite thread error: '%s' -> '%s'",
@@ -126,17 +128,19 @@ def _setup_module_alias(module_name: str) -> None:
 # Module aliases will be created on-demand when first accessed
 class _LazyModuleLoader:
     """Lazy loader for module aliases to avoid import-time overhead."""
-    
+
     def __init__(self, module_aliases):
         self._aliases = module_aliases
         self._loaded = set()
-    
+
     def __call__(self, name):
         if name in self._aliases and name not in self._loaded:
             _setup_module_alias(name)
             self._loaded.add(name)
 
+
 _lazy_loader = _LazyModuleLoader(_MODULE_ALIASES)
+
 
 # Override module __getattr__ for lazy loading
 def __getattr__(name: str) -> Any:

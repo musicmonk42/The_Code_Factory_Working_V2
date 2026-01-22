@@ -43,8 +43,12 @@ import signal
 try:
     from self_fixing_engineer.arbiter import __path__ as assistant_pkg_path
     from self_fixing_engineer.arbiter.config import ArbiterConfig
-    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY
-    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import (
+        PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY,
+    )
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import (
+        PlugInKind as ArbiterPlugInKind,
+    )
 except ImportError:
     try:
         # Fall back to aliased path for backward compatibility
@@ -939,7 +943,9 @@ class PluginRegistry:
     ):
         config = ArbiterConfig()
         # DEFENSIVE CHECK: Handle missing PLUGINS_ENABLED attribute
-        plugins_enabled = getattr(config, 'PLUGINS_ENABLED', True)  # Default to True if missing
+        plugins_enabled = getattr(
+            config, "PLUGINS_ENABLED", True
+        )  # Default to True if missing
         if not plugins_enabled:
             raise ValueError("Plugins are disabled in ArbiterConfig")
 
@@ -1176,14 +1182,19 @@ class PluginWatcher:
     def start(self):
         # Ensure the directory exists before starting the observer
         import os
+
         if not os.path.exists(self.directory):
-            self.logger.warning(f"Plugin directory does not exist, creating: {self.directory}")
+            self.logger.warning(
+                f"Plugin directory does not exist, creating: {self.directory}"
+            )
             try:
                 os.makedirs(self.directory, exist_ok=True)
             except Exception as e:
-                self.logger.error(f"Failed to create plugin directory {self.directory}: {e}")
+                self.logger.error(
+                    f"Failed to create plugin directory {self.directory}: {e}"
+                )
                 return
-        
+
         self.logger.info(f"Starting to watch directory: {self.directory}")
         self._observer.schedule(self._handler, path=self.directory, recursive=False)
         self._observer.start()

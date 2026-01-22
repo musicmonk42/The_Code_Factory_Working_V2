@@ -251,9 +251,7 @@ def get_output_refiner() -> OutputRefiner:
     """Initialize output refiner with fallback."""
     refiner = LangChainOutputRefiner()
     if refiner.chat is None:
-        logger.debug(
-            "LangChainOutputRefiner not initialized; using NoOpOutputRefiner."
-        )
+        logger.debug("LangChainOutputRefiner not initialized; using NoOpOutputRefiner.")
         return NoOpOutputRefiner()
     return refiner
 
@@ -337,19 +335,19 @@ def validate_manifest(manifest: Dict[str, Any], module_name: str):
 async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) -> bool:
     """
     Check if all plugin dependencies are installed.
-    
+
     Note: This function only verifies that required packages are installed.
     It does NOT perform full version constraint validation. For production use
     with strict version requirements, consider integrating the 'packaging' library
     for proper version comparison.
-    
+
     Args:
         manifest: Plugin manifest containing dependencies dict
         module_name: Name of the module being checked
-        
+
     Returns:
         bool: True if all dependencies are installed, False otherwise
-        
+
     Limitations:
         - Only checks package existence, not version constraints
         - Version specifiers are logged but not validated
@@ -369,8 +367,10 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
                 # to support complex version specifiers like ">=1.0,<2.0", "~=1.0", "!=1.0"
                 if ver:
                     # Validate common version patterns - check if format is recognized
-                    recognized_prefixes = ['>=', '<=', '==', '!=', '~=', '>', '<']
-                    if not any(ver.startswith(prefix) for prefix in recognized_prefixes):
+                    recognized_prefixes = [">=", "<=", "==", "!=", "~=", ">", "<"]
+                    if not any(
+                        ver.startswith(prefix) for prefix in recognized_prefixes
+                    ):
                         logger.warning(
                             f"Version specifier '{ver}' for package '{pkg}' doesn't use a recognized operator. "
                             f"Assuming '>={ver}'"
@@ -379,7 +379,7 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
                         ver_display = f">={ver}"
                     else:
                         ver_display = ver
-                    
+
                     # Note: Actual version comparison would require packaging library
                     # For now, we only check if the package exists and log the requirement
                     logger.debug(
@@ -387,7 +387,9 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
                         f"Required: {ver_display}. Full validation requires packaging library."
                     )
                 else:
-                    logger.debug(f"Dependency {pkg} found (version {installed_version}). Any version accepted.")
+                    logger.debug(
+                        f"Dependency {pkg} found (version {installed_version}). Any version accepted."
+                    )
             except importlib_metadata.PackageNotFoundError as e:
                 # Preserve specific package information for better debugging
                 raise importlib_metadata.PackageNotFoundError(
@@ -410,8 +412,10 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
             # Fallback if parsing fails
             pkg_name = "unknown"
             required_ver = "unknown"
-            logger.warning(f"Failed to parse dependency error details from: {error_msg}")
-        
+            logger.warning(
+                f"Failed to parse dependency error details from: {error_msg}"
+            )
+
         await audit_logger.emit_audit_event(
             "plugin_dependency_missing",
             {
@@ -419,7 +423,7 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
                 "dependency": pkg_name,
                 "required_version": required_ver,
                 "error": "Dependency not found",
-                "full_error": error_msg
+                "full_error": error_msg,
             },
             severity="ERROR",
         )

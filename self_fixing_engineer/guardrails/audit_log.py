@@ -327,9 +327,7 @@ try:
     logger.info("Loaded config from app.config.")
 except (ImportError, AttributeError):
     config = MockConfig()
-    logger.debug(
-        "app.config not available; using MockConfig for audit_log.py."
-    )
+    logger.debug("app.config not available; using MockConfig for audit_log.py.")
 except Exception as e:
     config = MockConfig()
     logger.error(
@@ -1769,7 +1767,9 @@ if __name__ == "__main__":
                     print("Test 2 FAILED: Local audit chain verification failed.")
 
                 _simple_dlt_cls = get_SimpleDLTClient()
-                if _simple_dlt_cls and isinstance(_dlt_client_instance, _simple_dlt_cls):
+                if _simple_dlt_cls and isinstance(
+                    _dlt_client_instance, _simple_dlt_cls
+                ):
                     print(
                         f"\nSimple DLT Client Chain Contents (for 'deployment:start'): {json.dumps(_dlt_client_instance.chain.get('audit_deployment:start'), indent=2)}"
                     )

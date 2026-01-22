@@ -262,7 +262,7 @@ class WorkflowOutput(BaseModel):
         populate_by_name=True,
     )
 
-    @field_serializer('*', when_used='json')
+    @field_serializer("*", when_used="json")
     def serialize_datetime(self, value: Any) -> Any:
         """Serialize datetime objects to ISO format strings."""
         if isinstance(value, datetime):

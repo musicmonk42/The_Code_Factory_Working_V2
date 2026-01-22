@@ -530,7 +530,6 @@ rate_limiter = RateLimiter(
 )  # Default: 100 calls per minute
 
 
-
 @CsrfProtect.load_config
 def get_csrf_config():
     """Return CSRF configuration as a Pydantic BaseSettings compatible class"""
@@ -598,7 +597,11 @@ plugin_upload_lock = asyncio.Lock()
 # The ArbiterConfig singleton initializes this during __new__, so it should always be available
 try:
     # Ensure we have a valid key - if empty bytes, generate one
-    key_bytes = settings.ENCRYPTION_KEY_BYTES if settings.ENCRYPTION_KEY_BYTES else Fernet.generate_key()
+    key_bytes = (
+        settings.ENCRYPTION_KEY_BYTES
+        if settings.ENCRYPTION_KEY_BYTES
+        else Fernet.generate_key()
+    )
     encrypter = Fernet(key_bytes)
 except (AttributeError, ValueError, Exception) as e:
     logger.error(
@@ -615,7 +618,7 @@ async def lifespan(app: FastAPI):
     Replaces deprecated @app.on_event decorators.
     """
     global chatbot_arbiter, arena, system_audit_merkle_tree, meta_supervisor_instance, simulation_module
-    
+
     # Startup
     await omnicore_engine.initialize()
 
@@ -819,6 +822,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Add security middleware
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
@@ -854,6 +858,7 @@ app.add_middleware(
 def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError):
     return JSONResponse(status_code=403, content={"error": "CSRF validation failed"})
 
+
 app.mount("/metrics", make_asgi_app())
 
 
@@ -873,10 +878,10 @@ async def custom_redoc_html():
 async def root_health_check():
     """
     Root-level health check endpoint for container orchestration and load balancers.
-    
+
     This endpoint is separate from /api/health to provide a simple, fast health check
     at the root level that container orchestrators (Docker, Kubernetes, Railway) expect.
-    
+
     Returns:
         dict: Health status with status and timestamp
     """

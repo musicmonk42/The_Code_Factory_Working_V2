@@ -950,18 +950,18 @@ class MyBetterRunner:
     Stub runner class for compatibility with plugin_registry imports.
     Provides basic interface for enhanced runner functionality.
     """
-    
+
     def __init__(self):
         self.logger = runners_logger
         self.logger.info("MyBetterRunner initialized")
-    
+
     def run(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a runner with enhanced features.
-        
+
         Args:
             config: Configuration dictionary for the runner
-            
+
         Returns:
             Dictionary with execution results
         """
@@ -969,7 +969,7 @@ class MyBetterRunner:
         return {
             "status": "SUCCESS",
             "message": "MyBetterRunner executed successfully",
-            "runner_type": "my_better_runner"
+            "runner_type": "my_better_runner",
         }
 
 
@@ -978,18 +978,18 @@ class MyCustomRunner:
     Stub runner class for compatibility with plugin_registry imports.
     Provides basic interface for custom runner functionality.
     """
-    
+
     def __init__(self):
         self.logger = runners_logger
         self.logger.info("MyCustomRunner initialized")
-    
+
     def run(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a custom runner.
-        
+
         Args:
             config: Configuration dictionary for the runner
-            
+
         Returns:
             Dictionary with execution results
         """
@@ -997,6 +997,5 @@ class MyCustomRunner:
         return {
             "status": "SUCCESS",
             "message": "MyCustomRunner executed successfully",
-            "runner_type": "my_custom_runner"
+            "runner_type": "my_custom_runner",
         }
-

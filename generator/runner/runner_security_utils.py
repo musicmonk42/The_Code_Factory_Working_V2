@@ -79,7 +79,9 @@ _PRESIDIO_ANALYZER_ENGINE: Optional[Any] = None
 _PRESIDIO_ANONYMIZER_ENGINE: Optional[Any] = None
 _PRESIDIO_AVAILABLE: bool = False
 _PRESIDIO_LOAD_ATTEMPTED: bool = False  # Track if we've already tried loading
-_PRESIDIO_NLP_MODE: bool = False  # Track if NLP engine is actually available (not just regex)
+_PRESIDIO_NLP_MODE: bool = (
+    False  # Track if NLP engine is actually available (not just regex)
+)
 
 # --- FIX: REMOVED ALL METRICS IMPORTS AND FALLBACKS ---
 # The logic for NoOpCounter and _get_metric has been removed.
@@ -90,27 +92,27 @@ _PRESIDIO_NLP_MODE: bool = False  # Track if NLP engine is actually available (n
 def _load_presidio_engine() -> bool:
     """
     Load presidio engine without auto-downloading models that cause SystemExit.
-    
+
     This function implements enterprise-grade error handling with graceful degradation:
     1. Try with configurable spaCy model (default: en_core_web_sm)
     2. Fall back to regex-only mode if model unavailable
     3. Catch SystemExit to prevent application crashes
     4. Never crash - always return boolean status
     5. Track NLP availability separately from basic availability
-    
+
     Returns:
         bool: True if Presidio is available (with or without NLP), False otherwise
     """
     global _PRESIDIO_ANALYZER_ENGINE, _PRESIDIO_ANONYMIZER_ENGINE, _PRESIDIO_AVAILABLE, _PRESIDIO_LOAD_ATTEMPTED, _PRESIDIO_NLP_MODE
-    
+
     # Return cached result if already loaded successfully
     if _PRESIDIO_AVAILABLE:
         return True
-    
+
     # Don't retry if we've already attempted and failed
     if _PRESIDIO_LOAD_ATTEMPTED:
         return False
-    
+
     _PRESIDIO_LOAD_ATTEMPTED = True
 
     # FIX: CRITICAL CHECK: Use the global TESTING flag if available, otherwise define locally
@@ -133,20 +135,20 @@ def _load_presidio_engine() -> bool:
         from presidio_analyzer import AnalyzerEngine
         from presidio_analyzer.nlp_engine import NlpEngineProvider
         from presidio_anonymizer import AnonymizerEngine
-        
+
         # Prevent auto-download warnings that can trigger SystemExit
-        os.environ['SPACY_WARNING_IGNORE'] = 'W007'
-        
+        os.environ["SPACY_WARNING_IGNORE"] = "W007"
+
         # Enterprise-grade: Make model configurable via environment
-        model_name = os.getenv('PRESIDIO_SPACY_MODEL', 'en_core_web_sm')
-        
+        model_name = os.getenv("PRESIDIO_SPACY_MODEL", "en_core_web_sm")
+
         # Try with configured model (default: small), fallback to regex-only
         # Using smaller model reduces memory footprint and startup time
         configuration = {
             "nlp_engine_name": "spacy",
-            "models": [{"lang_code": "en", "model_name": model_name}]
+            "models": [{"lang_code": "en", "model_name": model_name}],
         }
-        
+
         try:
             # Attempt to create NLP engine with configured model
             provider = NlpEngineProvider(nlp_configuration=configuration)
@@ -155,9 +157,11 @@ def _load_presidio_engine() -> bool:
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
             _PRESIDIO_NLP_MODE = True  # Full NLP mode available
-            logger.info(f"Presidio analyzer loaded successfully with {model_name} model (full NLP mode)")
+            logger.info(
+                f"Presidio analyzer loaded successfully with {model_name} model (full NLP mode)"
+            )
             return True
-            
+
         except SystemExit as se:
             # CRITICAL: Catch SystemExit from spaCy download attempts
             # This prevents the entire application from crashing during startup
@@ -172,7 +176,7 @@ def _load_presidio_engine() -> bool:
             _PRESIDIO_NLP_MODE = False  # Degraded to regex-only mode
             logger.info("Presidio running in REGEX-ONLY mode (NLP unavailable)")
             return True
-            
+
         except Exception as model_error:
             # Model loading failed, but presidio itself is available
             logger.warning(
@@ -186,7 +190,7 @@ def _load_presidio_engine() -> bool:
             _PRESIDIO_NLP_MODE = False  # Degraded to regex-only mode
             logger.info("Presidio running in REGEX-ONLY mode (NLP failed to load)")
             return True
-            
+
     except ImportError as ie:
         # Presidio library not installed
         _PRESIDIO_AVAILABLE = False
@@ -195,7 +199,7 @@ def _load_presidio_engine() -> bool:
             "Install with: pip install presidio-analyzer presidio-anonymizer"
         )
         return False
-        
+
     except SystemExit as se:
         # CRITICAL: Catch SystemExit at outer level too
         _PRESIDIO_AVAILABLE = False
@@ -204,13 +208,13 @@ def _load_presidio_engine() -> bool:
             "Disabling presidio to prevent application crash."
         )
         return False
-        
+
     except Exception as e:
         # Unexpected error during initialization
         _PRESIDIO_AVAILABLE = False
         logger.error(
             f"Presidio initialization failed with unexpected error: {type(e).__name__}: {e}",
-            exc_info=True
+            exc_info=True,
         )
         return False
 
@@ -421,33 +425,33 @@ def redact_secrets(
 ) -> Any:
     """
     Redacts sensitive information from data using the specified method.
-    
+
     Enterprise-grade implementation with comprehensive error handling:
     - Catches SystemExit to prevent application crashes
     - Gracefully degrades through multiple fallback levels
     - Never crashes - always returns data (redacted or original)
     - Thread-safe with proper exception isolation
-    
+
     Fallback chain:
     1. Requested method (if specified and available)
     2. NLP-based presidio (if available)
     3. Regex-based pattern matching
     4. Original data (if all else fails, with warning)
-    
+
     Args:
         data: The data to redact (str, dict, list, etc.)
         method: Optional specific redaction method to use
         patterns: Optional custom regex patterns for redaction
-        
+
     Returns:
         Redacted data of the same type as input
-        
+
     [FIX] This is now a SYNCHRONOUS function to fix the RuntimeWarning.
     """
     # Defensive: If no data, return immediately
     if data is None:
         return data
-        
+
     try:
         # FIX: Lazy import to break circular dependency
         from runner.runner_logging import log_audit_event
@@ -527,7 +531,7 @@ def redact_secrets(
                 pass
 
         return result
-        
+
     except SystemExit:
         # CRITICAL: Outermost SystemExit handler - last line of defense
         logger.error(
@@ -539,7 +543,7 @@ def redact_secrets(
         # Catch-all: Never crash, always return something
         logger.error(
             f"Unexpected error in redact_secrets: {type(e).__name__}: {e}",
-            exc_info=True
+            exc_info=True,
         )
         return data
 

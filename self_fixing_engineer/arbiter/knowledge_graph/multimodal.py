@@ -58,7 +58,7 @@ except ImportError:
     try:
         # Fallback to PyPDF2 for backwards compatibility
         from PyPDF2 import PdfReader
-        
+
         PDF_PROCESSING_AVAILABLE = True
     except ImportError:
         PdfReader = None

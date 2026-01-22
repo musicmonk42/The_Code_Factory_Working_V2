@@ -779,7 +779,7 @@ async def run_import_healer(
 class ImportFixerEngine:
     """
     Engine for fixing Python import errors.
-    
+
     This class provides the interface required by omnicore_engine.plugin_registry
     and omnicore_engine.engines for integrating import fixing functionality
     as a plugin.
@@ -847,10 +847,10 @@ class ImportFixerEngine:
             f"ImportFixerEngine.fix_code called (dry_run={dry_run}, "
             f"file_path={file_path})"
         )
-        
+
         fixes_applied = []
         fixed_code = code
-        
+
         try:
             # Try to parse the code to detect syntax errors
             try:
@@ -863,28 +863,27 @@ class ImportFixerEngine:
                     "status": "error",
                     "message": f"Syntax error detected: {e}",
                 }
-            
+
             # Analyze imports - for now, just validate the code
             # A more sophisticated implementation would detect and fix import issues
             lines = code.split("\n")
             new_lines = []
-            
+
             for line in lines:
                 # Check for import patterns
                 import_match = re.match(
-                    r'^(\s*)(from\s+[\w.]+\s+import\s+.+|import\s+[\w., ]+)\s*$',
-                    line
+                    r"^(\s*)(from\s+[\w.]+\s+import\s+.+|import\s+[\w., ]+)\s*$", line
                 )
-                
+
                 if import_match:
                     # Import line detected - pass through as-is for now
                     # Future enhancement: analyze and fix import issues
                     new_lines.append(line)
                 else:
                     new_lines.append(line)
-            
+
             fixed_code = "\n".join(new_lines)
-            
+
             if dry_run:
                 self.logger.info("Dry run completed - no changes applied.")
                 return {
@@ -893,14 +892,14 @@ class ImportFixerEngine:
                     "status": "success",
                     "message": "Dry run completed. No changes applied.",
                 }
-            
+
             return {
                 "fixed_code": fixed_code,
                 "fixes_applied": fixes_applied,
                 "status": "success",
                 "message": "Import analysis completed.",
             }
-            
+
         except Exception as e:
             self.logger.error(f"Error during import fixing: {e}", exc_info=True)
             return {
@@ -973,7 +972,7 @@ class ImportFixerEngine:
             A dictionary containing the healing report.
         """
         self.logger.info(f"Starting project healing for: {project_root}")
-        
+
         return await run_import_healer(
             project_root=project_root,
             whitelisted_paths=whitelisted_paths or [],
