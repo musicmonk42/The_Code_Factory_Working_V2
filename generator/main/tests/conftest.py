@@ -103,5 +103,31 @@ def mock_modules(monkeypatch):
     return _mock_modules
 
 
+@pytest.fixture(autouse=True)
+def protect_pydantic_decorators(monkeypatch):
+    """
+    Ensure pydantic decorators remain callable to prevent
+    'PydanticUserError: A non-annotated attribute was detected' errors.
+    """
+    try:
+        import pydantic
+        
+        # Create a no-op decorator that preserves function behavior
+        def _noop_decorator(*args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+        
+        # Only patch if pydantic decorators have been replaced with non-callables
+        if not callable(getattr(pydantic, 'field_validator', None)):
+            monkeypatch.setattr(pydantic, 'field_validator', _noop_decorator)
+        if not callable(getattr(pydantic, 'model_validator', None)):
+            monkeypatch.setattr(pydantic, 'model_validator', _noop_decorator)
+    except ImportError:
+        pass
+    
+    yield
+
+
 def pytest_configure(config):
     config.option.asyncio_mode = "auto"

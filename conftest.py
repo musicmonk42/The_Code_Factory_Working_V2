@@ -205,6 +205,49 @@ _OPTIONAL_DEPENDENCIES = [
     # and should NOT be mocked as they are critical for proper type checking
 ]
 
+# Special handling for botocore.exceptions - must be proper exception classes
+if "botocore.exceptions" not in sys.modules:
+    try:
+        import botocore.exceptions
+    except ImportError:
+        import types
+        import importlib.util
+        
+        # Create botocore.exceptions with REAL exception classes
+        botocore_exc_module = types.ModuleType("botocore.exceptions")
+        botocore_exc_module.__file__ = "<mocked botocore.exceptions>"
+        botocore_exc_module.__path__ = []
+        botocore_exc_module.__spec__ = importlib.util.spec_from_loader(
+            "botocore.exceptions", loader=None
+        )
+        
+        # Create proper exception classes that inherit from BaseException
+        class NoCredentialsError(Exception):
+            """Raised when AWS credentials are not found."""
+            pass
+        
+        class ClientError(Exception):
+            """Raised when AWS service returns an error."""
+            def __init__(self, error_response=None, operation_name=None):
+                self.response = error_response or {}
+                self.operation_name = operation_name
+                super().__init__(f"An error occurred ({operation_name}): {error_response}")
+        
+        class BotoCoreError(Exception):
+            """Base exception for botocore errors."""
+            pass
+        
+        botocore_exc_module.NoCredentialsError = NoCredentialsError
+        botocore_exc_module.ClientError = ClientError
+        botocore_exc_module.BotoCoreError = BotoCoreError
+        
+        # Create parent botocore module if needed
+        if "botocore" not in sys.modules:
+            botocore_module = _create_mock_module("botocore")
+            sys.modules["botocore"] = botocore_module
+        
+        sys.modules["botocore.exceptions"] = botocore_exc_module
+
 for dep in _OPTIONAL_DEPENDENCIES:
     if dep not in sys.modules:
         try:
@@ -751,6 +794,18 @@ try:
         "ClientResponse": getattr(aiohttp, "ClientResponse", None),
         "ClientSession": getattr(aiohttp, "ClientSession", None),
     }
+    
+    # Ensure they are not replaced during test collection
+    def _protect_aiohttp():
+        """Restore aiohttp types if they've been replaced with mocks."""
+        for name, original_type in _ORIGINAL_AIOHTTP_TYPES.items():
+            if original_type and hasattr(aiohttp, name):
+                current_type = getattr(aiohttp, name)
+                # Check if it's been replaced with a mock
+                if hasattr(current_type, '_mock_name') or 'Mock' in str(type(current_type).__name__):
+                    setattr(aiohttp, name, original_type)
+    
+    _protect_aiohttp()
 except ImportError:
     _ORIGINAL_AIOHTTP_TYPES = {}
 
