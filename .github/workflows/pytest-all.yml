@@ -210,7 +210,12 @@ jobs:
           python -c "import conftest; print('conftest OK')" || echo "conftest import failed"
           
           echo "=== Pytest collection preview (full output saved) ==="
-          pytest --collect-only -q 2>&1 | tee debug-collection.log
+          # Use timeout to prevent infinite hangs during test collection
+          # 5 minutes should be more than enough for collection
+          timeout 300 pytest --collect-only -q 2>&1 | tee debug-collection.log || {
+            echo "WARNING: pytest collection timed out or failed (exit code: $?)"
+            echo "Collection may have hung - check for import-time side effects"
+          }
           
           echo ""
           echo "=== First 50 lines of collection output ==="
@@ -290,7 +295,7 @@ jobs:
             done
             echo ""
             echo "=== Attempting to collect tests with verbose output ==="
-            pytest --collect-only -v; DIAG_EXIT=$?
+            timeout 300 pytest --collect-only -v; DIAG_EXIT=$?
             echo "Diagnostic collection exit code: $DIAG_EXIT"
             exit 1
           elif [ $PYTEST_EXIT -ne 0 ]; then
