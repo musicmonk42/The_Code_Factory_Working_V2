@@ -58,11 +58,9 @@ def _get_settings():
             from arbiter.config import ArbiterConfig
         except ImportError:
             pass
-    
+
     if ArbiterConfig is None:
-        logging.debug(
-            "arbiter.config not available; using fallback settings."
-        )
+        logging.debug("arbiter.config not available; using fallback settings.")
         return _create_fallback_settings()
 
     try:
@@ -343,14 +341,14 @@ class MerkleTree:
 
     def get_root(self) -> str:
         """Returns the Merkle root as a hex string.
-        
+
         This method provides compatibility with code that expects a get_root() interface.
         It is functionally equivalent to get_merkle_root().
-        
+
         Returns:
             str: The Merkle root hash as a hexadecimal string. Returns an empty string
                  if the tree is empty and has no root.
-        
+
         Note:
             This is an alias for get_merkle_root() provided for API compatibility.
             Both methods return the same value and can be used interchangeably.
@@ -513,29 +511,27 @@ class OmniCoreEngine:
                     ArbiterGrowthManager,
                 )
             except ImportError as e:
-                self.logger.debug(
-                    f"ArbiterGrowthManager not available: {e}"
-                )
+                self.logger.debug(f"ArbiterGrowthManager not available: {e}")
 
         try:
-            from self_fixing_engineer.arbiter.decision_optimizer import DecisionOptimizer
+            from self_fixing_engineer.arbiter.decision_optimizer import (
+                DecisionOptimizer,
+            )
         except ImportError:
             try:
                 from arbiter.decision_optimizer import DecisionOptimizer
             except ImportError as e:
-                self.logger.debug(
-                    f"DecisionOptimizer not available: {e}"
-                )
+                self.logger.debug(f"DecisionOptimizer not available: {e}")
 
         try:
-            from self_fixing_engineer.arbiter.explainable_reasoner import ExplainableReasonerPlugin
+            from self_fixing_engineer.arbiter.explainable_reasoner import (
+                ExplainableReasonerPlugin,
+            )
         except ImportError:
             try:
                 from arbiter.explainable_reasoner import ExplainableReasonerPlugin
             except ImportError as e:
-                self.logger.debug(
-                    f"ExplainableReasonerPlugin not available: {e}"
-                )
+                self.logger.debug(f"ExplainableReasonerPlugin not available: {e}")
 
         try:
             from self_fixing_engineer.arbiter.feedback import FeedbackManager
@@ -543,9 +539,7 @@ class OmniCoreEngine:
             try:
                 from arbiter.feedback import FeedbackManager
             except ImportError as e:
-                self.logger.debug(
-                    f"FeedbackManager not available: {e}"
-                )
+                self.logger.debug(f"FeedbackManager not available: {e}")
 
         try:
             from self_fixing_engineer.arbiter.knowledge_graph import KnowledgeGraph
@@ -553,19 +547,17 @@ class OmniCoreEngine:
             try:
                 from arbiter.knowledge_graph import KnowledgeGraph
             except ImportError as e:
-                self.logger.debug(
-                    f"KnowledgeGraph not available: {e}"
-                )
+                self.logger.debug(f"KnowledgeGraph not available: {e}")
 
         try:
-            from self_fixing_engineer.arbiter.arbiter_growth.storage_backends import SQLiteStorageBackend
+            from self_fixing_engineer.arbiter.arbiter_growth.storage_backends import (
+                SQLiteStorageBackend,
+            )
         except ImportError:
             try:
                 from arbiter.arbiter_growth.storage_backends import SQLiteStorageBackend
             except ImportError as e:
-                self.logger.debug(
-                    f"SQLiteStorageBackend not available: {e}"
-                )
+                self.logger.debug(f"SQLiteStorageBackend not available: {e}")
 
         try:
             if KnowledgeGraph is not None:

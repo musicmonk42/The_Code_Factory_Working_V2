@@ -156,12 +156,12 @@ class RegulatoryAuditLogger:
     def _determine_audit_directory(self) -> Path:
         """
         Determine the audit directory with fallback support for containerized environments.
-        
+
         Try directories in order:
         1. /var/log/analyzer_audit (production default)
         2. /app/logs/analyzer_audit (containerized fallback)
         3. /tmp/analyzer_audit (last resort)
-        
+
         Returns:
             Path: The first writable directory found
         """
@@ -171,7 +171,7 @@ class RegulatoryAuditLogger:
             Path("/app/logs/analyzer_audit"),  # Container-friendly location
             Path(tempfile.gettempdir()) / "analyzer_audit",  # Last resort
         ]
-        
+
         for candidate in candidate_dirs:
             # Try to create the directory to test writability
             try:
@@ -180,7 +180,7 @@ class RegulatoryAuditLogger:
                 test_file = candidate / ".write_test"
                 test_file.touch()
                 test_file.unlink()
-                
+
                 # If we got here, this directory is writable
                 if candidate != candidate_dirs[0]:
                     # Log when using fallback directory
@@ -193,7 +193,7 @@ class RegulatoryAuditLogger:
                 # This candidate didn't work, try the next one
                 logger.debug(f"Cannot use {candidate} for audit logs: {e}")
                 continue
-        
+
         # If we get here, none of the directories worked
         # Return the last one anyway and let the initialization handle the error
         return candidate_dirs[-1]
@@ -631,12 +631,16 @@ class RegulatoryAuditLogger:
 
     def _start_integrity_monitor(self):
         """Start continuous integrity monitoring thread."""
-        
+
         # Skip in CI/test environments to prevent thread exhaustion
-        if (os.getenv('CI') in ('1', 'true', 'True', 'TRUE') or 
-            os.getenv('GITHUB_ACTIONS') in ('1', 'true', 'True', 'TRUE') or
-            os.getenv('TESTING') == '1'):
-            logger.info("Skipping integrity monitor thread (CI/test environment detected)")
+        if (
+            os.getenv("CI") in ("1", "true", "True", "TRUE")
+            or os.getenv("GITHUB_ACTIONS") in ("1", "true", "True", "TRUE")
+            or os.getenv("TESTING") == "1"
+        ):
+            logger.info(
+                "Skipping integrity monitor thread (CI/test environment detected)"
+            )
             return
 
         def monitor_loop():
@@ -720,11 +724,11 @@ def get_audit_logger() -> RegulatoryAuditLogger:
                 # Skip background thread initialization in CI environments
                 # to prevent thread exhaustion during import-time checks
                 skip_init = (
-                    os.getenv('CI') in ('1', 'true', 'True', 'TRUE') or 
-                    os.getenv('GITHUB_ACTIONS') in ('1', 'true', 'True', 'TRUE') or 
-                    os.getenv('SKIP_AUDIT_INIT') in ('1', 'true', 'True', 'TRUE')
+                    os.getenv("CI") in ("1", "true", "True", "TRUE")
+                    or os.getenv("GITHUB_ACTIONS") in ("1", "true", "True", "TRUE")
+                    or os.getenv("SKIP_AUDIT_INIT") in ("1", "true", "True", "TRUE")
                 )
-                
+
                 if not skip_init:
                     try:
                         loop = asyncio.get_running_loop()
@@ -740,7 +744,9 @@ def get_audit_logger() -> RegulatoryAuditLogger:
 
                         threading.Thread(target=run_init_log, daemon=True).start()
                 else:
-                    logger.info("Skipping audit logger background initialization (CI environment detected)")
+                    logger.info(
+                        "Skipping audit logger background initialization (CI environment detected)"
+                    )
     return _audit_logger_instance
 
 

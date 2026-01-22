@@ -154,16 +154,19 @@ class Configuration:
 AUDIT_LOGGER_AVAILABLE = False
 _real_audit_event = None
 
+
 def _get_real_audit_event():
     """Lazy import to avoid circular dependency with orchestrator"""
     global _real_audit_event
     if _real_audit_event is None:
         try:
             from test_generation.orchestrator.audit import audit_event
+
             _real_audit_event = audit_event
         except ImportError:
             return None
     return _real_audit_event
+
 
 try:
     # Test if the import is available by attempting lazy load
@@ -396,9 +399,7 @@ try:
     except PackageNotFoundError:
         logger.debug("tenacity not found; retries unavailable.")
     except Exception as e:
-        logger.debug(
-            f"Error during tenacity version check: {e}; retries unavailable."
-        )
+        logger.debug(f"Error during tenacity version check: {e}; retries unavailable.")
 except ImportError:
     logger.warning(
         "Warning: 'aiohttp' not available. Notifications and OPA integration disabled."
@@ -410,9 +411,7 @@ except ImportError:
 
 # Define fallback retry decorator if tenacity is not available
 if not TENACITY_AVAILABLE:
-    logger.debug(
-        "Tenacity unavailable; using no-op retry decorator."
-    )
+    logger.debug("Tenacity unavailable; using no-op retry decorator.")
 
     def retry(*args, **kwargs):
         def wrap(f):

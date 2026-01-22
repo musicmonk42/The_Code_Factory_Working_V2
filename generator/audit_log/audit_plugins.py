@@ -114,9 +114,7 @@ except ImportError:
     except ImportError:
         _DUMMY_LOG_ACTION_USED = True
         logger = logging.getLogger(__name__)
-        logger.debug(
-            "log_action import failed, using dummy function."
-        )
+        logger.debug("log_action import failed, using dummy function.")
 
         async def real_log_action(
             *args, **kwargs

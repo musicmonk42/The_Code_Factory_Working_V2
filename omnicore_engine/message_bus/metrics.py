@@ -370,15 +370,15 @@ _lazy_metrics: Dict[str, Any] = {}
 def _lazy_get_or_create_metric(metric_name: str, *args) -> Any:
     """
     Lazy wrapper that creates metrics on first access.
-    
+
     This defers expensive Prometheus metric creation (with threading locks
     and registry operations) until the metric is actually used, preventing
     import-time overhead that causes CI timeouts.
-    
+
     Args:
         metric_name: Name of the metric to create
         *args: Arguments to pass to _get_or_create_metric
-        
+
     Returns:
         The metric object (created on first access, cached thereafter)
     """
@@ -498,26 +498,26 @@ _METRIC_DEFINITIONS = {
 def __getattr__(name: str) -> Any:
     """
     Lazy load metrics on first module attribute access (PEP 562).
-    
+
     This allows metrics to be imported and used exactly as before:
         from omnicore_engine.message_bus.metrics import MESSAGE_BUS_QUEUE_SIZE
         MESSAGE_BUS_QUEUE_SIZE.labels(shard_id="0").set(10)
-    
+
     But defers the expensive metric creation until the metric is actually accessed,
     preventing the 18+ second import-time overhead that causes CI timeouts.
-    
+
     Args:
         name: Name of the module attribute being accessed
-        
+
     Returns:
         The requested metric object
-        
+
     Raises:
         AttributeError: If the attribute doesn't exist in metric definitions
     """
     if name in _METRIC_DEFINITIONS:
         return _lazy_get_or_create_metric(name, *_METRIC_DEFINITIONS[name])
-    
+
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
@@ -542,8 +542,8 @@ def dispatch_timer(shard_id: int):
     # Import the metric within the function to trigger lazy loading via __getattr__
     # when this function is called from outside the module
     metric = _lazy_get_or_create_metric(
-        "MESSAGE_BUS_DISPATCH_DURATION", 
-        *_METRIC_DEFINITIONS["MESSAGE_BUS_DISPATCH_DURATION"]
+        "MESSAGE_BUS_DISPATCH_DURATION",
+        *_METRIC_DEFINITIONS["MESSAGE_BUS_DISPATCH_DURATION"],
     )
     with timer(metric, shard_id=str(shard_id)):
         yield
@@ -559,10 +559,10 @@ def reset_metrics():
     """
     # Clear the lazy metrics cache
     _lazy_metrics.clear()
-    
+
     # Clear the metric registry cache
     _metric_registry.clear()
-    
+
     if not _PROMETHEUS_AVAILABLE:
         # Note: After clearing, any previously accessed metrics won't exist
         # This is intentional for testing - fresh metrics will be created on next access

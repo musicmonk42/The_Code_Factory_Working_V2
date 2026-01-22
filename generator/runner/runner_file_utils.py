@@ -170,8 +170,9 @@ except ImportError:
     try:
         # Fallback to PyPDF2 for backwards compatibility
         import PyPDF2
+
         PyPDF2_PdfReader = PyPDF2.PdfReader
-        
+
         HAS_PDF = True
     except ImportError:
         HAS_PDF = False

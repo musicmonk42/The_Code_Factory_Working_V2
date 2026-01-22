@@ -75,7 +75,7 @@ class BaseConfig(BaseModel):
     )
 
     # Use field_serializer for datetime fields instead of deprecated json_encoders
-    @field_serializer('*', when_used='json')
+    @field_serializer("*", when_used="json")
     def serialize_datetime(self, value: Any) -> Any:
         """Serialize datetime objects to ISO format strings."""
         if isinstance(value, datetime):

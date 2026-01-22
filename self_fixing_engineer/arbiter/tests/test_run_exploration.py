@@ -47,7 +47,15 @@ for mod_name in _MOCKED_MODULE_NAMES:
 # We need to patch imports before importing the module under test
 # CRITICAL: Do NOT mock pydantic, fastapi, or aiohttp if they're already loaded
 # as they are needed for proper type annotations and decorator evaluation
-_NEVER_MOCK_MODULES = {"pydantic", "pydantic_settings", "pydantic_core", "fastapi", "starlette", "aiohttp"}
+_NEVER_MOCK_MODULES = {
+    "pydantic",
+    "pydantic_settings",
+    "pydantic_core",
+    "fastapi",
+    "starlette",
+    "aiohttp",
+}
+
 
 def _safe_mock_module(name, mock_obj=None):
     """Only mock a module if it's not in the never-mock list and not already properly loaded."""
@@ -57,6 +65,7 @@ def _safe_mock_module(name, mock_obj=None):
         return  # Skip - already has a real implementation
     sys.modules[name] = mock_obj if mock_obj else MagicMock()
 
+
 _safe_mock_module("arbiter.config")
 _safe_mock_module("arbiter.arena")
 _safe_mock_module("arbiter.arbiter")
@@ -64,7 +73,9 @@ _safe_mock_module("arbiter_plugin_registry")
 _safe_mock_module("arbiter.logging_utils")
 _safe_mock_module("sqlalchemy.ext.asyncio")
 _safe_mock_module("opentelemetry", _create_package_mock("opentelemetry"))
-_safe_mock_module("opentelemetry.sdk.trace", _create_package_mock("opentelemetry.sdk.trace"))
+_safe_mock_module(
+    "opentelemetry.sdk.trace", _create_package_mock("opentelemetry.sdk.trace")
+)
 _safe_mock_module("opentelemetry.sdk.trace.export")
 _safe_mock_module("opentelemetry.exporter.otlp.proto.http.trace_exporter")
 # NOTE: aiohttp is in _NEVER_MOCK_MODULES, so it won't be mocked

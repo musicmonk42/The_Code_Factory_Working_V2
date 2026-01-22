@@ -259,9 +259,9 @@ class ArbiterArena:
         # Initialize SimulationEngine with proper fallback
         try:
             plugin_registry = _get_plugin_registry_dict()
-            sim_from_registry = plugin_registry.get(
-                PlugInKind.CORE_SERVICE, {}
-            ).get("simulation_module")
+            sim_from_registry = plugin_registry.get(PlugInKind.CORE_SERVICE, {}).get(
+                "simulation_module"
+            )
             self.simulation_module = (
                 sim_from_registry if sim_from_registry else SimulationEngine()
             )

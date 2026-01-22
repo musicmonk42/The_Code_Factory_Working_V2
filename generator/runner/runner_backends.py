@@ -112,9 +112,7 @@ except ImportError:
     k8s_client = None
     k8s_config = None
     K8sApiException = None
-    logger.info(
-        "kubernetes library not found. KubernetesBackend will be unavailable."
-    )
+    logger.info("kubernetes library not found. KubernetesBackend will be unavailable.")
 
 try:
     import boto3

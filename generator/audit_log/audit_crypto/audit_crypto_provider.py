@@ -18,6 +18,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Set
 # Allow nested event loops for compatibility with FastAPI lifespan
 try:
     import nest_asyncio
+
     nest_asyncio.apply()
     HAS_NEST_ASYNCIO = True
 except ImportError:
@@ -395,16 +396,20 @@ class SoftwareCryptoProvider(CryptoProvider):
                     # Fallback: create a new thread to run the async function
                     import concurrent.futures
                     import threading
-                    
+
                     def run_in_thread():
                         new_loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(new_loop)
                         try:
-                            return new_loop.run_until_complete(self._fetch_master_key_safely())
+                            return new_loop.run_until_complete(
+                                self._fetch_master_key_safely()
+                            )
                         finally:
                             new_loop.close()
-                    
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+
+                    with concurrent.futures.ThreadPoolExecutor(
+                        max_workers=1
+                    ) as executor:
                         future = executor.submit(run_in_thread)
                         master_key = future.result(timeout=5.0)
             else:
@@ -412,11 +417,16 @@ class SoftwareCryptoProvider(CryptoProvider):
                 master_key = loop.run_until_complete(self._fetch_master_key_safely())
         except RuntimeError as e:
             # No event loop exists, create one
-            if "no running event loop" in str(e).lower() or "no current event loop" in str(e).lower():
+            if (
+                "no running event loop" in str(e).lower()
+                or "no current event loop" in str(e).lower()
+            ):
                 loop = asyncio.new_event_loop()
                 try:
                     asyncio.set_event_loop(loop)
-                    master_key = loop.run_until_complete(self._fetch_master_key_safely())
+                    master_key = loop.run_until_complete(
+                        self._fetch_master_key_safely()
+                    )
                 finally:
                     asyncio.set_event_loop(None)
                     loop.close()

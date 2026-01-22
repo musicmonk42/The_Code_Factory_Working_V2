@@ -420,15 +420,15 @@ except TypeError:
 def get_or_create_counter(name: str, description: str, labelnames: List[str] = None):
     """
     Enterprise-grade counter factory with idempotent registration.
-    
+
     Implements check-before-create pattern to prevent 'Duplicated timeseries
     in CollectorRegistry' errors that crash agents during initialization.
-    
+
     Args:
         name: Unique metric name following prometheus naming conventions
         description: Human-readable metric description
         labelnames: Optional list of label names for dimensional metrics
-        
+
     Returns:
         Existing or newly created Counter instance
     """
@@ -455,12 +455,12 @@ def get_or_create_counter(name: str, description: str, labelnames: List[str] = N
 def get_or_create_histogram(name: str, description: str, labelnames: List[str] = None):
     """
     Enterprise-grade histogram factory with idempotent registration.
-    
+
     Args:
         name: Unique metric name following prometheus naming conventions
         description: Human-readable metric description
         labelnames: Optional list of label names for dimensional metrics
-        
+
     Returns:
         Existing or newly created Histogram instance
     """
@@ -484,12 +484,12 @@ def get_or_create_histogram(name: str, description: str, labelnames: List[str] =
 def get_or_create_gauge(name: str, description: str, labelnames: List[str] = None):
     """
     Enterprise-grade gauge factory with idempotent registration.
-    
+
     Args:
         name: Unique metric name following prometheus naming conventions
         description: Human-readable metric description
         labelnames: Optional list of label names for dimensional metrics
-        
+
     Returns:
         Existing or newly created Gauge instance
     """

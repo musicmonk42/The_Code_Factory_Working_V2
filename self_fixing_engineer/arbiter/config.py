@@ -14,6 +14,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Tuple
 # Optional imports - make aiofiles optional since it's only used in refresh()
 try:
     import aiofiles
+
     AIOFILES_AVAILABLE = True
 except ImportError:
     AIOFILES_AVAILABLE = False
@@ -52,36 +53,38 @@ _tracer_cache = None  # Cache for the tracer instance
 def _get_tracer():
     """
     Lazy loader for OpenTelemetry tracer to avoid import-time initialization.
-    
+
     Returns a cached tracer instance to avoid repeated imports.
     Falls back to NoOpTracer if OpenTelemetry is not available.
     """
     global _tracer_cache
-    
+
     if _tracer_cache is not None:
         return _tracer_cache
-    
+
     try:
         from arbiter.otel_config import get_tracer
+
         _tracer_cache = get_tracer(__name__)
         return _tracer_cache
     except Exception:
         # Import NoOpTracer if available, otherwise create a minimal one
         try:
             from arbiter.otel_config import NoOpTracer
+
             _tracer_cache = NoOpTracer()
             return _tracer_cache
         except ImportError:
             # Minimal no-op tracer as last resort
             from contextlib import contextmanager
-            
+
             @contextmanager
             def noop_span(name):
-                yield type('NoOpSpan', (), {})()
-            
-            _tracer_cache = type('NoOpTracer', (), {
-                'start_as_current_span': noop_span
-            })()
+                yield type("NoOpSpan", (), {})()
+
+            _tracer_cache = type(
+                "NoOpTracer", (), {"start_as_current_span": noop_span}
+            )()
             return _tracer_cache
 
 

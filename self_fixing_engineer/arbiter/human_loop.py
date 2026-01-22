@@ -1340,7 +1340,9 @@ async def get_human_approval(
 
 # Only register if not already registered and not in testing environment
 # to avoid validation errors during test collection
-if not os.environ.get("TESTING") and not arbiter_registry.get_metadata(PlugInKind.CORE_SERVICE, "human_in_loop"):
+if not os.environ.get("TESTING") and not arbiter_registry.get_metadata(
+    PlugInKind.CORE_SERVICE, "human_in_loop"
+):
     register(
         kind=PlugInKind.CORE_SERVICE,
         name="human_in_loop",

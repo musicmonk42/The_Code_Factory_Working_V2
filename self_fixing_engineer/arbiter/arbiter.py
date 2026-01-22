@@ -237,13 +237,19 @@ _sentry_initialized = False
 def _init_sentry():
     """Initialize Sentry SDK if configured. Called lazily on first Arbiter instantiation."""
     global _sentry_initialized
-    if not _sentry_initialized and os.getenv("SENTRY_DSN") and SENTRY_AVAILABLE and sentry_sdk:
+    if (
+        not _sentry_initialized
+        and os.getenv("SENTRY_DSN")
+        and SENTRY_AVAILABLE
+        and sentry_sdk
+    ):
         sentry_sdk.init(
             dsn=os.getenv("SENTRY_DSN"),
             traces_sample_rate=1.0,
             environment=os.getenv("ENV", "production"),
         )
         _sentry_initialized = True
+
 
 # Type checking imports - only used for type hints, not at runtime
 # Use string forward references in annotations (e.g., Optional["HumanInLoop"])
@@ -279,24 +285,28 @@ except ImportError as e:
 
 
 from arbiter.arbiter_plugin_registry import PluginBase, PlugInKind
+
 # REMOVED: from arbiter.arbiter_plugin_registry import registry as PLUGIN_REGISTRY
 # Replaced with lazy getter to avoid import-time initialization overhead
 # REMOVED: from simulation.simulation_module import UnifiedSimulationModule
 # This import causes a circular dependency chain. Will be loaded lazily in __init__
 
+
 def _get_plugin_registry():
     """
     Lazy-load plugin registry to avoid import-time initialization.
-    
+
     Returns the singleton PluginRegistry instance, creating it only when first accessed.
-    This prevents heavy initialization (plugin loading, metrics, async operations) 
+    This prevents heavy initialization (plugin loading, metrics, async operations)
     from executing during module import.
-    
+
     Returns:
         PluginRegistry: The singleton plugin registry instance
     """
     from arbiter.arbiter_plugin_registry import get_registry
+
     return get_registry()
+
 
 try:
     from envs.code_health_env import CodeHealthEnv as BaseCodeHealthEnv
@@ -1066,7 +1076,9 @@ def _init_additional_metrics():
         db_health_gauge = get_or_create_gauge(
             "db_health", "Database health status (1=healthy, 0=unhealthy)"
         )
-        rl_reward_gauge = get_or_create_gauge("rl_reward", "Reward from RL steps", ("agent",))
+        rl_reward_gauge = get_or_create_gauge(
+            "rl_reward", "Reward from RL steps", ("agent",)
+        )
         _additional_metrics_initialized = True
 
 
@@ -1401,7 +1413,9 @@ class Arbiter:
         monitor: Optional[Monitor] = None,
         intent_capture_engine: Optional[Any] = None,
         test_generation_engine: Optional[Any] = None,
-        simulation_engine: Optional["UnifiedSimulationModule"] = None,  # String literal for TYPE_CHECKING
+        simulation_engine: Optional[
+            "UnifiedSimulationModule"
+        ] = None,  # String literal for TYPE_CHECKING
         code_health_env: Optional[BaseCodeHealthEnv] = None,
         audit_log_manager: Optional[Any] = None,
         engines: Optional[Dict[str, Any]] = None,
@@ -1414,7 +1428,7 @@ class Arbiter:
         _init_metrics()
         _init_additional_metrics()
         _register_default_plugins()
-        
+
         self.settings = settings
         self.name = name
         self.world_size = world_size
@@ -1496,15 +1510,16 @@ class Arbiter:
             self.human_in_loop = None
 
         self.engines = engines or {}
-        
+
         # Lazy import to avoid circular dependency with simulation module
         # Only load if simulation_engine not provided and not in engines
         if simulation_engine is None and not self.engines.get("simulation"):
             try:
                 # Import at runtime to break circular dependency chain:
-                # arbiter.py -> simulation.simulation_module -> omnicore_engine.engines 
+                # arbiter.py -> simulation.simulation_module -> omnicore_engine.engines
                 # -> generator.agents -> docgen_agent -> arbiter.models.common
                 from simulation.simulation_module import UnifiedSimulationModule
+
                 # Note: We don't auto-instantiate - leave it to caller or lazy loading
                 logger.debug(
                     f"[{name}] UnifiedSimulationModule available for lazy instantiation"
@@ -1516,9 +1531,9 @@ class Arbiter:
             except Exception as e:
                 logging.getLogger(__name__).error(
                     f"[{name}] Error importing UnifiedSimulationModule: {e}",
-                    exc_info=True
+                    exc_info=True,
                 )
-        
+
         self.simulation_engine = self.engines.get("simulation") or simulation_engine
         self.test_generation_engine = self.engines.get("test_generation")
         self.generator_engine = self.engines.get("generator")
@@ -1889,7 +1904,9 @@ class Arbiter:
                                 )
                                 observation, reward, done, info = vec_env.step(action)
                                 if rl_reward_gauge is not None:
-                                    rl_reward_gauge.labels(agent=self.name).set(reward[0])
+                                    rl_reward_gauge.labels(agent=self.name).set(
+                                        reward[0]
+                                    )
                                 self.log_event(
                                     f"RL step complete. Reward: {reward[0]}",
                                     "rl_step_complete",
@@ -2405,8 +2422,10 @@ class Arbiter:
         self.role = self.state_manager.role
         self.agent_type = self.state_manager.agent_type
 
-        growth_manager_plugin = _get_plugin_registry().get(PlugInKind.GROWTH_MANAGER, {}).get(
-            "arbiter_growth"
+        growth_manager_plugin = (
+            _get_plugin_registry()
+            .get(PlugInKind.GROWTH_MANAGER, {})
+            .get("arbiter_growth")
         )
         if not growth_manager_plugin:
             logging.getLogger(__name__).critical(
@@ -2416,12 +2435,14 @@ class Arbiter:
         self.growth_manager = growth_manager_plugin
         self.growth_manager.arbiter_name = self.name
 
-        self.benchmarking_engine = _get_plugin_registry().get(PlugInKind.CORE_SERVICE, {}).get(
-            "benchmarking"
+        self.benchmarking_engine = (
+            _get_plugin_registry().get(PlugInKind.CORE_SERVICE, {}).get("benchmarking")
         )
-        self.explainable_reasoner = _get_plugin_registry().get(
-            PlugInKind.AI_ASSISTANT, {}
-        ).get("explainable_reasoner")
+        self.explainable_reasoner = (
+            _get_plugin_registry()
+            .get(PlugInKind.AI_ASSISTANT, {})
+            .get("explainable_reasoner")
+        )
 
         for name, instance in [
             ("Explainable Reasoner", self.explainable_reasoner),
@@ -2841,8 +2862,8 @@ class Arbiter:
             "filter_companies",
         )
 
-        company_data_plugin = _get_plugin_registry().get(PlugInKind.CORE_SERVICE, {}).get(
-            "company_data"
+        company_data_plugin = (
+            _get_plugin_registry().get(PlugInKind.CORE_SERVICE, {}).get("company_data")
         )
 
         if company_data_plugin:

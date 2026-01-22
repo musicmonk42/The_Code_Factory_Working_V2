@@ -84,26 +84,26 @@ except (ImportError, AttributeError):
 def _get_or_create_metric(metric_class, name: str, description: str, labelnames=None):
     """
     Enterprise-grade metric factory with idempotent registration.
-    
+
     Implements check-before-create pattern to prevent 'Duplicated timeseries
     in CollectorRegistry' errors that crash agents during initialization.
-    
+
     Thread Safety: Uses REGISTRY's internal locking mechanism.
-    
+
     Args:
         metric_class: prometheus_client metric class (Counter, Gauge, Histogram)
         name: Unique metric name following prometheus naming conventions
         description: Human-readable metric description
         labelnames: Optional list of label names for dimensional metrics
-        
+
     Returns:
         Existing or newly created metric instance
-        
+
     Raises:
         ValueError: Only if a non-duplicate registration error occurs
     """
     labelnames = labelnames or []
-    
+
     # Check if metric already exists in registry (idempotent)
     try:
         existing = prometheus_client.REGISTRY._names_to_collectors.get(name)
@@ -111,7 +111,7 @@ def _get_or_create_metric(metric_class, name: str, description: str, labelnames=
             return existing
     except (AttributeError, KeyError):
         pass  # Registry structure may vary
-    
+
     # Create new metric if it doesn't exist
     try:
         if labelnames:
@@ -211,23 +211,23 @@ def scrub_text(text: str) -> str:
 class ScrubFilter(logging.Filter):
     """
     Enterprise-grade logging filter that scrubs sensitive data from log records.
-    
+
     Implements comprehensive error handling to prevent crashes from:
     - SystemExit from model downloads
     - Missing dependencies
     - Malformed log records
     - Any scrubbing failures
-    
+
     Never allows exceptions to propagate - the filter must always succeed.
     """
-    
+
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
         """
         Filter and scrub sensitive data from log record.
-        
+
         Args:
             record: The log record to process
-            
+
         Returns:
             bool: Always True (never block log records)
         """
@@ -255,7 +255,7 @@ class ScrubFilter(logging.Filter):
                             "Logging message unscrubbed."
                         )
                     pass
-            
+
             # Scrub exception info if present
             if getattr(record, "exc_info", None):
                 try:
@@ -273,12 +273,12 @@ class ScrubFilter(logging.Filter):
                 except (SystemExit, Exception):
                     # If exc_info processing fails entirely, leave it unchanged
                     pass
-                    
+
         except Exception:
             # Outermost catch-all: never crash the logging system
             # Even if record processing fails completely, allow the log through
             pass
-        
+
         # Always return True - never block log records
         return True
 

@@ -328,7 +328,7 @@ class TestMerkleTree:
         """Test get_root() returns root hash when tree has data"""
         tree = MerkleTree()
         tree.add_leaf(b"test_data")
-        
+
         root = tree.get_root()
         assert root != ""
         assert isinstance(root, str)
@@ -338,10 +338,10 @@ class TestMerkleTree:
     def test_get_root_matches_get_merkle_root(self):
         """Test get_root() is equivalent to get_merkle_root()"""
         tree = MerkleTree()
-        
+
         # Empty tree
         assert tree.get_root() == tree.get_merkle_root()
-        
+
         # Add leaves
         for i in range(5):
             tree.add_leaf(f"data_{i}".encode())
@@ -352,7 +352,7 @@ class TestMerkleTree:
         """Test get_root() returns a valid hex string"""
         tree = MerkleTree()
         tree.add_leaf(b"test_data")
-        
+
         root = tree.get_root()
         # Should be a hex string (can be decoded from hex)
         try:
@@ -360,7 +360,7 @@ class TestMerkleTree:
             is_hex = True
         except ValueError:
             is_hex = False
-        
+
         assert is_hex, "get_root() should return a hex string"
 
 

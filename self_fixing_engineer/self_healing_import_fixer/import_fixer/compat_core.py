@@ -79,10 +79,10 @@ except ImportError:
     class _TenacityNoOpCondition:
         """
         Thread-safe no-op condition for tenacity fallback.
-        
+
         Implements the Null Object pattern to provide API compatibility
         without actual retry behavior when tenacity is unavailable.
-        
+
         Thread Safety: This class is stateless and inherently thread-safe.
         """
 
@@ -97,6 +97,7 @@ except ImportError:
 
     class _TenacityNoOpStopCondition(_TenacityNoOpCondition):
         """No-op stop condition - never signals stop."""
+
         pass
 
     class _TenacityNoOpWaitCondition(_TenacityNoOpCondition):
@@ -107,21 +108,22 @@ except ImportError:
 
     class _TenacityNoOpRetryCondition(_TenacityNoOpCondition):
         """No-op retry condition - never triggers retry."""
+
         pass
 
     class tenacity:  # type: ignore[no-redef]
         """
         Enterprise-grade tenacity fallback stub.
-        
+
         Provides complete API compatibility with the tenacity library when
         it is not installed. All retry decorators become pass-through
         (identity) decorators, allowing code to execute without retry logic.
-        
+
         This implementation follows the Null Object pattern to ensure:
         1. No AttributeError when accessing tenacity attributes
         2. Decorated functions execute normally without modification
         3. Zero runtime overhead when tenacity features are not needed
-        
+
         Usage:
             @tenacity.retry(
                 stop=tenacity.stop_after_attempt(3),
@@ -130,7 +132,7 @@ except ImportError:
             def my_function():
                 # Without tenacity installed, this executes once without retry
                 pass
-        
+
         Thread Safety: All methods are stateless and thread-safe.
         """
 
@@ -151,10 +153,10 @@ except ImportError:
         ) -> Callable[[Callable], Callable]:
             """
             No-op retry decorator - returns the function unchanged.
-            
+
             All retry parameters are accepted but ignored, ensuring
             API compatibility with real tenacity.retry() calls.
-            
+
             Args:
                 *args: Positional arguments (ignored)
                 stop: Stop condition (ignored)
@@ -163,22 +165,24 @@ except ImportError:
                 before_sleep: Callback before sleep (ignored)
                 reraise: Whether to reraise exceptions (ignored)
                 **kwargs: Additional keyword arguments (ignored)
-                
+
             Returns:
                 Identity decorator that returns the original function
             """
+
             def decorator(func: Callable) -> Callable:
                 return func
+
             return decorator
 
         @staticmethod
         def stop_after_attempt(max_attempts: int) -> _TenacityNoOpStopCondition:
             """
             Create a no-op stop condition.
-            
+
             Args:
                 max_attempts: Maximum retry attempts (ignored in fallback)
-                
+
             Returns:
                 No-op stop condition instance
             """
@@ -188,10 +192,10 @@ except ImportError:
         def stop_after_delay(max_delay: float) -> _TenacityNoOpStopCondition:
             """
             Create a no-op stop-after-delay condition.
-            
+
             Args:
                 max_delay: Maximum delay in seconds (ignored in fallback)
-                
+
             Returns:
                 No-op stop condition instance
             """
@@ -206,13 +210,13 @@ except ImportError:
         ) -> _TenacityNoOpWaitCondition:
             """
             Create a no-op exponential wait condition.
-            
+
             Args:
                 multiplier: Wait multiplier (ignored in fallback)
                 min: Minimum wait time (ignored in fallback)
                 max: Maximum wait time (ignored in fallback)
                 exp_base: Exponential base (ignored in fallback)
-                
+
             Returns:
                 No-op wait condition instance
             """
@@ -222,26 +226,24 @@ except ImportError:
         def wait_fixed(wait: float) -> _TenacityNoOpWaitCondition:
             """
             Create a no-op fixed wait condition.
-            
+
             Args:
                 wait: Fixed wait time in seconds (ignored in fallback)
-                
+
             Returns:
                 No-op wait condition instance
             """
             return _TenacityNoOpWaitCondition()
 
         @staticmethod
-        def wait_random(
-            min: float = 0, max: float = 1
-        ) -> _TenacityNoOpWaitCondition:
+        def wait_random(min: float = 0, max: float = 1) -> _TenacityNoOpWaitCondition:
             """
             Create a no-op random wait condition.
-            
+
             Args:
                 min: Minimum wait time (ignored in fallback)
                 max: Maximum wait time (ignored in fallback)
-                
+
             Returns:
                 No-op wait condition instance
             """
@@ -253,10 +255,10 @@ except ImportError:
         ) -> _TenacityNoOpRetryCondition:
             """
             Create a no-op retry-on-exception condition.
-            
+
             Args:
                 exception_types: Exception type(s) to retry on (ignored)
-                
+
             Returns:
                 No-op retry condition instance
             """
@@ -266,10 +268,10 @@ except ImportError:
         def retry_if_result(predicate: Callable) -> _TenacityNoOpRetryCondition:
             """
             Create a no-op retry-on-result condition.
-            
+
             Args:
                 predicate: Result predicate function (ignored in fallback)
-                
+
             Returns:
                 No-op retry condition instance
             """
@@ -279,10 +281,10 @@ except ImportError:
         def retry_if_not_result(predicate: Callable) -> _TenacityNoOpRetryCondition:
             """
             Create a no-op retry-if-not-result condition.
-            
+
             Args:
                 predicate: Result predicate function (ignored in fallback)
-                
+
             Returns:
                 No-op retry condition instance
             """
@@ -493,7 +495,7 @@ _metrics_registry: Dict[str, Any] = {}
 def _get_metrics() -> Dict[str, Any]:
     """
     Get or create Prometheus metrics registry.
-    
+
     Thread-safe implementation that prevents duplicate metric registration
     by checking the existing REGISTRY before creating new metrics.
     Follows industry best practices for metric reuse in multi-import scenarios.
@@ -501,27 +503,29 @@ def _get_metrics() -> Dict[str, Any]:
     global _metrics_registry
     with _observability_lock:
         if not _metrics_registry and METRICS_ENABLED and _HAS_PROMETHEUS:
-            
-            def get_or_create_metric(metric_class, name, documentation, labelnames=None):
+
+            def get_or_create_metric(
+                metric_class, name, documentation, labelnames=None
+            ):
                 """
                 Helper function to get existing metric or create new one.
                 Prevents 'Duplicated timeseries in CollectorRegistry' errors
                 by checking registry BEFORE creating metrics.
-                
+
                 Industry best practice: Check first to avoid any duplication errors.
-                
+
                 Args:
                     metric_class: Counter, Gauge, or Histogram class
                     name: Metric name
                     documentation: Metric description
                     labelnames: Optional list of label names
-                    
+
                 Returns:
                     Existing or newly created metric
                 """
                 # CRITICAL: Check if metric exists BEFORE attempting creation
                 # This prevents any ValueError from being raised in the first place
-                if hasattr(REGISTRY, '_names_to_collectors'):
+                if hasattr(REGISTRY, "_names_to_collectors"):
                     existing = REGISTRY._names_to_collectors.get(name)
                     if existing is not None:
                         logger.debug(
@@ -529,7 +533,7 @@ def _get_metrics() -> Dict[str, Any]:
                             extra={"data_classification": "internal"},
                         )
                         return existing
-                
+
                 # Metric doesn't exist - safe to create
                 try:
                     if labelnames:
@@ -537,7 +541,9 @@ def _get_metrics() -> Dict[str, Any]:
                     return metric_class(name, documentation)
                 except ValueError as e:
                     # Last resort: if creation still fails, retrieve from registry
-                    if "Duplicated timeseries" in str(e) and hasattr(REGISTRY, '_names_to_collectors'):
+                    if "Duplicated timeseries" in str(e) and hasattr(
+                        REGISTRY, "_names_to_collectors"
+                    ):
                         existing = REGISTRY._names_to_collectors.get(name)
                         if existing is not None:
                             logger.warning(
@@ -546,7 +552,7 @@ def _get_metrics() -> Dict[str, Any]:
                             )
                             return existing
                     raise  # Re-raise if it's a different error
-            
+
             _metrics_registry = {
                 "init_duration": get_or_create_metric(
                     Histogram,
@@ -671,18 +677,18 @@ _redis_client = None
 def _get_redis_client():
     """
     Get or create Redis client with comprehensive fallback support.
-    
+
     Configuration priority (highest to lowest):
     1. REDIS_URL - Full connection URL (preferred for Railway and other platforms)
     2. REDIS_HOST/REDIS_PORT - Traditional host/port configuration
     3. REDISHOST/REDISPORT - Railway-specific environment variables
-    
+
     Implements graceful degradation: returns None if Redis is unavailable,
     allowing the application to continue without distributed caching.
     Follows industry standards for connection resilience and fallback handling.
-    
+
     Connection timeout is set to 5 seconds to prevent hanging during startup.
-    
+
     Returns:
         redis.Redis instance if connection successful, None otherwise
     """
@@ -693,7 +699,7 @@ def _get_redis_client():
             redis_url = os.getenv("REDIS_URL")
             if redis_url:
                 _redis_client = redis.from_url(
-                    redis_url, 
+                    redis_url,
                     decode_responses=True,
                     socket_connect_timeout=5,  # Prevent hanging on slow connections
                     socket_timeout=5,
@@ -718,7 +724,7 @@ def _get_redis_client():
                     f"Redis client created with host={host}, port={port}",
                     extra={"data_classification": "internal"},
                 )
-            
+
             # Test connection to ensure Redis is actually available
             # ping() will respect the socket_timeout configured above
             _redis_client.ping()

@@ -6,7 +6,7 @@ Sets up mocks for Windows DLL issues and missing dependencies.
 
 IMPORTANT: This file has been refactored to avoid CPU timeout issues in CI.
 - Removed redundant OpenTelemetry setup (duplicated from root conftest)
-- Removed unused LazyModuleAliasFinder and import_timeout utilities  
+- Removed unused LazyModuleAliasFinder and import_timeout utilities
 - Removed module-level mock setup (lines 915-1006 in previous version)
 - Mocks are now set up LAZILY via _test_setup() fixture at test session start
 - Import time reduced from CPU timeout to < 0.2 seconds
@@ -40,9 +40,10 @@ if not sys.path or sys.path[0] != generator_root_str:
 # Create mocks immediately WITHOUT expensive __import__() attempts.
 # This avoids CPU timeout while still allowing test files to import dependencies.
 
+
 def _create_mock_module(name):
     """Create a minimal mock module for missing dependencies."""
-    
+
     # Create a mock class that can be used as decorator or callable
     class MockCallable:
         """
@@ -321,7 +322,11 @@ def _is_ci_environment():
     """
     ci_value = os.environ.get("CI", "").lower()
     github_actions_value = os.environ.get("GITHUB_ACTIONS", "").lower()
-    return ci_value in ("1", "true", "yes") or github_actions_value in ("1", "true", "yes")
+    return ci_value in ("1", "true", "yes") or github_actions_value in (
+        "1",
+        "true",
+        "yes",
+    )
 
 
 def _create_parent_modules(dep):
@@ -432,9 +437,7 @@ def _create_opentelemetry_stubs():
     otel_module = ModuleType("opentelemetry")
     otel_module.__file__ = "<mocked opentelemetry>"
     otel_module.__path__ = []
-    otel_module.__spec__ = importlib.util.spec_from_loader(
-        "opentelemetry", loader=None
-    )
+    otel_module.__spec__ = importlib.util.spec_from_loader("opentelemetry", loader=None)
     otel_module.trace = trace_module
     otel_module.metrics = metrics_module
 
@@ -449,9 +452,7 @@ def _create_opentelemetry_stubs():
 
     # Create common instrumentation submodules
     instrumentation_fastapi = ModuleType("opentelemetry.instrumentation.fastapi")
-    instrumentation_fastapi.__file__ = (
-        "<mocked opentelemetry.instrumentation.fastapi>"
-    )
+    instrumentation_fastapi.__file__ = "<mocked opentelemetry.instrumentation.fastapi>"
     instrumentation_fastapi.__path__ = []
     instrumentation_fastapi.__spec__ = importlib.util.spec_from_loader(
         "opentelemetry.instrumentation.fastapi", loader=None
@@ -505,9 +506,7 @@ def _create_opentelemetry_stubs():
 
     # Create instrumentation._semconv module (required by instrumentation.fastapi)
     instrumentation_semconv = ModuleType("opentelemetry.instrumentation._semconv")
-    instrumentation_semconv.__file__ = (
-        "<mocked opentelemetry.instrumentation._semconv>"
-    )
+    instrumentation_semconv.__file__ = "<mocked opentelemetry.instrumentation._semconv>"
     instrumentation_semconv.__path__ = []
     instrumentation_semconv.__spec__ = importlib.util.spec_from_loader(
         "opentelemetry.instrumentation._semconv", loader=None
@@ -568,9 +567,7 @@ def _create_opentelemetry_stubs():
     )
     exporter_module.jaeger = exporter_jaeger_module
 
-    exporter_jaeger_thrift_module = ModuleType(
-        "opentelemetry.exporter.jaeger.thrift"
-    )
+    exporter_jaeger_thrift_module = ModuleType("opentelemetry.exporter.jaeger.thrift")
     exporter_jaeger_thrift_module.__file__ = (
         "<mocked opentelemetry.exporter.jaeger.thrift>"
     )
@@ -589,9 +586,7 @@ def _create_opentelemetry_stubs():
     exporter_module.otlp = exporter_otlp_module
 
     exporter_otlp_proto_module = ModuleType("opentelemetry.exporter.otlp.proto")
-    exporter_otlp_proto_module.__file__ = (
-        "<mocked opentelemetry.exporter.otlp.proto>"
-    )
+    exporter_otlp_proto_module.__file__ = "<mocked opentelemetry.exporter.otlp.proto>"
     exporter_otlp_proto_module.__path__ = []
     exporter_otlp_proto_module.__spec__ = importlib.util.spec_from_loader(
         "opentelemetry.exporter.otlp.proto", loader=None
@@ -669,9 +664,7 @@ def _create_opentelemetry_stubs():
     sys.modules["opentelemetry.sdk.resources"] = sdk_resources_module
     sys.modules["opentelemetry.exporter"] = exporter_module
     sys.modules["opentelemetry.exporter.jaeger"] = exporter_jaeger_module
-    sys.modules["opentelemetry.exporter.jaeger.thrift"] = (
-        exporter_jaeger_thrift_module
-    )
+    sys.modules["opentelemetry.exporter.jaeger.thrift"] = exporter_jaeger_thrift_module
     sys.modules["opentelemetry.exporter.otlp"] = exporter_otlp_module
     sys.modules["opentelemetry.exporter.otlp.proto"] = exporter_otlp_proto_module
     sys.modules["opentelemetry.exporter.otlp.proto.grpc"] = (
@@ -707,14 +700,14 @@ def _setup_optional_dependency_mocks():
     expensive mock setup until tests actually run.
     """
     global _mocks_initialized
-    
+
     # Skip if already initialized
     if _mocks_initialized:
         return
-    
+
     # CI environment fast path: Skip expensive import attempts in CI
     is_ci = _is_ci_environment()
-    
+
     for dep in _OPTIONAL_DEPENDENCIES:
         if dep not in sys.modules:
             # Special handling for opentelemetry - use dedicated stub creator
@@ -729,13 +722,13 @@ def _setup_optional_dependency_mocks():
                     except ImportError:
                         _create_opentelemetry_stubs()
                 continue
-            
+
             # In CI, skip expensive import attempts and use lightweight stubs
             if is_ci:
                 # Create lightweight stub without trying to import
                 mock_module = _create_mock_module(dep)
                 sys.modules[dep] = mock_module
-                
+
                 # Handle parent modules for dotted packages
                 _create_parent_modules(dep)
             else:
@@ -808,9 +801,10 @@ def _setup_optional_dependency_mocks():
                     mock_module = _create_mock_module(dep)
                     sys.modules[dep] = mock_module
                     _create_parent_modules(dep)
-    
+
     # Mark as initialized
     _mocks_initialized = True
+
 
 # Add the generator directory to sys.path
 generator_root = Path(__file__).parent.resolve()
@@ -836,14 +830,14 @@ class LazyModuleAliasFinder(MetaPathFinder):
     This allows 'runner', 'main', 'agents' to resolve to their generator.* equivalents
     without importing them at conftest load time.
     """
-    
+
     def __init__(self):
         self.aliases = {
-            'runner': 'generator.runner',
-            'main': 'generator.main',
-            'agents': 'generator.agents',
+            "runner": "generator.runner",
+            "main": "generator.main",
+            "agents": "generator.agents",
         }
-    
+
     def find_spec(self, fullname, path, target=None):
         """Find module spec for aliased modules."""
         if fullname in self.aliases:
@@ -854,17 +848,19 @@ class LazyModuleAliasFinder(MetaPathFinder):
                 sys.modules[fullname] = sys.modules[actual_name]
                 return None
             # Return a spec that will load the actual module and alias it
-            return spec_from_loader(fullname, LazyModuleAliasLoader(actual_name, fullname))
+            return spec_from_loader(
+                fullname, LazyModuleAliasLoader(actual_name, fullname)
+            )
         return None
 
 
 class LazyModuleAliasLoader(Loader):
     """Loader that imports the actual module and creates an alias."""
-    
+
     def __init__(self, actual_name, alias_name):
         self.actual_name = actual_name
         self.alias_name = alias_name
-    
+
     def create_module(self, spec):
         """Import the actual module and return it."""
         try:
@@ -874,8 +870,8 @@ class LazyModuleAliasLoader(Loader):
                 actual_module = sys.modules[self.actual_name]
             else:
                 # Import the actual module
-                actual_module = __import__(self.actual_name, fromlist=[''])
-            
+                actual_module = __import__(self.actual_name, fromlist=[""])
+
             # Ensure both names point to the same module in sys.modules
             sys.modules[self.alias_name] = actual_module
             sys.modules[self.actual_name] = actual_module
@@ -883,7 +879,7 @@ class LazyModuleAliasLoader(Loader):
         except ImportError:
             # If import fails, return None (module not available)
             return None
-    
+
     def exec_module(self, module):
         """Module is already executed during create_module."""
         pass
@@ -919,11 +915,12 @@ def import_timeout(seconds=30):  # Increased from 10 to 30 for CI environments
     Context manager to timeout expensive imports in tests.
     Prevents CPU limit exceeded errors in CI environments.
     """
+
     def timeout_handler(signum, frame):
         raise TimeoutError(f"Import took longer than {seconds}s")
-    
+
     # Set up signal handler (Unix only)
-    if hasattr(signal, 'SIGALRM'):
+    if hasattr(signal, "SIGALRM"):
         old_handler = signal.signal(signal.SIGALRM, timeout_handler)
         signal.alarm(seconds)
         try:
@@ -955,7 +952,7 @@ try:
         Ensure optional dependency mocks are set up once per test session.
         This fixture is automatically used by all tests (autouse=True) and runs
         once per session (scope="session") to set up the mocks lazily.
-        
+
         Note: In CI environments, mocks are set up during conftest import to avoid
         timeout during test collection. This fixture will skip setup in that case.
         """
