@@ -38,10 +38,15 @@ def _create_mock_module(name):
         - As a callable: mock.function()
         - As an attribute chain: mock.sub.module.attr
         - As a context manager: with mock.context():
+        - As a generic type: mock.Type[str]
         """
 
         def __call__(self, *args, **kwargs):
-            # When called directly, return self to support chaining
+            # When used as a decorator, return the original function/class unchanged
+            # This prevents decorators from breaking actual code
+            if len(args) == 1 and callable(args[0]) and not kwargs:
+                return args[0]
+            # Otherwise return self to support chaining
             return self
 
         def __getattr__(self, attr):
@@ -53,6 +58,14 @@ def _create_mock_module(name):
 
         def __exit__(self, *args):
             pass
+
+        def __class_getitem__(cls, item):
+            """Support for generic type annotations like Type[str]."""
+            return cls
+
+        def __mro_entries__(self, bases):
+            """Support for use in class inheritance - return object as base."""
+            return (object,)
 
     mock_module = types.ModuleType(name)
     mock_module.__file__ = f"<mocked {name}>"
@@ -147,15 +160,24 @@ def _create_mock_module(name):
     return mock_module
 
 
+# Packages that should NEVER be mocked, even if missing
+# These packages cause type annotation errors or decorator issues when mocked
+_NEVER_MOCK = [
+    "aiohttp",  # Type annotations used in aiohttp_client_cache
+    "aiohttp_client_cache",  # Uses aiohttp.ClientResponse in type hints
+    "pydantic",  # Decorators like field_validator must be real
+    "pydantic_settings",  # Must work with real pydantic
+    "pydantic_core",  # Core pydantic functionality
+    "fastapi",  # __spec__ errors and type annotation issues
+    "starlette",  # FastAPI dependency, needs proper __spec__
+]
+
 # Only mock if genuinely missing (not if already imported)
 _OPTIONAL_DEPENDENCIES = [
     "tiktoken",  # Often missing, used by LLM clients
     "aiofiles",  # Required by generator.main.api
     "aiofiles.os",  # Required by test_generation modules
     "backoff",  # Required by generator.main.api
-    "fastapi",  # Required by generator.main.api
-    "fastapi.security",  # Required by generator.main.api
-    "fastapi.testclient",  # Required by test files
     "uvicorn",  # Required by generator.main
     "jwt",  # Required by generator.main.api
     "sqlalchemy",  # Required by many modules
@@ -200,7 +222,6 @@ _OPTIONAL_DEPENDENCIES = [
     "deap",  # Evolutionary algorithms
     "langchain_openai",  # LangChain OpenAI integration
     "cerberus",  # Schema validation - required by policy module
-    "pydantic",  # Data validation - required by bug_manager and other modules
     # Note: prometheus_client, aiohttp, and aiosqlite should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
@@ -250,6 +271,10 @@ if "botocore.exceptions" not in sys.modules:
         sys.modules["botocore.exceptions"] = botocore_exc_module
 
 for dep in _OPTIONAL_DEPENDENCIES:
+    # Skip packages that should never be mocked
+    if any(dep == never_mock or dep.startswith(never_mock + ".") for never_mock in _NEVER_MOCK):
+        continue
+    
     if dep not in sys.modules:
         try:
             __import__(dep)
