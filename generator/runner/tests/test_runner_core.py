@@ -17,7 +17,9 @@ from prometheus_client import REGISTRY
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Mock external dependencies
-sys.modules["aiohttp"] = MagicMock()
+# NOTE: Do NOT mock aiohttp, pydantic, or fastapi - they are needed for proper
+# type annotations and decorator evaluation at import time
+# sys.modules["aiohttp"] = MagicMock()  # REMOVED - causes type annotation errors
 sys.modules["backoff"] = MagicMock()
 sys.modules["opentelemetry"] = MagicMock()
 sys.modules["opentelemetry.trace"] = MagicMock()

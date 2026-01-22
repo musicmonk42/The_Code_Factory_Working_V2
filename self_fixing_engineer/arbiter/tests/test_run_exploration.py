@@ -22,6 +22,7 @@ def _create_package_mock(name):
 
 # Store original modules for later restoration
 _ORIGINAL_MODULES = {}
+# NOTE: Removed fastapi and aiohttp from _MOCKED_MODULE_NAMES as they should not be mocked
 _MOCKED_MODULE_NAMES = [
     "arbiter.config",
     "arbiter.arena",
@@ -33,11 +34,8 @@ _MOCKED_MODULE_NAMES = [
     "opentelemetry.sdk.trace",
     "opentelemetry.sdk.trace.export",
     "opentelemetry.exporter.otlp.proto.http.trace_exporter",
-    "aiohttp",
     "prometheus_client",
     "tenacity",
-    "fastapi.security",
-    "fastapi",
     "aiofiles",
 ]
 
@@ -47,18 +45,30 @@ for mod_name in _MOCKED_MODULE_NAMES:
         _ORIGINAL_MODULES[mod_name] = sys.modules[mod_name]
 
 # We need to patch imports before importing the module under test
-sys.modules["arbiter.config"] = MagicMock()
-sys.modules["arbiter.arena"] = MagicMock()
-sys.modules["arbiter.arbiter"] = MagicMock()
-sys.modules["arbiter_plugin_registry"] = MagicMock()
-sys.modules["arbiter.logging_utils"] = MagicMock()
-sys.modules["sqlalchemy.ext.asyncio"] = MagicMock()
-sys.modules["opentelemetry"] = _create_package_mock("opentelemetry")
-sys.modules["opentelemetry.sdk.trace"] = _create_package_mock("opentelemetry.sdk.trace")
-sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
-sys.modules["opentelemetry.exporter.otlp.proto.http.trace_exporter"] = MagicMock()
-sys.modules["aiohttp"] = MagicMock()
-sys.modules["prometheus_client"] = _create_package_mock("prometheus_client")
+# CRITICAL: Do NOT mock pydantic, fastapi, or aiohttp if they're already loaded
+# as they are needed for proper type annotations and decorator evaluation
+_NEVER_MOCK_MODULES = {"pydantic", "pydantic_settings", "pydantic_core", "fastapi", "starlette", "aiohttp"}
+
+def _safe_mock_module(name, mock_obj=None):
+    """Only mock a module if it's not in the never-mock list and not already properly loaded."""
+    if name.split(".")[0] in _NEVER_MOCK_MODULES:
+        return  # Skip - these modules should not be mocked
+    if name in sys.modules and not isinstance(sys.modules[name], MagicMock):
+        return  # Skip - already has a real implementation
+    sys.modules[name] = mock_obj if mock_obj else MagicMock()
+
+_safe_mock_module("arbiter.config")
+_safe_mock_module("arbiter.arena")
+_safe_mock_module("arbiter.arbiter")
+_safe_mock_module("arbiter_plugin_registry")
+_safe_mock_module("arbiter.logging_utils")
+_safe_mock_module("sqlalchemy.ext.asyncio")
+_safe_mock_module("opentelemetry", _create_package_mock("opentelemetry"))
+_safe_mock_module("opentelemetry.sdk.trace", _create_package_mock("opentelemetry.sdk.trace"))
+_safe_mock_module("opentelemetry.sdk.trace.export")
+_safe_mock_module("opentelemetry.exporter.otlp.proto.http.trace_exporter")
+# NOTE: aiohttp is in _NEVER_MOCK_MODULES, so it won't be mocked
+_safe_mock_module("prometheus_client", _create_package_mock("prometheus_client"))
 
 
 # Mock tenacity properly to preserve async functions
@@ -77,10 +87,11 @@ tenacity_mock.stop_after_attempt = lambda x: None
 tenacity_mock.wait_exponential = lambda **kw: None
 tenacity_mock.retry_if_exception_type = lambda x: None
 tenacity_mock.RetryError = Exception  # Add RetryError as a real exception class
-sys.modules["tenacity"] = tenacity_mock
+_safe_mock_module("tenacity", tenacity_mock)
 
-sys.modules["fastapi.security"] = MagicMock()
-sys.modules["fastapi"] = MagicMock()
+# NOTE: fastapi is in _NEVER_MOCK_MODULES, so it won't be mocked
+_safe_mock_module("fastapi.security")
+# fastapi itself is protected by _NEVER_MOCK_MODULES
 
 
 # Create a proper async mock for aiofiles

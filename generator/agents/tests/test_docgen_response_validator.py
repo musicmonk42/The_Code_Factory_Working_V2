@@ -171,8 +171,9 @@ sys.modules["nltk.corpus"] = mock_corpus
 sys.modules["tiktoken"] = MagicMock()
 sys.modules["jinja2"] = MagicMock()
 sys.modules["aiofiles"] = MagicMock()
-sys.modules["fastapi"] = MagicMock()
-sys.modules["pydantic"] = MagicMock()
+# NOTE: Do NOT mock pydantic or fastapi - these modules are needed for proper
+# class definition with decorators like @field_validator at import time.
+# Mocking them causes PydanticUserError during test collection.
 sys.modules["uvicorn"] = MagicMock()
 
 # === CRITICAL FIX: Properly mock watchdog with inheritance support ===

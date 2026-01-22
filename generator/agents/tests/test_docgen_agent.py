@@ -61,24 +61,27 @@ sys.modules["sphinx.cmd.build"] = MagicMock()
 sys.modules["plantuml"] = MagicMock()
 
 # --- Mock other top-level imports (FIXED AIOHTTP MOCKING) ---
-mock_aiohttp = type(sys)("aiohttp")
-mock_aiohttp.web = MagicMock()
-mock_aiohttp.web_routedef = MagicMock()
-mock_aiohttp.web_request = MagicMock()
-mock_aiohttp.web_response = MagicMock()
-mock_aiohttp.ClientError = type("ClientError", (Exception,), {})
+# Only mock aiohttp if not already loaded with the real module
+# This prevents breaking type annotations in other modules
+if "aiohttp" not in sys.modules or isinstance(sys.modules.get("aiohttp"), MagicMock):
+    mock_aiohttp = type(sys)("aiohttp")
+    mock_aiohttp.web = MagicMock()
+    mock_aiohttp.web_routedef = MagicMock()
+    mock_aiohttp.web_request = MagicMock()
+    mock_aiohttp.web_response = MagicMock()
+    mock_aiohttp.ClientError = type("ClientError", (Exception,), {})
 
-setattr(mock_aiohttp, "web", mock_aiohttp.web)
-setattr(mock_aiohttp, "web_routedef", mock_aiohttp.web_routedef)
-setattr(mock_aiohttp, "web_request", mock_aiohttp.web_request)
-setattr(mock_aiohttp, "web_response", mock_aiohttp.web_response)
-setattr(mock_aiohttp, "ClientError", mock_aiohttp.ClientError)
+    setattr(mock_aiohttp, "web", mock_aiohttp.web)
+    setattr(mock_aiohttp, "web_routedef", mock_aiohttp.web_routedef)
+    setattr(mock_aiohttp, "web_request", mock_aiohttp.web_request)
+    setattr(mock_aiohttp, "web_response", mock_aiohttp.web_response)
+    setattr(mock_aiohttp, "ClientError", mock_aiohttp.ClientError)
 
-sys.modules["aiohttp"] = mock_aiohttp
-sys.modules["aiohttp.web"] = mock_aiohttp.web
-sys.modules["aiohttp.web_routedef"] = mock_aiohttp.web_routedef
-sys.modules["aiohttp.web_request"] = mock_aiohttp.web_request
-sys.modules["aiohttp.web_response"] = mock_aiohttp.web_response
+    sys.modules["aiohttp"] = mock_aiohttp
+    sys.modules["aiohttp.web"] = mock_aiohttp.web
+    sys.modules["aiohttp.web_routedef"] = mock_aiohttp.web_routedef
+    sys.modules["aiohttp.web_request"] = mock_aiohttp.web_request
+    sys.modules["aiohttp.web_response"] = mock_aiohttp.web_response
 
 sys.modules["tiktoken"] = MagicMock()
 sys.modules["aiofiles"] = MagicMock()

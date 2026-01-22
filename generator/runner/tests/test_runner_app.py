@@ -131,7 +131,9 @@ sys.modules["textual.timer"].Timer = MagicMock()
 # --- END TEXTUAL MOCKS ---
 
 # Mock other external dependencies
-sys.modules["aiohttp"] = MagicMock()
+# NOTE: Do NOT mock aiohttp, pydantic, or fastapi - they are needed for proper
+# type annotations and decorator evaluation at import time
+# sys.modules["aiohttp"] = MagicMock()  # REMOVED - causes type annotation errors
 sys.modules["opentelemetry"] = MagicMock()
 sys.modules["opentelemetry.trace"] = MagicMock()
 sys.modules["opentelemetry.sdk.trace"] = MagicMock()
