@@ -283,10 +283,9 @@ def _get_metrics() -> Dict[str, Any]:
                 """
                 Helper function to get existing metric or create new one.
                 Prevents 'Duplicated timeseries in CollectorRegistry' errors
-                when modules are imported multiple times or in parallel.
+                by checking registry BEFORE creating metrics.
                 
-                Uses try-except pattern to handle metric creation idempotently,
-                which is more robust than accessing private registry attributes.
+                Industry best practice: Check first to avoid any duplication errors.
                 
                 Args:
                     metric_class: Counter, Gauge, or Histogram class
@@ -297,21 +296,33 @@ def _get_metrics() -> Dict[str, Any]:
                 Returns:
                     Existing or newly created metric
                 """
-                # Try to create the metric; if it already exists, the exception
-                # will be caught and we'll retrieve the existing one
+                # CRITICAL: Check if metric exists BEFORE attempting creation
+                # This prevents any ValueError from being raised in the first place
+                if hasattr(REGISTRY, '_names_to_collectors'):
+                    existing = REGISTRY._names_to_collectors.get(name)
+                    if existing is not None:
+                        logger.debug(
+                            f"Reusing existing metric: {name}",
+                            extra={"data_classification": "internal"},
+                        )
+                        return existing
+                
+                # Metric doesn't exist - safe to create
                 try:
                     if labelnames:
                         return metric_class(name, documentation, labelnames)
                     return metric_class(name, documentation)
                 except ValueError as e:
-                    # Metric already exists - retrieve it from the registry
-                    # This approach is more future-proof than accessing _names_to_collectors
-                    if "Duplicated timeseries" in str(e):
-                        # Access the private attribute as fallback since there's no public API
-                        # This is the recommended approach per prometheus_client docs
-                        if hasattr(REGISTRY, '_names_to_collectors') and name in REGISTRY._names_to_collectors:
-                            return REGISTRY._names_to_collectors[name]
-                    raise  # Re-raise if it's a different ValueError
+                    # Last resort: if creation still fails, retrieve from registry
+                    if "Duplicated timeseries" in str(e) and hasattr(REGISTRY, '_names_to_collectors'):
+                        existing = REGISTRY._names_to_collectors.get(name)
+                        if existing is not None:
+                            logger.warning(
+                                f"Metric {name} was created concurrently, reusing existing",
+                                extra={"data_classification": "internal"},
+                            )
+                            return existing
+                    raise  # Re-raise if it's a different error
             
             _metrics_registry = {
                 "init_duration": get_or_create_metric(
