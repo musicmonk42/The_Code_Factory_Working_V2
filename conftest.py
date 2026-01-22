@@ -1,5 +1,6 @@
 import os
 import sys
+import types
 
 # Add the project root to Python path
 project_root = os.path.abspath(os.path.dirname(__file__))
