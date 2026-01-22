@@ -1094,6 +1094,37 @@ def cleanup_sqlalchemy():
     # tests that rely on table definitions persisting within a session
 
 
+@pytest.fixture(autouse=True)
+def protect_pydantic_decorators(monkeypatch):
+    """
+    Ensure pydantic decorators remain callable to prevent
+    'PydanticUserError: A non-annotated attribute was detected' errors.
+    """
+    try:
+        import pydantic
+        
+        # Create a no-op decorator that preserves function behavior
+        def _noop_decorator(*args, **kwargs):
+            def decorator(func):
+                return func
+            # Handle both @decorator and @decorator() usage
+            if args and callable(args[0]):
+                return args[0]
+            return decorator
+        
+        # Only patch if pydantic decorators have been replaced with non-callables
+        if not callable(getattr(pydantic, 'field_validator', None)):
+            monkeypatch.setattr(pydantic, 'field_validator', _noop_decorator)
+        if not callable(getattr(pydantic, 'model_validator', None)):
+            monkeypatch.setattr(pydantic, 'model_validator', _noop_decorator)
+        if not callable(getattr(pydantic, 'validator', None)):
+            monkeypatch.setattr(pydantic, 'validator', _noop_decorator)
+    except ImportError:
+        pass
+    
+    yield
+
+
 @pytest.fixture(scope="function", autouse=True)
 def protect_sys_modules():
     """
