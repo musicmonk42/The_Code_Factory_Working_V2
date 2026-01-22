@@ -7,7 +7,7 @@ import pytest
 # Set test environment variables BEFORE any arbiter imports
 os.environ["TESTING"] = "1"
 os.environ["AWS_REGION"] = ""  # Disable AWS SSM lookup
-os.environ.setdefault("FALLBACK_ENCRYPTION_KEY", "dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcw==")  # base64 32-byte key
+os.environ.setdefault("FALLBACK_ENCRYPTION_KEY", "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=")  # base64 32-byte key
 
 # Mock botocore exceptions BEFORE importing encryption module
 # This prevents "catching classes that do not inherit from BaseException" errors
@@ -59,7 +59,7 @@ def mock_aws_ssm():
         mock_ssm = MagicMock()
         mock_ssm.get_parameter.return_value = {
             'Parameter': {
-                'Value': 'dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcw=='  # base64 32-byte key
+                'Value': 'dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ='  # base64 32-byte key
             }
         }
         mock_client.return_value = mock_ssm

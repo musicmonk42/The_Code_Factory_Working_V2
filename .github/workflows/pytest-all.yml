@@ -236,7 +236,7 @@ jobs:
         env:
           TESTING: "1"
           AWS_REGION: ""
-          FALLBACK_ENCRYPTION_KEY: "dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcw=="
+          FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
           
