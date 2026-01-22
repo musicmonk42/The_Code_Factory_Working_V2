@@ -244,13 +244,13 @@ jobs:
           python -c "import gc; gc.collect(); print('Garbage collection completed')"
           
           echo ""
-          echo "=== Running tests from tests/ directory ==="
+          echo "=== Running ALL tests (pytest discovers from pyproject.toml) ==="
           
-          # Run pytest directly on tests/ directory to avoid generator/conftest.py segfaults
-          # Let pytest handle collection internally with better error reporting
+          # Run pytest without path argument to use testpaths from pyproject.toml
+          # This discovers and runs tests from all 27+ configured test directories
           # Capture exit code to provide better diagnostics
           set +e  # Don't exit on error, we want to handle it
-          pytest tests/ \
+          pytest \
             --maxfail=50 \
             --timeout=300 \
             --cov=generator \
@@ -276,14 +276,17 @@ jobs:
             echo "PYTHONPATH=$PYTHONPATH"
             echo "PWD=$PWD"
             echo ""
-            echo "=== Checking tests directory ==="
-            ls -la tests/ || echo "tests/ directory not found"
-            echo ""
-            echo "=== Available test files ==="
-            find tests/ -name "test_*.py" -type f || echo "No test files found"
+            echo "=== Checking test directories ==="
+            for test_dir in tests generator/tests omnicore_engine/tests self_fixing_engineer/tests; do
+              if [ -d "$test_dir" ]; then
+                echo "✓ $test_dir exists ($(find $test_dir -name 'test_*.py' 2>/dev/null | wc -l) test files)"
+              else
+                echo "✗ $test_dir not found"
+              fi
+            done
             echo ""
             echo "=== Attempting to collect tests with verbose output ==="
-            pytest tests/ --collect-only -v; DIAG_EXIT=$?
+            pytest --collect-only -v; DIAG_EXIT=$?
             echo "Diagnostic collection exit code: $DIAG_EXIT"
             exit 1
           elif [ $PYTEST_EXIT -ne 0 ]; then
