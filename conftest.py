@@ -39,7 +39,12 @@ def _create_mock_module(name):
         - As an attribute chain: mock.sub.module.attr
         - As a context manager: with mock.context():
         - As a generic type: mock.Type[str]
+        - As a class instantiation: mock.Class(args)
         """
+
+        def __init__(self, *args, **kwargs):
+            """Accept any arguments during instantiation."""
+            pass
 
         def __call__(self, *args, **kwargs):
             # When used as a decorator, return the original function/class unchanged
