@@ -1147,6 +1147,49 @@ def _cleanup_sqlalchemy_metadata():
         pass
 
 
+# ---- Fix modules without __spec__ ----
+def _ensure_module_specs():
+    """
+    Ensure all modules in sys.modules have __spec__ attribute.
+    Some test files create modules with types.ModuleType() without setting __spec__,
+    which causes 'AttributeError: __spec__' or 'ValueError: xxx.__spec__ is not set'.
+    """
+    import importlib.util
+    
+    for name, module in list(sys.modules.items()):
+        if module is not None and isinstance(module, types.ModuleType):
+            if not hasattr(module, '__spec__') or module.__spec__ is None:
+                try:
+                    module.__spec__ = importlib.util.spec_from_loader(name, loader=None)
+                except Exception:
+                    pass  # Some modules can't have spec set
+            if not hasattr(module, '__path__'):
+                # Only set __path__ if this looks like a package (has submodules)
+                if any(m.startswith(name + '.') for m in sys.modules):
+                    module.__path__ = []
+
+
+# Run the spec fix at import time
+_ensure_module_specs()
+
+
+# ---- Pytest hooks for collection-time fixes ----
+def pytest_collectstart(collector):
+    """
+    Hook called before collection starts for a collector.
+    Ensures all modules have __spec__ to prevent collection errors.
+    """
+    _ensure_module_specs()
+
+
+def pytest_collection_finish(session):
+    """
+    Hook called after test collection is complete.
+    Final pass to ensure all modules have __spec__.
+    """
+    _ensure_module_specs()
+
+
 # ---- pytest_plugins configuration ----
 # Move from nested conftest files to top-level to avoid pytest deprecation warning
 pytest_plugins = ["pytest_asyncio"]
@@ -1171,6 +1214,18 @@ def cleanup_chromadb_session():
     _cleanup_chromadb_singleton()
     yield
     _cleanup_chromadb_singleton()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_module_specs():
+    """
+    Ensure all modules have __spec__ attribute at session start.
+    This prevents 'AttributeError: __spec__' errors during test collection.
+    """
+    _ensure_module_specs()
+    yield
+    # Also run at end in case modules were added during tests
+    _ensure_module_specs()
 
 
 @pytest.fixture(scope="function", autouse=True)
