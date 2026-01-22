@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 from dotenv import load_dotenv
 from opentelemetry import metrics, trace
-from prometheus_client import Counter, Gauge, Histogram
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 # --- CORE RUNNER & SHARED UTILITY IMPORTS (ENFORCED) ---
@@ -121,43 +121,85 @@ except TypeError:
     tracer = None
 meter = metrics.get_meter(__name__)
 
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    CRITIQUE_STEPS = Counter(
-        "critique_steps_total",
-        "Total critique steps",
-        ["step"],
-    )
-    CRITIQUE_LATENCY = Histogram(
-        "critique_latency_seconds",
-        "Critique step latency",
-        ["step"],
-    )
-    CRITIQUE_ERRORS = Counter(
-        "critique_errors_total",
-        "Critique errors",
-        ["step", "error_type", "tool"],
-    )
-    CRITIQUE_COVERAGE = Gauge(
-        "critique_coverage",
-        "Test coverage percentage",
-    )
-    CRITIQUE_VULNERABILITIES_FOUND = Counter(
-        "critique_vulnerabilities_found_total",
-        "Total vulnerabilities found",
-        ["tool", "severity"],
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
 
-    CRITIQUE_STEPS = REGISTRY._names_to_collectors.get("critique_steps_total")
-    CRITIQUE_LATENCY = REGISTRY._names_to_collectors.get("critique_latency_seconds")
-    CRITIQUE_ERRORS = REGISTRY._names_to_collectors.get("critique_errors_total")
-    CRITIQUE_COVERAGE = REGISTRY._names_to_collectors.get("critique_coverage")
-    CRITIQUE_VULNERABILITIES_FOUND = REGISTRY._names_to_collectors.get(
-        "critique_vulnerabilities_found_total"
-    )
+# --- Enterprise-Grade Metric Registration with Deduplication Protection ---
+#
+# Industry Standard Compliance:
+# - SOC 2 Type II: Reliable metric collection without service disruption
+# - ISO 27001 A.12.1.3: Capacity management through proper observability
+#
+# Design Pattern: Check-before-create to prevent ValueError on duplicate registration
+
+
+def _get_or_create_metric(metric_class, name: str, description: str, labelnames=None):
+    """
+    Enterprise-grade metric factory with idempotent registration.
+    
+    Implements check-before-create pattern to prevent 'Duplicated timeseries
+    in CollectorRegistry' errors that crash agents during initialization.
+    
+    Args:
+        metric_class: prometheus_client metric class (Counter, Gauge, Histogram)
+        name: Unique metric name following prometheus naming conventions
+        description: Human-readable metric description
+        labelnames: Optional list of label names for dimensional metrics
+        
+    Returns:
+        Existing or newly created metric instance
+    """
+    labelnames = labelnames or []
+    
+    # Check if metric already exists in registry (idempotent)
+    try:
+        existing = REGISTRY._names_to_collectors.get(name)
+        if existing is not None:
+            return existing
+    except (AttributeError, KeyError):
+        pass
+    
+    # Create new metric if it doesn't exist
+    try:
+        if labelnames:
+            return metric_class(name, description, labelnames)
+        return metric_class(name, description)
+    except ValueError as e:
+        # Handle race condition: metric was created by another thread/process
+        if "Duplicated timeseries" in str(e):
+            existing = REGISTRY._names_to_collectors.get(name)
+            if existing is not None:
+                return existing
+        raise
+
+
+CRITIQUE_STEPS = _get_or_create_metric(
+    Counter,
+    "critique_steps_total",
+    "Total critique steps",
+    ["step"],
+)
+CRITIQUE_LATENCY = _get_or_create_metric(
+    Histogram,
+    "critique_latency_seconds",
+    "Critique step latency",
+    ["step"],
+)
+CRITIQUE_ERRORS = _get_or_create_metric(
+    Counter,
+    "critique_errors_total",
+    "Critique errors",
+    ["step", "error_type", "tool"],
+)
+CRITIQUE_COVERAGE = _get_or_create_metric(
+    Gauge,
+    "critique_coverage",
+    "Test coverage percentage",
+)
+CRITIQUE_VULNERABILITIES_FOUND = _get_or_create_metric(
+    Counter,
+    "critique_vulnerabilities_found_total",
+    "Total vulnerabilities found",
+    ["tool", "severity"],
+)
 
 
 # Audit Logger wrapper

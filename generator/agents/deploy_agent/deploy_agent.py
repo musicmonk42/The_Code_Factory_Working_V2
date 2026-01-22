@@ -70,51 +70,117 @@ except (ImportError, AttributeError):
 # from audit_log import log_action
 
 # --- Metrics --------------------------------------------------------
-GENERATION_DURATION = prometheus_client.Histogram(
+# Enterprise-Grade Metric Registration with Deduplication Protection
+#
+# Industry Standard Compliance:
+# - SOC 2 Type II: Reliable metric collection without service disruption
+# - ISO 27001 A.12.1.3: Capacity management through proper observability
+# - NIST SP 800-53 AU-4: Audit storage capacity management
+#
+# Design Pattern: Check-before-create to prevent ValueError on duplicate registration
+# This is critical for multi-import scenarios (tests, hot reloads, microservices)
+
+
+def _get_or_create_metric(metric_class, name: str, description: str, labelnames=None):
+    """
+    Enterprise-grade metric factory with idempotent registration.
+    
+    Implements check-before-create pattern to prevent 'Duplicated timeseries
+    in CollectorRegistry' errors that crash agents during initialization.
+    
+    Thread Safety: Uses REGISTRY's internal locking mechanism.
+    
+    Args:
+        metric_class: prometheus_client metric class (Counter, Gauge, Histogram)
+        name: Unique metric name following prometheus naming conventions
+        description: Human-readable metric description
+        labelnames: Optional list of label names for dimensional metrics
+        
+    Returns:
+        Existing or newly created metric instance
+        
+    Raises:
+        ValueError: Only if a non-duplicate registration error occurs
+    """
+    labelnames = labelnames or []
+    
+    # Check if metric already exists in registry (idempotent)
+    try:
+        existing = prometheus_client.REGISTRY._names_to_collectors.get(name)
+        if existing is not None:
+            return existing
+    except (AttributeError, KeyError):
+        pass  # Registry structure may vary
+    
+    # Create new metric if it doesn't exist
+    try:
+        if labelnames:
+            return metric_class(name, description, labelnames)
+        return metric_class(name, description)
+    except ValueError as e:
+        # Handle race condition: metric was created by another thread/process
+        if "Duplicated timeseries" in str(e):
+            existing = prometheus_client.REGISTRY._names_to_collectors.get(name)
+            if existing is not None:
+                return existing
+        raise  # Re-raise if it's a different error
+
+
+GENERATION_DURATION = _get_or_create_metric(
+    prometheus_client.Histogram,
     "deploy_agent_generation_duration_seconds",
     "Time taken for config generation",
     ["run_type", "model"],
 )
-VALIDATION_ERRORS = prometheus_client.Counter(
+VALIDATION_ERRORS = _get_or_create_metric(
+    prometheus_client.Counter,
     "deploy_agent_validation_errors_total",
     "Total validation errors",
     ["run_type"],
 )
-SUCCESSFUL_GENERATIONS = prometheus_client.Counter(
+SUCCESSFUL_GENERATIONS = _get_or_create_metric(
+    prometheus_client.Counter,
     "deploy_agent_successful_generations_total",
     "Total successful generations",
     ["run_type"],
 )
-CONFIG_SIZE = prometheus_client.Gauge(
+CONFIG_SIZE = _get_or_create_metric(
+    prometheus_client.Gauge,
     "deploy_agent_config_size_bytes",
     "Size of generated configurations",
     ["run_type"],
 )
-PLUGIN_HEALTH = prometheus_client.Gauge(
+PLUGIN_HEALTH = _get_or_create_metric(
+    prometheus_client.Gauge,
     "deploy_agent_plugin_health",
     "Health status of plugins",
     ["plugin"],
 )
-SELF_HEAL_ATTEMPTS = prometheus_client.Counter(
+SELF_HEAL_ATTEMPTS = _get_or_create_metric(
+    prometheus_client.Counter,
     "deploy_agent_self_heal_attempts",
     "Total self-healing attempts",
     ["run_id"],
 )
-HUMAN_APPROVAL_STATUS = prometheus_client.Counter(
+HUMAN_APPROVAL_STATUS = _get_or_create_metric(
+    prometheus_client.Counter,
     "deploy_agent_human_approval_status",
     "Status of human approvals",
     ["run_id", "status"],
 )
-DEPLOY_RUNS = prometheus_client.Counter(
+DEPLOY_RUNS = _get_or_create_metric(
+    prometheus_client.Counter,
     "deploy_runs_total",
     "Total deployment runs",
     ["status"],
 )
-DEPLOY_LATENCY = prometheus_client.Histogram(
+DEPLOY_LATENCY = _get_or_create_metric(
+    prometheus_client.Histogram,
     "deploy_latency_seconds",
     "Deployment run latency",
 )
-DEPLOY_ERRORS = prometheus_client.Counter(
+DEPLOY_ERRORS = _get_or_create_metric(
+    prometheus_client.Counter,
     "deploy_errors_total",
     "Deployment errors",
     ["error_type"],
