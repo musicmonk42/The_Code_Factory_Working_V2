@@ -306,3 +306,17 @@ class TestLanguageDetection:
         
         readme = "# Node Project\n\nInstall with npm install. Uses nodejs runtime."
         assert detect_language_from_content(readme) == "javascript"
+    
+    def test_npm_at_start_of_line(self):
+        """Test npm detection at beginning of line."""
+        from server.routers.generator import detect_language_from_content
+        
+        readme = "# Project\n\nnpm install to get started."
+        assert detect_language_from_content(readme) == "javascript"
+    
+    def test_npm_with_punctuation(self):
+        """Test npm detection with punctuation."""
+        from server.routers.generator import detect_language_from_content
+        
+        readme = "# Project\n\nRun npm, then start the server."
+        assert detect_language_from_content(readme) == "javascript"

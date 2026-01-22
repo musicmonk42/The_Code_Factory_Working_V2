@@ -6,6 +6,7 @@ Handles file uploads and generator-specific operations.
 
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -59,13 +60,15 @@ def detect_language_from_content(readme_content: str) -> str:
     if "typescript" in readme_lower:
         return "typescript"
     
-    # JavaScript check with common patterns
-    if "javascript" in readme_lower or "node.js" in readme_lower or "nodejs" in readme_lower or " npm " in readme_lower:
+    # JavaScript check with common patterns, using word boundaries for npm
+    if ("javascript" in readme_lower or 
+        "node.js" in readme_lower or 
+        "nodejs" in readme_lower or 
+        re.search(r'\bnpm\b', readme_lower)):
         return "javascript"
     
-    # Java check - avoid matching "javascript" by checking it's not already classified
-    # Use word boundaries to match "java " or "java." or "java\n" but not "javascript"
-    import re
+    # Java check - avoid matching "javascript" by using word boundary
+    # Pattern: matches "java " or "java." but not "javascript"
     if re.search(r'\bjava\b(?!script)', readme_lower, re.IGNORECASE):
         return "java"
     
