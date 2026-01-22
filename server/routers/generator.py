@@ -5,6 +5,7 @@ Handles file uploads and generator-specific operations.
 """
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -39,6 +40,34 @@ def get_generator_service() -> GeneratorService:
     return GeneratorService(omnicore_service=omnicore)
 
 
+def detect_language_from_content(readme_content: str) -> str:
+    """
+    Detect programming language from README content using keyword analysis.
+    
+    Args:
+        readme_content: Content of the README file
+        
+    Returns:
+        Detected language (defaults to 'python' if no match found)
+    """
+    readme_lower = readme_content.lower()
+    
+    # Check for language-specific keywords in priority order
+    if "typescript" in readme_lower:
+        return "typescript"
+    elif "javascript" in readme_lower or "node.js" in readme_lower or "npm" in readme_lower:
+        return "javascript"
+    elif "java" in readme_lower and "javascript" not in readme_lower:
+        return "java"
+    elif "go" in readme_lower or "golang" in readme_lower:
+        return "go"
+    elif "rust" in readme_lower:
+        return "rust"
+    
+    # Default to Python
+    return "python"
+
+
 async def _trigger_pipeline_background(
     job_id: str,
     readme_content: str,
@@ -55,19 +84,9 @@ async def _trigger_pipeline_background(
     try:
         logger.info(f"Auto-triggering full pipeline for job {job_id}")
         
-        # Auto-detect language from README content (simple heuristic)
-        language = "python"  # Default to Python
-        readme_lower = readme_content.lower()
-        if "javascript" in readme_lower or "node.js" in readme_lower or "npm" in readme_lower:
-            language = "javascript"
-        elif "typescript" in readme_lower:
-            language = "typescript"
-        elif "java" in readme_lower and "javascript" not in readme_lower:
-            language = "java"
-        elif "go" in readme_lower or "golang" in readme_lower:
-            language = "go"
-        elif "rust" in readme_lower:
-            language = "rust"
+        # Auto-detect language from README content
+        language = detect_language_from_content(readme_content)
+        logger.info(f"Auto-detected language '{language}' for job {job_id}")
         
         # Run full pipeline with sensible defaults
         result = await generator_service.run_full_pipeline(
@@ -224,8 +243,8 @@ async def upload_files(
         if filename_lower.endswith('.md'):
             readme_files.append(file.filename)
             # Store README content for pipeline trigger
-            # Check if this is a README file (readme.md or just README in various formats)
-            base_name = filename_lower.replace('.md', '')
+            # Check if this is a README file using proper path handling
+            base_name, _ = os.path.splitext(filename_lower)
             if not readme_content and 'readme' in base_name:
                 try:
                     readme_content = content.decode('utf-8')

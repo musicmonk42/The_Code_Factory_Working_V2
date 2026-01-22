@@ -21,13 +21,23 @@ from server.utils.agent_loader import get_agent_loader
 
 logger = logging.getLogger(__name__)
 
-# Import configuration
+# Import configuration and helper functions
 try:
-    from server.config import get_agent_config, get_llm_config
+    from server.config import (
+        detect_available_llm_provider,
+        get_agent_config,
+        get_default_model_for_provider,
+        get_llm_config,
+    )
     CONFIG_AVAILABLE = True
 except ImportError:
     logger.warning("server.config not available, using default configuration")
     CONFIG_AVAILABLE = False
+    # Provide fallback implementations
+    def detect_available_llm_provider():
+        return None
+    def get_default_model_for_provider(provider):
+        return "gpt-4"
 
 # In-memory storage for clarification sessions
 _clarification_sessions = {}
@@ -208,8 +218,6 @@ class OmniCoreService:
         if not self.llm_config:
             # Fallback configuration when config module not available
             # Try to auto-detect from environment
-            from server.config import detect_available_llm_provider, get_default_model_for_provider
-            
             auto_provider = detect_available_llm_provider()
             if auto_provider:
                 logger.info(f"Auto-detected LLM provider: {auto_provider}")
@@ -230,8 +238,6 @@ class OmniCoreService:
         
         # Auto-detect if the default provider is not configured
         if not self.llm_config.is_provider_configured(provider):
-            from server.config import detect_available_llm_provider, get_default_model_for_provider
-            
             logger.warning(
                 f"Default LLM provider '{provider}' is not configured. "
                 "Attempting auto-detection..."

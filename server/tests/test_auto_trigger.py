@@ -208,34 +208,65 @@ This is a Python project that does something interesting.
 class TestLanguageDetection:
     """Test suite for language auto-detection from README content."""
     
-    def test_detect_python(self):
+    def test_detect_python_default(self):
+        """Test that Python is the default when no specific language is mentioned."""
+        from server.routers.generator import detect_language_from_content
+        
+        readme = "# My Project\n\nThis is a generic project."
+        assert detect_language_from_content(readme) == "python"
+    
+    def test_detect_python_explicit(self):
         """Test detection of Python projects."""
+        from server.routers.generator import detect_language_from_content
+        
         readme = "# Python Project\n\nThis is a Python application."
-        # The language detection happens in the background task
-        # We just verify the logic would work correctly
-        assert "python" in readme.lower()
+        assert detect_language_from_content(readme) == "python"
     
     def test_detect_javascript(self):
         """Test detection of JavaScript projects."""
+        from server.routers.generator import detect_language_from_content
+        
         readme = "# JavaScript Project\n\nBuilt with Node.js and npm."
-        assert "javascript" in readme.lower() or "node.js" in readme.lower()
+        assert detect_language_from_content(readme) == "javascript"
     
     def test_detect_typescript(self):
         """Test detection of TypeScript projects."""
+        from server.routers.generator import detect_language_from_content
+        
         readme = "# TypeScript Project\n\nA modern TypeScript application."
-        assert "typescript" in readme.lower()
+        assert detect_language_from_content(readme) == "typescript"
     
     def test_detect_java(self):
         """Test detection of Java projects."""
+        from server.routers.generator import detect_language_from_content
+        
         readme = "# Java Application\n\nA Java-based microservice."
-        assert "java" in readme.lower()
+        assert detect_language_from_content(readme) == "java"
     
     def test_detect_go(self):
         """Test detection of Go projects."""
+        from server.routers.generator import detect_language_from_content
+        
         readme = "# Go Service\n\nA golang microservice."
-        assert "go" in readme.lower() or "golang" in readme.lower()
+        assert detect_language_from_content(readme) == "go"
     
     def test_detect_rust(self):
         """Test detection of Rust projects."""
+        from server.routers.generator import detect_language_from_content
+        
         readme = "# Rust CLI\n\nA fast Rust command-line tool."
-        assert "rust" in readme.lower()
+        assert detect_language_from_content(readme) == "rust"
+    
+    def test_typescript_priority_over_javascript(self):
+        """Test that TypeScript is detected even if JavaScript is also mentioned."""
+        from server.routers.generator import detect_language_from_content
+        
+        readme = "# Project\n\nBuilt with TypeScript, compiles to JavaScript."
+        assert detect_language_from_content(readme) == "typescript"
+    
+    def test_java_not_confused_with_javascript(self):
+        """Test that Java is not confused with JavaScript."""
+        from server.routers.generator import detect_language_from_content
+        
+        readme = "# Java Project\n\nBuilt with Java 17."
+        assert detect_language_from_content(readme) == "java"
