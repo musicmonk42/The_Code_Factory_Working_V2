@@ -48,6 +48,8 @@ def _create_mock_module(name):
 
         def __call__(self, *args, **kwargs):
             # When used as a decorator, handle Pydantic validators specially
+            import inspect
+            
             if len(args) == 1:
                 arg = args[0]
                 # If it's a function/method being decorated
@@ -55,14 +57,13 @@ def _create_mock_module(name):
                     # For Pydantic validators, ensure it's a classmethod
                     if not isinstance(arg, classmethod):
                         # Check if this looks like a validator (has 'cls' as first param)
-                        import inspect
                         try:
                             sig = inspect.signature(arg)
                             params = list(sig.parameters.keys())
                             if params and params[0] == 'cls':
                                 # This is likely a Pydantic validator, wrap as classmethod
                                 return classmethod(arg)
-                        except:
+                        except (TypeError, ValueError, AttributeError):
                             pass
                     # Return the original function/classmethod unchanged
                     return arg
@@ -71,13 +72,12 @@ def _create_mock_module(name):
                     def validator_decorator(func):
                         # Wrap in classmethod if needed
                         if not isinstance(func, classmethod):
-                            import inspect
                             try:
                                 sig = inspect.signature(func)
                                 params = list(sig.parameters.keys())
                                 if params and params[0] == 'cls':
                                     return classmethod(func)
-                            except:
+                            except (TypeError, ValueError, AttributeError):
                                 pass
                         return func
                     return validator_decorator
@@ -201,15 +201,16 @@ def _create_mock_module(name):
         # Add field_validator that works properly with Pydantic validators
         def field_validator(*fields, **kwargs):
             """Mock field_validator that preserves function behavior."""
+            import inspect
+            
             def decorator(func):
                 if not isinstance(func, classmethod):
-                    import inspect
                     try:
                         sig = inspect.signature(func)
                         params = list(sig.parameters.keys())
                         if params and params[0] == 'cls':
                             return classmethod(func)
-                    except:
+                    except (TypeError, ValueError, AttributeError):
                         pass
                 return func
             
@@ -1191,6 +1192,7 @@ def protect_pydantic_decorators(monkeypatch):
     """
     try:
         import pydantic
+        import inspect
         
         # Create a proper validator decorator
         def create_validator_decorator(*fields, **kwargs):
@@ -1198,14 +1200,13 @@ def protect_pydantic_decorators(monkeypatch):
             def decorator(func):
                 # Ensure the function is a classmethod for Pydantic v2
                 if not isinstance(func, classmethod):
-                    import inspect
                     try:
                         sig = inspect.signature(func)
                         params = list(sig.parameters.keys())
                         # If first param is 'cls', wrap as classmethod
                         if params and params[0] == 'cls':
                             return classmethod(func)
-                    except:
+                    except (TypeError, ValueError, AttributeError):
                         pass
                 return func
             
