@@ -57,10 +57,25 @@ USE_KAFKA_AUDIT = "false"
 # JWT_SECRET_KEY = "${{secret()}}"
 # ENCRYPTION_KEY = "32-byte-base64-fernet-key"
 
-# CRITICAL: AGENTIC_AUDIT_HMAC_KEY is REQUIRED for production audit logging
-# Set this in Railway UI as a secret variable to enable secure audit trails
-# Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
-# AGENTIC_AUDIT_HMAC_KEY = "${{secret()}}"
+# =============================================================================
+# CRITICAL: AUDIT SIGNING KEYS - REQUIRED FOR PRODUCTION
+# =============================================================================
+# These keys are REQUIRED for production audit logging. Without them, the
+# application will crash when attempting to log security events.
+#
+# Set these in Railway UI as secret variables or use ${{secret()}} syntax.
+# Generate with:
+#   openssl rand -hex 32  (for AUDIT_SIGNING_KEY)
+#   python -c "import secrets; print(secrets.token_urlsafe(32))"  (for AGENTIC_AUDIT_HMAC_KEY)
+
+# Main audit signing key for cryptographic log signatures
+AUDIT_SIGNING_KEY = "${{AUDIT_SIGNING_KEY}}"
+
+# Key ID for V0 audit crypto system
+RUNNER_AUDIT_SIGNING_KEY_ID = "prod-audit-key-v1"
+
+# HMAC key for agentic/self-fixing engineer audit logging
+AGENTIC_AUDIT_HMAC_KEY = "${{AGENTIC_AUDIT_HMAC_KEY}}"
 
 # === Observability ===
 # SENTRY_DSN = "https://your-sentry-dsn"
