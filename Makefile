@@ -41,24 +41,29 @@ install-dev: ## Install all dependencies including development tools
 
 test: ## Run all tests
 	@echo "$(BLUE)Running all tests...$(NC)"
-	pytest -v --tb=short
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && pytest -v --tb=short
 	@echo "$(GREEN)Tests complete!$(NC)"
+
+test-collect: ## Verify pytest can collect all tests without errors
+	@echo "$(BLUE)Verifying pytest collection...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && pytest --collect-only -q
+	@echo "$(GREEN)Collection verification complete!$(NC)"
 
 test-generator: ## Run Generator tests
 	@echo "$(BLUE)Running Generator tests...$(NC)"
-	cd generator && pytest tests/ -v --tb=short
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && cd generator && pytest tests/ -v --tb=short
 
 test-omnicore: ## Run OmniCore Engine tests
 	@echo "$(BLUE)Running OmniCore Engine tests...$(NC)"
-	cd omnicore_engine && pytest tests/ -v --tb=short
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && cd omnicore_engine && pytest tests/ -v --tb=short
 
 test-sfe: ## Run Self-Fixing Engineer tests
 	@echo "$(BLUE)Running Self-Fixing Engineer tests...$(NC)"
-	cd self_fixing_engineer && pytest tests/ -v --tb=short
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && cd self_fixing_engineer && pytest tests/ -v --tb=short
 
 test-coverage: ## Run tests with coverage report
 	@echo "$(BLUE)Running tests with coverage...$(NC)"
-	pytest --cov --cov-report=html --cov-report=term -v
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && pytest --cov --cov-report=html --cov-report=term -v
 	@echo "$(GREEN)Coverage report generated in htmlcov/$(NC)"
 
 test-watch: ## Run tests in watch mode (requires pytest-watch)

@@ -233,6 +233,10 @@ jobs:
           df -h
           
       - name: Run all tests from repository root
+        env:
+          TESTING: "1"
+          AWS_REGION: ""
+          FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
           
