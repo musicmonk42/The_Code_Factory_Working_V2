@@ -222,6 +222,11 @@ if "botocore.exceptions" not in sys.modules:
         )
         
         # Create proper exception classes that inherit from BaseException
+        # These are independent exceptions - they don't need to inherit from each other
+        class BotoCoreError(Exception):
+            """Base exception for botocore errors."""
+            pass
+        
         class NoCredentialsError(Exception):
             """Raised when AWS credentials are not found."""
             pass
@@ -233,13 +238,9 @@ if "botocore.exceptions" not in sys.modules:
                 self.operation_name = operation_name
                 super().__init__(f"An error occurred ({operation_name}): {error_response}")
         
-        class BotoCoreError(Exception):
-            """Base exception for botocore errors."""
-            pass
-        
+        botocore_exc_module.BotoCoreError = BotoCoreError
         botocore_exc_module.NoCredentialsError = NoCredentialsError
         botocore_exc_module.ClientError = ClientError
-        botocore_exc_module.BotoCoreError = BotoCoreError
         
         # Create parent botocore module if needed
         if "botocore" not in sys.modules:
