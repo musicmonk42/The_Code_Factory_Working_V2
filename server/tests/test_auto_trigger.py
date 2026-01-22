@@ -270,3 +270,39 @@ class TestLanguageDetection:
         
         readme = "# Java Project\n\nBuilt with Java 17."
         assert detect_language_from_content(readme) == "java"
+    
+    def test_java_with_javascript_mentioned(self):
+        """Test that Java is detected even when JavaScript is mentioned."""
+        from server.routers.generator import detect_language_from_content
+        
+        readme = "# Java Backend\n\nJava REST API that serves a JavaScript frontend."
+        assert detect_language_from_content(readme) == "java"
+    
+    def test_go_not_false_positive(self):
+        """Test that 'go' in common English words doesn't trigger Go detection."""
+        from server.routers.generator import detect_language_from_content
+        
+        readme = "# Algorithm Project\n\nLet's go through the algorithm step by step."
+        # Should default to Python, not Go
+        assert detect_language_from_content(readme) == "python"
+    
+    def test_go_with_golang(self):
+        """Test Go detection with 'golang' keyword."""
+        from server.routers.generator import detect_language_from_content
+        
+        readme = "# Golang Service\n\nBuilt with golang 1.21."
+        assert detect_language_from_content(readme) == "go"
+    
+    def test_go_with_go_language(self):
+        """Test Go detection with 'go language' phrase."""
+        from server.routers.generator import detect_language_from_content
+        
+        readme = "# Microservice\n\nWritten in the Go language for high performance."
+        assert detect_language_from_content(readme) == "go"
+    
+    def test_npm_without_space_nodejs(self):
+        """Test JavaScript detection with npm and nodejs variations."""
+        from server.routers.generator import detect_language_from_content
+        
+        readme = "# Node Project\n\nInstall with npm install. Uses nodejs runtime."
+        assert detect_language_from_content(readme) == "javascript"

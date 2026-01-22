@@ -53,16 +53,30 @@ def detect_language_from_content(readme_content: str) -> str:
     readme_lower = readme_content.lower()
     
     # Check for language-specific keywords in priority order
+    # Use word boundaries and specific patterns to avoid false matches
+    
+    # TypeScript must be checked before JavaScript since JS is often mentioned in TS projects
     if "typescript" in readme_lower:
         return "typescript"
-    elif "javascript" in readme_lower or "node.js" in readme_lower or "npm" in readme_lower:
+    
+    # JavaScript check with common patterns
+    if "javascript" in readme_lower or "node.js" in readme_lower or "nodejs" in readme_lower or " npm " in readme_lower:
         return "javascript"
-    elif "java" in readme_lower and "javascript" not in readme_lower:
+    
+    # Java check - avoid matching "javascript" by checking it's not already classified
+    # Use word boundaries to match "java " or "java." or "java\n" but not "javascript"
+    import re
+    if re.search(r'\bjava\b(?!script)', readme_lower, re.IGNORECASE):
         return "java"
-    elif "go" in readme_lower or "golang" in readme_lower:
-        return "go"
-    elif "rust" in readme_lower:
+    
+    # Rust check
+    if "rust" in readme_lower:
         return "rust"
+    
+    # Go check - use specific patterns to avoid false positives
+    # Look for "golang" or "go " with word boundaries
+    if "golang" in readme_lower or re.search(r'\bgo\s+(language|lang|programming)\b', readme_lower, re.IGNORECASE):
+        return "go"
     
     # Default to Python
     return "python"
