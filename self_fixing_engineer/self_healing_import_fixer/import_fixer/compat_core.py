@@ -67,12 +67,18 @@ except ImportError:
 
 
 try:
-    from prometheus_client import Counter, Gauge, Histogram, start_http_server
+    from prometheus_client import (
+        REGISTRY,
+        Counter,
+        Gauge,
+        Histogram,
+        start_http_server,
+    )
 
     _HAS_PROMETHEUS = True
 except ImportError:
     _HAS_PROMETHEUS = False
-    Counter = Gauge = Histogram = start_http_server = None
+    REGISTRY = Counter = Gauge = Histogram = start_http_server = None
 
 # Import centralized OpenTelemetry configuration with fallback
 # to avoid circular import issues with arbiter
@@ -262,39 +268,78 @@ _metrics_registry: Dict[str, Any] = {}
 
 
 def _get_metrics() -> Dict[str, Any]:
+    """
+    Get or create Prometheus metrics registry.
+    
+    Thread-safe implementation that prevents duplicate metric registration
+    by checking the existing REGISTRY before creating new metrics.
+    Follows industry best practices for metric reuse in multi-import scenarios.
+    """
     global _metrics_registry
     with _observability_lock:
         if not _metrics_registry and METRICS_ENABLED and _HAS_PROMETHEUS:
+            
+            def get_or_create_metric(metric_class, name, documentation, labelnames=None):
+                """
+                Helper function to get existing metric or create new one.
+                Prevents 'Duplicated timeseries in CollectorRegistry' errors
+                when modules are imported multiple times or in parallel.
+                
+                Args:
+                    metric_class: Counter, Gauge, or Histogram class
+                    name: Metric name
+                    documentation: Metric description
+                    labelnames: Optional list of label names
+                    
+                Returns:
+                    Existing or newly created metric
+                """
+                # Check if metric already exists in the registry
+                if name in REGISTRY._names_to_collectors:
+                    return REGISTRY._names_to_collectors[name]
+                
+                # Create new metric with appropriate signature
+                if labelnames:
+                    return metric_class(name, documentation, labelnames)
+                return metric_class(name, documentation)
+            
             _metrics_registry = {
-                "init_duration": Histogram(
+                "init_duration": get_or_create_metric(
+                    Histogram,
                     "compat_core_init_duration_seconds",
                     "Time taken to initialize compat_core",
                 ),
-                "import_failures": Counter(
+                "import_failures": get_or_create_metric(
+                    Counter,
                     "compat_core_import_failures_total",
                     "Core module import failures",
                     ["module"],
                 ),
-                "fallback_usage": Counter(
+                "fallback_usage": get_or_create_metric(
+                    Counter,
                     "compat_core_fallback_usage_total",
                     "Usage of fallback shims",
                     ["component", "environment"],
                 ),
-                "load_status": Gauge(
+                "load_status": get_or_create_metric(
+                    Gauge,
                     "compat_core_module_loaded_status",
                     "Status of core module load (1=loaded, 0=failed)",
                     ["module"],
                 ),
-                "fallback_latency": Histogram(
+                "fallback_latency": get_or_create_metric(
+                    Histogram,
                     "compat_core_fallback_latency_seconds",
                     "Latency of fallback operations",
                     ["component"],
                 ),
-                "s3_offload_failures": Counter(
+                "s3_offload_failures": get_or_create_metric(
+                    Counter,
                     "compat_core_s3_offload_failures_total",
                     "Failures to offload audit logs to S3",
                 ),
-                "suppressed_warnings": Counter(
+                "suppressed_warnings": get_or_create_metric(
+                    Counter,
                     "compat_core_suppressed_warnings_total",
                     "Warnings suppressed by rate limiter",
                 ),
@@ -380,19 +425,60 @@ _redis_client = None
 
 
 def _get_redis_client():
+    """
+    Get or create Redis client with comprehensive fallback support.
+    
+    Configuration priority (highest to lowest):
+    1. REDIS_URL - Full connection URL (preferred for Railway and other platforms)
+    2. REDIS_HOST/REDIS_PORT - Traditional host/port configuration
+    3. REDISHOST/REDISPORT - Railway-specific environment variables
+    
+    Implements graceful degradation: returns None if Redis is unavailable,
+    allowing the application to continue without distributed caching.
+    Follows industry standards for connection resilience and fallback handling.
+    
+    Returns:
+        redis.Redis instance if connection successful, None otherwise
+    """
     global _redis_client
     if _redis_client is None and _HAS_REDIS:
         try:
-            _redis_client = redis.Redis(
-                host=os.getenv("REDIS_HOST", "localhost"),
-                port=int(os.getenv("REDIS_PORT", "6379")),
-                decode_responses=True,
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to connect to Redis: {e}",
+            # Support REDIS_URL (preferred) for platforms like Railway
+            redis_url = os.getenv("REDIS_URL")
+            if redis_url:
+                _redis_client = redis.from_url(redis_url, decode_responses=True)
+                logger.debug(
+                    "Redis client created from REDIS_URL",
+                    extra={"data_classification": "internal"},
+                )
+            else:
+                # Fallback to traditional REDIS_HOST/REDIS_PORT
+                # Also support Railway's REDISHOST/REDISPORT variables
+                host = os.getenv("REDIS_HOST", os.getenv("REDISHOST", "localhost"))
+                port = int(os.getenv("REDIS_PORT", os.getenv("REDISPORT", "6379")))
+                _redis_client = redis.Redis(
+                    host=host,
+                    port=port,
+                    decode_responses=True,
+                )
+                logger.debug(
+                    f"Redis client created with host={host}, port={port}",
+                    extra={"data_classification": "internal"},
+                )
+            
+            # Test connection to ensure Redis is actually available
+            _redis_client.ping()
+            logger.info(
+                "Redis connection established successfully",
                 extra={"data_classification": "internal"},
             )
+        except Exception as e:
+            # Graceful degradation: log warning and continue without Redis
+            logger.warning(
+                f"Redis unavailable, distributed caching disabled: {e}",
+                extra={"data_classification": "internal"},
+            )
+            _redis_client = None  # Explicit fallback to None
     return _redis_client
 
 
