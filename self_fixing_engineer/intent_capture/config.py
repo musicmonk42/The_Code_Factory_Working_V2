@@ -340,12 +340,14 @@ class Config(BaseSettings):
     # Add other fields as needed
 
     @field_validator("REDIS_URL")
+    @classmethod
     def validate_redis_url(cls, v):
         if not v.startswith("redis://"):
             raise ValueError("Invalid REDIS_URL format")
         return v
 
     @field_validator("LOG_LEVEL")
+    @classmethod
     def validate_log_level(cls, v):
         if v not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
             raise ValueError("Invalid LOG_LEVEL")

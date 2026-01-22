@@ -197,6 +197,7 @@ class MetaLearningConfig(BaseSettings):
     @field_validator(
         "DATA_LAKE_PATH", "LOCAL_AUDIT_LOG_PATH", "CONFIG_FILE_PATH", mode="before"
     )
+    @classmethod
     def validate_file_paths(cls, v: Optional[str]) -> Optional[str]:
         """Ensures that parent directories exist for file paths."""
         if v:
@@ -219,6 +220,7 @@ class MetaLearningConfig(BaseSettings):
     @field_validator(
         "AUDIT_ENCRYPTION_KEY", "AUDIT_SIGNING_PRIVATE_KEY", "AUDIT_SIGNING_PUBLIC_KEY"
     )
+    @classmethod
     def validate_security_keys(
         cls, v: Optional[str], info: ValidationInfo
     ) -> Optional[str]:
@@ -235,6 +237,7 @@ class MetaLearningConfig(BaseSettings):
         return v
 
     @field_validator("KAFKA_BOOTSTRAP_SERVERS")
+    @classmethod
     def validate_kafka_brokers(cls, v: str, info: ValidationInfo) -> str:
         """Ensures Kafka bootstrap servers are valid if Kafka is enabled."""
         use_kafka_ingestion = info.data.get("USE_KAFKA_INGESTION", False)
@@ -256,6 +259,7 @@ class MetaLearningConfig(BaseSettings):
         return v
 
     @field_validator("REDIS_URL")
+    @classmethod
     def validate_redis_url(cls, v: str) -> str:
         """Validates Redis URL format."""
         if not v.startswith(("redis://", "rediss://", "http://", "https://")):
@@ -267,6 +271,7 @@ class MetaLearningConfig(BaseSettings):
         "AGENT_CONFIG_SERVICE_ENDPOINT",
         "POLICY_ENGINE_ENDPOINT",
     )
+    @classmethod
     def validate_endpoints(cls, v: str, info: ValidationInfo) -> str:
         """Validates endpoint URLs."""
         if not v.startswith(("http://", "https://")):
@@ -274,6 +279,7 @@ class MetaLearningConfig(BaseSettings):
         return v
 
     @field_validator("DATA_RETENTION_DAYS")
+    @classmethod
     def validate_retention(cls, v: int, info: ValidationInfo) -> int:
         use_s3 = info.data.get("USE_S3_DATA_LAKE", False)
         if use_s3 and v > 365:

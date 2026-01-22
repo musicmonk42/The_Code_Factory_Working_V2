@@ -53,6 +53,7 @@ except ImportError as e:
         """
 
         __tablename__ = "agent_state"
+        __table_args__ = {"extend_existing": True}
 
         id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
         name: Mapped[str] = mapped_column(String, nullable=False)
@@ -97,6 +98,7 @@ class AgentState(ArbiterAgentState):
     """
 
     __tablename__ = "omnicore_agent_state"
+    __table_args__ = {"extend_existing": True}
 
     # In SQLAlchemy 2.0+ joined-table inheritance, the id column MUST be explicitly
     # redeclared with a ForeignKey to establish the join relationship.
@@ -162,6 +164,7 @@ class GeneratorAgentState(AgentState):
     """
 
     __tablename__ = "generator_agent_state"
+    __table_args__ = {"extend_existing": True}
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -192,6 +195,7 @@ class SFEAgentState(AgentState):
     """
 
     __tablename__ = "sfe_agent_state"
+    __table_args__ = {"extend_existing": True}
 
     id: Mapped[int] = mapped_column(
         Integer,
