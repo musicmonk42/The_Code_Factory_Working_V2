@@ -152,7 +152,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:${PATH}" \
     APP_STARTUP=1 \
     SKIP_IMPORT_TIME_VALIDATION=1 \
-    SPACY_WARNING_IGNORE=W007
+    SPACY_WARNING_IGNORE=W007 \
+    TESTING=1 \
+    AWS_REGION="" \
+    FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support
