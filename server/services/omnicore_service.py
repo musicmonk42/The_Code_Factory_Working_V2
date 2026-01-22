@@ -844,6 +844,10 @@ class OmniCoreService:
         """
         Execute requirements clarification using LLM-based or rule-based approach.
         
+        Uses the Clarifier class which auto-detects available LLM providers
+        (OpenAI, Anthropic, xAI, Google, Ollama) via the central runner/llm_client.py.
+        Falls back to rule-based clarification if no LLM is available.
+        
         Args:
             job_id: Job identifier
             payload: Parameters including readme_content, ambiguities
@@ -861,36 +865,69 @@ class OmniCoreService:
                     "message": "No README content provided for clarification",
                 }
             
-            # Check if LLM-based clarifier is available
-            if self._clarifier_llm_class:
+            # Try LLM-based clarification first (with auto-detection)
+            if self.agents_available.get("clarifier"):
                 logger.info(f"Running LLM-based clarifier for job {job_id}")
                 try:
-                    # Build LLM config for clarifier
-                    llm_config = self._build_llm_config()
+                    from generator.clarifier.clarifier import Clarifier
                     
-                    # Initialize LLM-based clarifier with API key from config
-                    api_key = None
-                    if self.llm_config:
-                        api_key = self.llm_config.get_provider_api_key(llm_config["backend"])
+                    # Create clarifier instance with auto-detection
+                    clarifier = await Clarifier.create()
                     
-                    clarifier = self._clarifier_llm_class(
-                        api_key=api_key,
-                        model=llm_config.get("model", {}).get(llm_config["backend"], "grok-1")
-                    )
+                    # Check if LLM is actually available (not just rule-based fallback)
+                    has_llm = hasattr(clarifier, 'llm') and clarifier.llm is not None
                     
-                    # Generate questions using LLM (async call)
-                    questions = await clarifier.generate_clarification_questions(
-                        requirements=readme_content,
-                        ambiguities=ambiguities
-                    )
+                    if has_llm:
+                        # Try to detect ambiguities using LLM
+                        try:
+                            detected_ambiguities = await clarifier.detect_ambiguities(readme_content)
+                            # Generate questions based on detected ambiguities
+                            questions = await clarifier.generate_questions(detected_ambiguities)
+                            
+                            logger.info(
+                                f"LLM-based clarifier generated {len(questions)} questions for job {job_id}",
+                                extra={"method": "llm", "questions_count": len(questions)}
+                            )
+                            
+                            # Store session
+                            _clarification_sessions[job_id] = {
+                                "job_id": job_id,
+                                "requirements": readme_content,
+                                "questions": questions,
+                                "answers": {},
+                                "status": "in_progress",
+                                "created_at": datetime.now().isoformat(),
+                                "method": "llm",
+                            }
+                            
+                            return {
+                                "status": "clarification_initiated",
+                                "job_id": job_id,
+                                "clarifications": questions,
+                                "confidence": 0.65,
+                                "questions_count": len(questions),
+                                "method": "llm",
+                            }
+                        except Exception as llm_error:
+                            logger.warning(
+                                f"LLM-based clarification failed: {llm_error}. "
+                                "Falling back to rule-based.",
+                                exc_info=True
+                            )
+                    else:
+                        logger.info("No LLM configured, using rule-based clarification")
                     
-                    logger.info(f"LLM-based clarifier generated {len(questions)} questions for job {job_id}")
+                except ImportError as e:
+                    logger.warning(f"Could not import Clarifier module: {e}. Using rule-based.")
                 except Exception as e:
-                    logger.warning(f"LLM clarifier failed, falling back to rule-based: {e}")
-                    questions = self._generate_clarification_questions(readme_content)
-            else:
-                logger.info(f"Running rule-based clarifier for job {job_id}")
-                questions = self._generate_clarification_questions(readme_content)
+                    logger.warning(
+                        f"Error initializing clarifier: {e}. Falling back to rule-based.",
+                        exc_info=True
+                    )
+            
+            # Fallback to rule-based clarification
+            logger.info(f"Running rule-based clarifier for job {job_id}")
+            questions = self._generate_clarification_questions(readme_content)
             
             # Store session
             _clarification_sessions[job_id] = {
@@ -900,6 +937,7 @@ class OmniCoreService:
                 "answers": {},
                 "status": "in_progress",
                 "created_at": datetime.now().isoformat(),
+                "method": "rule_based",
             }
             
             result = {
@@ -908,6 +946,7 @@ class OmniCoreService:
                 "clarifications": questions,
                 "confidence": 0.65,  # Low confidence indicates need for clarification
                 "questions_count": len(questions),
+                "method": "rule_based",
             }
             
             logger.info(f"Clarifier completed for job {job_id} with {len(questions)} questions")

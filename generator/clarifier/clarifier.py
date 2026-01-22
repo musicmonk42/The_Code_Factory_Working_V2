@@ -1029,14 +1029,85 @@ class Clarifier:
 
     def _init_llm(self) -> LLMProvider:
         """
-        FIXED: Removed fragile introspection, using duck typing instead.
+        Initialize LLM with auto-detection of available providers.
+        
+        Checks for API keys in priority order:
+        1. OPENAI_API_KEY → OpenAI via UnifiedLLMProvider
+        2. ANTHROPIC_API_KEY → Anthropic via UnifiedLLMProvider
+        3. XAI_API_KEY or GROK_API_KEY → xAI/Grok (direct or unified)
+        4. GOOGLE_API_KEY → Google via UnifiedLLMProvider
+        5. OLLAMA_HOST → Ollama via UnifiedLLMProvider
+        
+        Falls back to rule-based clarification if no LLM is available.
         """
-        if self.config.LLM_PROVIDER == "grok":
+        # Try to import UnifiedLLMProvider
+        try:
+            from .clarifier_llm import UnifiedLLMProvider
+            has_unified = True
+        except ImportError:
+            has_unified = False
+            self.logger.warning("UnifiedLLMProvider not available, using legacy provider")
+        
+        # Auto-detect available provider
+        if os.getenv("OPENAI_API_KEY"):
+            self.logger.info("Auto-detected OpenAI - using unified LLM client")
+            if has_unified:
+                return UnifiedLLMProvider(provider="openai", model="gpt-4")
+            else:
+                self.logger.warning("UnifiedLLMProvider not available, cannot use OpenAI")
+                return LLMProvider()
+        
+        elif os.getenv("ANTHROPIC_API_KEY"):
+            self.logger.info("Auto-detected Anthropic - using unified LLM client")
+            if has_unified:
+                return UnifiedLLMProvider(provider="anthropic", model="claude-3-sonnet-20240229")
+            else:
+                self.logger.warning("UnifiedLLMProvider not available, cannot use Anthropic")
+                return LLMProvider()
+        
+        elif os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY"):
+            # For xAI/Grok, prefer unified provider if available, otherwise use GrokLLM
+            if has_unified:
+                self.logger.info("Auto-detected xAI/Grok - using unified LLM client")
+                return UnifiedLLMProvider(provider="grok", model="grok-beta")
+            else:
+                self.logger.info("Auto-detected xAI/Grok - using GrokLLM direct integration")
+                try:
+                    from .clarifier_llm import GrokLLM
+                    api_key = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
+                    return GrokLLM(
+                        api_key=api_key,
+                        target_language=self.config.TARGET_LANGUAGE,
+                    )
+                except Exception as e:
+                    self.logger.warning(
+                        f"Failed to initialize GrokLLM: {e}. Using dummy LLM provider."
+                    )
+                    return LLMProvider()
+        
+        elif os.getenv("GOOGLE_API_KEY"):
+            self.logger.info("Auto-detected Google/Gemini - using unified LLM client")
+            if has_unified:
+                return UnifiedLLMProvider(provider="google", model="gemini-pro")
+            else:
+                self.logger.warning("UnifiedLLMProvider not available, cannot use Google")
+                return LLMProvider()
+        
+        elif os.getenv("OLLAMA_HOST"):
+            self.logger.info("Auto-detected Ollama - using unified LLM client")
+            if has_unified:
+                return UnifiedLLMProvider(provider="ollama", model="codellama")
+            else:
+                self.logger.warning("UnifiedLLMProvider not available, cannot use Ollama")
+                return LLMProvider()
+        
+        # Legacy: Check if config specifies grok explicitly
+        elif hasattr(self.config, 'LLM_PROVIDER') and self.config.LLM_PROVIDER == "grok":
             self.logger.info(
-                f"Initializing GrokLLM for target language: {self.config.TARGET_LANGUAGE}"
+                f"Using configured LLM provider: {self.config.LLM_PROVIDER}"
             )
-            # FIX: Use duck typing instead of introspection
             try:
+                from .clarifier_llm import GrokLLM
                 return GrokLLM(
                     api_key=os.getenv("GROK_API_KEY", ""),
                     target_language=self.config.TARGET_LANGUAGE,
@@ -1046,9 +1117,15 @@ class Clarifier:
                     f"Failed to initialize GrokLLM: {e}. Using dummy LLM provider."
                 )
                 return LLMProvider()
+        
         else:
-            CLARIFIER_ERRORS.labels("config_llm").inc()
-            raise ValueError(f"Unsupported LLM provider: {self.config.LLM_PROVIDER}")
+            self.logger.warning(
+                "No LLM API key found. Clarifier will use rule-based fallback. "
+                "For LLM-based clarification, set one of: "
+                "OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, GROK_API_KEY, "
+                "GOOGLE_API_KEY, or OLLAMA_HOST"
+            )
+            return LLMProvider()  # Dummy provider for rule-based fallback
 
     def _init_context_manager(self) -> ContextManager:
         """

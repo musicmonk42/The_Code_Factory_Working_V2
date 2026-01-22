@@ -884,6 +884,245 @@ class GrokLLM(LLMProvider):
 
 
 # ============================================================================
+# Unified LLM Provider (Uses Central runner/llm_client.py)
+# ============================================================================
+
+
+class UnifiedLLMProvider(LLMProvider):
+    """
+    LLM Provider that uses the central runner/llm_client.py for unified LLM access.
+    
+    This provider wraps the central LLM client to provide consistent access to
+    multiple LLM providers (OpenAI, Anthropic, xAI, Google, Ollama) with unified
+    retry logic, rate limiting, circuit breaker, and metrics.
+    
+    Features:
+    - Auto-detected LLM provider (OpenAI, Anthropic, xAI, Google, Ollama)
+    - Unified retry logic and rate limiting
+    - Circuit breaker for resilience
+    - Consistent metrics and logging
+    - Graceful fallback on errors
+    
+    Example:
+        >>> llm = UnifiedLLMProvider(provider="openai", model="gpt-4")
+        >>> response = await llm.generate("Clarify this requirement...")
+    """
+    
+    PROVIDER_NAME: Final[str] = "unified"
+    
+    def __init__(
+        self,
+        provider: str = "openai",
+        model: str = "gpt-4",
+        fallback_config: Optional[FallbackConfig] = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Initialize Unified LLM provider.
+        
+        Args:
+            provider: LLM provider name (openai, anthropic, grok, google, ollama)
+            model: Model identifier for the provider
+            fallback_config: FallbackConfig for customizing fallback responses
+            **kwargs: Additional configuration passed to base class
+        """
+        super().__init__(api_key=None, model=model, **kwargs)
+        
+        self.provider = provider
+        self._fallback_config = fallback_config or DEFAULT_FALLBACK_CONFIG
+        
+        logger.info(
+            "Initialized UnifiedLLMProvider",
+            extra={
+                "provider": provider,
+                "model": model,
+            },
+        )
+    
+    async def generate(self, prompt: str, **kwargs: Any) -> str:
+        """
+        Generate clarifying questions or responses using central LLM client.
+        
+        This method uses the runner/llm_client.py for actual API calls with
+        automatic retry for transient failures. Falls back to intelligent
+        local generation if the API is unavailable.
+        
+        Args:
+            prompt: Input prompt for clarification
+            **kwargs: Generation parameters (temperature, max_tokens, etc.)
+        
+        Returns:
+            Generated clarification text
+        
+        Raises:
+            ValueError: If prompt is empty
+            LLMProviderError: If API call fails and cannot be recovered
+        """
+        result = await self.generate_with_metadata(prompt, **kwargs)
+        return result.content
+    
+    async def generate_with_metadata(
+        self, prompt: str, **kwargs: Any
+    ) -> GenerationResult:
+        """
+        Generate text with detailed metadata using central LLM client.
+        
+        Args:
+            prompt: Input prompt for clarification
+            **kwargs: Generation parameters
+        
+        Returns:
+            GenerationResult with content, metadata, and timing information
+        
+        Raises:
+            ValueError: If prompt is empty
+            LLMProviderError: If API call fails after all retries
+        """
+        # Validate input
+        if not prompt or not prompt.strip():
+            raise ValueError("Prompt cannot be empty")
+        
+        start_time = time.monotonic()
+        
+        try:
+            # Import the central LLM client
+            from runner.llm_client import call_llm_api
+            
+            logger.info(
+                "Calling central LLM client",
+                extra={
+                    "provider": self.provider,
+                    "model": self.model,
+                    "prompt_length": len(prompt),
+                },
+            )
+            
+            # Call the central LLM client
+            response = await call_llm_api(
+                prompt=prompt,
+                model=self.model,
+                provider=self.provider,
+                **kwargs,
+            )
+            
+            latency_ms = (time.monotonic() - start_time) * 1000
+            
+            # Extract content from response
+            content = response.get("content", "")
+            tokens_used = response.get("tokens_used", 0)
+            
+            logger.info(
+                "Central LLM client call successful",
+                extra={
+                    "provider": self.provider,
+                    "model": self.model,
+                    "response_length": len(content),
+                    "tokens_used": tokens_used,
+                    "latency_ms": round(latency_ms, 2),
+                },
+            )
+            
+            return GenerationResult(
+                content=content,
+                model=self.model,
+                tokens_used=tokens_used,
+                latency_ms=latency_ms,
+                from_fallback=False,
+                metadata={"provider": self.provider},
+            )
+        
+        except Exception as e:
+            # Use fallback on any error
+            logger.warning(
+                "Using fallback due to central LLM client error",
+                extra={
+                    "provider": self.provider,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+            )
+            
+            content = self._generate_fallback_response(prompt)
+            latency_ms = (time.monotonic() - start_time) * 1000
+            
+            return GenerationResult(
+                content=content,
+                model=self.model,
+                latency_ms=latency_ms,
+                from_fallback=True,
+                metadata={"reason": "llm_client_error", "error": str(e)},
+            )
+    
+    def _generate_fallback_response(self, prompt: str) -> str:
+        """
+        Generate an intelligent fallback response when API is unavailable.
+        
+        This method uses the FallbackConfig to generate contextually
+        appropriate clarifying questions.
+        
+        Args:
+            prompt: The original prompt
+        
+        Returns:
+            Generated fallback response with clarifying questions
+        """
+        # Detect if this is a clarification request
+        prompt_lower = prompt.lower()
+        is_clarification_request = any(
+            keyword in prompt_lower
+            for keyword in ["ambiguit", "clarif", "unclear", "requirement", "specify"]
+        )
+        
+        if is_clarification_request:
+            # Generate structured clarification response using configured questions
+            clarifications = [
+                {"question": q.question, "context": q.context, "priority": q.priority}
+                for q in self._fallback_config.questions
+            ]
+            
+            return json.dumps(
+                {
+                    "clarifications": clarifications,
+                    "metadata": {
+                        "generated_by": "fallback",
+                        "note": "Central LLM client unavailable - using fallback questions",
+                    },
+                },
+                indent=2,
+            )
+        
+        # Generic response using configured guidance
+        return self._fallback_config.generic_guidance
+    
+    async def health_check(self) -> bool:
+        """
+        Perform health check via central LLM client.
+        
+        Returns:
+            True if LLM client is healthy, False otherwise
+        """
+        try:
+            from runner.llm_client import call_llm_api
+            
+            # Try a minimal prompt to check health
+            await call_llm_api(
+                prompt="test",
+                model=self.model,
+                provider=self.provider,
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                "Health check failed",
+                extra={
+                    "provider": self.provider,
+                    "error_type": type(e).__name__,
+                },
+            )
+            return False
+
+
+# ============================================================================
 # Factory Function
 # ============================================================================
 
@@ -893,7 +1132,7 @@ def create_llm_provider(provider_type: str = "grok", **kwargs: Any) -> LLMProvid
     Factory function to create LLM provider instances.
 
     Args:
-        provider_type: Type of provider to create ('grok', etc.)
+        provider_type: Type of provider to create ('grok', 'unified', 'openai', 'anthropic', etc.)
         **kwargs: Provider-specific configuration
 
     Returns:
@@ -905,9 +1144,20 @@ def create_llm_provider(provider_type: str = "grok", **kwargs: Any) -> LLMProvid
     Example:
         >>> provider = create_llm_provider("grok", api_key="your-key")
         >>> response = await provider.generate("Clarify this requirement")
+        
+        >>> # Or use unified provider for OpenAI
+        >>> provider = create_llm_provider("unified", provider="openai", model="gpt-4")
+        >>> response = await provider.generate("Clarify this requirement")
     """
+    # Map provider types to classes
     providers: Dict[str, type] = {
         "grok": GrokLLM,
+        "unified": UnifiedLLMProvider,
+        # Aliases for convenience
+        "openai": lambda **kw: UnifiedLLMProvider(provider="openai", **kw),
+        "anthropic": lambda **kw: UnifiedLLMProvider(provider="anthropic", **kw),
+        "google": lambda **kw: UnifiedLLMProvider(provider="google", **kw),
+        "ollama": lambda **kw: UnifiedLLMProvider(provider="ollama", **kw),
     }
 
     provider_class = providers.get(provider_type.lower())
@@ -918,6 +1168,9 @@ def create_llm_provider(provider_type: str = "grok", **kwargs: Any) -> LLMProvid
             f"Supported providers: {supported}"
         )
 
+    # Handle both class and lambda constructors
+    if callable(provider_class) and not isinstance(provider_class, type):
+        return provider_class(**kwargs)
     return provider_class(**kwargs)
 
 
@@ -929,6 +1182,7 @@ __all__ = [
     # Base classes
     "LLMProvider",
     "GrokLLM",
+    "UnifiedLLMProvider",
     # Factory
     "create_llm_provider",
     # Configuration
