@@ -47,12 +47,48 @@ def _create_mock_module(name):
             pass
 
         def __call__(self, *args, **kwargs):
-            # When used as a decorator, return the original function/class unchanged
-            # This prevents decorators from breaking actual code
-            if len(args) == 1 and callable(args[0]) and not kwargs:
-                return args[0]
+            # When used as a decorator, handle Pydantic validators specially
+            if len(args) == 1:
+                arg = args[0]
+                # If it's a function/method being decorated
+                if callable(arg) and hasattr(arg, '__name__'):
+                    # For Pydantic validators, ensure it's a classmethod
+                    if not isinstance(arg, classmethod):
+                        # Check if this looks like a validator (has 'cls' as first param)
+                        import inspect
+                        try:
+                            sig = inspect.signature(arg)
+                            params = list(sig.parameters.keys())
+                            if params and params[0] == 'cls':
+                                # This is likely a Pydantic validator, wrap as classmethod
+                                return classmethod(arg)
+                        except:
+                            pass
+                    # Return the original function/classmethod unchanged
+                    return arg
+                # If it's a string (field name for validator), return a decorator
+                elif isinstance(arg, str):
+                    def validator_decorator(func):
+                        # Wrap in classmethod if needed
+                        if not isinstance(func, classmethod):
+                            import inspect
+                            try:
+                                sig = inspect.signature(func)
+                                params = list(sig.parameters.keys())
+                                if params and params[0] == 'cls':
+                                    return classmethod(func)
+                            except:
+                                pass
+                        return func
+                    return validator_decorator
+            
             # Otherwise return self to support chaining
             return self
+
+        def __set_name__(self, owner, name):
+            """Called when MockCallable is assigned as a class attribute.
+            This prevents Pydantic from treating it as a field."""
+            pass
 
         def __getattr__(self, attr):
             # Return another MockCallable for attribute access
@@ -161,6 +197,30 @@ def _create_mock_module(name):
         mock_module.VERSION = "2.0.0"  # VERSION string (not __version__)
         # pydantic also needs __version__ as a string
         mock_module.__version__ = "2.0.0"
+        
+        # Add field_validator that works properly with Pydantic validators
+        def field_validator(*fields, **kwargs):
+            """Mock field_validator that preserves function behavior."""
+            def decorator(func):
+                if not isinstance(func, classmethod):
+                    import inspect
+                    try:
+                        sig = inspect.signature(func)
+                        params = list(sig.parameters.keys())
+                        if params and params[0] == 'cls':
+                            return classmethod(func)
+                    except:
+                        pass
+                return func
+            
+            # Handle @field_validator('field') and @field_validator syntax
+            if fields and callable(fields[0]):
+                return decorator(fields[0])
+            return decorator
+        
+        mock_module.field_validator = field_validator
+        mock_module.model_validator = field_validator
+        mock_module.validator = field_validator
 
     return mock_module
 
@@ -1127,28 +1187,40 @@ def cleanup_sqlalchemy():
 @pytest.fixture(autouse=True)
 def protect_pydantic_decorators(monkeypatch):
     """
-    Ensure pydantic decorators remain callable to prevent
-    'PydanticUserError: A non-annotated attribute was detected' errors.
+    Ensure pydantic decorators remain callable and return proper values.
     """
     try:
         import pydantic
         
-        # Create a no-op decorator that preserves function behavior
-        def _noop_decorator(*args, **kwargs):
+        # Create a proper validator decorator
+        def create_validator_decorator(*fields, **kwargs):
+            """Create a validator decorator that preserves classmethod behavior."""
             def decorator(func):
+                # Ensure the function is a classmethod for Pydantic v2
+                if not isinstance(func, classmethod):
+                    import inspect
+                    try:
+                        sig = inspect.signature(func)
+                        params = list(sig.parameters.keys())
+                        # If first param is 'cls', wrap as classmethod
+                        if params and params[0] == 'cls':
+                            return classmethod(func)
+                    except:
+                        pass
                 return func
+            
             # Handle both @decorator and @decorator() usage
-            if args and callable(args[0]):
-                return args[0]
+            if fields and callable(fields[0]) and not kwargs:
+                return decorator(fields[0])
             return decorator
         
         # Only patch if pydantic decorators have been replaced with non-callables
         if not callable(getattr(pydantic, 'field_validator', None)):
-            monkeypatch.setattr(pydantic, 'field_validator', _noop_decorator)
+            monkeypatch.setattr(pydantic, 'field_validator', create_validator_decorator)
         if not callable(getattr(pydantic, 'model_validator', None)):
-            monkeypatch.setattr(pydantic, 'model_validator', _noop_decorator)
+            monkeypatch.setattr(pydantic, 'model_validator', create_validator_decorator)
         if not callable(getattr(pydantic, 'validator', None)):
-            monkeypatch.setattr(pydantic, 'validator', _noop_decorator)
+            monkeypatch.setattr(pydantic, 'validator', create_validator_decorator)
     except ImportError:
         pass
     
