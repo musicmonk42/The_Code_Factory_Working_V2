@@ -46,7 +46,11 @@ class LLMProviderConfig(BaseSettings):
         description="Custom OpenAI API base URL (for Azure OpenAI, etc.)"
     )
     
-    # xAI Grok Configuration
+    # xAI Grok Configuration (supports both XAI_API_KEY and GROK_API_KEY)
+    xai_api_key: Optional[SecretStr] = Field(
+        default=None,
+        description="xAI API key (alternative to grok_api_key)"
+    )
     grok_api_key: Optional[SecretStr] = Field(
         default=None,
         description="xAI Grok API key"
@@ -54,6 +58,16 @@ class LLMProviderConfig(BaseSettings):
     grok_model: str = Field(
         default="grok-beta",
         description="Default Grok model to use"
+    )
+    
+    # Ollama Configuration (local LLM)
+    ollama_host: Optional[str] = Field(
+        default=None,
+        description="Ollama host URL (e.g., http://localhost:11434)"
+    )
+    ollama_model: str = Field(
+        default="codellama",
+        description="Default Ollama model to use"
     )
     
     # Anthropic Claude Configuration
@@ -79,7 +93,7 @@ class LLMProviderConfig(BaseSettings):
     # Default Provider Configuration
     default_llm_provider: str = Field(
         default="openai",
-        description="Default LLM provider to use (openai, grok, anthropic, google)"
+        description="Default LLM provider to use (openai, grok, anthropic, google, ollama)"
     )
     
     # LLM Request Configuration
@@ -114,7 +128,7 @@ class LLMProviderConfig(BaseSettings):
     @classmethod
     def validate_provider(cls, v: str) -> str:
         """Validate that the provider is one of the supported options."""
-        valid_providers = {"openai", "grok", "anthropic", "google"}
+        valid_providers = {"openai", "grok", "anthropic", "google", "ollama"}
         if v not in valid_providers:
             raise ValueError(
                 f"Invalid LLM provider: {v}. Must be one of {valid_providers}"
@@ -126,7 +140,7 @@ class LLMProviderConfig(BaseSettings):
         Get the API key for the specified provider.
         
         Args:
-            provider: Provider name (openai, grok, anthropic, google).
+            provider: Provider name (openai, grok, anthropic, google, ollama).
                      If None, uses default_llm_provider.
         
         Returns:
@@ -134,9 +148,20 @@ class LLMProviderConfig(BaseSettings):
         """
         provider = provider or self.default_llm_provider
         
+        # Special handling for xAI/Grok - check both xai_api_key and grok_api_key
+        if provider == "grok":
+            # Prefer XAI_API_KEY, fallback to GROK_API_KEY
+            xai_key = self.xai_api_key or self.grok_api_key
+            if xai_key:
+                return xai_key.get_secret_value()
+            return None
+        
+        # Ollama doesn't use API keys
+        if provider == "ollama":
+            return None
+        
         key_mapping = {
             "openai": self.openai_api_key,
-            "grok": self.grok_api_key,
             "anthropic": self.anthropic_api_key,
             "google": self.google_api_key,
         }
@@ -163,20 +188,28 @@ class LLMProviderConfig(BaseSettings):
             "grok": self.grok_model,
             "anthropic": self.anthropic_model,
             "google": self.google_model,
+            "ollama": self.ollama_model,
         }
         
         return model_mapping.get(provider, "gpt-4")
     
     def is_provider_configured(self, provider: Optional[str] = None) -> bool:
         """
-        Check if a provider is properly configured with an API key.
+        Check if a provider is properly configured with an API key or host.
         
         Args:
             provider: Provider name. If None, uses default_llm_provider.
         
         Returns:
-            True if the provider has an API key configured
+            True if the provider has an API key configured or is Ollama with host
         """
+        provider = provider or self.default_llm_provider
+        
+        # Special case for Ollama - check for host instead of API key
+        if provider == "ollama":
+            return self.ollama_host is not None
+        
+        # For other providers, check API key
         return self.get_provider_api_key(provider) is not None
     
     def get_available_providers(self) -> List[str]:
@@ -187,7 +220,7 @@ class LLMProviderConfig(BaseSettings):
             List of provider names that are configured
         """
         providers = []
-        for provider in ["openai", "grok", "anthropic", "google"]:
+        for provider in ["openai", "grok", "anthropic", "google", "ollama"]:
             if self.is_provider_configured(provider):
                 providers.append(provider)
         return providers
@@ -358,6 +391,66 @@ def get_server_config() -> ServerConfig:
         ServerConfig instance
     """
     return ServerConfig()
+
+
+def detect_available_llm_provider() -> Optional[str]:
+    """
+    Auto-detect which LLM provider is available based on environment variables.
+    
+    Checks for API keys in this priority order:
+    1. OPENAI_API_KEY → use OpenAI
+    2. ANTHROPIC_API_KEY → use Anthropic/Claude
+    3. XAI_API_KEY → use xAI/Grok
+    4. GOOGLE_API_KEY → use Google/Gemini
+    5. OLLAMA_HOST → use Ollama (local)
+    
+    Returns:
+        Provider name (openai, anthropic, grok, google, ollama) or None if none found
+    """
+    # Check environment variables in priority order
+    if os.getenv("OPENAI_API_KEY"):
+        logger.info("Auto-detected OpenAI provider from OPENAI_API_KEY")
+        return "openai"
+    
+    if os.getenv("ANTHROPIC_API_KEY"):
+        logger.info("Auto-detected Anthropic provider from ANTHROPIC_API_KEY")
+        return "anthropic"
+    
+    # xAI Grok can use either XAI_API_KEY or GROK_API_KEY
+    if os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY"):
+        logger.info("Auto-detected xAI/Grok provider from XAI_API_KEY or GROK_API_KEY")
+        return "grok"
+    
+    if os.getenv("GOOGLE_API_KEY"):
+        logger.info("Auto-detected Google/Gemini provider from GOOGLE_API_KEY")
+        return "google"
+    
+    if os.getenv("OLLAMA_HOST"):
+        logger.info("Auto-detected Ollama provider from OLLAMA_HOST")
+        return "ollama"
+    
+    logger.warning("No LLM provider API keys found in environment variables")
+    return None
+
+
+def get_default_model_for_provider(provider: str) -> str:
+    """
+    Get the default model name for a given provider.
+    
+    Args:
+        provider: Provider name (openai, anthropic, grok, google, ollama)
+    
+    Returns:
+        Default model name for the provider
+    """
+    model_defaults = {
+        "openai": "gpt-4-turbo",
+        "anthropic": "claude-3-sonnet-20240229",
+        "grok": "grok-beta",
+        "google": "gemini-pro",
+        "ollama": "codellama",
+    }
+    return model_defaults.get(provider, "gpt-4")
 
 
 def validate_configuration() -> Dict[str, Any]:

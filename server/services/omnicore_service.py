@@ -21,13 +21,23 @@ from server.utils.agent_loader import get_agent_loader
 
 logger = logging.getLogger(__name__)
 
-# Import configuration
+# Import configuration and helper functions
 try:
-    from server.config import get_agent_config, get_llm_config
+    from server.config import (
+        detect_available_llm_provider,
+        get_agent_config,
+        get_default_model_for_provider,
+        get_llm_config,
+    )
     CONFIG_AVAILABLE = True
 except ImportError:
     logger.warning("server.config not available, using default configuration")
     CONFIG_AVAILABLE = False
+    # Provide fallback implementations
+    def detect_available_llm_provider():
+        return None
+    def get_default_model_for_provider(provider):
+        return "gpt-4"
 
 # In-memory storage for clarification sessions
 _clarification_sessions = {}
@@ -200,26 +210,75 @@ class OmniCoreService:
     def _build_llm_config(self) -> Dict[str, Any]:
         """
         Build LLM configuration dict for agents from our config.
+        Auto-detects available LLM provider if default is not configured.
         
         Returns:
             Configuration dictionary compatible with agent requirements
         """
         if not self.llm_config:
             # Fallback configuration when config module not available
-            return {
-                "backend": "openai",
-                "model": {"openai": "gpt-4"},
-                "ensemble_enabled": False,
-            }
+            # Try to auto-detect from environment
+            auto_provider = detect_available_llm_provider()
+            if auto_provider:
+                logger.info(f"Auto-detected LLM provider: {auto_provider}")
+                return {
+                    "backend": auto_provider,
+                    "model": {auto_provider: get_default_model_for_provider(auto_provider)},
+                    "ensemble_enabled": False,
+                }
+            else:
+                logger.warning("No LLM provider configured or auto-detected")
+                return {
+                    "backend": "openai",
+                    "model": {"openai": "gpt-4"},
+                    "ensemble_enabled": False,
+                }
         
         provider = self.llm_config.default_llm_provider
-        model = self.llm_config.get_provider_model(provider)
+        
+        # Auto-detect if the default provider is not configured
+        if not self.llm_config.is_provider_configured(provider):
+            logger.warning(
+                f"Default LLM provider '{provider}' is not configured. "
+                "Attempting auto-detection..."
+            )
+            
+            auto_provider = detect_available_llm_provider()
+            if auto_provider:
+                logger.info(f"Auto-detected LLM provider: {auto_provider}")
+                provider = auto_provider
+                # Update model to match auto-detected provider
+                model = self.llm_config.get_provider_model(provider)
+            else:
+                logger.error(
+                    "No LLM provider configured. Please set API keys in environment variables:\n"
+                    "  - OPENAI_API_KEY for OpenAI\n"
+                    "  - ANTHROPIC_API_KEY for Anthropic/Claude\n"
+                    "  - XAI_API_KEY or GROK_API_KEY for xAI/Grok\n"
+                    "  - GOOGLE_API_KEY for Google/Gemini\n"
+                    "  - OLLAMA_HOST for Ollama (local)"
+                )
+                # Use default provider anyway, might be mocked
+                model = self.llm_config.get_provider_model(provider)
+        else:
+            model = self.llm_config.get_provider_model(provider)
+            logger.info(f"Using configured LLM provider: {provider} with model: {model}")
+        
         api_key = self.llm_config.get_provider_api_key(provider)
         
         # Set environment variable for the agent to use
         if api_key:
-            env_var = f"{provider.upper()}_API_KEY"
-            os.environ[env_var] = api_key
+            # For xAI/Grok, set both XAI_API_KEY and GROK_API_KEY
+            if provider == "grok":
+                os.environ["XAI_API_KEY"] = api_key
+                os.environ["GROK_API_KEY"] = api_key
+            else:
+                env_var = f"{provider.upper()}_API_KEY"
+                os.environ[env_var] = api_key
+        
+        # For Ollama, set the host
+        if provider == "ollama" and self.llm_config.ollama_host:
+            os.environ["OLLAMA_HOST"] = self.llm_config.ollama_host
         
         config = {
             "backend": provider,
@@ -233,6 +292,10 @@ class OmniCoreService:
         # Add OpenAI base URL if configured
         if provider == "openai" and self.llm_config.openai_base_url:
             config["openai_base_url"] = self.llm_config.openai_base_url
+        
+        # Add Ollama host if configured
+        if provider == "ollama" and self.llm_config.ollama_host:
+            config["ollama_host"] = self.llm_config.ollama_host
         
         return config
     
@@ -781,6 +844,10 @@ class OmniCoreService:
         """
         Execute requirements clarification using LLM-based or rule-based approach.
         
+        Uses the Clarifier class which auto-detects available LLM providers
+        (OpenAI, Anthropic, xAI, Google, Ollama) via the central runner/llm_client.py.
+        Falls back to rule-based clarification if no LLM is available.
+        
         Args:
             job_id: Job identifier
             payload: Parameters including readme_content, ambiguities
@@ -798,36 +865,69 @@ class OmniCoreService:
                     "message": "No README content provided for clarification",
                 }
             
-            # Check if LLM-based clarifier is available
-            if self._clarifier_llm_class:
+            # Try LLM-based clarification first (with auto-detection)
+            if self.agents_available.get("clarifier"):
                 logger.info(f"Running LLM-based clarifier for job {job_id}")
                 try:
-                    # Build LLM config for clarifier
-                    llm_config = self._build_llm_config()
+                    from generator.clarifier.clarifier import Clarifier
                     
-                    # Initialize LLM-based clarifier with API key from config
-                    api_key = None
-                    if self.llm_config:
-                        api_key = self.llm_config.get_provider_api_key(llm_config["backend"])
+                    # Create clarifier instance with auto-detection
+                    clarifier = await Clarifier.create()
                     
-                    clarifier = self._clarifier_llm_class(
-                        api_key=api_key,
-                        model=llm_config.get("model", {}).get(llm_config["backend"], "grok-1")
-                    )
+                    # Check if LLM is actually available (not just rule-based fallback)
+                    has_llm = hasattr(clarifier, 'llm') and clarifier.llm is not None
                     
-                    # Generate questions using LLM (async call)
-                    questions = await clarifier.generate_clarification_questions(
-                        requirements=readme_content,
-                        ambiguities=ambiguities
-                    )
+                    if has_llm:
+                        # Try to detect ambiguities using LLM
+                        try:
+                            detected_ambiguities = await clarifier.detect_ambiguities(readme_content)
+                            # Generate questions based on detected ambiguities
+                            questions = await clarifier.generate_questions(detected_ambiguities)
+                            
+                            logger.info(
+                                f"LLM-based clarifier generated {len(questions)} questions for job {job_id}",
+                                extra={"method": "llm", "questions_count": len(questions)}
+                            )
+                            
+                            # Store session
+                            _clarification_sessions[job_id] = {
+                                "job_id": job_id,
+                                "requirements": readme_content,
+                                "questions": questions,
+                                "answers": {},
+                                "status": "in_progress",
+                                "created_at": datetime.now().isoformat(),
+                                "method": "llm",
+                            }
+                            
+                            return {
+                                "status": "clarification_initiated",
+                                "job_id": job_id,
+                                "clarifications": questions,
+                                "confidence": 0.65,
+                                "questions_count": len(questions),
+                                "method": "llm",
+                            }
+                        except Exception as llm_error:
+                            logger.warning(
+                                f"LLM-based clarification failed: {llm_error}. "
+                                "Falling back to rule-based.",
+                                exc_info=True
+                            )
+                    else:
+                        logger.info("No LLM configured, using rule-based clarification")
                     
-                    logger.info(f"LLM-based clarifier generated {len(questions)} questions for job {job_id}")
+                except ImportError as e:
+                    logger.warning(f"Could not import Clarifier module: {e}. Using rule-based.")
                 except Exception as e:
-                    logger.warning(f"LLM clarifier failed, falling back to rule-based: {e}")
-                    questions = self._generate_clarification_questions(readme_content)
-            else:
-                logger.info(f"Running rule-based clarifier for job {job_id}")
-                questions = self._generate_clarification_questions(readme_content)
+                    logger.warning(
+                        f"Error initializing clarifier: {e}. Falling back to rule-based.",
+                        exc_info=True
+                    )
+            
+            # Fallback to rule-based clarification
+            logger.info(f"Running rule-based clarifier for job {job_id}")
+            questions = self._generate_clarification_questions(readme_content)
             
             # Store session
             _clarification_sessions[job_id] = {
@@ -837,6 +937,7 @@ class OmniCoreService:
                 "answers": {},
                 "status": "in_progress",
                 "created_at": datetime.now().isoformat(),
+                "method": "rule_based",
             }
             
             result = {
@@ -845,6 +946,7 @@ class OmniCoreService:
                 "clarifications": questions,
                 "confidence": 0.65,  # Low confidence indicates need for clarification
                 "questions_count": len(questions),
+                "method": "rule_based",
             }
             
             logger.info(f"Clarifier completed for job {job_id} with {len(questions)} questions")
