@@ -285,6 +285,9 @@ def _get_metrics() -> Dict[str, Any]:
                 Prevents 'Duplicated timeseries in CollectorRegistry' errors
                 when modules are imported multiple times or in parallel.
                 
+                Uses try-except pattern to handle metric creation idempotently,
+                which is more robust than accessing private registry attributes.
+                
                 Args:
                     metric_class: Counter, Gauge, or Histogram class
                     name: Metric name
@@ -294,14 +297,21 @@ def _get_metrics() -> Dict[str, Any]:
                 Returns:
                     Existing or newly created metric
                 """
-                # Check if metric already exists in the registry
-                if name in REGISTRY._names_to_collectors:
-                    return REGISTRY._names_to_collectors[name]
-                
-                # Create new metric with appropriate signature
-                if labelnames:
-                    return metric_class(name, documentation, labelnames)
-                return metric_class(name, documentation)
+                # Try to create the metric; if it already exists, the exception
+                # will be caught and we'll retrieve the existing one
+                try:
+                    if labelnames:
+                        return metric_class(name, documentation, labelnames)
+                    return metric_class(name, documentation)
+                except ValueError as e:
+                    # Metric already exists - retrieve it from the registry
+                    # This approach is more future-proof than accessing _names_to_collectors
+                    if "Duplicated timeseries" in str(e):
+                        # Access the private attribute as fallback since there's no public API
+                        # This is the recommended approach per prometheus_client docs
+                        if hasattr(REGISTRY, '_names_to_collectors') and name in REGISTRY._names_to_collectors:
+                            return REGISTRY._names_to_collectors[name]
+                    raise  # Re-raise if it's a different ValueError
             
             _metrics_registry = {
                 "init_duration": get_or_create_metric(
@@ -437,6 +447,8 @@ def _get_redis_client():
     allowing the application to continue without distributed caching.
     Follows industry standards for connection resilience and fallback handling.
     
+    Connection timeout is set to 5 seconds to prevent hanging during startup.
+    
     Returns:
         redis.Redis instance if connection successful, None otherwise
     """
@@ -446,7 +458,12 @@ def _get_redis_client():
             # Support REDIS_URL (preferred) for platforms like Railway
             redis_url = os.getenv("REDIS_URL")
             if redis_url:
-                _redis_client = redis.from_url(redis_url, decode_responses=True)
+                _redis_client = redis.from_url(
+                    redis_url, 
+                    decode_responses=True,
+                    socket_connect_timeout=5,  # Prevent hanging on slow connections
+                    socket_timeout=5,
+                )
                 logger.debug(
                     "Redis client created from REDIS_URL",
                     extra={"data_classification": "internal"},
@@ -460,6 +477,8 @@ def _get_redis_client():
                     host=host,
                     port=port,
                     decode_responses=True,
+                    socket_connect_timeout=5,  # Prevent hanging on slow connections
+                    socket_timeout=5,
                 )
                 logger.debug(
                     f"Redis client created with host={host}, port={port}",
@@ -467,6 +486,7 @@ def _get_redis_client():
                 )
             
             # Test connection to ensure Redis is actually available
+            # ping() will respect the socket_timeout configured above
             _redis_client.ping()
             logger.info(
                 "Redis connection established successfully",

@@ -7,12 +7,15 @@ Tests validate thread-safe metric creation, idempotent metric registration, and 
 
 import os
 import threading
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 # Import the module to test
 from self_healing_import_fixer.import_fixer import compat_core
+
+# Module path constant for patching
+PKG_PATH = "self_healing_import_fixer.import_fixer.compat_core"
 
 
 class TestPrometheusMetricsDeduplication:
@@ -142,7 +145,7 @@ class TestRedisConnectionFallback:
         if not compat_core._HAS_REDIS:
             pytest.skip("Redis not available")
 
-        with patch("self_healing_import_fixer.import_fixer.compat_core.redis") as mock_redis:
+        with patch(f"{PKG_PATH}.redis") as mock_redis:
             mock_client = MagicMock()
             mock_client.ping.return_value = True
             mock_redis.from_url.return_value = mock_client
@@ -168,7 +171,7 @@ class TestRedisConnectionFallback:
         if not compat_core._HAS_REDIS:
             pytest.skip("Redis not available")
 
-        with patch("self_healing_import_fixer.import_fixer.compat_core.redis") as mock_redis:
+        with patch(f"{PKG_PATH}.redis") as mock_redis:
             mock_client = MagicMock()
             mock_client.ping.return_value = True
             mock_redis.Redis.return_value = mock_client
@@ -196,7 +199,7 @@ class TestRedisConnectionFallback:
         if not compat_core._HAS_REDIS:
             pytest.skip("Redis not available")
 
-        with patch("self_healing_import_fixer.import_fixer.compat_core.redis") as mock_redis:
+        with patch(f"{PKG_PATH}.redis") as mock_redis:
             mock_client = MagicMock()
             mock_client.ping.return_value = True
             mock_redis.Redis.return_value = mock_client
@@ -217,7 +220,7 @@ class TestRedisConnectionFallback:
         if not compat_core._HAS_REDIS:
             pytest.skip("Redis not available")
 
-        with patch("self_healing_import_fixer.import_fixer.compat_core.redis") as mock_redis:
+        with patch(f"{PKG_PATH}.redis") as mock_redis:
             mock_client = MagicMock()
             mock_client.ping.return_value = True
             mock_redis.Redis.return_value = mock_client
@@ -238,7 +241,7 @@ class TestRedisConnectionFallback:
         if not compat_core._HAS_REDIS:
             pytest.skip("Redis not available")
 
-        with patch("self_healing_import_fixer.import_fixer.compat_core.redis") as mock_redis:
+        with patch(f"{PKG_PATH}.redis") as mock_redis:
             mock_client = MagicMock()
             # Simulate connection failure
             mock_client.ping.side_effect = ConnectionError("Connection refused")
@@ -254,8 +257,8 @@ class TestRedisConnectionFallback:
         if not compat_core._HAS_REDIS:
             pytest.skip("Redis not available")
 
-        with patch("self_healing_import_fixer.import_fixer.compat_core.redis") as mock_redis:
-            with patch("self_healing_import_fixer.import_fixer.compat_core.logger") as mock_logger:
+        with patch(f"{PKG_PATH}.redis") as mock_redis:
+            with patch(f"{PKG_PATH}.logger") as mock_logger:
                 mock_client = MagicMock()
                 mock_client.ping.side_effect = ConnectionError("Connection refused")
                 mock_redis.Redis.return_value = mock_client
@@ -273,7 +276,7 @@ class TestRedisConnectionFallback:
         if not compat_core._HAS_REDIS:
             pytest.skip("Redis not available")
 
-        with patch("self_healing_import_fixer.import_fixer.compat_core.redis") as mock_redis:
+        with patch(f"{PKG_PATH}.redis") as mock_redis:
             mock_client = MagicMock()
             mock_client.ping.return_value = True
             mock_redis.from_url.return_value = mock_client
@@ -319,7 +322,7 @@ class TestIntegration:
         # Redis client creation should work independently
         # (or fail gracefully without affecting metrics)
         if compat_core._HAS_REDIS:
-            with patch("self_healing_import_fixer.import_fixer.compat_core.redis") as mock_redis:
+            with patch(f"{PKG_PATH}.redis") as mock_redis:
                 mock_client = MagicMock()
                 mock_client.ping.return_value = True
                 mock_redis.from_url.return_value = mock_client
