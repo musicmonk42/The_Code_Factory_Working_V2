@@ -5,7 +5,7 @@ Handles file uploads and generator-specific operations.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
@@ -262,7 +262,7 @@ async def upload_files(
 
     # Update job status
     job.status = JobStatus.RUNNING
-    job.updated_at = datetime.utcnow()
+    job.updated_at = datetime.now(timezone.utc)
     
     # Auto-trigger pipeline if README content is available
     if readme_content:

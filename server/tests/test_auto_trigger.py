@@ -7,6 +7,7 @@ and the automatic detection of available LLM providers.
 
 import io
 import os
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -27,14 +28,12 @@ def client():
 @pytest.fixture
 def sample_job():
     """Create a sample job for testing."""
-    from datetime import datetime
-    
     job = Job(
         id="test-auto-trigger-123",
         status=JobStatus.PENDING,
         input_files=[],
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
         metadata={},
     )
     jobs_db[job.id] = job
@@ -144,7 +143,7 @@ This is a Python project that does something interesting.
             "filename": "README.md",
             "path": f"./uploads/{sample_job.id}/README.md",
             "size": len(readme_content),
-            "uploaded_at": "2024-01-01T00:00:00"
+            "uploaded_at": datetime.now(timezone.utc).isoformat()
         })
         mock_service.create_generation_job = AsyncMock(return_value={
             "job_id": sample_job.id,
@@ -182,7 +181,7 @@ This is a Python project that does something interesting.
             "filename": "test.py",
             "path": f"./uploads/{sample_job.id}/test.py",
             "size": len(test_content),
-            "uploaded_at": "2024-01-01T00:00:00"
+            "uploaded_at": datetime.now(timezone.utc).isoformat()
         })
         mock_service.create_generation_job = AsyncMock(return_value={
             "job_id": sample_job.id,
