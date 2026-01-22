@@ -23,10 +23,10 @@ coordination layer for centralized control and monitoring.
 # This prevents circular imports, SystemExit crashes, and reduces startup time
 import os
 
-# --- DEMO PRODUCTION FIX START ---
+# --- PRODUCTION MODE CONFIGURATION START ---
 # Force Production Mode
-os.environ["VULCAN_ENV"] = "production"
-os.environ["VULCAN_DEV_MODE"] = "0"
+os.environ["APP_ENV"] = "production"
+os.environ["DEV_MODE"] = "0"
 
 # INJECT SIGNING KEY (Required for Production Audit Logging)
 # This prevents the "CRITICAL - FATAL: log_audit_event" crash
@@ -34,7 +34,7 @@ os.environ.setdefault(
     "AUDIT_SIGNING_KEY",
     "7f8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a"
 )
-# --- DEMO PRODUCTION FIX END ---
+# --- PRODUCTION MODE CONFIGURATION END ---
 
 # Enterprise-grade startup configuration
 os.environ.setdefault("APP_STARTUP", "1")  # Skip plugin loading during startup
