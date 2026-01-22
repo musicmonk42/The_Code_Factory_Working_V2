@@ -33,8 +33,10 @@ sys.path.insert(
 )
 
 # Mock aiohttp at module level before importing slack_plugin
-mock_aiohttp = MagicMock()
-sys.modules["aiohttp"] = mock_aiohttp
+# Only mock if not already loaded with a real module to preserve type annotations
+if "aiohttp" not in sys.modules or isinstance(sys.modules.get("aiohttp"), MagicMock):
+    mock_aiohttp = MagicMock()
+    sys.modules["aiohttp"] = mock_aiohttp
 
 # Mock psutil at module level before importing slack_plugin
 mock_psutil = MagicMock()

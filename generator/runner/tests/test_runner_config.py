@@ -13,10 +13,12 @@ from cryptography.fernet import Fernet
 from pydantic import ValidationError
 
 # Mock external dependencies
+# NOTE: Do NOT mock aiohttp, pydantic, or fastapi - they are needed for proper
+# type annotations and decorator evaluation at import time
 sys.modules["hvac"] = MagicMock()
 sys.modules["deepdiff"] = MagicMock()
 sys.modules["watchfiles"] = MagicMock()
-sys.modules["aiohttp"] = MagicMock()
+# sys.modules["aiohttp"] = MagicMock()  # REMOVED - causes type annotation errors
 
 # Import runner modules
 from runner.runner_config import ConfigWatcher, RunnerConfig, load_config
