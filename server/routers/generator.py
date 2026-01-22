@@ -224,7 +224,9 @@ async def upload_files(
         if filename_lower.endswith('.md'):
             readme_files.append(file.filename)
             # Store README content for pipeline trigger
-            if not readme_content and filename_lower in ['readme.md', 'readme']:
+            # Check if this is a README file (readme.md or just README in various formats)
+            base_name = filename_lower.replace('.md', '')
+            if not readme_content and 'readme' in base_name:
                 try:
                     readme_content = content.decode('utf-8')
                 except UnicodeDecodeError:

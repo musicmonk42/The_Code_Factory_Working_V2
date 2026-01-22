@@ -49,8 +49,7 @@ class LLMProviderConfig(BaseSettings):
     # xAI Grok Configuration (supports both XAI_API_KEY and GROK_API_KEY)
     xai_api_key: Optional[SecretStr] = Field(
         default=None,
-        description="xAI API key (alternative to grok_api_key)",
-        alias="xai_api_key"
+        description="xAI API key (alternative to grok_api_key)"
     )
     grok_api_key: Optional[SecretStr] = Field(
         default=None,
