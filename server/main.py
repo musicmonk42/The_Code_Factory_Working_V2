@@ -69,7 +69,7 @@ from server.routers import (
     sfe_router,
 )
 from server.utils.agent_loader import AgentType, get_agent_loader
-from server.schemas import ErrorResponse, HealthResponse, ReadinessResponse
+from server.schemas import ErrorResponse, HealthResponse, ReadinessResponse, DetailedHealthResponse
 
 # Configure logging
 logging.basicConfig(
@@ -388,6 +388,156 @@ async def readiness_check(response: Response) -> ReadinessResponse:
         status=status_text,
         checks=checks,
         timestamp=datetime.utcnow().isoformat(),
+    )
+
+
+@app.get("/health/detailed", response_model=DetailedHealthResponse, tags=["Health"])
+async def detailed_health_check() -> DetailedHealthResponse:
+    """
+    Detailed health check endpoint with comprehensive dependency and feature status.
+    
+    Provides granular health information about:
+    - All 5 agents (codegen, critique, testgen, deploy, docgen)
+    - External dependencies (Redis, Database, Feast)
+    - Optional features (HSM, PlantUML, Sphinx, Sentry, etc.)
+    
+    This endpoint is useful for monitoring and debugging the platform's
+    configuration and optional features.
+    
+    **Returns:**
+    - Agent availability status for each agent
+    - External dependency connection status
+    - Optional feature availability status
+    - Overall health status
+    - API version and timestamp
+    """
+    # Get agent status
+    try:
+        loader = get_agent_loader()
+        agent_status = loader.get_status()
+        available_agents = agent_status.get('available_agents', {})
+        
+        # Map agent status
+        agents = {
+            "codegen": "available" if available_agents.get(AgentType.CODEGEN) else "unavailable",
+            "critique": "available" if available_agents.get(AgentType.CRITIQUE) else "unavailable",
+            "testgen": "available" if available_agents.get(AgentType.TESTGEN) else "unavailable",
+            "deploy": "available" if available_agents.get(AgentType.DEPLOY) else "unavailable",
+            "docgen": "available" if available_agents.get(AgentType.DOCGEN) else "unavailable",
+        }
+    except Exception as e:
+        logger.error(f"Error checking agent status: {e}", exc_info=True)
+        agents = {
+            "codegen": "error",
+            "critique": "error",
+            "testgen": "error",
+            "deploy": "error",
+            "docgen": "error",
+        }
+    
+    # Check external dependencies
+    dependencies = {}
+    
+    # Check Redis
+    try:
+        import redis.asyncio as redis
+        # Try to connect (with timeout)
+        r = redis.Redis.from_url(
+            os.getenv("REDIS_URL", "redis://localhost:6379"),
+            socket_connect_timeout=1,
+            socket_timeout=1
+        )
+        await r.ping()
+        dependencies["redis"] = "connected"
+        await r.close()
+    except Exception:
+        dependencies["redis"] = "unavailable"
+    
+    # Check Database
+    try:
+        # Check if DATABASE_URL is configured
+        if os.getenv("DATABASE_URL"):
+            dependencies["database"] = "configured"
+        else:
+            dependencies["database"] = "not_configured"
+    except Exception:
+        dependencies["database"] = "error"
+    
+    # Check Feast feature store
+    try:
+        import feast
+        dependencies["feast"] = "installed"
+    except ImportError:
+        dependencies["feast"] = "not_installed"
+    
+    # Check Presidio (PII detection)
+    try:
+        import presidio_analyzer
+        import presidio_anonymizer
+        dependencies["presidio"] = "installed"
+    except ImportError:
+        dependencies["presidio"] = "not_installed"
+    
+    # Check optional features
+    optional_features = {}
+    
+    # HSM Support
+    try:
+        import pkcs11
+        optional_features["hsm"] = "available"
+    except ImportError:
+        optional_features["hsm"] = "not_installed"
+    
+    # PlantUML/Graphviz
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["dot", "-V"],
+            capture_output=True,
+            timeout=1
+        )
+        if result.returncode == 0:
+            optional_features["graphviz"] = "available"
+        else:
+            optional_features["graphviz"] = "unavailable"
+    except Exception:
+        optional_features["graphviz"] = "not_installed"
+    
+    # Sphinx documentation
+    try:
+        import sphinx
+        optional_features["sphinx"] = "installed"
+    except ImportError:
+        optional_features["sphinx"] = "not_installed"
+    
+    # Sentry error tracking
+    try:
+        if os.getenv("SENTRY_DSN"):
+            optional_features["sentry"] = "configured"
+        else:
+            optional_features["sentry"] = "not_configured"
+    except Exception:
+        optional_features["sentry"] = "not_configured"
+    
+    # Docker
+    try:
+        import docker
+        client = docker.from_env()
+        client.ping()
+        optional_features["docker"] = "available"
+    except Exception:
+        optional_features["docker"] = "unavailable"
+    
+    # Overall status
+    status = "healthy"
+    
+    return DetailedHealthResponse(
+        status=status,
+        version=__version__,
+        timestamp=datetime.utcnow().isoformat(),
+        agents=agents,
+        dependencies=dependencies,
+        optional_features=optional_features,
     )
 
 

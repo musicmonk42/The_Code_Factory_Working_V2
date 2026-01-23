@@ -45,8 +45,8 @@ from arbiter.metrics import (
 from cryptography.fernet import Fernet
 from dotenv import dotenv_values, load_dotenv
 from prometheus_client import REGISTRY, push_to_gateway
-from pydantic import BaseModel, Field, HttpUrl, SecretStr, field_validator
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import BigInteger, Column, DateTime, String, Text, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -174,22 +174,23 @@ class MyArbiterConfig(BaseSettings):
     )
     LLM_MODEL: str = Field("llama3", description="Name of the LLM model to use")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-        extra = "allow"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="allow"
+    )
 
-        @classmethod
-        def customise_sources(cls, init_settings, env_settings, file_secret_settings):
-            env = os.getenv("ENV", "production")
-            env_file = f".env.{env}" if os.path.exists(f".env.{env}") else ".env"
-            return (
-                init_settings,
-                lambda: dotenv_values(env_file),
-                env_settings,
-                file_secret_settings,
-            )
+    @classmethod
+    def customise_sources(cls, init_settings, env_settings, file_secret_settings):
+        env = os.getenv("ENV", "production")
+        env_file = f".env.{env}" if os.path.exists(f".env.{env}") else ".env"
+        return (
+            init_settings,
+            lambda: dotenv_values(env_file),
+            env_settings,
+            file_secret_settings,
+        )
 
     @field_validator(
         "OMNICORE_URL",

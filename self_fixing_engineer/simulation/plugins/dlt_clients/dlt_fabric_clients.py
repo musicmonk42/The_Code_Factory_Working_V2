@@ -25,6 +25,7 @@ from pydantic import (
     AnyHttpUrl,
     AnyUrl,
     BaseModel,
+    ConfigDict,
     Field,
     ValidationError,
     model_validator,
@@ -225,9 +226,7 @@ class FabricConfig(BaseModel):
                     raise ValueError(f"File not found: {v}")
         return v
 
-    class Config:
-        # This ensures validators run in the order fields are defined
-        validate_assignment = True
+    model_config = ConfigDict(validate_assignment=True)
 
 
 # ---------------------------

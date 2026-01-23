@@ -1334,13 +1334,12 @@ if __name__ == "__main__":
 
     # Dummy config for testing
     # FIX: Ensure RunnerConfig is imported before this definition
+    from pydantic import ConfigDict
     from runner.runner_config import RunnerConfig
 
     # FIX: Correct DummyRunnerConfig to properly inherit from RunnerConfig
     class DummyRunnerConfig(RunnerConfig):
-        # Allow extra fields for this test class
-        class Config:
-            extra = "allow"
+        model_config = ConfigDict(extra="allow")
 
         # Define fields that are not in the base RunnerConfig but are used in this file
         mutation: bool = True

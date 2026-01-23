@@ -33,7 +33,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 # Pydantic for robust data validation
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 from pydantic import field_validator
 
@@ -310,8 +310,7 @@ class FeatureEntityModel(BaseModel):
             )
         return v
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class FeatureViewModel(BaseModel):
@@ -346,8 +345,7 @@ class FeatureViewModel(BaseModel):
             raise ValueError("TTL must be positive.")
         return v
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class FeatureSourceModel(BaseModel):
@@ -374,8 +372,7 @@ class FeatureSourceModel(BaseModel):
             raise ValueError(f"Invalid source type: {v}. Must be one of {valid_types}.")
         return v
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 # --- Feature Store Client Class ---

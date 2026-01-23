@@ -204,8 +204,7 @@ except ImportError:
         def parse_obj(cls, obj):
             return cls(**obj)
 
-        class Config:
-            extra = "allow"
+        model_config = {"extra": "allow"}
 
     class Field:
         def __new__(cls, default=None, **kwargs):
@@ -561,12 +560,7 @@ if PYDANTIC_AVAILABLE:
         source: str = "sfe_audit"
         sourcetype: str = "_json"
         index: Optional[str] = None
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class ElasticConfig(BaseModel):
         url: str
@@ -574,12 +568,7 @@ if PYDANTIC_AVAILABLE:
         username: Optional[str] = None
         password: Optional[str] = None
         index: str = "sfe-logs"
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class DatadogConfig(BaseModel):
         url: str = "https://http-intake.logs.datadoghq.com/api/v2/logs"
@@ -589,12 +578,7 @@ if PYDANTIC_AVAILABLE:
         service: str = "sfe-agent"
         source: str = "sfe-audit-plugin"
         tags: List[str] = Field(default_factory=list)
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class AzureSentinelConfig(BaseModel):
         workspace_id: str
@@ -602,56 +586,31 @@ if PYDANTIC_AVAILABLE:
         log_type: str = "SFE_Audit_CL"
         api_version: str = "2016-04-01"
         monitor_query_endpoint: Optional[str] = None
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class AzureEventGridConfig(BaseModel):
         endpoint: str
         key: str
         topic_name: str = "sfe-events"
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class AzureServiceBusConfig(BaseModel):
         connection_string: Optional[str] = None
         queue_name: Optional[str] = None
         topic_name: Optional[str] = None
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class AWSCloudWatchConfig(BaseModel):
         region_name: str = "us-east-1"
         log_group_name: str = "sfe-audit-logs"
         log_stream_name: str = "default"
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class GCPLoggingConfig(BaseModel):
         project_id: str
         log_name: str = "sfe-audit-log"
         credentials_path: Optional[str] = None
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class PolicyCondition(BaseModel):
         field: str = Field(..., description="Field name to apply the condition to.")
@@ -663,12 +622,7 @@ if PYDANTIC_AVAILABLE:
             ...,
             description="Value to compare against. Can be a regex string for 'matches_regex'.",
         )
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class PolicyRule(BaseModel):
         conditions: List[PolicyCondition] = Field(
@@ -684,12 +638,7 @@ if PYDANTIC_AVAILABLE:
         mask_with: str = Field(
             "[MASKED]", description="Value to replace with if action is 'mask'."
         )
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class PolicyConfig(BaseModel):
         rules: List[PolicyRule] = Field(
@@ -704,12 +653,7 @@ if PYDANTIC_AVAILABLE:
         compliance_flags: List[str] = Field(
             default_factory=list, description="Compliance flags to tag events with."
         )
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
     class PluginGlobalConfig(BaseModel):
         _CONFIG_VERSION = PrivateAttr(1)
@@ -734,12 +678,7 @@ if PYDANTIC_AVAILABLE:
         aws_cloudwatch: Optional[AWSCloudWatchConfig] = None
         gcp_logging: Optional[GCPLoggingConfig] = None
         policy: PolicyConfig = Field(default_factory=PolicyConfig)
-        if PYDANTIC_V2:
-            model_config = ConfigDict(extra="forbid")
-        else:
-
-            class Config:
-                extra = Extra.forbid
+        model_config = ConfigDict(extra="forbid")
 
         @classmethod
         def migrate_config(cls, raw_config: Dict[str, Any]) -> Dict[str, Any]:
