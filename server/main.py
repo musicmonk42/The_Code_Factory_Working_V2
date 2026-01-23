@@ -71,6 +71,7 @@ from server.routers import (
 from server.utils.agent_loader import AgentType, get_agent_loader
 from server.schemas import ErrorResponse, HealthResponse, ReadinessResponse, DetailedHealthResponse
 from server.config_utils import initialize_config, validate_required_api_keys
+from server.distributed_lock import get_startup_lock
 
 # Configure logging
 logging.basicConfig(
@@ -119,16 +120,29 @@ async def lifespan(app: FastAPI):
             logger.warning("Continuing startup despite configuration errors (non-production mode)")
     
     # Start the server IMMEDIATELY - agent loading happens in background
+    # Use distributed lock to prevent duplicate initialization across containers
     logger.info("=" * 80)
     logger.info("STARTING SERVER WITH BACKGROUND AGENT LOADING")
     logger.info("=" * 80)
     
     try:
+        # Acquire startup lock (non-blocking for now - agents can handle concurrency)
+        # The lock is primarily informational and logged for debugging
+        startup_lock = get_startup_lock()
+        lock_acquired = await startup_lock.acquire(blocking=False)
+        
+        if lock_acquired:
+            logger.info("✓ Startup lock acquired - this instance will initialize agents")
+        else:
+            logger.info("⚠ Startup lock held by another instance - agents may already be loading")
+            logger.info("  This is normal in multi-instance deployments")
+        
         # Get the agent loader
         loader = get_agent_loader()
         
         # Start background agent loading WITHOUT awaiting
         # This allows the server to start accepting HTTP connections immediately
+        # The agent loader has its own internal lock to prevent duplicate loading
         logger.info("Initiating background agent loading...")
         loader.start_background_loading()
         logger.info("✓ Background agent loading task started")
@@ -146,6 +160,14 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Code Factory API Server")
+    
+    # Release startup lock if we acquired it
+    try:
+        startup_lock = get_startup_lock()
+        await startup_lock.release()
+        await startup_lock.close()
+    except Exception as e:
+        logger.warning(f"Error releasing startup lock during shutdown: {e}")
 
     # Clean up connections
     # Example:
