@@ -77,8 +77,13 @@ except Exception:
 
 # [FIX] End of patch
 
-# We will get the key ID from the runner_config later
-_DEFAULT_AUDIT_KEY_ID: str = ""
+# Initialize from environment variables at import time to prevent race conditions
+# where log_audit_event() is called before configure_logging_from_config()
+_DEFAULT_AUDIT_KEY_ID: str = (
+    os.getenv("AGENTIC_AUDIT_HMAC_KEY", "")
+    or os.getenv("AUDIT_SIGNING_KEY", "")
+    or os.getenv("RUNNER_AUDIT_SIGNING_KEY_ID", "")
+)
 
 # [NEW] State management for the audit chain
 _AUDIT_CHAIN_LOCK = asyncio.Lock()
