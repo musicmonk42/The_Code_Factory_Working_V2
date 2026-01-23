@@ -210,20 +210,29 @@ def test_no_numpy_internal_api_usage():
     print("="*80)
     
     try:
-        import subprocess
+        # Use Python's built-in file searching for cross-platform compatibility
+        deprecated_api = 'numpy.core._multiarray_umath'
+        found_files = []
         
-        # Search for deprecated numpy.core._multiarray_umath
-        # Exclude test files to avoid false positives
-        result = subprocess.run(
-            ['grep', '-r', 'numpy.core._multiarray_umath', str(project_root), 
-             '--include=*.py', '--exclude-dir=.git', '--exclude=test_*.py'],
-            capture_output=True,
-            text=True
-        )
+        # Search through Python files
+        for py_file in project_root.rglob('*.py'):
+            # Skip test files and git directory
+            if 'test_' in py_file.name or '.git' in str(py_file):
+                continue
+            
+            try:
+                with open(py_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    if deprecated_api in content:
+                        found_files.append(str(py_file.relative_to(project_root)))
+            except Exception:
+                # Skip files that can't be read
+                pass
         
-        if result.returncode == 0 and result.stdout.strip():
-            print(f"✗ Found deprecated numpy.core usage:")
-            print(result.stdout)
+        if found_files:
+            print(f"✗ Found deprecated numpy.core usage in {len(found_files)} file(s):")
+            for f in found_files:
+                print(f"  - {f}")
             return False
         else:
             print("✓ No direct usage of numpy.core._multiarray_umath found in source code")
@@ -232,8 +241,8 @@ def test_no_numpy_internal_api_usage():
         return True
     except Exception as e:
         print(f"⚠ TEST WARNING: {e}")
-        print("⚠ Could not verify NumPy usage (grep may not be available)")
-        return True  # Don't fail the test if we can't run grep
+        print("⚠ Could not verify NumPy usage")
+        return True  # Don't fail the test if we can't check
 
 
 def test_arbiter_plugin_registry_async_handling():

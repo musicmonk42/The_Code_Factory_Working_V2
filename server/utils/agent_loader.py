@@ -358,14 +358,29 @@ class AgentLoader:
         except ModuleNotFoundError as e:
             logger.error(f"Module not found for {agent_name}: {e}")
             if attempt < max_attempts:
-                await asyncio.sleep(retry_delay * attempt)
+                # Use exponential backoff for consistency
+                await asyncio.sleep(retry_delay * (2 ** (attempt - 1)))
                 return await self._load_agent_safe(agent_name, module_path, attempt + 1)
             raise
             
         except Exception as e:
-            # Check if it's a deadlock error
-            if "_DeadlockError" in str(type(e).__name__) or "deadlock detected" in str(e):
-                logger.warning(f"Deadlock detected loading {agent_name}, retrying (attempt {attempt}/{max_attempts})")
+            # Check if it's a deadlock or import lock error
+            # Python's import system can raise various exceptions for deadlocks:
+            # - _DeadlockError (internal)
+            # - ImportError with "deadlock" in message
+            # - RuntimeError from import locks
+            error_msg = str(e).lower()
+            error_type = type(e).__name__
+            
+            is_deadlock = (
+                "_deadlock" in error_type.lower() or
+                "deadlock" in error_msg or
+                ("import" in error_msg and "lock" in error_msg) or
+                ("circular" in error_msg and "import" in error_msg)
+            )
+            
+            if is_deadlock:
+                logger.warning(f"Deadlock/circular import detected loading {agent_name}, retrying (attempt {attempt}/{max_attempts})")
                 
                 if attempt < max_attempts:
                     # Exponential backoff
