@@ -41,6 +41,16 @@ import logging
 import sys
 from typing import Optional
 
+# Loggers that should have their handlers cleared to prevent duplicates
+# These are the main module-level loggers in the application
+MANAGED_LOGGERS = [
+    'generator',
+    'arbiter', 
+    'runner',
+    'omnicore_engine',
+    'server',
+]
+
 
 class LevelPrefixFormatter(logging.Formatter):
     """
@@ -202,7 +212,8 @@ def configure_logging(
     root_logger.handlers = [info_handler, error_handler]
     
     # Prevent propagation for specific loggers to avoid duplicates
-    for logger_name in ['generator', 'arbiter', 'runner', 'omnicore_engine', 'server']:
+    # Use the MANAGED_LOGGERS constant for maintainability
+    for logger_name in MANAGED_LOGGERS:
         specific_logger = logging.getLogger(logger_name)
         # Don't set propagate=False as it would prevent logging
         # Just ensure no duplicate handlers at this level

@@ -102,6 +102,16 @@ class AgentLoader:
     agent status across the application lifecycle.
     """
     
+    # Agent dependency map for pre-loading dependencies
+    # This prevents circular import deadlocks
+    AGENT_DEPENDENCY_MAP = {
+        "testgen": ["runner", "omnicore_engine"],
+        "critique": ["runner", "omnicore_engine"],
+        "deploy": ["runner"],
+        "docgen": ["runner", "omnicore_engine"],
+        "codegen": ["runner", "omnicore_engine"],
+    }
+    
     _instance: Optional['AgentLoader'] = None
     _initialized: bool = False
     
@@ -319,26 +329,31 @@ class AgentLoader:
                 logger.info(f"Agent {agent_name} already loaded, reusing module")
                 return sys.modules[module_path]
             
-            # Phase 2: Acquire import lock
-            with self._import_lock:
-                # Double-check after acquiring lock
-                if module_path in sys.modules:
-                    return sys.modules[module_path]
-                
-                # Phase 3: Load dependencies first (if any)
-                await self._load_agent_dependencies(agent_name)
-                
-                # Phase 4: Import with importlib
-                logger.info(f"Importing {agent_name} from {module_path} (attempt {attempt}/{max_attempts})")
-                
-                # Use importlib.import_module instead of __import__
-                module = importlib.import_module(module_path)
-                
-                # Phase 5: Cache the loaded module
-                self._loaded_modules[agent_name] = module
-                
-                logger.info(f"✓ Successfully loaded {agent_name} agent (attempt {attempt})")
-                return module
+            # Phase 2: Load dependencies first (before acquiring lock)
+            await self._load_agent_dependencies(agent_name)
+            
+            # Phase 3: Import with lock (synchronous operation)
+            # Use asyncio.to_thread to avoid blocking the event loop
+            def _sync_import():
+                with self._import_lock:
+                    # Double-check after acquiring lock
+                    if module_path in sys.modules:
+                        return sys.modules[module_path]
+                    
+                    logger.info(f"Importing {agent_name} from {module_path} (attempt {attempt}/{max_attempts})")
+                    
+                    # Use importlib.import_module instead of __import__
+                    module = importlib.import_module(module_path)
+                    
+                    # Cache the loaded module
+                    self._loaded_modules[agent_name] = module
+                    
+                    logger.info(f"✓ Successfully loaded {agent_name} agent (attempt {attempt})")
+                    return module
+            
+            # Run the synchronous import in a thread pool to avoid blocking
+            module = await asyncio.to_thread(_sync_import)
+            return module
                 
         except ModuleNotFoundError as e:
             logger.error(f"Module not found for {agent_name}: {e}")
@@ -373,18 +388,13 @@ class AgentLoader:
         Load known dependencies for an agent before loading the agent itself.
         This prevents circular import deadlocks.
         
+        Uses the AGENT_DEPENDENCY_MAP class constant to determine which
+        dependencies to pre-load for each agent.
+        
         Args:
             agent_name: Name of the agent to load dependencies for
         """
-        dependency_map = {
-            "testgen": ["runner", "omnicore_engine"],
-            "critique": ["runner", "omnicore_engine"],
-            "deploy": ["runner"],
-            "docgen": ["runner", "omnicore_engine"],
-            "codegen": ["runner", "omnicore_engine"],
-        }
-        
-        deps = dependency_map.get(agent_name, [])
+        deps = self.AGENT_DEPENDENCY_MAP.get(agent_name, [])
         for dep in deps:
             dep_module = f"generator.{dep}" if dep != "omnicore_engine" else dep
             if dep_module not in sys.modules:
