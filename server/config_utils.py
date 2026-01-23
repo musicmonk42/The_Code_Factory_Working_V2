@@ -156,41 +156,16 @@ def detect_environment() -> Tuple[bool, bool, bool]:
     """
     Detect the current runtime environment.
     
-    Uses a proper hierarchy for environment detection:
-    1. Check PRODUCTION_MODE env var first (explicit production flag)
-    2. Check APP_ENV variable (production, development, staging)
-    3. Check TESTING env var (CI/test mode)
-    4. Default to development
+    DEPRECATED: Use server.environment module instead for consistent detection.
+    This function remains for backward compatibility but delegates to the
+    centralized environment detector.
     
     Returns:
         Tuple of (is_production, is_testing, is_development)
     """
-    # Explicit production mode flag (highest priority)
-    if os.getenv("PRODUCTION_MODE", "0") == "1":
-        logger.info("Environment: PRODUCTION (PRODUCTION_MODE=1)")
-        return True, False, False
+    from server.environment import is_production, is_test, is_development
     
-    # Check APP_ENV variable
-    app_env = os.getenv("APP_ENV", "").lower()
-    if app_env == "production":
-        logger.info("Environment: PRODUCTION (APP_ENV=production)")
-        return True, False, False
-    
-    # Check for testing mode
-    is_testing = os.getenv("TESTING", "0") == "1"
-    if is_testing:
-        logger.info("Environment: TESTING (TESTING=1)")
-        return False, True, False
-    
-    # Check if running under pytest (but don't use this for production detection!)
-    # This is informational only
-    if "pytest" in sys.modules:
-        logger.info("Environment: TESTING (pytest detected)")
-        return False, True, False
-    
-    # Default to development
-    logger.info("Environment: DEVELOPMENT (default)")
-    return False, False, True
+    return is_production(), is_test(), is_development()
 
 
 def get_config() -> PlatformConfig:

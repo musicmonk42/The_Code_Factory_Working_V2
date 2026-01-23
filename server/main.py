@@ -57,6 +57,10 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+# Configure logging BEFORE any other imports that might log
+from server.logging_config import configure_logging
+configure_logging()
+
 from server import __version__
 from server.routers import (
     api_keys_router,
@@ -73,11 +77,6 @@ from server.schemas import ErrorResponse, HealthResponse, ReadinessResponse, Det
 from server.config_utils import initialize_config, validate_required_api_keys
 from server.distributed_lock import get_startup_lock
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 # Get the directory where this file is located
