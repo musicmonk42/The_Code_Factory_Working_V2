@@ -6,8 +6,16 @@ but implemented using tenacity which is more actively maintained.
 
 from functools import wraps
 
-from tenacity import retry as tenacity_retry
-from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
+try:
+    from tenacity import retry as tenacity_retry
+    from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
+    _HAS_TENACITY = True
+except ImportError:
+    _HAS_TENACITY = False
+    tenacity_retry = None
+    retry_if_exception_type = None
+    stop_after_attempt = None
+    wait_exponential = None
 
 
 def retry(tries=3, delay=1, backoff=2, exceptions=(Exception,)):
@@ -23,6 +31,11 @@ def retry(tries=3, delay=1, backoff=2, exceptions=(Exception,)):
     Returns:
         Decorated function with retry logic
     """
+    # If tenacity is not available, return a no-op decorator
+    if not _HAS_TENACITY:
+        def noop_decorator(func):
+            return func
+        return noop_decorator
 
     def decorator(func):
         @wraps(func)

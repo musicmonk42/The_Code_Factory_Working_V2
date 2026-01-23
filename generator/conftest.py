@@ -54,7 +54,12 @@ def _create_mock_module(name):
         - As a context manager: with mock.context():
         - As an iterable: for item in mock
         - As __mro_entries__ for class inheritance
+        - As a class instantiation: mock.Class(args)
         """
+
+        def __init__(self, *args, **kwargs):
+            """Accept any arguments during instantiation."""
+            pass
 
         def __call__(self, *args, **kwargs):
             # When called directly, return self to support chaining
@@ -192,7 +197,7 @@ def _create_mock_module(name):
         mock_module.Boolean = MockCallable()
         mock_module.ForeignKey = MockCallable()
     elif name == "pydantic":
-        # Pydantic needs BaseModel
+        # Pydantic needs BaseModel and VERSION
         class MockBaseModel:
             def __init__(self, **kwargs):
                 for key, value in kwargs.items():
@@ -211,6 +216,8 @@ def _create_mock_module(name):
         mock_module.BaseModel = MockBaseModel
         mock_module.Field = lambda *args, **kwargs: None
         mock_module.validator = lambda *args, **kwargs: lambda f: f
+        mock_module.VERSION = "2.0.0"  # Mock version string for version checks
+        mock_module.__version__ = "2.0.0"  # Alternative version attribute
     elif name == "fastapi":
         # FastAPI needs specific classes
         mock_module.FastAPI = MockCallable
@@ -284,7 +291,7 @@ _OPTIONAL_DEPENDENCIES = [
     "uvicorn",  # ASGI server
     "faker",  # Fake data generator
     "httpx",  # HTTP client
-    "tenacity",  # Retry library
+    # NOTE: tenacity removed - it has special | operator handling that mocks break
     "freezegun",  # Time mocking library
     "typer",  # CLI library
     "numpy",  # Numerical computing
@@ -691,6 +698,59 @@ if _is_ci_environment():
                 mock_module = _create_mock_module(dep)
                 sys.modules[dep] = mock_module
                 _create_parent_modules(dep)
+                
+                # Special handling for packages that need specific submodules
+                if dep == "watchdog":
+                    # Create watchdog.events submodule
+                    watchdog_events = _create_mock_module("watchdog.events")
+                    sys.modules["watchdog.events"] = watchdog_events
+
+                    # Add FileSystemEventHandler class
+                    class FileSystemEventHandler:
+                        def on_modified(self, event):
+                            pass
+
+                        def on_created(self, event):
+                            pass
+
+                        def on_deleted(self, event):
+                            pass
+
+                    watchdog_events.FileSystemEventHandler = FileSystemEventHandler
+                    mock_module.events = watchdog_events
+
+                    # Create watchdog.observers submodule
+                    watchdog_observers = _create_mock_module("watchdog.observers")
+                    sys.modules["watchdog.observers"] = watchdog_observers
+
+                    # Add Observer class
+                    class Observer:
+                        def __init__(self):
+                            pass
+
+                        def schedule(self, *args, **kwargs):
+                            pass
+
+                        def start(self):
+                            pass
+
+                        def stop(self):
+                            pass
+
+                        def join(self):
+                            pass
+
+                    watchdog_observers.Observer = Observer
+                    mock_module.observers = watchdog_observers
+                elif dep == "defusedxml":
+                    # Create defusedxml.ElementTree submodule
+                    defusedxml_et = _create_mock_module("defusedxml.ElementTree")
+                    sys.modules["defusedxml.ElementTree"] = defusedxml_et
+                    mock_module.ElementTree = defusedxml_et
+                    # Add common ElementTree functions
+                    defusedxml_et.parse = lambda *args, **kwargs: None
+                    defusedxml_et.fromstring = lambda *args, **kwargs: None
+                    defusedxml_et.XML = lambda *args, **kwargs: None
 
 
 def _setup_optional_dependency_mocks():
@@ -724,6 +784,8 @@ def _setup_optional_dependency_mocks():
                 continue
 
             # In CI, skip expensive import attempts and use lightweight stubs
+            # In non-CI, try to import first, fallback to mock on failure
+            mock_module = None
             if is_ci:
                 # Create lightweight stub without trying to import
                 mock_module = _create_mock_module(dep)
@@ -743,64 +805,66 @@ def _setup_optional_dependency_mocks():
 
                     # For packages that are commonly accessed as submodules, create parent stubs
                     _create_parent_modules(dep)
-
-                    # Special handling for packages that need specific submodules
-                    if dep == "watchdog":
-                        # Create watchdog.events submodule
-                        watchdog_events = _create_mock_module("watchdog.events")
-                        sys.modules["watchdog.events"] = watchdog_events
-
-                        # Add FileSystemEventHandler class
-                        class FileSystemEventHandler:
-                            def on_modified(self, event):
-                                pass
-
-                            def on_created(self, event):
-                                pass
-
-                            def on_deleted(self, event):
-                                pass
-
-                        watchdog_events.FileSystemEventHandler = FileSystemEventHandler
-                        mock_module.events = watchdog_events
-
-                        # Create watchdog.observers submodule
-                        watchdog_observers = _create_mock_module("watchdog.observers")
-                        sys.modules["watchdog.observers"] = watchdog_observers
-
-                        # Add Observer class
-                        class Observer:
-                            def __init__(self):
-                                pass
-
-                            def schedule(self, *args, **kwargs):
-                                pass
-
-                            def start(self):
-                                pass
-
-                            def stop(self):
-                                pass
-
-                            def join(self):
-                                pass
-
-                        watchdog_observers.Observer = Observer
-                        mock_module.observers = watchdog_observers
-                    elif dep == "defusedxml":
-                        # Create defusedxml.ElementTree submodule
-                        defusedxml_et = _create_mock_module("defusedxml.ElementTree")
-                        sys.modules["defusedxml.ElementTree"] = defusedxml_et
-                        mock_module.ElementTree = defusedxml_et
-                        # Add common ElementTree functions
-                        defusedxml_et.parse = lambda *args, **kwargs: None
-                        defusedxml_et.fromstring = lambda *args, **kwargs: None
-                        defusedxml_et.XML = lambda *args, **kwargs: None
                 except Exception:
                     # Catch any other errors and create a mock
                     mock_module = _create_mock_module(dep)
                     sys.modules[dep] = mock_module
                     _create_parent_modules(dep)
+
+            # Special handling for packages that need specific submodules
+            # Apply this for both CI and non-CI when a mock was created
+            if mock_module is not None:
+                if dep == "watchdog":
+                    # Create watchdog.events submodule
+                    watchdog_events = _create_mock_module("watchdog.events")
+                    sys.modules["watchdog.events"] = watchdog_events
+
+                    # Add FileSystemEventHandler class
+                    class FileSystemEventHandler:
+                        def on_modified(self, event):
+                            pass
+
+                        def on_created(self, event):
+                            pass
+
+                        def on_deleted(self, event):
+                            pass
+
+                    watchdog_events.FileSystemEventHandler = FileSystemEventHandler
+                    mock_module.events = watchdog_events
+
+                    # Create watchdog.observers submodule
+                    watchdog_observers = _create_mock_module("watchdog.observers")
+                    sys.modules["watchdog.observers"] = watchdog_observers
+
+                    # Add Observer class
+                    class Observer:
+                        def __init__(self):
+                            pass
+
+                        def schedule(self, *args, **kwargs):
+                            pass
+
+                        def start(self):
+                            pass
+
+                        def stop(self):
+                            pass
+
+                        def join(self):
+                            pass
+
+                    watchdog_observers.Observer = Observer
+                    mock_module.observers = watchdog_observers
+                elif dep == "defusedxml":
+                    # Create defusedxml.ElementTree submodule
+                    defusedxml_et = _create_mock_module("defusedxml.ElementTree")
+                    sys.modules["defusedxml.ElementTree"] = defusedxml_et
+                    mock_module.ElementTree = defusedxml_et
+                    # Add common ElementTree functions
+                    defusedxml_et.parse = lambda *args, **kwargs: None
+                    defusedxml_et.fromstring = lambda *args, **kwargs: None
+                    defusedxml_et.XML = lambda *args, **kwargs: None
 
     # Mark as initialized
     _mocks_initialized = True

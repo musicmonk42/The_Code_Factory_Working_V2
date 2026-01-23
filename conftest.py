@@ -289,6 +289,8 @@ _OPTIONAL_DEPENDENCIES = [
     "deap",  # Evolutionary algorithms
     "langchain_openai",  # LangChain OpenAI integration
     "cerberus",  # Schema validation - required by policy module
+    "PIL",  # Pillow - image processing
+    "pillow",  # Pillow alternative import name
     # Note: prometheus_client, aiohttp, and aiosqlite should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
@@ -360,6 +362,385 @@ for dep in _OPTIONAL_DEPENDENCIES:
                     if parent_name not in sys.modules:
                         parent_mock = _create_mock_module(parent_name)
                         sys.modules[parent_name] = parent_mock
+            
+            # Special handling for packages that need specific submodules
+            if dep == "sqlalchemy":
+                # Create common sqlalchemy submodules
+                for submod in ["orm", "exc", "dialects", "dialects.sqlite", "dialects.postgresql", 
+                               "engine", "ext", "ext.asyncio", "sql", "sql.expression", "types"]:
+                    submod_name = f"sqlalchemy.{submod}"
+                    if submod_name not in sys.modules:
+                        submod_mock = _create_mock_module(submod_name)
+                        sys.modules[submod_name] = submod_mock
+                        # Set as attribute on parent module
+                        parts = submod.split(".")
+                        parent = mock_module
+                        for part in parts[:-1]:
+                            parent = getattr(parent, part, _create_mock_module(f"sqlalchemy.{part}"))
+                        setattr(parent, parts[-1], submod_mock)
+                
+                # Add common SQLAlchemy components
+                # DeclarativeBase for model definitions
+                class MockDeclarativeBase:
+                    pass
+                
+                # Column types
+                class MockColumn:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                
+                class MockInteger:
+                    pass
+                
+                class MockString:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                
+                class MockText:
+                    pass
+                
+                class MockDateTime:
+                    pass
+                
+                class MockBoolean:
+                    pass
+                
+                class MockFloat:
+                    pass
+                
+                class MockJSON:
+                    pass
+                
+                class MockForeignKey:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                
+                # Session and engine mocks
+                class MockSession:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                    def add(self, *args, **kwargs):
+                        pass
+                    def commit(self, *args, **kwargs):
+                        pass
+                    def rollback(self, *args, **kwargs):
+                        pass
+                    def query(self, *args, **kwargs):
+                        return self
+                    def filter(self, *args, **kwargs):
+                        return self
+                    def all(self, *args, **kwargs):
+                        return []
+                    def first(self, *args, **kwargs):
+                        return None
+                    def close(self, *args, **kwargs):
+                        pass
+                    def __enter__(self):
+                        return self
+                    def __exit__(self, *args):
+                        pass
+                
+                class MockEngine:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                    def connect(self, *args, **kwargs):
+                        return MockSession()
+                    def dispose(self, *args, **kwargs):
+                        pass
+                    def begin(self, *args, **kwargs):
+                        return MockSession()
+                
+                # Add to orm submodule
+                if "sqlalchemy.orm" in sys.modules:
+                    orm_mod = sys.modules["sqlalchemy.orm"]
+                    orm_mod.Session = MockSession
+                    orm_mod.declarative_base = lambda *args, **kwargs: type('Base', (), {'metadata': type('Metadata', (), {'clear': lambda self: None, 'create_all': lambda self, *a, **kw: None})()})
+                    orm_mod.sessionmaker = lambda *args, **kwargs: MockSession
+                    orm_mod.relationship = lambda *args, **kwargs: None
+                
+                # Add to ext.asyncio submodule
+                if "sqlalchemy.ext.asyncio" in sys.modules:
+                    ext_asyncio_mod = sys.modules["sqlalchemy.ext.asyncio"]
+                    ext_asyncio_mod.create_async_engine = lambda *args, **kwargs: MockEngine()
+                    ext_asyncio_mod.AsyncSession = MockSession
+                    ext_asyncio_mod.async_sessionmaker = lambda *args, **kwargs: MockSession
+                
+                # Add common functions/classes to main module
+                mock_module.Column = MockColumn
+                mock_module.Integer = MockInteger
+                mock_module.String = MockString
+                mock_module.Text = MockText
+                mock_module.DateTime = MockDateTime
+                mock_module.Boolean = MockBoolean
+                mock_module.Float = MockFloat
+                mock_module.JSON = MockJSON
+                mock_module.ForeignKey = MockForeignKey
+                mock_module.create_engine = lambda *args, **kwargs: MockEngine()
+                
+                # Add insert function to dialects.sqlite
+                if "sqlalchemy.dialects.sqlite" in sys.modules:
+                    sqlite_mod = sys.modules["sqlalchemy.dialects.sqlite"]
+                    sqlite_mod.insert = lambda *args, **kwargs: type('Insert', (), {
+                        'on_conflict_do_update': lambda *a, **kw: None,
+                        'on_conflict_do_nothing': lambda *a, **kw: None,
+                    })()
+            
+            elif dep == "structlog":
+                # structlog needs a mock logger with .bind() method
+                class MockBoundLogger:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                    
+                    def bind(self, *args, **kwargs):
+                        return self
+                    
+                    def unbind(self, *args, **kwargs):
+                        return self
+                    
+                    def new(self, *args, **kwargs):
+                        return self
+                    
+                    def debug(self, *args, **kwargs):
+                        pass
+                    
+                    def info(self, *args, **kwargs):
+                        pass
+                    
+                    def warning(self, *args, **kwargs):
+                        pass
+                    
+                    def warn(self, *args, **kwargs):
+                        pass
+                    
+                    def error(self, *args, **kwargs):
+                        pass
+                    
+                    def critical(self, *args, **kwargs):
+                        pass
+                    
+                    def exception(self, *args, **kwargs):
+                        pass
+                    
+                    def msg(self, *args, **kwargs):
+                        pass
+                    
+                    def log(self, *args, **kwargs):
+                        pass
+                
+                mock_module.get_logger = lambda *args, **kwargs: MockBoundLogger()
+                mock_module.configure = lambda *args, **kwargs: None
+                mock_module.wrap_logger = lambda *args, **kwargs: MockBoundLogger()
+                mock_module.BoundLogger = MockBoundLogger
+                
+                # Create stdlib submodule
+                stdlib_module = _create_mock_module("structlog.stdlib")
+                sys.modules["structlog.stdlib"] = stdlib_module
+                stdlib_module.add_logger_name = lambda *args, **kwargs: None
+                stdlib_module.add_log_level = lambda *args, **kwargs: None
+                stdlib_module.LoggerFactory = lambda *args, **kwargs: None
+                stdlib_module.BoundLogger = MockBoundLogger
+                mock_module.stdlib = stdlib_module
+                
+                # Create processors submodule
+                processors_module = _create_mock_module("structlog.processors")
+                sys.modules["structlog.processors"] = processors_module
+                processors_module.TimeStamper = lambda *args, **kwargs: None
+                processors_module.StackInfoRenderer = lambda *args, **kwargs: None
+                processors_module.JSONRenderer = lambda *args, **kwargs: None
+                mock_module.processors = processors_module
+            
+            elif dep == "PIL" or dep == "pillow":
+                # PIL/Pillow needs mock Image class
+                class MockImage:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                    
+                    @staticmethod
+                    def open(*args, **kwargs):
+                        return MockImage()
+                    
+                    @staticmethod
+                    def new(*args, **kwargs):
+                        return MockImage()
+                    
+                    @staticmethod
+                    def frombytes(*args, **kwargs):
+                        return MockImage()
+                    
+                    def save(self, *args, **kwargs):
+                        pass
+                    
+                    def convert(self, *args, **kwargs):
+                        return self
+                    
+                    def resize(self, *args, **kwargs):
+                        return self
+                    
+                    def crop(self, *args, **kwargs):
+                        return self
+                    
+                    @property
+                    def size(self):
+                        return (100, 100)
+                    
+                    @property
+                    def mode(self):
+                        return "RGB"
+                
+                mock_module.Image = MockImage
+            
+            elif dep == "asyncpg":
+                # asyncpg needs pool submodule
+                pool_module = _create_mock_module("asyncpg.pool")
+                sys.modules["asyncpg.pool"] = pool_module
+                
+                class MockPool:
+                    async def acquire(self):
+                        return MockConnection()
+                    
+                    async def release(self, *args, **kwargs):
+                        pass
+                    
+                    async def close(self):
+                        pass
+                
+                class MockConnection:
+                    async def execute(self, *args, **kwargs):
+                        return None
+                    
+                    async def fetch(self, *args, **kwargs):
+                        return []
+                    
+                    async def fetchrow(self, *args, **kwargs):
+                        return None
+                    
+                    async def fetchval(self, *args, **kwargs):
+                        return None
+                    
+                    async def close(self):
+                        pass
+                
+                pool_module.Pool = MockPool
+                mock_module.pool = pool_module
+                mock_module.Pool = MockPool
+                mock_module.create_pool = lambda *args, **kwargs: MockPool()
+                mock_module.connect = lambda *args, **kwargs: MockConnection()
+
+# ---- Tenacity stub setup ----
+# Tenacity requires special handling for its retry decorator and combinable conditions
+if "tenacity" not in sys.modules:
+    try:
+        import tenacity as _test_tenacity
+    except ImportError:
+        # Create complete tenacity stubs
+        import types
+        
+        # Create a retry predicate that supports the | operator
+        class _RetryPredicate:
+            def __or__(self, other):
+                return _RetryPredicate()
+            
+            def __and__(self, other):
+                return _RetryPredicate()
+        
+        # Create the tenacity module
+        import importlib.util
+        tenacity_module = types.ModuleType("tenacity")
+        tenacity_module.__file__ = "<mocked tenacity>"
+        tenacity_module.__path__ = []
+        tenacity_module.__spec__ = importlib.util.spec_from_loader("tenacity", loader=None)
+        
+        # Retry decorator - returns the function unchanged
+        def mock_retry(*args, **kwargs):
+            def decorator(func):
+                return func
+            if len(args) == 1 and callable(args[0]):
+                return args[0]
+            return decorator
+        
+        # Wait strategy class that supports + operator
+        class _WaitStrategy:
+            def __add__(self, other):
+                return _WaitStrategy()
+            def __radd__(self, other):
+                return _WaitStrategy()
+            def __call__(self, *args, **kwargs):
+                return 0
+        
+        # Stop strategy class
+        class _StopStrategy:
+            def __call__(self, *args, **kwargs):
+                return True
+        
+        tenacity_module.retry = mock_retry
+        tenacity_module.stop_after_attempt = lambda *args, **kwargs: _StopStrategy()
+        tenacity_module.stop_after_delay = lambda *args, **kwargs: _StopStrategy()
+        tenacity_module.wait_exponential = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait_exponential_jitter = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait_random = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait_random_exponential = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait_fixed = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait_chain = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.retry_if_exception_type = lambda *args, **kwargs: _RetryPredicate()
+        tenacity_module.retry_if_exception = lambda *args, **kwargs: _RetryPredicate()
+        tenacity_module.retry_if_result = lambda *args, **kwargs: _RetryPredicate()
+        tenacity_module.before_sleep_log = lambda *args, **kwargs: None
+        tenacity_module.after_log = lambda *args, **kwargs: None
+        tenacity_module.before_log = lambda *args, **kwargs: None
+        
+        # Create wait submodule for tenacity.wait.wait_exponential style access
+        wait_module = types.ModuleType("tenacity.wait")
+        wait_module.__file__ = "<mocked tenacity.wait>"
+        wait_module.__path__ = []
+        wait_module.wait_exponential = lambda *args, **kwargs: _WaitStrategy()
+        wait_module.wait_exponential_jitter = lambda *args, **kwargs: _WaitStrategy()
+        wait_module.wait_random = lambda *args, **kwargs: _WaitStrategy()
+        wait_module.wait_random_exponential = lambda *args, **kwargs: _WaitStrategy()
+        wait_module.wait_fixed = lambda *args, **kwargs: _WaitStrategy()
+        wait_module.wait_chain = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait = wait_module
+        sys.modules["tenacity.wait"] = wait_module
+        
+        # Create stop submodule for tenacity.stop.stop_after_attempt style access
+        stop_module = types.ModuleType("tenacity.stop")
+        stop_module.__file__ = "<mocked tenacity.stop>"
+        stop_module.__path__ = []
+        stop_module.stop_after_attempt = lambda *args, **kwargs: _StopStrategy()
+        stop_module.stop_after_delay = lambda *args, **kwargs: _StopStrategy()
+        stop_module.stop_never = lambda *args, **kwargs: _StopStrategy()
+        tenacity_module.stop = stop_module
+        sys.modules["tenacity.stop"] = stop_module
+        
+        # Exception classes
+        class RetryError(Exception):
+            pass
+        
+        class TryAgain(Exception):
+            pass
+        
+        tenacity_module.RetryError = RetryError
+        tenacity_module.TryAgain = TryAgain
+        
+        # Additional classes needed by some modules
+        class RetryCallState:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        tenacity_module.RetryCallState = RetryCallState
+        
+        # Create Retrying class
+        class Retrying:
+            def __init__(self, *args, **kwargs):
+                pass
+            def __call__(self, *args, **kwargs):
+                return args[0] if args else lambda x: x
+            def __iter__(self):
+                return iter([])
+        
+        tenacity_module.Retrying = Retrying
+        
+        # Register the module
+        sys.modules["tenacity"] = tenacity_module
 
 # ---- OpenTelemetry stub setup ----
 # OpenTelemetry requires special handling because it has specific methods that must exist
@@ -1062,10 +1443,13 @@ if "prometheus_client" not in sys.modules:
         prom_module.Info = _MockInfo
         prom_module.Summary = _MockHistogram  # Summary is similar to Histogram
         prom_module.ProcessCollector = lambda *args, **kwargs: None
+        prom_module.PROCESS_COLLECTOR = None  # Process collector singleton
         prom_module.PLATFORM_COLLECTOR = lambda *args, **kwargs: None
+        prom_module.GC_COLLECTOR = None  # GC collector singleton
         prom_module.generate_latest = lambda *args, **kwargs: b""
         prom_module.start_http_server = lambda *args, **kwargs: None
         prom_module.REGISTRY = _MockCollectorRegistry()
+        prom_module.CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
 
         # Create multiprocess submodule
         prom_multiprocess = types.ModuleType("prometheus_client.multiprocess")
