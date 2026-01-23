@@ -565,7 +565,14 @@ async def call_llm_api(
     lock = _get_or_create_lock()
     async with lock:
         if _async_client is None:
-            config = config or RunnerConfig.load()
+            if config is None:
+                # Try to load config from file, fallback to minimal defaults if file doesn't exist
+                try:
+                    config = RunnerConfig.load()
+                except (ConfigurationError, FileNotFoundError) as e:
+                    logger.warning(f"Could not load runner_config.yaml: {e}. Using minimal defaults.")
+                    # Create minimal config with required fields
+                    config = RunnerConfig(backend="docker", framework="pytest")
             # Use direct instantiation for backward compatibility (lazy init happens on first call)
             _async_client = LLMClient(config)
     return await _async_client.call_llm_api(prompt, model, stream, provider)
@@ -581,7 +588,14 @@ async def call_ensemble_api(
     lock = _get_or_create_lock()
     async with lock:
         if _async_client is None:
-            config = config or RunnerConfig.load()
+            if config is None:
+                # Try to load config from file, fallback to minimal defaults if file doesn't exist
+                try:
+                    config = RunnerConfig.load()
+                except (ConfigurationError, FileNotFoundError) as e:
+                    logger.warning(f"Could not load runner_config.yaml: {e}. Using minimal defaults.")
+                    # Create minimal config with required fields
+                    config = RunnerConfig(backend="docker", framework="pytest")
             _async_client = LLMClient(config)
     return await _async_client.call_ensemble_api(prompt, models, voting_strategy)
 
