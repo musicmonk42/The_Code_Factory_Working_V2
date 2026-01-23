@@ -91,7 +91,7 @@ from agents.docgen_agent import (
     BatchProcessor,
     CompliancePlugin,
     CopyrightCompliance,
-    DocGenAgent,
+    DocgenAgent,
     LicenseCompliance,
     PluginRegistry,
     SphinxDocGenerator,
@@ -170,7 +170,7 @@ def mock_presidio_instances():
 
 @pytest.fixture
 def agent(temp_repo):
-    """Provides a DocGenAgent instance with mocked dependencies."""
+    """Provides a DocgenAgent instance with mocked dependencies."""
     # This fixture is now mainly for tests that DON'T want to test the
     # real agent.generate_documentation method.
     with (
@@ -202,7 +202,7 @@ def agent(temp_repo):
         MockPluginRegistry = MagicMock()
         MockPluginRegistry.return_value.get_all_plugins = MagicMock(return_value=[])
 
-        agent_instance = DocGenAgent(repo_path=str(temp_repo))
+        agent_instance = DocgenAgent(repo_path=str(temp_repo))
 
         agent_instance.plugin_registry = MockPluginRegistry.return_value
         agent_instance.sphinx_generator = MockSphinxGen.return_value
@@ -398,18 +398,18 @@ class TestBatchProcessing:
 
 
 # =============================================================================
-# TEST: DocGenAgent Main Functionality
+# TEST: DocgenAgent Main Functionality
 # =============================================================================
 
 
-class TestDocGenAgent:
-    """Test the main DocGenAgent functionality."""
+class TestDocgenAgent:
+    """Test the main DocgenAgent functionality."""
 
     def test_agent_initialization(self, temp_repo):
-        """Test DocGenAgent initializes correctly."""
+        """Test DocgenAgent initializes correctly."""
         # This test now implicitly checks that the agent can be created
         # without a TemplateNotFound error, thanks to the updated fixture.
-        agent = DocGenAgent(repo_path=str(temp_repo))
+        agent = DocgenAgent(repo_path=str(temp_repo))
         assert agent.repo_path == str(temp_repo)
 
     @pytest.mark.asyncio
@@ -566,7 +566,7 @@ class TestErrorHandling:
             }
 
         # *** FIX: Instantiate a REAL agent using the temp_repo ***
-        agent = DocGenAgent(repo_path=str(temp_repo))
+        agent = DocgenAgent(repo_path=str(temp_repo))
 
         # Patch the inner call_llm_api which will be retried
         with (
@@ -640,7 +640,7 @@ class TestUtilityFunctions:
         mock_result = {"status": "batch_success"}
 
         # *** FIX: Correct patch path ***
-        with patch("agents.docgen_agent.docgen_agent.DocGenAgent") as MockAgent:
+        with patch("agents.docgen_agent.docgen_agent.DocgenAgent") as MockAgent:
             mock_agent_instance = MagicMock()
             mock_agent_instance.generate_documentation_batch = AsyncMock(
                 return_value=[mock_result]
@@ -662,7 +662,7 @@ class TestUtilityFunctions:
         mock_result = {"status": "single_success"}
 
         # *** FIX: Correct patch path ***
-        with patch("agents.docgen_agent.docgen_agent.DocGenAgent") as MockAgent:
+        with patch("agents.docgen_agent.docgen_agent.DocgenAgent") as MockAgent:
             mock_agent_instance = MagicMock()
             mock_agent_instance.generate_documentation = AsyncMock(
                 return_value=mock_result
@@ -688,7 +688,7 @@ class TestUtilityFunctions:
             yield {"stage": "complete", "result": {"status": "stream_success"}}
 
         # *** FIX: Correct patch path ***
-        with patch("agents.docgen_agent.docgen_agent.DocGenAgent") as MockAgent:
+        with patch("agents.docgen_agent.docgen_agent.DocgenAgent") as MockAgent:
             mock_agent_instance = MagicMock()
             # *** FIX: Use AsyncMock for the async method ***
             mock_agent_instance.generate_documentation = AsyncMock(
@@ -753,12 +753,12 @@ class TestIntegration:
             "suggestions": [],
         }
 
-        # Let the real DocGenAgent run. It will use the temp_repo's dummy template.
+        # Let the real DocgenAgent run. It will use the temp_repo's dummy template.
         with (
             patch(
                 "agents.docgen_agent.docgen_agent.ResponseValidator"
             ) as MockValidator,
-            patch.object(DocGenAgent, "_gather_context", new_callable=AsyncMock),
+            patch.object(DocgenAgent, "_gather_context", new_callable=AsyncMock),
             patch(
                 "agents.docgen_agent.docgen_agent.call_summarizer",
                 new_callable=AsyncMock,
@@ -773,7 +773,7 @@ class TestIntegration:
                 return_value=mock_validation_result
             )
 
-            agent = DocGenAgent(repo_path=str(temp_repo))
+            agent = DocgenAgent(repo_path=str(temp_repo))
 
             result = await agent.generate_documentation(
                 target_files=["src/module.py"], doc_type="README"
@@ -811,7 +811,7 @@ class TestIntegration:
             patch(
                 "agents.docgen_agent.docgen_agent.ResponseValidator"
             ) as MockValidator,
-            patch.object(DocGenAgent, "_gather_context", new_callable=AsyncMock),
+            patch.object(DocgenAgent, "_gather_context", new_callable=AsyncMock),
             patch(
                 "agents.docgen_agent.docgen_agent.call_summarizer",
                 new_callable=AsyncMock,
@@ -834,7 +834,7 @@ class TestIntegration:
                 }
             )
 
-            agent = DocGenAgent(repo_path=str(temp_repo))
+            agent = DocgenAgent(repo_path=str(temp_repo))
 
             batch_requests = [
                 {"target_files": ["file1.py"], "doc_type": "README"},
@@ -879,12 +879,12 @@ class TestIntegration:
         # Let the real agent run, patching internals
         with (
             patch.object(
-                DocGenAgent,
+                DocgenAgent,
                 "_human_approval",
                 new_callable=AsyncMock,
                 side_effect=mock_approval_granted,
             ),
-            patch.object(DocGenAgent, "_gather_context", new_callable=AsyncMock),
+            patch.object(DocgenAgent, "_gather_context", new_callable=AsyncMock),
             patch(
                 "agents.docgen_agent.docgen_agent.ResponseValidator"
             ) as MockValidator,
@@ -910,7 +910,7 @@ class TestIntegration:
                 }
             )
 
-            agent = DocGenAgent(repo_path=str(temp_repo))
+            agent = DocgenAgent(repo_path=str(temp_repo))
 
             result = await agent.generate_documentation(
                 target_files=["src/module.py"], doc_type="README", human_approval=True
@@ -948,7 +948,7 @@ class TestPerformanceAndEdgeCases:
             mock_file.read.return_value = large_content
             mock_open.return_value.__aenter__.return_value = mock_file
 
-            agent = DocGenAgent(repo_path=str(temp_repo))
+            agent = DocgenAgent(repo_path=str(temp_repo))
 
             mock_stat = MagicMock()
             mock_stat.st_size = len(large_content)
@@ -971,7 +971,7 @@ class TestPerformanceAndEdgeCases:
         }
 
         # Patch the instance method
-        agent = DocGenAgent(repo_path=str(temp_repo))
+        agent = DocgenAgent(repo_path=str(temp_repo))
         agent.generate_documentation = AsyncMock(return_value=mock_result)
 
         result = await agent.generate_documentation(target_files=[], doc_type="README")
@@ -982,7 +982,7 @@ class TestPerformanceAndEdgeCases:
     async def test_nonexistent_file_handling(self, temp_repo):
         """Test handling of nonexistent files."""
 
-        agent = DocGenAgent(repo_path=str(temp_repo))
+        agent = DocgenAgent(repo_path=str(temp_repo))
 
         context = await agent._gather_context(["nonexistent_file.py"])
 
@@ -994,7 +994,7 @@ class TestPerformanceAndEdgeCases:
         """Test that invalid repo path raises appropriate error."""
 
         with pytest.raises(ValueError, match="Repository path does not exist"):
-            agent = DocGenAgent(repo_path="/nonexistent/path")
+            agent = DocgenAgent(repo_path="/nonexistent/path")
 
     @pytest.mark.asyncio
     async def test_concurrent_requests(self, temp_repo, mock_llm_calls):
@@ -1002,7 +1002,7 @@ class TestPerformanceAndEdgeCases:
 
         mock_result = {"overall_status": "success"}
 
-        agent = DocGenAgent(repo_path=str(temp_repo))
+        agent = DocgenAgent(repo_path=str(temp_repo))
         # Patch the instance method
         agent.generate_documentation = AsyncMock(return_value=mock_result)
 

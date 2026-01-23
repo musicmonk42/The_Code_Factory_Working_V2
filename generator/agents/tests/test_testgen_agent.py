@@ -294,7 +294,7 @@ def setup_comprehensive_mocking():
     testgen_agent_mock = Mock()
     mock_test_gen_agent = Mock()
     mock_test_gen_agent.return_value.repo_path = None  # Will be set in test
-    testgen_agent_mock.TestGenAgent = lambda path: Mock(repo_path=Path(path))
+    testgen_agent_mock.TestgenAgent = lambda path: Mock(repo_path=Path(path))
 
     # Combine all mocks
     all_mocks = {
@@ -411,19 +411,19 @@ class TestTextSanitization:
 
 
 class TestAgentCreation:
-    """Test TestGenAgent creation and basic functionality."""
+    """Test TestgenAgent creation and basic functionality."""
 
     def test_agent_initialization(self):
-        """Test TestGenAgent can be initialized."""
+        """Test TestgenAgent can be initialized."""
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
             with tempfile.TemporaryDirectory() as temp_dir:
-                from agents.testgen_agent.testgen_agent import TestGenAgent
+                from agents.testgen_agent.testgen_agent import TestgenAgent
 
-                agent = TestGenAgent(temp_dir)
+                agent = TestgenAgent(temp_dir)
                 assert agent.repo_path == Path(temp_dir)
-                print("✅ TestGenAgent creation working")
+                print("✅ TestgenAgent creation working")
 
 
 class TestResponseHandler:
