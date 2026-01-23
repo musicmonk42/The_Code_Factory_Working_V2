@@ -245,10 +245,12 @@ function createJobCard(job) {
     const isRunning = job.status === 'running';
     const isFailed = job.status === 'failed';
     
-    // Show output file count if available
+    // Show output file count if available, with null-safe access
+    const inputCount = job.input_files ? job.input_files.length : 0;
+    const outputCount = job.output_files ? job.output_files.length : 0;
     const fileCountDisplay = hasOutputFiles 
-        ? `Input: ${job.input_files.length}, Output: ${job.output_files.length}`
-        : `Files: ${job.input_files.length}`;
+        ? `Input: ${inputCount}, Output: ${outputCount}`
+        : `Files: ${inputCount}`;
     
     card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: start;">

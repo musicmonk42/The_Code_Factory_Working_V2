@@ -72,6 +72,7 @@ services:
     volumes:
       - .:/app
       - platform-output:/app/output
+      - platform-uploads:/app/uploads  # Persist uploaded files across restarts
     depends_on:
       redis:
         condition: service_healthy
@@ -116,6 +117,7 @@ volumes:
   redis-data:
   postgres-data:
   platform-output:
+  platform-uploads:  # Persist uploaded job files
   prometheus-data:
   grafana-data:
 

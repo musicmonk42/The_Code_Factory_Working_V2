@@ -270,3 +270,6 @@ pytest_report.xml
 /test_integration_fixes.py
 /test_acceptance_criteria.py
 /test_audit_logger_fix.py
+
+# Uploads directory - temporary job files
+uploads/
