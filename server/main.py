@@ -30,8 +30,9 @@ os.environ["DEV_MODE"] = "0"
 
 # INJECT SIGNING KEY (Required for Production Audit Logging)
 # This prevents the "CRITICAL - FATAL: log_audit_event" crash
+# Using AGENTIC_AUDIT_HMAC_KEY to match documentation in RAILWAY_DEPLOYMENT.md
 os.environ.setdefault(
-    "AUDIT_SIGNING_KEY",
+    "AGENTIC_AUDIT_HMAC_KEY",
     "7f8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a"
 )
 # --- PRODUCTION MODE CONFIGURATION END ---

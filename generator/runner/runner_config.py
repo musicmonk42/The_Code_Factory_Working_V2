@@ -801,6 +801,10 @@ def load_config(
         "RUNNER_LOG_SIGNING_ALGO": "log_signing_algo",
         "RUNNER_LOG_SIGNING_KEY_ENV_VAR": "log_signing_key_env_var",
         "RUNNER_AUDIT_SIGNING_KEY_ID": "audit_signing_key_id",
+        # Primary alias matching documentation
+        "AGENTIC_AUDIT_HMAC_KEY": "audit_signing_key_id",
+        # Backward compatibility alias from server/main.py
+        "AUDIT_SIGNING_KEY": "audit_signing_key_id",
     }
     for env_key, field_name in env_map.items():
         if env_val := os.getenv(env_key):
