@@ -641,6 +641,9 @@ class AgentLoader:
                 start_time = datetime.utcnow()
                 
                 try:
+                    # Note: _parallel_loading flag controls enhanced loading mode
+                    # Despite the name, this now uses phased sequential loading
+                    # to prevent import deadlocks (controlled by PARALLEL_AGENT_LOADING env var)
                     if self._parallel_loading:
                         # PHASED SEQUENTIAL LOADING - Prevents import deadlocks
                         logger.info("Phased loading enabled - will prevent import deadlocks")

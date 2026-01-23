@@ -305,7 +305,7 @@ class DistributedLock:
                 return False
                 
         except Exception as e:
-            logger.debug(f"Could not release lock '{self.lock_name}': {e}")
+            logger.debug(f"Could not release lock '{self.lock_name}': {e}", exc_info=True)
             self._acquired = False
             return False
     
