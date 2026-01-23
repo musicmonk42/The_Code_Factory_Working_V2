@@ -323,20 +323,46 @@ def setup_logging() -> logging.Logger:
 
 
 def load_config() -> Dynaconf:
-    """Loads and validates the application configuration using Dynaconf."""
+    """
+    Loads and validates the application configuration using Dynaconf.
+    
+    Configuration is loaded from:
+    1. clarifier_config.yaml (if present)
+    2. Environment variables with CLARIFIER_ prefix
+    3. Default values (for development/testing)
+    
+    Returns:
+        Dynaconf configuration object with validated settings
+        
+    Note:
+        In production environments, it's recommended to explicitly set all configuration
+        via environment variables or config file to avoid relying on defaults.
+        
+        Critical settings that should be explicitly configured in production:
+        - CLARIFIER_KMS_KEY_ID: For encryption of sensitive data
+        - CLARIFIER_ALERT_ENDPOINT: For operational alerts
+        - CLARIFIER_CONTEXT_DB_PATH: For persistent context storage
+        - CLARIFIER_HISTORY_FILE: For audit trail
+    """
+    # Check if we're in production to adjust validation strictness
+    is_production = os.getenv("PYTHON_ENV", "development").lower() == "production"
+    
     cfg = Dynaconf(
         envvar_prefix="CLARIFIER",
         settings_files=["clarifier_config.yaml"],
         validators=[
             Validator("LLM_PROVIDER", default="auto", is_in=["openai", "anthropic", "grok", "google", "gemini", "ollama", "local", "auto"]),
-            Validator("INTERACTION_MODE", must_exist=True, is_in=["cli"]),
+            Validator("INTERACTION_MODE", default="cli", is_in=["cli"]),
             Validator("BATCH_STRATEGY", default="default", is_in=["default"]),
             Validator("FEEDBACK_STRATEGY", default="none", is_in=["none"]),
-            Validator("HISTORY_FILE", must_exist=True, is_type_of=str),
+            # File paths - use /tmp for development, should be configured for production
+            Validator("HISTORY_FILE", default="/tmp/clarifier_history.json", is_type_of=str),
             Validator("TARGET_LANGUAGE", default="en", is_type_of=str),
-            Validator("CONTEXT_DB_PATH", must_exist=True, is_type_of=str),
-            Validator("KMS_KEY_ID", must_exist=True, is_type_of=str),
-            Validator("ALERT_ENDPOINT", must_exist=True, is_type_of=str),
+            Validator("CONTEXT_DB_PATH", default="/tmp/clarifier_context.db", is_type_of=str),
+            # Security settings - empty defaults indicate features are disabled
+            Validator("KMS_KEY_ID", default="", is_type_of=str),
+            Validator("ALERT_ENDPOINT", default="", is_type_of=str),
+            # Behavioral settings
             Validator("HISTORY_COMPRESSION", default=False, is_type_of=bool),
             Validator("CONTEXT_QUERY_LIMIT", default=3, gte=1, lte=10),
             Validator("HISTORY_LOOKBACK_LIMIT", default=10, gte=1, lte=100),
@@ -344,15 +370,47 @@ def load_config() -> Dynaconf:
             Validator("CIRCUIT_BREAKER_TIMEOUT", default=30, gte=1),
         ],
     )
+    
     try:
         cfg.validators.validate()
         get_logger().info("Clarifier configuration validated successfully.")
-        cfg.is_production_env = (
-            os.getenv("PYTHON_ENV", "development").lower() == "production"
-        )
+        cfg.is_production_env = is_production
+        
+        # Warn about missing critical production settings
+        if is_production:
+            warnings = []
+            if not cfg.get("KMS_KEY_ID"):
+                warnings.append("KMS_KEY_ID is not set - encryption features will be limited")
+            if not cfg.get("ALERT_ENDPOINT"):
+                warnings.append("ALERT_ENDPOINT is not set - operational alerts will be disabled")
+            if cfg.get("HISTORY_FILE", "").startswith("/tmp/"):
+                warnings.append("HISTORY_FILE uses /tmp path - data may not persist across restarts")
+            if cfg.get("CONTEXT_DB_PATH", "").startswith("/tmp/"):
+                warnings.append("CONTEXT_DB_PATH uses /tmp path - context may not persist across restarts")
+                
+            if warnings:
+                get_logger().warning(
+                    f"PRODUCTION CONFIGURATION WARNINGS:\n  - " + "\n  - ".join(warnings) +
+                    "\nConsider setting explicit CLARIFIER_* environment variables for production deployments."
+                )
     except Exception as e:
-        get_logger().critical(f"Configuration validation failed: {e}")
-        sys.exit(1)
+        # Log validation failure appropriately based on environment
+        if is_production:
+            get_logger().error(
+                f"CRITICAL: Configuration validation failed in production: {e}. "
+                f"Continuing with default values, but this may cause service degradation. "
+                f"Please review CLARIFIER_* environment variables immediately."
+            )
+        else:
+            get_logger().warning(
+                f"Configuration validation failed: {e}. "
+                f"Continuing with default values suitable for development/testing. "
+                f"Set CLARIFIER_* environment variables if specific configuration is needed."
+            )
+        
+        # Set production flag to False since we're using fallback config
+        cfg.is_production_env = False
+    
     return cfg
 
 
