@@ -338,6 +338,9 @@ def preload_all(verbose: bool = True) -> float:
     This can be called after startup to load all dependencies in the background,
     ensuring they're ready when needed while keeping startup time fast.
     
+    Note: The list of modules is hardcoded for simplicity. For more flexibility,
+    consider using a registry pattern or auto-discovering LazyImport instances.
+    
     Args:
         verbose: Whether to log each import
     
@@ -353,7 +356,11 @@ def preload_all(verbose: bool = True) -> float:
     """
     start = time.perf_counter()
     
-    for name in ['sentence_transformers', 'torch', 'transformers', 'faiss', 'matplotlib']:
+    # List of lazy import module names (matches module-level variables)
+    # TODO: Consider using a registry pattern to avoid hardcoding
+    lazy_module_names = ['sentence_transformers', 'torch', 'transformers', 'faiss', 'matplotlib']
+    
+    for name in lazy_module_names:
         try:
             lazy_mod = globals()[name]
             if not lazy_mod.is_loaded:

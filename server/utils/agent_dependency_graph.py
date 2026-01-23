@@ -178,7 +178,7 @@ AGENT_GRAPH: Dict[str, AgentConfig] = {
     "deploy": AgentConfig(
         name="deploy",
         module_path="generator.agents.deploy_agent.deploy_agent",
-        dependencies=(),  # No dependencies
+        dependencies=(),  # No dependencies - could be Phase 1, but kept in Phase 2 for balanced load distribution
         phase=2
     ),
     

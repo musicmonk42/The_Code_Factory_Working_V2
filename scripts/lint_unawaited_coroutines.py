@@ -49,9 +49,14 @@ class CoroutineChecker(ast.NodeVisitor):
     
     This checker identifies function calls to known async functions that
     are not properly awaited, which is a common source of bugs in async code.
+    
+    Note: The list of known async functions is maintained manually. For
+    production use, consider implementing auto-discovery based on function
+    signatures or maintaining this list in a configuration file for easier updates.
     """
     
     # Known async functions that must be awaited
+    # TODO: Consider moving to configuration file for easier maintenance
     KNOWN_ASYNC_FUNCTIONS = {
         'register_with_omnicore',
         'log_audit_event',
