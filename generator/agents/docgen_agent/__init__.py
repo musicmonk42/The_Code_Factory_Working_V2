@@ -11,7 +11,7 @@ from .docgen_agent import (
     BatchProcessor,
     CompliancePlugin,
     CopyrightCompliance,
-    DocGenAgent,
+    DocgenAgent,
     LicenseCompliance,
     SphinxDocGenerator,
     doc_critique_summary,

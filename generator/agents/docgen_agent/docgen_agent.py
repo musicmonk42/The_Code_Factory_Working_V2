@@ -520,13 +520,13 @@ class BatchProcessor:
         self.semaphore = asyncio.Semaphore(max_concurrent)
 
     async def process_batch(
-        self, agent: "DocGenAgent", batch_requests: List[Dict[str, Any]]
+        self, agent: "DocgenAgent", batch_requests: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
         Process a batch of documentation generation requests in parallel.
 
         Args:
-            agent: The DocGenAgent instance
+            agent: The DocgenAgent instance
             batch_requests: List of request dictionaries with keys:
                 - target_files: List[str]
                 - doc_type: str
@@ -605,7 +605,7 @@ SUMMARIZERS.register("doc_critique", doc_critique_summary)
 
 
 # --- Main DocGen Agent ---
-class DocGenAgent:
+class DocgenAgent:
     """
     The orchestrator for automated documentation generation.
     FULLY IMPLEMENTED: All features from docstring are complete.
@@ -650,7 +650,7 @@ class DocGenAgent:
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
         logger.info(
-            f"DocGenAgent initialized for repo: {repo_path}, "
+            f"DocgenAgent initialized for repo: {repo_path}, "
             f"languages: {self.languages_supported}, "
             f"plugins: {len(self.plugin_registry.get_all_plugins())}"
         )
@@ -1761,14 +1761,14 @@ async def generate(
     **kwargs,
 ) -> Dict[str, Any]:
     """
-    OmniCore plugin entry point to run the DocGenAgent's generation pipeline.
+    OmniCore plugin entry point to run the DocgenAgent's generation pipeline.
     Supports both single and batch processing.
     """
     # Handle doc_format -> doc_type mapping for integration tests
     if doc_format and doc_type == "README":
         doc_type = doc_format
 
-    agent = DocGenAgent(repo_path=repo_path, plugins_dir=plugins_dir, **kwargs)
+    agent = DocgenAgent(repo_path=repo_path, plugins_dir=plugins_dir, **kwargs)
 
     # Batch processing mode
     if batch_requests:
@@ -1814,7 +1814,7 @@ if __name__ == "__main__":
 
     async def test_integration():
         print("Running integration test...")
-        agent = DocGenAgent(repo_path=temp_repo_path)
+        agent = DocgenAgent(repo_path=temp_repo_path)
 
         # Mock the LLM client to return predictable content
         with patch(

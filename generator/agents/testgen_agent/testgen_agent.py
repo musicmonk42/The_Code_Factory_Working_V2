@@ -356,7 +356,7 @@ def validate_policy(policy_dict: Dict[str, Any]) -> None:
         raise ValueError("All LLM model fields must be non-empty strings.")
 
 
-class TestGenAgent:
+class TestgenAgent:
     """
     An intelligent agent that orchestrates the test generation lifecycle.
     REFACTORED: Uses central runner components.
@@ -370,7 +370,7 @@ class TestGenAgent:
             )
 
         # REFACTORED: Removed self.llm_orchestrator
-        logger.info(f"Initializing TestGenAgent for repository: {self.repo_path}")
+        logger.info(f"Initializing TestgenAgent for repository: {self.repo_path}")
 
         try:
             initialize_codebase_for_rag(str(self.repo_path))
@@ -1177,7 +1177,7 @@ Agent --> Dev : Deliver Report
 
 
 async def main():
-    """CLI entrypoint for the TestGenAgent."""
+    """CLI entrypoint for the TestgenAgent."""
     # REFACTORED: Removed local logging config
 
     # REFACTORED: Updated dependency check list
@@ -1205,7 +1205,7 @@ async def main():
             sys.exit(1)
 
     parser = argparse.ArgumentParser(
-        description="Run the TestGenAgent to generate tests for code files."
+        description="Run the TestgenAgent to generate tests for code files."
     )
     parser.add_argument(
         "target_files",
@@ -1318,7 +1318,7 @@ async def main():
         )
         sys.exit(1)
 
-    agent = TestGenAgent(repo_path=args.repo_path)
+    agent = TestgenAgent(repo_path=args.repo_path)
 
     result = await agent.generate_tests(
         target_files=args.target_files, language=args.language, policy=policy
