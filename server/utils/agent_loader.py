@@ -45,6 +45,15 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Import phased loading support
+try:
+    from server.utils.agent_dependency_graph import get_load_phases, AgentConfig, AGENT_GRAPH
+    PHASED_LOADING_AVAILABLE = True
+except ImportError:
+    PHASED_LOADING_AVAILABLE = False
+    AGENT_GRAPH = {}
+    logger.warning("Phased loading not available - agent_dependency_graph not found")
+
 
 # Environment variable constants
 ENV_VAR_TRUE = "1"
@@ -128,9 +137,12 @@ class AgentLoader:
         
         # Feature flags
         self._parallel_loading = os.getenv("PARALLEL_AGENT_LOADING", "1") == "1"
+        self._phased_loading = os.getenv("PHASED_AGENT_LOADING", "1") == "1" and PHASED_LOADING_AVAILABLE
         
         self._initialized = True
         logger.info("AgentLoader initialized")
+        if self._phased_loading:
+            logger.info("Phased loading enabled - will prevent import deadlocks")
     
     def safe_import_agent(
         self,
@@ -272,6 +284,105 @@ class AgentLoader:
             ) from error
         
         return False, None
+    
+    async def load_agent_by_config_async(self, config: 'AgentConfig') -> Optional[object]:
+        """
+        Load a single agent by its configuration asynchronously.
+        
+        Args:
+            config: AgentConfig with module path and import names
+            
+        Returns:
+            Loaded module or None on failure
+        """
+        logger.info(f"Importing {config.name} from {config.module_path}")
+        
+        # Dynamic import with timeout protection
+        try:
+            # Use asyncio.timeout if available (Python 3.11+), otherwise use wait_for
+            try:
+                import asyncio
+                # Try Python 3.11+ timeout
+                async with asyncio.timeout(30):  # 30s per agent
+                    success, module = await asyncio.to_thread(
+                        self.safe_import_agent,
+                        agent_type=AgentType(config.name),
+                        module_path=config.module_path,
+                        import_names=[],  # Already imported in safe_import_agent
+                        description=f"Phased load {config.name} agent"
+                    )
+                    return module if success else None
+            except AttributeError:
+                # Fall back to wait_for for Python < 3.11
+                success, module = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.safe_import_agent,
+                        agent_type=AgentType(config.name),
+                        module_path=config.module_path,
+                        import_names=[],
+                        description=f"Phased load {config.name} agent"
+                    ),
+                    timeout=30.0
+                )
+                return module if success else None
+        except asyncio.TimeoutError:
+            error_msg = f"Agent {config.name} import timed out after 30s"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+    
+    async def load_agents_phased(self) -> Dict[str, Any]:
+        """
+        Load agents in phases to prevent import deadlocks.
+        
+        Phase 0: Foundation modules (sequential)
+        Phase 1+: Parallel within phase, sequential between phases
+        
+        Returns:
+            Dictionary of loaded agents
+        """
+        if not PHASED_LOADING_AVAILABLE:
+            logger.warning("Phased loading not available - falling back to regular loading")
+            return {}
+        
+        phases = get_load_phases()
+        loaded_agents = {}
+        
+        logger.info("=" * 80)
+        logger.info("Starting PHASED agent loading (deadlock prevention)")
+        logger.info(f"Total phases: {len(phases)}")
+        logger.info("=" * 80)
+        
+        for phase_num in sorted(phases.keys()):
+            phase_agents = phases[phase_num]
+            logger.info(f"Loading phase {phase_num}: {[a.name for a in phase_agents]}")
+            
+            # Load phase in parallel (safe within same dependency level)
+            tasks = []
+            for agent_config in phase_agents:
+                task = self.load_agent_by_config_async(agent_config)
+                tasks.append((agent_config, task))
+            
+            # Execute all tasks for this phase
+            results = await asyncio.gather(*[t[1] for t in tasks], return_exceptions=True)
+            
+            # Check for failures
+            for (agent_config, _), result in zip(tasks, results):
+                if isinstance(result, Exception):
+                    logger.error(f"Phase {phase_num} agent '{agent_config.name}' failed: {result}")
+                    if self._strict_mode:
+                        raise result
+                elif result is not None:
+                    loaded_agents[agent_config.name] = result
+                    logger.info(f"✓ Phase {phase_num} agent '{agent_config.name}' loaded")
+            
+            # Small delay between phases to allow GIL release
+            await asyncio.sleep(0.1)
+        
+        logger.info("=" * 80)
+        logger.info(f"✓ Phased loading complete: {len(loaded_agents)}/{len(AGENT_GRAPH)} agents loaded")
+        logger.info("=" * 80)
+        
+        return loaded_agents
     
     def _extract_missing_dependencies(
         self, error_message: str, traceback_str: str

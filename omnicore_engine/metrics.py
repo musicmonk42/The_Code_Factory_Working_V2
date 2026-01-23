@@ -154,13 +154,18 @@ except ImportError:
 
 # --- Prometheus HTTP Server Startup (optional) ---
 # Skip server startup in test/CI environments to prevent import timeouts and core dumps
-_skip_server = (
-    os.getenv("TESTING", "").lower() in ("1", "true", "yes")
-    or os.getenv("OTEL_SDK_DISABLED", "").lower() in ("1", "true", "yes")
-    or os.getenv("SKIP_IMPORT_TIME_VALIDATION", "").lower() in ("1", "true", "yes")
-    or os.getenv("PYTEST_CURRENT_TEST") is not None  # pytest sets this to test path
-    or os.getenv("CI", "").lower() in ("1", "true", "yes")
-)
+try:
+    from server.environment import is_test
+    _skip_server = is_test()
+except ImportError:
+    # Fallback if environment module not available yet (during early initialization)
+    _skip_server = (
+        os.getenv("TESTING", "").lower() in ("1", "true", "yes")
+        or os.getenv("OTEL_SDK_DISABLED", "").lower() in ("1", "true", "yes")
+        or os.getenv("SKIP_IMPORT_TIME_VALIDATION", "").lower() in ("1", "true", "yes")
+        or os.getenv("PYTEST_CURRENT_TEST") is not None  # pytest sets this to test path
+        or os.getenv("CI", "").lower() in ("1", "true", "yes")
+    )
 
 if _skip_server:
     logger.info(

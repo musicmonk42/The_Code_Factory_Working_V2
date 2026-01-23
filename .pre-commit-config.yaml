@@ -115,6 +115,13 @@ repos:
   # Custom hooks
   - repo: local
     hooks:
+      - id: check-unawaited-coroutines
+        name: Check for unawaited coroutines
+        entry: python scripts/lint_unawaited_coroutines.py
+        language: system
+        types: [python]
+        pass_filenames: true
+        
       - id: no-secrets-in-code
         name: Check for hardcoded secrets
         entry: bash -c 'if grep -r --exclude-dir={.git,.venv,node_modules} -E "(api[_-]?key|password|secret|token|bearer)" *.py; then echo "Potential secret found in code"; exit 1; fi'
