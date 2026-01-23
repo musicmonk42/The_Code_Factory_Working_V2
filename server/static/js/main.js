@@ -262,6 +262,11 @@ function createJobCard(job) {
                 <p style="color: var(--text-secondary);">
                     ${fileCountDisplay}
                 </p>
+                <p style="color: var(--text-secondary); font-size: 0.85rem; cursor: pointer;" 
+                   title="Click to copy full job ID" 
+                   onclick="copyJobId('${job.id}')">
+                    Full ID: ${job.id.substring(0, 8)}... (click to copy)
+                </p>
             </div>
             <div>
                 <span class="status-badge status-${job.status}">${job.status}</span>
@@ -408,10 +413,15 @@ function initSFE() {
 }
 
 async function analyzeCode() {
-    const jobId = document.getElementById('analyze-job-id').value;
-    if (!jobId) {
+    const jobIdInput = document.getElementById('analyze-job-id').value;
+    if (!jobIdInput) {
         showError('Please enter a job ID');
         return;
+    }
+    
+    const jobId = sanitizeJobId(jobIdInput);
+    if (!jobId) {
+        return; // Error already shown by sanitizeJobId
     }
     
     try {
@@ -671,6 +681,52 @@ function showError(message) {
     alert('✗ ' + message);
 }
 
+/**
+ * Sanitize and validate a job ID input
+ * Handles common user input issues like "Job abc123" prefix or truncated IDs
+ * @param {string} input - Raw user input
+ * @returns {string|null} - Valid UUID or null if invalid
+ */
+function sanitizeJobId(input) {
+    if (!input) return null;
+    
+    // Trim whitespace
+    let jobId = input.trim();
+    
+    // Remove "Job " prefix (case-insensitive)
+    jobId = jobId.replace(/^job\s+/i, '');
+    
+    // UUID regex (with or without dashes)
+    const uuidRegex = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
+    
+    if (!uuidRegex.test(jobId)) {
+        // Check if it's a truncated UUID (first 8 chars only)
+        if (/^[0-9a-f]{8}$/i.test(jobId)) {
+            showError(`Job ID '${jobId}' appears to be truncated. Please use the full job ID.`);
+        } else {
+            showError(`Invalid job ID format: '${input}'. Please enter a valid UUID.`);
+        }
+        return null;
+    }
+    
+    return jobId;
+}
+
+/**
+ * Copy job ID to clipboard
+ * @param {string} jobId - The job ID to copy
+ */
+function copyJobId(jobId) {
+    // Create a temporary input element
+    const temp = document.createElement('input');
+    temp.value = jobId;
+    document.body.appendChild(temp);
+    temp.select();
+    document.execCommand('copy');
+    document.body.removeChild(temp);
+    showSuccess(`Job ID copied: ${jobId}`);
+}
+
 // Add status badge styles
 const style = document.createElement('style');
 style.textContent = `
@@ -771,10 +827,11 @@ async function deleteJob(jobId) {
 // ===== GENERATOR AGENT FUNCTIONS =====
 
 async function runAgentPipeline() {
-    let jobId = document.getElementById('agent-job-id').value;
+    let jobIdInput = document.getElementById('agent-job-id').value;
+    let jobId = null;
     
     // If no job ID, create one automatically
-    if (!jobId) {
+    if (!jobIdInput) {
         try {
             const createResponse = await fetch(`${API_BASE}/jobs/`, {
                 method: 'POST',
@@ -797,6 +854,12 @@ async function runAgentPipeline() {
         } catch (error) {
             showError('Failed to create job: ' + error.message);
             return;
+        }
+    } else {
+        // Sanitize provided job ID
+        jobId = sanitizeJobId(jobIdInput);
+        if (!jobId) {
+            return; // Error already shown by sanitizeJobId
         }
     }
     
@@ -838,10 +901,15 @@ async function runAgentPipeline() {
 }
 
 async function runCodegen() {
-    let jobId = document.getElementById('agent-job-id').value;
-    if (!jobId) {
+    let jobIdInput = document.getElementById('agent-job-id').value;
+    if (!jobIdInput) {
         showError('Please enter a job ID or create one by clicking Full Pipeline first');
         return;
+    }
+    
+    const jobId = sanitizeJobId(jobIdInput);
+    if (!jobId) {
+        return; // Error already shown by sanitizeJobId
     }
     
     try {
@@ -870,8 +938,13 @@ async function runCodegen() {
 }
 
 async function runTestgen() {
-    const jobId = document.getElementById('agent-job-id').value;
-    if (!jobId) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
+    const jobIdInput = document.getElementById('agent-job-id').value;
+    if (!jobIdInput) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
+    
+    const jobId = sanitizeJobId(jobIdInput);
+    if (!jobId) {
+        return; // Error already shown by sanitizeJobId
+    }
     
     try {
         const response = await fetch(`${API_BASE}/generator/${jobId}/testgen`, {
@@ -899,8 +972,13 @@ async function runTestgen() {
 }
 
 async function runDocgen() {
-    const jobId = document.getElementById('agent-job-id').value;
-    if (!jobId) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
+    const jobIdInput = document.getElementById('agent-job-id').value;
+    if (!jobIdInput) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
+    
+    const jobId = sanitizeJobId(jobIdInput);
+    if (!jobId) {
+        return; // Error already shown by sanitizeJobId
+    }
     
     try {
         const response = await fetch(`${API_BASE}/generator/${jobId}/docgen`, {
@@ -928,8 +1006,13 @@ async function runDocgen() {
 }
 
 async function runDeploy() {
-    const jobId = document.getElementById('agent-job-id').value;
-    if (!jobId) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
+    const jobIdInput = document.getElementById('agent-job-id').value;
+    if (!jobIdInput) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
+    
+    const jobId = sanitizeJobId(jobIdInput);
+    if (!jobId) {
+        return; // Error already shown by sanitizeJobId
+    }
     
     try {
         const response = await fetch(`${API_BASE}/generator/${jobId}/deploy`, {
@@ -957,8 +1040,13 @@ async function runDeploy() {
 }
 
 async function runCritique() {
-    const jobId = document.getElementById('agent-job-id').value;
-    if (!jobId) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
+    const jobIdInput = document.getElementById('agent-job-id').value;
+    if (!jobIdInput) return showError('Please enter a job ID or create one by clicking Full Pipeline first');
+    
+    const jobId = sanitizeJobId(jobIdInput);
+    if (!jobId) {
+        return; // Error already shown by sanitizeJobId
+    }
     
     try {
         const response = await fetch(`${API_BASE}/generator/${jobId}/critique`, {
@@ -1241,8 +1329,13 @@ async function analyzeCodebase() {
 }
 
 async function prioritizeBugs() {
-    const jobId = document.getElementById('analyze-job-id').value;
-    if (!jobId) return showError('Please enter a job ID');
+    const jobIdInput = document.getElementById('analyze-job-id').value;
+    if (!jobIdInput) return showError('Please enter a job ID');
+    
+    const jobId = sanitizeJobId(jobIdInput);
+    if (!jobId) {
+        return; // Error already shown by sanitizeJobId
+    }
     
     try {
         const response = await fetch(`${API_BASE}/sfe/${jobId}/bugs/prioritize`, {
@@ -1623,12 +1716,19 @@ async function startClarification() {
             currentClarifierJobId = job.id;
             document.getElementById('clarifier-job-id').value = currentClarifierJobId;
         } else {
-            // Validate provided job ID exists
-            const validateResponse = await fetch(`${API_BASE}/jobs/${jobIdInput}`);
-            if (!validateResponse.ok) {
-                throw new Error(`Job ID '${jobIdInput}' not found. Please create a job first or leave the field empty to auto-generate.`);
+            // Sanitize and validate provided job ID
+            const sanitizedJobId = sanitizeJobId(jobIdInput);
+            if (!sanitizedJobId) {
+                updateClarifierStatus('Ready', 'idle');
+                return; // Error already shown by sanitizeJobId
             }
-            currentClarifierJobId = jobIdInput;
+            
+            // Validate job ID exists
+            const validateResponse = await fetch(`${API_BASE}/jobs/${sanitizedJobId}`);
+            if (!validateResponse.ok) {
+                throw new Error(`Job ID '${sanitizedJobId}' not found. Please create a job first or leave the field empty to auto-generate.`);
+            }
+            currentClarifierJobId = sanitizedJobId;
         }
         
         // Call clarifier API
