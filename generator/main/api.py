@@ -1344,11 +1344,6 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
                 is_active=True,
                 created_at=datetime.now(timezone.utc),
                 last_login_at=None,
-                model_config=(
-                    {"from_attributes": True}
-                    if not hasattr(UserResponse.Config, "orm_mode")
-                    else {}
-                ),
             )
 
 
