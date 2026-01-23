@@ -32,6 +32,7 @@ Usage:
         logger.error(f"Codegen agent unavailable: {error}")
 """
 
+import asyncio
 import logging
 import os
 import sys
@@ -123,6 +124,10 @@ class AgentLoader:
         self._loading_started: bool = False
         self._loading_completed: bool = False
         self._loading_error: Optional[str] = None
+        self._loading_lock: Optional[asyncio.Lock] = None  # Startup lock
+        
+        # Feature flags
+        self._parallel_loading = os.getenv("PARALLEL_AGENT_LOADING", "1") == "1"
         
         self._initialized = True
         logger.info("AgentLoader initialized")
@@ -339,6 +344,12 @@ class AgentLoader:
         FastAPI application lifespan startup). It will raise RuntimeError if called
         outside an async context.
         
+        Features:
+        - Startup lock to prevent duplicate initialization
+        - Parallel loading support (configurable via PARALLEL_AGENT_LOADING env var)
+        - Graceful error handling
+        - Performance metrics logging
+        
         Args:
             agents_to_load: List of (agent_type, module_path, import_names) tuples.
                           If None, loads a default set of agents.
@@ -347,7 +358,7 @@ class AgentLoader:
             RuntimeError: If called outside an async context
         """
         if self._loading_started:
-            logger.warning("Background agent loading already started")
+            logger.warning("Background agent loading already started - preventing duplicate initialization")
             return
         
         self._loading_started = True
@@ -365,33 +376,81 @@ class AgentLoader:
         import asyncio
         
         async def load_agents_async():
-            """Load agents asynchronously."""
-            logger.info("Starting background agent loading")
-            try:
-                for agent_type, module_path, import_names in agents_to_load:
-                    self.safe_import_agent(
-                        agent_type=agent_type,
-                        module_path=module_path,
-                        import_names=import_names,
-                        description=f"Background load {agent_type.value} agent",
-                    )
+            """Load agents asynchronously with startup lock."""
+            # Initialize lock if not already done
+            if self._loading_lock is None:
+                self._loading_lock = asyncio.Lock()
+            
+            # Acquire lock to prevent concurrent initialization
+            async with self._loading_lock:
+                logger.info("=" * 80)
+                logger.info("Starting background agent loading")
+                logger.info(f"Parallel loading: {self._parallel_loading}")
+                logger.info(f"Number of agents to load: {len(agents_to_load)}")
+                logger.info("=" * 80)
                 
-                self._loading_completed = True
-                logger.info("✓ Background agent loading completed successfully")
+                start_time = datetime.utcnow()
                 
-                # Log summary
-                status = self.get_status()
-                logger.info(f"Loaded {len(status['available_agents'])}/{status['total_agents']} agents")
-                
-            except Exception as e:
-                logger.error(f"Error during background agent loading: {e}", exc_info=True)
-                self._loading_error = str(e)
-                self._loading_completed = True  # Mark as completed even on error
+                try:
+                    if self._parallel_loading:
+                        # PARALLEL LOADING - Much faster!
+                        logger.info("Loading agents in PARALLEL for maximum performance")
+                        
+                        # Create coroutines for parallel execution
+                        load_tasks = []
+                        for agent_type, module_path, import_names in agents_to_load:
+                            async def load_single_agent(at=agent_type, mp=module_path, names=import_names):
+                                # Run the sync import in thread pool to avoid blocking
+                                await asyncio.to_thread(
+                                    self.safe_import_agent,
+                                    agent_type=at,
+                                    module_path=mp,
+                                    import_names=names,
+                                    description=f"Parallel load {at.value} agent",
+                                )
+                            load_tasks.append(load_single_agent())
+                        
+                        # Execute all loads in parallel
+                        await asyncio.gather(*load_tasks, return_exceptions=True)
+                    else:
+                        # SEQUENTIAL LOADING - Slower but safer for debugging
+                        logger.info("Loading agents SEQUENTIALLY (set PARALLEL_AGENT_LOADING=1 for better performance)")
+                        for agent_type, module_path, import_names in agents_to_load:
+                            self.safe_import_agent(
+                                agent_type=agent_type,
+                                module_path=module_path,
+                                import_names=import_names,
+                                description=f"Sequential load {agent_type.value} agent",
+                            )
+                    
+                    self._loading_completed = True
+                    end_time = datetime.utcnow()
+                    duration = (end_time - start_time).total_seconds()
+                    
+                    logger.info("=" * 80)
+                    logger.info("✓ Background agent loading completed successfully")
+                    logger.info(f"Loading time: {duration:.2f}s")
+                    
+                    # Log summary
+                    status = self.get_status()
+                    available = len(status['available_agents'])
+                    total = status['total_agents']
+                    logger.info(f"Loaded {available}/{total} agents successfully")
+                    
+                    if status['unavailable_agents']:
+                        logger.warning(f"Unavailable agents: {', '.join(status['unavailable_agents'])}")
+                    
+                    logger.info("=" * 80)
+                    
+                except Exception as e:
+                    logger.error(f"Error during background agent loading: {e}", exc_info=True)
+                    self._loading_error = str(e)
+                    self._loading_completed = True  # Mark as completed even on error
         
         # Create the background task - must be in async context
         try:
             self._loading_task = asyncio.create_task(load_agents_async())
-            logger.info("Background agent loading task created")
+            logger.info("✓ Background agent loading task created with startup lock protection")
         except RuntimeError as e:
             # Not in an async context - this is an error
             logger.error("start_background_loading must be called from an async context")
