@@ -343,8 +343,8 @@ class ArbiterConfig(BaseSettings):
                     raise ValueError("REDIS_URL must be set in production.")
                 for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
                     if not values.get(key):
-                        logger.warning(
-                            f"{key} is not set. LLM functionality may be disabled for {key.split('_')[0].lower()}."
+                        logger.debug(
+                            f"{key} is not set. LLM functionality for {key.split('_')[0].lower()} will be disabled."
                         )
                         span.set_attribute(f"{key.lower()}_status", "missing")
                 if values.get("ENCRYPTION_KEY"):
