@@ -70,6 +70,7 @@ from server.routers import (
 )
 from server.utils.agent_loader import AgentType, get_agent_loader
 from server.schemas import ErrorResponse, HealthResponse, ReadinessResponse, DetailedHealthResponse
+from server.config_utils import initialize_config, validate_required_api_keys
 
 # Configure logging
 logging.basicConfig(
@@ -97,6 +98,25 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Code Factory API Server")
     logger.info(f"Version: {__version__}")
+    
+    # Initialize configuration and validate
+    logger.info("=" * 80)
+    logger.info("INITIALIZING PLATFORM CONFIGURATION")
+    logger.info("=" * 80)
+    
+    try:
+        config = initialize_config(log_summary=True)
+        
+        # Validate API keys (fail-fast in production)
+        validate_required_api_keys(config, fail_fast=config.is_production)
+        
+    except Exception as e:
+        logger.error(f"Configuration initialization failed: {e}", exc_info=True)
+        if config and config.is_production:
+            # In production, fail fast on configuration errors
+            raise RuntimeError(f"Production configuration validation failed: {e}") from e
+        else:
+            logger.warning("Continuing startup despite configuration errors (non-production mode)")
     
     # Start the server IMMEDIATELY - agent loading happens in background
     logger.info("=" * 80)

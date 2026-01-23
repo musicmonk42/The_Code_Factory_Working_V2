@@ -1,0 +1,126 @@
+# Optional Dependencies for Code Factory Platform
+# ===============================================
+#
+# These dependencies are NOT required for basic platform operation.
+# Install only if you need the specific feature.
+#
+# Install all optional dependencies:
+#   pip install -r requirements-optional.txt
+#
+# Or install specific features as needed:
+#   pip install python-pkcs11  # For HSM support
+#   pip install sphinx sphinx-rtd-theme  # For documentation generation
+
+# =============================================================================
+# HSM (Hardware Security Module) Support
+# =============================================================================
+# Provides cryptographic key storage in hardware security modules
+# Only needed if ENABLE_HSM=1
+python-pkcs11>=0.7.0
+
+# =============================================================================
+# Virtualization (libvirt)
+# =============================================================================
+# System dependencies required FIRST:
+#   apt-get install -y libvirt-dev pkg-config
+# Then uncomment to enable libvirt support:
+# libvirt-python>=12.0.0
+
+# =============================================================================
+# Avro Serialization
+# =============================================================================
+# Fast serialization for data pipelines
+# Already in main requirements.txt
+# fastavro>=1.11.1
+
+# =============================================================================
+# Documentation Generation
+# =============================================================================
+# Sphinx documentation system
+# Already in main requirements.txt
+# sphinx>=7.0.0
+# sphinx-rtd-theme>=1.3.0
+
+# =============================================================================
+# Diagram Generation
+# =============================================================================
+# PlantUML support (requires system graphviz package)
+# System dependency: apt-get install -y graphviz
+# Already in main requirements.txt
+# plantuml>=0.3.0
+
+# =============================================================================
+# Advanced ML Features
+# =============================================================================
+# Additional ML libraries for advanced features
+# sentence-transformers>=5.0.0  # Already in main requirements
+# faiss-cpu>=1.9.0  # Already in main requirements
+
+# =============================================================================
+# Cloud Provider SDKs (if not already in main requirements)
+# =============================================================================
+# Most cloud SDKs are already included in requirements.txt
+# Add only if you need additional cloud providers
+
+# =============================================================================
+# Database Drivers (additional)
+# =============================================================================
+# PostgreSQL support is already in main requirements (psycopg2-binary)
+# MySQL support:
+# mysqlclient>=2.2.0
+
+# MongoDB support:
+# pymongo>=4.0.0
+# motor>=3.0.0  # Async MongoDB driver
+
+# =============================================================================
+# Message Queue Systems (additional)
+# =============================================================================
+# RabbitMQ is already included (pika in main requirements)
+# Additional message queue systems:
+
+# Apache Pulsar:
+# pulsar-client>=3.0.0
+
+# NATS:
+# Already included in main requirements (nats-py)
+
+# =============================================================================
+# Monitoring & Observability (additional)
+# =============================================================================
+# Most monitoring tools are already in main requirements
+# Datadog:
+# ddtrace>=2.0.0
+
+# New Relic:
+# newrelic>=9.0.0
+
+# =============================================================================
+# Testing Tools (additional)
+# =============================================================================
+# Most testing tools are in main requirements
+# Load testing:
+# locust>=2.0.0
+
+# Contract testing:
+# pact-python>=2.0.0
+
+# =============================================================================
+# Security Tools (additional)
+# =============================================================================
+# Vault support is already in main requirements (hvac)
+# Additional security tools:
+
+# AWS Secrets Manager:
+# Already covered by boto3
+
+# Azure Key Vault:
+# Already covered by azure-identity
+
+# =============================================================================
+# Notes
+# =============================================================================
+# 1. Most commonly used dependencies are already in requirements.txt
+# 2. This file primarily documents system dependencies and rarely-used features
+# 3. Check ENABLE_* environment variables to control feature activation
+# 4. System packages (graphviz, libvirt-dev) must be installed via apt/yum/brew
