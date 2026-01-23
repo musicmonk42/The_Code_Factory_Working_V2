@@ -271,5 +271,75 @@ def test_optional_dependencies_detection():
         assert isinstance(deps, list)
 
 
+def test_distributed_lock_input_validation():
+    """Test distributed lock validates input parameters."""
+    from server.distributed_lock import DistributedLock
+    import pytest
+    
+    # Test empty lock_name
+    with pytest.raises(ValueError, match="non-empty string"):
+        DistributedLock("")
+    
+    # Test whitespace-only lock_name
+    with pytest.raises(ValueError, match="non-empty string"):
+        DistributedLock("   ")
+    
+    # Test invalid timeout (too small)
+    with pytest.raises(ValueError, match="timeout must be between"):
+        DistributedLock("test", timeout=0)
+    
+    # Test invalid timeout (too large)
+    with pytest.raises(ValueError, match="timeout must be between"):
+        DistributedLock("test", timeout=4000)
+    
+    # Test invalid retry_delay (too small)
+    with pytest.raises(ValueError, match="retry_delay must be between"):
+        DistributedLock("test", retry_delay=0.01)
+    
+    # Test invalid retry_delay (too large)
+    with pytest.raises(ValueError, match="retry_delay must be between"):
+        DistributedLock("test", retry_delay=100)
+    
+    # Test invalid max_retries (too small)
+    with pytest.raises(ValueError, match="max_retries must be between"):
+        DistributedLock("test", max_retries=0)
+    
+    # Test invalid max_retries (too large)
+    with pytest.raises(ValueError, match="max_retries must be between"):
+        DistributedLock("test", max_retries=200)
+    
+    # Test valid parameters
+    lock = DistributedLock("test", timeout=30, retry_delay=1.0, max_retries=5)
+    assert lock.lock_name == "lock:test"
+    assert lock.timeout == 30
+    assert lock.retry_delay == 1.0
+    assert lock.max_retries == 5
+
+
+def test_config_startup_timeout_bounds():
+    """Test that startup timeout is validated and bounded."""
+    from server.config_utils import get_config, MIN_STARTUP_TIMEOUT, MAX_STARTUP_TIMEOUT
+    
+    # Test value within bounds
+    with patch.dict(os.environ, {"STARTUP_TIMEOUT": "90"}, clear=True):
+        config = get_config()
+        assert config.startup_timeout == 90
+    
+    # Test value below minimum
+    with patch.dict(os.environ, {"STARTUP_TIMEOUT": "5"}, clear=True):
+        config = get_config()
+        assert config.startup_timeout == 90  # Should use default
+    
+    # Test value above maximum
+    with patch.dict(os.environ, {"STARTUP_TIMEOUT": "1000"}, clear=True):
+        config = get_config()
+        assert config.startup_timeout == 90  # Should use default
+    
+    # Test invalid value
+    with patch.dict(os.environ, {"STARTUP_TIMEOUT": "invalid"}, clear=True):
+        config = get_config()
+        assert config.startup_timeout == 90  # Should use default
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

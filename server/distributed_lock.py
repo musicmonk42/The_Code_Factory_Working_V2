@@ -10,11 +10,13 @@ Key Features:
 - Automatic lock expiration for fault tolerance
 - Context manager support for easy usage
 - Startup lock for preventing duplicate container initialization
+- Input validation and security checks
+- Graceful degradation when Redis is unavailable
 
 Usage:
     from server.distributed_lock import get_startup_lock, acquire_startup_lock
     
-    # Using context manager
+    # Using context manager (recommended)
     async with get_startup_lock() as acquired:
         if acquired:
             # Safe to initialize
@@ -27,6 +29,38 @@ Usage:
             await initialize_agents()
         finally:
             await lock.release()
+
+Security Considerations:
+    - REDIS_URL must use 'redis://' or 'rediss://' scheme
+    - Lock names are sanitized and prefixed with 'lock:'
+    - Unique lock values prevent accidental releases
+    - Automatic expiration prevents deadlocks
+
+Constants:
+    MIN_LOCK_TIMEOUT: Minimum lock timeout (seconds)
+    MAX_LOCK_TIMEOUT: Maximum lock timeout (seconds)
+    MIN_RETRY_DELAY: Minimum retry delay (seconds)
+    MAX_RETRY_DELAY: Maximum retry delay (seconds)
+    MIN_MAX_RETRIES: Minimum retry attempts
+    MAX_MAX_RETRIES: Maximum retry attempts
+
+Examples:
+    >>> # Create a lock with default settings
+    >>> lock = DistributedLock("my_resource")
+    >>> 
+    >>> # Create a lock with custom settings
+    >>> lock = DistributedLock(
+    ...     "my_resource",
+    ...     timeout=60,        # 60 second expiration
+    ...     retry_delay=1.0,   # 1 second between retries
+    ...     max_retries=5      # 5 retry attempts
+    ... )
+    >>> 
+    >>> # Use with context manager
+    >>> async with lock as acquired:
+    ...     if acquired:
+    ...         # Critical section
+    ...         pass
 """
 
 import asyncio
@@ -34,9 +68,17 @@ import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# Lock configuration constants
+MIN_LOCK_TIMEOUT = 1  # Minimum lock timeout in seconds
+MAX_LOCK_TIMEOUT = 3600  # Maximum lock timeout in seconds (1 hour)
+MIN_RETRY_DELAY = 0.1  # Minimum retry delay in seconds
+MAX_RETRY_DELAY = 60  # Maximum retry delay in seconds
+MIN_MAX_RETRIES = 1  # Minimum number of retry attempts
+MAX_MAX_RETRIES = 100  # Maximum number of retry attempts
 
 
 class DistributedLock:
@@ -60,7 +102,7 @@ class DistributedLock:
         timeout: int = 30,
         retry_delay: float = 0.5,
         max_retries: int = 3
-    ):
+    ) -> None:
         """
         Initialize a distributed lock.
         
@@ -69,16 +111,35 @@ class DistributedLock:
             timeout: Lock expiration time in seconds (default: 30)
             retry_delay: Delay between acquisition attempts in seconds (default: 0.5)
             max_retries: Maximum number of acquisition attempts (default: 3)
+            
+        Raises:
+            ValueError: If parameters are out of valid range
         """
-        self.lock_name = f"lock:{lock_name}"
+        # Input validation
+        if not lock_name or not lock_name.strip():
+            raise ValueError("lock_name must be a non-empty string")
+        if timeout <= MIN_LOCK_TIMEOUT - 1 or timeout > MAX_LOCK_TIMEOUT:
+            raise ValueError(
+                f"timeout must be between {MIN_LOCK_TIMEOUT} and {MAX_LOCK_TIMEOUT} seconds"
+            )
+        if retry_delay < MIN_RETRY_DELAY or retry_delay > MAX_RETRY_DELAY:
+            raise ValueError(
+                f"retry_delay must be between {MIN_RETRY_DELAY} and {MAX_RETRY_DELAY} seconds"
+            )
+        if max_retries < MIN_MAX_RETRIES or max_retries > MAX_MAX_RETRIES:
+            raise ValueError(
+                f"max_retries must be between {MIN_MAX_RETRIES} and {MAX_MAX_RETRIES}"
+            )
+        
+        self.lock_name = f"lock:{lock_name.strip()}"
         self.timeout = timeout
         self.retry_delay = retry_delay
         self.max_retries = max_retries
         self.lock_value = str(uuid.uuid4())  # Unique identifier for this lock holder
         self._acquired = False
-        self._redis_client: Optional[any] = None
+        self._redis_client: Optional[Any] = None
     
-    async def _get_redis_client(self):
+    async def _get_redis_client(self) -> Optional[Any]:
         """
         Get or create Redis client.
         
@@ -92,6 +153,15 @@ class DistributedLock:
             import redis.asyncio as redis
             
             redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+            
+            # Basic URL validation for security
+            if not redis_url.startswith(("redis://", "rediss://")):
+                logger.error(
+                    f"Invalid REDIS_URL scheme. Must start with 'redis://' or 'rediss://'. "
+                    f"Distributed locking disabled."
+                )
+                return None
+            
             self._redis_client = redis.Redis.from_url(
                 redis_url,
                 socket_connect_timeout=5,
@@ -239,16 +309,31 @@ class DistributedLock:
             self._acquired = False
             return False
     
-    async def __aenter__(self):
-        """Context manager entry: acquire the lock."""
+    async def __aenter__(self) -> bool:
+        """Context manager entry: acquire the lock.
+        
+        Returns:
+            True if lock was acquired, False otherwise
+        """
         acquired = await self.acquire(blocking=True)
         return acquired
     
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit: release the lock."""
+    async def __aexit__(
+        self,
+        exc_type: Optional[type],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[Any]
+    ) -> None:
+        """Context manager exit: release the lock.
+        
+        Args:
+            exc_type: Exception type if an exception occurred
+            exc_val: Exception value if an exception occurred
+            exc_tb: Exception traceback if an exception occurred
+        """
         await self.release()
     
-    async def close(self):
+    async def close(self) -> None:
         """Close the Redis connection."""
         if self._redis_client is not None:
             try:

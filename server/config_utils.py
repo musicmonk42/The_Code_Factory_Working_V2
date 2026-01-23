@@ -10,22 +10,88 @@ Key Features:
 - Feature flag system for optional components
 - API key validation with fail-fast behavior
 - Configuration documentation and validation
+- Input validation and bounds checking
+- Secure default values
 
 Usage:
     from server.config_utils import get_config, validate_required_api_keys
     
+    # Get configuration
     config = get_config()
+    
+    # Check environment
     if config.is_production:
-        validate_required_api_keys()
+        # Production-specific logic
+        validate_required_api_keys(config)
+    
+    # Use feature flags
+    if config.enable_database:
+        # Database functionality
+        pass
+
+Environment Detection Hierarchy:
+    1. PRODUCTION_MODE env var (explicit override)
+    2. APP_ENV env var (production/staging/development)
+    3. TESTING env var (CI/test mode)
+    4. pytest detection (informational only)
+    5. Default to development
+
+Feature Flags:
+    Database & Storage:
+        - ENABLE_DATABASE: PostgreSQL/SQLite functionality
+        - ENABLE_FEATURE_STORE: Feast feature store
+    
+    Observability:
+        - ENABLE_SENTRY: Sentry error tracking
+        - ENABLE_PROMETHEUS: Prometheus metrics (auto-enabled in non-test mode)
+        - ENABLE_AUDIT_LOGGING: Audit logging (auto-enabled in production)
+    
+    Optional Features:
+        - ENABLE_HSM: Hardware Security Module support
+        - ENABLE_LIBVIRT: Libvirt virtualization
+    
+    Performance:
+        - PARALLEL_AGENT_LOADING: Parallel vs sequential agent loading
+        - LAZY_LOAD_ML: Lazy loading of ML libraries
+
+Constants:
+    MIN_STARTUP_TIMEOUT: Minimum allowed startup timeout (seconds)
+    MAX_STARTUP_TIMEOUT: Maximum allowed startup timeout (seconds)
+    DEFAULT_STARTUP_TIMEOUT: Default startup timeout (seconds)
+
+Security Considerations:
+    - API keys are detected but never logged
+    - Configuration values are validated
+    - Timeouts are bounded to prevent abuse
+    - Production mode requires explicit enablement
+
+Examples:
+    >>> # Basic configuration
+    >>> config = get_config()
+    >>> print(f"Environment: {config.is_production}")
+    
+    >>> # Validate API keys
+    >>> try:
+    ...     validate_required_api_keys(config, fail_fast=True)
+    ... except RuntimeError as e:
+    ...     print(f"Missing API keys: {e}")
+    
+    >>> # Initialize with logging
+    >>> config = initialize_config(log_summary=True)
 """
 
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
+
+# Configuration constants
+MIN_STARTUP_TIMEOUT = 10  # Minimum startup timeout in seconds
+MAX_STARTUP_TIMEOUT = 600  # Maximum startup timeout in seconds (10 minutes)
+DEFAULT_STARTUP_TIMEOUT = 90  # Default startup timeout in seconds
 
 
 @dataclass
@@ -86,7 +152,7 @@ class PlatformConfig:
     database_url: Optional[str] = None
 
 
-def detect_environment() -> tuple[bool, bool, bool]:
+def detect_environment() -> Tuple[bool, bool, bool]:
     """
     Detect the current runtime environment.
     
@@ -161,10 +227,19 @@ def get_config() -> PlatformConfig:
     
     # Startup Configuration
     try:
-        config.startup_timeout = int(os.getenv("STARTUP_TIMEOUT", "90"))
-    except ValueError:
-        logger.warning(f"Invalid STARTUP_TIMEOUT value, using default: 90")
-        config.startup_timeout = 90
+        timeout_value = int(os.getenv("STARTUP_TIMEOUT", str(DEFAULT_STARTUP_TIMEOUT)))
+        # Validate timeout is within reasonable bounds
+        if MIN_STARTUP_TIMEOUT <= timeout_value <= MAX_STARTUP_TIMEOUT:
+            config.startup_timeout = timeout_value
+        else:
+            logger.warning(
+                f"STARTUP_TIMEOUT value {timeout_value} out of range "
+                f"({MIN_STARTUP_TIMEOUT}-{MAX_STARTUP_TIMEOUT}s), using default: {DEFAULT_STARTUP_TIMEOUT}"
+            )
+            config.startup_timeout = DEFAULT_STARTUP_TIMEOUT
+    except ValueError as e:
+        logger.warning(f"Invalid STARTUP_TIMEOUT value: {e}, using default: {DEFAULT_STARTUP_TIMEOUT}")
+        config.startup_timeout = DEFAULT_STARTUP_TIMEOUT
     
     # Database & Redis
     config.database_url = os.getenv("DATABASE_URL")
