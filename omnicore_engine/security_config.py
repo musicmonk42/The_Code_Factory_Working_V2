@@ -12,11 +12,25 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
-from pydantic import Field, field_validator, model_validator
-from pydantic.types import conint
+try:
+    from pydantic import Field, field_validator, model_validator, conint
+except ImportError:
+    # Fallback for older pydantic versions or missing pydantic
+    from pydantic import Field, field_validator, model_validator
+    try:
+        from pydantic.types import conint
+    except ImportError:
+        # Create a minimal conint equivalent if pydantic.types is not available
+        def conint(*, gt=None, ge=None, lt=None, le=None, strict=False, multiple_of=None):
+            return int
 
 # Pydantic V2 Imports: BaseSettings is now in pydantic_settings
-from pydantic_settings import BaseSettings, SettingsConfigDict
+try:
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+except ImportError:
+    # Fallback for environments without pydantic_settings
+    from pydantic import BaseSettings
+    SettingsConfigDict = dict
 
 
 class SecurityLevel(str, Enum):

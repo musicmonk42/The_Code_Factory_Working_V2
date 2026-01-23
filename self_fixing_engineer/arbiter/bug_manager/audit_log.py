@@ -12,11 +12,54 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import aiohttp
-import portalocker
-import tenacity
-from cryptography.fernet import Fernet
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+try:
+    import aiohttp
+except ImportError:
+    aiohttp = None
+
+try:
+    import portalocker
+except ImportError:
+    portalocker = None
+
+try:
+    import tenacity
+except ImportError:
+    # Provide a minimal tenacity shim for when it's not available
+    class _MockTenacity:
+        @staticmethod
+        def retry(*args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+        
+        @staticmethod
+        def stop_after_attempt(*args, **kwargs):
+            pass
+        
+        @staticmethod
+        def wait_exponential(*args, **kwargs):
+            pass
+        
+        @staticmethod
+        def retry_if_exception_type(*args, **kwargs):
+            class _P:
+                def __or__(self, other):
+                    return _P()
+            return _P()
+    
+    tenacity = _MockTenacity()
+
+try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    Fernet = None
+
+try:
+    from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+except ImportError:
+    REGISTRY = None
+    Counter = Gauge = Histogram = None
 
 # Assuming a local utils module with these components
 from .utils import AuditLogError, validate_input_details

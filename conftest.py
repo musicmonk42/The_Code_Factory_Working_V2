@@ -360,6 +360,192 @@ for dep in _OPTIONAL_DEPENDENCIES:
                     if parent_name not in sys.modules:
                         parent_mock = _create_mock_module(parent_name)
                         sys.modules[parent_name] = parent_mock
+            
+            # Special handling for packages that need specific submodules
+            if dep == "sqlalchemy":
+                # Create common sqlalchemy submodules
+                for submod in ["orm", "exc", "dialects", "dialects.sqlite", "dialects.postgresql", 
+                               "engine", "ext", "ext.asyncio", "sql", "sql.expression", "types"]:
+                    submod_name = f"sqlalchemy.{submod}"
+                    if submod_name not in sys.modules:
+                        submod_mock = _create_mock_module(submod_name)
+                        sys.modules[submod_name] = submod_mock
+                        # Set as attribute on parent module
+                        parts = submod.split(".")
+                        parent = mock_module
+                        for part in parts[:-1]:
+                            parent = getattr(parent, part, _create_mock_module(f"sqlalchemy.{part}"))
+                        setattr(parent, parts[-1], submod_mock)
+                
+                # Add common SQLAlchemy components
+                # DeclarativeBase for model definitions
+                class MockDeclarativeBase:
+                    pass
+                
+                # Column types
+                class MockColumn:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                
+                class MockInteger:
+                    pass
+                
+                class MockString:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                
+                class MockText:
+                    pass
+                
+                class MockDateTime:
+                    pass
+                
+                class MockBoolean:
+                    pass
+                
+                class MockFloat:
+                    pass
+                
+                class MockJSON:
+                    pass
+                
+                class MockForeignKey:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                
+                # Session and engine mocks
+                class MockSession:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                    def add(self, *args, **kwargs):
+                        pass
+                    def commit(self, *args, **kwargs):
+                        pass
+                    def rollback(self, *args, **kwargs):
+                        pass
+                    def query(self, *args, **kwargs):
+                        return self
+                    def filter(self, *args, **kwargs):
+                        return self
+                    def all(self, *args, **kwargs):
+                        return []
+                    def first(self, *args, **kwargs):
+                        return None
+                    def close(self, *args, **kwargs):
+                        pass
+                    def __enter__(self):
+                        return self
+                    def __exit__(self, *args):
+                        pass
+                
+                class MockEngine:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                    def connect(self, *args, **kwargs):
+                        return MockSession()
+                    def dispose(self, *args, **kwargs):
+                        pass
+                    def begin(self, *args, **kwargs):
+                        return MockSession()
+                
+                # Add to orm submodule
+                if "sqlalchemy.orm" in sys.modules:
+                    orm_mod = sys.modules["sqlalchemy.orm"]
+                    orm_mod.Session = MockSession
+                    orm_mod.declarative_base = lambda *args, **kwargs: type('Base', (), {'metadata': type('Metadata', (), {'clear': lambda self: None, 'create_all': lambda self, *a, **kw: None})()})
+                    orm_mod.sessionmaker = lambda *args, **kwargs: MockSession
+                    orm_mod.relationship = lambda *args, **kwargs: None
+                
+                # Add to ext.asyncio submodule
+                if "sqlalchemy.ext.asyncio" in sys.modules:
+                    ext_asyncio_mod = sys.modules["sqlalchemy.ext.asyncio"]
+                    ext_asyncio_mod.create_async_engine = lambda *args, **kwargs: MockEngine()
+                    ext_asyncio_mod.AsyncSession = MockSession
+                    ext_asyncio_mod.async_sessionmaker = lambda *args, **kwargs: MockSession
+                
+                # Add common functions/classes to main module
+                mock_module.Column = MockColumn
+                mock_module.Integer = MockInteger
+                mock_module.String = MockString
+                mock_module.Text = MockText
+                mock_module.DateTime = MockDateTime
+                mock_module.Boolean = MockBoolean
+                mock_module.Float = MockFloat
+                mock_module.JSON = MockJSON
+                mock_module.ForeignKey = MockForeignKey
+                mock_module.create_engine = lambda *args, **kwargs: MockEngine()
+                
+                # Add insert function to dialects.sqlite
+                if "sqlalchemy.dialects.sqlite" in sys.modules:
+                    sqlite_mod = sys.modules["sqlalchemy.dialects.sqlite"]
+                    sqlite_mod.insert = lambda *args, **kwargs: type('Insert', (), {
+                        'on_conflict_do_update': lambda *a, **kw: None,
+                        'on_conflict_do_nothing': lambda *a, **kw: None,
+                    })()
+            
+            elif dep == "structlog":
+                # structlog needs a mock logger with .bind() method
+                class MockBoundLogger:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                    
+                    def bind(self, *args, **kwargs):
+                        return self
+                    
+                    def unbind(self, *args, **kwargs):
+                        return self
+                    
+                    def new(self, *args, **kwargs):
+                        return self
+                    
+                    def debug(self, *args, **kwargs):
+                        pass
+                    
+                    def info(self, *args, **kwargs):
+                        pass
+                    
+                    def warning(self, *args, **kwargs):
+                        pass
+                    
+                    def warn(self, *args, **kwargs):
+                        pass
+                    
+                    def error(self, *args, **kwargs):
+                        pass
+                    
+                    def critical(self, *args, **kwargs):
+                        pass
+                    
+                    def exception(self, *args, **kwargs):
+                        pass
+                    
+                    def msg(self, *args, **kwargs):
+                        pass
+                    
+                    def log(self, *args, **kwargs):
+                        pass
+                
+                mock_module.get_logger = lambda *args, **kwargs: MockBoundLogger()
+                mock_module.configure = lambda *args, **kwargs: None
+                mock_module.wrap_logger = lambda *args, **kwargs: MockBoundLogger()
+                mock_module.BoundLogger = MockBoundLogger
+                
+                # Create stdlib submodule
+                stdlib_module = _create_mock_module("structlog.stdlib")
+                sys.modules["structlog.stdlib"] = stdlib_module
+                stdlib_module.add_logger_name = lambda *args, **kwargs: None
+                stdlib_module.add_log_level = lambda *args, **kwargs: None
+                stdlib_module.LoggerFactory = lambda *args, **kwargs: None
+                stdlib_module.BoundLogger = MockBoundLogger
+                mock_module.stdlib = stdlib_module
+                
+                # Create processors submodule
+                processors_module = _create_mock_module("structlog.processors")
+                sys.modules["structlog.processors"] = processors_module
+                processors_module.TimeStamper = lambda *args, **kwargs: None
+                processors_module.StackInfoRenderer = lambda *args, **kwargs: None
+                processors_module.JSONRenderer = lambda *args, **kwargs: None
+                mock_module.processors = processors_module
 
 # ---- OpenTelemetry stub setup ----
 # OpenTelemetry requires special handling because it has specific methods that must exist
