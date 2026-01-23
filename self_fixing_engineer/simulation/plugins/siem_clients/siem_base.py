@@ -226,7 +226,7 @@ aiohttp = _check_and_import_critical("aiohttp")
 tenacity = _check_and_import_critical("tenacity")
 
 pydantic = _check_and_import_critical("pydantic")
-from pydantic import BaseModel, Extra, Field
+from pydantic import BaseModel, ConfigDict, Extra, Field
 
 try:
     # pydantic v1 path
@@ -327,8 +327,7 @@ class GenericLogEvent(BaseModel):
     event_type: str = "generic"
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        extra = Extra.allow
+    model_config = ConfigDict(extra="allow")
 
 
 # --- Aiohttp Client Mixin ---

@@ -16,7 +16,7 @@ import aiohttp  # For Slack notifications
 from arbiter.arbiter_plugin_registry import PlugInKind, register
 from arbiter.arbiter_plugin_registry import registry as arbiter_registry
 from arbiter.otel_config import get_tracer
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Mock aiosmtplib if not available
@@ -381,8 +381,7 @@ class DecisionRequestSchema(BaseModel):
     action: str = "unknown"
     details: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class HumanInLoopConfig(BaseModel):

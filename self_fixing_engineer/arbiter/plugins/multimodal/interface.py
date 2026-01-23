@@ -20,7 +20,7 @@ from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 # This makes results automatically JSON-serializable and validates structure.
 try:
     from prometheus_client import Counter, Histogram
-    from pydantic import BaseModel, Field, ValidationError
+    from pydantic import BaseModel, ConfigDict, Field, ValidationError
 except ImportError:
     raise ImportError(
         "Pydantic and prometheus_client are required. Please install them with 'pip install pydantic prometheus_client'."
@@ -97,10 +97,11 @@ class ProcessingResult(BaseModel, Generic[T]):
         description="Confidence score of the model's output (0.0 to 1.0), if applicable.",
     )
 
-    class Config:
-        arbitrary_types_allowed = True
-        populate_by_name = True
-        extra = "allow"  # Changed to 'allow' to accommodate diverse raw_data
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+        extra="allow"
+    )
 
 
 class ImageProcessor(ABC):
@@ -196,14 +197,11 @@ class MultiModalAnalysisResult(BaseModel, Generic[T], ABC):
         description="Unique identifier for the audit trail entry associated with this analysis.",
     )
 
-    class Config:
-        """Pydantic configuration for the base model."""
-
-        arbitrary_types_allowed = (
-            True  # Allow 'raw_data' to be flexible (e.g., numpy arrays)
-        )
-        populate_by_name = True  # Allow field aliasing if needed
-        extra = "forbid"  # For strict data validation - disallow extra fields not defined in the schema
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+        extra="forbid"
+    )
 
     @abstractmethod
     def summary(self) -> str:

@@ -30,7 +30,7 @@ except ImportError:
     _REDIS_AVAILABLE = False
 
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from omnicore_engine.core import safe_serialize
 
@@ -95,10 +95,7 @@ class RedisBridgeConfig(BaseModel):
         default=True, description="Enable Prometheus metrics if available."
     )
 
-    class Config:
-        """Pydantic configuration settings."""
-
-        extra = "ignore"  # Allow extra fields from core ArbiterConfig
+    model_config = ConfigDict(extra="ignore")
 
 
 # --- Metrics (Prometheus if available) ---

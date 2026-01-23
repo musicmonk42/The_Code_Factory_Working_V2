@@ -1885,15 +1885,14 @@ if __name__ == "__main__":
     from unittest.mock import AsyncMock, MagicMock, patch
 
     # from runner.runner_errors import RunnerError as ActualRunnerError # Cannot import this due to circle
-    from pydantic import SecretStr
+    from pydantic import ConfigDict, SecretStr
 
     # FIX: Import RunnerConfig from the correct location for the __main__ block
     from runner.runner_config import RunnerConfig
 
     # Mock the necessary parts for the test block
     class MockRunnerConfig(RunnerConfig):
-        class Config:
-            extra = "allow"
+        model_config = ConfigDict(extra="allow")
 
         @classmethod
         def model_validate(cls, obj, *args, **kwargs):

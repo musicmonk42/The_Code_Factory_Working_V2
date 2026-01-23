@@ -15,7 +15,7 @@ import uvicorn
 from jwt.exceptions import InvalidTokenError
 
 # Pydantic for data validation
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # --- Guarded Heavy Imports ---
 _FASTAPI_AVAILABLE = False
@@ -694,15 +694,7 @@ class UserResponse(BaseModel):  # For user output (don't expose hashed password)
     created_at: datetime
     last_login_at: Optional[datetime]
 
-    class Config:
-        from pydantic import VERSION
-
-        if VERSION.startswith("1."):
-            orm_mode = True
-        else:
-            from pydantic_settings import BaseSettings
-
-            model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class APIKeyInDB(BaseModel):  # For internal use, includes hashed key
@@ -722,15 +714,7 @@ class APIKeyResponse(BaseModel):  # For API key output (don't expose hashed key)
     created_at: datetime
     last_used_at: Optional[datetime]
 
-    class Config:
-        from pydantic import VERSION
-
-        if VERSION.startswith("1."):
-            orm_mode = True
-        else:
-            from pydantic_settings import BaseSettings
-
-            model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Token(BaseModel):
