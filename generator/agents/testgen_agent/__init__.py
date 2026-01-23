@@ -26,9 +26,9 @@ both as a standalone package and as part of a larger project.
 __all__ = []
 
 try:
-    from .testgen_agent import Policy, TestGenAgent, validate_policy
+    from .testgen_agent import Policy, TestgenAgent, validate_policy
 
-    __all__.extend(["TestGenAgent", "Policy", "validate_policy"])
+    __all__.extend(["TestgenAgent", "Policy", "validate_policy"])
 except ImportError as e:
     import warnings
 

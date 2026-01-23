@@ -42,7 +42,7 @@ builtins.abstractmethod = abstractmethod
 builtins.abstractabstractmethod = abstractmethod  # Typo in source file on line 154
 
 # Import all components
-from generator.agents.docgen_agent.docgen_agent import DocGenAgent, generate
+from generator.agents.docgen_agent.docgen_agent import DocgenAgent, generate
 from generator.agents.docgen_agent.docgen_prompt import DocGenPromptAgent
 from generator.agents.docgen_agent.docgen_response_validator import ResponseValidator
 
@@ -390,7 +390,7 @@ class TestEndToEndGeneration:
     ):
         """Test generating documentation for a single file through complete pipeline."""
         # Initialize agent
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         # Generate documentation
         target_file = str(comprehensive_repo / "src" / "calculator.py")
@@ -416,7 +416,7 @@ class TestEndToEndGeneration:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test batch generation for multiple files."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         files = [
             str(comprehensive_repo / "src" / "calculator.py"),
@@ -436,7 +436,7 @@ class TestEndToEndGeneration:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test generating documentation in multiple formats."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         target_file = str(comprehensive_repo / "src" / "calculator.py")
         result = await agent.generate_documentation(
@@ -462,7 +462,7 @@ class TestStreamingGeneration:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test streaming generation for a single file."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         target_file = str(comprehensive_repo / "src" / "calculator.py")
 
@@ -483,7 +483,7 @@ class TestStreamingGeneration:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test streaming generation for multiple files."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         files = [
             str(comprehensive_repo / "src" / "calculator.py"),
@@ -545,8 +545,8 @@ class TestComponentIntegration:
     async def test_agent_uses_all_components(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
-        """Test that DocGenAgent properly uses all components."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        """Test that DocgenAgent properly uses all components."""
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         # Verify components are initialized
         assert agent.prompt_agent is not None
@@ -578,7 +578,7 @@ class TestHumanInTheLoop:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test complete human approval workflow."""
-        agent = DocGenAgent(
+        agent = DocgenAgent(
             repo_path=str(comprehensive_repo), slack_webhook="http://test.webhook"
         )
 
@@ -597,7 +597,7 @@ class TestHumanInTheLoop:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test handling approval rejection."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         with patch.object(agent, "_request_approval", return_value=False):
             target_file = str(comprehensive_repo / "src" / "calculator.py")
@@ -638,7 +638,7 @@ class TestErrorRecovery:
             "generator.agents.docgen_agent.docgen_agent.call_llm_api",
             side_effect=mock_llm_with_retry,
         ):
-            agent = DocGenAgent(repo_path=str(comprehensive_repo))
+            agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
             target_file = str(comprehensive_repo / "src" / "calculator.py")
             result = await agent.generate_documentation(target_files=[target_file])
@@ -652,7 +652,7 @@ class TestErrorRecovery:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test handling partial failures in batch processing."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         # Mix of valid and invalid files
         files = [
@@ -709,7 +709,7 @@ class TestPerformanceAndConcurrency:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test processing multiple files concurrently."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         # Create multiple files
         for i in range(5):
@@ -749,7 +749,7 @@ class TestRealWorldScenarios:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test documenting an entire project."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         # Find all Python files
         python_files = list((comprehensive_repo / "src").rglob("*.py"))
@@ -769,7 +769,7 @@ class TestRealWorldScenarios:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test documenting a multi-language project."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         files = [
             str(comprehensive_repo / "src" / "calculator.py"),
@@ -788,7 +788,7 @@ class TestRealWorldScenarios:
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test updating documentation for changed files."""
-        agent = DocGenAgent(repo_path=str(comprehensive_repo))
+        agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
         # Generate initial docs
         target_file = str(comprehensive_repo / "src" / "calculator.py")

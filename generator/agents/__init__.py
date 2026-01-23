@@ -45,7 +45,7 @@ CodeGenConfig = None
 SecurityUtils = None
 CritiqueConfig = None
 orchestrate_critique_pipeline = None
-TestGenAgent = None
+TestgenAgent = None
 Policy = None
 DeployAgent = None
 DeployConfig = None
@@ -154,11 +154,11 @@ else:
 
 # testgen_agent - has heavy dependencies (presidio, spacy, torch)
 _success, _testgen_module = _safe_import_agent(
-    "generator.agents.testgen_agent", "testgen", ["TestGenAgent", "Policy"]
+    "generator.agents.testgen_agent", "testgen", ["TestgenAgent", "Policy"]
 )
 if _success and _testgen_module:
-    if hasattr(_testgen_module, "TestGenAgent"):
-        TestGenAgent = _testgen_module.TestGenAgent
+    if hasattr(_testgen_module, "TestgenAgent"):
+        TestgenAgent = _testgen_module.TestgenAgent
     if hasattr(_testgen_module, "Policy"):
         Policy = _testgen_module.Policy
     _AVAILABLE_AGENTS["testgen"] = True
@@ -294,7 +294,7 @@ __all__ = [
     "CritiqueConfig",
     "orchestrate_critique_pipeline",
     # testgen_agent exports
-    "TestGenAgent",
+    "TestgenAgent",
     "Policy",
     # deploy_agent exports
     "DeployAgent",
