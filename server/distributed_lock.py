@@ -297,7 +297,7 @@ class DistributedLock:
                 logger.info(f"Distributed lock '{self.lock_name}' released")
                 return True
             else:
-                logger.warning(
+                logger.debug(
                     f"Lock '{self.lock_name}' could not be released "
                     "(may have expired or been acquired by another instance)"
                 )
@@ -305,7 +305,7 @@ class DistributedLock:
                 return False
                 
         except Exception as e:
-            logger.error(f"Error releasing lock '{self.lock_name}': {e}", exc_info=True)
+            logger.debug(f"Could not release lock '{self.lock_name}': {e}")
             self._acquired = False
             return False
     

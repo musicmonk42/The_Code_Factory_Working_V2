@@ -638,25 +638,57 @@ class AgentLoader:
                 
                 try:
                     if self._parallel_loading:
-                        # PARALLEL LOADING - Much faster!
-                        logger.info("Loading agents in PARALLEL for maximum performance")
+                        # PHASED SEQUENTIAL LOADING - Prevents import deadlocks
+                        logger.info("Phased loading enabled - will prevent import deadlocks")
                         
-                        # Create coroutines for parallel execution
-                        load_tasks = []
-                        for agent_type, module_path, import_names in agents_to_load:
-                            async def load_single_agent(at=agent_type, mp=module_path, names=import_names):
-                                # Run the sync import in thread pool to avoid blocking
-                                await asyncio.to_thread(
-                                    self.safe_import_agent,
-                                    agent_type=at,
-                                    module_path=mp,
-                                    import_names=names,
-                                    description=f"Parallel load {at.value} agent",
-                                )
-                            load_tasks.append(load_single_agent())
+                        # Define loading phases based on dependencies
+                        # Phase 1: Pre-load shared dependencies sequentially
+                        shared_modules = ["runner", "omnicore_engine", "arbiter"]
+                        logger.info(f"Phase 1: Pre-loading shared dependencies: {shared_modules}")
+                        for module_name in shared_modules:
+                            try:
+                                logger.info(f"  Pre-loading {module_name}...")
+                                importlib.import_module(module_name)
+                                logger.info(f"  ✓ Pre-loaded {module_name}")
+                            except Exception as e:
+                                logger.warning(f"  Could not pre-load {module_name}: {e}")
                         
-                        # Execute all loads in parallel
-                        await asyncio.gather(*load_tasks, return_exceptions=True)
+                        # Small delay after phase 1
+                        await asyncio.sleep(0.5)
+                        
+                        # Phase 2: Load codegen first (minimal dependencies)
+                        logger.info("Phase 2: Loading codegen agent")
+                        codegen_agents = [(at, mp, names) for at, mp, names in agents_to_load 
+                                         if at == AgentType.CODEGEN]
+                        for agent_type, module_path, import_names in codegen_agents:
+                            load_start = time.time()
+                            await asyncio.to_thread(
+                                self.safe_import_agent,
+                                agent_type=agent_type,
+                                module_path=module_path,
+                                import_names=import_names,
+                                description=f"Phase 2 load {agent_type.value} agent",
+                            )
+                            load_time = time.time() - load_start
+                            logger.info(f"  ✓ Loaded {agent_type.value} agent in {load_time:.2f}s")
+                            await asyncio.sleep(0.5)  # Give import locks time to release
+                        
+                        # Phase 3: Load remaining agents sequentially
+                        remaining_agents = [(at, mp, names) for at, mp, names in agents_to_load 
+                                           if at != AgentType.CODEGEN]
+                        logger.info(f"Phase 3: Loading remaining agents: {[at.value for at, _, _ in remaining_agents]}")
+                        for agent_type, module_path, import_names in remaining_agents:
+                            load_start = time.time()
+                            await asyncio.to_thread(
+                                self.safe_import_agent,
+                                agent_type=agent_type,
+                                module_path=module_path,
+                                import_names=import_names,
+                                description=f"Phase 3 load {agent_type.value} agent",
+                            )
+                            load_time = time.time() - load_start
+                            logger.info(f"  ✓ Loaded {agent_type.value} agent in {load_time:.2f}s")
+                            await asyncio.sleep(0.5)  # Give import locks time to release
                     else:
                         # SEQUENTIAL LOADING - Slower but safer for debugging
                         logger.info("Loading agents SEQUENTIALLY (set PARALLEL_AGENT_LOADING=1 for better performance)")

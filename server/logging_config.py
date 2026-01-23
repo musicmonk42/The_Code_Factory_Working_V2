@@ -93,14 +93,18 @@ class LevelPrefixFormatter(logging.Formatter):
             This method is called for every log message, so it must be fast.
             Current implementation is O(1) with minimal overhead.
         """
+        # Format message using parent class formatter
+        formatted = super().format(record)
+        
+        # Check if prefix already added (prevent duplicate prefixes)
+        if formatted.startswith("[inf]") or formatted.startswith("[err]"):
+            return formatted
+        
         # Determine prefix based on level (fast integer comparison)
         if record.levelno <= logging.INFO:  # DEBUG=10, INFO=20
             prefix = "[inf]"
         else:  # WARNING=30, ERROR=40, CRITICAL=50
             prefix = "[err]"
-        
-        # Format message using parent class formatter
-        formatted = super().format(record)
         
         # Prepend prefix with two spaces for visual alignment
         return f"{prefix}  {formatted}"
