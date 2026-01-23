@@ -588,9 +588,6 @@ for dep in _OPTIONAL_DEPENDENCIES:
                         return "RGB"
                 
                 mock_module.Image = MockImage
-                # Also register as PIL if it's PIL
-                if dep == "PIL":
-                    sys.modules["PIL"] = mock_module
             
             elif dep == "asyncpg":
                 # asyncpg needs pool submodule
