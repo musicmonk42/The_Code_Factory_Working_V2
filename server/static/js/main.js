@@ -704,7 +704,7 @@ function sanitizeJobId(input) {
         if (/^[0-9a-f]{8}$/i.test(jobId)) {
             showError(`Job ID '${jobId}' appears to be truncated. Please use the full job ID.`);
         } else {
-            showError(`Invalid job ID format: '${input}'. Please enter a valid UUID.`);
+            showError(`Invalid job ID format: '${jobId}'. Please enter a valid UUID.`);
         }
         return null;
     }
@@ -717,14 +717,42 @@ function sanitizeJobId(input) {
  * @param {string} jobId - The job ID to copy
  */
 function copyJobId(jobId) {
-    // Create a temporary input element
+    // Validate input
+    if (!jobId || typeof jobId !== 'string') {
+        showError('Invalid job ID');
+        return;
+    }
+    
+    // Use modern clipboard API with fallback
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(jobId).then(() => {
+            showSuccess(`Job ID copied: ${jobId}`);
+        }).catch(() => {
+            // Fallback to deprecated method if modern API fails
+            copyJobIdFallback(jobId);
+        });
+    } else {
+        // Fallback for older browsers
+        copyJobIdFallback(jobId);
+    }
+}
+
+/**
+ * Fallback method to copy text to clipboard
+ * @param {string} text - The text to copy
+ */
+function copyJobIdFallback(text) {
     const temp = document.createElement('input');
-    temp.value = jobId;
+    temp.value = text;
     document.body.appendChild(temp);
     temp.select();
-    document.execCommand('copy');
+    try {
+        document.execCommand('copy');
+        showSuccess(`Job ID copied: ${text}`);
+    } catch (err) {
+        showError('Failed to copy job ID');
+    }
     document.body.removeChild(temp);
-    showSuccess(`Job ID copied: ${jobId}`);
 }
 
 // Add status badge styles
