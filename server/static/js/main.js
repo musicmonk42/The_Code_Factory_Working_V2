@@ -238,9 +238,17 @@ function createJobCard(job) {
     const card = document.createElement('div');
     card.className = 'job-card';
     
-    const hasFiles = job.output_files && job.output_files.length > 0;
+    const hasOutputFiles = job.output_files && job.output_files.length > 0;
+    const hasInputFiles = job.input_files && job.input_files.length > 0;
+    const hasAnyFiles = hasOutputFiles || hasInputFiles;
     const isCompleted = job.status === 'completed';
     const isRunning = job.status === 'running';
+    const isFailed = job.status === 'failed';
+    
+    // Show output file count if available
+    const fileCountDisplay = hasOutputFiles 
+        ? `Input: ${job.input_files.length}, Output: ${job.output_files.length}`
+        : `Files: ${job.input_files.length}`;
     
     card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: start;">
@@ -250,7 +258,7 @@ function createJobCard(job) {
                     Created: ${new Date(job.created_at).toLocaleString()}
                 </p>
                 <p style="color: var(--text-secondary);">
-                    Files: ${job.input_files.length}
+                    ${fileCountDisplay}
                 </p>
             </div>
             <div>
@@ -261,12 +269,12 @@ function createJobCard(job) {
             <button class="btn btn-secondary" onclick="viewJobDetails('${job.id}')">
                 View Details
             </button>
-            ${isCompleted && hasFiles ? `
+            ${isCompleted && hasAnyFiles ? `
                 <button class="btn btn-primary" onclick="downloadJobFiles('${job.id}')">
                     ⬇️ Download
                 </button>
             ` : ''}
-            ${isCompleted || hasFiles ? `
+            ${(isCompleted || isFailed || hasAnyFiles) ? `
                 <button class="btn btn-secondary" onclick="viewJobFiles('${job.id}')">
                     📁 Files
                 </button>

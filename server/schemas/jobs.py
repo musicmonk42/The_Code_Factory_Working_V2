@@ -72,6 +72,9 @@ class Job(BaseModel):
     input_files: List[str] = Field(
         default_factory=list, description="List of input file names"
     )
+    output_files: List[str] = Field(
+        default_factory=list, description="List of generated output file names"
+    )
     created_at: datetime = Field(..., description="Job creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
     completed_at: Optional[datetime] = Field(
