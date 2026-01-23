@@ -51,6 +51,10 @@ MANAGED_LOGGERS = [
     'server',
 ]
 
+# Log level prefix constants
+LOG_PREFIX_INFO = "[inf]"
+LOG_PREFIX_ERROR = "[err]"
+
 
 class LevelPrefixFormatter(logging.Formatter):
     """
@@ -97,14 +101,14 @@ class LevelPrefixFormatter(logging.Formatter):
         formatted = super().format(record)
         
         # Check if prefix already added (prevent duplicate prefixes)
-        if formatted.startswith("[inf]") or formatted.startswith("[err]"):
+        if formatted.startswith(LOG_PREFIX_INFO) or formatted.startswith(LOG_PREFIX_ERROR):
             return formatted
         
         # Determine prefix based on level (fast integer comparison)
         if record.levelno <= logging.INFO:  # DEBUG=10, INFO=20
-            prefix = "[inf]"
+            prefix = LOG_PREFIX_INFO
         else:  # WARNING=30, ERROR=40, CRITICAL=50
-            prefix = "[err]"
+            prefix = LOG_PREFIX_ERROR
         
         # Prepend prefix with two spaces for visual alignment
         return f"{prefix}  {formatted}"
