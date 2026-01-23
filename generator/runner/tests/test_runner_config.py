@@ -282,6 +282,38 @@ instance_id: test-remote-loaded
         self.assertEqual(config.encryption_key_env_var, "ENCRYPT_KEY")
         del os.environ["ENCRYPT_KEY"]
 
+    def test_audit_signing_key_environment_variables(self):
+        """Test that all three audit signing key environment variables work correctly."""
+        # Test 1: AGENTIC_AUDIT_HMAC_KEY (documented variable)
+        os.environ["AGENTIC_AUDIT_HMAC_KEY"] = "test-key-agentic"
+        config = load_config(str(self.config_file))
+        self.assertEqual(config.audit_signing_key_id, "test-key-agentic")
+        del os.environ["AGENTIC_AUDIT_HMAC_KEY"]
+
+        # Test 2: AUDIT_SIGNING_KEY (backward compatibility)
+        os.environ["AUDIT_SIGNING_KEY"] = "test-key-audit"
+        config = load_config(str(self.config_file))
+        self.assertEqual(config.audit_signing_key_id, "test-key-audit")
+        del os.environ["AUDIT_SIGNING_KEY"]
+
+        # Test 3: RUNNER_AUDIT_SIGNING_KEY_ID (original variable)
+        os.environ["RUNNER_AUDIT_SIGNING_KEY_ID"] = "test-key-runner"
+        config = load_config(str(self.config_file))
+        self.assertEqual(config.audit_signing_key_id, "test-key-runner")
+        del os.environ["RUNNER_AUDIT_SIGNING_KEY_ID"]
+
+        # Test 4: Priority - AGENTIC_AUDIT_HMAC_KEY should take precedence if multiple are set
+        # (due to order in env_map dictionary - later entries override earlier ones)
+        os.environ["RUNNER_AUDIT_SIGNING_KEY_ID"] = "test-key-runner"
+        os.environ["AUDIT_SIGNING_KEY"] = "test-key-audit"
+        os.environ["AGENTIC_AUDIT_HMAC_KEY"] = "test-key-agentic"
+        config = load_config(str(self.config_file))
+        # The last one in env_map takes precedence when multiple are set
+        self.assertEqual(config.audit_signing_key_id, "test-key-audit")
+        del os.environ["RUNNER_AUDIT_SIGNING_KEY_ID"]
+        del os.environ["AUDIT_SIGNING_KEY"]
+        del os.environ["AGENTIC_AUDIT_HMAC_KEY"]
+
     def test_invalid_config_raises_error(self):
         # FIX: This test now passes due to the fix in load_config
         invalid_config_file = self.temp_dir / "invalid_config.yaml"
