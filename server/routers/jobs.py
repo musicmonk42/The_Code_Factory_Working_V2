@@ -67,6 +67,7 @@ async def create_job(
         status=JobStatus.PENDING,
         current_stage=JobStage.UPLOAD,
         input_files=[],
+        output_files=[],
         created_at=now,
         updated_at=now,
         metadata=request.metadata or {},
@@ -168,31 +169,115 @@ async def get_job_progress(
 
     job = jobs_db[job_id]
 
-    # Get stage-specific progress from services
-    # In a real implementation, these would query actual service state
-    stages = [
+    # Determine stage statuses based on job status
+    is_completed = job.status == JobStatus.COMPLETED
+    is_failed = job.status == JobStatus.FAILED
+    is_running = job.status == JobStatus.RUNNING
+    is_pending = job.status == JobStatus.PENDING
+
+    # Build stages list based on actual job state
+    stages = []
+
+    # Stage 1: Upload - always completed if job exists with files
+    upload_completed = len(job.input_files) > 0
+    stages.append(
         StageProgress(
             stage=JobStage.UPLOAD,
-            status=JobStatus.COMPLETED,
-            progress_percent=100.0,
-            message="Files uploaded successfully",
+            status=JobStatus.COMPLETED if upload_completed else JobStatus.PENDING,
+            progress_percent=100.0 if upload_completed else 0.0,
+            message="Files uploaded successfully" if upload_completed else "Waiting for file upload",
             started_at=job.created_at,
-            completed_at=job.created_at,
-        ),
+            completed_at=job.created_at if upload_completed else None,
+        )
+    )
+
+    # Stage 2: Generator Clarification
+    clarification_status = JobStatus.PENDING
+    clarification_progress = 0.0
+    clarification_message = "Waiting for clarification"
+    if is_completed or is_failed:
+        clarification_status = JobStatus.COMPLETED
+        clarification_progress = 100.0
+        clarification_message = "Requirements clarified"
+    elif is_running and upload_completed:
+        clarification_status = JobStatus.COMPLETED
+        clarification_progress = 100.0
+        clarification_message = "Requirements clarified"
+    stages.append(
         StageProgress(
             stage=JobStage.GENERATOR_CLARIFICATION,
-            status=(
-                JobStatus.RUNNING
-                if job.status == JobStatus.RUNNING
-                else JobStatus.PENDING
-            ),
-            progress_percent=50.0 if job.status == JobStatus.RUNNING else 0.0,
-            message="Clarifying requirements",
-            started_at=job.created_at if job.status == JobStatus.RUNNING else None,
-        ),
-        # Additional stages would be added here
-    ]
+            status=clarification_status,
+            progress_percent=clarification_progress,
+            message=clarification_message,
+            started_at=job.created_at if is_running or is_completed else None,
+            completed_at=job.completed_at if is_completed else None,
+        )
+    )
 
+    # Stage 3: Generator Generation
+    generation_status = JobStatus.PENDING
+    generation_progress = 0.0
+    generation_message = "Waiting for code generation"
+    if is_completed or is_failed:
+        generation_status = JobStatus.COMPLETED if is_completed else JobStatus.FAILED
+        generation_progress = 100.0 if is_completed else 50.0
+        generation_message = "Code generated successfully" if is_completed else "Code generation failed"
+    elif is_running:
+        generation_status = JobStatus.RUNNING
+        generation_progress = 50.0
+        generation_message = "Generating code..."
+    stages.append(
+        StageProgress(
+            stage=JobStage.GENERATOR_GENERATION,
+            status=generation_status,
+            progress_percent=generation_progress,
+            message=generation_message,
+            started_at=job.created_at if is_running or is_completed else None,
+            completed_at=job.completed_at if is_completed else None,
+            error=job.metadata.get("error") if is_failed else None,
+        )
+    )
+
+    # Stage 4: OmniCore Processing
+    processing_status = JobStatus.PENDING
+    processing_progress = 0.0
+    processing_message = "Waiting for processing"
+    if is_completed or is_failed:
+        processing_status = JobStatus.COMPLETED if is_completed else JobStatus.FAILED
+        processing_progress = 100.0 if is_completed else 0.0
+        processing_message = "Processing completed" if is_completed else "Processing failed"
+    elif is_running:
+        processing_status = JobStatus.RUNNING
+        processing_progress = 50.0
+        processing_message = "Processing through OmniCore..."
+    stages.append(
+        StageProgress(
+            stage=JobStage.OMNICORE_PROCESSING,
+            status=processing_status,
+            progress_percent=processing_progress,
+            message=processing_message,
+            started_at=job.created_at if is_running or is_completed else None,
+            completed_at=job.completed_at if is_completed else None,
+        )
+    )
+
+    # Stage 5: Completed
+    completed_status = JobStatus.COMPLETED if is_completed else (JobStatus.FAILED if is_failed else JobStatus.PENDING)
+    completed_progress = 100.0 if is_completed else 0.0
+    completed_message = "Job completed successfully" if is_completed else ("Job failed" if is_failed else "Waiting for completion")
+    stages.append(
+        StageProgress(
+            stage=JobStage.COMPLETED,
+            status=completed_status,
+            progress_percent=completed_progress,
+            message=completed_message,
+            started_at=job.completed_at if is_completed else None,
+            completed_at=job.completed_at if is_completed else None,
+            error=job.metadata.get("error") if is_failed else None,
+        )
+    )
+
+    # Calculate overall progress
     overall_progress = sum(s.progress_percent for s in stages) / len(stages)
 
     return JobProgress(
