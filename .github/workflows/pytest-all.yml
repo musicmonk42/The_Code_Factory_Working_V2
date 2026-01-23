@@ -199,44 +199,6 @@ jobs:
           rm -rf /home/runner/.cache/pip/* /tmp/* || true
           df -h
           
-      - name: Debug test collection
-        run: |
-          export PYTHONPATH="$PYTHONPATH:$PWD"
-          
-          echo "=== Python path ==="
-          python -c "import sys; print('\n'.join(sys.path))"
-          
-          echo "=== Testing conftest import ==="
-          python -c "import conftest; print('conftest OK')" || echo "conftest import failed"
-          
-          echo "=== Pytest collection preview (full output saved) ==="
-          # Use timeout to prevent infinite hangs during test collection
-          # 5 minutes should be more than enough for collection
-          timeout 300 pytest --collect-only -q 2>&1 | tee debug-collection.log || {
-            echo "WARNING: pytest collection timed out or failed (exit code: $?)"
-            echo "Collection may have hung - check for import-time side effects"
-          }
-          
-          echo ""
-          echo "=== First 50 lines of collection output ==="
-          head -50 debug-collection.log
-          
-          echo ""
-          echo "=== Last 100 lines of collection output (errors usually at end) ==="
-          tail -100 debug-collection.log
-          
-          echo ""
-          echo "=== Searching for errors in collection output ==="
-          grep -i "error\|exception\|failed\|traceback" debug-collection.log || echo "No obvious errors found in collection"
-          
-      - name: Check available memory
-        run: |
-          echo "=== System Memory Status ==="
-          free -h
-          echo ""
-          echo "=== Disk Space ==="
-          df -h
-          
       - name: Run all tests from repository root
         env:
           TESTING: "1"
@@ -321,12 +283,4 @@ jobs:
         with:
           name: test-output-log
           path: test-output.log
-          retention-days: 7
-          
-      - name: Upload diagnostic logs
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: diagnostic-logs
-          path: debug-collection.log
           retention-days: 7
