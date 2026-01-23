@@ -561,6 +561,23 @@ async def call_llm_api(
     provider: Optional[Literal["openai", "claude", "grok", "gemini", "local"]] = None,
     config: Optional[RunnerConfig] = None,
 ) -> Dict[str, Any] | AsyncGenerator[str, None]:
+    """
+    Call LLM API with automatic config loading and graceful fallback.
+    
+    Args:
+        prompt: The prompt to send to the LLM
+        model: Optional model name
+        stream: Whether to stream the response
+        provider: Optional provider name
+        config: Optional RunnerConfig. If None, will attempt to load from file with fallback to defaults.
+    
+    Returns:
+        LLM response dictionary or async generator for streaming
+        
+    Note:
+        In production environments, ensure runner_config.yaml exists or pass explicit config.
+        Fallback defaults are suitable for development/testing only.
+    """
     global _async_client
     lock = _get_or_create_lock()
     async with lock:
@@ -569,10 +586,30 @@ async def call_llm_api(
                 # Try to load config from file, fallback to minimal defaults if file doesn't exist
                 try:
                     config = RunnerConfig.load()
+                    logger.debug("Loaded RunnerConfig from runner_config.yaml")
                 except (ConfigurationError, FileNotFoundError) as e:
-                    logger.warning(f"Could not load runner_config.yaml: {e}. Using minimal defaults.")
-                    # Create minimal config with required fields
-                    config = RunnerConfig(backend="docker", framework="pytest")
+                    # Check if we're in production - if so, log more seriously
+                    is_production = os.getenv("PYTHON_ENV", "").lower() == "production"
+                    
+                    if is_production:
+                        logger.error(
+                            f"PRODUCTION WARNING: Could not load runner_config.yaml: {e}. "
+                            f"Using minimal fallback configuration. This may cause degraded functionality. "
+                            f"Please ensure runner_config.yaml exists in production deployments."
+                        )
+                    else:
+                        logger.warning(
+                            f"Could not load runner_config.yaml: {e}. "
+                            f"Using minimal fallback configuration (backend=docker, framework=pytest). "
+                            f"This is acceptable for development/testing."
+                        )
+                    
+                    # Create minimal config with required fields suitable for development
+                    config = RunnerConfig(
+                        backend="docker",
+                        framework="pytest",
+                        instance_id=f"fallback-{os.getpid()}"
+                    )
             # Use direct instantiation for backward compatibility (lazy init happens on first call)
             _async_client = LLMClient(config)
     return await _async_client.call_llm_api(prompt, model, stream, provider)
@@ -584,6 +621,22 @@ async def call_ensemble_api(
     voting_strategy: str = "majority",
     config: Optional[RunnerConfig] = None,
 ) -> Dict[str, Any]:
+    """
+    Call ensemble LLM API with automatic config loading and graceful fallback.
+    
+    Args:
+        prompt: The prompt to send to the LLMs
+        models: List of model configurations
+        voting_strategy: Strategy for combining results
+        config: Optional RunnerConfig. If None, will attempt to load from file with fallback to defaults.
+    
+    Returns:
+        Ensemble LLM response dictionary
+        
+    Note:
+        In production environments, ensure runner_config.yaml exists or pass explicit config.
+        Fallback defaults are suitable for development/testing only.
+    """
     global _async_client
     lock = _get_or_create_lock()
     async with lock:
@@ -592,10 +645,30 @@ async def call_ensemble_api(
                 # Try to load config from file, fallback to minimal defaults if file doesn't exist
                 try:
                     config = RunnerConfig.load()
+                    logger.debug("Loaded RunnerConfig from runner_config.yaml")
                 except (ConfigurationError, FileNotFoundError) as e:
-                    logger.warning(f"Could not load runner_config.yaml: {e}. Using minimal defaults.")
-                    # Create minimal config with required fields
-                    config = RunnerConfig(backend="docker", framework="pytest")
+                    # Check if we're in production - if so, log more seriously
+                    is_production = os.getenv("PYTHON_ENV", "").lower() == "production"
+                    
+                    if is_production:
+                        logger.error(
+                            f"PRODUCTION WARNING: Could not load runner_config.yaml: {e}. "
+                            f"Using minimal fallback configuration. This may cause degraded functionality. "
+                            f"Please ensure runner_config.yaml exists in production deployments."
+                        )
+                    else:
+                        logger.warning(
+                            f"Could not load runner_config.yaml: {e}. "
+                            f"Using minimal fallback configuration (backend=docker, framework=pytest). "
+                            f"This is acceptable for development/testing."
+                        )
+                    
+                    # Create minimal config with required fields suitable for development
+                    config = RunnerConfig(
+                        backend="docker",
+                        framework="pytest",
+                        instance_id=f"fallback-{os.getpid()}"
+                    )
             _async_client = LLMClient(config)
     return await _async_client.call_ensemble_api(prompt, models, voting_strategy)
 
