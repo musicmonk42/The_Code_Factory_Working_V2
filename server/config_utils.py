@@ -278,8 +278,9 @@ def validate_required_api_keys(config: Optional[PlatformConfig] = None, fail_fas
             logger.error(message)
             raise RuntimeError(message)
         else:
-            logger.warning(message)
-            logger.warning("LLM functionality may be disabled or limited.")
+            # Use DEBUG instead of WARNING for optional API keys
+            logger.debug(message)
+            logger.debug("LLM functionality may be disabled or limited.")
             return False
     
     # Log available keys
