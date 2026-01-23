@@ -547,6 +547,108 @@ for dep in _OPTIONAL_DEPENDENCIES:
                 processors_module.JSONRenderer = lambda *args, **kwargs: None
                 mock_module.processors = processors_module
 
+# ---- Tenacity stub setup ----
+# Tenacity requires special handling for its retry decorator and combinable conditions
+if "tenacity" not in sys.modules:
+    try:
+        import tenacity as _test_tenacity
+    except ImportError:
+        # Create complete tenacity stubs
+        import types
+        
+        # Create a retry predicate that supports the | operator
+        class _RetryPredicate:
+            def __or__(self, other):
+                return _RetryPredicate()
+            
+            def __and__(self, other):
+                return _RetryPredicate()
+        
+        # Create the tenacity module
+        import importlib.util
+        tenacity_module = types.ModuleType("tenacity")
+        tenacity_module.__file__ = "<mocked tenacity>"
+        tenacity_module.__path__ = []
+        tenacity_module.__spec__ = importlib.util.spec_from_loader("tenacity", loader=None)
+        
+        # Retry decorator - returns the function unchanged
+        def mock_retry(*args, **kwargs):
+            def decorator(func):
+                return func
+            if len(args) == 1 and callable(args[0]):
+                return args[0]
+            return decorator
+        
+        tenacity_module.retry = mock_retry
+        tenacity_module.stop_after_attempt = lambda *args, **kwargs: None
+        tenacity_module.stop_after_delay = lambda *args, **kwargs: None
+        tenacity_module.wait_exponential = lambda *args, **kwargs: None
+        tenacity_module.wait_exponential_jitter = lambda *args, **kwargs: None
+        tenacity_module.wait_random = lambda *args, **kwargs: None
+        tenacity_module.wait_random_exponential = lambda *args, **kwargs: None
+        tenacity_module.wait_fixed = lambda *args, **kwargs: None
+        tenacity_module.wait_chain = lambda *args, **kwargs: None
+        tenacity_module.retry_if_exception_type = lambda *args, **kwargs: _RetryPredicate()
+        tenacity_module.retry_if_exception = lambda *args, **kwargs: _RetryPredicate()
+        tenacity_module.retry_if_result = lambda *args, **kwargs: _RetryPredicate()
+        tenacity_module.before_sleep_log = lambda *args, **kwargs: None
+        tenacity_module.after_log = lambda *args, **kwargs: None
+        tenacity_module.before_log = lambda *args, **kwargs: None
+        
+        # Create wait submodule for tenacity.wait.wait_exponential style access
+        wait_module = types.ModuleType("tenacity.wait")
+        wait_module.__file__ = "<mocked tenacity.wait>"
+        wait_module.__path__ = []
+        wait_module.wait_exponential = lambda *args, **kwargs: None
+        wait_module.wait_exponential_jitter = lambda *args, **kwargs: None
+        wait_module.wait_random = lambda *args, **kwargs: None
+        wait_module.wait_random_exponential = lambda *args, **kwargs: None
+        wait_module.wait_fixed = lambda *args, **kwargs: None
+        wait_module.wait_chain = lambda *args, **kwargs: None
+        tenacity_module.wait = wait_module
+        sys.modules["tenacity.wait"] = wait_module
+        
+        # Create stop submodule for tenacity.stop.stop_after_attempt style access
+        stop_module = types.ModuleType("tenacity.stop")
+        stop_module.__file__ = "<mocked tenacity.stop>"
+        stop_module.__path__ = []
+        stop_module.stop_after_attempt = lambda *args, **kwargs: None
+        stop_module.stop_after_delay = lambda *args, **kwargs: None
+        stop_module.stop_never = lambda *args, **kwargs: None
+        tenacity_module.stop = stop_module
+        sys.modules["tenacity.stop"] = stop_module
+        
+        # Exception classes
+        class RetryError(Exception):
+            pass
+        
+        class TryAgain(Exception):
+            pass
+        
+        tenacity_module.RetryError = RetryError
+        tenacity_module.TryAgain = TryAgain
+        
+        # Additional classes needed by some modules
+        class RetryCallState:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        tenacity_module.RetryCallState = RetryCallState
+        
+        # Create Retrying class
+        class Retrying:
+            def __init__(self, *args, **kwargs):
+                pass
+            def __call__(self, *args, **kwargs):
+                return args[0] if args else lambda x: x
+            def __iter__(self):
+                return iter([])
+        
+        tenacity_module.Retrying = Retrying
+        
+        # Register the module
+        sys.modules["tenacity"] = tenacity_module
+
 # ---- OpenTelemetry stub setup ----
 # OpenTelemetry requires special handling because it has specific methods that must exist
 # and be callable, not just module stubs

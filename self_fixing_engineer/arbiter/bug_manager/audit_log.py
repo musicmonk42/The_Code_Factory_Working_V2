@@ -42,11 +42,23 @@ except ImportError:
             pass
         
         @staticmethod
+        def wait_random(*args, **kwargs):
+            pass
+        
+        @staticmethod
         def retry_if_exception_type(*args, **kwargs):
             class _P:
                 def __or__(self, other):
                     return _P()
             return _P()
+        
+        @staticmethod
+        def before_sleep_log(*args, **kwargs):
+            pass
+        
+        @staticmethod
+        def after_log(*args, **kwargs):
+            pass
     
     tenacity = _MockTenacity()
 
