@@ -328,7 +328,7 @@ def load_config() -> Dynaconf:
         envvar_prefix="CLARIFIER",
         settings_files=["clarifier_config.yaml"],
         validators=[
-            Validator("LLM_PROVIDER", must_exist=True, is_in=["grok"]),
+            Validator("LLM_PROVIDER", default="auto", is_in=["openai", "anthropic", "grok", "google", "gemini", "ollama", "local", "auto"]),
             Validator("INTERACTION_MODE", must_exist=True, is_in=["cli"]),
             Validator("BATCH_STRATEGY", default="default", is_in=["default"]),
             Validator("FEEDBACK_STRATEGY", default="none", is_in=["none"]),

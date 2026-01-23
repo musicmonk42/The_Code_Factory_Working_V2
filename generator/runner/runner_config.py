@@ -726,6 +726,23 @@ class RunnerConfig(BaseModel):
         # Extend this if you introduce other secret-like fields later.
         return secrets
 
+    @classmethod
+    def load(cls, config_file: str = "runner_config.yaml", overrides: Optional[Dict[str, Any]] = None) -> "RunnerConfig":
+        """
+        Class method to load RunnerConfig from a YAML file.
+        
+        This method provides backwards compatibility for code that calls RunnerConfig.load()
+        instead of the standalone load_config() function.
+        
+        Args:
+            config_file (str): Path to the YAML configuration file. Defaults to "runner_config.yaml".
+            overrides (Optional[Dict[str, Any]]): Dictionary of settings to override.
+        
+        Returns:
+            RunnerConfig: The validated and migrated RunnerConfig instance.
+        """
+        return load_config(config_file, overrides)
+
 
 def load_config(
     config_file: str, overrides: Optional[Dict[str, Any]] = None
