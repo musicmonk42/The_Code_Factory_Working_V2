@@ -423,3 +423,9 @@ python-pkcs11==0.7.0
 paramiko==3.5.0
 fastavro==1.11.1
 faiss-cpu==1.9.0.post1
+
+# Additional optional dependencies for complete feature support
+plantuml>=0.3.0
+sphinx>=7.0.0
+sphinx-rtd-theme>=1.3.0
+tomli-w>=1.0.0

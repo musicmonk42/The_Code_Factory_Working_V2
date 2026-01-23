@@ -139,6 +139,20 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "✓ SpaCy model downloads complete"; \
     fi
 
+# Pre-download NLTK data to prevent runtime download issues
+RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
+        echo "========================================"; \
+        echo "Downloading NLTK data..."; \
+        echo "========================================"; \
+        python -c "import nltk; \
+            nltk.download('punkt', quiet=True); \
+            nltk.download('stopwords', quiet=True); \
+            nltk.download('vader_lexicon', quiet=True); \
+            nltk.download('punkt_tab', quiet=True)" || \
+        (echo "WARNING: Failed to download some NLTK data"); \
+        echo "✓ NLTK data downloads complete"; \
+    fi
+
 # Copy the rest of the application
 COPY . /app
 
@@ -159,10 +173,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support
+# Add graphviz for PlantUML diagram generation support
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
- && apt-get install -y --no-install-recommends curl git libmagic1 \
+ && apt-get install -y --no-install-recommends curl git libmagic1 graphviz \
  && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

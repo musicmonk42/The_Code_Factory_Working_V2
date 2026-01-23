@@ -3,6 +3,7 @@ Pydantic schemas for API request/response models.
 """
 
 from .common import (
+    DetailedHealthResponse,
     ErrorResponse,
     HealthResponse,
     PaginationParams,
@@ -85,6 +86,7 @@ from .sfe_schemas import (
 
 __all__ = [
     # Common
+    "DetailedHealthResponse",
     "ErrorResponse",
     "HealthResponse",
     "PaginationParams",

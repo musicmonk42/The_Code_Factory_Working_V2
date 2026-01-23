@@ -51,6 +51,17 @@ class ReadinessResponse(BaseModel):
     timestamp: str = Field(..., description="Readiness check timestamp (ISO 8601)")
 
 
+class DetailedHealthResponse(BaseModel):
+    """Detailed health check response with dependency and feature status."""
+
+    status: str = Field(..., description="Overall health status")
+    version: str = Field(..., description="API version")
+    timestamp: str = Field(..., description="Health check timestamp (ISO 8601)")
+    agents: Dict[str, str] = Field(..., description="Agent availability status")
+    dependencies: Dict[str, str] = Field(..., description="External dependency status")
+    optional_features: Dict[str, str] = Field(..., description="Optional feature status")
+
+
 class PaginationParams(BaseModel):
     """Pagination parameters for list endpoints."""
 
