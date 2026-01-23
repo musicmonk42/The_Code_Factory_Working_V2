@@ -351,7 +351,10 @@ def load_config() -> Dynaconf:
             os.getenv("PYTHON_ENV", "development").lower() == "production"
         )
     except Exception as e:
-        get_logger().error(f"Configuration validation failed: {e}. Using defaults where possible.")
+        get_logger().error(
+            f"Configuration validation failed: {e}. "
+            "Continuing with default values. Check CLARIFIER_* environment variables if this is production."
+        )
         # Instead of sys.exit(1), log the error and continue with defaults
         # This allows the system to function in development/test environments
         cfg.is_production_env = False
