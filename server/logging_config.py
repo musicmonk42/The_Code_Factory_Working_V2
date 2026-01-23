@@ -201,6 +201,13 @@ def configure_logging(
     # Add new handlers
     root_logger.handlers = [info_handler, error_handler]
     
+    # Prevent propagation for specific loggers to avoid duplicates
+    for logger_name in ['generator', 'arbiter', 'runner', 'omnicore_engine', 'server']:
+        specific_logger = logging.getLogger(logger_name)
+        # Don't set propagate=False as it would prevent logging
+        # Just ensure no duplicate handlers at this level
+        specific_logger.handlers = []
+    
     # Log configuration success
     logger = logging.getLogger(__name__)
     logger.info("Logging configuration applied successfully")

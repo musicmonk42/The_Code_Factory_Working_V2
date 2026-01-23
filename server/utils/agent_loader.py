@@ -33,9 +33,12 @@ Usage:
 """
 
 import asyncio
+import importlib
 import logging
 import os
 import sys
+import threading
+import time
 import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -134,6 +137,10 @@ class AgentLoader:
         self._loading_completed: bool = False
         self._loading_error: Optional[str] = None
         self._loading_lock: Optional[asyncio.Lock] = None  # Startup lock
+        
+        # Deadlock prevention support
+        self._import_lock = threading.RLock()
+        self._loaded_modules: Dict[str, Any] = {}
         
         # Feature flags
         self._parallel_loading = os.getenv("PARALLEL_AGENT_LOADING", "1") == "1"
@@ -284,6 +291,108 @@ class AgentLoader:
             ) from error
         
         return False, None
+    
+    async def _load_agent_safe(self, agent_name: str, module_path: str, attempt: int = 1) -> Optional[Any]:
+        """
+        Safely load agent with deadlock prevention and retry logic.
+        
+        This method implements the following deadlock prevention strategies:
+        1. Check if module is already loaded to avoid reimport
+        2. Use a reentrant lock to prevent concurrent imports
+        3. Pre-load dependencies to avoid circular import deadlocks
+        4. Retry with exponential backoff on deadlock errors
+        
+        Args:
+            agent_name: Name of the agent (e.g., 'codegen', 'testgen')
+            module_path: Full module path to import
+            attempt: Current attempt number (for retry logic)
+            
+        Returns:
+            Loaded module or None on failure
+        """
+        max_attempts = 3
+        retry_delay = 1.0  # seconds
+        
+        try:
+            # Phase 1: Check if already loaded
+            if module_path in sys.modules:
+                logger.info(f"Agent {agent_name} already loaded, reusing module")
+                return sys.modules[module_path]
+            
+            # Phase 2: Acquire import lock
+            with self._import_lock:
+                # Double-check after acquiring lock
+                if module_path in sys.modules:
+                    return sys.modules[module_path]
+                
+                # Phase 3: Load dependencies first (if any)
+                await self._load_agent_dependencies(agent_name)
+                
+                # Phase 4: Import with importlib
+                logger.info(f"Importing {agent_name} from {module_path} (attempt {attempt}/{max_attempts})")
+                
+                # Use importlib.import_module instead of __import__
+                module = importlib.import_module(module_path)
+                
+                # Phase 5: Cache the loaded module
+                self._loaded_modules[agent_name] = module
+                
+                logger.info(f"✓ Successfully loaded {agent_name} agent (attempt {attempt})")
+                return module
+                
+        except ModuleNotFoundError as e:
+            logger.error(f"Module not found for {agent_name}: {e}")
+            if attempt < max_attempts:
+                await asyncio.sleep(retry_delay * attempt)
+                return await self._load_agent_safe(agent_name, module_path, attempt + 1)
+            raise
+            
+        except Exception as e:
+            # Check if it's a deadlock error
+            if "_DeadlockError" in str(type(e).__name__) or "deadlock detected" in str(e):
+                logger.warning(f"Deadlock detected loading {agent_name}, retrying (attempt {attempt}/{max_attempts})")
+                
+                if attempt < max_attempts:
+                    # Exponential backoff
+                    await asyncio.sleep(retry_delay * (2 ** (attempt - 1)))
+                    
+                    # Clear the problematic module from sys.modules if present
+                    if module_path in sys.modules:
+                        del sys.modules[module_path]
+                    
+                    return await self._load_agent_safe(agent_name, module_path, attempt + 1)
+                else:
+                    logger.error(f"Failed to load {agent_name} after {max_attempts} attempts due to deadlock")
+                    raise
+            else:
+                logger.error(f"Unexpected error loading {agent_name}: {e}", exc_info=True)
+                raise
+    
+    async def _load_agent_dependencies(self, agent_name: str) -> None:
+        """
+        Load known dependencies for an agent before loading the agent itself.
+        This prevents circular import deadlocks.
+        
+        Args:
+            agent_name: Name of the agent to load dependencies for
+        """
+        dependency_map = {
+            "testgen": ["runner", "omnicore_engine"],
+            "critique": ["runner", "omnicore_engine"],
+            "deploy": ["runner"],
+            "docgen": ["runner", "omnicore_engine"],
+            "codegen": ["runner", "omnicore_engine"],
+        }
+        
+        deps = dependency_map.get(agent_name, [])
+        for dep in deps:
+            dep_module = f"generator.{dep}" if dep != "omnicore_engine" else dep
+            if dep_module not in sys.modules:
+                try:
+                    importlib.import_module(dep_module)
+                    logger.debug(f"Pre-loaded dependency {dep_module} for {agent_name}")
+                except Exception as e:
+                    logger.warning(f"Could not pre-load dependency {dep_module}: {e}")
     
     async def load_agent_by_config_async(self, config: 'AgentConfig') -> Optional[object]:
         """
