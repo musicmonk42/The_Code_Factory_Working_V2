@@ -174,8 +174,13 @@ check_environment() {
             else
                 SECURE_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
             fi
-            echo "AGENTIC_AUDIT_HMAC_KEY=$SECURE_KEY" >> .env
-            log_success "Generated and saved AGENTIC_AUDIT_HMAC_KEY to .env"
+            # Only append if not already present in file
+            if ! grep -q "AGENTIC_AUDIT_HMAC_KEY=" .env; then
+                echo "AGENTIC_AUDIT_HMAC_KEY=$SECURE_KEY" >> .env
+                log_success "Generated and saved AGENTIC_AUDIT_HMAC_KEY to .env"
+            else
+                log_info "AGENTIC_AUDIT_HMAC_KEY already exists in .env (value is empty)"
+            fi
         fi
     fi
 }
@@ -202,6 +207,30 @@ initialize_database() {
         log_success "Database initialized"
     else
         log_info "No Alembic configuration found. Skipping database setup."
+    fi
+}
+
+# Initialize plugin registry (if database is configured)
+initialize_plugin_registry() {
+    log_header "Initializing Plugin Registry"
+    
+    # Check if DATABASE_URL is set
+    if [ -z "$DATABASE_URL" ]; then
+        log_info "DATABASE_URL not set. Plugin registry will run without persistence."
+        log_info "This is normal for development. To enable plugin registry persistence,"
+        log_info "set DATABASE_URL in .env and run: python3 scripts/init_plugin_registry.py"
+        return
+    fi
+    
+    # Run plugin registry initialization
+    if [ -f "scripts/init_plugin_registry.py" ]; then
+        log_info "Initializing plugin registry database..."
+        python3 scripts/init_plugin_registry.py || {
+            log_warning "Plugin registry initialization failed. The application will still work."
+            log_warning "Plugin metadata won't be persisted to the database."
+        }
+    else
+        log_warning "Plugin registry initialization script not found."
     fi
 }
 
@@ -290,6 +319,7 @@ main() {
     check_environment
     create_directories
     initialize_database
+    initialize_plugin_registry
     check_optional_dependencies
     run_health_check
     
