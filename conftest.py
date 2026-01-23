@@ -289,6 +289,8 @@ _OPTIONAL_DEPENDENCIES = [
     "deap",  # Evolutionary algorithms
     "langchain_openai",  # LangChain OpenAI integration
     "cerberus",  # Schema validation - required by policy module
+    "PIL",  # Pillow - image processing
+    "pillow",  # Pillow alternative import name
     # Note: prometheus_client, aiohttp, and aiosqlite should be installed
     # and should NOT be mocked as they are critical for proper type checking
 ]
@@ -546,6 +548,86 @@ for dep in _OPTIONAL_DEPENDENCIES:
                 processors_module.StackInfoRenderer = lambda *args, **kwargs: None
                 processors_module.JSONRenderer = lambda *args, **kwargs: None
                 mock_module.processors = processors_module
+            
+            elif dep == "PIL" or dep == "pillow":
+                # PIL/Pillow needs mock Image class
+                class MockImage:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                    
+                    @staticmethod
+                    def open(*args, **kwargs):
+                        return MockImage()
+                    
+                    @staticmethod
+                    def new(*args, **kwargs):
+                        return MockImage()
+                    
+                    @staticmethod
+                    def frombytes(*args, **kwargs):
+                        return MockImage()
+                    
+                    def save(self, *args, **kwargs):
+                        pass
+                    
+                    def convert(self, *args, **kwargs):
+                        return self
+                    
+                    def resize(self, *args, **kwargs):
+                        return self
+                    
+                    def crop(self, *args, **kwargs):
+                        return self
+                    
+                    @property
+                    def size(self):
+                        return (100, 100)
+                    
+                    @property
+                    def mode(self):
+                        return "RGB"
+                
+                mock_module.Image = MockImage
+                # Also register as PIL if it's PIL
+                if dep == "PIL":
+                    sys.modules["PIL"] = mock_module
+            
+            elif dep == "asyncpg":
+                # asyncpg needs pool submodule
+                pool_module = _create_mock_module("asyncpg.pool")
+                sys.modules["asyncpg.pool"] = pool_module
+                
+                class MockPool:
+                    async def acquire(self):
+                        return MockConnection()
+                    
+                    async def release(self, *args, **kwargs):
+                        pass
+                    
+                    async def close(self):
+                        pass
+                
+                class MockConnection:
+                    async def execute(self, *args, **kwargs):
+                        return None
+                    
+                    async def fetch(self, *args, **kwargs):
+                        return []
+                    
+                    async def fetchrow(self, *args, **kwargs):
+                        return None
+                    
+                    async def fetchval(self, *args, **kwargs):
+                        return None
+                    
+                    async def close(self):
+                        pass
+                
+                pool_module.Pool = MockPool
+                mock_module.pool = pool_module
+                mock_module.Pool = MockPool
+                mock_module.create_pool = lambda *args, **kwargs: MockPool()
+                mock_module.connect = lambda *args, **kwargs: MockConnection()
 
 # ---- Tenacity stub setup ----
 # Tenacity requires special handling for its retry decorator and combinable conditions
@@ -579,15 +661,29 @@ if "tenacity" not in sys.modules:
                 return args[0]
             return decorator
         
+        # Wait strategy class that supports + operator
+        class _WaitStrategy:
+            def __add__(self, other):
+                return _WaitStrategy()
+            def __radd__(self, other):
+                return _WaitStrategy()
+            def __call__(self, *args, **kwargs):
+                return 0
+        
+        # Stop strategy class
+        class _StopStrategy:
+            def __call__(self, *args, **kwargs):
+                return True
+        
         tenacity_module.retry = mock_retry
-        tenacity_module.stop_after_attempt = lambda *args, **kwargs: None
-        tenacity_module.stop_after_delay = lambda *args, **kwargs: None
-        tenacity_module.wait_exponential = lambda *args, **kwargs: None
-        tenacity_module.wait_exponential_jitter = lambda *args, **kwargs: None
-        tenacity_module.wait_random = lambda *args, **kwargs: None
-        tenacity_module.wait_random_exponential = lambda *args, **kwargs: None
-        tenacity_module.wait_fixed = lambda *args, **kwargs: None
-        tenacity_module.wait_chain = lambda *args, **kwargs: None
+        tenacity_module.stop_after_attempt = lambda *args, **kwargs: _StopStrategy()
+        tenacity_module.stop_after_delay = lambda *args, **kwargs: _StopStrategy()
+        tenacity_module.wait_exponential = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait_exponential_jitter = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait_random = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait_random_exponential = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait_fixed = lambda *args, **kwargs: _WaitStrategy()
+        tenacity_module.wait_chain = lambda *args, **kwargs: _WaitStrategy()
         tenacity_module.retry_if_exception_type = lambda *args, **kwargs: _RetryPredicate()
         tenacity_module.retry_if_exception = lambda *args, **kwargs: _RetryPredicate()
         tenacity_module.retry_if_result = lambda *args, **kwargs: _RetryPredicate()
@@ -599,12 +695,12 @@ if "tenacity" not in sys.modules:
         wait_module = types.ModuleType("tenacity.wait")
         wait_module.__file__ = "<mocked tenacity.wait>"
         wait_module.__path__ = []
-        wait_module.wait_exponential = lambda *args, **kwargs: None
-        wait_module.wait_exponential_jitter = lambda *args, **kwargs: None
-        wait_module.wait_random = lambda *args, **kwargs: None
-        wait_module.wait_random_exponential = lambda *args, **kwargs: None
-        wait_module.wait_fixed = lambda *args, **kwargs: None
-        wait_module.wait_chain = lambda *args, **kwargs: None
+        wait_module.wait_exponential = lambda *args, **kwargs: _WaitStrategy()
+        wait_module.wait_exponential_jitter = lambda *args, **kwargs: _WaitStrategy()
+        wait_module.wait_random = lambda *args, **kwargs: _WaitStrategy()
+        wait_module.wait_random_exponential = lambda *args, **kwargs: _WaitStrategy()
+        wait_module.wait_fixed = lambda *args, **kwargs: _WaitStrategy()
+        wait_module.wait_chain = lambda *args, **kwargs: _WaitStrategy()
         tenacity_module.wait = wait_module
         sys.modules["tenacity.wait"] = wait_module
         
@@ -612,9 +708,9 @@ if "tenacity" not in sys.modules:
         stop_module = types.ModuleType("tenacity.stop")
         stop_module.__file__ = "<mocked tenacity.stop>"
         stop_module.__path__ = []
-        stop_module.stop_after_attempt = lambda *args, **kwargs: None
-        stop_module.stop_after_delay = lambda *args, **kwargs: None
-        stop_module.stop_never = lambda *args, **kwargs: None
+        stop_module.stop_after_attempt = lambda *args, **kwargs: _StopStrategy()
+        stop_module.stop_after_delay = lambda *args, **kwargs: _StopStrategy()
+        stop_module.stop_never = lambda *args, **kwargs: _StopStrategy()
         tenacity_module.stop = stop_module
         sys.modules["tenacity.stop"] = stop_module
         
@@ -1350,10 +1446,13 @@ if "prometheus_client" not in sys.modules:
         prom_module.Info = _MockInfo
         prom_module.Summary = _MockHistogram  # Summary is similar to Histogram
         prom_module.ProcessCollector = lambda *args, **kwargs: None
+        prom_module.PROCESS_COLLECTOR = None  # Process collector singleton
         prom_module.PLATFORM_COLLECTOR = lambda *args, **kwargs: None
+        prom_module.GC_COLLECTOR = None  # GC collector singleton
         prom_module.generate_latest = lambda *args, **kwargs: b""
         prom_module.start_http_server = lambda *args, **kwargs: None
         prom_module.REGISTRY = _MockCollectorRegistry()
+        prom_module.CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
 
         # Create multiprocess submodule
         prom_multiprocess = types.ModuleType("prometheus_client.multiprocess")
