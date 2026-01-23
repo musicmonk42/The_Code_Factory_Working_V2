@@ -548,6 +548,11 @@ def redact_secrets(
         return data
 
 
+# Alias for backward compatibility and semantic clarity
+# Many modules expect scrub_pii_and_secrets instead of redact_secrets
+scrub_pii_and_secrets = redact_secrets
+
+
 @util_decorator
 async def encrypt_data(
     data: Union[str, bytes], key: bytes, algorithm: str = "fernet"
