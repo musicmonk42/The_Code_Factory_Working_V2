@@ -123,7 +123,7 @@ metrics_interval_seconds: 5
 
     def test_runner_config_has_load_method(self):
         """Test that RunnerConfig has a load() class method."""
-        from runner.runner_config import RunnerConfig
+        from generator.runner.runner_config import RunnerConfig
 
         # Check that the load method exists
         self.assertTrue(hasattr(RunnerConfig, "load"))
@@ -131,7 +131,7 @@ metrics_interval_seconds: 5
 
     def test_runner_config_load_method_works(self):
         """Test that RunnerConfig.load() successfully loads a config file."""
-        from runner.runner_config import RunnerConfig
+        from generator.runner.runner_config import RunnerConfig
 
         # Set environment variable for TESTING
         with patch.dict(os.environ, {"TESTING": "1"}):
@@ -147,7 +147,7 @@ metrics_interval_seconds: 5
 
     def test_runner_config_load_with_overrides(self):
         """Test that RunnerConfig.load() works with overrides."""
-        from runner.runner_config import RunnerConfig
+        from generator.runner.runner_config import RunnerConfig
 
         # Set environment variable for TESTING
         with patch.dict(os.environ, {"TESTING": "1"}):
