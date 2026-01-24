@@ -198,66 +198,80 @@ def _lazy_import_channel_components():
         raise
 
 
-# Provide module-level access with lazy loading
-try:
-    from omnicore_engine.plugin_registry import PlugInKind, plugin
-    from .clarifier_updater import update_requirements_with_answers
-    from .clarifier_user_prompt import UserPromptChannel as InteractionMode
-    from .clarifier_user_prompt import get_channel
-except ImportError as e:
-    _channel_import_failed = True
-    _channel_import_error = e
-    logging.warning(
-        f"Failed to load package dependencies (Prompt/Updater/Plugin) at module load time: {e}. "
-        f"Will use fallback implementations."
-    )
+# Module-level flags for tracking import failures
+_channel_import_failed = False
+_channel_import_error = None
 
-    # Define minimal fallback implementations for graceful degradation
-    class InteractionMode:
-        """Stub InteractionMode when clarifier_user_prompt cannot be imported"""
-        pass
+# Provide module-level access with lazy loading ONLY
+# Do NOT import at module level to avoid circular dependencies
+# All imports happen via _lazy_import_channel_components() on-demand
 
-    def get_channel(*args, **kwargs):
-        """
-        Fallback for get_channel when import fails.
-        
-        Attempts lazy import first, then provides helpful error message.
-        """
-        try:
-            _, real_get_channel, _, _, _ = _lazy_import_channel_components()
-            return real_get_channel(*args, **kwargs)
-        except ImportError:
-            error_msg = (
-                "Channel imports failed - clarifier_user_prompt module is unavailable. "
-                f"Original error: {_channel_import_error}. "
-                "Possible solutions:\n"
-                "1. Ensure clarifier_user_prompt.py exists in the same directory\n"
-                "2. Check for circular import issues in the module dependencies\n"
-                "3. Try importing the channel module directly before initializing Clarifier\n"
-                "4. Use a mock/stub channel implementation for testing"
-            )
-            logging.error(error_msg)
-            raise NotImplementedError(error_msg)
+# Define minimal fallback implementations for graceful degradation
+class InteractionMode:
+    """Stub InteractionMode when clarifier_user_prompt cannot be imported"""
+    pass
 
-    def update_requirements_with_answers(*args, **kwargs):
-        """
-        Fallback for update_requirements_with_answers when import fails.
-        
-        Attempts lazy import first, then returns empty dict for graceful degradation.
-        """
-        try:
-            _, _, real_update_requirements, _, _ = _lazy_import_channel_components()
-            return real_update_requirements(*args, **kwargs)
-        except ImportError:
-            logging.warning(
-                "update_requirements_with_answers called but clarifier_updater module is unavailable. "
-                "Returning empty result."
-            )
-            return {}
+def get_channel(*args, **kwargs):
+    """
+    Fallback for get_channel when import fails.
+    
+    Attempts lazy import first, then provides helpful error message.
+    This is called only when the import hasn't been successful yet.
+    """
+    try:
+        _, real_get_channel, _, _, _ = _lazy_import_channel_components()
+        return real_get_channel(*args, **kwargs)
+    except ImportError as e:
+        global _channel_import_failed, _channel_import_error
+        _channel_import_failed = True
+        _channel_import_error = e
+        error_msg = (
+            "Channel imports failed - clarifier_user_prompt module is unavailable. "
+            f"Original error: {e}. "
+            "Possible solutions:\n"
+            "1. Ensure clarifier_user_prompt.py exists in the same directory\n"
+            "2. Check for circular import issues in the module dependencies\n"
+            "3. Try importing the channel module directly before initializing Clarifier\n"
+            "4. Use a mock/stub channel implementation for testing"
+        )
+        logging.error(error_msg)
+        raise NotImplementedError(error_msg)
 
-    def plugin(*args, **kwargs):
-        """Fallback plugin decorator - no-op that returns the function unchanged."""
-        return lambda f: f
+def update_requirements_with_answers(*args, **kwargs):
+    """
+    Fallback for update_requirements_with_answers when import fails.
+    
+    Attempts lazy import first, then returns empty dict for graceful degradation.
+    """
+    try:
+        _, _, real_update_requirements, _, _ = _lazy_import_channel_components()
+        return real_update_requirements(*args, **kwargs)
+    except ImportError:
+        logging.warning(
+            "update_requirements_with_answers called but clarifier_updater module is unavailable. "
+            "Returning empty result."
+        )
+        return {}
+
+def plugin(*args, **kwargs):
+    """Fallback plugin decorator - no-op that returns the function unchanged."""
+    def decorator(f):
+        return f
+    if args and callable(args[0]):
+        # Called without arguments: @plugin
+        return args[0]
+    else:
+        # Called with arguments: @plugin(...)
+        return decorator
+
+class PlugInKind:
+    """Stub PlugInKind enum when plugin_registry cannot be imported"""
+    CLARIFIER = "clarifier"
+    GENERATOR = "generator"
+    FIX = "fix"
+    OPTIMIZER = "optimizer"
+    VALIDATOR = "validator"
+    ANALYZER = "analyzer"
 
     class PlugInKind:
         """Fallback PlugInKind with minimal definitions."""
