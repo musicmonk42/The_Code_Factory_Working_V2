@@ -465,6 +465,7 @@ class ShardedMessageBus:
                 )
 
         self.dispatcher_tasks = []
+        self._dispatchers_started = False  # Track if dispatchers have been started
         self._start_dispatchers()
         if self.kafka_bridge:
             self.kafka_bridge.start()
@@ -490,6 +491,18 @@ class ShardedMessageBus:
             use_kafka=self.kafka_bridge is not None,
             use_redis=self.redis_bridge is not None,
         )
+
+    async def _ensure_dispatchers_started(self) -> None:
+        """
+        Ensures dispatcher tasks are started. Call this from async methods
+        to lazily start dispatchers if they weren't started during __init__.
+        """
+        if self._dispatchers_started or not self.running:
+            return
+            
+        # Try to start dispatchers now that we're in an async context
+        self._start_dispatchers()
+        self._dispatchers_started = True
 
     def _get_loop(self) -> asyncio.AbstractEventLoop:
         """
@@ -543,6 +556,18 @@ class ShardedMessageBus:
 
     def _start_dispatchers(self) -> None:
         """Starts asynchronous dispatcher tasks for each queue."""
+        # Check if we're in an async context with a running event loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running event loop - defer dispatcher startup
+            logger.debug(
+                "No running event loop available. Dispatcher tasks will be started "
+                "when first async operation is called."
+            )
+            return
+        
+        # We have a running event loop, start dispatchers
         for shard_id in range(self.shard_count):
             task = asyncio.create_task(
                 self._dispatcher_loop(
@@ -562,6 +587,8 @@ class ShardedMessageBus:
                 )
             )
             self.dispatcher_tasks.append(task)
+        
+        self._dispatchers_started = True
         logger.info("Dispatcher tasks started.", num_tasks=len(self.dispatcher_tasks))
 
     async def _dispatcher_loop(
@@ -875,6 +902,9 @@ class ShardedMessageBus:
         """
         Publishes a message to the message bus, handling arbiter-specific events.
         """
+        # Ensure dispatchers are started (lazy initialization)
+        await self._ensure_dispatchers_started()
+        
         # Security: Rate Limiting
         try:
             await self.rate_limiter.check_rate_limit(client_id)
