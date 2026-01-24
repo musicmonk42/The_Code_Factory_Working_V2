@@ -1007,9 +1007,21 @@ def import_timeout(seconds=30):  # Increased from 10 to 30 for CI environments
 # pytest collection phase. Tests that need mocked dependencies must explicitly
 # request this fixture.
 #
-# Background: The autouse=True flag caused the fixture to run during collection,
-# defeating the purpose of lazy loading and causing CPU timeout errors.
-# By removing autouse, mocks are only initialized when tests actually execute.
+# BREAKING CHANGE NOTICE (v2.0):
+# The autouse=True flag has been removed from this fixture to fix pytest
+# collection timeouts. Tests that relied on automatic mock setup will need
+# to explicitly request the _ensure_mocks or _test_setup fixture.
+#
+# Migration Guide:
+#   Before: Tests automatically had mocks (autouse=True)
+#   After:  Tests must request fixture explicitly:
+#           - Add _ensure_mocks to function parameters
+#           - Or use @pytest.mark.usefixtures("_ensure_mocks")
+#
+# Rationale:
+#   The autouse=True flag caused the fixture to run during collection,
+#   defeating lazy loading and causing "CPU time limit exceeded" errors.
+#   By removing autouse, mocks only initialize when tests actually execute.
 try:
     import pytest
 

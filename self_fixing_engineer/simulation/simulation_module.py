@@ -40,7 +40,11 @@ from typing import Any, Callable, Dict, List, Optional
 
 # Module-level constants
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
-PYTEST_COLLECTING = os.getenv("PYTEST_COLLECTING", "false").lower() == "true" or os.getenv("PYTEST_CURRENT_TEST", "") != ""
+# Check if we're in pytest collection mode to avoid expensive initialization
+PYTEST_COLLECTING = bool(
+    os.getenv("PYTEST_COLLECTING", "false").lower() == "true" 
+    or os.getenv("PYTEST_CURRENT_TEST", "") != ""
+)
 
 
 # --------------------------- Settings (patchable) ----------------------------
@@ -124,31 +128,44 @@ class _HealthGauge:
         self.set = _AssertableCall()
 
 
-# Only create metrics if not in pytest collection mode
-if not PYTEST_COLLECTING:
-    SIM_MODULE_METRICS: Dict[str, Any] = {
-        "simulation_run_total": _get_or_create_metric(
-            Counter, "sim_module_run_total", "Total simulation runs", ["type", "status"]
-        ),
-        "simulation_duration_seconds": _get_or_create_metric(
-            Histogram, "sim_module_duration_seconds", "Duration of simulations", ["type"]
-        ),
-        "quantum_op_total": _get_or_create_metric(
-            Counter,
-            "sim_module_quantum_op_total",
-            "Total quantum operations",
-            ["op_type", "status"],
-        ),
-        "health_status": _HealthGauge(),
-    }
-else:
-    # Stub metrics for pytest collection
-    SIM_MODULE_METRICS: Dict[str, Any] = {
-        "simulation_run_total": _DummyMetric(),
-        "simulation_duration_seconds": _DummyMetric(),
-        "quantum_op_total": _DummyMetric(),
-        "health_status": _HealthGauge(),
-    }
+def _create_metrics_dict(use_real_metrics: bool = True) -> Dict[str, Any]:
+    """
+    Factory function to create metrics dictionary.
+    
+    Args:
+        use_real_metrics: If True, creates real Prometheus metrics.
+                         If False, creates dummy stub metrics.
+    
+    Returns:
+        Dict mapping metric names to their implementations.
+    """
+    if use_real_metrics:
+        return {
+            "simulation_run_total": _get_or_create_metric(
+                Counter, "sim_module_run_total", "Total simulation runs", ["type", "status"]
+            ),
+            "simulation_duration_seconds": _get_or_create_metric(
+                Histogram, "sim_module_duration_seconds", "Duration of simulations", ["type"]
+            ),
+            "quantum_op_total": _get_or_create_metric(
+                Counter,
+                "sim_module_quantum_op_total",
+                "Total quantum operations",
+                ["op_type", "status"],
+            ),
+            "health_status": _HealthGauge(),
+        }
+    else:
+        return {
+            "simulation_run_total": _DummyMetric(),
+            "simulation_duration_seconds": _DummyMetric(),
+            "quantum_op_total": _DummyMetric(),
+            "health_status": _HealthGauge(),
+        }
+
+
+# Create metrics dictionary based on collection mode
+SIM_MODULE_METRICS: Dict[str, Any] = _create_metrics_dict(use_real_metrics=not PYTEST_COLLECTING)
 
 
 # --------------------------- Minimal stand-ins -------------------------------
@@ -1185,8 +1202,9 @@ class SimulationEngine:
         self._db: Optional[Database] = None
         self._message_bus: Optional[ShardedMessageBus] = None
         self._module: Optional[UnifiedSimulationModule] = None
+        self._init_lock = asyncio.Lock()  # Thread safety for lazy initialization
 
-    def _ensure_initialized(self) -> None:
+    async def _ensure_initialized(self) -> None:
         """
         Lazy initialization - only create DB/MessageBus when first needed.
         
@@ -1194,12 +1212,15 @@ class SimulationEngine:
         It skips initialization during pytest collection to avoid timeouts.
         
         Thread Safety:
-            Not thread-safe. Should be called from a single async context.
+            Uses asyncio.Lock to ensure only one coroutine initializes resources.
+            Safe for concurrent async operations.
         """
-        if self._db is None and not PYTEST_COLLECTING:
-            self._db = Database()
-        if self._message_bus is None and not PYTEST_COLLECTING:
-            self._message_bus = ShardedMessageBus()
+        async with self._init_lock:
+            # Double-check pattern: verify resources still need initialization
+            if self._db is None and not PYTEST_COLLECTING:
+                self._db = Database()
+            if self._message_bus is None and not PYTEST_COLLECTING:
+                self._message_bus = ShardedMessageBus()
 
     @staticmethod
     def get_tools() -> Dict[str, Callable[..., Any]]:
@@ -1255,7 +1276,7 @@ class SimulationEngine:
             >>> config = {"type": "agent", "iterations": 10}
             >>> result = await engine.run_simulation(config)
         """
-        self._ensure_initialized()
+        await self._ensure_initialized()
         
         if self._module is None:
             self._module = UnifiedSimulationModule(

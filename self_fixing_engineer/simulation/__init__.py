@@ -35,11 +35,12 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 # Detect pytest collection mode to avoid expensive initialization
-_IN_TEST_COLLECTION = bool(
+# Using PYTEST_COLLECTING for consistency with simulation_module.py
+PYTEST_COLLECTING = bool(
     os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING")
 )
 
-if _IN_TEST_COLLECTION:
+if PYTEST_COLLECTING:
     # Test collection mode: Provide lightweight stubs
     logger.debug("Skipping simulation module initialization during pytest collection")
     
