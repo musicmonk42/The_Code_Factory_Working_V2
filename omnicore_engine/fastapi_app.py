@@ -54,6 +54,41 @@ from omnicore_engine.plugin_registry import (
     PluginMarketplace,
 )
 
+# Import configuration validator for production mode checks
+try:
+    from omnicore_engine.config_validator import is_production_mode
+except ImportError:
+    # Fallback if config_validator not available
+    def is_production_mode():
+        return os.getenv("PRODUCTION_MODE", "0") == "1"
+
+
+def check_production_mode_usage(component_name: str, method_name: str = None):
+    """
+    Helper function to check and log production mode usage of mock implementations.
+    
+    Args:
+        component_name: Name of the component (e.g., "ExplainableReasonerPlugin")
+        method_name: Optional method name being called
+    
+    Raises:
+        RuntimeError: If in production mode and method_name is provided
+    """
+    if not is_production_mode():
+        return
+    
+    if method_name:
+        logger.error(f"Mock {component_name}.{method_name}() called in production mode")
+        raise RuntimeError(
+            f"Mock {component_name} should not be used in production. "
+            f"Please install the required Arbiter package."
+        )
+    else:
+        logger.error(
+            f"CRITICAL: Mock {component_name} initialized in production mode. "
+            f"Real implementation required for production."
+        )
+
 try:
     from self_fixing_engineer.simulation.simulation_module import (
         UnifiedSimulationModule,
@@ -101,6 +136,23 @@ except ImportError as e:
         f"Could not import all core engine components for FastAPI: {e}. Some features will be mocked."
     )
 
+    # Check if we're in production mode - fail fast if so
+    if is_production_mode():
+        error_msg = (
+            f"CRITICAL: Required Arbiter components are not available in production mode. "
+            f"Import error: {e}. "
+            f"Please ensure all required dependencies are installed. "
+            f"See DEPENDENCY_GUIDE.md for installation instructions."
+        )
+        logger.error(error_msg)
+        # In production, we should not start with mock implementations
+        # However, we'll allow the application to start but log a critical error
+        # The health check should catch this and report unhealthy status
+        logger.error(
+            "WARNING: Starting with mock implementations in production mode. "
+            "This is not recommended and may cause unexpected behavior."
+        )
+
     ARBITER_AVAILABLE = False
     ARENA_AVAILABLE = False
     MERKLE_TREE_AVAILABLE = False
@@ -122,11 +174,13 @@ except ImportError as e:
         - Counterfactual analysis ("what-if" scenarios)
         - Confidence scores and uncertainty quantification
         - Citation of decision factors and data sources
+        
+        WARNING: This mock should not be used in production mode.
         """
 
         def __init__(self, *args, **kwargs):
             """Initialize mock ExplainableReasonerPlugin."""
-            pass
+            check_production_mode_usage("ExplainableReasonerPlugin")
 
         async def explain(self, *args, **kwargs):
             """
@@ -141,6 +195,7 @@ except ImportError as e:
             Returns:
                 str: Mock explanation message
             """
+            check_production_mode_usage("ExplainableReasonerPlugin", "explain")
             return "Mock explanation."
 
     class PolicyEngine:
@@ -162,11 +217,13 @@ except ImportError as e:
         - Policy versioning and rollback
         - Policy conflict detection
         - Explainable policy decisions
+        
+        WARNING: This mock should not be used in production mode.
         """
 
         def __init__(self, *args, **kwargs):
             """Initialize mock PolicyEngine."""
-            pass
+            check_production_mode_usage("PolicyEngine")
 
         async def should_auto_learn(self, *args, **kwargs):
             """
@@ -182,6 +239,7 @@ except ImportError as e:
             Returns:
                 tuple: (bool, str) - (should_learn, policy_reason)
             """
+            check_production_mode_usage("PolicyEngine", "should_auto_learn")
             return True, "Mock Policy"
 
     class FeedbackManager:
@@ -204,11 +262,18 @@ except ImportError as e:
         - Automated categorization and routing
         - Priority scoring and triage
         - Analytics and trend detection
+        
+        WARNING: This mock should not be used in production mode.
         """
 
         def __init__(self, *args, **kwargs):
             """Initialize mock FeedbackManager."""
-            pass
+            if is_production_mode():
+                logger.warning(
+                    "Mock FeedbackManager initialized in production mode. "
+                    "Feedback features will be disabled. "
+                    "Install the full FeedbackManager for production use."
+                )
 
         async def initialize(self):
             """No-op initialization for mock."""
@@ -225,6 +290,8 @@ except ImportError as e:
             - Send notifications to relevant teams
             - Update metrics and dashboards
             """
+            if is_production_mode():
+                logger.warning("Mock FeedbackManager.record_feedback() called in production mode")
             pass
 
     class FeedbackType:

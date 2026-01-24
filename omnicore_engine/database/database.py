@@ -39,6 +39,14 @@ logger = logging.getLogger(__name__)
 # Corrected imports using the new arbiter package and centralized settings
 import types
 
+# Import configuration validator for production mode checks
+import os
+
+
+def is_production_mode():
+    """Check if the application is running in production mode."""
+    return os.getenv("PRODUCTION_MODE", "0") == "1" or os.getenv("APP_ENV", "development") == "production"
+
 
 def _create_fallback_settings():
     """Create a minimal settings object for when ArbiterConfig is unavailable."""
@@ -454,6 +462,11 @@ class Database:
                 logger.debug("PolicyEngine initialized successfully")
             except (TypeError, ValueError, AttributeError) as e:
                 # Config type mismatch or initialization error - create mock
+                if is_production_mode():
+                    logger.error(
+                        f"CRITICAL: Failed to initialize PolicyEngine in production mode: {e}. "
+                        "This indicates a configuration issue. Please review your settings."
+                    )
                 logger.warning(
                     f"Failed to initialize PolicyEngine due to config/type error: {e}. "
                     "Using mock implementation. This is expected in test environments."
@@ -461,6 +474,12 @@ class Database:
                 self.policy_engine = self._create_mock_policy_engine()
             except Exception as e:
                 # Unexpected error - create mock and log for investigation
+                if is_production_mode():
+                    logger.error(
+                        f"CRITICAL: Unexpected error initializing PolicyEngine in production mode: {e}. "
+                        "Mock implementation will be used, but this is not recommended.",
+                        exc_info=True
+                    )
                 logger.warning(
                     f"Unexpected error initializing PolicyEngine: {e}. "
                     "Using mock implementation.",
@@ -468,6 +487,12 @@ class Database:
                 )
                 self.policy_engine = self._create_mock_policy_engine()
         else:
+            if is_production_mode():
+                logger.error(
+                    "CRITICAL: PolicyEngine not available in production mode. "
+                    "Mock implementation will be used, but this is not recommended. "
+                    "Please install the required Arbiter package."
+                )
             logger.info("PolicyEngine not available (import failed). Using mock implementation.")
             self.policy_engine = self._create_mock_policy_engine()
 
