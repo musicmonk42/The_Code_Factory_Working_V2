@@ -120,26 +120,22 @@ def get_or_create_metric(
     """
     Creates or returns an existing Prometheus metric in a thread-safe manner,
     handling Histogram and Summary checks properly.
+    
+    Uses idempotent metric creation to avoid 'Duplicated timeseries' errors
+    when the module is imported multiple times (e.g., during test collection).
     """
     from prometheus_client import Histogram, Summary
 
     labelnames = labelnames or ()
-    # For Histogram and Summary, check '_sum' sub-metric to detect existence
-    if metric_class in (Histogram, Summary):
-        name + "_sum"
-    else:
-        pass
 
     with _metrics_lock:
-        try:
-            # Try to get existing collector - avoid private attributes
-            # Just attempt to create; Prometheus will handle duplicates gracefully
-            pass
-        except Exception as e:
-            logger.error(f"Error checking/unregistering metric {name}: {e}")
+        # Check if metric already exists in registry - use _names_to_collectors
+        # which maps metric names to their collectors
+        if name in REGISTRY._names_to_collectors:
+            logger.debug(f"Metric {name} already registered, reusing existing")
+            return REGISTRY._names_to_collectors[name]
 
         # Create the new metric. Pass buckets only if provided and applicable.
-        # Prometheus client handles duplicate registrations internally
         try:
             if buckets and metric_class in (Histogram, Summary):
                 return metric_class(
@@ -147,17 +143,11 @@ def get_or_create_metric(
                 )
             return metric_class(name, documentation, labelnames=labelnames)
         except ValueError as e:
-            # Metric already exists - try to retrieve it
+            # Metric already exists - try to retrieve it from registry
             if "Duplicated timeseries" in str(e) or "already registered" in str(e):
-                # Return None and let caller handle, or try to get from registry
                 logger.debug(f"Metric {name} already registered, reusing existing")
-                # Attempt to get from collector registry (no private access)
-                for collector in list(REGISTRY._collector_to_names.keys()):
-                    try:
-                        if hasattr(collector, "_name") and collector._name == name:
-                            return collector
-                    except AttributeError:
-                        continue
+                if name in REGISTRY._names_to_collectors:
+                    return REGISTRY._names_to_collectors[name]
             raise
 
 
