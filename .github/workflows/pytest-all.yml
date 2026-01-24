@@ -140,6 +140,8 @@ jobs:
             pytest-timeout \
             pytest-xdist \
             pytest-asyncio \
+            pytest-html \
+            pytest-json-report \
             tomli_w \
             typing-extensions \
             hypothesis
@@ -267,6 +269,8 @@ jobs:
             "tests"
             "self_fixing_engineer/tests"
             "omnicore_engine/tests"
+            "omnicore_engine/database/tests"
+            "omnicore_engine/message_bus/tests"
             "generator/tests"
           )
           
@@ -324,6 +328,8 @@ jobs:
               --cov=self_fixing_engineer \
               --cov-report=xml:coverage.xml \
               --cov-report=term \
+              --html=test-report.html --self-contained-html \
+              --json-report --json-report-file=test-report.json \
               -v \
               2>&1 | tee test-output.log || OVERALL_EXIT=$?
           else
@@ -351,6 +357,22 @@ jobs:
           files: ./coverage.xml
           flags: pytest-all
           fail_ci_if_error: false
+          
+      - name: Upload HTML test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-report-html
+          path: test-report.html
+          retention-days: 30
+          
+      - name: Upload JSON test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-report-json
+          path: test-report.json
+          retention-days: 30
           
       - name: Upload test output log
         uses: actions/upload-artifact@v4

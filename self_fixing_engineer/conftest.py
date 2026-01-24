@@ -1,45 +1,77 @@
-# conftest.py (root)
+# conftest.py (self_fixing_engineer)
 
 import os
 
 import pytest
 
-# Import OpenTelemetry components with fallback to avoid collection failures
-try:
-    from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-
-    # FIXED: Replaced InMemorySpanExporter with ConsoleSpanExporter
-    # This is a stable import path and will fix the 'NoOpSpan' errors.
-    from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
-
-    _OTEL_AVAILABLE = True
-except ImportError:
-    # OpenTelemetry not available, use stub
-    _OTEL_AVAILABLE = False
-    trace = None
-    TracerProvider = None
-    ConsoleSpanExporter = None
-    SimpleSpanProcessor = None
-
-# Allow duplicate metric registration during tests to prevent collection failures
+# Set environment variables early
+os.environ.setdefault("TESTING", "1")
 os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
 
-# ---- Prometheus duplicate-metric hardening (runs before any package imports)
-try:
-    from prometheus_client import REGISTRY
-    from prometheus_client.registry import CollectorRegistry
 
-    _ORIG_REGISTER = CollectorRegistry.register
+# ---- Deferred imports for OpenTelemetry ----
+# Import OpenTelemetry components with fallback to avoid collection failures
+# These are checked at fixture time, not import time
+_OTEL_AVAILABLE = None
+_OTEL_IMPORTS = {}
 
-    def _safe_register(self, collector):
-        """
-        If any metric name produced by `collector` is already present, skip
-        registering (no-op) instead of raising ValueError.
-        """
+
+def _check_otel_availability():
+    """
+    Check if OpenTelemetry is available (deferred to fixture time).
+    Thread-safe check with proper locking for parallel test execution.
+    """
+    global _OTEL_AVAILABLE, _OTEL_IMPORTS
+    
+    # Quick check if already initialized (no lock needed)
+    if _OTEL_AVAILABLE is not None:
+        return _OTEL_AVAILABLE
+    
+    # Import lock at module level to ensure thread safety
+    import threading
+    if not hasattr(_check_otel_availability, '_lock'):
+        _check_otel_availability._lock = threading.Lock()
+    
+    # Double-checked locking pattern
+    with _check_otel_availability._lock:
+        # Check again inside lock in case another thread initialized it
+        if _OTEL_AVAILABLE is not None:
+            return _OTEL_AVAILABLE
+        
         try:
+            from opentelemetry import trace
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+            
+            _OTEL_IMPORTS['trace'] = trace
+            _OTEL_IMPORTS['TracerProvider'] = TracerProvider
+            _OTEL_IMPORTS['ConsoleSpanExporter'] = ConsoleSpanExporter
+            _OTEL_IMPORTS['SimpleSpanProcessor'] = SimpleSpanProcessor
+            _OTEL_AVAILABLE = True
+        except ImportError:
+            _OTEL_AVAILABLE = False
+        
+        return _OTEL_AVAILABLE
+
+
+def _setup_prometheus_patching():
+    """
+    Setup Prometheus registry patching to allow duplicate metrics.
+    Deferred to fixture time to avoid expensive imports during test collection.
+    """
+    try:
+        from prometheus_client import REGISTRY
+        from prometheus_client.registry import CollectorRegistry
+
+        _ORIG_REGISTER = CollectorRegistry.register
+
+        def _safe_register(self, collector):
+            """
+            If any metric name produced by `collector` is already present, skip
+            registering (no-op) instead of raising ValueError.
+            """
             try:
-                names = set(self._get_names(collector))  # type: ignore[attr-defined]
+                names = set(self._get_names(collector)) if hasattr(self, '_get_names') else set()
             except Exception:
                 names = set()
 
@@ -53,33 +85,47 @@ try:
 
             if names & present:
                 return collector  # treat as already-registered
-            return _ORIG_REGISTER(self, collector)
-        except Exception:
-            # Last resort: never let metrics kill the test run
+            
+            # Try to register, but don't fail if it errors
             try:
                 return _ORIG_REGISTER(self, collector)
             except Exception:
                 return collector
 
-    # Patch both the class and the default registry instance
-    CollectorRegistry.register = _safe_register  # class-level
-    REGISTRY.register = _safe_register.__get__(
-        REGISTRY, REGISTRY.__class__
-    )  # instance-level
-except Exception:
-    pass
-# ---- end hardening
+        # Patch both the class and the default registry instance
+        CollectorRegistry.register = _safe_register  # class-level
+        REGISTRY.register = _safe_register.__get__(
+            REGISTRY, REGISTRY.__class__
+        )  # instance-level
+    except Exception:
+        pass
 
 
-# ---- OpenTelemetry Test Setup Fixture ---
+# ---- Session fixtures (run AFTER test collection) ----
+@pytest.fixture(scope="session", autouse=True)
+def setup_prometheus():
+    """
+    Setup Prometheus patching for the test session.
+    Runs AFTER test collection to avoid slow imports.
+    """
+    _setup_prometheus_patching()
+    yield
+
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_otel():
     """
     Initializes a minimal OpenTelemetry SDK for the entire test session.
     This prevents 'NoneType' and 'NoOpSpan' AttributeErrors when code
     tries to access or record spans during tests.
+    Runs AFTER test collection to avoid slow imports.
     """
-    if _OTEL_AVAILABLE:
+    if _check_otel_availability():
+        trace = _OTEL_IMPORTS['trace']
+        TracerProvider = _OTEL_IMPORTS['TracerProvider']
+        ConsoleSpanExporter = _OTEL_IMPORTS['ConsoleSpanExporter']
+        SimpleSpanProcessor = _OTEL_IMPORTS['SimpleSpanProcessor']
+        
         provider = TracerProvider()
         # Using ConsoleSpanExporter as a robust fallback.
         exporter = ConsoleSpanExporter()
