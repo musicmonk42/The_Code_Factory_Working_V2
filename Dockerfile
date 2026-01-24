@@ -202,4 +202,4 @@ EXPOSE 8000 9090
 
 # Start the unified platform API server
 # Use PORT environment variable if set (Railway, Heroku, etc.), otherwise default to 8000
-CMD sh -c "python -m uvicorn server.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+CMD ["python", "server/run.py"]
