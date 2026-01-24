@@ -319,6 +319,100 @@ def test_function():
             # For this test, we verify that the method completes without error.
             # The file was processed (no exceptions raised).
 
+    @pytest.mark.asyncio
+    async def test_pending_metadata_queue_thread_safety(self, registry):
+        """Test that pending metadata queue operations use proper locking."""
+        # Reset the pending metadata
+        with registry._pending_metadata_lock:
+            registry._pending_plugin_metadata.clear()
+        
+        # Verify lock exists and works
+        assert hasattr(registry, '_pending_metadata_lock')
+        
+        # Test queue operation
+        registry.queue_pending_metadata({'name': 'plugin1', 'kind': 'fix'})
+        registry.queue_pending_metadata({'name': 'plugin2', 'kind': 'check'})
+        
+        # Verify count is correct
+        assert registry.get_pending_metadata_count() == 2
+        
+        # Verify both operations used the lock (no data corruption)
+        with registry._pending_metadata_lock:
+            assert len(registry._pending_plugin_metadata) == 2
+
+    @pytest.mark.asyncio
+    async def test_persist_pending_metadata_success(self, registry):
+        """Test successful persistence of pending metadata."""
+        # Setup
+        registry.db = Mock()
+        registry.db.save_plugin_legacy = AsyncMock()
+        
+        # Queue test metadata
+        registry.queue_pending_metadata({'name': 'plugin1', 'kind': 'fix'})
+        registry.queue_pending_metadata({'name': 'plugin2', 'kind': 'check'})
+        
+        # Persist
+        persisted, total = await registry._persist_pending_metadata()
+        
+        assert persisted == 2
+        assert total == 2
+        assert registry.get_pending_metadata_count() == 0
+        assert registry.db.save_plugin_legacy.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_persist_pending_metadata_partial_failure(self, registry):
+        """Test persistence with some failures."""
+        # Setup
+        registry.db = Mock()
+        call_count = [0]
+        
+        async def mock_save(metadata):
+            call_count[0] += 1
+            if call_count[0] == 2:  # Second call fails
+                raise Exception("Database error")
+        
+        registry.db.save_plugin_legacy = mock_save
+        
+        # Queue test metadata
+        registry.queue_pending_metadata({'name': 'plugin1', 'kind': 'fix'})
+        registry.queue_pending_metadata({'name': 'plugin2', 'kind': 'check'})  # Will fail
+        registry.queue_pending_metadata({'name': 'plugin3', 'kind': 'validation'})
+        
+        # Persist
+        persisted, total = await registry._persist_pending_metadata()
+        
+        assert persisted == 2  # 2 out of 3 succeeded
+        assert total == 3
+        assert registry.get_pending_metadata_count() == 0  # Queue is cleared
+
+    @pytest.mark.asyncio
+    async def test_persist_pending_metadata_no_db(self, registry):
+        """Test persistence when DB is not available."""
+        registry.db = None
+        
+        # Queue test metadata
+        registry.queue_pending_metadata({'name': 'plugin1', 'kind': 'fix'})
+        
+        # Persist should be a no-op
+        persisted, total = await registry._persist_pending_metadata()
+        
+        assert persisted == 0
+        assert total == 0
+        assert registry.get_pending_metadata_count() == 1  # Metadata remains
+
+    @pytest.mark.asyncio
+    async def test_persist_pending_metadata_empty_queue(self, registry):
+        """Test persistence with empty queue."""
+        registry.db = Mock()
+        registry.db.save_plugin_legacy = AsyncMock()
+        
+        # Don't queue anything
+        persisted, total = await registry._persist_pending_metadata()
+        
+        assert persisted == 0
+        assert total == 0
+        registry.db.save_plugin_legacy.assert_not_called()
+
 
 class TestPluginPerformanceTracker:
     """Test PluginPerformanceTracker class"""
