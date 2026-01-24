@@ -1344,8 +1344,10 @@ class Clarifier:
             await asyncio.sleep(60)
             if self.shutdown_event.is_set():
                 break
+            # Note: Prometheus Counter doesn't expose _value.get() - just log that monitoring is active
             self.logger.info(
-                f"Metrics summary: Cycles={CLARIFIER_CYCLES._value.get()}, Errors={CLARIFIER_ERRORS._value.get()}"
+                "Metrics monitoring active (Prometheus metrics are being collected)",
+                extra={"operation": "metrics_monitoring"}
             )
 
     async def _periodic_context_sync(self):
@@ -1522,6 +1524,15 @@ class Clarifier:
 
     async def _save_history(self):
         try:
+            # Ensure the directory exists before saving
+            history_dir = os.path.dirname(self.config.HISTORY_FILE)
+            if history_dir and not os.path.exists(history_dir):
+                os.makedirs(history_dir, mode=0o755, exist_ok=True)
+                self.logger.info(
+                    f"Created history directory: {history_dir}",
+                    extra={"operation": "create_history_dir"}
+                )
+            
             history_data = json.dumps(self.history)
             if self.config.HISTORY_COMPRESSION:
                 history_data = zstd.compress(history_data.encode())

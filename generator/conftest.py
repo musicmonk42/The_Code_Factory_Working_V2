@@ -721,86 +721,12 @@ def _create_opentelemetry_stubs():
 _TIME_AFTER_MOCK_DEFINITIONS = time.time()
 print(f"[generator/conftest.py] Mock function definitions: {_TIME_AFTER_MOCK_DEFINITIONS - _TIME_AFTER_PATH_SETUP:.3f}s")
 
-
-# ---- Early CI mock initialization ----
-# In CI environments, set up mocks immediately to avoid timeout during test collection.
-# This code runs at module level, right after all helper functions are defined.
-print(f"[generator/conftest.py] CI environment check: CI={os.environ.get('CI')}, GITHUB_ACTIONS={os.environ.get('GITHUB_ACTIONS')}")
-if _is_ci_environment():
-    print(f"[generator/conftest.py] CI environment detected, initializing mocks eagerly...")
-    _mock_init_start = time.time()
-    if not _mocks_initialized:
-        _mocks_initialized = True  # Prevent double initialization
-        for dep in _OPTIONAL_DEPENDENCIES:
-            if dep not in sys.modules:
-                if dep == "opentelemetry":
-                    # Create opentelemetry stubs directly without import attempt
-                    _create_opentelemetry_stubs()
-                    continue
-                # Create lightweight stub WITHOUT trying to import first
-                mock_module = _create_mock_module(dep)
-                sys.modules[dep] = mock_module
-                _create_parent_modules(dep)
-                
-                # Special handling for packages that need specific submodules
-                if dep == "watchdog":
-                    # Create watchdog.events submodule
-                    watchdog_events = _create_mock_module("watchdog.events")
-                    sys.modules["watchdog.events"] = watchdog_events
-
-                    # Add FileSystemEventHandler class
-                    class FileSystemEventHandler:
-                        def on_modified(self, event):
-                            pass
-
-                        def on_created(self, event):
-                            pass
-
-                        def on_deleted(self, event):
-                            pass
-
-                    watchdog_events.FileSystemEventHandler = FileSystemEventHandler
-                    mock_module.events = watchdog_events
-
-                    # Create watchdog.observers submodule
-                    watchdog_observers = _create_mock_module("watchdog.observers")
-                    sys.modules["watchdog.observers"] = watchdog_observers
-
-                    # Add Observer class
-                    class Observer:
-                        def __init__(self):
-                            pass
-
-                        def schedule(self, *args, **kwargs):
-                            pass
-
-                        def start(self):
-                            pass
-
-                        def stop(self):
-                            pass
-
-                        def join(self):
-                            pass
-
-                    watchdog_observers.Observer = Observer
-                    mock_module.observers = watchdog_observers
-                elif dep == "defusedxml":
-                    # Create defusedxml.ElementTree submodule
-                    defusedxml_et = _create_mock_module("defusedxml.ElementTree")
-                    sys.modules["defusedxml.ElementTree"] = defusedxml_et
-                    mock_module.ElementTree = defusedxml_et
-                    # Add common ElementTree functions
-                    defusedxml_et.parse = lambda *args, **kwargs: None
-                    defusedxml_et.fromstring = lambda *args, **kwargs: None
-                    defusedxml_et.XML = lambda *args, **kwargs: None
-    
-    _mock_init_end = time.time()
-    print(f"[generator/conftest.py] CI mock initialization: {_mock_init_end - _mock_init_start:.3f}s")
-    print(f"[generator/conftest.py] Total conftest import time: {_mock_init_end - _CONFTEST_START_TIME:.3f}s")
-else:
-    print(f"[generator/conftest.py] Not in CI environment, mocks will be initialized lazily")
-    print(f"[generator/conftest.py] Total conftest import time: {time.time() - _CONFTEST_START_TIME:.3f}s")
+# ---- Defer ALL mock initialization until test session starts ----
+# Mock initialization is now ALWAYS deferred until the _test_setup fixture runs.
+# This ensures test collection completes quickly (< 10 seconds target).
+# The _test_setup fixture will initialize mocks AFTER collection is complete.
+print(f"[generator/conftest.py] Mocks will be initialized lazily by _test_setup fixture")
+print(f"[generator/conftest.py] Total conftest import time: {time.time() - _CONFTEST_START_TIME:.3f}s")
 
 
 def _setup_optional_dependency_mocks():
@@ -1066,15 +992,19 @@ try:
         Ensure optional dependency mocks are set up once per test session.
         This fixture is automatically used by all tests (autouse=True) and runs
         once per session (scope="session") to set up the mocks lazily.
-
-        Note: In CI environments, mocks are set up during conftest import to avoid
-        timeout during test collection. This fixture will skip setup in that case.
+        
+        Mocks are initialized AFTER test collection completes to avoid timeout.
+        This runs when the first test actually executes, not during collection.
         """
-        # In CI, mocks are already set up during conftest import
-        # to avoid timeout during test collection
-        if not _is_ci_environment():
-            # Non-CI: Setup mocks when tests actually run, not at import time
-            _setup_optional_dependency_mocks()
+        import time
+        _fixture_start = time.time()
+        print(f"\n[generator/conftest.py] _test_setup fixture starting mock initialization...")
+        
+        # Always setup mocks when tests actually run, regardless of environment
+        _setup_optional_dependency_mocks()
+        
+        _fixture_end = time.time()
+        print(f"[generator/conftest.py] _test_setup fixture completed in {_fixture_end - _fixture_start:.3f}s")
         yield
 
 except ImportError:
