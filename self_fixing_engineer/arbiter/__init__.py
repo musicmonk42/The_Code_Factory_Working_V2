@@ -8,30 +8,77 @@ This package provides:
 - HumanInLoop: Human-in-the-loop approval workflows
 - HumanInLoopConfig: Configuration for human-in-the-loop features
 - ArbiterConfig: Core configuration management
+
+Performance Considerations:
+    - Defers all heavy imports until actually needed
+    - Skips initialization entirely during pytest collection phase
+    - Uses environment variables PYTEST_CURRENT_TEST and PYTEST_COLLECTING
+      to detect test collection mode
 """
 
+import os
 import sys
 
-# Import and expose main components that tests and other modules expect
-try:
-    from . import arbiter
-    from .arbiter import Arbiter
-except ImportError as e:
-    print(f"WARNING: Failed to import arbiter.arbiter module: {e}", file=sys.stderr)
-    arbiter = None
-    Arbiter = None
+# Detect pytest collection mode to avoid expensive initialization
+# This prevents CPU timeouts during pytest --collect-only
+PYTEST_COLLECTING = bool(
+    os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING")
+)
 
-try:
-    from .arena import ArbiterArena
-except ImportError as e:
-    print(f"WARNING: Failed to import arbiter.arena module: {e}", file=sys.stderr)
-    ArbiterArena = None
+# Module-level variables for lazy loading
+arbiter = None
+Arbiter = None
+ArbiterArena = None
+FeedbackManager = None
+ArbiterConfig = None
 
-try:
-    from .feedback import FeedbackManager
-except ImportError as e:
-    print(f"WARNING: Failed to import arbiter.feedback module: {e}", file=sys.stderr)
-    FeedbackManager = None
+# Track if we've already loaded components
+_components_loaded = False
+
+# Components that support lazy loading via __getattr__
+_LAZY_COMPONENT_NAMES = {"arbiter", "Arbiter", "ArbiterArena", "FeedbackManager", "ArbiterConfig"}
+
+
+def _load_components():
+    """Load all components lazily. Called on first access."""
+    global arbiter
+    global Arbiter
+    global ArbiterArena
+    global FeedbackManager
+    global ArbiterConfig
+    global _components_loaded
+    
+    if _components_loaded:
+        return
+    
+    _components_loaded = True
+    
+    # Import and expose main components that tests and other modules expect
+    try:
+        from . import arbiter as _arbiter
+        from .arbiter import Arbiter as _Arbiter
+        arbiter = _arbiter
+        Arbiter = _Arbiter
+    except ImportError as e:
+        print(f"WARNING: Failed to import arbiter.arbiter module: {e}", file=sys.stderr)
+
+    try:
+        from .arena import ArbiterArena as _ArbiterArena
+        ArbiterArena = _ArbiterArena
+    except ImportError as e:
+        print(f"WARNING: Failed to import arbiter.arena module: {e}", file=sys.stderr)
+
+    try:
+        from .feedback import FeedbackManager as _FeedbackManager
+        FeedbackManager = _FeedbackManager
+    except ImportError as e:
+        print(f"WARNING: Failed to import arbiter.feedback module: {e}", file=sys.stderr)
+
+    try:
+        from .config import ArbiterConfig as _ArbiterConfig
+        ArbiterConfig = _ArbiterConfig
+    except ImportError as e:
+        print(f"WARNING: Failed to import arbiter.config module: {e}", file=sys.stderr)
 
 
 def _get_human_loop():
@@ -54,11 +101,9 @@ def _get_human_loop_config():
         return None
 
 
-try:
-    from .config import ArbiterConfig
-except ImportError as e:
-    print(f"WARNING: Failed to import arbiter.config module: {e}", file=sys.stderr)
-    ArbiterConfig = None
+# Only load components if not in pytest collection mode
+if not PYTEST_COLLECTING:
+    _load_components()
 
 
 def get_component_status():
@@ -71,6 +116,8 @@ def get_component_status():
               True indicates the component was successfully imported and is available.
               False indicates the component import failed or is not available.
     """
+    # Ensure components are loaded before checking status
+    _load_components()
     return {
         "Arbiter": Arbiter is not None,
         "ArbiterArena": ArbiterArena is not None,
@@ -99,10 +146,11 @@ __all__ = [
 
 def __getattr__(name):
     """
-    Lazy loading of HumanInLoop and HumanInLoopConfig to avoid circular imports.
-    This allows 'from arbiter import HumanInLoop' to work while preventing
-    circular dependency issues at module initialization time.
+    Lazy loading of components to avoid expensive imports during test collection.
+    This allows 'from arbiter import Arbiter' to work while deferring
+    actual import until runtime.
     """
+    # Special lazy imports for circular dependency handling
     lazy_imports = {
         "HumanInLoop": _get_human_loop,
         "HumanInLoopConfig": _get_human_loop_config,
@@ -113,5 +161,14 @@ def __getattr__(name):
         if result is None:
             raise ImportError(f"Cannot import name '{name}' from 'arbiter'")
         return result
+    
+    if name in _LAZY_COMPONENT_NAMES:
+        # Load components on first access
+        _load_components()
+        # Return the now-loaded component
+        result = globals().get(name)
+        if result is not None:
+            return result
+        raise ImportError(f"Cannot import name '{name}' from 'arbiter'")
 
     raise AttributeError(f"module 'arbiter' has no attribute '{name}'")

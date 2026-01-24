@@ -1434,12 +1434,37 @@ def _cleanup_sqlalchemy_metadata():
 
 
 # ---- Fix modules without __spec__ ----
+# Track if module specs have been ensured
+_module_specs_ensured = False
+
+
 def _ensure_module_specs():
     """
     Ensure all modules in sys.modules have __spec__ attribute.
     Some test files create modules with types.ModuleType() without setting __spec__,
     which causes 'AttributeError: __spec__' or 'ValueError: xxx.__spec__ is not set'.
+    
+    Performance Note:
+        This function is O(n) where n is the number of modules. We only run it once
+        to avoid expensive iteration on every collector.
     """
+    global _module_specs_ensured
+    
+    # Only run once to avoid O(n²) complexity during collection
+    if _module_specs_ensured:
+        return
+    _module_specs_ensured = True
+    
+    # Build set of parent module names for efficient lookup
+    # This avoids O(n²) complexity from checking every module against every other
+    module_names = set(sys.modules.keys())
+    parent_modules = set()
+    for name in module_names:
+        if '.' in name:
+            parts = name.split('.')
+            for i in range(1, len(parts)):
+                parent_modules.add('.'.join(parts[:i]))
+    
     for name, module in list(sys.modules.items()):
         if module is not None and isinstance(module, types.ModuleType):
             if not hasattr(module, '__spec__') or module.__spec__ is None:
@@ -1449,7 +1474,8 @@ def _ensure_module_specs():
                     pass  # Some modules can't have spec set
             if not hasattr(module, '__path__'):
                 # Only set __path__ if this looks like a package (has submodules)
-                if any(m.startswith(name + '.') for m in sys.modules):
+                # Using precomputed set for O(1) lookup instead of O(n) scan
+                if name in parent_modules:
                     module.__path__ = []
 
 
