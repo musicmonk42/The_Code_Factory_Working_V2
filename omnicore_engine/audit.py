@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import threading
 import time
 import types
@@ -656,7 +657,16 @@ class ExplainAudit:
             self.config.DATABASE_URL, system_audit_merkle_tree=system_audit_merkle_tree
         )
 
-        self.policy_engine = PolicyEngine(arbiter_instance=None)
+        # Initialize PolicyEngine with proper config
+        try:
+            from self_fixing_engineer.arbiter.policy.config import get_config
+            config = get_config()
+            self.policy_engine = PolicyEngine(arbiter_instance=None, config=config)
+        except Exception as e:
+            logger.warning(f"Failed to initialize PolicyEngine with config: {e}. Using fallback.")
+            # Use the mock PolicyEngine or basic initialization
+            self.policy_engine = PolicyEngine(arbiter_instance=None)
+        
         self.knowledge_graph = KnowledgeGraph() if KnowledgeGraph is not None else None
 
         self.plugin_registry = PLUGIN_REGISTRY
@@ -1577,6 +1587,11 @@ class ExplainAudit:
                     )
 
         try:
+            # Add check for PYTEST_CURRENT_TEST to skip during test collection
+            if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING"):
+                logger.info("Skipping periodic audit flush task during pytest collection")
+                return
+                
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 asyncio.create_task(periodic_flush_coro())

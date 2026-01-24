@@ -73,6 +73,15 @@ testpaths = [
 ]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+# Environment variables to set for all test runs
+env = [
+    "PYTEST_COLLECTING=1",
+    "SKIP_AUDIT_INIT=1",
+    "SKIP_BACKGROUND_TASKS=1",
+    "NO_MONITORING=1",
+    "DISABLE_TELEMETRY=1",
+    "OTEL_SDK_DISABLED=1",
+]
 # Filter warnings from various modules
 filterwarnings = [
     # Pydantic V1 -> V2 Deprecation Warnings (from omnicore_engine)

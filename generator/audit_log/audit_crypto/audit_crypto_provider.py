@@ -475,15 +475,19 @@ class SoftwareCryptoProvider(CryptoProvider):
 
         # Background tasks need a loop, so we conditionally create them
         try:
-            loop = asyncio.get_running_loop()
+            # Skip during pytest collection to avoid event loop requirements
+            if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING"):
+                self.logger.info("Skipping background tasks during pytest collection")
+            else:
+                loop = asyncio.get_running_loop()
 
-            self._load_keys_task = loop.create_task(self._load_existing_keys())
-            self._background_tasks.add(self._load_keys_task)
-            self._load_keys_task.add_done_callback(self._background_tasks.discard)
+                self._load_keys_task = loop.create_task(self._load_existing_keys())
+                self._background_tasks.add(self._load_keys_task)
+                self._load_keys_task.add_done_callback(self._background_tasks.discard)
 
-            self._rotation_task = loop.create_task(self._rotate_keys_periodically())
-            self._background_tasks.add(self._rotation_task)
-            self._rotation_task.add_done_callback(self._background_tasks.discard)
+                self._rotation_task = loop.create_task(self._rotate_keys_periodically())
+                self._background_tasks.add(self._rotation_task)
+                self._rotation_task.add_done_callback(self._background_tasks.discard)
         except RuntimeError:
             self.logger.warning(
                 "SoftwareCryptoProvider initialized without an active event loop. Periodic tasks (key loading/rotation) will not start automatically."

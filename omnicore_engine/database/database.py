@@ -439,18 +439,37 @@ class Database:
             try:
                 # Get the config settings for PolicyEngine
                 config = _get_settings()
+                
+                # Ensure config is properly typed for PolicyEngine initialization
                 # PolicyEngine expects arbiter_instance and config parameters
-                # Try to initialize, but handle gracefully if config type is wrong
+                # Validate that config has the required structure
+                if not isinstance(config, types.SimpleNamespace) and not hasattr(config, '__dict__'):
+                    logger.warning(
+                        f"Config is not in expected format (got {type(config).__name__}). "
+                        "Using fallback settings for PolicyEngine."
+                    )
+                    config = _create_fallback_settings()
+                
                 self.policy_engine = PolicyEngine(arbiter_instance=None, config=config)
+                logger.debug("PolicyEngine initialized successfully")
             except (TypeError, ValueError, AttributeError) as e:
                 # Config type mismatch or initialization error - create mock
-                logger.warning(f"Failed to initialize PolicyEngine: {e}. Using mock.")
+                logger.warning(
+                    f"Failed to initialize PolicyEngine due to config/type error: {e}. "
+                    "Using mock implementation. This is expected in test environments."
+                )
                 self.policy_engine = self._create_mock_policy_engine()
             except Exception as e:
-                logger.warning(f"Failed to initialize PolicyEngine: {e}. Using mock.")
+                # Unexpected error - create mock and log for investigation
+                logger.warning(
+                    f"Unexpected error initializing PolicyEngine: {e}. "
+                    "Using mock implementation.",
+                    exc_info=True
+                )
                 self.policy_engine = self._create_mock_policy_engine()
         else:
-            self.policy_engine = None
+            logger.info("PolicyEngine not available (import failed). Using mock implementation.")
+            self.policy_engine = self._create_mock_policy_engine()
 
         # Initialize KnowledgeGraph if available
         if KnowledgeGraph is not None:
