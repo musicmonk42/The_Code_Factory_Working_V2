@@ -8,7 +8,6 @@ for development environments.
 
 import logging
 import os
-import sys
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)

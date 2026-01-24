@@ -62,6 +62,33 @@ except ImportError:
     def is_production_mode():
         return os.getenv("PRODUCTION_MODE", "0") == "1"
 
+
+def check_production_mode_usage(component_name: str, method_name: str = None):
+    """
+    Helper function to check and log production mode usage of mock implementations.
+    
+    Args:
+        component_name: Name of the component (e.g., "ExplainableReasonerPlugin")
+        method_name: Optional method name being called
+    
+    Raises:
+        RuntimeError: If in production mode and method_name is provided
+    """
+    if not is_production_mode():
+        return
+    
+    if method_name:
+        logger.error(f"Mock {component_name}.{method_name}() called in production mode")
+        raise RuntimeError(
+            f"Mock {component_name} should not be used in production. "
+            f"Please install the required Arbiter package."
+        )
+    else:
+        logger.error(
+            f"CRITICAL: Mock {component_name} initialized in production mode. "
+            f"Real implementation required for production."
+        )
+
 try:
     from self_fixing_engineer.simulation.simulation_module import (
         UnifiedSimulationModule,
@@ -153,11 +180,7 @@ except ImportError as e:
 
         def __init__(self, *args, **kwargs):
             """Initialize mock ExplainableReasonerPlugin."""
-            if is_production_mode():
-                logger.error(
-                    "CRITICAL: Mock ExplainableReasonerPlugin initialized in production mode. "
-                    "Real implementation required for production."
-                )
+            check_production_mode_usage("ExplainableReasonerPlugin")
 
         async def explain(self, *args, **kwargs):
             """
@@ -172,12 +195,7 @@ except ImportError as e:
             Returns:
                 str: Mock explanation message
             """
-            if is_production_mode():
-                logger.error("Mock ExplainableReasonerPlugin.explain() called in production mode")
-                raise RuntimeError(
-                    "Mock ExplainableReasonerPlugin should not be used in production. "
-                    "Please install the Arbiter package."
-                )
+            check_production_mode_usage("ExplainableReasonerPlugin", "explain")
             return "Mock explanation."
 
     class PolicyEngine:
@@ -205,11 +223,7 @@ except ImportError as e:
 
         def __init__(self, *args, **kwargs):
             """Initialize mock PolicyEngine."""
-            if is_production_mode():
-                logger.error(
-                    "CRITICAL: Mock PolicyEngine initialized in production mode. "
-                    "Real implementation required for production."
-                )
+            check_production_mode_usage("PolicyEngine")
 
         async def should_auto_learn(self, *args, **kwargs):
             """
@@ -225,12 +239,7 @@ except ImportError as e:
             Returns:
                 tuple: (bool, str) - (should_learn, policy_reason)
             """
-            if is_production_mode():
-                logger.error("Mock PolicyEngine.should_auto_learn() called in production mode")
-                raise RuntimeError(
-                    "Mock PolicyEngine should not be used in production. "
-                    "Please install the Arbiter package."
-                )
+            check_production_mode_usage("PolicyEngine", "should_auto_learn")
             return True, "Mock Policy"
 
     class FeedbackManager:

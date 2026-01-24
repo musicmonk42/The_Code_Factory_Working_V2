@@ -40,6 +40,9 @@ from .models import AuditLog, Base, GrowthEventRecord, GrowthSnapshot
 logger = logging.getLogger(__name__)
 tracer = get_tracer_safe(__name__)
 
+# Cache timeout for hash lookups (in seconds)
+CACHE_TIMEOUT_SECONDS = 60
+
 # --- Observability ---
 # Clear any existing metric with this name
 try:
@@ -358,7 +361,7 @@ class SQLiteStorageBackend:
             )
             self._hash_cache[arbiter_id] = (
                 current_hash,
-                time.time() + 60,
+                time.time() + CACHE_TIMEOUT_SECONDS,
             )
             return current_hash
 
@@ -384,7 +387,7 @@ class SQLiteStorageBackend:
             ).scalar_one_or_none() or "genesis_hash"
             self._hash_cache[arbiter_id] = (
                 last_hash,
-                time.time() + 60,
+                time.time() + CACHE_TIMEOUT_SECONDS,
             )
             return last_hash
 
@@ -626,7 +629,7 @@ class RedisStreamsStorageBackend:
         await self.redis.rpush(self._key(arbiter_id, "audit"), log_entry)
         self._hash_cache[arbiter_id] = (
             current_hash,
-            time.time() + 60,
+            time.time() + CACHE_TIMEOUT_SECONDS,
         )
         return current_hash
 
@@ -644,7 +647,7 @@ class RedisStreamsStorageBackend:
         if not last_log_json:
             return "genesis_hash"
         last_hash = json.loads(last_log_json).get("log_hash", "genesis_hash")
-        self._hash_cache[arbiter_id] = (last_hash, time.time() + 60)
+        self._hash_cache[arbiter_id] = (last_hash, time.time() + CACHE_TIMEOUT_SECONDS)
         return last_hash
 
     @STORAGE_LATENCY_SECONDS.labels(
@@ -882,7 +885,7 @@ class KafkaStorageBackend:
         )
         self._hash_cache[arbiter_id] = (
             current_hash,
-            time.time() + 60,
+            time.time() + CACHE_TIMEOUT_SECONDS,
         )
         return current_hash
 
@@ -929,7 +932,7 @@ class KafkaStorageBackend:
             last_hash = log_entry.get("log_hash", "genesis_hash")
             self._hash_cache[arbiter_id] = (
                 last_hash,
-                time.time() + 60,
+                time.time() + CACHE_TIMEOUT_SECONDS,
             )
             return last_hash
         finally:

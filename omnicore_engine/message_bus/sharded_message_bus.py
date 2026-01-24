@@ -26,10 +26,17 @@ from typing import (
 import structlog
 
 # Import nest_asyncio to allow nested event loops
+# Only apply if not already applied (checking for idempotency)
 try:
     import nest_asyncio
-    nest_asyncio.apply()
-    NEST_ASYNCIO_AVAILABLE = True
+    # Check if already applied by trying to detect if we're in a nested loop scenario
+    # nest_asyncio.apply() is idempotent, so it's safe to call multiple times
+    if not hasattr(asyncio, '_nest_asyncio_applied'):
+        nest_asyncio.apply()
+        asyncio._nest_asyncio_applied = True  # type: ignore
+        NEST_ASYNCIO_AVAILABLE = True
+    else:
+        NEST_ASYNCIO_AVAILABLE = True
 except ImportError:
     NEST_ASYNCIO_AVAILABLE = False
 
