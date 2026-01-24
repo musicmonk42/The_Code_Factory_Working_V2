@@ -25,6 +25,14 @@ from typing import (
 
 import structlog
 
+# Import nest_asyncio to allow nested event loops
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+    NEST_ASYNCIO_AVAILABLE = True
+except ImportError:
+    NEST_ASYNCIO_AVAILABLE = False
+
 # External project imports
 from pydantic import ValidationError
 
@@ -418,18 +426,23 @@ class ShardedMessageBus:
         )
 
         # Store the event loop - we'll use _get_loop() for safer access
-        try:
-            # Don't require event loop during pytest collection
-            if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING"):
-                self._loop = None
-                logger.info("Skipping event loop initialization during pytest collection")
-            else:
-                self._loop = asyncio.get_event_loop()
-        except RuntimeError:
-            logger.warning(
-                "ShardedMessageBus initialized without running event loop. Async operations may fail."
-            )
+        # Don't require event loop during pytest collection
+        if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING"):
             self._loop = None
+            logger.info("Skipping event loop initialization during pytest collection")
+        else:
+            # Try to get the running loop; if not in async context, don't store it
+            try:
+                self._loop = asyncio.get_running_loop()
+                logger.debug("ShardedMessageBus initialized with existing event loop")
+            except RuntimeError:
+                # No running event loop - this is OK for sync initialization
+                # The _get_loop() method will properly get the loop when needed
+                self._loop = None
+                logger.debug(
+                    "ShardedMessageBus initialized without running event loop. "
+                    "Event loop will be obtained when async operations are called."
+                )
 
         self.dispatcher_tasks = []
         self._start_dispatchers()
@@ -440,8 +453,15 @@ class ShardedMessageBus:
         if self.guardian:
             self.guardian.start()
 
-        if self.dynamic_shards_enabled:
-            asyncio.create_task(self._periodic_rebalance_check())
+        # Only create the periodic rebalance task if we're in an async context
+        if self.dynamic_shards_enabled and self._loop is not None:
+            try:
+                asyncio.create_task(self._periodic_rebalance_check())
+            except RuntimeError:
+                logger.debug(
+                    "Cannot create periodic rebalance task outside async context. "
+                    "Task will be created when first async operation is called."
+                )
 
         logger.info(
             "ShardedMessageBus initialized.",

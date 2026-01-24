@@ -802,17 +802,19 @@ class ExplainAudit:
 
     def safe_create_task(self, coro: Coroutine):
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
+            # Try to get the running loop first
+            try:
+                loop = asyncio.get_running_loop()
                 asyncio.create_task(coro)
-            else:
+            except RuntimeError:
+                # No running loop - try to run it synchronously
                 logger.warning(
-                    "Event loop not running, attempting to run coroutine directly. This might block."
+                    "No event loop running, attempting to run coroutine with asyncio.run(). This might block."
                 )
                 try:
-                    loop.run_until_complete(coro)
-                except RuntimeError:
                     asyncio.run(coro)
+                except RuntimeError as e:
+                    logger.error(f"Failed to run coroutine: {e}")
         except RuntimeError as e:
             logger.warning(
                 f"RuntimeError in safe_create_task (no event loop): {e}. Attempting asyncio.run()."
@@ -860,22 +862,19 @@ class ExplainAudit:
         allowed = True
         reason = ""
         try:
-            current_loop = None
+            # Try to call should_auto_learn - this is a sync function, so we can't await
+            # We need to handle running the async method from sync context
             try:
-                current_loop = asyncio.get_event_loop()
-                if current_loop.is_running():
-                    allowed, reason = current_loop.run_until_complete(
-                        self.policy_engine.should_auto_learn(
-                            user_id_for_policy, action_for_policy, metadata_for_policy
-                        )
+                loop = asyncio.get_running_loop()
+                # We're in an async context, but this is a sync function - shouldn't happen
+                # Fall back to asyncio.run()
+                allowed, reason = asyncio.run(
+                    self.policy_engine.should_auto_learn(
+                        user_id_for_policy, action_for_policy, metadata_for_policy
                     )
-                else:
-                    allowed, reason = asyncio.run(
-                        self.policy_engine.should_auto_learn(
-                            user_id_for_policy, action_for_policy, metadata_for_policy
-                        )
-                    )
+                )
             except RuntimeError:
+                # Not in async context - run with asyncio.run()
                 allowed, reason = asyncio.run(
                     self.policy_engine.should_auto_learn(
                         user_id_for_policy, action_for_policy, metadata_for_policy
@@ -1592,11 +1591,12 @@ class ExplainAudit:
                 logger.info("Skipping periodic audit flush task during pytest collection")
                 return
                 
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
+            # Try to create the periodic flush task
+            try:
+                loop = asyncio.get_running_loop()
                 asyncio.create_task(periodic_flush_coro())
                 logger.info("Periodic audit flush task created.")
-            else:
+            except RuntimeError:
                 logger.warning(
                     "No running event loop found; periodic audit flush task will not start automatically. Buffer relies on size threshold."
                 )

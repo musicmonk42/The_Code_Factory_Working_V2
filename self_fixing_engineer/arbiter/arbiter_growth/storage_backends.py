@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Protocol, Union
@@ -357,7 +358,7 @@ class SQLiteStorageBackend:
             )
             self._hash_cache[arbiter_id] = (
                 current_hash,
-                asyncio.get_event_loop().time() + 60,
+                time.time() + 60,
             )
             return current_hash
 
@@ -368,7 +369,7 @@ class SQLiteStorageBackend:
     @SQL_BREAKER
     async def get_last_audit_hash(self, arbiter_id: str) -> str:
         cached = self._hash_cache.get(arbiter_id)
-        if cached and cached[1] > asyncio.get_event_loop().time():
+        if cached and cached[1] > time.time():
             return cached[0]
 
         async with self._get_session() as session:
@@ -383,7 +384,7 @@ class SQLiteStorageBackend:
             ).scalar_one_or_none() or "genesis_hash"
             self._hash_cache[arbiter_id] = (
                 last_hash,
-                asyncio.get_event_loop().time() + 60,
+                time.time() + 60,
             )
             return last_hash
 
@@ -625,7 +626,7 @@ class RedisStreamsStorageBackend:
         await self.redis.rpush(self._key(arbiter_id, "audit"), log_entry)
         self._hash_cache[arbiter_id] = (
             current_hash,
-            asyncio.get_event_loop().time() + 60,
+            time.time() + 60,
         )
         return current_hash
 
@@ -636,14 +637,14 @@ class RedisStreamsStorageBackend:
     @REDIS_BREAKER
     async def get_last_audit_hash(self, arbiter_id: str) -> str:
         cached = self._hash_cache.get(arbiter_id)
-        if cached and cached[1] > asyncio.get_event_loop().time():
+        if cached and cached[1] > time.time():
             return cached[0]
 
         last_log_json = await self.redis.lindex(self._key(arbiter_id, "audit"), -1)
         if not last_log_json:
             return "genesis_hash"
         last_hash = json.loads(last_log_json).get("log_hash", "genesis_hash")
-        self._hash_cache[arbiter_id] = (last_hash, asyncio.get_event_loop().time() + 60)
+        self._hash_cache[arbiter_id] = (last_hash, time.time() + 60)
         return last_hash
 
     @STORAGE_LATENCY_SECONDS.labels(
@@ -881,7 +882,7 @@ class KafkaStorageBackend:
         )
         self._hash_cache[arbiter_id] = (
             current_hash,
-            asyncio.get_event_loop().time() + 60,
+            time.time() + 60,
         )
         return current_hash
 
@@ -892,7 +893,7 @@ class KafkaStorageBackend:
     @KAFKA_BREAKER
     async def get_last_audit_hash(self, arbiter_id: str) -> str:
         cached = self._hash_cache.get(arbiter_id)
-        if cached and cached[1] > asyncio.get_event_loop().time():
+        if cached and cached[1] > time.time():
             return cached[0]
 
         # This is inefficient in Kafka. For production, the hash should be stored
@@ -928,7 +929,7 @@ class KafkaStorageBackend:
             last_hash = log_entry.get("log_hash", "genesis_hash")
             self._hash_cache[arbiter_id] = (
                 last_hash,
-                asyncio.get_event_loop().time() + 60,
+                time.time() + 60,
             )
             return last_hash
         finally:
