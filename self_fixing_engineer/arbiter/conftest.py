@@ -157,8 +157,10 @@ def _setup_opentelemetry_context():
         logger.warning(f"Failed to setup OpenTelemetry context: {e}")
 
 
-# Run the OpenTelemetry context setup immediately
-_setup_opentelemetry_context()
+# Run the OpenTelemetry context setup immediately, but only if not in collection phase
+# Skip during pytest collection to avoid CPU timeout (pytest sets PYTEST_COLLECTING during collection)
+if os.environ.get("PYTEST_COLLECTING") != "1":
+    _setup_opentelemetry_context()
 
 
 # -----------------------------------------------------------------------------
@@ -446,23 +448,25 @@ def _install_inmemory_exporter():
 
 # Try the standard import first; if it fails or the attribute is absent, install our shim.
 _USING_SHIM = False
-try:
-    # Try to import the real InMemorySpanExporter
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
-        InMemorySpanExporter as _RealExporter,
-    )
+# Skip expensive imports during pytest collection to avoid CPU timeout
+if os.environ.get("PYTEST_COLLECTING") != "1":
+    try:
+        # Try to import the real InMemorySpanExporter
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter as _RealExporter,
+        )
 
-    # Verify it has the methods we need
-    if not hasattr(_RealExporter, "clear"):
+        # Verify it has the methods we need
+        if not hasattr(_RealExporter, "clear"):
+            _install_inmemory_exporter()
+            _USING_SHIM = True
+    except ImportError:
+        # Module not available, install our shim
         _install_inmemory_exporter()
         _USING_SHIM = True
-except ImportError:
-    # Module not available, install our shim
-    _install_inmemory_exporter()
-    _USING_SHIM = True
-except Exception:
-    _install_inmemory_exporter()
-    _USING_SHIM = True
+    except Exception:
+        _install_inmemory_exporter()
+        _USING_SHIM = True
 
 
 # -----------------------------------------------------------------------------
