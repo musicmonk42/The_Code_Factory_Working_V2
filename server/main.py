@@ -28,6 +28,11 @@ import os
 os.environ["APP_ENV"] = "production"
 os.environ["DEV_MODE"] = "0"
 
+# FIX: Unset AUDIT_LOG_DEV_MODE in production to prevent conflicting configuration
+# This prevents the security error: "Production environment variables are set but dev mode is also enabled"
+if "AUDIT_LOG_DEV_MODE" in os.environ:
+    del os.environ["AUDIT_LOG_DEV_MODE"]
+
 # AUDIT CRYPTO CONFIGURATION
 # Allow audit crypto initialization to fail gracefully if secrets are not configured
 # This prevents the server from crashing on startup when secrets are not yet configured
