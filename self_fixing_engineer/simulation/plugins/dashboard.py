@@ -24,13 +24,23 @@ logging.basicConfig(
 )
 
 # Apply nest_asyncio for handling nested event loops in Streamlit
+
+
+def _is_uvloop_policy() -> bool:
+    """Check if uvloop is set as the event loop policy."""
+    policy = asyncio.get_event_loop_policy()
+    return type(policy).__module__.startswith("uvloop")
+
+
 try:
     import nest_asyncio
 
-    nest_asyncio.apply()
-except ImportError:
+    # FIX: Check if uvloop is being used - nest_asyncio doesn't support uvloop
+    if not _is_uvloop_policy():
+        nest_asyncio.apply()
+except (ImportError, ValueError) as e:
     logging.warning(
-        "nest_asyncio not installed. Async operations may fail in some environments."
+        f"nest_asyncio not installed or not compatible: {e}. Async operations may fail in some environments."
     )
 
 # Use python-dotenv to optionally load environment variables from a .env file
