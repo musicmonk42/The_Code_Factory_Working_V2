@@ -48,17 +48,26 @@ if str(project_root) not in sys.path:
 # 4. Pytest fixtures
 # -------------------------------------------------
 import pytest
-from prometheus_client import REGISTRY
 
 
 @pytest.fixture(autouse=True)
 def clear_prometheus_registry():
-    """Remove all Prometheus collectors before/after each test."""
-    for collector in list(REGISTRY._names_to_collectors.values()):
-        try:
-            REGISTRY.unregister(collector)
-        except Exception:
-            pass
+    """Remove all Prometheus collectors before/after each test.
+    
+    NOTE: prometheus_client import is deferred to fixture execution time
+    to avoid expensive imports during pytest collection phase, which can
+    cause 'CPU time limit exceeded' errors in CI.
+    """
+    try:
+        from prometheus_client import REGISTRY
+        for collector in list(REGISTRY._names_to_collectors.values()):
+            try:
+                REGISTRY.unregister(collector)
+            except Exception:
+                pass
+    except ImportError:
+        # prometheus_client not available - skip cleanup
+        pass
     yield
 
 

@@ -2,8 +2,30 @@ import logging
 from unittest.mock import patch
 
 import pytest
-from prometheus_client import REGISTRY, CollectorRegistry
-from prometheus_client.metrics import MetricWrapperBase
+
+
+# Defer prometheus_client imports to pytest_configure hook to avoid
+# expensive imports during pytest collection phase, which can cause
+# 'CPU time limit exceeded' errors in CI.
+REGISTRY = None
+CollectorRegistry = None
+MetricWrapperBase = None
+
+
+def _load_prometheus_client():
+    """Load prometheus_client lazily to avoid import-time overhead."""
+    global REGISTRY, CollectorRegistry, MetricWrapperBase
+    if REGISTRY is None:
+        try:
+            from prometheus_client import REGISTRY as _REGISTRY
+            from prometheus_client import CollectorRegistry as _CollectorRegistry
+            from prometheus_client.metrics import MetricWrapperBase as _MetricWrapperBase
+            REGISTRY = _REGISTRY
+            CollectorRegistry = _CollectorRegistry
+            MetricWrapperBase = _MetricWrapperBase
+        except ImportError:
+            pass
+    return REGISTRY is not None
 
 
 def setup_logging():
@@ -24,9 +46,18 @@ def setup_logging():
 def pytest_configure(config):
     """
     Reset the Prometheus registry before test collection to prevent duplicate metric registration.
+    
+    NOTE: prometheus_client is loaded lazily at this point (not at import time) to avoid
+    expensive imports during pytest collection phase, which can cause 'CPU time limit exceeded' 
+    errors in CI.
     """
     setup_logging()
     logging.info("Configuring pytest and resetting Prometheus registry")
+
+    # Load prometheus_client lazily
+    if not _load_prometheus_client():
+        logging.warning("prometheus_client not available - skipping registry reset")
+        return
 
     # Mock the global REGISTRY to isolate test environment
     with patch("prometheus_client.REGISTRY", CollectorRegistry()):
