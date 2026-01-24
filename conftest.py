@@ -389,292 +389,307 @@ if "botocore.exceptions" not in sys.modules:
         
         sys.modules["botocore.exceptions"] = botocore_exc_module
 
-for dep in _OPTIONAL_DEPENDENCIES:
-    # Skip packages that should never be mocked
-    if any(dep == never_mock or dep.startswith(never_mock + ".") for never_mock in _NEVER_MOCK):
-        continue
-    
-    if dep not in sys.modules:
-        try:
-            __import__(dep)
-        except (ImportError, OSError, AttributeError):
-            # Create a more sophisticated mock that handles submodule access
-            # OSError is caught to handle DLL initialization failures on Windows (e.g., torch)
-            # AttributeError is caught to handle bugs in packages like gnosis-py that use removed Python 2 functions (e.g., string.join() which was removed in Python 3.0)
-            mock_module = _create_mock_module(dep)
-            sys.modules[dep] = mock_module
+# ---- Deferred optional dependency mock initialization ----
+# Skip expensive import loop at module level - defer to pytest fixture
+# This prevents CPU timeout during conftest.py import in CI
+_mocks_initialized = False
 
-            # For packages that are commonly accessed as submodules, create parent stubs
-            if "." in dep:
-                parts = dep.split(".")
-                for i in range(1, len(parts)):
-                    parent_name = ".".join(parts[:i])
-                    if parent_name not in sys.modules:
-                        parent_mock = _create_mock_module(parent_name)
-                        sys.modules[parent_name] = parent_mock
+def _initialize_optional_dependency_mocks():
+    """
+    Initialize mocks for optional dependencies.
+    Called from session-scoped fixture to defer expensive operations.
+    """
+    global _mocks_initialized
+    if _mocks_initialized:
+        return
+    _mocks_initialized = True
+
+    for dep in _OPTIONAL_DEPENDENCIES:
+        # Skip packages that should never be mocked
+        if any(dep == never_mock or dep.startswith(never_mock + ".") for never_mock in _NEVER_MOCK):
+            continue
+    
+        if dep not in sys.modules:
+            try:
+                __import__(dep)
+            except (ImportError, OSError, AttributeError):
+                # Create a more sophisticated mock that handles submodule access
+                # OSError is caught to handle DLL initialization failures on Windows (e.g., torch)
+                # AttributeError is caught to handle bugs in packages like gnosis-py that use removed Python 2 functions (e.g., string.join() which was removed in Python 3.0)
+                mock_module = _create_mock_module(dep)
+                sys.modules[dep] = mock_module
+
+                # For packages that are commonly accessed as submodules, create parent stubs
+                if "." in dep:
+                    parts = dep.split(".")
+                    for i in range(1, len(parts)):
+                        parent_name = ".".join(parts[:i])
+                        if parent_name not in sys.modules:
+                            parent_mock = _create_mock_module(parent_name)
+                            sys.modules[parent_name] = parent_mock
             
-            # Special handling for packages that need specific submodules
-            if dep == "sqlalchemy":
-                # Create common sqlalchemy submodules
-                for submod in ["orm", "exc", "dialects", "dialects.sqlite", "dialects.postgresql", 
-                               "engine", "ext", "ext.asyncio", "sql", "sql.expression", "types"]:
-                    submod_name = f"sqlalchemy.{submod}"
-                    if submod_name not in sys.modules:
-                        submod_mock = _create_mock_module(submod_name)
-                        sys.modules[submod_name] = submod_mock
-                        # Set as attribute on parent module
-                        parts = submod.split(".")
-                        parent = mock_module
-                        for part in parts[:-1]:
-                            parent = getattr(parent, part, _create_mock_module(f"sqlalchemy.{part}"))
-                        setattr(parent, parts[-1], submod_mock)
+                # Special handling for packages that need specific submodules
+                if dep == "sqlalchemy":
+                    # Create common sqlalchemy submodules
+                    for submod in ["orm", "exc", "dialects", "dialects.sqlite", "dialects.postgresql", 
+                                   "engine", "ext", "ext.asyncio", "sql", "sql.expression", "types"]:
+                        submod_name = f"sqlalchemy.{submod}"
+                        if submod_name not in sys.modules:
+                            submod_mock = _create_mock_module(submod_name)
+                            sys.modules[submod_name] = submod_mock
+                            # Set as attribute on parent module
+                            parts = submod.split(".")
+                            parent = mock_module
+                            for part in parts[:-1]:
+                                parent = getattr(parent, part, _create_mock_module(f"sqlalchemy.{part}"))
+                            setattr(parent, parts[-1], submod_mock)
                 
-                # Add common SQLAlchemy components
-                # DeclarativeBase for model definitions
-                class MockDeclarativeBase:
-                    pass
-                
-                # Column types
-                class MockColumn:
-                    def __init__(self, *args, **kwargs):
+                    # Add common SQLAlchemy components
+                    # DeclarativeBase for model definitions
+                    class MockDeclarativeBase:
                         pass
                 
-                class MockInteger:
-                    pass
+                    # Column types
+                    class MockColumn:
+                        def __init__(self, *args, **kwargs):
+                            pass
                 
-                class MockString:
-                    def __init__(self, *args, **kwargs):
+                    class MockInteger:
                         pass
                 
-                class MockText:
-                    pass
+                    class MockString:
+                        def __init__(self, *args, **kwargs):
+                            pass
                 
-                class MockDateTime:
-                    pass
-                
-                class MockBoolean:
-                    pass
-                
-                class MockFloat:
-                    pass
-                
-                class MockJSON:
-                    pass
-                
-                class MockForeignKey:
-                    def __init__(self, *args, **kwargs):
+                    class MockText:
                         pass
                 
-                # Session and engine mocks
-                class MockSession:
-                    def __init__(self, *args, **kwargs):
-                        pass
-                    def add(self, *args, **kwargs):
-                        pass
-                    def commit(self, *args, **kwargs):
-                        pass
-                    def rollback(self, *args, **kwargs):
-                        pass
-                    def query(self, *args, **kwargs):
-                        return self
-                    def filter(self, *args, **kwargs):
-                        return self
-                    def all(self, *args, **kwargs):
-                        return []
-                    def first(self, *args, **kwargs):
-                        return None
-                    def close(self, *args, **kwargs):
-                        pass
-                    def __enter__(self):
-                        return self
-                    def __exit__(self, *args):
+                    class MockDateTime:
                         pass
                 
-                class MockEngine:
-                    def __init__(self, *args, **kwargs):
+                    class MockBoolean:
                         pass
-                    def connect(self, *args, **kwargs):
-                        return MockSession()
-                    def dispose(self, *args, **kwargs):
+                
+                    class MockFloat:
                         pass
-                    def begin(self, *args, **kwargs):
-                        return MockSession()
                 
-                # Add to orm submodule
-                if "sqlalchemy.orm" in sys.modules:
-                    orm_mod = sys.modules["sqlalchemy.orm"]
-                    orm_mod.Session = MockSession
-                    orm_mod.declarative_base = lambda *args, **kwargs: type('Base', (), {'metadata': type('Metadata', (), {'clear': lambda self: None, 'create_all': lambda self, *a, **kw: None})()})
-                    orm_mod.sessionmaker = lambda *args, **kwargs: MockSession
-                    orm_mod.relationship = lambda *args, **kwargs: None
+                    class MockJSON:
+                        pass
                 
-                # Add to ext.asyncio submodule
-                if "sqlalchemy.ext.asyncio" in sys.modules:
-                    ext_asyncio_mod = sys.modules["sqlalchemy.ext.asyncio"]
-                    ext_asyncio_mod.create_async_engine = lambda *args, **kwargs: MockEngine()
-                    ext_asyncio_mod.AsyncSession = MockSession
-                    ext_asyncio_mod.async_sessionmaker = lambda *args, **kwargs: MockSession
+                    class MockForeignKey:
+                        def __init__(self, *args, **kwargs):
+                            pass
                 
-                # Add common functions/classes to main module
-                mock_module.Column = MockColumn
-                mock_module.Integer = MockInteger
-                mock_module.String = MockString
-                mock_module.Text = MockText
-                mock_module.DateTime = MockDateTime
-                mock_module.Boolean = MockBoolean
-                mock_module.Float = MockFloat
-                mock_module.JSON = MockJSON
-                mock_module.ForeignKey = MockForeignKey
-                mock_module.create_engine = lambda *args, **kwargs: MockEngine()
+                    # Session and engine mocks
+                    class MockSession:
+                        def __init__(self, *args, **kwargs):
+                            pass
+                        def add(self, *args, **kwargs):
+                            pass
+                        def commit(self, *args, **kwargs):
+                            pass
+                        def rollback(self, *args, **kwargs):
+                            pass
+                        def query(self, *args, **kwargs):
+                            return self
+                        def filter(self, *args, **kwargs):
+                            return self
+                        def all(self, *args, **kwargs):
+                            return []
+                        def first(self, *args, **kwargs):
+                            return None
+                        def close(self, *args, **kwargs):
+                            pass
+                        def __enter__(self):
+                            return self
+                        def __exit__(self, *args):
+                            pass
                 
-                # Add insert function to dialects.sqlite
-                if "sqlalchemy.dialects.sqlite" in sys.modules:
-                    sqlite_mod = sys.modules["sqlalchemy.dialects.sqlite"]
-                    sqlite_mod.insert = lambda *args, **kwargs: type('Insert', (), {
-                        'on_conflict_do_update': lambda *a, **kw: None,
-                        'on_conflict_do_nothing': lambda *a, **kw: None,
-                    })()
+                    class MockEngine:
+                        def __init__(self, *args, **kwargs):
+                            pass
+                        def connect(self, *args, **kwargs):
+                            return MockSession()
+                        def dispose(self, *args, **kwargs):
+                            pass
+                        def begin(self, *args, **kwargs):
+                            return MockSession()
+                
+                    # Add to orm submodule
+                    if "sqlalchemy.orm" in sys.modules:
+                        orm_mod = sys.modules["sqlalchemy.orm"]
+                        orm_mod.Session = MockSession
+                        orm_mod.declarative_base = lambda *args, **kwargs: type('Base', (), {'metadata': type('Metadata', (), {'clear': lambda self: None, 'create_all': lambda self, *a, **kw: None})()})
+                        orm_mod.sessionmaker = lambda *args, **kwargs: MockSession
+                        orm_mod.relationship = lambda *args, **kwargs: None
+                
+                    # Add to ext.asyncio submodule
+                    if "sqlalchemy.ext.asyncio" in sys.modules:
+                        ext_asyncio_mod = sys.modules["sqlalchemy.ext.asyncio"]
+                        ext_asyncio_mod.create_async_engine = lambda *args, **kwargs: MockEngine()
+                        ext_asyncio_mod.AsyncSession = MockSession
+                        ext_asyncio_mod.async_sessionmaker = lambda *args, **kwargs: MockSession
+                
+                    # Add common functions/classes to main module
+                    mock_module.Column = MockColumn
+                    mock_module.Integer = MockInteger
+                    mock_module.String = MockString
+                    mock_module.Text = MockText
+                    mock_module.DateTime = MockDateTime
+                    mock_module.Boolean = MockBoolean
+                    mock_module.Float = MockFloat
+                    mock_module.JSON = MockJSON
+                    mock_module.ForeignKey = MockForeignKey
+                    mock_module.create_engine = lambda *args, **kwargs: MockEngine()
+                
+                    # Add insert function to dialects.sqlite
+                    if "sqlalchemy.dialects.sqlite" in sys.modules:
+                        sqlite_mod = sys.modules["sqlalchemy.dialects.sqlite"]
+                        sqlite_mod.insert = lambda *args, **kwargs: type('Insert', (), {
+                            'on_conflict_do_update': lambda *a, **kw: None,
+                            'on_conflict_do_nothing': lambda *a, **kw: None,
+                        })()
             
-            elif dep == "structlog":
-                # structlog needs a mock logger with .bind() method
-                class MockBoundLogger:
-                    def __init__(self, *args, **kwargs):
-                        pass
+                elif dep == "structlog":
+                    # structlog needs a mock logger with .bind() method
+                    class MockBoundLogger:
+                        def __init__(self, *args, **kwargs):
+                            pass
                     
-                    def bind(self, *args, **kwargs):
-                        return self
+                        def bind(self, *args, **kwargs):
+                            return self
                     
-                    def unbind(self, *args, **kwargs):
-                        return self
+                        def unbind(self, *args, **kwargs):
+                            return self
                     
-                    def new(self, *args, **kwargs):
-                        return self
+                        def new(self, *args, **kwargs):
+                            return self
                     
-                    def debug(self, *args, **kwargs):
-                        pass
+                        def debug(self, *args, **kwargs):
+                            pass
                     
-                    def info(self, *args, **kwargs):
-                        pass
+                        def info(self, *args, **kwargs):
+                            pass
                     
-                    def warning(self, *args, **kwargs):
-                        pass
+                        def warning(self, *args, **kwargs):
+                            pass
                     
-                    def warn(self, *args, **kwargs):
-                        pass
+                        def warn(self, *args, **kwargs):
+                            pass
                     
-                    def error(self, *args, **kwargs):
-                        pass
+                        def error(self, *args, **kwargs):
+                            pass
                     
-                    def critical(self, *args, **kwargs):
-                        pass
+                        def critical(self, *args, **kwargs):
+                            pass
                     
-                    def exception(self, *args, **kwargs):
-                        pass
+                        def exception(self, *args, **kwargs):
+                            pass
                     
-                    def msg(self, *args, **kwargs):
-                        pass
+                        def msg(self, *args, **kwargs):
+                            pass
                     
-                    def log(self, *args, **kwargs):
-                        pass
+                        def log(self, *args, **kwargs):
+                            pass
                 
-                mock_module.get_logger = lambda *args, **kwargs: MockBoundLogger()
-                mock_module.configure = lambda *args, **kwargs: None
-                mock_module.wrap_logger = lambda *args, **kwargs: MockBoundLogger()
-                mock_module.BoundLogger = MockBoundLogger
+                    mock_module.get_logger = lambda *args, **kwargs: MockBoundLogger()
+                    mock_module.configure = lambda *args, **kwargs: None
+                    mock_module.wrap_logger = lambda *args, **kwargs: MockBoundLogger()
+                    mock_module.BoundLogger = MockBoundLogger
                 
-                # Create stdlib submodule
-                stdlib_module = _create_mock_module("structlog.stdlib")
-                sys.modules["structlog.stdlib"] = stdlib_module
-                stdlib_module.add_logger_name = lambda *args, **kwargs: None
-                stdlib_module.add_log_level = lambda *args, **kwargs: None
-                stdlib_module.LoggerFactory = lambda *args, **kwargs: None
-                stdlib_module.BoundLogger = MockBoundLogger
-                mock_module.stdlib = stdlib_module
+                    # Create stdlib submodule
+                    stdlib_module = _create_mock_module("structlog.stdlib")
+                    sys.modules["structlog.stdlib"] = stdlib_module
+                    stdlib_module.add_logger_name = lambda *args, **kwargs: None
+                    stdlib_module.add_log_level = lambda *args, **kwargs: None
+                    stdlib_module.LoggerFactory = lambda *args, **kwargs: None
+                    stdlib_module.BoundLogger = MockBoundLogger
+                    mock_module.stdlib = stdlib_module
                 
-                # Create processors submodule
-                processors_module = _create_mock_module("structlog.processors")
-                sys.modules["structlog.processors"] = processors_module
-                processors_module.TimeStamper = lambda *args, **kwargs: None
-                processors_module.StackInfoRenderer = lambda *args, **kwargs: None
-                processors_module.JSONRenderer = lambda *args, **kwargs: None
-                mock_module.processors = processors_module
+                    # Create processors submodule
+                    processors_module = _create_mock_module("structlog.processors")
+                    sys.modules["structlog.processors"] = processors_module
+                    processors_module.TimeStamper = lambda *args, **kwargs: None
+                    processors_module.StackInfoRenderer = lambda *args, **kwargs: None
+                    processors_module.JSONRenderer = lambda *args, **kwargs: None
+                    mock_module.processors = processors_module
             
-            elif dep == "PIL" or dep == "pillow":
-                # PIL/Pillow needs mock Image class
-                class MockImage:
-                    def __init__(self, *args, **kwargs):
-                        pass
+                elif dep == "PIL" or dep == "pillow":
+                    # PIL/Pillow needs mock Image class
+                    class MockImage:
+                        def __init__(self, *args, **kwargs):
+                            pass
                     
-                    @staticmethod
-                    def open(*args, **kwargs):
-                        return MockImage()
+                        @staticmethod
+                        def open(*args, **kwargs):
+                            return MockImage()
                     
-                    @staticmethod
-                    def new(*args, **kwargs):
-                        return MockImage()
+                        @staticmethod
+                        def new(*args, **kwargs):
+                            return MockImage()
                     
-                    @staticmethod
-                    def frombytes(*args, **kwargs):
-                        return MockImage()
+                        @staticmethod
+                        def frombytes(*args, **kwargs):
+                            return MockImage()
                     
-                    def save(self, *args, **kwargs):
-                        pass
+                        def save(self, *args, **kwargs):
+                            pass
                     
-                    def convert(self, *args, **kwargs):
-                        return self
+                        def convert(self, *args, **kwargs):
+                            return self
                     
-                    def resize(self, *args, **kwargs):
-                        return self
+                        def resize(self, *args, **kwargs):
+                            return self
                     
-                    def crop(self, *args, **kwargs):
-                        return self
+                        def crop(self, *args, **kwargs):
+                            return self
                     
-                    @property
-                    def size(self):
-                        return (100, 100)
+                        @property
+                        def size(self):
+                            return (100, 100)
                     
-                    @property
-                    def mode(self):
-                        return "RGB"
+                        @property
+                        def mode(self):
+                            return "RGB"
                 
-                mock_module.Image = MockImage
+                    mock_module.Image = MockImage
             
-            elif dep == "asyncpg":
-                # asyncpg needs pool submodule
-                pool_module = _create_mock_module("asyncpg.pool")
-                sys.modules["asyncpg.pool"] = pool_module
+                elif dep == "asyncpg":
+                    # asyncpg needs pool submodule
+                    pool_module = _create_mock_module("asyncpg.pool")
+                    sys.modules["asyncpg.pool"] = pool_module
                 
-                class MockPool:
-                    async def acquire(self):
-                        return MockConnection()
+                    class MockPool:
+                        async def acquire(self):
+                            return MockConnection()
                     
-                    async def release(self, *args, **kwargs):
-                        pass
+                        async def release(self, *args, **kwargs):
+                            pass
                     
-                    async def close(self):
-                        pass
+                        async def close(self):
+                            pass
                 
-                class MockConnection:
-                    async def execute(self, *args, **kwargs):
-                        return None
+                    class MockConnection:
+                        async def execute(self, *args, **kwargs):
+                            return None
                     
-                    async def fetch(self, *args, **kwargs):
-                        return []
+                        async def fetch(self, *args, **kwargs):
+                            return []
                     
-                    async def fetchrow(self, *args, **kwargs):
-                        return None
+                        async def fetchrow(self, *args, **kwargs):
+                            return None
                     
-                    async def fetchval(self, *args, **kwargs):
-                        return None
+                        async def fetchval(self, *args, **kwargs):
+                            return None
                     
-                    async def close(self):
-                        pass
+                        async def close(self):
+                            pass
                 
-                pool_module.Pool = MockPool
-                mock_module.pool = pool_module
-                mock_module.Pool = MockPool
-                mock_module.create_pool = lambda *args, **kwargs: MockPool()
-                mock_module.connect = lambda *args, **kwargs: MockConnection()
+                    pool_module.Pool = MockPool
+                    mock_module.pool = pool_module
+                    mock_module.Pool = MockPool
+                    mock_module.create_pool = lambda *args, **kwargs: MockPool()
+                    mock_module.connect = lambda *args, **kwargs: MockConnection()
 
 # ---- Tenacity stub setup ----
 # Tenacity requires special handling for its retry decorator and combinable conditions
@@ -792,438 +807,10 @@ if "tenacity" not in sys.modules:
         # Register the module
         sys.modules["tenacity"] = tenacity_module
 
+
 # ---- OpenTelemetry stub setup ----
-# OpenTelemetry requires special handling because it has specific methods that must exist
-# and be callable, not just module stubs
-# Check for opentelemetry.trace specifically, not just opentelemetry (which may be a namespace package)
-if "opentelemetry.trace" not in sys.modules:
-    try:
-        from opentelemetry import trace as _test_trace
-    except (ImportError, AttributeError):
-        # Create a complete OpenTelemetry stub with all required attributes
-        import types
-
-        # Create a no-op tracer
-        class _NoOpTracer:
-            def start_as_current_span(self, name, **kwargs):
-                from contextlib import nullcontext
-
-                return nullcontext()
-
-        # Create a no-op span
-        class _NoOpSpan:
-            def set_attribute(self, *args, **kwargs):
-                pass
-
-            def add_event(self, *args, **kwargs):
-                pass
-
-            def set_status(self, *args, **kwargs):
-                pass
-
-            def record_exception(self, *args, **kwargs):
-                pass
-
-        # Create trace module with all required methods
-        trace_module = types.ModuleType("opentelemetry.trace")
-        trace_module.__file__ = "<mocked opentelemetry.trace>"
-        trace_module.get_tracer = lambda *args, **kwargs: _NoOpTracer()
-        trace_module.get_current_span = lambda: _NoOpSpan()
-
-        # Create a mock tracer provider with add_span_processor method
-        class _MockTracerProvider:
-            def add_span_processor(self, *args, **kwargs):
-                pass
-
-        _tracer_provider = _MockTracerProvider()
-        trace_module.get_tracer_provider = lambda: _tracer_provider
-        trace_module.set_tracer_provider = lambda *args, **kwargs: None
-
-        # Create main opentelemetry module
-        import importlib.util
-
-        otel_module = types.ModuleType("opentelemetry")
-        otel_module.__file__ = "<mocked opentelemetry>"
-        otel_module.__path__ = []  # Make it a package
-        otel_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry", loader=None
-        )
-        otel_module.trace = trace_module
-
-        # Create instrumentation module
-        instrumentation_module = types.ModuleType("opentelemetry.instrumentation")
-        instrumentation_module.__file__ = "<mocked opentelemetry.instrumentation>"
-        instrumentation_module.__path__ = []  # This is required for submodule imports
-        instrumentation_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation", loader=None
-        )
-        otel_module.instrumentation = instrumentation_module
-
-        # Create common instrumentation submodules
-        instrumentation_fastapi = types.ModuleType(
-            "opentelemetry.instrumentation.fastapi"
-        )
-        instrumentation_fastapi.__file__ = (
-            "<mocked opentelemetry.instrumentation.fastapi>"
-        )
-        instrumentation_fastapi.__path__ = []
-        instrumentation_fastapi.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation.fastapi", loader=None
-        )
-
-        # FastAPIInstrumentor must be a proper class with instrument_app method
-        class FastAPIInstrumentor:
-            @classmethod
-            def instrument_app(cls, *args, **kwargs):
-                pass
-
-        instrumentation_fastapi.FastAPIInstrumentor = FastAPIInstrumentor
-
-        # Create grpc instrumentation module
-        instrumentation_grpc = types.ModuleType("opentelemetry.instrumentation.grpc")
-        instrumentation_grpc.__file__ = "<mocked opentelemetry.instrumentation.grpc>"
-        instrumentation_grpc.__path__ = []
-        instrumentation_grpc.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation.grpc", loader=None
-        )
-
-        # GrpcAioInstrumentor must be a proper class
-        class GrpcAioInstrumentor:
-            @classmethod
-            def instrument(cls, *args, **kwargs):
-                pass
-
-        instrumentation_grpc.GrpcAioInstrumentor = GrpcAioInstrumentor
-
-        # Create instrumentation.utils module (required by instrumentation._semconv)
-        class _MockCallable:
-            """Mock callable for module attributes."""
-
-            def __call__(self, *args, **kwargs):
-                return self
-
-            def __getattr__(self, attr):
-                return _MockCallable()
-
-        instrumentation_utils = types.ModuleType("opentelemetry.instrumentation.utils")
-        instrumentation_utils.__file__ = "<mocked opentelemetry.instrumentation.utils>"
-        instrumentation_utils.__path__ = []
-        instrumentation_utils.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation.utils", loader=None
-        )
-        instrumentation_utils.http_status_to_status_code = lambda *args, **kwargs: None
-        instrumentation_utils.__getattr__ = lambda attr: _MockCallable()
-
-        # Create instrumentation._semconv module (required by instrumentation.fastapi)
-        instrumentation_semconv = types.ModuleType(
-            "opentelemetry.instrumentation._semconv"
-        )
-        instrumentation_semconv.__file__ = (
-            "<mocked opentelemetry.instrumentation._semconv>"
-        )
-        instrumentation_semconv.__path__ = []
-        instrumentation_semconv.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation._semconv", loader=None
-        )
-        instrumentation_semconv.__getattr__ = lambda attr: _MockCallable()
-
-        instrumentation_logging = types.ModuleType(
-            "opentelemetry.instrumentation.logging"
-        )
-        instrumentation_logging.__file__ = (
-            "<mocked opentelemetry.instrumentation.logging>"
-        )
-        instrumentation_logging.__path__ = []
-        instrumentation_logging.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation.logging", loader=None
-        )
-        instrumentation_logging.LoggingInstrumentor = lambda *args, **kwargs: None
-
-        instrumentation_requests = types.ModuleType(
-            "opentelemetry.instrumentation.requests"
-        )
-        instrumentation_requests.__file__ = (
-            "<mocked opentelemetry.instrumentation.requests>"
-        )
-        instrumentation_requests.__path__ = []
-        instrumentation_requests.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation.requests", loader=None
-        )
-        instrumentation_requests.RequestsInstrumentor = lambda *args, **kwargs: None
-
-        instrumentation_system_metrics = types.ModuleType(
-            "opentelemetry.instrumentation.system_metrics"
-        )
-        instrumentation_system_metrics.__file__ = (
-            "<mocked opentelemetry.instrumentation.system_metrics>"
-        )
-        instrumentation_system_metrics.__path__ = []
-        instrumentation_system_metrics.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.instrumentation.system_metrics", loader=None
-        )
-        instrumentation_system_metrics.SystemMetricsInstrumentor = (
-            lambda *args, **kwargs: None
-        )
-
-        # Create sdk modules
-        sdk_module = types.ModuleType("opentelemetry.sdk")
-        sdk_module.__file__ = "<mocked opentelemetry.sdk>"
-        sdk_module.__path__ = []  # Parent module for submodules
-        otel_module.sdk = sdk_module
-
-        sdk_trace_module = types.ModuleType("opentelemetry.sdk.trace")
-        sdk_trace_module.__file__ = "<mocked opentelemetry.sdk.trace>"
-        sdk_trace_module.__path__ = []  # Parent module for submodules
-        sdk_trace_module.TracerProvider = lambda *args, **kwargs: None
-        sdk_module.trace = sdk_trace_module
-
-        sdk_trace_export_module = types.ModuleType("opentelemetry.sdk.trace.export")
-        sdk_trace_export_module.__file__ = "<mocked opentelemetry.sdk.trace.export>"
-        sdk_trace_export_module.__path__ = []  # Parent module for submodules
-        sdk_trace_export_module.ConsoleSpanExporter = lambda *args, **kwargs: None
-        sdk_trace_export_module.SimpleSpanProcessor = lambda *args, **kwargs: None
-        sdk_trace_export_module.BatchSpanProcessor = lambda *args, **kwargs: None
-        sdk_trace_module.export = sdk_trace_export_module
-
-        # Create in_memory_span_exporter submodule
-        in_memory_exporter = types.ModuleType(
-            "opentelemetry.sdk.trace.export.in_memory_span_exporter"
-        )
-        in_memory_exporter.__file__ = (
-            "<mocked opentelemetry.sdk.trace.export.in_memory_span_exporter>"
-        )
-        in_memory_exporter.InMemorySpanExporter = lambda *args, **kwargs: None
-        sdk_trace_export_module.in_memory_span_exporter = in_memory_exporter
-
-        sdk_resources_module = types.ModuleType("opentelemetry.sdk.resources")
-        sdk_resources_module.__file__ = "<mocked opentelemetry.sdk.resources>"
-
-        # Create Resource class with create() classmethod
-        class _MockResource:
-            def __init__(self, *args, **kwargs):
-                pass
-
-            @classmethod
-            def create(cls, attributes=None):
-                return cls()
-
-        sdk_resources_module.Resource = _MockResource
-        sdk_module.resources = sdk_resources_module
-
-        # Create additional OpenTelemetry modules used in the codebase
-
-        # trace.status module
-        trace_status_module = types.ModuleType("opentelemetry.trace.status")
-        trace_status_module.__file__ = "<mocked opentelemetry.trace.status>"
-
-        # Create Status and StatusCode classes that can be used in the codebase
-        class _MockStatus:
-            def __init__(self, *args, **kwargs):
-                pass
-
-        class _MockStatusCode:
-            ERROR = "ERROR"
-            OK = "OK"
-            UNSET = "UNSET"
-
-        trace_status_module.Status = _MockStatus
-        trace_status_module.StatusCode = _MockStatusCode
-
-        # Also add Status and StatusCode directly to trace module for imports like: from opentelemetry.trace import Status
-        trace_module.Status = _MockStatus
-        trace_module.StatusCode = _MockStatusCode
-        trace_module.status = trace_status_module
-
-        # trace.propagation module
-        trace_propagation_module = types.ModuleType("opentelemetry.trace.propagation")
-        trace_propagation_module.__file__ = "<mocked opentelemetry.trace.propagation>"
-        trace_propagation_module.__path__ = []
-        trace_module.propagation = trace_propagation_module
-
-        trace_propagation_tracecontext = types.ModuleType(
-            "opentelemetry.trace.propagation.tracecontext"
-        )
-        trace_propagation_tracecontext.__file__ = (
-            "<mocked opentelemetry.trace.propagation.tracecontext>"
-        )
-        trace_propagation_tracecontext.TraceContextTextMapPropagator = (
-            lambda *args, **kwargs: None
-        )
-        trace_propagation_module.tracecontext = trace_propagation_tracecontext
-
-        # Create propagate module (required by instrumentation.utils)
-        propagate_module = types.ModuleType("opentelemetry.propagate")
-        propagate_module.__file__ = "<mocked opentelemetry.propagate>"
-        propagate_module.__path__ = []
-        propagate_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.propagate", loader=None
-        )
-        propagate_module.extract = lambda *args, **kwargs: {}
-        propagate_module.inject = lambda *args, **kwargs: None
-        propagate_module.get_global_textmap = lambda *args, **kwargs: None
-        propagate_module.set_global_textmap = lambda *args, **kwargs: None
-        otel_module.propagate = propagate_module
-
-        # sdk.trace.sampling module
-        sdk_trace_sampling_module = types.ModuleType("opentelemetry.sdk.trace.sampling")
-        sdk_trace_sampling_module.__file__ = "<mocked opentelemetry.sdk.trace.sampling>"
-        sdk_trace_sampling_module.ParentBased = lambda *args, **kwargs: None
-        sdk_trace_sampling_module.TraceIdRatioBased = lambda *args, **kwargs: None
-        sdk_trace_sampling_module.ALWAYS_ON = lambda *args, **kwargs: None
-        sdk_trace_sampling_module.ALWAYS_OFF = lambda *args, **kwargs: None
-        sdk_trace_module.sampling = sdk_trace_sampling_module
-
-        # exporter modules
-        exporter_module = types.ModuleType("opentelemetry.exporter")
-        exporter_module.__file__ = "<mocked opentelemetry.exporter>"
-        exporter_module.__path__ = []
-        otel_module.exporter = exporter_module
-
-        exporter_jaeger_module = types.ModuleType("opentelemetry.exporter.jaeger")
-        exporter_jaeger_module.__file__ = "<mocked opentelemetry.exporter.jaeger>"
-        exporter_jaeger_module.__path__ = []
-        exporter_module.jaeger = exporter_jaeger_module
-
-        exporter_jaeger_thrift_module = types.ModuleType(
-            "opentelemetry.exporter.jaeger.thrift"
-        )
-        exporter_jaeger_thrift_module.__file__ = (
-            "<mocked opentelemetry.exporter.jaeger.thrift>"
-        )
-        exporter_jaeger_thrift_module.JaegerExporter = lambda *args, **kwargs: None
-        exporter_jaeger_module.thrift = exporter_jaeger_thrift_module
-
-        exporter_otlp_module = types.ModuleType("opentelemetry.exporter.otlp")
-        exporter_otlp_module.__file__ = "<mocked opentelemetry.exporter.otlp>"
-        exporter_otlp_module.__path__ = []
-        exporter_module.otlp = exporter_otlp_module
-
-        exporter_otlp_proto_module = types.ModuleType(
-            "opentelemetry.exporter.otlp.proto"
-        )
-        exporter_otlp_proto_module.__file__ = (
-            "<mocked opentelemetry.exporter.otlp.proto>"
-        )
-        exporter_otlp_proto_module.__path__ = []
-        exporter_otlp_module.proto = exporter_otlp_proto_module
-
-        exporter_otlp_proto_grpc_module = types.ModuleType(
-            "opentelemetry.exporter.otlp.proto.grpc"
-        )
-        exporter_otlp_proto_grpc_module.__file__ = (
-            "<mocked opentelemetry.exporter.otlp.proto.grpc>"
-        )
-        exporter_otlp_proto_grpc_module.__path__ = []
-        exporter_otlp_proto_module.grpc = exporter_otlp_proto_grpc_module
-
-        exporter_otlp_proto_grpc_trace_exporter_module = types.ModuleType(
-            "opentelemetry.exporter.otlp.proto.grpc.trace_exporter"
-        )
-        exporter_otlp_proto_grpc_trace_exporter_module.__file__ = (
-            "<mocked opentelemetry.exporter.otlp.proto.grpc.trace_exporter>"
-        )
-        exporter_otlp_proto_grpc_trace_exporter_module.OTLPSpanExporter = (
-            lambda *args, **kwargs: None
-        )
-        exporter_otlp_proto_grpc_module.trace_exporter = (
-            exporter_otlp_proto_grpc_trace_exporter_module
-        )
-
-        # Add HTTP exporter module
-        exporter_otlp_proto_http_module = types.ModuleType(
-            "opentelemetry.exporter.otlp.proto.http"
-        )
-        exporter_otlp_proto_http_module.__file__ = (
-            "<mocked opentelemetry.exporter.otlp.proto.http>"
-        )
-        exporter_otlp_proto_http_module.__path__ = []
-        exporter_otlp_proto_module.http = exporter_otlp_proto_http_module
-
-        exporter_otlp_proto_http_trace_exporter_module = types.ModuleType(
-            "opentelemetry.exporter.otlp.proto.http.trace_exporter"
-        )
-        exporter_otlp_proto_http_trace_exporter_module.__file__ = (
-            "<mocked opentelemetry.exporter.otlp.proto.http.trace_exporter>"
-        )
-        exporter_otlp_proto_http_trace_exporter_module.OTLPSpanExporter = (
-            lambda *args, **kwargs: None
-        )
-        exporter_otlp_proto_http_module.trace_exporter = (
-            exporter_otlp_proto_http_trace_exporter_module
-        )
-
-        # semconv module
-        semconv_module = types.ModuleType("opentelemetry.semconv")
-        semconv_module.__file__ = "<mocked opentelemetry.semconv>"
-        semconv_module.__path__ = []
-        otel_module.semconv = semconv_module
-
-        semconv_trace_module = types.ModuleType("opentelemetry.semconv.trace")
-        semconv_trace_module.__file__ = "<mocked opentelemetry.semconv.trace>"
-        semconv_trace_module.SpanAttributes = lambda *args, **kwargs: None
-        semconv_module.trace = semconv_trace_module
-
-        # metrics module
-        metrics_module = types.ModuleType("opentelemetry.metrics")
-        metrics_module.__file__ = "<mocked opentelemetry.metrics>"
-        metrics_module.__path__ = []
-        metrics_module.__spec__ = importlib.util.spec_from_loader(
-            "opentelemetry.metrics", loader=None
-        )
-        metrics_module.get_meter_provider = lambda: None
-        metrics_module.get_meter = lambda *args, **kwargs: None
-        metrics_module.set_meter_provider = lambda *args, **kwargs: None
-        otel_module.metrics = metrics_module
-
-        # Register all modules in sys.modules
-        sys.modules["opentelemetry"] = otel_module
-        sys.modules["opentelemetry.trace"] = trace_module
-        sys.modules["opentelemetry.trace.status"] = trace_status_module
-        sys.modules["opentelemetry.trace.propagation"] = trace_propagation_module
-        sys.modules["opentelemetry.trace.propagation.tracecontext"] = (
-            trace_propagation_tracecontext
-        )
-        sys.modules["opentelemetry.propagate"] = propagate_module
-        sys.modules["opentelemetry.metrics"] = metrics_module
-        sys.modules["opentelemetry.instrumentation"] = instrumentation_module
-        sys.modules["opentelemetry.instrumentation.fastapi"] = instrumentation_fastapi
-        sys.modules["opentelemetry.instrumentation.grpc"] = instrumentation_grpc
-        sys.modules["opentelemetry.instrumentation.utils"] = instrumentation_utils
-        sys.modules["opentelemetry.instrumentation._semconv"] = instrumentation_semconv
-        sys.modules["opentelemetry.instrumentation.logging"] = instrumentation_logging
-        sys.modules["opentelemetry.instrumentation.requests"] = instrumentation_requests
-        sys.modules["opentelemetry.instrumentation.system_metrics"] = (
-            instrumentation_system_metrics
-        )
-        sys.modules["opentelemetry.sdk"] = sdk_module
-        sys.modules["opentelemetry.sdk.trace"] = sdk_trace_module
-        sys.modules["opentelemetry.sdk.trace.sampling"] = sdk_trace_sampling_module
-        sys.modules["opentelemetry.sdk.trace.export"] = sdk_trace_export_module
-        sys.modules["opentelemetry.sdk.trace.export.in_memory_span_exporter"] = (
-            in_memory_exporter
-        )
-        sys.modules["opentelemetry.sdk.resources"] = sdk_resources_module
-        sys.modules["opentelemetry.exporter"] = exporter_module
-        sys.modules["opentelemetry.exporter.jaeger"] = exporter_jaeger_module
-        sys.modules["opentelemetry.exporter.jaeger.thrift"] = (
-            exporter_jaeger_thrift_module
-        )
-        sys.modules["opentelemetry.exporter.otlp"] = exporter_otlp_module
-        sys.modules["opentelemetry.exporter.otlp.proto"] = exporter_otlp_proto_module
-        sys.modules["opentelemetry.exporter.otlp.proto.grpc"] = (
-            exporter_otlp_proto_grpc_module
-        )
-        sys.modules["opentelemetry.exporter.otlp.proto.grpc.trace_exporter"] = (
-            exporter_otlp_proto_grpc_trace_exporter_module
-        )
-        sys.modules["opentelemetry.exporter.otlp.proto.http"] = (
-            exporter_otlp_proto_http_module
-        )
-        sys.modules["opentelemetry.exporter.otlp.proto.http.trace_exporter"] = (
-            exporter_otlp_proto_http_trace_exporter_module
-        )
-        sys.modules["opentelemetry.semconv"] = semconv_module
-        sys.modules["opentelemetry.semconv.trace"] = semconv_trace_module
+# NOTE: OpenTelemetry stubs are handled by generator/conftest.py
+# Removed duplicate OpenTelemetry setup (433 lines) to reduce import time
 
 # ---- Pydantic decorator safety shim ----
 # Prevents test collection-time errors when pydantic decorators are replaced with non-callables
@@ -1538,32 +1125,38 @@ if "prometheus_client" not in sys.modules:
 # ---- Omnicore Engine submodule import protection ----
 # Handle omnicore_engine.database and omnicore_engine.message_bus gracefully
 # These submodules may have missing dependencies (aiosqlite, structlog, etc.) during test collection
-# Print warnings but allow tests to proceed with mock modules
-if "omnicore_engine.database" not in sys.modules:
-    try:
-        import omnicore_engine.database
-    except (ImportError, ModuleNotFoundError, OSError) as e:
-        print(f"omnicore_engine.database not found. Database functionality disabled. Error: {e}")
-        # Create a mock module if not already mocked by optional dependencies
-        if "omnicore_engine.database" not in sys.modules:
-            database_mock = _create_mock_module("omnicore_engine.database")
-            sys.modules["omnicore_engine.database"] = database_mock
-            # Ensure parent module exists and has the attribute
-            if "omnicore_engine" in sys.modules:
-                sys.modules["omnicore_engine"].database = database_mock
+# Deferred to _initialize_omnicore_mocks() to avoid import-time overhead
 
-if "omnicore_engine.message_bus" not in sys.modules:
-    try:
-        import omnicore_engine.message_bus
-    except (ImportError, ModuleNotFoundError, OSError) as e:
-        print(f"omnicore_engine.message_bus not found. Message bus functionality disabled. Error: {e}")
-        # Create a mock module if not already mocked by optional dependencies
-        if "omnicore_engine.message_bus" not in sys.modules:
-            message_bus_mock = _create_mock_module("omnicore_engine.message_bus")
-            sys.modules["omnicore_engine.message_bus"] = message_bus_mock
-            # Ensure parent module exists and has the attribute
-            if "omnicore_engine" in sys.modules:
-                sys.modules["omnicore_engine"].message_bus = message_bus_mock
+def _initialize_omnicore_mocks():
+    """
+    Initialize mocks for omnicore_engine submodules.
+    Called from session-scoped fixture to defer expensive import attempts.
+    """
+    if "omnicore_engine.database" not in sys.modules:
+        try:
+            import omnicore_engine.database
+        except (ImportError, ModuleNotFoundError, OSError) as e:
+            print(f"omnicore_engine.database not found. Database functionality disabled. Error: {e}")
+            # Create a mock module if not already mocked by optional dependencies
+            if "omnicore_engine.database" not in sys.modules:
+                database_mock = _create_mock_module("omnicore_engine.database")
+                sys.modules["omnicore_engine.database"] = database_mock
+                # Ensure parent module exists and has the attribute
+                if "omnicore_engine" in sys.modules:
+                    sys.modules["omnicore_engine"].database = database_mock
+
+    if "omnicore_engine.message_bus" not in sys.modules:
+        try:
+            import omnicore_engine.message_bus
+        except (ImportError, ModuleNotFoundError, OSError) as e:
+            print(f"omnicore_engine.message_bus not found. Message bus functionality disabled. Error: {e}")
+            # Create a mock module if not already mocked by optional dependencies
+            if "omnicore_engine.message_bus" not in sys.modules:
+                message_bus_mock = _create_mock_module("omnicore_engine.message_bus")
+                sys.modules["omnicore_engine.message_bus"] = message_bus_mock
+                # Ensure parent module exists and has the attribute
+                if "omnicore_engine" in sys.modules:
+                    sys.modules["omnicore_engine"].message_bus = message_bus_mock
 
 # ---- ChromaDB singleton cleanup ----
 # Global cleanup of ChromaDB singleton between test sessions
@@ -1661,6 +1254,18 @@ pytest_plugins = ["pytest_asyncio"]
 
 # ---- Global pytest fixtures ----
 import pytest
+
+
+@pytest.fixture(scope="session", autouse=True)
+def initialize_mocks():
+    """
+    Initialize optional dependency mocks and omnicore mocks.
+    This fixture runs once per test session AFTER test collection
+    to defer expensive operations from module import time to test execution time.
+    """
+    _initialize_optional_dependency_mocks()
+    _initialize_omnicore_mocks()
+    yield
 
 
 @pytest.fixture(scope="function", autouse=True)
