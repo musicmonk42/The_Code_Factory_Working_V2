@@ -66,7 +66,8 @@ def setup_logging_and_warnings():
     # Cleanup logging at end of session
     try:
         logging.shutdown()
-    except:
+    except Exception:
+        # Silently ignore any logging shutdown errors
         pass
 
 
@@ -130,6 +131,7 @@ def cleanup_logging():
     for handler in logging.root.handlers[:]:
         try:
             handler.close()
-        except:
+        except Exception:
+            # Silently ignore handler close errors
             pass
         logging.root.removeHandler(handler)

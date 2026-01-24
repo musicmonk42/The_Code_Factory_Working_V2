@@ -57,8 +57,10 @@ def test_prometheus_stubs_in_conftest():
 
 def test_opentelemetry_context_setup():
     """Test that OpenTelemetry context setup is deferred."""
+    from pathlib import Path
+    
     # Check arbiter conftest
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "self_fixing_engineer"))
+    sys.path.insert(0, str(Path(__file__).parent / "self_fixing_engineer"))
     
     # Import the module
     from arbiter import conftest as arbiter_conftest
@@ -76,15 +78,16 @@ def test_opentelemetry_context_setup():
 def test_logging_setup_in_intent_capture():
     """Test that logging setup is deferred to fixture."""
     import self_fixing_engineer.intent_capture.tests.conftest as ic_conftest
+    import _pytest.fixtures
     
     # Check that setup_logging_and_warnings fixture exists
     assert hasattr(ic_conftest, "setup_logging_and_warnings")
     
-    # Check that it's a pytest fixture by checking its type
+    # Check that it's a pytest fixture
     func = getattr(ic_conftest, "setup_logging_and_warnings")
     
-    # Should be a FixtureFunctionDefinition
-    assert type(func).__name__ == "FixtureFunctionDefinition", \
+    # Should be a FixtureFunctionDefinition (more reliable than string comparison)
+    assert isinstance(func, _pytest.fixtures.FixtureFunctionDefinition), \
         f"setup_logging_and_warnings should be a pytest fixture, got {type(func)}"
     
     print("✓ Logging setup is in fixture, not at module level")
