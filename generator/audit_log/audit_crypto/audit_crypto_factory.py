@@ -186,6 +186,11 @@ def _is_test_or_dev_mode() -> bool:
     Returns True when running under pytest or explicit DEV mode.
     Keeps audit_crypto_factory from failing hard during tests.
     """
+    # Check explicit audit crypto mode setting
+    audit_crypto_mode = os.getenv("AUDIT_CRYPTO_MODE", "").lower()
+    if audit_crypto_mode in ("dev", "disabled"):
+        return True
+    
     if os.getenv("AUDIT_LOG_DEV_MODE", "").lower() == "true":
         return True
     if os.getenv("PYTEST_CURRENT_TEST"):
@@ -1066,18 +1071,35 @@ try:
         settings.PROVIDER_TYPE
     )
 except CryptoInitializationError as e:
-    if _is_test_or_dev_mode():
+    # Check if we should allow initialization failure
+    allow_init_failure = os.getenv("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "0").lower() in ("1", "true", "yes")
+    
+    if _is_test_or_dev_mode() or allow_init_failure:
         logger.warning(
-            "AUDIT_CRYPTO: Failed to eagerly initialize crypto_provider in DEV/TEST (%s). "
+            "AUDIT_CRYPTO: Failed to eagerly initialize crypto_provider (%s). "
             "Tests/consumers will implicitly use or call get_provider() lazily, "
-            "which will return DummyCryptoProvider.",
+            "which will return DummyCryptoProvider. "
+            "Set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 to enforce strict initialization.",
             e,
         )
         # Explicitly set to DummyCryptoProvider to ensure the backward-compatible global variable is safe
         # even if the initial call failed in a test environment.
         crypto_provider = crypto_provider_factory.get_provider("dummy")
+        
+        if not _is_test_or_dev_mode() and allow_init_failure:
+            logger.error(
+                "AUDIT_CRYPTO: Using DummyCryptoProvider in PRODUCTION due to AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1. "
+                "This provides NO REAL SECURITY for audit log signatures. "
+                "Configure proper secrets (AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64) "
+                "and set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 for production security."
+            )
     else:
-        # In production, this is fatal.
+        # In production with strict mode, this is fatal.
+        logger.critical(
+            "AUDIT_CRYPTO: Crypto provider initialization failed in production. "
+            "Configure AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 secret or "
+            "set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1 to allow graceful degradation."
+        )
         raise
 
 

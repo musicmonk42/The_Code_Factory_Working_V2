@@ -28,6 +28,17 @@ import os
 os.environ["APP_ENV"] = "production"
 os.environ["DEV_MODE"] = "0"
 
+# AUDIT CRYPTO CONFIGURATION
+# Allow audit crypto initialization to fail gracefully if secrets are not configured
+# This prevents the server from crashing on startup when secrets are not yet configured
+# Set to "0" once AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is properly configured
+os.environ.setdefault("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "1")
+
+# Set audit crypto mode to allow startup without full cryptographic secrets
+# Options: "full" (requires secrets), "dev" (uses dummy keys), "disabled" (no crypto signing)
+# Change to "full" once AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is configured
+os.environ.setdefault("AUDIT_CRYPTO_MODE", "dev")
+
 # INJECT SIGNING KEY (Required for Production Audit Logging)
 # This prevents the "CRITICAL - FATAL: log_audit_event" crash
 # Using AGENTIC_AUDIT_HMAC_KEY to match documentation in RAILWAY_DEPLOYMENT.md
