@@ -17,10 +17,18 @@ import traceback
 import uuid
 from typing import Any, Callable, Dict, List, Optional
 
+# --- Python Version Check ---
+# This check is performed at module import time. In production, we exit
+# if Python version is too old. During test collection, we skip the exit
+# to allow pytest to discover and collect tests.
 if sys.version_info < (3, 10):
     sys.stderr.write("Python 3.10+ required.\n")
-    # Only exit if not in testing mode (prevents test collection failures)
-    if os.getenv("TESTING", "0") != "1" and os.getenv("PYTEST_CURRENT_TEST") is None:
+    _testing_mode = (
+        os.getenv("TESTING", "0") == "1" 
+        or os.getenv("PYTEST_CURRENT_TEST") is not None
+        or os.getenv("PYTEST_COLLECTING", "0") == "1"
+    )
+    if not _testing_mode:
         sys.exit(98)
 
 try:

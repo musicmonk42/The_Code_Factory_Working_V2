@@ -45,8 +45,16 @@ class DLTClientLoggerAdapter(logging.LoggerAdapter):
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
 _base_logger.info(f"DLT_BASE: PRODUCTION_MODE is set to: {PRODUCTION_MODE}")
 
-# --- Testing Mode Flag (prevents sys.exit during test collection) ---
-TESTING_MODE = os.getenv("TESTING", "0") == "1" or os.getenv("PYTEST_CURRENT_TEST") is not None
+# --- Testing Mode Flag ---
+# This flag is used to prevent sys.exit() calls during test collection,
+# which would cause pytest to fail with CPU timeout (exit code 152).
+# When TESTING_MODE is True, missing dependencies will be stubbed instead
+# of causing the process to exit.
+TESTING_MODE = (
+    os.getenv("TESTING", "0") == "1" 
+    or os.getenv("PYTEST_CURRENT_TEST") is not None
+    or os.getenv("PYTEST_COLLECTING", "0") == "1"
+)
 
 
 # --- Placeholder for Operator Alerting (Centralized) ---
@@ -96,12 +104,16 @@ SECRETS_MANAGER = SecretsManager()
 
 
 # --- Strict Dependency Checks ---
+# These dependencies are required for production operation but can be stubbed
+# during test collection to allow pytest to discover and collect tests without
+# requiring all production dependencies to be installed.
+
+AIOHTTP_AVAILABLE = False
 try:
     import aiohttp
 
     AIOHTTP_AVAILABLE = True
 except ImportError:
-    AIOHTTP_AVAILABLE = False
     _base_logger.critical(
         "CRITICAL: Required dependency 'aiohttp' not found. Aborting startup."
     )
@@ -112,12 +124,45 @@ except ImportError:
     if not TESTING_MODE:
         sys.exit(1)
     else:
-        # Provide minimal stub for test collection
-        import types
-        aiohttp = types.ModuleType("aiohttp")
-        aiohttp.ClientSession = type("ClientSession", (), {"__init__": lambda self, *a, **kw: None})
+        # Provide comprehensive stub for test collection only.
+        # This stub is NOT suitable for production use.
+        import types as _types
+        
+        class _StubClientSession:
+            """
+            Minimal aiohttp.ClientSession stub for test collection.
+            
+            Supports async context manager protocol and returns no-op
+            responses for all method calls. This allows test files to
+            import modules that use aiohttp without requiring the actual
+            dependency during collection phase.
+            """
+            
+            def __init__(self, *args, **kwargs):
+                pass
+            
+            async def __aenter__(self):
+                return self
+            
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+            
+            async def close(self):
+                pass
+            
+            def __getattr__(self, name):
+                """Return async no-op for any method call."""
+                async def _async_noop(*args, **kwargs):
+                    return None
+                return _async_noop
+        
+        aiohttp = _types.ModuleType("aiohttp")
+        aiohttp.ClientSession = _StubClientSession
+        aiohttp.ClientError = Exception
+        aiohttp.ClientResponseError = Exception
         sys.modules["aiohttp"] = aiohttp
 
+TENACITY_AVAILABLE = False
 try:
     import tenacity
     from tenacity import (
@@ -130,7 +175,6 @@ try:
 
     TENACITY_AVAILABLE = True
 except ImportError:
-    TENACITY_AVAILABLE = False
     _base_logger.critical(
         "CRITICAL: Required dependency 'tenacity' not found. Aborting startup."
     )
@@ -141,30 +185,41 @@ except ImportError:
     if not TESTING_MODE:
         sys.exit(1)
     else:
-        # Provide minimal stubs for test collection
+        # Provide minimal tenacity stubs for test collection only.
+        # The retry decorator is a passthrough that returns the original function.
         def retry(*args, **kwargs):
+            """
+            Stub retry decorator that passes through the decorated function unchanged.
+            Handles both @retry and @retry(...) usage patterns.
+            """
             def decorator(func):
                 return func
-            return decorator if not args or not callable(args[0]) else args[0]
+            # Support @retry without parentheses (direct function decoration)
+            if args and callable(args[0]) and not kwargs:
+                return args[0]
+            return decorator
         
+        # Retry condition stubs - return None (no-op conditions)
         def retry_if_exception_type(*args, **kwargs):
             return None
         
+        # Stop condition stubs
         def stop_after_attempt(*args, **kwargs):
             return None
         
+        # Wait strategy stubs
         def wait_exponential(*args, **kwargs):
             return None
         
         def wait_random_exponential(*args, **kwargs):
             return None
 
+PYDANTIC_AVAILABLE = False
 try:
     from pydantic import BaseModel, Field, ValidationError, validator
 
     PYDANTIC_AVAILABLE = True
 except ImportError:
-    PYDANTIC_AVAILABLE = False
     _base_logger.critical(
         "CRITICAL: pydantic not found. Configuration validation is critical. Aborting startup."
     )
@@ -175,19 +230,57 @@ except ImportError:
     if not TESTING_MODE:
         sys.exit(1)
     else:
-        # Provide minimal stubs for test collection
-        class BaseModel:
-            def __init__(self, **kwargs):
-                for k, v in kwargs.items():
-                    setattr(self, k, v)
+        # Provide minimal pydantic stubs for test collection only.
+        # These stubs allow class definitions to be parsed but do NOT
+        # provide actual validation functionality.
         
-        def Field(*args, **kwargs):
-            return kwargs.get('default')
+        class BaseModel:
+            """
+            Minimal BaseModel stub for test collection.
+            
+            Accepts any keyword arguments and sets them as instance attributes.
+            Does not perform validation - for test collection only.
+            """
+            
+            def __init__(self, **kwargs):
+                for key, value in kwargs.items():
+                    setattr(self, key, value)
+            
+            def __init_subclass__(cls, **kwargs):
+                super().__init_subclass__(**kwargs)
+            
+            def dict(self, **kwargs):
+                return self.__dict__.copy()
+            
+            def model_dump(self, **kwargs):
+                return self.__dict__.copy()
+        
+        class _FieldInfo:
+            """Stub field descriptor for pydantic Field()."""
+            
+            def __init__(self, default=None, **kwargs):
+                self.default = default
+            
+            def __repr__(self):
+                return f"FieldInfo(default={self.default!r})"
+        
+        def Field(default=None, *args, **kwargs):
+            """
+            Stub Field function for test collection.
+            Returns the default value to allow class attribute assignment.
+            """
+            if default is ...:
+                return None  # Required field, return None for stub
+            return default
         
         class ValidationError(Exception):
+            """Stub ValidationError exception."""
             pass
         
-        def validator(*args, **kwargs):
+        def validator(*fields, **kwargs):
+            """
+            Stub validator decorator that passes through the decorated function.
+            """
             def decorator(func):
                 return func
             return decorator
@@ -288,6 +381,49 @@ except ImportError:
     )
     if not TESTING_MODE:
         sys.exit(1)
+    else:
+        # Provide minimal prometheus stubs for test collection only.
+        # These stubs allow metric definitions to be parsed but do NOT
+        # collect actual metrics.
+        
+        class _StubMetric:
+            """Base stub metric that accepts any method calls."""
+            
+            def __init__(self, *args, **kwargs):
+                pass
+            
+            def labels(self, *args, **kwargs):
+                return self
+            
+            def inc(self, *args, **kwargs):
+                pass
+            
+            def dec(self, *args, **kwargs):
+                pass
+            
+            def set(self, *args, **kwargs):
+                pass
+            
+            def observe(self, *args, **kwargs):
+                pass
+        
+        Counter = Gauge = Histogram = _StubMetric
+        CollectorRegistry = lambda *a, **kw: None
+        generate_latest = lambda *a, **kw: b""
+        _metrics_registry = None
+        _metrics_lock = threading.Lock()
+        
+        def get_or_create_metric(*args, **kwargs):
+            return _StubMetric()
+        
+        # Stub metric instances
+        dlt_requests_total = _StubMetric()
+        dlt_request_errors_total = _StubMetric()
+        dlt_request_latency_seconds = _StubMetric()
+        dlt_backoff_total = _StubMetric()
+        circuit_breaker_status = _StubMetric()
+        circuit_breaker_failures = _StubMetric()
+        audit_log_integrity_status = _StubMetric()
 
 
 # --- Conditional Imports (still checked, but won't abort unless backend is chosen) ---

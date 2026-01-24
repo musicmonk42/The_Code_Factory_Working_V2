@@ -19,10 +19,18 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-# --- Testing Mode Flag (prevents sys.exit during test collection) ---
-_TESTING_MODE = os.getenv("TESTING", "0") == "1" or os.getenv("PYTEST_CURRENT_TEST") is not None
+# --- Testing Mode Flag ---
+# This flag is used to prevent sys.exit() calls during test collection,
+# which would cause pytest to fail with CPU timeout (exit code 152).
+# When _TESTING_MODE is True, missing dependencies will be stubbed instead
+# of causing the process to exit.
+_TESTING_MODE = (
+    os.getenv("TESTING", "0") == "1" 
+    or os.getenv("PYTEST_CURRENT_TEST") is not None
+    or os.getenv("PYTEST_COLLECTING", "0") == "1"
+)
 
-# Required library (fail fast)
+# Required library (fail fast in production, stub in test mode)
 try:
     from pydantic import BaseModel, Field, ValidationError
 except ImportError:
@@ -32,16 +40,42 @@ except ImportError:
     if not _TESTING_MODE:
         sys.exit(97)
     else:
-        # Provide minimal stubs for test collection
-        class BaseModel:
-            def __init__(self, **kwargs):
-                for k, v in kwargs.items():
-                    setattr(self, k, v)
+        # Provide minimal pydantic stubs for test collection only.
+        # These stubs allow class definitions to be parsed but do NOT
+        # provide actual validation functionality.
         
-        def Field(*args, **kwargs):
-            return kwargs.get('default')
+        class BaseModel:
+            """
+            Minimal BaseModel stub for test collection.
+            
+            Accepts any keyword arguments and sets them as instance attributes.
+            Does not perform validation - for test collection only.
+            """
+            
+            def __init__(self, **kwargs):
+                for key, value in kwargs.items():
+                    setattr(self, key, value)
+            
+            def __init_subclass__(cls, **kwargs):
+                super().__init_subclass__(**kwargs)
+            
+            def dict(self, **kwargs):
+                return self.__dict__.copy()
+            
+            def model_dump(self, **kwargs):
+                return self.__dict__.copy()
+        
+        def Field(default=None, *args, **kwargs):
+            """
+            Stub Field function for test collection.
+            Returns the default value to allow class attribute assignment.
+            """
+            if default is ...:
+                return None  # Required field, return None for stub
+            return default
         
         class ValidationError(Exception):
+            """Stub ValidationError exception."""
             pass
 
 # Optional libraries
