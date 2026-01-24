@@ -194,11 +194,16 @@ AGENT_GRAPH: Dict[str, AgentConfig] = {
         phase=3
     ),
     
+    # ========================================================================
+    # Phase 4: Final Agents
+    # ========================================================================
+    # These agents depend on Phase 3 agents and must be loaded last.
+    
     "docgen": AgentConfig(
         name="docgen",
         module_path="generator.agents.docgen_agent.docgen_agent",
         dependencies=("critique",),  # Depends on critique
-        phase=3
+        phase=4
     ),
 }
 

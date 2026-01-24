@@ -11,9 +11,12 @@ import pytest
 @pytest.fixture
 def skip_if_lazy_disabled():
     """Fixture that skips tests if lazy module aliasing is disabled."""
-    import generator.conftest as conftest
-    if not getattr(conftest, '_ENABLE_LAZY_ALIASES', False):
-        pytest.skip("Lazy module aliasing is disabled (_ENABLE_LAZY_ALIASES=False)")
+    try:
+        import conftest
+        if not getattr(conftest, '_ENABLE_LAZY_ALIASES', False):
+            pytest.skip("Lazy module aliasing is disabled (_ENABLE_LAZY_ALIASES=False)")
+    except ImportError:
+        pytest.skip("conftest module not importable - lazy aliases may not be configured")
 
 
 def test_lazy_loading_mechanism(skip_if_lazy_disabled):

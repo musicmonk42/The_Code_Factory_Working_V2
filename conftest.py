@@ -1,19 +1,17 @@
 import os
 import sys
 import types
+from pathlib import Path
 
 # Add the project root to Python path
 project_root = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
 
-# Add the self_fixing_engineer directory so arbiter can be imported
-sys.path.insert(0, os.path.join(project_root, "self_fixing_engineer"))
-
-# Add omnicore_engine directory
-sys.path.insert(0, os.path.join(project_root, "omnicore_engine"))
-
-# Add generator directory
-sys.path.insert(0, os.path.join(project_root, "generator"))
+# NOTE: We only add the project root to sys.path.
+# Adding subdirectories (self_fixing_engineer, omnicore_engine, generator) would break
+# package imports like "from omnicore_engine.meta_supervisor import X" because Python
+# would try to find meta_supervisor inside the omnicore_engine subdirectory rather than
+# treating omnicore_engine as a top-level package.
 
 # ---- Set TESTING environment variable early ----
 # This should be set before any module imports to prevent side effects
