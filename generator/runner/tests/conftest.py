@@ -8,12 +8,9 @@ import tempfile
 os.environ.setdefault("TESTING", "1")
 os.environ.setdefault("DEV_MODE", "1")
 
-# Create and set the LLM plugin directory (Dynaconf/LLMPluginManager dependency)
-# Setting both formats for Dynaconf compatibility
-tmp_plugins = pathlib.Path(tempfile.gettempdir()) / f"plugins_pytest_{os.getpid()}"
-tmp_plugins.mkdir(exist_ok=True)
-os.environ.setdefault("LLM_PLUGIN__PLUGIN_DIR", str(tmp_plugins))
-os.environ.setdefault("LLM_PLUGIN_PLUGIN_DIR", str(tmp_plugins))
+# Defer actual directory creation to fixture to avoid blocking during collection
+# These will be set by the session-scoped fixture
+_tmp_plugins_dir = None
 
 # Silence noisy third-party libraries (OTEL, Audit Crypto)
 os.environ.setdefault("OTEL_SDK_DISABLED", "1")
@@ -26,9 +23,8 @@ os.environ["PROVIDER_TYPE"] = "software"
 # --- END FIX ---
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_DEFAULT_ALGO"] = "hmac"
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_KEY_ROTATION_INTERVAL_SECONDS"] = "86400"
-os.environ["AUDIT_CRYPTO_DEVELOPMENT_SOFTWARE_KEY_DIR"] = str(
-    pathlib.Path(tempfile.gettempdir()) / "pytest-keys"
-)  # Use tempdir
+# Defer temp directory creation to fixture
+_software_key_dir = None
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_KMS_KEY_ID"] = "dummy-kms-key"
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_AWS_REGION"] = "us-east-1"
 
@@ -116,6 +112,34 @@ except (ImportError, ModuleNotFoundError) as e:
 def pytest_configure(config):
     """Sets pytest configuration options."""
     config.option.asyncio_mode = "auto"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_environment():
+    """
+    Session-scoped fixture to set up test environment.
+    Creates temporary directories INSIDE fixture (not at module level) to speed up collection.
+    """
+    global _tmp_plugins_dir, _software_key_dir
+    
+    # Create temporary directories INSIDE fixture, not at module level
+    # This prevents blocking during pytest collection phase
+    _tmp_plugins_dir = pathlib.Path(tempfile.gettempdir()) / f"plugins_pytest_{os.getpid()}"
+    _tmp_plugins_dir.mkdir(exist_ok=True)
+    os.environ.setdefault("LLM_PLUGIN__PLUGIN_DIR", str(_tmp_plugins_dir))
+    os.environ.setdefault("LLM_PLUGIN_PLUGIN_DIR", str(_tmp_plugins_dir))
+    
+    _software_key_dir = pathlib.Path(tempfile.gettempdir()) / "pytest-keys"
+    os.environ["AUDIT_CRYPTO_DEVELOPMENT_SOFTWARE_KEY_DIR"] = str(_software_key_dir)
+    
+    yield
+    
+    # Cleanup
+    import shutil
+    if _tmp_plugins_dir and _tmp_plugins_dir.exists():
+        shutil.rmtree(_tmp_plugins_dir, ignore_errors=True)
+    if _software_key_dir and _software_key_dir.exists():
+        shutil.rmtree(_software_key_dir, ignore_errors=True)
 
 
 # CRITICAL FIX for asynchronous cleanup hang during teardown

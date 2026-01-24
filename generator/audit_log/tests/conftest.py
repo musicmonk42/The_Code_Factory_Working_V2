@@ -17,10 +17,15 @@ def _load_dotenv(path: Path):
 
 
 def pytest_load_initial_conftests(*_args, **_kwargs):
-    # If you keep a master .env elsewhere, point to it here:
-    external_env = Path(r"D:\SFE\self_fixing_engineer\.env")  # <— change if needed
-    _load_dotenv(external_env)
-
+    # Removed hardcoded Windows-specific path to improve cross-platform compatibility
+    # and prevent unnecessary file I/O during test collection.
+    # 
+    # If you need to load environment variables from a .env file:
+    # 1. Place a .env file in the project root
+    # 2. Install python-dotenv: pip install python-dotenv
+    # 3. Add to conftest.py: from dotenv import load_dotenv; load_dotenv()
+    # 4. Or pass environment variables through your CI/CD configuration
+    
     # Hard test-safe defaults (only if not already provided)
     os.environ.setdefault("AUDIT_LOG_DEV_MODE", "true")
 

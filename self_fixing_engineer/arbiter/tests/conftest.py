@@ -39,9 +39,10 @@ os.environ["OTEL_ENABLED"] = "0"
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["SFE_OTEL_EXPORTER_TYPE"] = "console"
 
-# Create a temporary directory for test artifacts
-TEST_TEMP_DIR = tempfile.mkdtemp(prefix="sfe_test_")
-TEST_PLUGIN_FILE = os.path.join(TEST_TEMP_DIR, "test_plugins.json")
+# Defer temporary directory creation to fixture (prevent expensive op during collection)
+# These will be initialized by the session-scoped fixture
+TEST_TEMP_DIR = None
+TEST_PLUGIN_FILE = None
 
 
 # -----------------------------------------------------------------------------
@@ -157,8 +158,13 @@ def _setup_opentelemetry_context():
         logger.warning(f"Failed to setup OpenTelemetry context: {e}")
 
 
-# Run the OpenTelemetry context setup immediately
-_setup_opentelemetry_context()
+# Run the OpenTelemetry context setup only if not in collection phase
+# PYTEST_COLLECTING environment variable is set in root conftest.py before pytest
+# collection starts (search for "os.environ.setdefault" in root conftest.py).
+# This allows us to skip expensive OpenTelemetry initialization during the collection
+# phase, improving collection performance and preventing timeout issues.
+if os.environ.get("PYTEST_COLLECTING") != "1":
+    _setup_opentelemetry_context()
 
 
 # -----------------------------------------------------------------------------
@@ -169,7 +175,15 @@ def isolate_plugin_registry():
     """
     Isolate the plugin registry for testing to prevent persistence conflicts.
     This fixture runs once per test session.
+    Creates temporary directory here (not at module level) to speed up collection.
     """
+    global TEST_TEMP_DIR, TEST_PLUGIN_FILE
+    
+    # Create temporary directory INSIDE fixture, not at module level
+    # This prevents blocking during pytest collection phase
+    TEST_TEMP_DIR = tempfile.mkdtemp(prefix="sfe_test_")
+    TEST_PLUGIN_FILE = os.path.join(TEST_TEMP_DIR, "test_plugins.json")
+    
     # Import the registry module early
     import arbiter.arbiter_plugin_registry as registry_module
 
@@ -195,7 +209,7 @@ def isolate_plugin_registry():
 
     # Cleanup after all tests
     try:
-        if os.path.exists(TEST_TEMP_DIR):
+        if TEST_TEMP_DIR and os.path.exists(TEST_TEMP_DIR):
             shutil.rmtree(TEST_TEMP_DIR, ignore_errors=True)
         os.environ.pop("TESTING", None)
         logger.info("Test environment cleaned up")
