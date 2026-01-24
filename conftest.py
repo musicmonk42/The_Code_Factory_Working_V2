@@ -296,7 +296,6 @@ def _create_mock_module(name):
 # Packages that should NEVER be mocked, even if missing
 # These packages cause type annotation errors or decorator issues when mocked
 _NEVER_MOCK = [
-    "aiohttp",  # Type annotations used in aiohttp_client_cache
     "aiohttp_client_cache",  # Uses aiohttp.ClientResponse in type hints
     "pydantic",  # Decorators like field_validator must be real
     "pydantic_settings",  # Must work with real pydantic
@@ -307,6 +306,7 @@ _NEVER_MOCK = [
 
 # Only mock if genuinely missing (not if already imported)
 _OPTIONAL_DEPENDENCIES = [
+    "aiohttp",  # HTTP client - required by many modules, needs comprehensive stub
     "tiktoken",  # Often missing, used by LLM clients
     "aiofiles",  # Required by generator.main.api
     "aiofiles.os",  # Required by test_generation modules
@@ -357,7 +357,7 @@ _OPTIONAL_DEPENDENCIES = [
     "cerberus",  # Schema validation - required by policy module
     "PIL",  # Pillow - image processing
     "pillow",  # Pillow alternative import name
-    # Note: prometheus_client, aiohttp, and aiosqlite should be installed
+    # Note: prometheus_client and aiosqlite should be installed
     # and should NOT be mocked as they are critical for proper type checking
     # Omnicore engine submodules that may have missing dependencies
     "omnicore_engine.database",  # May be missing aiosqlite or other dependencies
@@ -830,6 +830,185 @@ if "tenacity" not in sys.modules:
         
         # Register the module
         sys.modules["tenacity"] = tenacity_module
+
+
+# ---- aiohttp stub setup ----
+# aiohttp requires comprehensive stubbing for async HTTP client functionality
+# This is needed because many modules use aiohttp.ClientSession for HTTP requests
+if "aiohttp" not in sys.modules:
+    try:
+        import aiohttp as _test_aiohttp
+    except ImportError:
+        # Create complete aiohttp stubs for test collection
+        import types
+        import importlib.util
+        
+        aiohttp_module = types.ModuleType("aiohttp")
+        aiohttp_module.__file__ = "<mocked aiohttp>"
+        aiohttp_module.__path__ = []
+        aiohttp_module.__spec__ = importlib.util.spec_from_loader("aiohttp", loader=None)
+        
+        # Create ClientTimeout class
+        class ClientTimeout:
+            """Mock aiohttp.ClientTimeout for test collection."""
+            def __init__(self, total=None, connect=None, sock_read=None, sock_connect=None):
+                self.total = total
+                self.connect = connect
+                self.sock_read = sock_read
+                self.sock_connect = sock_connect
+        
+        # Create ClientResponse class
+        class ClientResponse:
+            """Mock aiohttp.ClientResponse for test collection."""
+            def __init__(self, *args, **kwargs):
+                self.status = 200
+                self.headers = {}
+                self._content = b""
+            
+            async def json(self, *args, **kwargs):
+                return {}
+            
+            async def text(self, *args, **kwargs):
+                return ""
+            
+            async def read(self, *args, **kwargs):
+                return b""
+            
+            async def __aenter__(self):
+                return self
+            
+            async def __aexit__(self, *args):
+                pass
+            
+            def raise_for_status(self):
+                pass
+        
+        # Create ClientSession class with full async context manager support
+        class ClientSession:
+            """
+            Mock aiohttp.ClientSession for test collection.
+            
+            Supports async context manager protocol and returns mock responses
+            for all HTTP methods. This allows test files to import modules that
+            use aiohttp without requiring the actual dependency during collection.
+            """
+            
+            def __init__(self, *args, **kwargs):
+                self._closed = False
+            
+            async def __aenter__(self):
+                return self
+            
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                await self.close()
+            
+            async def close(self):
+                self._closed = True
+            
+            @property
+            def closed(self):
+                return self._closed
+            
+            async def _make_request(self, *args, **kwargs):
+                return ClientResponse()
+            
+            async def get(self, *args, **kwargs):
+                return ClientResponse()
+            
+            async def post(self, *args, **kwargs):
+                return ClientResponse()
+            
+            async def put(self, *args, **kwargs):
+                return ClientResponse()
+            
+            async def patch(self, *args, **kwargs):
+                return ClientResponse()
+            
+            async def delete(self, *args, **kwargs):
+                return ClientResponse()
+            
+            async def head(self, *args, **kwargs):
+                return ClientResponse()
+            
+            async def options(self, *args, **kwargs):
+                return ClientResponse()
+            
+            async def request(self, *args, **kwargs):
+                return ClientResponse()
+        
+        # Create exception classes
+        class ClientError(Exception):
+            """Base exception for aiohttp client errors."""
+            pass
+        
+        class ClientResponseError(ClientError):
+            """Exception for HTTP response errors."""
+            def __init__(self, request_info=None, history=None, status=None, message=None, headers=None):
+                self.request_info = request_info
+                self.history = history or ()
+                self.status = status or 0
+                self.message = message or ""
+                self.headers = headers or {}
+                super().__init__(f"{self.status}: {self.message}")
+        
+        class ClientConnectionError(ClientError):
+            """Exception for connection errors."""
+            pass
+        
+        class ServerTimeoutError(ClientError):
+            """Exception for server timeout errors."""
+            pass
+        
+        class ContentTypeError(ClientError):
+            """Exception for content type errors."""
+            pass
+        
+        class InvalidURL(ClientError):
+            """Exception for invalid URL errors."""
+            pass
+        
+        # Create TCPConnector class
+        class TCPConnector:
+            """Mock aiohttp.TCPConnector for test collection."""
+            def __init__(self, *args, **kwargs):
+                pass
+            
+            async def close(self):
+                pass
+        
+        # Create BasicAuth class
+        class BasicAuth:
+            """Mock aiohttp.BasicAuth for test collection."""
+            def __init__(self, login, password="", encoding="latin1"):
+                self.login = login
+                self.password = password
+                self.encoding = encoding
+        
+        # Create FormData class
+        class FormData:
+            """Mock aiohttp.FormData for test collection."""
+            def __init__(self):
+                self._fields = []
+            
+            def add_field(self, name, value, **kwargs):
+                self._fields.append((name, value))
+        
+        # Register all classes and types on the module
+        aiohttp_module.ClientTimeout = ClientTimeout
+        aiohttp_module.ClientResponse = ClientResponse
+        aiohttp_module.ClientSession = ClientSession
+        aiohttp_module.ClientError = ClientError
+        aiohttp_module.ClientResponseError = ClientResponseError
+        aiohttp_module.ClientConnectionError = ClientConnectionError
+        aiohttp_module.ServerTimeoutError = ServerTimeoutError
+        aiohttp_module.ContentTypeError = ContentTypeError
+        aiohttp_module.InvalidURL = InvalidURL
+        aiohttp_module.TCPConnector = TCPConnector
+        aiohttp_module.BasicAuth = BasicAuth
+        aiohttp_module.FormData = FormData
+        
+        # Register the module
+        sys.modules["aiohttp"] = aiohttp_module
 
 
 # ---- OpenTelemetry stub setup ----
