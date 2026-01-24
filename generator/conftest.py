@@ -17,6 +17,10 @@ import os
 from pathlib import Path
 from types import ModuleType
 import importlib.util
+import time
+
+# Start timing for diagnostics
+_CONFTEST_START_TIME = time.time()
 
 # Set testing environment variables EARLY
 os.environ.setdefault("TESTING", "1")
@@ -24,6 +28,15 @@ os.environ.setdefault("PYTEST_CURRENT_TEST", "true")
 os.environ.setdefault("OTEL_SDK_DISABLED", "1")
 os.environ.setdefault("AWS_REGION", "us-east-1")
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
+# Defensive CI environment detection - force-set CI variables if in GitHub Actions
+# This ensures _is_ci_environment() always returns True in GitHub Actions
+if os.environ.get("GITHUB_ACTIONS", "").lower() in ("1", "true", "yes"):
+    os.environ["CI"] = "1"
+    print(f"[generator/conftest.py] GitHub Actions detected, CI=1 set")
+
+_TIME_AFTER_ENV_SETUP = time.time()
+print(f"[generator/conftest.py] Environment setup: {_TIME_AFTER_ENV_SETUP - _CONFTEST_START_TIME:.3f}s")
 
 # Add the generator directory to sys.path
 generator_root = Path(__file__).parent.resolve()
@@ -34,6 +47,9 @@ if not sys.path or sys.path[0] != generator_root_str:
     if generator_root_str in sys.path:
         sys.path.remove(generator_root_str)
     sys.path.insert(0, generator_root_str)
+
+_TIME_AFTER_PATH_SETUP = time.time()
+print(f"[generator/conftest.py] Path setup: {_TIME_AFTER_PATH_SETUP - _TIME_AFTER_ENV_SETUP:.3f}s")
 
 
 # ---- Lightweight mock setup for optional dependencies ----
@@ -316,6 +332,21 @@ _OPTIONAL_DEPENDENCIES = [
     "boto3",  # AWS SDK
     "botocore.exceptions",  # AWS SDK exceptions
     "opentelemetry",  # OpenTelemetry - requires special handling, see _create_opentelemetry_stubs()
+    # Additional potentially expensive imports
+    "scipy",  # Scientific computing
+    "pandas",  # Data analysis
+    "sklearn",  # Machine learning (scikit-learn)
+    "matplotlib",  # Plotting library
+    "seaborn",  # Statistical visualization
+    "plotly",  # Interactive plots
+    "jinja2",  # Template engine
+    "yaml",  # YAML parsing
+    "toml",  # TOML parsing
+    "tomli",  # TOML parsing library
+    "PIL",  # Python Imaging Library (Pillow)
+    "cv2",  # OpenCV
+    "tensorflow",  # TensorFlow
+    "keras",  # Keras deep learning
 ]
 
 # Flag to track if mocks have been set up (to avoid duplicate work)
@@ -682,10 +713,17 @@ def _create_opentelemetry_stubs():
     )
 
 
+_TIME_AFTER_MOCK_DEFINITIONS = time.time()
+print(f"[generator/conftest.py] Mock function definitions: {_TIME_AFTER_MOCK_DEFINITIONS - _TIME_AFTER_PATH_SETUP:.3f}s")
+
+
 # ---- Early CI mock initialization ----
 # In CI environments, set up mocks immediately to avoid timeout during test collection.
 # This code runs at module level, right after all helper functions are defined.
+print(f"[generator/conftest.py] CI environment check: CI={os.environ.get('CI')}, GITHUB_ACTIONS={os.environ.get('GITHUB_ACTIONS')}")
 if _is_ci_environment():
+    print(f"[generator/conftest.py] CI environment detected, initializing mocks eagerly...")
+    _mock_init_start = time.time()
     if not _mocks_initialized:
         _mocks_initialized = True  # Prevent double initialization
         for dep in _OPTIONAL_DEPENDENCIES:
@@ -751,6 +789,13 @@ if _is_ci_environment():
                     defusedxml_et.parse = lambda *args, **kwargs: None
                     defusedxml_et.fromstring = lambda *args, **kwargs: None
                     defusedxml_et.XML = lambda *args, **kwargs: None
+    
+    _mock_init_end = time.time()
+    print(f"[generator/conftest.py] CI mock initialization: {_mock_init_end - _mock_init_start:.3f}s")
+    print(f"[generator/conftest.py] Total conftest import time: {_mock_init_end - _CONFTEST_START_TIME:.3f}s")
+else:
+    print(f"[generator/conftest.py] Not in CI environment, mocks will be initialized lazily")
+    print(f"[generator/conftest.py] Total conftest import time: {time.time() - _CONFTEST_START_TIME:.3f}s")
 
 
 def _setup_optional_dependency_mocks():

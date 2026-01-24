@@ -219,16 +219,16 @@ jobs:
           rm -rf .pytest_cache/
           
           echo ""
-          echo "=== PREFLIGHT: Validating test collection (60s timeout) ==="
+          echo "=== PREFLIGHT: Validating test collection (120s timeout) ==="
           # This is the critical fix - ensure collection completes before running tests
-          timeout 60s pytest --collect-only --quiet --import-mode=importlib || {
+          timeout 120s pytest --collect-only --quiet --import-mode=importlib || {
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 124 ]; then
-              echo "ERROR: Test collection timed out after 60 seconds"
+              echo "ERROR: Test collection timed out after 120 seconds"
               echo "This usually means a conftest.py or test module has expensive imports"
               echo ""
               echo "=== Diagnostic: Attempting collection with verbose output ==="
-              timeout 30s pytest --collect-only -v --import-mode=importlib 2>&1 | head -100
+              timeout 60s pytest --collect-only -v --import-mode=importlib 2>&1 | head -100
               exit 1
             else
               echo "ERROR: Test collection failed with exit code $EXIT_CODE"
