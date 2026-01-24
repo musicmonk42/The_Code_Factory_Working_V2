@@ -29,11 +29,18 @@ from server.environment import (
 @pytest.fixture(autouse=True)
 def reset_environment():
     """Reset environment detector before each test."""
-    # Reset the singleton state
+    # Reset the singleton state - both class and instance attributes
+    # Also reset the module-level env_detector instance
     EnvironmentDetector._environment = None
+    env_detector._environment = None
+    if EnvironmentDetector._instance is not None:
+        EnvironmentDetector._instance._environment = None
     yield
     # Clean up after test
     EnvironmentDetector._environment = None
+    env_detector._environment = None
+    if EnvironmentDetector._instance is not None:
+        EnvironmentDetector._instance._environment = None
 
 
 @pytest.fixture
@@ -54,6 +61,13 @@ def clean_env(monkeypatch):
     ]
     for var in env_vars:
         monkeypatch.delenv(var, raising=False)
+    
+    # Reset the environment detector AFTER clearing env vars
+    # This ensures any cached value from previous detection is cleared
+    EnvironmentDetector._environment = None
+    env_detector._environment = None
+    if EnvironmentDetector._instance is not None:
+        EnvironmentDetector._instance._environment = None
 
 
 class TestEnvironmentDetector:

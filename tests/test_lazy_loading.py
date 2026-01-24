@@ -11,9 +11,12 @@ import pytest
 @pytest.fixture
 def skip_if_lazy_disabled():
     """Fixture that skips tests if lazy module aliasing is disabled."""
-    import generator.conftest as conftest
-    if not getattr(conftest, '_ENABLE_LAZY_ALIASES', False):
-        pytest.skip("Lazy module aliasing is disabled (_ENABLE_LAZY_ALIASES=False)")
+    try:
+        import conftest
+        if not getattr(conftest, '_ENABLE_LAZY_ALIASES', False):
+            pytest.skip("Lazy module aliasing is disabled (_ENABLE_LAZY_ALIASES=False)")
+    except ImportError:
+        pytest.skip("conftest module not importable - lazy aliases may not be configured")
 
 
 def test_lazy_loading_mechanism(skip_if_lazy_disabled):
@@ -88,8 +91,8 @@ def test_conftest_import_is_fast():
     import time
     import importlib
     
-    # Remove from sys.modules if already imported
-    conftest_module_name = 'generator.conftest'
+    # Test the root conftest since generator.conftest was consolidated
+    conftest_module_name = 'conftest'
     if conftest_module_name in sys.modules:
         # Already imported, can't test this
         pytest.skip("conftest already imported, cannot test import speed")

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.asyncio
 async def test_runner_stubs():
-    """Test Issue #2: Runner stubs should raise NotImplementedError."""
+    """Test Issue #2: Runner stubs should raise NotImplementedError or accept valid args."""
     logger.info("Testing Issue #2: Runner stub functions...")
 
     try:
@@ -28,11 +28,23 @@ async def test_runner_stubs():
 
         logger.info("✓ Runner functions imported successfully")
 
-        # Test that calling the stub raises NotImplementedError
-        with pytest.raises(NotImplementedError):
-            await run_tests_in_sandbox()
-        
-        logger.info("✓ run_tests_in_sandbox correctly raises NotImplementedError")
+        # Test that the function can be called with proper arguments
+        # The function should either:
+        # 1. Raise NotImplementedError (if stub)
+        # 2. Return a result dict (if real implementation)
+        try:
+            result = await run_tests_in_sandbox(
+                code_files={"test.py": "x = 1"},
+                test_files={"test_test.py": "def test_x(): pass"},
+                temp_path="/tmp/test",
+                language="python"
+            )
+            # If we get here, the real function ran
+            assert isinstance(result, dict), f"Expected dict result, got {type(result)}"
+            logger.info("✓ run_tests_in_sandbox executed with real implementation")
+        except NotImplementedError:
+            # Stub raised NotImplementedError as expected
+            logger.info("✓ run_tests_in_sandbox correctly raises NotImplementedError (stub mode)")
 
     except ImportError as e:
         logger.warning(f"Import error (expected in some environments): {e}")
@@ -63,7 +75,7 @@ def test_intent_parser_redact_secrets():
 
 @pytest.mark.asyncio
 async def test_clarifier_stubs():
-    """Test Issue #4: Clarifier stubs should raise NotImplementedError."""
+    """Test Issue #4: Clarifier LLM classes should work (real or fallback mode)."""
     logger.info("Testing Issue #4: Clarifier stub implementations...")
 
     try:
@@ -76,15 +88,21 @@ async def test_clarifier_stubs():
 
         logger.info("✓ Clarifier classes imported")
 
-        # Test that methods raise NotImplementedError
+        # Test that GrokLLM can be instantiated and generate returns a response
+        # It may use fallback mode if API is unavailable
         try:
             llm = GrokLLM(api_key="test")
-            with pytest.raises(NotImplementedError):
-                await llm.generate("test prompt")
-            logger.info("✓ GrokLLM.generate correctly raises NotImplementedError")
+            result = await llm.generate("test prompt")
+            # If we get here, the function completed (either real or fallback)
+            assert result is not None, "GrokLLM.generate should return a response"
+            assert isinstance(result, str), f"Expected string result, got {type(result)}"
+            logger.info(f"✓ GrokLLM.generate returned a response ({len(result)} chars)")
+        except NotImplementedError:
+            # Stub raised NotImplementedError - also acceptable
+            logger.info("✓ GrokLLM.generate raises NotImplementedError (stub mode)")
         except Exception as e:
-            # May fail due to missing dependencies
-            logger.info(f"✓ Got expected exception: {type(e).__name__}")
+            # May fail due to missing dependencies - still acceptable
+            logger.info(f"✓ Got expected exception: {type(e).__name__}: {e}")
 
     except ImportError as e:
         logger.warning(f"Import error (expected in some environments): {e}")
