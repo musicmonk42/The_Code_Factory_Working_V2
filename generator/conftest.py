@@ -355,6 +355,20 @@ _OPTIONAL_DEPENDENCIES = [
     # Omnicore engine submodules that may have missing dependencies
     "omnicore_engine.database",  # May be missing aiosqlite or other dependencies
     "omnicore_engine.message_bus",  # May be missing structlog or other dependencies
+    # Simulation module - expensive initialization with event loops
+    "simulation",
+    "simulation.simulation_module",
+    "simulation.runners",
+    "simulation.core",
+    "simulation.agentic",
+    "simulation.parallel",
+    "simulation.quantum",
+    "simulation.explain",
+    "simulation.sandbox",
+    "simulation.plugins",
+    "simulation.plugins.plugin_manager",
+    "simulation.registry",
+    "omnicore_engine.engines",  # Required by simulation registration
 ]
 
 # Flag to track if mocks have been set up (to avoid duplicate work)
@@ -989,26 +1003,28 @@ def import_timeout(seconds=30):  # Increased from 10 to 30 for CI environments
 try:
     import pytest
 
-    @pytest.fixture(scope="session", autouse=True)
-    def _test_setup():
+    @pytest.fixture(scope="session")
+    def _ensure_mocks():
         """
         Ensure optional dependency mocks are set up once per test session.
-        This fixture is automatically used by all tests (autouse=True) and runs
-        once per session (scope="session") to set up the mocks lazily.
+        This fixture is NOT autouse - tests must opt-in explicitly.
         
-        Mocks are initialized AFTER test collection completes to avoid timeout.
-        This runs when the first test actually executes, not during collection.
+        Mocks are initialized when first test using this fixture runs,
+        NOT during collection phase.
         """
         import time
         _fixture_start = time.time()
-        print(f"\n[generator/conftest.py] _test_setup fixture starting mock initialization...")
+        print(f"\n[generator/conftest.py] _ensure_mocks fixture starting mock initialization...")
         
-        # Always setup mocks when tests actually run, regardless of environment
+        # Always setup mocks when tests actually run
         _setup_optional_dependency_mocks()
         
         _fixture_end = time.time()
-        print(f"[generator/conftest.py] _test_setup fixture completed in {_fixture_end - _fixture_start:.3f}s")
+        print(f"[generator/conftest.py] _ensure_mocks fixture completed in {_fixture_end - _fixture_start:.3f}s")
         yield
+    
+    # Legacy alias for backward compatibility
+    _test_setup = _ensure_mocks
 
 except ImportError:
     # pytest not available (e.g., when conftest is imported outside of pytest context)
