@@ -620,22 +620,118 @@ class Plugin:
 
 
 class PluginRegistry:
+    """
+    Thread-safe registry for managing plugin lifecycle, registration, and persistence.
+    
+    The registry supports deferred persistence for plugins registered before the
+    database connection is established. This is common during module import time
+    when plugins use decorators to register themselves.
+    
+    Thread Safety:
+        - Plugin registration uses _register_lock for thread-safe operations
+        - Pending metadata queue uses _pending_metadata_lock for concurrent access
+        - Async initialization uses _init_lock to prevent race conditions
+    """
+    
     def __init__(self):
         self._plugins = defaultdict(dict)
         self._entrypoints = {}
         self._is_initialized = False
         self._init_lock = asyncio.Lock()  # Lock for atomic initialization
         self._register_lock = threading.Lock()  # Lock for plugin registration
+        self._pending_metadata_lock = threading.Lock()  # Lock for pending metadata queue
         self.db: Optional[Database] = None
         self.audit_client: Optional[Any] = None
         self.message_bus: Optional[ShardedMessageBus] = None
         self.performance_tracker: Optional[PluginPerformanceTracker] = None
         self.logger = logging.getLogger("PluginRegistry")
         self._loop = None
+        # Store pending plugin metadata for later persistence when DB becomes available
+        # Access must be protected by _pending_metadata_lock for thread safety
+        self._pending_plugin_metadata: list[Dict[str, Any]] = []
 
     @property
     def plugins(self):
         return self._plugins
+
+    def queue_pending_metadata(self, metadata: Dict[str, Any]) -> None:
+        """
+        Thread-safe method to queue plugin metadata for deferred persistence.
+        
+        Called when plugins are registered before the database is initialized.
+        The metadata will be persisted when initialize() is called with a valid DB.
+        
+        Args:
+            metadata: Plugin metadata dictionary containing name, kind, version, etc.
+        """
+        with self._pending_metadata_lock:
+            self._pending_plugin_metadata.append(metadata)
+
+    def get_pending_metadata_count(self) -> int:
+        """
+        Thread-safe method to get the count of pending metadata entries.
+        
+        Returns:
+            Number of pending plugin metadata entries awaiting persistence.
+        """
+        with self._pending_metadata_lock:
+            return len(self._pending_plugin_metadata)
+
+    async def _persist_pending_metadata(self) -> Tuple[int, int]:
+        """
+        Persist any pending plugin metadata that was queued before DB initialization.
+        
+        This method is called during initialize() after the database connection
+        is established. It processes all queued metadata entries and attempts
+        to persist them to the database.
+        
+        Returns:
+            Tuple of (successfully_persisted_count, total_attempted_count)
+            
+        Thread Safety:
+            This method acquires _pending_metadata_lock to safely access and
+            clear the pending metadata queue.
+        """
+        if not self.db:
+            self.logger.debug("DB not available, skipping pending metadata persistence.")
+            return (0, 0)
+        
+        # Atomically get and clear pending metadata
+        with self._pending_metadata_lock:
+            if not self._pending_plugin_metadata:
+                return (0, 0)
+            # Copy and clear under lock to prevent race conditions
+            pending_metadata = self._pending_plugin_metadata.copy()
+            self._pending_plugin_metadata.clear()
+        
+        pending_count = len(pending_metadata)
+        self.logger.info(f"Persisting {pending_count} pending plugin metadata entries...")
+        
+        persisted = 0
+        failed_plugins: set[str] = set()
+        
+        for metadata in pending_metadata:
+            plugin_name = metadata.get("name", "unknown")
+            try:
+                await self.db.save_plugin_legacy(metadata)
+                persisted += 1
+                self.logger.debug(f"Persisted metadata for plugin '{plugin_name}'.")
+            except Exception as e:
+                failed_plugins.add(plugin_name)
+                self.logger.warning(
+                    f"Failed to persist metadata for plugin '{plugin_name}': {e}",
+                    exc_info=self.logger.isEnabledFor(logging.DEBUG)
+                )
+        
+        if persisted == pending_count:
+            self.logger.info(f"Successfully persisted all {persisted} pending plugin metadata entries.")
+        else:
+            self.logger.warning(
+                f"Persisted {persisted}/{pending_count} pending plugin metadata entries. "
+                f"Failed plugins: {', '.join(failed_plugins)}"
+            )
+        
+        return (persisted, pending_count)
 
     def _attach_bus_adapter_if_any(self, name: str, kind_str: str, plugin: "Plugin"):
         if self.message_bus and PluginMessageBusAdapter is not None:
@@ -677,6 +773,8 @@ class PluginRegistry:
                 self.performance_tracker = PluginPerformanceTracker(
                     db=self.db, audit_client=self.audit_client
                 )
+                # Persist any pending plugin metadata that was queued before DB initialization
+                await self._persist_pending_metadata()
 
             await self.load_arbiter_plugins()
             await self.load_from_directory(settings.PLUGIN_DIR)
@@ -1265,29 +1363,50 @@ def plugin(
 
         PLUGIN_REGISTRY.register(kind.value, name, plugin_instance)
         logger.info(f"Plugin '{name}' registered via decorator to global registry.")
+        
+        # Build metadata for persistence
+        # Note: We extract source code here while we have access to the function
+        try:
+            fn_source_code = inspect.getsource(fn) if callable(fn) else str(fn)
+        except (OSError, TypeError) as e:
+            # Source code may not be available for built-in functions or dynamically created functions
+            logger.debug(f"Could not extract source code for plugin '{name}': {e}")
+            fn_source_code = f"# Source unavailable: {type(fn).__name__}"
+        
+        plugin_metadata = {
+            "uuid": str(uuid.uuid4()),
+            "name": name,
+            "kind": kind.value,
+            "version": version,
+            "description": description,
+            "safe": safe,
+            "source": source,
+            "params_schema": params_schema if params_schema is not None else {},
+            "code": fn_source_code,
+        }
+        
         if PLUGIN_REGISTRY.db:
-            asyncio.create_task(
-                PLUGIN_REGISTRY.db.save_plugin_legacy(
-                    {
-                        "uuid": str(uuid.uuid4()),
-                        "name": name,
-                        "kind": kind.value,
-                        "version": version,
-                        "description": description,
-                        "safe": safe,
-                        "source": source,
-                        "params_schema": (
-                            params_schema if params_schema is not None else {}
-                        ),
-                        "code": (
-                            inspect.getsource(fn) if not isinstance(fn, str) else fn
-                        ),
-                    }
+            # DB is available - attempt to persist immediately via async task
+            # First check if there's a running event loop
+            try:
+                asyncio.get_running_loop()
+                # Event loop exists, safe to create task
+                asyncio.create_task(
+                    PLUGIN_REGISTRY.db.save_plugin_legacy(plugin_metadata)
                 )
-            )
+            except RuntimeError:
+                # No running event loop - queue for later persistence
+                # This is expected during import-time registration
+                PLUGIN_REGISTRY.queue_pending_metadata(plugin_metadata)
+                logger.debug(
+                    f"Plugin '{name}' metadata queued (no running event loop)."
+                )
         else:
-            logger.warning(
-                f"PluginRegistry DB not initialized. Plugin '{name}' metadata not persisted."
+            # Queue metadata for later persistence when DB becomes available
+            # This is expected during import-time registration before engine initialization
+            PLUGIN_REGISTRY.queue_pending_metadata(plugin_metadata)
+            logger.debug(
+                f"Plugin '{name}' metadata queued for deferred persistence."
             )
         return fn
 
