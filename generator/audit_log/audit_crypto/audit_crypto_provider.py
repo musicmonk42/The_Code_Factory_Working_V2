@@ -16,24 +16,23 @@ from types import SimpleNamespace  # Used for fallbacks
 from typing import Any, Awaitable, Callable, Dict, Optional, Set
 
 # Allow nested event loops for compatibility with FastAPI lifespan
+def _is_uvloop_policy() -> bool:
+    """Check if uvloop is set as the event loop policy."""
+    policy = asyncio.get_event_loop_policy()
+    return type(policy).__module__.startswith("uvloop")
+
+
 try:
     import nest_asyncio
 
     # FIX: Check if uvloop is being used - nest_asyncio doesn't support uvloop
-    try:
-        loop = asyncio.get_event_loop()
-        loop_type = type(loop).__name__
-        if "uvloop" in loop_type.lower():
-            # uvloop is active - skip nest_asyncio as it's not compatible
-            HAS_NEST_ASYNCIO = False
-            logging.getLogger(__name__).debug(
-                "nest_asyncio skipped: uvloop is active and not supported by nest_asyncio"
-            )
-        else:
-            nest_asyncio.apply()
-            HAS_NEST_ASYNCIO = True
-    except RuntimeError:
-        # No event loop running yet - safe to apply nest_asyncio
+    if _is_uvloop_policy():
+        # uvloop is the event loop policy - skip nest_asyncio as it's not compatible
+        HAS_NEST_ASYNCIO = False
+        logging.getLogger(__name__).debug(
+            "nest_asyncio skipped: uvloop is active and not supported by nest_asyncio"
+        )
+    else:
         nest_asyncio.apply()
         HAS_NEST_ASYNCIO = True
 except (ImportError, ValueError) as e:

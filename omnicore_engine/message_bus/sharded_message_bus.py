@@ -27,24 +27,24 @@ import structlog
 
 # Import nest_asyncio to allow nested event loops
 # Only apply if not already applied (checking for idempotency)
+
+
+def _is_uvloop_policy() -> bool:
+    """Check if uvloop is set as the event loop policy."""
+    policy = asyncio.get_event_loop_policy()
+    return type(policy).__module__.startswith("uvloop")
+
+
 try:
     import nest_asyncio
     # Check if already applied by trying to detect if we're in a nested loop scenario
     # nest_asyncio.apply() is idempotent, so it's safe to call multiple times
     if not hasattr(asyncio, '_nest_asyncio_applied'):
         # FIX: Check if uvloop is being used - nest_asyncio doesn't support uvloop
-        try:
-            loop = asyncio.get_event_loop()
-            loop_type = type(loop).__name__
-            if "uvloop" in loop_type.lower():
-                # uvloop is active - skip nest_asyncio as it's not compatible
-                NEST_ASYNCIO_AVAILABLE = False
-            else:
-                nest_asyncio.apply()
-                asyncio._nest_asyncio_applied = True  # type: ignore
-                NEST_ASYNCIO_AVAILABLE = True
-        except RuntimeError:
-            # No event loop running yet - safe to apply nest_asyncio
+        if _is_uvloop_policy():
+            # uvloop is the event loop policy - skip nest_asyncio as it's not compatible
+            NEST_ASYNCIO_AVAILABLE = False
+        else:
             nest_asyncio.apply()
             asyncio._nest_asyncio_applied = True  # type: ignore
             NEST_ASYNCIO_AVAILABLE = True

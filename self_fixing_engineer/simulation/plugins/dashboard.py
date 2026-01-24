@@ -24,17 +24,19 @@ logging.basicConfig(
 )
 
 # Apply nest_asyncio for handling nested event loops in Streamlit
+
+
+def _is_uvloop_policy() -> bool:
+    """Check if uvloop is set as the event loop policy."""
+    policy = asyncio.get_event_loop_policy()
+    return type(policy).__module__.startswith("uvloop")
+
+
 try:
     import nest_asyncio
 
     # FIX: Check if uvloop is being used - nest_asyncio doesn't support uvloop
-    try:
-        loop = asyncio.get_event_loop()
-        loop_type = type(loop).__name__
-        if "uvloop" not in loop_type.lower():
-            nest_asyncio.apply()
-    except RuntimeError:
-        # No event loop running yet - safe to apply nest_asyncio
+    if not _is_uvloop_policy():
         nest_asyncio.apply()
 except (ImportError, ValueError) as e:
     logging.warning(
