@@ -129,13 +129,12 @@ Issues = "https://github.com/your-org/self_fixing_engineer/issues"
 Documentation = "https://your-org.github.io/self_fixing_engineer/"
 
 # Setuptools configuration for package discovery
-[tool.setuptools]
-package-dir = {"" = "."}
-
+# Flat layout: pyproject.toml is at the root of the package
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["self_fixing_engineer*"]
-exclude = ["tests*", "*.tests*", "docs*", "test_checkpoints*"]
+# Don't filter by name - just find all packages
+include = ["*"]
+exclude = ["docs*", "test_checkpoints*"]
 
 [tool.black]
 line-length = 88
