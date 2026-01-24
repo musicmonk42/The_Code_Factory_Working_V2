@@ -1,0 +1,279 @@
+# Production Docker Compose Configuration
+# This file provides production-ready settings with security best practices
+# 
+# IMPORTANT: 
+# 1. Store secrets in Docker secrets or external secrets manager
+# 2. Replace all placeholder values before deploying
+# 3. Use proper SSL/TLS certificates
+# 4. Enable all monitoring and security features
+
+version: '3.8'
+
+services:
+  # Redis for message bus and caching
+  redis:
+    image: redis:7-alpine
+    container_name: codefactory-redis-prod
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - codefactory-network
+
+  # PostgreSQL database (recommended for production)
+  postgres:
+    image: postgres:15-alpine
+    container_name: codefactory-postgres-prod
+    environment:
+      POSTGRES_DB: codefactory
+      POSTGRES_USER: codefactory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codefactory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - codefactory-network
+
+  # Unified Code Factory Platform
+  codefactory:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: codefactory-platform-prod
+    environment:
+      # ============================================
+      # CRITICAL: Application Environment
+      # ============================================
+      - APP_ENV=production
+      - DEV_MODE=0
+      - PRODUCTION_MODE=1
+      
+      # ============================================
+      # CRITICAL: Security Configuration
+      # Replace with strong random keys from secrets manager!
+      # ============================================
+      - AGENTIC_AUDIT_HMAC_KEY=${AGENTIC_AUDIT_HMAC_KEY}  # REQUIRED: 64-char hex key
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}  # REQUIRED: Fernet key
+      - KMS_KEY_ID=${KMS_KEY_ID:-}  # Optional: AWS KMS key
+      
+      # ============================================
+      # Startup Optimization
+      # ============================================
+      - APP_STARTUP=1
+      - SKIP_IMPORT_TIME_VALIDATION=1
+      - SPACY_WARNING_IGNORE=W007
+      
+      # ============================================
+      # Database Configuration
+      # ============================================
+      - DB_PATH=postgresql+asyncpg://codefactory:${POSTGRES_PASSWORD}@postgres:5432/codefactory
+      - DB_POOL_SIZE=50
+      - DB_POOL_MAX_OVERFLOW=20
+      - DB_RETRY_ATTEMPTS=3
+      - DB_RETRY_DELAY=1.0
+      
+      # ============================================
+      # Message Bus Configuration
+      # ============================================
+      - MESSAGE_BUS_SHARD_COUNT=8
+      - MESSAGE_BUS_WORKERS_PER_SHARD=4
+      - ENABLE_MESSAGE_BUS_GUARDIAN=1
+      - MESSAGE_BUS_GUARDIAN_INTERVAL=30
+      
+      # ============================================
+      # LLM Provider Configuration
+      # ============================================
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - GROK_API_KEY=${GROK_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}  # REQUIRED for most features
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - OLLAMA_HOST=${OLLAMA_HOST:-}
+      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-openai}
+      - LLM_TIMEOUT=300
+      - LLM_MAX_RETRIES=3
+      - LLM_TEMPERATURE=0.7
+      
+      # ============================================
+      # Infrastructure
+      # ============================================
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      
+      # ============================================
+      # Feature Flags
+      # ============================================
+      - ENABLE_HSM=${ENABLE_HSM:-0}
+      - ENABLE_REDIS=1
+      - ENABLE_KAFKA=${ENABLE_KAFKA:-0}
+      
+      # ============================================
+      # Logging Configuration
+      # ============================================
+      - LOG_LEVEL=INFO
+      - ENABLE_STRUCTURED_LOGGING=1
+      
+      # ============================================
+      # Monitoring
+      # ============================================
+      - PROMETHEUS_PORT=9090
+      
+      # ============================================
+      # Application Paths
+      # ============================================
+      - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
+      - AUDIT_LOG_PATH=/app/logs/audit_trail.log
+      
+    ports:
+      - "8000:8000"  # Main API endpoint
+      - "9090:9090"  # Prometheus metrics
+    volumes:
+      # Use named volumes for persistence, not bind mounts
+      - platform-output:/app/output
+      - platform-uploads:/app/uploads
+      - platform-logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: always
+    networks:
+      - codefactory-network
+    # Resource limits for production stability
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Command with production workers
+    command: sh -c "gunicorn server.main:app -w 9 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 300 --access-logfile - --error-logfile -"
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: codefactory-prometheus-prod
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    restart: always
+    networks:
+      - codefactory-network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: codefactory-grafana-prod
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://grafana.yourdomain.com
+      - GF_SECURITY_COOKIE_SECURE=true
+      - GF_SECURITY_COOKIE_SAMESITE=strict
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    restart: always
+    networks:
+      - codefactory-network
+
+volumes:
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local
+  platform-output:
+    driver: local
+  platform-uploads:
+    driver: local
+  platform-logs:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  codefactory-network:
+    driver: bridge
+
+# ============================================
+# Production Deployment Instructions
+# ============================================
+#
+# 1. Create .env.production file with all required secrets:
+#    AGENTIC_AUDIT_HMAC_KEY=<64-char-hex-key>
+#    ENCRYPTION_KEY=<fernet-key>
+#    POSTGRES_PASSWORD=<strong-password>
+#    REDIS_PASSWORD=<strong-password>
+#    OPENAI_API_KEY=<your-key>
+#    GRAFANA_PASSWORD=<strong-password>
+#
+# 2. Generate strong keys:
+#    # HMAC key (64 hex chars)
+#    openssl rand -hex 32
+#    
+#    # Fernet encryption key
+#    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#
+# 3. Deploy:
+#    docker-compose -f docker-compose.production.yml --env-file .env.production up -d
+#
+# 4. Verify:
+#    docker-compose -f docker-compose.production.yml ps
+#    curl http://localhost:8000/health
+#    curl http://localhost:8000/ready
+#
+# 5. Monitor:
+#    Prometheus: http://localhost:9091
+#    Grafana: http://localhost:3000
+#    Metrics: http://localhost:9090/metrics
+#
+# 6. Backup:
+#    docker-compose -f docker-compose.production.yml exec postgres pg_dump -U codefactory codefactory > backup.sql
+#
+# 7. Security Checklist:
+#    [ ] All secrets stored in secrets manager (not .env files)
+#    [ ] Strong random keys generated
+#    [ ] Different keys per environment
+#    [ ] SSL/TLS enabled (use reverse proxy like nginx)
+#    [ ] Firewall rules configured
+#    [ ] Regular key rotation schedule
+#    [ ] Monitoring and alerting configured
+#    [ ] Backup and restore tested

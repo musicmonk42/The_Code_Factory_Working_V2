@@ -273,10 +273,6 @@ class PlugInKind:
     VALIDATOR = "validator"
     ANALYZER = "analyzer"
 
-    class PlugInKind:
-        """Fallback PlugInKind with minimal definitions."""
-        FIX = "fix"
-
 
 # --- End of FIX restructuring ---
 

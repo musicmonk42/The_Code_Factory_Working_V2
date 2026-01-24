@@ -193,6 +193,16 @@ This document provides a comprehensive reference for all environment variables u
 - **Example:** `MESSAGE_BUS_WORKERS_PER_SHARD=4`
 - **Impact:** Controls concurrent message processing
 
+### MESSAGE_BUS_OPERATION_TIMEOUT
+- **Purpose:** Timeout for subscribe/unsubscribe operations (seconds)
+- **Type:** Float
+- **Values:** 1.0-30.0
+- **Default:** `5.0`
+- **Production:** `5.0-10.0`
+- **Example:** `MESSAGE_BUS_OPERATION_TIMEOUT=5.0`
+- **Impact:** Prevents hanging on message bus operations
+- **Note:** Currently hardcoded to 5.0 in code, can be made configurable if needed
+
 ### ENABLE_MESSAGE_BUS_GUARDIAN
 - **Purpose:** Enables message bus health monitoring
 - **Type:** Boolean (0 or 1)
