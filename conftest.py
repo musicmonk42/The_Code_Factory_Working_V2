@@ -348,48 +348,51 @@ _OPTIONAL_DEPENDENCIES = [
 ]
 
 # Special handling for botocore.exceptions - must be proper exception classes
-if "botocore.exceptions" not in sys.modules:
-    try:
-        import botocore.exceptions
-    except ImportError:
-        import types
-        import importlib.util
-        
-        # Create botocore.exceptions with REAL exception classes
-        botocore_exc_module = types.ModuleType("botocore.exceptions")
-        botocore_exc_module.__file__ = "<mocked botocore.exceptions>"
-        botocore_exc_module.__path__ = []
-        botocore_exc_module.__spec__ = importlib.util.spec_from_loader(
-            "botocore.exceptions", loader=None
-        )
-        
-        # Create proper exception classes that inherit from BaseException
-        # These are independent exceptions - they don't need to inherit from each other
-        class BotoCoreError(Exception):
-            """Base exception for botocore errors."""
-            pass
-        
-        class NoCredentialsError(Exception):
-            """Raised when AWS credentials are not found."""
-            pass
-        
-        class ClientError(Exception):
-            """Raised when AWS service returns an error."""
-            def __init__(self, error_response=None, operation_name=None):
-                self.response = error_response or {}
-                self.operation_name = operation_name
-                super().__init__(f"An error occurred ({operation_name}): {error_response}")
-        
-        botocore_exc_module.BotoCoreError = BotoCoreError
-        botocore_exc_module.NoCredentialsError = NoCredentialsError
-        botocore_exc_module.ClientError = ClientError
-        
-        # Create parent botocore module if needed
-        if "botocore" not in sys.modules:
-            botocore_module = _create_mock_module("botocore")
-            sys.modules["botocore"] = botocore_module
-        
-        sys.modules["botocore.exceptions"] = botocore_exc_module
+# DEFERRED: This is now handled in _initialize_botocore_exceptions() called from fixture
+def _initialize_botocore_exceptions():
+    """Initialize botocore.exceptions with proper exception classes."""
+    if "botocore.exceptions" not in sys.modules:
+        try:
+            import botocore.exceptions
+        except ImportError:
+            import types
+            import importlib.util
+            
+            # Create botocore.exceptions with REAL exception classes
+            botocore_exc_module = types.ModuleType("botocore.exceptions")
+            botocore_exc_module.__file__ = "<mocked botocore.exceptions>"
+            botocore_exc_module.__path__ = []
+            botocore_exc_module.__spec__ = importlib.util.spec_from_loader(
+                "botocore.exceptions", loader=None
+            )
+            
+            # Create proper exception classes that inherit from BaseException
+            # These are independent exceptions - they don't need to inherit from each other
+            class BotoCoreError(Exception):
+                """Base exception for botocore errors."""
+                pass
+            
+            class NoCredentialsError(Exception):
+                """Raised when AWS credentials are not found."""
+                pass
+            
+            class ClientError(Exception):
+                """Raised when AWS service returns an error."""
+                def __init__(self, error_response=None, operation_name=None):
+                    self.response = error_response or {}
+                    self.operation_name = operation_name
+                    super().__init__(f"An error occurred ({operation_name}): {error_response}")
+            
+            botocore_exc_module.BotoCoreError = BotoCoreError
+            botocore_exc_module.NoCredentialsError = NoCredentialsError
+            botocore_exc_module.ClientError = ClientError
+            
+            # Create parent botocore module if needed
+            if "botocore" not in sys.modules:
+                botocore_module = _create_mock_module("botocore")
+                sys.modules["botocore"] = botocore_module
+            
+            sys.modules["botocore.exceptions"] = botocore_exc_module
 
 # ---- Deferred optional dependency mock initialization ----
 # Skip expensive import loop at module level - defer to pytest fixture
@@ -899,40 +902,52 @@ except TypeError:
 
 # ---- Protect aiohttp types from being mocked ----
 # Ensure aiohttp types remain as proper classes for type annotations
-try:
-    import aiohttp
+# DEFERRED: Moved to _initialize_aiohttp_protection() called from fixture
+_ORIGINAL_AIOHTTP_TYPES = {}
 
-    # Store original types before any mocking can happen
-    _ORIGINAL_AIOHTTP_TYPES = {
-        "ClientResponse": getattr(aiohttp, "ClientResponse", None),
-        "ClientSession": getattr(aiohttp, "ClientSession", None),
-    }
-    
-    # Ensure they are not replaced during test collection
-    def _protect_aiohttp():
-        """Restore aiohttp types if they've been replaced with mocks."""
-        for name, original_type in _ORIGINAL_AIOHTTP_TYPES.items():
-            if original_type and hasattr(aiohttp, name):
-                current_type = getattr(aiohttp, name)
-                # Check if it's been replaced with a mock
-                if hasattr(current_type, '_mock_name') or 'Mock' in str(type(current_type).__name__):
-                    setattr(aiohttp, name, original_type)
-    
-    _protect_aiohttp()
-except ImportError:
-    _ORIGINAL_AIOHTTP_TYPES = {}
+def _initialize_aiohttp_protection():
+    """Initialize aiohttp type protection - deferred to avoid expensive imports during collection."""
+    global _ORIGINAL_AIOHTTP_TYPES
+    try:
+        import aiohttp
+
+        # Store original types before any mocking can happen
+        _ORIGINAL_AIOHTTP_TYPES = {
+            "ClientResponse": getattr(aiohttp, "ClientResponse", None),
+            "ClientSession": getattr(aiohttp, "ClientSession", None),
+        }
+        
+        # Ensure they are not replaced during test collection
+        def _protect_aiohttp():
+            """Restore aiohttp types if they've been replaced with mocks."""
+            for name, original_type in _ORIGINAL_AIOHTTP_TYPES.items():
+                if original_type and hasattr(aiohttp, name):
+                    current_type = getattr(aiohttp, name)
+                    # Check if it's been replaced with a mock
+                    if hasattr(current_type, '_mock_name') or 'Mock' in str(type(current_type).__name__):
+                        setattr(aiohttp, name, original_type)
+        
+        _protect_aiohttp()
+    except ImportError:
+        _ORIGINAL_AIOHTTP_TYPES = {}
 
 
 # ---- Protect common exception types from being mocked ----
 # Store references to common exception types before they can be mocked
-try:
-    import cryptography.fernet
+# DEFERRED: Moved to _initialize_crypto_protection() called from fixture
+_ORIGINAL_CRYPTO_EXCEPTIONS = {}
 
-    _ORIGINAL_CRYPTO_EXCEPTIONS = {
-        "InvalidToken": getattr(cryptography.fernet, "InvalidToken", Exception),
-    }
-except ImportError:
-    _ORIGINAL_CRYPTO_EXCEPTIONS = {}
+def _initialize_crypto_protection():
+    """Initialize cryptography exception protection - deferred to avoid expensive imports during collection."""
+    global _ORIGINAL_CRYPTO_EXCEPTIONS
+    try:
+        import cryptography.fernet
+
+        _ORIGINAL_CRYPTO_EXCEPTIONS = {
+            "InvalidToken": getattr(cryptography.fernet, "InvalidToken", Exception),
+        }
+    except ImportError:
+        _ORIGINAL_CRYPTO_EXCEPTIONS = {}
 
 
 # ---- Runner module stub setup ----
@@ -1282,11 +1297,23 @@ def setup_test_stubs():
     This runs AFTER test collection is complete, keeping collection fast.
     
     Includes:
+    - Botocore exceptions setup
+    - Aiohttp type protection
+    - Cryptography exception protection
     - Prometheus client stub setup
     - Optional dependency mocks
     - Omnicore engine mocks
     - Module spec fixing
     """
+    # Initialize botocore exceptions (deferred from module level)
+    _initialize_botocore_exceptions()
+    
+    # Initialize aiohttp protection (deferred from module level)
+    _initialize_aiohttp_protection()
+    
+    # Initialize cryptography protection (deferred from module level)
+    _initialize_crypto_protection()
+    
     # Initialize Prometheus stubs (deferred if we were in collection mode)
     _initialize_prometheus_stubs()
     
