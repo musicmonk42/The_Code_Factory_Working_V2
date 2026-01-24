@@ -33,20 +33,42 @@ os.environ["CLI_JWT_SECRET"] = "test_cli_secret"
 # Disable Streamlit in tests
 os.environ["STREAMLIT_SERVER_HEADLESS"] = "true"
 
-# Configure logging to prevent errors
-logging.basicConfig(level=logging.ERROR, force=True)
-logging.getLogger("streamlit").setLevel(logging.ERROR)
-logging.getLogger("intent_capture").setLevel(logging.ERROR)
-
-# Suppress warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-warnings.filterwarnings("ignore", message=".*pkg_resources.*")
-warnings.filterwarnings("ignore", message=".*missing ScriptRunContext.*")
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+# Suppress warnings - moved from module level to fixture
+# warnings.filterwarnings() will be called in setup_logging_and_warnings fixture
 
 import unittest.mock as mock
 
 import pytest
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_logging_and_warnings():
+    """
+    Configure logging and warning filters.
+    This runs AFTER test collection is complete to avoid expensive setup during collection.
+    """
+    import logging
+    import warnings
+    
+    # Configure logging to prevent errors
+    logging.basicConfig(level=logging.ERROR, force=True)
+    logging.getLogger("streamlit").setLevel(logging.ERROR)
+    logging.getLogger("intent_capture").setLevel(logging.ERROR)
+    
+    # Suppress warnings
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", message=".*pkg_resources.*")
+    warnings.filterwarnings("ignore", message=".*missing ScriptRunContext.*")
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
+    
+    yield
+    
+    # Cleanup logging at end of session
+    try:
+        logging.shutdown()
+    except:
+        pass
+
 
 # Defer Streamlit mocking to fixture to avoid module-level context manager execution
 # which can cause issues during test collection
@@ -111,19 +133,3 @@ def cleanup_logging():
         except:
             pass
         logging.root.removeHandler(handler)
-
-
-# Prevent module-level imports from failing
-import atexit
-
-
-def cleanup_at_exit():
-    """Cleanup function to prevent errors at exit."""
-    try:
-        # Close any remaining file handles
-        logging.shutdown()
-    except:
-        pass
-
-
-atexit.register(cleanup_at_exit)

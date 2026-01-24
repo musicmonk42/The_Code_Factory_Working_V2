@@ -949,13 +949,15 @@ def _initialize_prometheus_stubs():
     """
     Initialize prometheus_client stub modules.
     
-    This function MUST be explicitly called from the setup_test_stubs session fixture.
+    This function can be called from the setup_test_stubs session fixture
+    or at module level (when not in collection mode). It's safe to call multiple
+    times - it will only create stubs if prometheus_client is not already available.
+    
     If not called, tests that import prometheus_client will fail with ImportError,
     and any code using Prometheus metrics will fail at runtime.
     
-    Unlike the previous module-level implementation, this does not run automatically
-    during conftest import. It is deferred to the session fixture to avoid import-time
-    overhead during test collection, which was causing timeout issues.
+    This is deferred during test collection (PYTEST_COLLECTING=1) to avoid import-time
+    overhead, which was causing timeout issues.
     """
     # prometheus_client needs special handling for its .core submodule
     if "prometheus_client" not in sys.modules:
@@ -1241,11 +1243,11 @@ def _ensure_module_specs():
 # Module spec fixing is deferred to session fixture to avoid import-time overhead
 
 
-# ---- Initialize Prometheus stubs early (before collection) ----
-# This MUST happen before test collection because test modules import code
-# that depends on prometheus_client (e.g., bug_manager/utils.py)
-# Running this at module level (not in fixture) prevents collection-time import errors
-_initialize_prometheus_stubs()
+# ---- Initialize Prometheus stubs with collection guard ----
+# Defer to fixture during collection to avoid expensive initialization
+# Only run at module level if NOT in collection phase
+if os.environ.get("PYTEST_COLLECTING") != "1":
+    _initialize_prometheus_stubs()
 
 
 # ---- Pytest hooks for collection-time fixes ----
@@ -1280,13 +1282,13 @@ def setup_test_stubs():
     This runs AFTER test collection is complete, keeping collection fast.
     
     Includes:
-    - Prometheus client stub setup (already done at module level before collection)
+    - Prometheus client stub setup
     - Optional dependency mocks
     - Omnicore engine mocks
     - Module spec fixing
     """
-    # Prometheus stubs already initialized at module level (before collection)
-    # to prevent import errors during test collection
+    # Initialize Prometheus stubs (deferred if we were in collection mode)
+    _initialize_prometheus_stubs()
     
     # Initialize optional dependency mocks
     _initialize_optional_dependency_mocks()
