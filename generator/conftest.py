@@ -355,6 +355,23 @@ _OPTIONAL_DEPENDENCIES = [
     # Omnicore engine submodules that may have missing dependencies
     "omnicore_engine.database",  # May be missing aiosqlite or other dependencies
     "omnicore_engine.message_bus",  # May be missing structlog or other dependencies
+    # Simulation modules - expensive initialization that causes pytest collection timeout
+    # These modules create event loops, databases, and message buses at import time,
+    # which can cause CPU time limit exceeded during pytest collection phase.
+    # Mocking prevents the expensive initialization while still allowing test collection.
+    "simulation",  # Main simulation package - registers with OmniCore at import
+    "simulation.simulation_module",  # Creates Database() and ShardedMessageBus() at import
+    "simulation.runners",  # Simulation runners with heavy dependencies
+    "simulation.core",  # Core simulation logic with async event loops
+    "simulation.agentic",  # Agent-based simulation components
+    "simulation.parallel",  # Parallel execution framework
+    "simulation.quantum",  # Quantum simulation components
+    "simulation.explain",  # Explanation generation utilities
+    "simulation.sandbox",  # Sandboxed execution environment
+    "simulation.plugins",  # Plugin system base
+    "simulation.plugins.plugin_manager",  # Plugin manager with registry
+    "simulation.registry",  # Plugin registry with initialization
+    "omnicore_engine.engines",  # Engine registration called by simulation.__init__
 ]
 
 # Flag to track if mocks have been set up (to avoid duplicate work)
@@ -986,30 +1003,82 @@ def import_timeout(seconds=30):  # Increased from 10 to 30 for CI environments
 # when tests actually run, not at conftest import time.
 
 # ---- Pytest fixture for lazy mock initialization ----
+# IMPORTANT: This fixture is NOT autouse to prevent expensive operations during
+# pytest collection phase. Tests that need mocked dependencies must explicitly
+# request this fixture.
+#
+# BREAKING CHANGE NOTICE (v2.0):
+# The autouse=True flag has been removed from this fixture to fix pytest
+# collection timeouts. Tests that relied on automatic mock setup will need
+# to explicitly request the _ensure_mocks or _test_setup fixture.
+#
+# Migration Guide:
+#   Before: Tests automatically had mocks (autouse=True)
+#   After:  Tests must request fixture explicitly:
+#           - Add _ensure_mocks to function parameters
+#           - Or use @pytest.mark.usefixtures("_ensure_mocks")
+#
+# Rationale:
+#   The autouse=True flag caused the fixture to run during collection,
+#   defeating lazy loading and causing "CPU time limit exceeded" errors.
+#   By removing autouse, mocks only initialize when tests actually execute.
 try:
     import pytest
 
-    @pytest.fixture(scope="session", autouse=True)
-    def _test_setup():
+    @pytest.fixture(scope="session")
+    def _ensure_mocks():
         """
         Ensure optional dependency mocks are set up once per test session.
-        This fixture is automatically used by all tests (autouse=True) and runs
-        once per session (scope="session") to set up the mocks lazily.
         
-        Mocks are initialized AFTER test collection completes to avoid timeout.
-        This runs when the first test actually executes, not during collection.
+        This fixture is NOT autouse - tests must opt-in explicitly by including
+        it in their parameter list or using pytest.mark.usefixtures decorator.
+        
+        Rationale:
+            Removing autouse=True prevents expensive mock initialization during
+            pytest collection, which was causing "CPU time limit exceeded" errors.
+            Tests that actually need mocked dependencies can request this fixture.
+        
+        Usage:
+            # Option 1: Request fixture explicitly
+            def test_my_feature(_ensure_mocks):
+                # Test code here
+                pass
+            
+            # Option 2: Use mark decorator
+            @pytest.mark.usefixtures("_ensure_mocks")
+            def test_my_feature():
+                # Test code here
+                pass
+        
+        Performance:
+            - Mock initialization happens AFTER collection completes
+            - Runs once per test session (scope="session")
+            - Cached for all tests that request it
+            
+        Yields:
+            None: Fixture provides no return value, only side effects (mocks)
         """
         import time
         _fixture_start = time.time()
-        print(f"\n[generator/conftest.py] _test_setup fixture starting mock initialization...")
+        print(
+            "\n[generator/conftest.py] _ensure_mocks fixture starting mock initialization..."
+        )
         
-        # Always setup mocks when tests actually run, regardless of environment
+        # Initialize all optional dependency mocks
         _setup_optional_dependency_mocks()
         
         _fixture_end = time.time()
-        print(f"[generator/conftest.py] _test_setup fixture completed in {_fixture_end - _fixture_start:.3f}s")
+        print(
+            f"[generator/conftest.py] _ensure_mocks fixture completed in "
+            f"{_fixture_end - _fixture_start:.3f}s"
+        )
         yield
+    
+    # Legacy alias for backward compatibility with existing tests
+    # Tests using the old name will continue to work
+    _test_setup = _ensure_mocks
 
 except ImportError:
     # pytest not available (e.g., when conftest is imported outside of pytest context)
+    # This is expected in non-test environments
     pass
