@@ -123,17 +123,23 @@ def get_or_create_metric(
     
     Uses idempotent metric creation to avoid 'Duplicated timeseries' errors
     when the module is imported multiple times (e.g., during test collection).
+    
+    Note: Uses _names_to_collectors which is a private attribute of the registry.
+    This is a common pattern in prometheus_client usage as there's no public API
+    for checking if a metric exists. A try-except wrapper is used for safety.
     """
     from prometheus_client import Histogram, Summary
 
     labelnames = labelnames or ()
 
     with _metrics_lock:
-        # Check if metric already exists in registry - use _names_to_collectors
-        # which maps metric names to their collectors
-        if name in REGISTRY._names_to_collectors:
-            logger.debug(f"Metric {name} already registered, reusing existing")
-            return REGISTRY._names_to_collectors[name]
+        # Check if metric already exists in registry (with defensive error handling)
+        try:
+            if hasattr(REGISTRY, '_names_to_collectors') and name in REGISTRY._names_to_collectors:
+                logger.debug(f"Metric {name} already registered, reusing existing")
+                return REGISTRY._names_to_collectors[name]
+        except (AttributeError, KeyError):
+            pass  # Fall through to create the metric
 
         # Create the new metric. Pass buckets only if provided and applicable.
         try:
@@ -146,8 +152,10 @@ def get_or_create_metric(
             # Metric already exists - try to retrieve it from registry
             if "Duplicated timeseries" in str(e) or "already registered" in str(e):
                 logger.debug(f"Metric {name} already registered, reusing existing")
-                if name in REGISTRY._names_to_collectors:
-                    return REGISTRY._names_to_collectors[name]
+                try:
+                    return REGISTRY._names_to_collectors.get(name)
+                except (AttributeError, KeyError):
+                    pass
             raise
 
 

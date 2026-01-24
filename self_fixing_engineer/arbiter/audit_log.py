@@ -322,18 +322,36 @@ class TamperEvidentLogger:
             return {}
         
         def _get_or_create_metric(metric_class, name: str, description: str, labelnames=None, buckets=None):
-            """Idempotently create or retrieve a Prometheus metric."""
+            """Idempotently create or retrieve a Prometheus metric.
+            
+            Note: Uses _names_to_collectors which is a private attribute of the registry.
+            This is a common pattern in prometheus_client usage as there's no public API
+            for checking if a metric exists. A try-except wrapper is used for safety.
+            """
             registry = prometheus_client.REGISTRY
-            # Check if metric already exists in registry
-            if name in registry._names_to_collectors:
-                return registry._names_to_collectors[name]
-            # Create new metric
-            if metric_class == prometheus_client.Histogram and buckets is not None:
-                return metric_class(name, description, labelnames=labelnames or [], buckets=buckets)
-            elif labelnames:
-                return metric_class(name, description, labelnames=labelnames)
-            else:
-                return metric_class(name, description)
+            # Check if metric already exists in registry (with defensive error handling)
+            try:
+                if hasattr(registry, '_names_to_collectors') and name in registry._names_to_collectors:
+                    return registry._names_to_collectors[name]
+            except (AttributeError, KeyError):
+                pass  # Fall through to create the metric
+            
+            # Create new metric with error handling for duplicate registration
+            try:
+                if metric_class == prometheus_client.Histogram and buckets is not None:
+                    return metric_class(name, description, labelnames=labelnames or [], buckets=buckets)
+                elif labelnames:
+                    return metric_class(name, description, labelnames=labelnames)
+                else:
+                    return metric_class(name, description)
+            except ValueError as e:
+                # Handle duplicate registration error gracefully
+                if "Duplicated timeseries" in str(e) or "already registered" in str(e):
+                    try:
+                        return registry._names_to_collectors.get(name)
+                    except (AttributeError, KeyError):
+                        pass
+                raise
         
         return {
             "log_events_total": _get_or_create_metric(
