@@ -348,7 +348,9 @@ _OPTIONAL_DEPENDENCIES = [
 ]
 
 # Special handling for botocore.exceptions - must be proper exception classes
-# DEFERRED: This is now handled in _initialize_botocore_exceptions() called from fixture
+# DEFERRED: Moved to _initialize_botocore_exceptions() to avoid expensive imports during test collection.
+# Module-level imports were causing test collection to timeout after 120 seconds. These operations
+# are now executed after collection completes via the setup_test_stubs fixture.
 def _initialize_botocore_exceptions():
     """Initialize botocore.exceptions with proper exception classes."""
     if "botocore.exceptions" not in sys.modules:
