@@ -32,12 +32,25 @@ try:
     # Check if already applied by trying to detect if we're in a nested loop scenario
     # nest_asyncio.apply() is idempotent, so it's safe to call multiple times
     if not hasattr(asyncio, '_nest_asyncio_applied'):
-        nest_asyncio.apply()
-        asyncio._nest_asyncio_applied = True  # type: ignore
-        NEST_ASYNCIO_AVAILABLE = True
+        # FIX: Check if uvloop is being used - nest_asyncio doesn't support uvloop
+        try:
+            loop = asyncio.get_event_loop()
+            loop_type = type(loop).__name__
+            if "uvloop" in loop_type.lower():
+                # uvloop is active - skip nest_asyncio as it's not compatible
+                NEST_ASYNCIO_AVAILABLE = False
+            else:
+                nest_asyncio.apply()
+                asyncio._nest_asyncio_applied = True  # type: ignore
+                NEST_ASYNCIO_AVAILABLE = True
+        except RuntimeError:
+            # No event loop running yet - safe to apply nest_asyncio
+            nest_asyncio.apply()
+            asyncio._nest_asyncio_applied = True  # type: ignore
+            NEST_ASYNCIO_AVAILABLE = True
     else:
         NEST_ASYNCIO_AVAILABLE = True
-except ImportError:
+except (ImportError, ValueError):
     NEST_ASYNCIO_AVAILABLE = False
 
 # External project imports

@@ -27,10 +27,18 @@ logging.basicConfig(
 try:
     import nest_asyncio
 
-    nest_asyncio.apply()
-except ImportError:
+    # FIX: Check if uvloop is being used - nest_asyncio doesn't support uvloop
+    try:
+        loop = asyncio.get_event_loop()
+        loop_type = type(loop).__name__
+        if "uvloop" not in loop_type.lower():
+            nest_asyncio.apply()
+    except RuntimeError:
+        # No event loop running yet - safe to apply nest_asyncio
+        nest_asyncio.apply()
+except (ImportError, ValueError) as e:
     logging.warning(
-        "nest_asyncio not installed. Async operations may fail in some environments."
+        f"nest_asyncio not installed or not compatible: {e}. Async operations may fail in some environments."
     )
 
 # Use python-dotenv to optionally load environment variables from a .env file

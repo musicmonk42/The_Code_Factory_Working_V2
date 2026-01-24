@@ -27,7 +27,8 @@ import aiohttp
 import opentelemetry.trace as trace  # Explicitly import trace for consistency
 
 # [CHANGE A] Add direct import for runtime patching
-import runner.runner_parsers as runner_parsers
+# FIX: Use relative import to avoid circular import when runner alias isn't set up yet
+from generator.runner import runner_parsers
 from opentelemetry.trace import (
     Status,
     StatusCode,
