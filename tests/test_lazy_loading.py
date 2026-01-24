@@ -91,8 +91,8 @@ def test_conftest_import_is_fast():
     import time
     import importlib
     
-    # Remove from sys.modules if already imported
-    conftest_module_name = 'generator.conftest'
+    # Test the root conftest since generator.conftest was consolidated
+    conftest_module_name = 'conftest'
     if conftest_module_name in sys.modules:
         # Already imported, can't test this
         pytest.skip("conftest already imported, cannot test import speed")

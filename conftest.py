@@ -32,12 +32,28 @@ import importlib.util
 
 # Only create stubs if we're in a test environment (TESTING=1 is set at the top of this file)
 if os.environ.get("TESTING") == "1":
+    # Define stubs only for modules that truly need stubbing (are optional/missing)
+    # Do NOT create stubs for modules that exist and can be imported
     _stub_modules = {
         'intent_capture': 'intent_capture',
         'audit_log': 'audit_log',
-        'omnicore_engine.database': 'omnicore_engine.database',
-        'omnicore_engine.message_bus': 'omnicore_engine.message_bus',
     }
+    
+    # Check if omnicore_engine.database and omnicore_engine.message_bus actually exist
+    # If they don't exist, we'll stub them (but we don't stub their parent)
+    try:
+        import omnicore_engine.database
+    except ImportError:
+        _stub_modules['omnicore_engine.database'] = 'omnicore_engine.database'
+    
+    try:
+        import omnicore_engine.message_bus  
+    except ImportError:
+        _stub_modules['omnicore_engine.message_bus'] = 'omnicore_engine.message_bus'
+
+    def _stub_getattr(name):
+        """Return a no-op callable for any attribute access."""
+        return lambda *args, **kwargs: None
 
     for module_name in _stub_modules.keys():
         if module_name not in sys.modules:
@@ -46,27 +62,27 @@ if os.environ.get("TESTING") == "1":
             stub.__file__ = f"<stub {module_name}>"
             stub.__path__ = []
             stub.__spec__ = importlib.util.spec_from_loader(module_name, loader=None)
-            
-            # Add a __getattr__ that returns no-op callables
-            def _stub_getattr(name):
-                """Return a no-op callable for any attribute access."""
-                return lambda *args, **kwargs: None
-            
             stub.__getattr__ = _stub_getattr
             sys.modules[module_name] = stub
             
-            # Create parent modules for dotted packages
+            # Create parent modules for dotted packages ONLY if they don't already exist
             if "." in module_name:
                 parts = module_name.split(".")
                 for i in range(1, len(parts)):
                     parent_name = ".".join(parts[:i])
+                    # Don't replace existing modules - this would break package imports
                     if parent_name not in sys.modules:
-                        parent_stub = types.ModuleType(parent_name)
-                        parent_stub.__file__ = f"<stub {parent_name}>"
-                        parent_stub.__path__ = []
-                        parent_stub.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
-                        parent_stub.__getattr__ = _stub_getattr
-                        sys.modules[parent_name] = parent_stub
+                        try:
+                            # Try to import the parent module first
+                            importlib.import_module(parent_name)
+                        except ImportError:
+                            # Only create stub if parent truly doesn't exist
+                            parent_stub = types.ModuleType(parent_name)
+                            parent_stub.__file__ = f"<stub {parent_name}>"
+                            parent_stub.__path__ = []
+                            parent_stub.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
+                            parent_stub.__getattr__ = _stub_getattr
+                            sys.modules[parent_name] = parent_stub
 
 # ---- Import error handling ----
 # Provide graceful fallbacks for common missing dependencies during test collection

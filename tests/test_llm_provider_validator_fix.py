@@ -78,7 +78,8 @@ class TestLLMProviderValidatorFix(unittest.TestCase):
                 is_in=supported_providers,
             )
             # The validator should accept all these values
-            self.assertIn(provider, validator.operations[0]["is_in"])
+            # validator.operations is a dict with 'is_in' key
+            self.assertIn(provider, validator.operations["is_in"])
 
 
 class TestRunnerConfigLoadMethod(unittest.TestCase):
