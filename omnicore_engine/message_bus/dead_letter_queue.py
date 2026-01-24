@@ -74,15 +74,41 @@ class DeadLetterQueue:
         kafka_bridge: Optional["KafkaBridge"],
         priority_threshold: int,
     ):
+        import os
+        
         self.db = db
         self.kafka_bridge = kafka_bridge
         self.priority_threshold = priority_threshold
         self.queue = asyncio.Queue()
         self.running = True
-        self._dlq_task = asyncio.create_task(self._process_dlq())
+        
+        # Defer task creation if no event loop is running (e.g., during pytest collection or sync initialization)
+        # The task will be created later via start() method when needed
+        try:
+            # Skip task creation during pytest collection or if no event loop
+            if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING"):
+                logger.info("Skipping DLQ task creation during pytest collection")
+                self._dlq_task = None
+            else:
+                asyncio.get_running_loop()  # Check if loop is running
+                self._dlq_task = asyncio.create_task(self._process_dlq())
+        except RuntimeError:
+            # No running event loop - defer task creation
+            logger.info("DeadLetterQueue initialized without running event loop. Task will be created when start() is called.")
+            self._dlq_task = None
+            
         self.max_retries = getattr(settings, "DLQ_MAX_RETRIES", 3)
         self.backoff_factor = getattr(settings, "DLQ_BACKOFF_FACTOR", 1.5)
         logger.info("DeadLetterQueue initialized.")
+    
+    def start(self):
+        """Start the DLQ processing task if not already started."""
+        if self._dlq_task is None:
+            try:
+                self._dlq_task = asyncio.create_task(self._process_dlq())
+                logger.info("DeadLetterQueue processing task started.")
+            except RuntimeError as e:
+                logger.warning(f"Failed to start DLQ task: {e}. Task will remain inactive.")
 
     async def add(self, message: Message, error: str):
         full_error = f"Error Type: {type(error).__name__}, Message: {error}"

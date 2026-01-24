@@ -27,45 +27,46 @@ os.environ.setdefault("SKIP_BACKGROUND_TASKS", "1")
 os.environ.setdefault("NO_MONITORING", "1")
 os.environ.setdefault("DISABLE_TELEMETRY", "1")
 
-# ---- Add minimal stubs for missing modules ----
-# Create stub modules with minimal functionality to prevent import errors
-# These are added early to avoid "module not found" errors during test collection
+# ---- Add minimal stubs for missing modules (TEST ENVIRONMENT ONLY) ----
+# Create stub modules with minimal functionality to prevent import errors during test collection
+# IMPORTANT: Only create stubs during testing to avoid interfering with production imports
 import importlib.util
 
-_stub_modules = {
-    'omnicore_engine.message_bus': 'omnicore_engine.message_bus',
-    'intent_capture': 'intent_capture',
-    'audit_log': 'audit_log',
-}
+# Only create stubs if we're in a test environment (TESTING=1 is set at the top of this file)
+if os.environ.get("TESTING") == "1":
+    _stub_modules = {
+        'intent_capture': 'intent_capture',
+        'audit_log': 'audit_log',
+    }
 
-for module_name in _stub_modules.keys():
-    if module_name not in sys.modules:
-        # Create a minimal stub module
-        stub = types.ModuleType(module_name)
-        stub.__file__ = f"<stub {module_name}>"
-        stub.__path__ = []
-        stub.__spec__ = importlib.util.spec_from_loader(module_name, loader=None)
-        
-        # Add a __getattr__ that returns no-op callables
-        def _stub_getattr(name):
-            """Return a no-op callable for any attribute access."""
-            return lambda *args, **kwargs: None
-        
-        stub.__getattr__ = _stub_getattr
-        sys.modules[module_name] = stub
-        
-        # Create parent modules for dotted packages
-        if "." in module_name:
-            parts = module_name.split(".")
-            for i in range(1, len(parts)):
-                parent_name = ".".join(parts[:i])
-                if parent_name not in sys.modules:
-                    parent_stub = types.ModuleType(parent_name)
-                    parent_stub.__file__ = f"<stub {parent_name}>"
-                    parent_stub.__path__ = []
-                    parent_stub.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
-                    parent_stub.__getattr__ = _stub_getattr
-                    sys.modules[parent_name] = parent_stub
+    for module_name in _stub_modules.keys():
+        if module_name not in sys.modules:
+            # Create a minimal stub module
+            stub = types.ModuleType(module_name)
+            stub.__file__ = f"<stub {module_name}>"
+            stub.__path__ = []
+            stub.__spec__ = importlib.util.spec_from_loader(module_name, loader=None)
+            
+            # Add a __getattr__ that returns no-op callables
+            def _stub_getattr(name):
+                """Return a no-op callable for any attribute access."""
+                return lambda *args, **kwargs: None
+            
+            stub.__getattr__ = _stub_getattr
+            sys.modules[module_name] = stub
+            
+            # Create parent modules for dotted packages
+            if "." in module_name:
+                parts = module_name.split(".")
+                for i in range(1, len(parts)):
+                    parent_name = ".".join(parts[:i])
+                    if parent_name not in sys.modules:
+                        parent_stub = types.ModuleType(parent_name)
+                        parent_stub.__file__ = f"<stub {parent_name}>"
+                        parent_stub.__path__ = []
+                        parent_stub.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
+                        parent_stub.__getattr__ = _stub_getattr
+                        sys.modules[parent_name] = parent_stub
 
 # ---- Import error handling ----
 # Provide graceful fallbacks for common missing dependencies during test collection
