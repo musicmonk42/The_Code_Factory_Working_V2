@@ -948,7 +948,10 @@ except ImportError:
 def _initialize_prometheus_stubs():
     """
     Initialize prometheus_client stub modules.
-    Deferred to session fixture to avoid import-time overhead.
+    
+    This function MUST be explicitly called from the setup_test_stubs session fixture.
+    Unlike the previous module-level implementation, it does not run automatically.
+    Deferred to session fixture to avoid import-time overhead during test collection.
     """
     # prometheus_client needs special handling for its .core submodule
     if "prometheus_client" not in sys.modules:
