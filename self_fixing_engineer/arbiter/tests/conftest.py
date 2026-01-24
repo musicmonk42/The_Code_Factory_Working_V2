@@ -159,8 +159,10 @@ def _setup_opentelemetry_context():
 
 
 # Run the OpenTelemetry context setup only if not in collection phase
-# PYTEST_COLLECTING is a custom environment variable set during collection phase to skip expensive operations
-# This improves pytest collection performance by deferring OpenTelemetry initialization until test runtime
+# PYTEST_COLLECTING environment variable is set in root conftest.py before pytest
+# collection starts (search for "os.environ.setdefault" in root conftest.py).
+# This allows us to skip expensive OpenTelemetry initialization during the collection
+# phase, improving collection performance and preventing timeout issues.
 if os.environ.get("PYTEST_COLLECTING") != "1":
     _setup_opentelemetry_context()
 

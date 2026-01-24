@@ -83,7 +83,12 @@ def setup_test_environment():
 
 @pytest.fixture(autouse=True)
 def mock_streamlit_for_tests(mock_streamlit_setup):
-    """Mock Streamlit components that cause issues in tests."""
+    """Mock Streamlit components that cause issues in tests.
+    
+    Note: This fixture depends on mock_streamlit_setup (passed as parameter) to ensure
+    the session-level Streamlit mock is initialized first. The parameter ensures proper
+    fixture ordering. We create a fresh mock_session_state here for test isolation.
+    """
     mock_session_state = mock.MagicMock()
     mock_session_state.get.return_value = "test_user"
     

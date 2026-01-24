@@ -142,7 +142,6 @@ def setup_test_environment():
         shutil.rmtree(_software_key_dir, ignore_errors=True)
 
 
-
 # CRITICAL FIX for asynchronous cleanup hang during teardown
 # We must explicitly shut down the global LLMClient singleton if it was initialized.
 @pytest.fixture(scope="session")
