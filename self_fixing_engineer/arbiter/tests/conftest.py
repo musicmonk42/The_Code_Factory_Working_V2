@@ -176,8 +176,12 @@ def isolate_plugin_registry():
     Isolate the plugin registry for testing to prevent persistence conflicts.
     This fixture runs once per test session.
     Creates temporary directory here (not at module level) to speed up collection.
+    Also ensures OpenTelemetry context is set up (if it wasn't already during import).
     """
     global TEST_TEMP_DIR, TEST_PLUGIN_FILE
+    
+    # Ensure OpenTelemetry context is set up (safe to call multiple times)
+    _setup_opentelemetry_context()
     
     # Create temporary directory INSIDE fixture, not at module level
     # This prevents blocking during pytest collection phase
