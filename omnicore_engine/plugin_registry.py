@@ -648,7 +648,7 @@ class PluginRegistry:
         self._loop = None
         # Store pending plugin metadata for later persistence when DB becomes available
         # Access must be protected by _pending_metadata_lock for thread safety
-        self._pending_plugin_metadata: List[Dict[str, Any]] = []
+        self._pending_plugin_metadata: list[Dict[str, Any]] = []
 
     @property
     def plugins(self):
@@ -1387,26 +1387,20 @@ def plugin(
         
         if PLUGIN_REGISTRY.db:
             # DB is available - attempt to persist immediately via async task
-            # Check if there's a running event loop before attempting to create a task
+            # First check if there's a running event loop
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
+                # Event loop exists, safe to create task
                 asyncio.create_task(
                     PLUGIN_REGISTRY.db.save_plugin_legacy(plugin_metadata)
                 )
-            except RuntimeError as e:
+            except RuntimeError:
                 # No running event loop - queue for later persistence
                 # This is expected during import-time registration
-                if "no running event loop" in str(e).lower():
-                    PLUGIN_REGISTRY.queue_pending_metadata(plugin_metadata)
-                    logger.debug(
-                        f"Plugin '{name}' metadata queued (no running event loop)."
-                    )
-                else:
-                    # Unexpected RuntimeError - log and queue to avoid data loss
-                    logger.warning(
-                        f"Unexpected error creating async task for plugin '{name}': {e}"
-                    )
-                    PLUGIN_REGISTRY.queue_pending_metadata(plugin_metadata)
+                PLUGIN_REGISTRY.queue_pending_metadata(plugin_metadata)
+                logger.debug(
+                    f"Plugin '{name}' metadata queued (no running event loop)."
+                )
         else:
             # Queue metadata for later persistence when DB becomes available
             # This is expected during import-time registration before engine initialization
