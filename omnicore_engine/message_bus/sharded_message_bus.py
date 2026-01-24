@@ -499,7 +499,7 @@ class ShardedMessageBus:
         """
         if self._dispatchers_started or not self.running:
             return
-            
+
         # Try to start dispatchers now that we're in an async context
         self._start_dispatchers()
         self._dispatchers_started = True

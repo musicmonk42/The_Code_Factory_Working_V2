@@ -1087,11 +1087,13 @@ except CryptoInitializationError as e:
         crypto_provider = crypto_provider_factory.get_provider("dummy")
         
         if not _is_test_or_dev_mode() and allow_init_failure:
-            logger.error(
-                "AUDIT_CRYPTO: Using DummyCryptoProvider in PRODUCTION due to AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1. "
-                "This provides NO REAL SECURITY for audit log signatures. "
-                "Configure proper secrets (AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64) "
-                "and set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 for production security."
+            logger.critical(
+                "SECURITY CRITICAL: Using DummyCryptoProvider in PRODUCTION due to AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1. "
+                "This provides NO REAL SECURITY for audit log signatures and cryptographic operations. "
+                "Audit log integrity is COMPROMISED. "
+                "URGENT: Configure proper secrets (AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64) "
+                "and set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 immediately for production security. "
+                "This configuration should ONLY be used temporarily during initial deployment."
             )
     else:
         # In production with strict mode, this is fatal.
