@@ -35,6 +35,17 @@ from .siem_base import (
     alert_operator,
 )
 
+# --- Testing Mode Flag ---
+# This flag is used to prevent sys.exit() calls during test collection,
+# which would cause pytest to fail with CPU timeout (exit code 152).
+# When _TESTING_MODE is True, missing dependencies will be stubbed instead
+# of causing the process to exit.
+_TESTING_MODE = (
+    os.getenv("TESTING", "0") == "1"
+    or os.getenv("PYTEST_CURRENT_TEST") is not None
+    or os.getenv("PYTEST_COLLECTING", "0") == "1"
+)
+
 # --- Strict Dependency Check for boto3 ---
 AWS_AVAILABLE = False
 try:
@@ -50,7 +61,15 @@ except ImportError:
         "CRITICAL: boto3 not found for AWS CloudWatch client. Aborting.",
         level="CRITICAL",
     )
-    sys.exit(1)
+    if not _TESTING_MODE:
+        sys.exit(1)
+    else:
+        # Provide minimal stub for test collection only.
+        # This stub allows the module to be imported but does NOT
+        # provide actual AWS functionality.
+        class AWSClientError(Exception):
+            """Stub AWS ClientError for test collection."""
+            pass
 
 
 # --- Configuration Schema for AWS CloudWatch Client ---
