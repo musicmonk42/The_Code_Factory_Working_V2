@@ -313,29 +313,73 @@ class TamperEvidentLogger:
             return None
 
     def _setup_metrics(self) -> Dict[str, Any]:
-        """Initialize Prometheus metrics if enabled."""
+        """Initialize Prometheus metrics if enabled.
+        
+        Uses idempotent metric creation to avoid 'Duplicated timeseries' errors
+        when the module is imported multiple times (e.g., during test collection).
+        """
         if not self.config.metrics_enabled or not prometheus_client:
             return {}
+        
+        def _get_or_create_metric(metric_class, name: str, description: str, labelnames=None, buckets=None):
+            """Idempotently create or retrieve a Prometheus metric.
+            
+            Note: Uses _names_to_collectors which is a private attribute of the registry.
+            This is a common pattern in prometheus_client usage as there's no public API
+            for checking if a metric exists. A try-except wrapper is used for safety.
+            """
+            registry = prometheus_client.REGISTRY
+            # Check if metric already exists in registry (with defensive error handling)
+            try:
+                if hasattr(registry, '_names_to_collectors') and name in registry._names_to_collectors:
+                    return registry._names_to_collectors[name]
+            except (AttributeError, KeyError):
+                pass  # Fall through to create the metric
+            
+            # Create new metric with error handling for duplicate registration
+            try:
+                if metric_class == prometheus_client.Histogram and buckets is not None:
+                    return metric_class(name, description, labelnames=labelnames or [], buckets=buckets)
+                elif labelnames:
+                    return metric_class(name, description, labelnames=labelnames)
+                else:
+                    return metric_class(name, description)
+            except ValueError as e:
+                # Handle duplicate registration error gracefully
+                if "Duplicated timeseries" in str(e) or "already registered" in str(e):
+                    try:
+                        return registry._names_to_collectors.get(name)
+                    except (AttributeError, KeyError):
+                        pass
+                raise
+        
         return {
-            "log_events_total": prometheus_client.Counter(
+            "log_events_total": _get_or_create_metric(
+                prometheus_client.Counter,
                 "audit_log_events_total",
                 "Total number of audit log events",
-                ["event_type"],
+                labelnames=["event_type"],
             ),
-            "dlt_failures_total": prometheus_client.Counter(
-                "audit_dlt_failures_total", "Total number of DLT anchoring failures"
+            "dlt_failures_total": _get_or_create_metric(
+                prometheus_client.Counter,
+                "audit_dlt_failures_total",
+                "Total number of DLT anchoring failures",
             ),
-            "integrity_checks_failed": prometheus_client.Counter(
+            "integrity_checks_failed": _get_or_create_metric(
+                prometheus_client.Counter,
                 "audit_integrity_checks_failed_total",
                 "Total number of failed integrity checks",
             ),
-            "log_latency_seconds": prometheus_client.Histogram(
+            "log_latency_seconds": _get_or_create_metric(
+                prometheus_client.Histogram,
                 "audit_log_latency_seconds",
                 "Latency of log operations",
                 buckets=[0.001, 0.01, 0.1, 0.5, 1, 5],
             ),
-            "batch_size": prometheus_client.Gauge(
-                "audit_log_batch_size", "Current size of the batch queue"
+            "batch_size": _get_or_create_metric(
+                prometheus_client.Gauge,
+                "audit_log_batch_size",
+                "Current size of the batch queue",
             ),
         }
 
