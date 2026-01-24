@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import os
 import sys
 import types
 from pathlib import Path
@@ -66,7 +67,10 @@ def _alias_test_generation_if_needed() -> None:
     logger.warning("Aliased %s -> %s for pytest collection", primary, alt)
 
 
-_alias_test_generation_if_needed()
+# Skip expensive module aliasing during pytest collection to improve collection performance
+# Set PYTEST_COLLECTING=1 environment variable in root conftest.py during collection phase
+if os.environ.get("PYTEST_COLLECTING") != "1":
+    _alias_test_generation_if_needed()
 
 # -----------------------------------------------------------------------------
 # Provide a tiny stub for arbiter.audit_log if not installed (avoid side effects)
@@ -144,7 +148,11 @@ def _repair_gen_agent_package():
             setattr(pkg, "agents", sys.modules[f"{pkg_name}.agents"])
 
 
-try:
-    _repair_gen_agent_package()
-except Exception as e:
-    logger.debug("gen_agent package repair skipped: %s", e)
+# Skip expensive package repair during pytest collection to improve collection performance
+# Set PYTEST_COLLECTING=1 environment variable in root conftest.py during collection phase
+if os.environ.get("PYTEST_COLLECTING") != "1":
+    try:
+        _repair_gen_agent_package()
+    except Exception as e:
+        logger.debug("gen_agent package repair skipped: %s", e)
+

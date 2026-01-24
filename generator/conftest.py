@@ -352,6 +352,9 @@ _OPTIONAL_DEPENDENCIES = [
     # Deep learning frameworks
     "tensorflow",  # TensorFlow
     "keras",  # Keras deep learning
+    # Omnicore engine submodules that may have missing dependencies
+    "omnicore_engine.database",  # May be missing aiosqlite or other dependencies
+    "omnicore_engine.message_bus",  # May be missing structlog or other dependencies
 ]
 
 # Flag to track if mocks have been set up (to avoid duplicate work)

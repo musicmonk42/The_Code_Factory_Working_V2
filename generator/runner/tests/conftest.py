@@ -98,9 +98,19 @@ if "opentelemetry" not in sys.modules:
 
 # === 4. Pytest config & Fixtures ===
 import pytest
-from runner import (
-    llm_client,
-)  # Import the module namespace to access the global variable
+
+# Wrap runner imports in try/except to handle missing dependencies during test collection
+try:
+    from runner import (
+        llm_client,
+    )  # Import the module namespace to access the global variable
+except (ImportError, ModuleNotFoundError) as e:
+    # If runner modules can't be imported during test collection, create a mock
+    # This allows pytest collection to succeed even when optional dependencies are missing
+    import types
+    llm_client = types.ModuleType("llm_client")
+    llm_client._client = None  # Mock global client variable
+    print(f"WARNING: runner.llm_client import failed during test collection: {e}")
 
 
 def pytest_configure(config):
