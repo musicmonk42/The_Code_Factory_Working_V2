@@ -8,6 +8,7 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
@@ -546,38 +547,141 @@ async def clarify_requirements(
     - Clarification initiation status and detected ambiguities
 
     **Errors:**
+    - 400: No README content found or file read error
     - 404: Job not found
     """
     if job_id not in jobs_db:
+        logger.warning(f"Clarify request for non-existent job: {job_id}")
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
     job = jobs_db[job_id]
-
-    # Get README content from uploaded files
+    
+    # Get README content from uploaded files with comprehensive error handling
     readme_content = ""
-    for filename in job.input_files:
-        if filename.lower().endswith('.md'):
-            file_path = f"./uploads/{job_id}/{filename}"
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    readme_content = f.read()
-                    break
-            except Exception as e:
-                logger.warning(f"Could not read file {filename}: {e}")
-
-    if not readme_content:
+    upload_base_path = Path("./uploads")
+    job_upload_path = upload_base_path / job_id
+    
+    # Validate upload directory exists
+    if not job_upload_path.exists():
+        logger.error(
+            f"Upload directory does not exist for job {job_id}: {job_upload_path.absolute()}"
+        )
         raise HTTPException(
             status_code=400,
-            detail="No README content found for clarification"
+            detail=f"Upload directory not found for job {job_id}. Please upload files first."
+        )
+    
+    # Search for README files with detailed logging
+    readme_candidates = []
+    for filename in job.input_files:
+        if filename.lower().endswith('.md'):
+            readme_candidates.append(filename)
+            file_path = job_upload_path / filename
+            
+            logger.debug(
+                f"Checking README candidate: {filename}",
+                file_path=str(file_path.absolute()),
+                exists=file_path.exists(),
+                is_file=file_path.is_file() if file_path.exists() else False
+            )
+            
+            try:
+                # Validate file exists and is readable
+                if not file_path.exists():
+                    logger.warning(f"README file does not exist: {file_path.absolute()}")
+                    continue
+                    
+                if not file_path.is_file():
+                    logger.warning(f"README path is not a file: {file_path.absolute()}")
+                    continue
+                
+                # Read file with proper encoding handling
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    readme_content = f.read()
+                    
+                if readme_content.strip():
+                    logger.info(
+                        f"Successfully read README for job {job_id}: {filename}",
+                        content_length=len(readme_content),
+                        file_path=str(file_path.absolute())
+                    )
+                    break
+                else:
+                    logger.warning(f"README file is empty: {filename}")
+                    
+            except UnicodeDecodeError as e:
+                logger.error(
+                    f"Encoding error reading file {filename} for job {job_id}: {e}",
+                    file_path=str(file_path.absolute())
+                )
+                # Try with different encoding
+                try:
+                    with open(file_path, 'r', encoding='latin-1') as f:
+                        readme_content = f.read()
+                    logger.info(f"Successfully read {filename} with latin-1 encoding")
+                    if readme_content.strip():
+                        break
+                except Exception as e2:
+                    logger.error(f"Failed to read {filename} with fallback encoding: {e2}")
+            except PermissionError as e:
+                logger.error(
+                    f"Permission denied reading file {filename} for job {job_id}: {e}",
+                    file_path=str(file_path.absolute())
+                )
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error reading file {filename} for job {job_id}: {e}",
+                    file_path=str(file_path.absolute()),
+                    exc_info=True
+                )
+
+    # Validate README content was found
+    if not readme_content or not readme_content.strip():
+        error_detail = {
+            "message": "No README content found for clarification",
+            "job_id": job_id,
+            "upload_path": str(job_upload_path.absolute()),
+            "input_files": job.input_files,
+            "readme_candidates": readme_candidates,
+            "troubleshooting": {
+                "check_upload_directory": str(job_upload_path.absolute()),
+                "expected_files": [f for f in job.input_files if f.lower().endswith('.md')],
+                "suggestions": [
+                    "Ensure .md files were uploaded",
+                    "Check file permissions",
+                    "Verify files are not empty"
+                ]
+            }
+        }
+        logger.error(
+            f"No valid README content found for job {job_id}",
+            **error_detail
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=error_detail
         )
 
-    result = await generator_service.clarify_requirements(
-        job_id=job_id,
-        readme_content=readme_content,
-    )
-
-    logger.info(f"Clarification initiated for job {job_id}")
-    return result
+    # Process clarification request
+    try:
+        result = await generator_service.clarify_requirements(
+            job_id=job_id,
+            readme_content=readme_content,
+        )
+        logger.info(
+            f"Clarification initiated successfully for job {job_id}",
+            result_keys=list(result.keys()) if isinstance(result, dict) else None
+        )
+        return result
+    except Exception as e:
+        logger.error(
+            f"Error processing clarification for job {job_id}: {e}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process clarification: {str(e)}"
+        )
 
 
 @router.get("/{job_id}/clarification/feedback")
