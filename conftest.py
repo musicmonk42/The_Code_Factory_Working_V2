@@ -1486,3 +1486,884 @@ def protect_sys_modules():
             ):
                 # Restore the original
                 sys.modules[mod_name] = original_module
+
+
+# ============================================================================
+# CONSOLIDATED FIXTURES FROM NESTED conftest.py FILES
+# ============================================================================
+# The following fixtures have been consolidated from various nested conftest.py
+# files to centralize test configuration. Redundant path setup and environment
+# variable configuration have been removed since they're handled above.
+# ============================================================================
+
+
+# ============ Fixtures from generator/agents/tests/conftest.py ============
+
+@pytest.fixture
+def codegen_env():
+    """
+    Provides a temporary environment for code generation tests with
+    config file, database, and template directory.
+    """
+    import shutil
+    import tempfile
+    import yaml
+    
+    dir_path = Path(tempfile.mkdtemp(prefix="codegen_test_"))
+    config = dir_path / "config.yaml"
+    db = dir_path / "feedback.db"
+    templates = dir_path / "templates"
+    templates.mkdir()
+
+    (templates / "python.jinja2").write_text(
+        "Generate: {{ requirements.features }}. "
+        'JSON: {"files": {"main.py": "def x(): pass"}}',
+        encoding="utf-8",
+    )
+
+    cfg = {
+        "backend": "openai",
+        "api_keys": {"openai": "sk-test"},
+        "model": {"openai": "gpt-4o"},
+        "allow_interactive_hitl": True,
+        "enable_security_scan": True,
+        "feedback_store": {"type": "sqlite", "path": str(db)},
+        "template_dir": str(templates),
+        "compliance": {
+            "banned_functions": ["eval"],
+            "max_line_length": 100,
+        },
+    }
+
+    with open(config, "w", encoding="utf-8") as f:
+        yaml.dump(cfg, f)
+
+    yield {
+        "config": str(config),
+        "db": str(db),
+        "req": {"features": ["fib"], "target_language": "python"},
+    }
+
+    shutil.rmtree(dir_path, ignore_errors=True)
+
+
+@pytest.fixture
+def generator_mock_llm():
+    """Mock LLM for testing code generation in generator module."""
+    from unittest.mock import AsyncMock, patch
+    
+    with patch(
+        "generator.agents.codegen_agent.codegen_agent.call_llm_api",
+        new_callable=AsyncMock,
+    ) as m:
+        m.return_value = {"content": '{"files": {"main.py": "def fib(n): return n"}}'}
+        yield m
+
+
+@pytest.fixture(autouse=True)
+def cleanup_chromadb():
+    """
+    Clean up ChromaDB singleton instances between tests to prevent
+    'An instance of Chroma already exists' errors.
+    """
+    yield
+    try:
+        import chromadb
+        from chromadb.api.shared_system_client import SharedSystemClient
+        if hasattr(SharedSystemClient, "_identifier_to_system"):
+            SharedSystemClient._identifier_to_system.clear()
+    except (ImportError, AttributeError):
+        pass
+
+
+# ============ Fixtures from generator/main/tests/conftest.py ============
+
+@pytest.fixture
+def mock_modules(monkeypatch):
+    """
+    Fixture to mock modules needed by tests.
+    Use this in tests that need specific modules mocked.
+    
+    Usage:
+        def test_something(mock_modules):
+            mock_modules(['runner.runner_core', 'intent_parser.intent_parser'])
+    """
+    from unittest.mock import MagicMock
+
+    def _mock_modules(module_names):
+        for name in module_names:
+            monkeypatch.setitem(sys.modules, name, MagicMock(name=f"mock_{name}"))
+
+    return _mock_modules
+
+
+# ============ Fixtures from generator/runner/tests/conftest.py ============
+
+@pytest.fixture(scope="session")
+def runner_event_loop():
+    """
+    Session-scoped event loop for runner tests.
+    Provides a clean event loop for cleaner async finalizers.
+    """
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    yield loop
+
+    try:
+        loop.close()
+    except Exception:
+        pass
+
+
+# ============ Fixtures from omnicore_engine/database/tests/conftest.py ============
+
+@pytest.fixture(autouse=True)
+def clear_sqlalchemy_metadata():
+    """Clear SQLAlchemy metadata before each test to avoid table redefinition errors."""
+    try:
+        from omnicore_engine.database import models
+        if hasattr(models, "Base") and hasattr(models.Base, "metadata"):
+            models.Base.metadata.clear()
+    except ImportError:
+        pass
+
+    yield
+
+    try:
+        from omnicore_engine.database import models
+        if hasattr(models, "Base") and hasattr(models.Base, "metadata"):
+            models.Base.metadata.clear()
+    except ImportError:
+        pass
+
+
+# ============ Fixtures from omnicore_engine/tests/conftest.py ============
+
+@pytest.fixture(scope="function")
+def temp_db_path(tmp_path):
+    """Provide a temporary database path for tests."""
+    return tmp_path / "test.db"
+
+
+# ============ Fixtures from arbiter/bug_manager/tests/conftest.py ============
+
+def _bug_manager_setup_logging():
+    """Configure logging to write to a file to avoid I/O errors on closed streams."""
+    import logging
+    logger = logging.getLogger()
+    logger.handlers = []
+    handler = logging.FileHandler("test.log", mode="w")
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+
+# ============ Fixtures from arbiter/conftest.py ============
+
+# Variables for plugin registry isolation
+_ARBITER_TEST_TEMP_DIR = None
+_ARBITER_TEST_PLUGIN_FILE = None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolate_arbiter_plugin_registry():
+    """
+    Isolate the arbiter plugin registry for testing to prevent persistence conflicts.
+    Creates temporary directory INSIDE fixture, not at module level.
+    """
+    global _ARBITER_TEST_TEMP_DIR, _ARBITER_TEST_PLUGIN_FILE
+    import tempfile
+    import shutil
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    _ARBITER_TEST_TEMP_DIR = tempfile.mkdtemp(prefix="arbiter_test_")
+    _ARBITER_TEST_PLUGIN_FILE = os.path.join(_ARBITER_TEST_TEMP_DIR, "test_plugins.json")
+    
+    try:
+        import arbiter.arbiter_plugin_registry as registry_module
+        if hasattr(registry_module, "PluginRegistry"):
+            if registry_module.PluginRegistry._instance:
+                registry_module.PluginRegistry._instance._persist_path = _ARBITER_TEST_PLUGIN_FILE
+    except ImportError:
+        pass
+    
+    logger.info(f"Arbiter plugin registry isolated to: {_ARBITER_TEST_PLUGIN_FILE}")
+    
+    yield
+    
+    try:
+        if _ARBITER_TEST_TEMP_DIR and os.path.exists(_ARBITER_TEST_TEMP_DIR):
+            shutil.rmtree(_ARBITER_TEST_TEMP_DIR, ignore_errors=True)
+    except Exception as e:
+        logger.warning(f"Cleanup error (non-critical): {e}")
+
+
+@pytest.fixture
+def mock_plugin_registry(monkeypatch):
+    """
+    Provides a mock plugin registry for tests that need complete isolation.
+    Use this fixture when you want to prevent any plugin registration.
+    """
+    from unittest.mock import MagicMock
+
+    mock_registry = MagicMock()
+    mock_registry.get_metadata.return_value = None
+    mock_registry.register.return_value = lambda x: x
+    mock_registry.register_instance.return_value = None
+
+    try:
+        monkeypatch.setattr("arbiter.arbiter_plugin_registry.registry", mock_registry)
+        monkeypatch.setattr("arbiter.arbiter_plugin_registry.PLUGIN_REGISTRY", {})
+
+        def mock_register(kind, name, version, author):
+            def decorator(func):
+                return func
+            return decorator
+
+        monkeypatch.setattr("arbiter.arbiter_plugin_registry.register", mock_register)
+    except Exception:
+        pass
+
+    return mock_registry
+
+
+@pytest.fixture
+def sample_decision_context():
+    """Provides a sample decision context for testing arbiter decisions."""
+    return {
+        "decision_id": "test_decision_123",
+        "action": "deploy_model",
+        "risk_level": "high",
+        "details": {
+            "model_name": "test_model",
+            "environment": "production",
+            "confidence": 0.95,
+        },
+    }
+
+
+@pytest.fixture
+def sample_feedback():
+    """Provides sample feedback data for testing arbiter feedback."""
+    return {
+        "decision_id": "test_decision_123",
+        "approved": True,
+        "user_id": "test_user",
+        "comment": "Looks good for deployment",
+        "timestamp": "2024-01-01T00:00:00Z",
+        "signature": "test_signature",
+    }
+
+
+@pytest.fixture
+def mock_opentelemetry(monkeypatch):
+    """Provides a mock OpenTelemetry setup for tests that need it."""
+
+    class MockSpan:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def set_attribute(self, key, value):
+            pass
+
+        def set_status(self, status):
+            pass
+
+        def get_span_context(self):
+            class MockSpanContext:
+                def __init__(self):
+                    self.trace_id = 0
+                    self.span_id = 0
+                    self.is_remote = False
+                    self.trace_flags = 0
+                    self.trace_state = None
+                    self.is_valid = False
+            return MockSpanContext()
+
+    class MockTracer:
+        def start_as_current_span(self, name, **kwargs):
+            return MockSpan()
+
+        def start_span(self, name, **kwargs):
+            return MockSpan()
+
+    class MockTrace:
+        @staticmethod
+        def get_tracer(name):
+            return MockTracer()
+
+    try:
+        monkeypatch.setattr("opentelemetry.trace.get_tracer", lambda x: MockTracer())
+    except Exception:
+        pass
+
+    return MockTrace()
+
+
+@pytest.fixture(autouse=True)
+def cleanup_arbiter_test_files():
+    """Clean up any arbiter test-generated files after each test."""
+    yield
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    test_files = [
+        "test_feedback.db",
+        "feedback.db",
+        "feedback_log.json",
+        "test_plugins.json",
+        "omnicore.db",
+        "arbiter_knowledge.db",
+        "arrays.json",
+        "arrays.db",
+        "test_arrays.json",
+    ]
+    for file in test_files:
+        if os.path.exists(file):
+            try:
+                os.remove(file)
+            except Exception as e:
+                logger.debug(f"Could not remove {file}: {e}")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def arbiter_session_cleanup():
+    """Final cleanup after all arbiter tests complete."""
+    yield
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Running final arbiter session cleanup")
+
+    for db_file in Path(".").glob("*.db"):
+        if "test" in db_file.name.lower() or db_file.name in [
+            "feedback.db",
+            "omnicore.db",
+            "arrays.db",
+        ]:
+            try:
+                db_file.unlink()
+            except:
+                pass
+
+    for json_file in Path(".").glob("*test*.json"):
+        try:
+            json_file.unlink()
+        except:
+            pass
+
+    if Path("arrays.json").exists():
+        try:
+            Path("arrays.json").unlink()
+        except:
+            pass
+
+
+# ============ Fixtures from arbiter/explainable_reasoner/tests/conftest.py ============
+
+@pytest.fixture(autouse=True)
+def isolated_reasoner_metrics():
+    """
+    Ensures every test runs with a clean Prometheus registry and metrics dictionary.
+    This prevents state from leaking between tests.
+    """
+    from unittest.mock import MagicMock, patch
+    
+    try:
+        from prometheus_client import CollectorRegistry
+    except ImportError:
+        yield None, None
+        return
+    
+    try:
+        from arbiter.explainable_reasoner.metrics import initialize_metrics
+    except ImportError:
+        yield None, None
+        return
+    
+    mock_metric = MagicMock()
+    mock_metric.labels.return_value = MagicMock(
+        inc=MagicMock(), dec=MagicMock(), set=MagicMock(), observe=MagicMock()
+    )
+
+    mock_metrics_dict = {
+        "reasoner_history_operations_total": mock_metric,
+        "reasoner_history_operation_latency_seconds": mock_metric,
+        "reasoner_history_db_connection_failures_total": mock_metric,
+        "reasoner_history_pruned_entries_total": mock_metric,
+        "reasoner_history_entries_current": mock_metric,
+        "reasoner_requests_total": mock_metric,
+        "reasoner_inference_success": mock_metric,
+        "reasoner_inference_errors": mock_metric,
+        "reasoner_prompt_truncations": mock_metric,
+        "reasoner_cache_hits": mock_metric,
+        "reasoner_cache_misses": mock_metric,
+        "reasoner_cache_errors": mock_metric,
+        "reasoner_model_reload_attempts": mock_metric,
+        "reasoner_model_reload_success": mock_metric,
+        "reasoner_model_load_errors": mock_metric,
+        "reasoner_health_check_success": mock_metric,
+        "reasoner_health_check_errors": mock_metric,
+        "reasoner_instances": mock_metric,
+        "reasoner_shutdown_duration_seconds": mock_metric,
+        "reasoner_prompt_size_bytes": mock_metric,
+        "reasoner_inference_duration_seconds": mock_metric,
+        "reasoner_history_entries_used": mock_metric,
+        "reasoner_sensitive_data_redaction_total": mock_metric,
+        "reasoner_executor_restarts_total": mock_metric,
+        "reasoner_executor_queue_size": mock_metric,
+        "reasoner_model_load_success": mock_metric,
+        "reasoner_model_unload_total": mock_metric,
+        "reasoner_init_duration_seconds": mock_metric,
+        "prompt_size_bytes": mock_metric,
+        "inference_duration_seconds": mock_metric,
+    }
+
+    try:
+        with (
+            patch(
+                "arbiter.explainable_reasoner.metrics.METRICS_REGISTRY",
+                new=CollectorRegistry(),
+            ) as registry,
+            patch(
+                "arbiter.explainable_reasoner.metrics.METRICS", new=mock_metrics_dict
+            ) as metrics_dict,
+        ):
+            initialize_metrics()
+            yield registry, metrics_dict
+    except Exception:
+        yield None, None
+
+
+# ============ Fixtures from arbiter/knowledge_graph/tests/conftest.py ============
+
+@pytest.fixture(autouse=True)
+def mock_knowledge_graph_agent_metrics(monkeypatch):
+    """Automatically mock AGENT_METRICS for knowledge graph tests."""
+    from unittest.mock import MagicMock
+    
+    mock_metrics = {
+        "agent_predict_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "agent_predict_success": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "agent_predict_errors": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "agent_predict_duration_seconds": MagicMock(labels=MagicMock(return_value=MagicMock(observe=MagicMock()))),
+        "agent_step_duration_seconds": MagicMock(labels=MagicMock(return_value=MagicMock(observe=MagicMock()))),
+        "agent_team_task_duration_seconds": MagicMock(observe=MagicMock()),
+        "agent_team_task_errors_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "agent_creation_duration_seconds": MagicMock(observe=MagicMock()),
+        "llm_calls_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "llm_errors_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "llm_call_latency_seconds": MagicMock(labels=MagicMock(return_value=MagicMock(observe=MagicMock()))),
+        "state_backend_operations_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "state_backend_errors_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "state_backend_latency_seconds": MagicMock(labels=MagicMock(return_value=MagicMock(observe=MagicMock()))),
+        "meta_learning_corrections_logged_total": MagicMock(inc=MagicMock()),
+        "meta_learning_train_duration_seconds": MagicMock(observe=MagicMock()),
+        "meta_learning_train_errors_total": MagicMock(inc=MagicMock()),
+        "sensitive_data_redaction_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "multimodal_data_processed_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "mm_processor_failures_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "agent_last_success_timestamp": MagicMock(labels=MagicMock(return_value=MagicMock(set=MagicMock()))),
+        "agent_last_error_timestamp": MagicMock(labels=MagicMock(return_value=MagicMock(set=MagicMock()))),
+        "agent_active_sessions_current": MagicMock(inc=MagicMock(), dec=MagicMock()),
+        "agent_heartbeat_timestamp": MagicMock(labels=MagicMock(return_value=MagicMock(set=MagicMock()))),
+    }
+    
+    try:
+        monkeypatch.setattr("arbiter.knowledge_graph.core.AGENT_METRICS", mock_metrics)
+        monkeypatch.setattr("arbiter.knowledge_graph.utils.AGENT_METRICS", mock_metrics)
+    except Exception:
+        pass
+    
+    return mock_metrics
+
+
+@pytest.fixture(autouse=True)
+def mock_meta_learning_persistence(monkeypatch):
+    """Mock file operations for MetaLearning to prevent loading persisted data."""
+    import builtins
+
+    original_open = builtins.open
+
+    def mock_open_wrapper(*args, **kwargs):
+        if args and "meta_learning.pkl" in str(args[0]):
+            if "rb" in str(args[1] if len(args) > 1 else kwargs.get("mode", "r")):
+                raise FileNotFoundError("No persisted meta-learning data")
+        return original_open(*args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", mock_open_wrapper)
+
+
+@pytest.fixture
+def mock_knowledge_graph_config(monkeypatch):
+    """Mock Config for knowledge graph tests."""
+    try:
+        from arbiter.knowledge_graph import config
+        
+        monkeypatch.setattr(config.Config, "REDIS_URL", None)
+        monkeypatch.setattr(config.Config, "POSTGRES_DB_URL", None)
+        monkeypatch.setattr(config.Config, "MAX_MM_DATA_SIZE_MB", 100)
+        monkeypatch.setattr(config.Config, "CACHE_EXPIRATION_SECONDS", 3600)
+        monkeypatch.setattr(config.Config, "PII_SENSITIVE_KEYS", ["password", "email", "ssn"])
+        monkeypatch.setattr(config.Config, "GDPR_MODE", True)
+        monkeypatch.setattr(config.Config, "DEFAULT_PROVIDER", "openai")
+        monkeypatch.setattr(config.Config, "DEFAULT_LLM_MODEL", "gpt-3.5-turbo")
+        monkeypatch.setattr(config.Config, "DEFAULT_TEMP", 0.7)
+        monkeypatch.setattr(config.Config, "DEFAULT_LANGUAGE", "en")
+        monkeypatch.setattr(config.Config, "MEMORY_WINDOW", 5)
+        monkeypatch.setattr(config.Config, "MAX_META_LEARNING_CORRECTIONS", 10)
+        monkeypatch.setattr(config.Config, "MAX_CORRECTION_ENTRY_SIZE", 10000)
+        monkeypatch.setattr(config.Config, "MIN_RECORDS_FOR_TRAINING", 2)
+        monkeypatch.setattr(config.Config, "LLM_RATE_LIMIT_CALLS", 10)
+        monkeypatch.setattr(config.Config, "LLM_RATE_LIMIT_PERIOD", 60)
+        monkeypatch.setattr(config.Config, "FALLBACK_PROVIDER", None)
+        monkeypatch.setattr(config.Config, "FALLBACK_LLM_CONFIG", {"model": "claude-2", "temperature": 0.7})
+        monkeypatch.setattr(config.Config, "AUDIT_LEDGER_URL", "http://localhost:8000/audit")
+        monkeypatch.setattr(config.Config, "AUDIT_SIGNING_PUBLIC_KEY", None)
+        
+        return config.Config
+    except ImportError:
+        return None
+
+
+@pytest.fixture
+def mock_knowledge_graph_external_clients(monkeypatch):
+    """Mock external client classes for knowledge graph tests."""
+    from unittest.mock import MagicMock, AsyncMock
+    
+    mock_redis_client = MagicMock()
+    mock_redis_instance = AsyncMock()
+    mock_redis_instance.ping = AsyncMock(return_value=True)
+    mock_redis_instance.get = AsyncMock(return_value=None)
+    mock_redis_instance.set = AsyncMock(return_value=True)
+    mock_redis_instance.setex = AsyncMock(return_value=True)
+    mock_redis_client.return_value = mock_redis_instance
+
+    mock_postgres_client = MagicMock()
+    mock_postgres_instance = AsyncMock()
+    mock_postgres_instance.connect = AsyncMock()
+    mock_postgres_instance.save = AsyncMock()
+    mock_postgres_instance.load = AsyncMock(return_value=None)
+    mock_postgres_client.return_value = mock_postgres_instance
+
+    mock_audit_client = MagicMock()
+    mock_audit_instance = AsyncMock()
+    mock_audit_instance.log_event = AsyncMock(return_value=True)
+    mock_audit_client.return_value = mock_audit_instance
+
+    try:
+        monkeypatch.setattr("arbiter.knowledge_graph.core.RedisClient", mock_redis_client)
+        monkeypatch.setattr("arbiter.knowledge_graph.core.PostgresClient", mock_postgres_client)
+        monkeypatch.setattr("arbiter.knowledge_graph.core.AuditLedgerClient", mock_audit_client)
+    except Exception:
+        pass
+
+    return {
+        "redis": mock_redis_client,
+        "postgres": mock_postgres_client,
+        "audit": mock_audit_client,
+    }
+
+
+@pytest.fixture
+def mock_knowledge_graph_llm_providers(monkeypatch):
+    """Mock LLM provider classes for knowledge graph tests."""
+    from unittest.mock import MagicMock
+
+    mock_openai = MagicMock()
+    mock_openai.return_value = MagicMock()
+
+    mock_anthropic = MagicMock()
+    mock_anthropic.return_value = MagicMock()
+
+    mock_google = MagicMock()
+    mock_google.return_value = MagicMock()
+
+    mock_xai = MagicMock()
+    mock_xai.return_value = MagicMock()
+
+    try:
+        monkeypatch.setattr("arbiter.knowledge_graph.core.ChatOpenAI", mock_openai)
+        monkeypatch.setattr("arbiter.knowledge_graph.core.ChatAnthropic", mock_anthropic)
+        monkeypatch.setattr("arbiter.knowledge_graph.core.ChatGoogleGenerativeAI", mock_google)
+        monkeypatch.setattr("arbiter.knowledge_graph.core.ChatXAI", mock_xai)
+    except Exception:
+        pass
+
+    return {
+        "openai": mock_openai,
+        "anthropic": mock_anthropic,
+        "google": mock_google,
+        "xai": mock_xai,
+    }
+
+
+# ============ Fixtures from arbiter/learner/tests/conftest.py ============
+
+# Mock botocore exceptions for learner tests
+class MockNoCredentialsError(Exception):
+    """Mock AWS NoCredentialsError exception."""
+    pass
+
+
+class MockClientError(Exception):
+    """Mock AWS ClientError exception."""
+    pass
+
+
+@pytest.fixture(autouse=True)
+def mock_learner_aws_ssm(monkeypatch):
+    """Mock AWS SSM client for learner tests to prevent real AWS API calls."""
+    from unittest.mock import MagicMock, patch
+    
+    with patch("boto3.client") as mock_client:
+        mock_ssm = MagicMock()
+        mock_ssm.get_parameter.return_value = {
+            "Parameter": {
+                "Value": "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="  # base64 32-byte key
+            }
+        }
+        mock_client.return_value = mock_ssm
+        yield mock_client
+
+
+# ============ Fixtures from arbiter/policy/tests/conftest.py ============
+
+@pytest.fixture(autouse=True)
+def reset_policy_singletons():
+    """Reset singleton instances between tests to ensure test isolation."""
+    yield
+    
+    try:
+        from arbiter.policy import core
+        if hasattr(core, "_policy_engine_instance"):
+            core._policy_engine_instance = None
+    except ImportError:
+        pass
+    
+    try:
+        from arbiter.policy import config
+        if hasattr(config, "_instance"):
+            config._instance = None
+    except ImportError:
+        pass
+    
+    try:
+        from arbiter.policy import circuit_breaker
+        if hasattr(circuit_breaker, "_breaker_states"):
+            circuit_breaker._breaker_states.clear()
+    except ImportError:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def mock_policy_arbiter_dependencies(monkeypatch):
+    """Mock external dependencies for policy tests."""
+    from unittest.mock import MagicMock
+
+    mock_audit_log = MagicMock()
+
+    mock_compliance = MagicMock()
+    mock_compliance.load_compliance_map = lambda config_path=None: {
+        "FAKE-1": {"name": "FakeControl", "status": "enforced", "required": True},
+        "FAKE-2": {"name": "FakeOptional", "status": "logged", "required": False},
+        "PC-1": {"name": "PolicyControl", "status": "enforced", "required": True},
+        "NIST_AC-1": {"name": "Access Control Policy", "status": "enforced", "required": True},
+        "NIST_AC-2": {"name": "Account Management", "status": "enforced", "required": True},
+        "NIST_AC-3": {"name": "Access Enforcement", "status": "enforced", "required": True},
+        "NIST_AC-6": {"name": "Least Privilege", "status": "enforced", "required": True},
+    }
+
+    mock_llm_client = MagicMock()
+
+    monkeypatch.setitem(sys.modules, "arbiter.policy.guardrails.audit_log", mock_audit_log)
+    monkeypatch.setitem(sys.modules, "arbiter.policy.guardrails.compliance_mapper", mock_compliance)
+    monkeypatch.setitem(sys.modules, "arbiter.policy.plugins.llm_client", mock_llm_client)
+
+    return {
+        "audit_log": mock_audit_log,
+        "compliance_mapper": mock_compliance,
+        "llm_client": mock_llm_client,
+    }
+
+
+@pytest.fixture
+def mock_policy_redis(monkeypatch):
+    """Mock Redis for policy tests that don't need actual Redis."""
+    from unittest.mock import MagicMock
+
+    mock_redis_client = MagicMock()
+    mock_redis_client.ping = MagicMock(return_value=True)
+    mock_redis_client.hgetall = MagicMock(return_value={})
+    mock_redis_client.hset = MagicMock(return_value=True)
+    mock_redis_client.expire = MagicMock(return_value=True)
+    mock_redis_client.pipeline = MagicMock()
+    mock_redis_client.close = MagicMock()
+
+    mock_redis_module = MagicMock()
+    mock_redis_module.Redis.from_url = MagicMock(return_value=mock_redis_client)
+    mock_redis_module.ConnectionPool.from_url = MagicMock()
+    mock_redis_module.RedisError = Exception
+
+    monkeypatch.setattr("redis.asyncio", mock_redis_module)
+    return mock_redis_client
+
+
+@pytest.fixture
+def clean_policy_environment(monkeypatch):
+    """Provide a clean environment for policy tests."""
+    original_env = os.environ.copy()
+
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("APP_ENV", "test")
+
+    yield
+
+    os.environ.clear()
+    os.environ.update(original_env)
+
+
+# ============ Fixtures from self_fixing_engineer/conftest.py ============
+
+# Deferred imports for OpenTelemetry
+_SFE_OTEL_AVAILABLE = None
+_SFE_OTEL_IMPORTS = {}
+
+
+def _check_sfe_otel_availability():
+    """Check if OpenTelemetry is available (deferred to fixture time)."""
+    global _SFE_OTEL_AVAILABLE, _SFE_OTEL_IMPORTS
+    
+    if _SFE_OTEL_AVAILABLE is not None:
+        return _SFE_OTEL_AVAILABLE
+    
+    import threading
+    if not hasattr(_check_sfe_otel_availability, '_lock'):
+        _check_sfe_otel_availability._lock = threading.Lock()
+    
+    with _check_sfe_otel_availability._lock:
+        if _SFE_OTEL_AVAILABLE is not None:
+            return _SFE_OTEL_AVAILABLE
+        
+        try:
+            from opentelemetry import trace
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+            
+            _SFE_OTEL_IMPORTS['trace'] = trace
+            _SFE_OTEL_IMPORTS['TracerProvider'] = TracerProvider
+            _SFE_OTEL_IMPORTS['ConsoleSpanExporter'] = ConsoleSpanExporter
+            _SFE_OTEL_IMPORTS['SimpleSpanProcessor'] = SimpleSpanProcessor
+            _SFE_OTEL_AVAILABLE = True
+        except ImportError:
+            _SFE_OTEL_AVAILABLE = False
+        
+        return _SFE_OTEL_AVAILABLE
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_sfe_otel():
+    """
+    Initializes a minimal OpenTelemetry SDK for the SFE test session.
+    Runs AFTER test collection to avoid slow imports.
+    """
+    if _check_sfe_otel_availability():
+        trace = _SFE_OTEL_IMPORTS['trace']
+        TracerProvider = _SFE_OTEL_IMPORTS['TracerProvider']
+        ConsoleSpanExporter = _SFE_OTEL_IMPORTS['ConsoleSpanExporter']
+        SimpleSpanProcessor = _SFE_OTEL_IMPORTS['SimpleSpanProcessor']
+        
+        provider = TracerProvider()
+        exporter = ConsoleSpanExporter()
+        processor = SimpleSpanProcessor(exporter)
+        provider.add_span_processor(processor)
+        trace.set_tracer_provider(provider)
+
+    yield
+
+
+# ============ Fixtures from intent_capture/tests/conftest.py ============
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_intent_capture_logging_and_warnings():
+    """Configure logging and warning filters for intent_capture tests."""
+    import logging
+    import warnings
+    
+    logging.basicConfig(level=logging.ERROR, force=True)
+    logging.getLogger("streamlit").setLevel(logging.ERROR)
+    logging.getLogger("intent_capture").setLevel(logging.ERROR)
+    
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", message=".*pkg_resources.*")
+    warnings.filterwarnings("ignore", message=".*missing ScriptRunContext.*")
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
+    
+    yield
+    
+    try:
+        logging.shutdown()
+    except Exception:
+        pass
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_streamlit_setup():
+    """Mock Streamlit session state globally for intent_capture tests."""
+    import unittest.mock as mock
+    
+    mock_session_state = mock.MagicMock()
+    mock_session_state.get.return_value = "test_user"
+    
+    with mock.patch.dict(sys.modules, {"streamlit": mock.MagicMock()}):
+        sys.modules["streamlit"].session_state = mock_session_state
+        yield
+
+
+@pytest.fixture(autouse=True)
+def mock_streamlit_for_tests(mock_streamlit_setup):
+    """Mock Streamlit components that cause issues in tests."""
+    import unittest.mock as mock
+    
+    mock_session_state = mock.MagicMock()
+    mock_session_state.get.return_value = "test_user"
+    
+    with mock.patch("streamlit.session_state", mock_session_state):
+        with mock.patch(
+            "streamlit.runtime.scriptrunner_utils.script_run_context.get_script_run_ctx",
+            return_value=None,
+        ):
+            yield
+
+
+@pytest.fixture(autouse=True)
+def cleanup_intent_capture_logging():
+    """Ensure logging doesn't cause issues in intent_capture tests."""
+    import logging
+    yield
+    for handler in logging.root.handlers[:]:
+        try:
+            handler.close()
+        except Exception:
+            pass
+        logging.root.removeHandler(handler)
+
+
+# ============================================================================
+# END OF CONSOLIDATED FIXTURES
+# ============================================================================
