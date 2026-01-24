@@ -364,13 +364,13 @@ def test_function():
         """Test persistence with some failures."""
         # Setup
         registry.db = Mock()
-        call_count = [0]
-        
-        async def mock_save(metadata):
-            call_count[0] += 1
-            if call_count[0] == 2:  # Second call fails
-                raise Exception("Database error")
-        
+        mock_save = AsyncMock()
+        # Configure mock to succeed on first and third calls, fail on second
+        mock_save.side_effect = [
+            None,  # First call succeeds
+            Exception("Database error"),  # Second call fails
+            None,  # Third call succeeds
+        ]
         registry.db.save_plugin_legacy = mock_save
         
         # Queue test metadata
@@ -384,6 +384,7 @@ def test_function():
         assert persisted == 2  # 2 out of 3 succeeded
         assert total == 3
         assert registry.get_pending_metadata_count() == 0  # Queue is cleared
+        assert mock_save.call_count == 3
 
     @pytest.mark.asyncio
     async def test_persist_pending_metadata_no_db(self, registry):

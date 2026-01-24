@@ -708,7 +708,7 @@ class PluginRegistry:
         self.logger.info(f"Persisting {pending_count} pending plugin metadata entries...")
         
         persisted = 0
-        failed_plugins: List[str] = []
+        failed_plugins: set[str] = set()
         
         for metadata in pending_metadata:
             plugin_name = metadata.get("name", "unknown")
@@ -717,7 +717,7 @@ class PluginRegistry:
                 persisted += 1
                 self.logger.debug(f"Persisted metadata for plugin '{plugin_name}'.")
             except Exception as e:
-                failed_plugins.append(plugin_name)
+                failed_plugins.add(plugin_name)
                 self.logger.warning(
                     f"Failed to persist metadata for plugin '{plugin_name}': {e}",
                     exc_info=self.logger.isEnabledFor(logging.DEBUG)
@@ -1367,7 +1367,7 @@ def plugin(
         # Build metadata for persistence
         # Note: We extract source code here while we have access to the function
         try:
-            fn_source_code = inspect.getsource(fn) if callable(fn) and not isinstance(fn, str) else str(fn)
+            fn_source_code = inspect.getsource(fn) if callable(fn) else str(fn)
         except (OSError, TypeError) as e:
             # Source code may not be available for built-in functions or dynamically created functions
             logger.debug(f"Could not extract source code for plugin '{name}': {e}")
