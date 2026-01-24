@@ -51,7 +51,7 @@ _base_logger.info(f"DLT_BASE: PRODUCTION_MODE is set to: {PRODUCTION_MODE}")
 # When TESTING_MODE is True, missing dependencies will be stubbed instead
 # of causing the process to exit.
 TESTING_MODE = (
-    os.getenv("TESTING", "0") == "1" 
+    os.getenv("TESTING", "0") == "1"
     or os.getenv("PYTEST_CURRENT_TEST") is not None
     or os.getenv("PYTEST_COLLECTING", "0") == "1"
 )
@@ -285,6 +285,7 @@ except ImportError:
                 return func
             return decorator
 
+PROMETHEUS_AVAILABLE = False
 try:
     from prometheus_client import (
         CollectorRegistry,

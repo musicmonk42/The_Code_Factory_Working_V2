@@ -25,7 +25,7 @@ import requests
 # When _TESTING_MODE is True, missing dependencies will be stubbed instead
 # of causing the process to exit.
 _TESTING_MODE = (
-    os.getenv("TESTING", "0") == "1" 
+    os.getenv("TESTING", "0") == "1"
     or os.getenv("PYTEST_CURRENT_TEST") is not None
     or os.getenv("PYTEST_COLLECTING", "0") == "1"
 )

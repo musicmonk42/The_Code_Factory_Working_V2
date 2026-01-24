@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, List, Optional
 if sys.version_info < (3, 10):
     sys.stderr.write("Python 3.10+ required.\n")
     _testing_mode = (
-        os.getenv("TESTING", "0") == "1" 
+        os.getenv("TESTING", "0") == "1"
         or os.getenv("PYTEST_CURRENT_TEST") is not None
         or os.getenv("PYTEST_COLLECTING", "0") == "1"
     )
