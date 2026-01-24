@@ -1241,6 +1241,13 @@ def _ensure_module_specs():
 # Module spec fixing is deferred to session fixture to avoid import-time overhead
 
 
+# ---- Initialize Prometheus stubs early (before collection) ----
+# This MUST happen before test collection because test modules import code
+# that depends on prometheus_client (e.g., bug_manager/utils.py)
+# Running this at module level (not in fixture) prevents collection-time import errors
+_initialize_prometheus_stubs()
+
+
 # ---- Pytest hooks for collection-time fixes ----
 def pytest_collectstart(collector):
     """
@@ -1273,13 +1280,13 @@ def setup_test_stubs():
     This runs AFTER test collection is complete, keeping collection fast.
     
     Includes:
-    - Prometheus client stub setup
+    - Prometheus client stub setup (already done at module level before collection)
     - Optional dependency mocks
     - Omnicore engine mocks
     - Module spec fixing
     """
-    # Initialize Prometheus stubs first (most expensive)
-    _initialize_prometheus_stubs()
+    # Prometheus stubs already initialized at module level (before collection)
+    # to prevent import errors during test collection
     
     # Initialize optional dependency mocks
     _initialize_optional_dependency_mocks()
