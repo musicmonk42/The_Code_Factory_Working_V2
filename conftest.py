@@ -950,8 +950,12 @@ def _initialize_prometheus_stubs():
     Initialize prometheus_client stub modules.
     
     This function MUST be explicitly called from the setup_test_stubs session fixture.
-    Unlike the previous module-level implementation, it does not run automatically.
-    Deferred to session fixture to avoid import-time overhead during test collection.
+    If not called, tests that import prometheus_client will fail with ImportError,
+    and any code using Prometheus metrics will fail at runtime.
+    
+    Unlike the previous module-level implementation, this does not run automatically
+    during conftest import. It is deferred to the session fixture to avoid import-time
+    overhead during test collection, which was causing timeout issues.
     """
     # prometheus_client needs special handling for its .core submodule
     if "prometheus_client" not in sys.modules:

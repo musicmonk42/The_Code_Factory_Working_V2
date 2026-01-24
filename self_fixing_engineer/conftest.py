@@ -17,25 +17,41 @@ _OTEL_IMPORTS = {}
 
 
 def _check_otel_availability():
-    """Check if OpenTelemetry is available (deferred to fixture time)."""
+    """
+    Check if OpenTelemetry is available (deferred to fixture time).
+    Thread-safe check with proper locking for parallel test execution.
+    """
     global _OTEL_AVAILABLE, _OTEL_IMPORTS
+    
+    # Quick check if already initialized (no lock needed)
     if _OTEL_AVAILABLE is not None:
         return _OTEL_AVAILABLE
     
-    try:
-        from opentelemetry import trace
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
-        
-        _OTEL_IMPORTS['trace'] = trace
-        _OTEL_IMPORTS['TracerProvider'] = TracerProvider
-        _OTEL_IMPORTS['ConsoleSpanExporter'] = ConsoleSpanExporter
-        _OTEL_IMPORTS['SimpleSpanProcessor'] = SimpleSpanProcessor
-        _OTEL_AVAILABLE = True
-    except ImportError:
-        _OTEL_AVAILABLE = False
+    # Import lock at module level to ensure thread safety
+    import threading
+    if not hasattr(_check_otel_availability, '_lock'):
+        _check_otel_availability._lock = threading.Lock()
     
-    return _OTEL_AVAILABLE
+    # Double-checked locking pattern
+    with _check_otel_availability._lock:
+        # Check again inside lock in case another thread initialized it
+        if _OTEL_AVAILABLE is not None:
+            return _OTEL_AVAILABLE
+        
+        try:
+            from opentelemetry import trace
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+            
+            _OTEL_IMPORTS['trace'] = trace
+            _OTEL_IMPORTS['TracerProvider'] = TracerProvider
+            _OTEL_IMPORTS['ConsoleSpanExporter'] = ConsoleSpanExporter
+            _OTEL_IMPORTS['SimpleSpanProcessor'] = SimpleSpanProcessor
+            _OTEL_AVAILABLE = True
+        except ImportError:
+            _OTEL_AVAILABLE = False
+        
+        return _OTEL_AVAILABLE
 
 
 def _setup_prometheus_patching():
@@ -55,28 +71,26 @@ def _setup_prometheus_patching():
             registering (no-op) instead of raising ValueError.
             """
             try:
-                try:
-                    names = set(self._get_names(collector))  # type: ignore[attr-defined]
-                except Exception:
-                    names = set()
+                names = set(self._get_names(collector)) if hasattr(self, '_get_names') else set()
+            except Exception:
+                names = set()
 
-                present = set()
-                try:
-                    for _c, seq in getattr(self, "_collector_to_names", {}).items():
-                        for n in seq:
-                            present.add(n)
-                except Exception:
-                    pass
+            present = set()
+            try:
+                for _c, seq in getattr(self, "_collector_to_names", {}).items():
+                    for n in seq:
+                        present.add(n)
+            except Exception:
+                pass
 
-                if names & present:
-                    return collector  # treat as already-registered
+            if names & present:
+                return collector  # treat as already-registered
+            
+            # Try to register, but don't fail if it errors
+            try:
                 return _ORIG_REGISTER(self, collector)
             except Exception:
-                # Last resort: never let metrics kill the test run
-                try:
-                    return _ORIG_REGISTER(self, collector)
-                except Exception:
-                    return collector
+                return collector
 
         # Patch both the class and the default registry instance
         CollectorRegistry.register = _safe_register  # class-level
