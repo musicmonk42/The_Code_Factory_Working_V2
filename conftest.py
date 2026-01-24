@@ -17,9 +17,15 @@ sys.path.insert(0, os.path.join(project_root, "generator"))
 
 # ---- Set TESTING environment variable early ----
 # This should be set before any module imports to prevent side effects
+# Set environment variables to skip expensive initialization during test collection
 os.environ["TESTING"] = "1"
 os.environ.setdefault("OTEL_SDK_DISABLED", "1")
 os.environ.setdefault("PYTEST_CURRENT_TEST", "true")
+os.environ.setdefault("PYTEST_COLLECTING", "1")
+os.environ.setdefault("SKIP_AUDIT_INIT", "1")
+os.environ.setdefault("SKIP_BACKGROUND_TASKS", "1")
+os.environ.setdefault("NO_MONITORING", "1")
+os.environ.setdefault("DISABLE_TELEMETRY", "1")
 
 # ---- Import error handling ----
 # Provide graceful fallbacks for common missing dependencies during test collection
@@ -1611,6 +1617,46 @@ def ensure_module_specs():
     yield
     # Also run at end in case modules were added during tests
     _ensure_module_specs()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_environment():
+    """
+    Set environment variables for all tests to skip expensive initialization.
+    
+    This fixture ensures that:
+    - Event loops are not created during test collection
+    - Background tasks are not started
+    - Audit logging is minimal
+    - Monitoring/telemetry is disabled
+    
+    These settings dramatically improve test collection speed and prevent
+    RuntimeError: no running event loop during pytest collection.
+    """
+    # Store original values in case they were set
+    original_env = {}
+    env_vars = {
+        "PYTEST_COLLECTING": "1",
+        "SKIP_AUDIT_INIT": "1",
+        "SKIP_BACKGROUND_TASKS": "1",
+        "NO_MONITORING": "1",
+        "DISABLE_TELEMETRY": "1",
+        "OTEL_SDK_DISABLED": "1",
+    }
+    
+    for key, value in env_vars.items():
+        if key in os.environ:
+            original_env[key] = os.environ[key]
+        os.environ[key] = value
+    
+    yield
+    
+    # Restore original environment (cleanup)
+    for key in env_vars:
+        if key in original_env:
+            os.environ[key] = original_env[key]
+        elif key in os.environ:
+            del os.environ[key]
 
 
 @pytest.fixture(scope="function", autouse=True)

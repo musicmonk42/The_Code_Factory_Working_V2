@@ -122,7 +122,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         severity="info",
                     )
                     
-                    await websocket.send_json(event_msg.dict())
+                    await websocket.send_json(event_msg.to_json_dict())
                     
                 except asyncio.TimeoutError:
                     # Send heartbeat if no events for 30 seconds
@@ -133,7 +133,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         data={"status": "healthy"},
                         severity="info",
                     )
-                    await websocket.send_json(heartbeat.dict())
+                    await websocket.send_json(heartbeat.to_json_dict())
                     
                 except Exception as e:
                     logger.error(f"Error processing event: {e}")
@@ -152,7 +152,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     data={"status": "healthy", "mode": "fallback"},
                     severity="info",
                 )
-                await websocket.send_json(event.dict())
+                await websocket.send_json(event.to_json_dict())
 
     except WebSocketDisconnect:
         active_connections.remove(websocket)
@@ -243,7 +243,7 @@ async def event_stream(
                 
                 yield {
                     "event": event.event_type.value,
-                    "data": json.dumps(event.dict(), default=str),
+                    "data": json.dumps(event.to_json_dict()),
                 }
                 
             except asyncio.TimeoutError:
@@ -259,7 +259,7 @@ async def event_stream(
                 
                 yield {
                     "event": "keepalive",
-                    "data": json.dumps(event.dict(), default=str),
+                    "data": json.dumps(event.to_json_dict()),
                 }
                 
     else:
@@ -282,7 +282,7 @@ async def event_stream(
 
             yield {
                 "event": event.event_type.value,
-                "data": json.dumps(event.dict(), default=str),
+                "data": json.dumps(event.to_json_dict()),
             }
 
 
@@ -335,7 +335,7 @@ async def broadcast_event(event: EventMessage):
     disconnected = []
     for connection in active_connections:
         try:
-            await connection.send_json(event.dict())
+            await connection.send_json(event.to_json_dict())
         except Exception as e:
             logger.error(f"Error broadcasting to client: {e}")
             disconnected.append(connection)

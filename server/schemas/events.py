@@ -40,3 +40,26 @@ class EventMessage(BaseModel):
     severity: str = Field(
         "info", description="Event severity (debug/info/warning/error/critical)"
     )
+
+    def to_json_dict(self) -> Dict[str, Any]:
+        """
+        Convert to JSON-serializable dictionary with proper datetime handling.
+        
+        This method handles Pydantic V2 compatibility and ensures datetime objects
+        are properly serialized to ISO format strings for JSON transport.
+        
+        Returns:
+            Dict with all datetime objects converted to ISO strings
+        """
+        # Use model_dump() for Pydantic V2, falling back to dict() for V1
+        try:
+            data = self.model_dump()
+        except AttributeError:
+            # Fallback for Pydantic V1
+            data = self.dict()
+        
+        # Convert datetime to ISO string
+        if isinstance(data.get('timestamp'), datetime):
+            data['timestamp'] = data['timestamp'].isoformat()
+        
+        return data

@@ -722,11 +722,13 @@ def get_audit_logger() -> RegulatoryAuditLogger:
                 _audit_logger_instance = RegulatoryAuditLogger()
 
                 # Skip background thread initialization in CI environments
-                # to prevent thread exhaustion during import-time checks
+                # and during pytest collection to prevent thread exhaustion
                 skip_init = (
                     os.getenv("CI") in ("1", "true", "True", "TRUE")
                     or os.getenv("GITHUB_ACTIONS") in ("1", "true", "True", "TRUE")
                     or os.getenv("SKIP_AUDIT_INIT") in ("1", "true", "True", "TRUE")
+                    or os.getenv("PYTEST_CURRENT_TEST") is not None
+                    or os.getenv("PYTEST_COLLECTING") in ("1", "true", "True", "TRUE")
                 )
 
                 if not skip_init:

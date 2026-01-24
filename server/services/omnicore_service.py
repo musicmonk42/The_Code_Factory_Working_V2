@@ -314,6 +314,12 @@ class OmniCoreService:
         """
         # Initialize Message Bus
         try:
+            # Skip during pytest collection to avoid event loop requirements
+            if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING"):
+                logger.info("Skipping message bus initialization during pytest collection")
+                self._message_bus = None
+                return
+                
             from omnicore_engine.message_bus.sharded_message_bus import ShardedMessageBus
             self._message_bus = ShardedMessageBus()
             self._omnicore_components_available["message_bus"] = True
