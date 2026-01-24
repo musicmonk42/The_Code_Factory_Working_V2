@@ -20,6 +20,8 @@ import importlib.util
 import time
 
 # Start timing for diagnostics
+# Note: Print statements are intentional for CI debugging of timeout issues
+# They only run once during conftest import and help identify slow imports
 _CONFTEST_START_TIME = time.time()
 
 # Set testing environment variables EARLY
@@ -332,19 +334,22 @@ _OPTIONAL_DEPENDENCIES = [
     "boto3",  # AWS SDK
     "botocore.exceptions",  # AWS SDK exceptions
     "opentelemetry",  # OpenTelemetry - requires special handling, see _create_opentelemetry_stubs()
-    # Additional potentially expensive imports
+    # Additional potentially expensive imports (scientific computing, ML, visualization)
     "scipy",  # Scientific computing
     "pandas",  # Data analysis
     "sklearn",  # Machine learning (scikit-learn)
     "matplotlib",  # Plotting library
     "seaborn",  # Statistical visualization
     "plotly",  # Interactive plots
+    # Template and configuration parsing libraries
     "jinja2",  # Template engine
     "yaml",  # YAML parsing
     "toml",  # TOML parsing
     "tomli",  # TOML parsing library
+    # Image processing and computer vision
     "PIL",  # Python Imaging Library (Pillow)
     "cv2",  # OpenCV
+    # Deep learning frameworks
     "tensorflow",  # TensorFlow
     "keras",  # Keras deep learning
 ]
