@@ -3,15 +3,18 @@ import sys
 import types
 from pathlib import Path
 
-# Add the project root to Python path
+# Add the project root to Python path (highest priority)
 project_root = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
 
-# NOTE: We only add the project root to sys.path.
-# Adding subdirectories (self_fixing_engineer, omnicore_engine, generator) would break
-# package imports like "from omnicore_engine.meta_supervisor import X" because Python
-# would try to find meta_supervisor inside the omnicore_engine subdirectory rather than
-# treating omnicore_engine as a top-level package.
+# Add subdirectories at END of path to support relative imports in tests
+# (e.g., "from agents.codegen_agent..." in generator/agents/tests/)
+# Using append ensures package imports like "from omnicore_engine.meta_supervisor import X"
+# still work because project_root (with full package hierarchy) is searched first.
+for subdir in ["self_fixing_engineer", "omnicore_engine", "generator"]:
+    subdir_path = os.path.join(project_root, subdir)
+    if subdir_path not in sys.path:
+        sys.path.append(subdir_path)
 
 # ---- Set TESTING environment variable early ----
 # This should be set before any module imports to prevent side effects
