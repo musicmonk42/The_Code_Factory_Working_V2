@@ -340,6 +340,9 @@ _OPTIONAL_DEPENDENCIES = [
     "pillow",  # Pillow alternative import name
     # Note: prometheus_client, aiohttp, and aiosqlite should be installed
     # and should NOT be mocked as they are critical for proper type checking
+    # Omnicore engine submodules that may have missing dependencies
+    "omnicore_engine.database",  # May be missing aiosqlite or other dependencies
+    "omnicore_engine.message_bus",  # May be missing structlog or other dependencies
 ]
 
 # Special handling for botocore.exceptions - must be proper exception classes
@@ -1531,6 +1534,36 @@ if "prometheus_client" not in sys.modules:
         sys.modules["prometheus_client.metrics"] = prom_metrics
         sys.modules["prometheus_client.multiprocess"] = prom_multiprocess
 
+
+# ---- Omnicore Engine submodule import protection ----
+# Handle omnicore_engine.database and omnicore_engine.message_bus gracefully
+# These submodules may have missing dependencies (aiosqlite, structlog, etc.) during test collection
+# Print warnings but allow tests to proceed with mock modules
+if "omnicore_engine.database" not in sys.modules:
+    try:
+        import omnicore_engine.database
+    except (ImportError, ModuleNotFoundError, OSError) as e:
+        print(f"omnicore_engine.database not found. Database functionality disabled. Error: {e}")
+        # Create a mock module if not already mocked by optional dependencies
+        if "omnicore_engine.database" not in sys.modules:
+            database_mock = _create_mock_module("omnicore_engine.database")
+            sys.modules["omnicore_engine.database"] = database_mock
+            # Ensure parent module exists and has the attribute
+            if "omnicore_engine" in sys.modules:
+                sys.modules["omnicore_engine"].database = database_mock
+
+if "omnicore_engine.message_bus" not in sys.modules:
+    try:
+        import omnicore_engine.message_bus
+    except (ImportError, ModuleNotFoundError, OSError) as e:
+        print(f"omnicore_engine.message_bus not found. Message bus functionality disabled. Error: {e}")
+        # Create a mock module if not already mocked by optional dependencies
+        if "omnicore_engine.message_bus" not in sys.modules:
+            message_bus_mock = _create_mock_module("omnicore_engine.message_bus")
+            sys.modules["omnicore_engine.message_bus"] = message_bus_mock
+            # Ensure parent module exists and has the attribute
+            if "omnicore_engine" in sys.modules:
+                sys.modules["omnicore_engine"].message_bus = message_bus_mock
 
 # ---- ChromaDB singleton cleanup ----
 # Global cleanup of ChromaDB singleton between test sessions
