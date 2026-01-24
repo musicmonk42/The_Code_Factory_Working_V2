@@ -42,11 +42,21 @@ services:
       dockerfile: Dockerfile
     container_name: codefactory-platform
     environment:
+      # Application Environment
       - APP_ENV=development
+      - DEV_MODE=1
+      - PRODUCTION_MODE=0
+      
       # Enterprise-grade startup optimization
       - APP_STARTUP=1
       - SKIP_IMPORT_TIME_VALIDATION=1
       - SPACY_WARNING_IGNORE=W007
+      
+      # Security - CRITICAL: Set proper values in production!
+      # Use strong random keys, NOT these development defaults
+      - AGENTIC_AUDIT_HMAC_KEY=dev_key_change_in_production_7f8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-dGVzdC1rZXktZm9yLWRldmVsb3BtZW50LW9ubHktMzJieXRlcw==}
+      
       # LLM Provider Configuration
       - XAI_API_KEY=${XAI_API_KEY:-}
       - GROK_API_KEY=${GROK_API_KEY:-}
@@ -58,11 +68,24 @@ services:
       - LLM_TIMEOUT=${LLM_TIMEOUT:-300}
       - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-3}
       - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
+      
       # Infrastructure
       - REDIS_URL=redis://redis:6379
+      - DB_PATH=${DB_PATH:-sqlite+aiosqlite:///./codefactory.db}
+      
+      # Message Bus Configuration
+      - MESSAGE_BUS_SHARD_COUNT=${MESSAGE_BUS_SHARD_COUNT:-4}
+      - MESSAGE_BUS_WORKERS_PER_SHARD=${MESSAGE_BUS_WORKERS_PER_SHARD:-4}
+      - ENABLE_MESSAGE_BUS_GUARDIAN=${ENABLE_MESSAGE_BUS_GUARDIAN:-0}
+      
       # Self-Fixing Engineer
       - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
       - AUDIT_LOG_PATH=/app/audit_trail.log
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENABLE_STRUCTURED_LOGGING=${ENABLE_STRUCTURED_LOGGING:-0}
+      
       # Metrics
       - PROMETHEUS_PORT=9090  # Prometheus metrics HTTP server port
     ports:

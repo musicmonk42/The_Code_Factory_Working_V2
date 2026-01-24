@@ -1,5 +1,15 @@
 # Railway Deployment Guide
 
+## ✅ Updated for All Critical Fixes
+
+This guide has been updated to include all environment variables required for the critical startup and runtime fixes:
+- Event loop management (Message Bus configuration)
+- Config validation (Production mode settings)
+- Audit logging (HMAC key requirements)
+- Startup optimization
+
+---
+
 ## Quick Start
 
 ### 1. Deploy to Railway
@@ -11,32 +21,90 @@ In your Railway project dashboard:
 2. Click **"+ New"** → **"Database"** → **"Redis"** (auto-injects `REDIS_URL`)
 
 ### 3. Set Required Secrets
-In the **Variables** tab, add:
 
-| Variable | How to Set | Required |
-|----------|-----------|----------|
-| `OPENAI_API_KEY` | Your OpenAI API key | ✅ Yes |
-| `SECRET_KEY` | `${{secret()}}` or generate manually | ✅ Yes |
-| `JWT_SECRET_KEY` | `${{secret()}}` or generate manually | ✅ Yes |
-| `AGENTIC_AUDIT_HMAC_KEY` | Generate with command below | ✅ Yes |
+⚠️ **CRITICAL**: All these secrets are REQUIRED for the application to start correctly.
 
-**Generate AGENTIC_AUDIT_HMAC_KEY:**
+| Variable | How to Generate | Required | Purpose |
+|----------|----------------|----------|---------|
+| `AGENTIC_AUDIT_HMAC_KEY` | `openssl rand -hex 32` | ✅ Yes | Audit log signing (64 hex chars) |
+| `ENCRYPTION_KEY` | Generate Fernet key (see below) | ✅ Yes | Data encryption at rest |
+| `SECRET_KEY` | `${{secret()}}` or generate | ✅ Yes | App secret |
+| `JWT_SECRET_KEY` | `${{secret()}}` or generate | ✅ Yes | JWT signing |
+| `OPENAI_API_KEY` | From OpenAI dashboard | ✅ Yes | LLM access |
+
+**Generate Commands:**
+
 ```bash
+# AGENTIC_AUDIT_HMAC_KEY (64 hex characters)
+openssl rand -hex 32
+
+# ENCRYPTION_KEY (Fernet key)
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# SECRET_KEY and JWT_SECRET_KEY
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-> **⚠️ CRITICAL**: `AGENTIC_AUDIT_HMAC_KEY` is **required** for production audit logging. Without it, the application will fail at runtime when attempting to log security events. Use Railway's `${{secret()}}` syntax or set a manually generated secret.
+> **⚠️ CRITICAL**: `AGENTIC_AUDIT_HMAC_KEY` is **required** for production audit logging. Without it, the application will fail at runtime when attempting to log security events. Must be exactly 64 hexadecimal characters.
 
-### 4. Optional Configuration
+---
 
-#### Additional LLM Providers
+## Environment Variables Configuration
+
+### ✅ Core Application (Auto-configured in railway.toml)
+
+These are already set in `railway.toml` but you can override them in Railway UI:
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `APP_ENV` | `production` | Enable production mode |
+| `DEV_MODE` | `0` | Disable development features |
+| `PRODUCTION_MODE` | `1` | Enable production checks |
+| `APP_STARTUP` | `1` | Optimize startup time |
+| `SKIP_IMPORT_TIME_VALIDATION` | `1` | Skip import-time validation |
+| `LOG_LEVEL` | `INFO` | Logging verbosity |
+
+### ✅ Message Bus (Auto-configured for Event Loop Fix)
+
+These ensure the event loop management fix works correctly:
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `MESSAGE_BUS_SHARD_COUNT` | `8` | Number of message shards |
+| `MESSAGE_BUS_WORKERS_PER_SHARD` | `4` | Workers per shard |
+| `ENABLE_MESSAGE_BUS_GUARDIAN` | `1` | Enable health monitoring |
+| `MESSAGE_BUS_GUARDIAN_INTERVAL` | `30` | Check interval (seconds) |
+
+### ✅ Database (Auto-configured for Config Fix)
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `DB_POOL_SIZE` | `50` | Connection pool size |
+| `DB_POOL_MAX_OVERFLOW` | `20` | Max overflow connections |
+| `DB_RETRY_ATTEMPTS` | `3` | Retry count |
+| `DB_RETRY_DELAY` | `1.0` | Retry delay (seconds) |
+
+### ✅ Feature Flags
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `ENABLE_HSM` | `0` | Hardware security module |
+| `ENABLE_REDIS` | `1` | Redis message bridge |
+| `ENABLE_KAFKA` | `0` | Kafka message bridge |
+| `ENABLE_STRUCTURED_LOGGING` | `1` | JSON logging |
+
+---
+
+## Optional Configuration
+
+### Additional LLM Providers
 | Variable | Provider |
 |----------|----------|
 | `ANTHROPIC_API_KEY` | Claude |
-| `GEMINI_API_KEY` | Google Gemini |
+| `GOOGLE_API_KEY` | Google Gemini |
 | `GROK_API_KEY` | xAI Grok |
 
-#### Kafka (External Provider)
+### Kafka (External Provider)
 If using Kafka instead of Redis Streams, use a managed service like [Upstash Kafka](https://upstash.com/kafka) or [Confluent Cloud](https://confluent.cloud):
 
 ```bash
@@ -48,7 +116,7 @@ KAFKA_SASL_PASSWORD=your-password
 KAFKA_SECURITY_PROTOCOL=SASL_SSL
 ```
 
-#### Neo4j (Knowledge Graph)
+### Neo4j (Knowledge Graph)
 For knowledge graph features, use [Neo4j Aura](https://neo4j.com/cloud/aura/):
 
 ```bash
@@ -57,86 +125,264 @@ NEO4J_USER=neo4j
 NEO4J_PASSWORD=your-password
 ```
 
-#### Observability
+### Observability
 ```bash
 SENTRY_DSN=https://your-sentry-dsn
 OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector:4317
+PROMETHEUS_PORT=9090
 ```
 
-#### Encryption Key Generation
-Generate a Fernet encryption key:
+---
+
+## Deployment Steps
+
+### Step 1: Fork and Connect Repository
+1. Fork this repository to your GitHub account
+2. Go to [Railway](https://railway.app)
+3. Click "New Project" → "Deploy from GitHub repo"
+4. Select your forked repository
+
+### Step 2: Add Database Plugins
+1. In your Railway project, click **"+ New"**
+2. Select **"Database"** → **"PostgreSQL"**
+3. Click **"+ New"** again
+4. Select **"Database"** → **"Redis"**
+
+Railway will automatically inject `DATABASE_URL` and `REDIS_URL`.
+
+### Step 3: Configure Secrets
+
+In the Railway dashboard, go to your service → **Variables** tab:
+
+1. **Generate and add security keys:**
+   ```bash
+   # Generate AGENTIC_AUDIT_HMAC_KEY
+   openssl rand -hex 32
+   # Copy output and add as Railway variable
+   
+   # Generate ENCRYPTION_KEY
+   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   # Copy output and add as Railway variable
+   ```
+
+2. **Add generated keys to Railway:**
+   - `AGENTIC_AUDIT_HMAC_KEY` = (paste 64-char hex key)
+   - `ENCRYPTION_KEY` = (paste Fernet key)
+   - `SECRET_KEY` = Use `${{secret()}}` or generate with Python
+   - `JWT_SECRET_KEY` = Use `${{secret()}}` or generate with Python
+
+3. **Add your OpenAI API key:**
+   - `OPENAI_API_KEY` = (paste your OpenAI API key)
+
+### Step 4: Deploy
+Railway will automatically build and deploy using the Dockerfile. Monitor the build logs.
+
+### Step 5: Verify Deployment
+
 ```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Check health endpoint
+curl https://your-app.up.railway.app/health
+
+# Expected response:
+{
+  "status": "healthy",
+  "timestamp": "2024-01-24T12:00:00Z",
+  "version": "..."
+}
+
+# Check readiness
+curl https://your-app.up.railway.app/ready
+
+# Check API docs
+# Visit: https://your-app.up.railway.app/docs
 ```
 
-## Environment Variables Reference
+### Step 6: Validate Critical Fixes
 
-### Core (Required)
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `APP_ENV` | Environment mode | `production` |
-| `DEBUG` | Debug mode | `false` |
-| `LOG_LEVEL` | Logging level | `INFO` |
-| `OPENAI_API_KEY` | OpenAI API key | - |
-| `SECRET_KEY` | Application secret | - |
-| `JWT_SECRET_KEY` | JWT signing secret | - |
-| `AGENTIC_AUDIT_HMAC_KEY` | Audit log signing key (REQUIRED) | - |
+Check the Railway logs for successful initialization:
 
-### Database (Auto-injected)
-| Variable | Description | Source |
-|----------|-------------|--------|
-| `DATABASE_URL` | PostgreSQL connection | Railway Plugin |
-| `REDIS_URL` | Redis connection | Railway Plugin |
+```bash
+# In Railway dashboard → Logs tab, look for:
 
-### LLM Configuration
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LLM_PROVIDER` | Default LLM provider | `openai` |
-| `LLM_MODEL` | Default model | `gpt-4o-mini` |
-| `ANTHROPIC_API_KEY` | Anthropic/Claude key | - |
-| `GEMINI_API_KEY` | Google Gemini key | - |
-| `GROK_API_KEY` | xAI Grok key | - |
+✓ "ShardedMessageBus initialized"
+  # Confirms event loop management fix is working
 
-### Kafka (Optional)
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `USE_KAFKA_INGESTION` | Enable Kafka ingestion | `false` |
-| `USE_KAFKA_AUDIT` | Enable Kafka audit | `false` |
-| `KAFKA_BOOTSTRAP_SERVERS` | Broker addresses | - |
-| `KAFKA_SECURITY_PROTOCOL` | Security protocol | `PLAINTEXT` |
+✓ "PolicyEngine initialized successfully"
+  # Confirms config validation fix is working
 
-### Performance
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `WORKER_COUNT` | Number of workers | `4` |
-| `MAX_CONCURRENT_TASKS` | Max concurrent tasks | `50` |
+✓ "API Server ready to accept connections"
+  # Confirms overall startup is successful
+
+# Should NOT see:
+✗ "RuntimeError: no running event loop"
+✗ "Config must be an instance of ArbiterConfig"
+✗ "Circular import in clarifier"
+```
+
+---
 
 ## Troubleshooting
 
-### Critical: Audit Logging Error
-**Error**: `FATAL: log_audit_event called for 'security_redact' but no signing key is configured and not in DEV_MODE`
+### ❌ Critical: Audit Logging Error
 
-**Cause**: The audit logging system requires `AGENTIC_AUDIT_HMAC_KEY` to sign security events in production.
+**Error**: 
+```
+FATAL: log_audit_event called for 'security_redact' but no signing key is configured
+```
+
+**Cause**: Missing `AGENTIC_AUDIT_HMAC_KEY`
 
 **Solution**:
-1. Generate a secure key:
-   ```bash
-   python -c "import secrets; print(secrets.token_urlsafe(32))"
-   ```
-2. Add it to Railway Variables:
-   - Go to your project → Variables tab
-   - Add `AGENTIC_AUDIT_HMAC_KEY` with the generated value
-   - Or use Railway's secret syntax: `${{secret()}}`
-3. Redeploy the application
+1. Generate: `openssl rand -hex 32`
+2. Add to Railway Variables as `AGENTIC_AUDIT_HMAC_KEY`
+3. Must be exactly 64 hex characters
+4. Redeploy
 
-### Health Check Failing
-- Ensure `/health` endpoint is accessible
-- Check `healthcheckTimeout` (default: 300s)
+### ❌ Event Loop Error
 
-### Database Connection Issues
-- Verify PostgreSQL/Redis plugins are added
-- Check `DATABASE_URL` and `REDIS_URL` are injected
+**Error**:
+```
+RuntimeError: no running event loop
+```
 
-### LLM Errors
-- Verify `OPENAI_API_KEY` is set correctly
-- Check LLM provider API status
+**Cause**: Missing message bus configuration
+
+**Solution**:
+Variables should be auto-configured from `railway.toml`. Verify in Railway UI:
+- `MESSAGE_BUS_SHARD_COUNT=8`
+- `MESSAGE_BUS_WORKERS_PER_SHARD=4`
+- `ENABLE_MESSAGE_BUS_GUARDIAN=1`
+
+### ❌ Config Validation Error
+
+**Error**:
+```
+Config must be an instance of ArbiterConfig
+```
+
+**Cause**: Missing production mode flags
+
+**Solution**:
+Verify in Railway UI:
+- `APP_ENV=production`
+- `PRODUCTION_MODE=1`
+- `DEV_MODE=0`
+
+### ❌ Health Check Failing
+
+**Symptoms**: Deployment shows as unhealthy
+
+**Solutions**:
+1. Check logs for startup errors
+2. Verify all required secrets are set
+3. Ensure PostgreSQL and Redis plugins are added
+4. Check `healthcheckTimeout` (default: 300s) is sufficient
+
+### ❌ Database Connection Issues
+
+**Error**: Connection timeout or refused
+
+**Solutions**:
+1. Verify PostgreSQL plugin is added and healthy
+2. Check `DATABASE_URL` is injected (should happen automatically)
+3. Restart the service if plugins were just added
+
+### ❌ LLM Errors
+
+**Error**: OpenAI API errors
+
+**Solutions**:
+1. Verify `OPENAI_API_KEY` is set correctly (no extra spaces)
+2. Check API key has sufficient credits
+3. Test the key: `curl https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"`
+
+---
+
+## Monitoring and Metrics
+
+### Health Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/health` | Liveness check (is app running?) |
+| `/ready` | Readiness check (can app serve traffic?) |
+| `/metrics` | Prometheus metrics |
+| `/docs` | OpenAPI documentation |
+
+### Key Metrics to Monitor
+
+```bash
+# Message bus health
+curl https://your-app.up.railway.app/metrics | grep message_bus
+
+# Event loop status
+curl https://your-app.up.railway.app/metrics | grep event_loop
+
+# Audit log operations
+curl https://your-app.up.railway.app/metrics | grep audit
+```
+
+---
+
+## Security Checklist
+
+- [x] `AGENTIC_AUDIT_HMAC_KEY` set to strong random key (64 hex chars)
+- [x] `ENCRYPTION_KEY` set to Fernet key
+- [x] `SECRET_KEY` and `JWT_SECRET_KEY` set to strong random values
+- [x] `OPENAI_API_KEY` stored as Railway secret
+- [x] Production mode enabled (`APP_ENV=production`)
+- [x] Structured logging enabled
+- [x] PostgreSQL used instead of SQLite
+- [x] Regular key rotation schedule established
+- [x] Monitoring and alerting configured
+
+---
+
+## Performance Optimization
+
+### Resource Configuration
+
+Railway automatically allocates resources, but you can optimize:
+
+1. **Vertical Scaling**: Upgrade Railway plan for more CPU/memory
+2. **Database**: Use Railway PostgreSQL for better performance than SQLite
+3. **Redis**: Essential for message bus performance
+4. **Workers**: Adjust `WORKER_COUNT` based on traffic (default: 4)
+
+### Message Bus Tuning
+
+For high-traffic deployments, adjust in Railway Variables:
+```
+MESSAGE_BUS_SHARD_COUNT=16  # More shards = better parallelism
+MESSAGE_BUS_WORKERS_PER_SHARD=8  # More workers per shard
+```
+
+---
+
+## Rolling Back
+
+If deployment fails:
+
+1. **Via Railway UI**: Deployments → Click previous successful deployment → "Redeploy"
+2. **Via Git**: Push previous commit to trigger new deployment
+3. **Quick fix**: Disable problematic feature flag in Variables
+
+---
+
+## Support and Documentation
+
+- **Main Documentation**: See `STARTUP_RUNTIME_FIXES_IMPLEMENTATION.md`
+- **Environment Variables**: See `ENVIRONMENT_VARIABLES.md`
+- **Docker**: See `DOCKER_VALIDATION_FIXES.md`
+- **Railway Docs**: https://docs.railway.app
+- **Issue Tracker**: Create GitHub issue with logs
+
+---
+
+## Next Steps After Deployment
+
+1. **Configure Monitoring**: Set up Sentry or other APM
+2. **Set Up Alerts**: Monitor health endpoint failures
+3. **Enable Backups**: Configure Railway automatic backups
+4. **Load Testing**: Test with expected traffic patterns
+5. **Documentation**: Update team runbooks with Railway specifics

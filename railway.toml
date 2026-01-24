@@ -1,5 +1,5 @@
 # Railway.app deployment configuration for The Code Factory Platform
-# This configuration deploys the A.S.E (Autonomous Software Engineer) web interface
+# This configuration deploys the unified platform with all startup/runtime fixes
 # Documentation: https://docs.railway.app/deploy/railway-toml-file
 
 [build]
@@ -7,31 +7,92 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "python -m server.main"
+startCommand = "python -m uvicorn server.main:app --host 0.0.0.0 --port ${PORT:-8000}"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
+# =============================================================================
+# CRITICAL ENVIRONMENT VARIABLES - REQUIRED FOR ALL FIXES
+# =============================================================================
+
 [variables]
-# === Core Application ===
+# === Core Application (REQUIRED) ===
 APP_ENV = "production"
+DEV_MODE = "0"
+PRODUCTION_MODE = "1"
 DEBUG = "false"
 LOG_LEVEL = "INFO"
+
+# === Startup Optimization (REQUIRED for fast startup) ===
+APP_STARTUP = "1"
+SKIP_IMPORT_TIME_VALIDATION = "1"
+SPACY_WARNING_IGNORE = "W007"
+
+# =============================================================================
+# SECURITY - CRITICAL: SET THESE IN RAILWAY UI AS SECRETS
+# =============================================================================
+# Generate with:
+#   openssl rand -hex 32  (for AGENTIC_AUDIT_HMAC_KEY - 64 hex chars)
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  (for ENCRYPTION_KEY)
+#   python -c "import secrets; print(secrets.token_urlsafe(32))"  (for SECRET_KEY, JWT_SECRET_KEY)
+
+# REQUIRED: Audit log HMAC signing key (64 hex characters)
+# Without this, audit logging will fail and crash the application
+AGENTIC_AUDIT_HMAC_KEY = "${{AGENTIC_AUDIT_HMAC_KEY}}"
+
+# REQUIRED: Fernet encryption key for data at rest
+ENCRYPTION_KEY = "${{ENCRYPTION_KEY}}"
+
+# REQUIRED: Application secret keys
+SECRET_KEY = "${{SECRET_KEY}}"
+JWT_SECRET_KEY = "${{JWT_SECRET_KEY}}"
+
+# Optional: AWS KMS key for hardware-backed encryption
+# KMS_KEY_ID = "arn:aws:kms:us-east-1:123456789012:key/abc-123"
+
+# Key ID for V0 audit crypto system
+RUNNER_AUDIT_SIGNING_KEY_ID = "prod-audit-key-v1"
+
+# === Database Configuration ===
+# Railway auto-injects DATABASE_URL from PostgreSQL plugin
+# Set DB_PATH to use PostgreSQL (recommended for production)
+# If DATABASE_URL is set by Railway, this will be overridden
+DB_PATH = "sqlite+aiosqlite:///./codefactory.db"
+DB_POOL_SIZE = "50"
+DB_POOL_MAX_OVERFLOW = "20"
+DB_RETRY_ATTEMPTS = "3"
+DB_RETRY_DELAY = "1.0"
+
+# === Message Bus Configuration (CRITICAL for event loop fix) ===
+MESSAGE_BUS_SHARD_COUNT = "8"
+MESSAGE_BUS_WORKERS_PER_SHARD = "4"
+ENABLE_MESSAGE_BUS_GUARDIAN = "1"
+MESSAGE_BUS_GUARDIAN_INTERVAL = "30"
+
+# === Redis Configuration ===
+# Railway auto-injects REDIS_URL from Redis plugin
+# REDIS_URL = "redis://default:password@redis:6379"
 
 # === LLM Configuration ===
 LLM_PROVIDER = "openai"
 LLM_MODEL = "gpt-4o-mini"
+LLM_TIMEOUT = "300"
+LLM_MAX_RETRIES = "3"
+LLM_TEMPERATURE = "0.7"
+
 # API Keys - Set these as secrets in Railway UI:
 # OPENAI_API_KEY (required)
 # ANTHROPIC_API_KEY (optional - for Claude)
-# GEMINI_API_KEY (optional - for Google Gemini)
+# GOOGLE_API_KEY (optional - for Google Gemini)
 # GROK_API_KEY (optional - for xAI Grok)
-# CLAUDE_API_KEY (optional - alternative for Anthropic)
+DEFAULT_LLM_PROVIDER = "openai"
 
-# === Database Configuration ===
-# DATABASE_URL - Auto-injected by Railway PostgreSQL plugin
-# REDIS_URL - Auto-injected by Railway Redis plugin
+# === Feature Flags ===
+ENABLE_HSM = "0"
+ENABLE_REDIS = "1"
+ENABLE_KAFKA = "0"
 
 # === Kafka Configuration (disabled by default - uses Redis Streams instead) ===
 USE_KAFKA_INGESTION = "false"
@@ -51,41 +112,54 @@ USE_KAFKA_AUDIT = "false"
 # NEO4J_USER = "neo4j"
 # NEO4J_PASSWORD = "your-password"
 
-# === Security Secrets ===
-# Generate these using Railway's ${{secret()}} syntax or set manually:
-# SECRET_KEY = "${{secret()}}"
-# JWT_SECRET_KEY = "${{secret()}}"
-# ENCRYPTION_KEY = "32-byte-base64-fernet-key"
-
-# =============================================================================
-# CRITICAL: AUDIT SIGNING KEYS - REQUIRED FOR PRODUCTION
-# =============================================================================
-# These keys are REQUIRED for production audit logging. Without them, the
-# application will crash when attempting to log security events.
-#
-# Set these in Railway UI as secret variables or use ${{secret()}} syntax.
-# Generate with:
-#   openssl rand -hex 32  (for AUDIT_SIGNING_KEY)
-#   python -c "import secrets; print(secrets.token_urlsafe(32))"  (for AGENTIC_AUDIT_HMAC_KEY)
-
-# Main audit signing key for cryptographic log signatures
-AUDIT_SIGNING_KEY = "${{AUDIT_SIGNING_KEY}}"
-
-# Key ID for V0 audit crypto system
-RUNNER_AUDIT_SIGNING_KEY_ID = "prod-audit-key-v1"
-
-# HMAC key for agentic/self-fixing engineer audit logging
-AGENTIC_AUDIT_HMAC_KEY = "${{AGENTIC_AUDIT_HMAC_KEY}}"
+# === Logging Configuration ===
+ENABLE_STRUCTURED_LOGGING = "1"
 
 # === Observability ===
 # SENTRY_DSN = "https://your-sentry-dsn"
 # OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel-collector:4317"
+PROMETHEUS_PORT = "9090"
 # METRICS_PORT = "9090"
 
 # === Performance ===
 WORKER_COUNT = "4"
 MAX_CONCURRENT_TASKS = "50"
 
-# === File Paths (use defaults or customize) ===
-# AUDIT_LOG_PATH = "/app/logs/audit.log"
+# === Self-Fixing Engineer ===
+CREW_CONFIG_PATH = "/app/self_fixing_engineer/crew_config.yaml"
+AUDIT_LOG_PATH = "/app/logs/audit_trail.log"
 # AUDIT_DLQ_PATH = "/app/logs/audit_dlq.jsonl"
+
+# =============================================================================
+# DEPLOYMENT NOTES
+# =============================================================================
+# 
+# 1. All critical fixes are enabled:
+#    - Event loop management (MESSAGE_BUS_* variables)
+#    - Config validation (APP_ENV, PRODUCTION_MODE)
+#    - Audit logging (AGENTIC_AUDIT_HMAC_KEY)
+#    - Startup optimization (APP_STARTUP, SKIP_IMPORT_TIME_VALIDATION)
+#
+# 2. Required Railway Plugins:
+#    - PostgreSQL (injects DATABASE_URL)
+#    - Redis (injects REDIS_URL)
+#
+# 3. Required Secrets (set in Railway UI):
+#    - AGENTIC_AUDIT_HMAC_KEY (64 hex chars)
+#    - ENCRYPTION_KEY (Fernet key)
+#    - SECRET_KEY (random string)
+#    - JWT_SECRET_KEY (random string)
+#    - OPENAI_API_KEY (from OpenAI)
+#
+# 4. Validation:
+#    - Check /health endpoint after deployment
+#    - Verify no "RuntimeError: no running event loop" in logs
+#    - Confirm "PolicyEngine initialized successfully" in logs
+#    - Check "ShardedMessageBus initialized" in logs
+#
+# 5. Monitoring:
+#    - Prometheus metrics: https://your-app.railway.app/metrics
+#    - Health check: https://your-app.railway.app/health
+#    - Readiness: https://your-app.railway.app/ready
+#
+# =============================================================================

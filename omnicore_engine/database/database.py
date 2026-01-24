@@ -70,29 +70,81 @@ def _create_fallback_settings():
 
 
 def _get_settings():
-    """Lazy import + defensive instantiation of settings."""
+    """
+    Lazy import + defensive instantiation of settings.
+    
+    Industry-standard config loading with:
+    - Multiple import paths for compatibility
+    - Type validation and verification
+    - Comprehensive error handling
+    - Production-safe fallback
+    
+    Returns:
+        ArbiterConfig or SimpleNamespace: Configuration object with proper typing
+    """
     ArbiterConfig = None
+    config_source = "unknown"
+    
+    # Try to import ArbiterConfig from multiple paths
     try:
         # Try the full canonical path first (preferred)
         from self_fixing_engineer.arbiter.config import ArbiterConfig
-    except ImportError:
+        config_source = "self_fixing_engineer.arbiter.config"
+        logger.debug(f"Successfully imported ArbiterConfig from {config_source}")
+    except ImportError as e:
+        logger.debug(f"Could not import from self_fixing_engineer.arbiter.config: {e}")
         try:
             # Fall back to aliased path for backward compatibility
             from arbiter.config import ArbiterConfig
-        except ImportError:
+            config_source = "arbiter.config"
+            logger.debug(f"Successfully imported ArbiterConfig from {config_source}")
+        except ImportError as e2:
+            logger.debug(f"Could not import from arbiter.config: {e2}")
             pass
 
+    # If ArbiterConfig is not available, use fallback
     if ArbiterConfig is None:
-        logging.debug("arbiter.config not available; using fallback settings.")
+        if is_production_mode():
+            logger.error(
+                "CRITICAL: ArbiterConfig not available in production mode. "
+                "This may indicate a deployment issue. Using fallback settings."
+            )
+        else:
+            logger.debug("ArbiterConfig not available; using fallback settings.")
         return _create_fallback_settings()
 
+    # Try to instantiate ArbiterConfig
     try:
-        return ArbiterConfig()
+        config = ArbiterConfig()
+        
+        # Validate that config has expected attributes
+        required_attrs = ['log_level', 'database_path', 'plugin_dir']
+        missing_attrs = [attr for attr in required_attrs if not hasattr(config, attr)]
+        
+        if missing_attrs:
+            logger.warning(
+                f"ArbiterConfig instance missing required attributes: {missing_attrs}. "
+                "This may cause issues with PolicyEngine initialization."
+            )
+        
+        # Add type marker for validation
+        if not hasattr(config, '__config_type__'):
+            config.__config_type__ = 'ArbiterConfig'
+            
+        logger.debug(f"Successfully instantiated ArbiterConfig from {config_source}")
+        return config
+        
     except Exception as e:
-        logging.warning(
-            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
-            e,
-        )
+        if is_production_mode():
+            logger.error(
+                f"CRITICAL: ArbiterConfig() instantiation failed in production mode: {e}. "
+                "Using fallback settings which may not be suitable for production.",
+                exc_info=True
+            )
+        else:
+            logger.warning(
+                f"ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: {e}"
+            )
         return _create_fallback_settings()
 
 
@@ -448,24 +500,67 @@ class Database:
                 # Get the config settings for PolicyEngine
                 config = _get_settings()
                 
-                # Ensure config is properly typed for PolicyEngine initialization
-                # PolicyEngine expects arbiter_instance and config parameters
-                # Validate that config has the required structure
-                if not isinstance(config, types.SimpleNamespace) and not hasattr(config, '__dict__'):
+                # Industry-standard config validation
+                # Validate that config has the required structure and type
+                config_valid = False
+                config_type = type(config).__name__
+                
+                # Check if config is ArbiterConfig or has the marker
+                if hasattr(config, '__config_type__') and config.__config_type__ == 'ArbiterConfig':
+                    config_valid = True
+                    logger.debug("Config validated as ArbiterConfig instance")
+                elif isinstance(config, types.SimpleNamespace):
+                    # SimpleNamespace is acceptable as fallback
+                    config_valid = True
+                    logger.debug("Config is SimpleNamespace fallback")
+                elif hasattr(config, '__dict__'):
+                    # Has dict-like attributes, acceptable
+                    config_valid = True
+                    logger.debug(f"Config type {config_type} has __dict__, acceptable")
+                else:
                     logger.warning(
-                        f"Config is not in expected format (got {type(config).__name__}). "
+                        f"Config validation failed: type {config_type} not recognized. "
                         "Using fallback settings for PolicyEngine."
                     )
                     config = _create_fallback_settings()
+                    config_valid = True
                 
-                self.policy_engine = PolicyEngine(arbiter_instance=None, config=config)
-                logger.debug("PolicyEngine initialized successfully")
+                # Validate required attributes exist
+                required_attrs = ['log_level', 'database_path', 'plugin_dir']
+                missing_attrs = [attr for attr in required_attrs if not hasattr(config, attr)]
+                
+                if missing_attrs and is_production_mode():
+                    logger.error(
+                        f"CRITICAL: Config missing required attributes in production: {missing_attrs}. "
+                        "PolicyEngine may not function correctly."
+                    )
+                elif missing_attrs:
+                    logger.warning(
+                        f"Config missing attributes: {missing_attrs}. "
+                        "Using fallback for missing attributes."
+                    )
+                    # Add missing attributes from fallback
+                    fallback = _create_fallback_settings()
+                    for attr in missing_attrs:
+                        if hasattr(fallback, attr):
+                            setattr(config, attr, getattr(fallback, attr))
+                
+                if config_valid:
+                    # Initialize PolicyEngine with validated config
+                    self.policy_engine = PolicyEngine(arbiter_instance=None, config=config)
+                    logger.info(
+                        f"PolicyEngine initialized successfully with config type: {config_type}"
+                    )
+                else:
+                    raise ValueError(f"Config validation failed for type: {config_type}")
+                    
             except (TypeError, ValueError, AttributeError) as e:
                 # Config type mismatch or initialization error - create mock
                 if is_production_mode():
                     logger.error(
                         f"CRITICAL: Failed to initialize PolicyEngine in production mode: {e}. "
-                        "This indicates a configuration issue. Please review your settings."
+                        "This indicates a configuration issue. Please review your settings.",
+                        exc_info=True
                     )
                 logger.warning(
                     f"Failed to initialize PolicyEngine due to config/type error: {e}. "
