@@ -3,9 +3,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Import the function that initializes your metrics
-from arbiter.explainable_reasoner.metrics import initialize_metrics
-from prometheus_client import CollectorRegistry
+
+# NOTE: prometheus_client and metrics imports are deferred to fixture execution time
+# to avoid expensive imports during pytest collection phase, which can cause
+# 'CPU time limit exceeded' errors in CI.
 
 
 @pytest.fixture(autouse=True)
@@ -14,6 +15,22 @@ def isolated_metrics():
     Ensures every test runs with a clean Prometheus registry and metrics dictionary.
     This prevents state from leaking between tests.
     """
+    # Lazy import prometheus_client to avoid import-time overhead
+    try:
+        from prometheus_client import CollectorRegistry
+    except ImportError:
+        # prometheus_client not available - skip isolation
+        yield None, None
+        return
+    
+    # Lazy import metrics initialization
+    try:
+        from arbiter.explainable_reasoner.metrics import initialize_metrics
+    except ImportError:
+        # metrics module not available - skip isolation
+        yield None, None
+        return
+    
     # Create a mock metric class
     mock_metric = MagicMock()
     mock_metric.labels.return_value = MagicMock(
