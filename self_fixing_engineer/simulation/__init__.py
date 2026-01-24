@@ -98,6 +98,10 @@ else:
             
         Raises:
             ImportError: If core simulation module is not available.
+            
+        Example:
+            >>> from self_fixing_engineer.simulation import simulation_run_entrypoint
+            >>> result = simulation_run_entrypoint(config={'type': 'test'})
         """
         from .core import main as simulation_main
         return asyncio.run(simulation_main(*args, **kwargs))
