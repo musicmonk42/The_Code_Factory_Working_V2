@@ -35,6 +35,9 @@ from .siem_base import (
     alert_operator,
 )
 
+# --- Testing Mode Flag (prevents sys.exit during test collection) ---
+_TESTING_MODE = os.getenv("TESTING", "0") == "1" or os.getenv("PYTEST_CURRENT_TEST") is not None
+
 # --- Strict Dependency Check for boto3 ---
 AWS_AVAILABLE = False
 try:
@@ -50,7 +53,8 @@ except ImportError:
         "CRITICAL: boto3 not found for AWS CloudWatch client. Aborting.",
         level="CRITICAL",
     )
-    sys.exit(1)
+    if not _TESTING_MODE:
+        sys.exit(1)
 
 
 # --- Configuration Schema for AWS CloudWatch Client ---
