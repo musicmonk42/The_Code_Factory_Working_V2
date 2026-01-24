@@ -1,52 +1,132 @@
 # simulation/__init__.py
 """
 Simulation module for Self-Fixing Engineer platform.
-Provides entry points for OmniCore integration.
+
+This module provides entry points for OmniCore integration with optimized
+lazy loading to avoid expensive initialization during pytest collection.
+
+Performance Considerations:
+    - Defers all heavy imports until actually needed
+    - Skips initialization entirely during pytest collection phase
+    - Uses environment variables PYTEST_CURRENT_TEST and PYTEST_COLLECTING
+      to detect test collection mode
+
+Module Behavior:
+    - In test collection mode: Provides stub functions that raise errors if called
+    - In runtime mode: Full initialization with database, message bus, and event loops
+
+Environment Variables:
+    PYTEST_CURRENT_TEST: Set by pytest during test execution
+    PYTEST_COLLECTING: Set during pytest collection phase
 """
+
+from __future__ import annotations
 
 import os
 import logging
+from typing import Any, Dict
+
+__all__ = [
+    "simulation_run_entrypoint",
+    "simulation_health_check", 
+    "simulation_get_registry",
+]
 
 logger = logging.getLogger(__name__)
 
-# Skip all initialization during pytest collection
-if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING"):
+# Detect pytest collection mode to avoid expensive initialization
+_IN_TEST_COLLECTION = bool(
+    os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING")
+)
+
+if _IN_TEST_COLLECTION:
+    # Test collection mode: Provide lightweight stubs
     logger.debug("Skipping simulation module initialization during pytest collection")
     
-    # Provide stub functions for test mode
-    def simulation_run_entrypoint(*args, **kwargs):
-        raise RuntimeError("Simulation not initialized - test collection mode")
+    def simulation_run_entrypoint(*args: Any, **kwargs: Any) -> Any:
+        """
+        Stub entrypoint for test collection mode.
+        
+        Raises:
+            RuntimeError: Always raises to prevent accidental use during collection.
+        """
+        raise RuntimeError(
+            "Simulation not initialized - test collection mode. "
+            "This function should not be called during pytest collection."
+        )
     
-    def simulation_health_check():
+    def simulation_health_check() -> Dict[str, str]:
+        """
+        Stub health check for test collection mode.
+        
+        Returns:
+            Dict indicating test mode status.
+        """
         return {"status": "test_mode", "module": "simulation"}
     
-    def simulation_get_registry():
+    def simulation_get_registry() -> Dict[str, Any]:
+        """
+        Stub registry getter for test collection mode.
+        
+        Returns:
+            Empty dictionary.
+        """
         return {}
     
-    # Skip OmniCore registration in test mode
-    def _register_with_omnicore():
+    def _register_with_omnicore() -> None:
+        """No-op registration stub for test collection mode."""
         pass
     
 else:
-    # Only import heavy modules when NOT collecting tests
+    # Runtime mode: Full initialization with lazy imports
     import asyncio
     
-    def simulation_run_entrypoint(*args, **kwargs):
-        """Main entrypoint for running simulation orchestrator."""
+    def simulation_run_entrypoint(*args: Any, **kwargs: Any) -> Any:
+        """
+        Main entrypoint for running simulation orchestrator.
+        
+        Lazily imports and runs the core simulation main function.
+        Uses asyncio.run() to handle async execution.
+        
+        Args:
+            *args: Positional arguments passed to simulation main.
+            **kwargs: Keyword arguments passed to simulation main.
+            
+        Returns:
+            Result from simulation execution.
+            
+        Raises:
+            ImportError: If core simulation module is not available.
+        """
         from .core import main as simulation_main
         return asyncio.run(simulation_main(*args, **kwargs))
     
-    def simulation_health_check():
-        """Health check for simulation module."""
+    def simulation_health_check() -> Dict[str, Any]:
+        """
+        Health check for simulation module.
+        
+        Checks registry availability and plugin count.
+        
+        Returns:
+            Dict with health status, containing:
+                - status: "healthy" or "unhealthy"
+                - module: Module name ("simulation")
+                - plugins_loaded: Number of registered plugins (on success)
+                - error: Error message (on failure)
+        """
         try:
             from .registry import get_registry
+            
             registry = get_registry()
             plugin_count = 0
+            
             if registry:
                 if isinstance(registry, dict):
                     plugin_count = len(registry)
                 else:
-                    logger.warning(f"Registry returned unexpected type: {type(registry)}")
+                    logger.warning(
+                        f"Registry returned unexpected type: {type(registry).__name__}"
+                    )
             
             return {
                 "status": "healthy",
@@ -54,16 +134,43 @@ else:
                 "plugins_loaded": plugin_count,
             }
         except Exception as e:
-            logger.error(f"Health check failed: {e}")
-            return {"status": "unhealthy", "module": "simulation", "error": str(e)}
+            logger.error(f"Health check failed: {e}", exc_info=True)
+            return {
+                "status": "unhealthy",
+                "module": "simulation",
+                "error": str(e),
+            }
     
-    def simulation_get_registry():
-        """Return the SIM_REGISTRY or other registry dict."""
+    def simulation_get_registry() -> Dict[str, Any]:
+        """
+        Return the simulation plugin registry.
+        
+        Lazily imports the registry module to avoid expensive initialization.
+        
+        Returns:
+            Dict containing registered simulation plugins.
+            
+        Raises:
+            ImportError: If registry module is not available.
+        """
         from .registry import get_registry
         return get_registry()
     
-    def _register_with_omnicore():
-        """Register simulation engine with OmniCore."""
+    def _register_with_omnicore() -> None:
+        """
+        Register simulation engine with OmniCore.
+        
+        Attempts to register simulation entrypoints with the OmniCore engine
+        registry. Gracefully handles cases where OmniCore is not available.
+        
+        This function is called automatically at module import time (not during
+        test collection).
+        
+        Logs:
+            - INFO: On successful registration
+            - DEBUG: If OmniCore is not available
+            - WARNING: On registration failure
+        """
         try:
             from omnicore_engine.engines import register_engine
             
@@ -79,7 +186,10 @@ else:
         except ImportError:
             logger.debug("OmniCore not available, skipping simulation engine registration")
         except Exception as e:
-            logger.warning(f"Failed to register simulation engine with OmniCore: {e}")
+            logger.warning(
+                f"Failed to register simulation engine with OmniCore: {e}",
+                exc_info=True,
+            )
 
-# Only register if not in test collection
+# Perform registration only if not in test collection mode
 _register_with_omnicore()
