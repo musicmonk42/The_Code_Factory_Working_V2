@@ -48,12 +48,20 @@ import unittest.mock as mock
 
 import pytest
 
-# Mock Streamlit session state globally to prevent errors
-mock_session_state = mock.MagicMock()
-mock_session_state.get.return_value = "test_user"
+# Defer Streamlit mocking to fixture to avoid module-level context manager execution
+# which can cause issues during test collection
+# The mocking is now handled by the mock_streamlit_setup fixture below
 
-with mock.patch.dict(sys.modules, {"streamlit": mock.MagicMock()}):
-    sys.modules["streamlit"].session_state = mock_session_state
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_streamlit_setup():
+    """Mock Streamlit session state globally to prevent errors during test collection."""
+    mock_session_state = mock.MagicMock()
+    mock_session_state.get.return_value = "test_user"
+    
+    with mock.patch.dict(sys.modules, {"streamlit": mock.MagicMock()}):
+        sys.modules["streamlit"].session_state = mock_session_state
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -74,8 +82,11 @@ def setup_test_environment():
 
 
 @pytest.fixture(autouse=True)
-def mock_streamlit_for_tests():
+def mock_streamlit_for_tests(mock_streamlit_setup):
     """Mock Streamlit components that cause issues in tests."""
+    mock_session_state = mock.MagicMock()
+    mock_session_state.get.return_value = "test_user"
+    
     with mock.patch("streamlit.session_state", mock_session_state):
         with mock.patch(
             "streamlit.runtime.scriptrunner_utils.script_run_context.get_script_run_ctx",
