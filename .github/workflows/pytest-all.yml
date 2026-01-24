@@ -204,6 +204,7 @@ jobs:
           TESTING: "1"
           AWS_REGION: ""
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"  # Speed up collection
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
           
@@ -214,60 +215,121 @@ jobs:
           # Force garbage collection before tests
           python -c "import gc; gc.collect(); print('Garbage collection completed')"
           
-          echo ""
-          echo "=== Running ALL tests (pytest discovers from pyproject.toml) ==="
-          
-          # Run pytest without path argument to use testpaths from pyproject.toml
-          # This discovers and runs tests from all 27+ configured test directories
-          # Capture exit code to provide better diagnostics
-          set +e  # Don't exit on error, we want to handle it
-          pytest \
-            --maxfail=50 \
-            --timeout=300 \
-            --cov=generator \
-            --cov=omnicore_engine \
-            --cov=self_fixing_engineer \
-            --cov-report=xml:coverage.xml \
-            --cov-report=term \
-            -v \
-            2>&1 | tee test-output.log
-          
-          PYTEST_EXIT=$?
-          set -e  # Re-enable exit on error
+          # Clear pytest cache to avoid stale data
+          rm -rf .pytest_cache/
           
           echo ""
-          echo "=== Memory after test execution ==="
-          free -h
+          echo "=== PREFLIGHT: Validating test collection (60s timeout) ==="
+          # This is the critical fix - ensure collection completes before running tests
+          timeout 60s pytest --collect-only --quiet --import-mode=importlib || {
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 124 ]; then
+              echo "ERROR: Test collection timed out after 60 seconds"
+              echo "This usually means a conftest.py or test module has expensive imports"
+              echo ""
+              echo "=== Diagnostic: Attempting collection with verbose output ==="
+              timeout 30s pytest --collect-only -v --import-mode=importlib 2>&1 | head -100
+              exit 1
+            else
+              echo "ERROR: Test collection failed with exit code $EXIT_CODE"
+              pytest --collect-only -v --import-mode=importlib 2>&1 | head -100
+              exit $EXIT_CODE
+            fi
+          }
           
-          # Handle exit codes
-          if [ $PYTEST_EXIT -eq 5 ]; then
+          echo "✓ Test collection completed successfully"
+          
+          # Force GC after collection
+          python -c "import gc; gc.collect(); print('Post-collection GC completed')"
+          
+          echo ""
+          echo "=== Running tests in batches with timeouts ==="
+          
+          # Track overall success
+          OVERALL_EXIT=0
+          FAILED_DIRS=""
+          
+          # Test directories in order of increasing complexity
+          TEST_DIRS=(
+            "tests"
+            "self_fixing_engineer/tests"
+            "omnicore_engine/tests"
+            "generator/tests"
+          )
+          
+          for test_dir in "${TEST_DIRS[@]}"; do
+            if [ ! -d "$test_dir" ]; then
+              echo "⊘ Skipping $test_dir (not found)"
+              continue
+            fi
+            
+            TEST_COUNT=$(find "$test_dir" -name 'test_*.py' 2>/dev/null | wc -l)
+            if [ "$TEST_COUNT" -eq 0 ]; then
+              echo "⊘ Skipping $test_dir (no test files)"
+              continue
+            fi
+            
             echo ""
-            echo "ERROR: No tests collected (exit code 5)"
-            echo "=== Diagnostic Information ==="
-            echo "PYTHONPATH=$PYTHONPATH"
-            echo "PWD=$PWD"
-            echo ""
-            echo "=== Checking test directories ==="
-            for test_dir in tests generator/tests omnicore_engine/tests self_fixing_engineer/tests; do
-              if [ -d "$test_dir" ]; then
-                echo "✓ $test_dir exists ($(find $test_dir -name 'test_*.py' 2>/dev/null | wc -l) test files)"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Testing: $test_dir ($TEST_COUNT test files)"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            # Run with timeout - 10 minutes per directory
+            timeout 600s pytest "$test_dir" \
+              --maxfail=10 \
+              --timeout=120 \
+              --import-mode=importlib \
+              -v \
+              2>&1 || {
+              DIR_EXIT=$?
+              if [ $DIR_EXIT -eq 124 ]; then
+                echo "✗ $test_dir TIMED OUT after 10 minutes"
               else
-                echo "✗ $test_dir not found"
+                echo "✗ $test_dir FAILED with exit code $DIR_EXIT"
               fi
-            done
+              OVERALL_EXIT=$DIR_EXIT
+              FAILED_DIRS="$FAILED_DIRS $test_dir"
+            }
+            
+            # Memory check and GC between directories
             echo ""
-            echo "=== Attempting to collect tests with verbose output ==="
-            timeout 300 pytest --collect-only -v; DIAG_EXIT=$?
-            echo "Diagnostic collection exit code: $DIAG_EXIT"
-            exit 1
-          elif [ $PYTEST_EXIT -ne 0 ]; then
-            echo ""
-            echo "ERROR: Tests failed with exit code $PYTEST_EXIT"
-            exit $PYTEST_EXIT
+            echo "Memory after $test_dir:"
+            free -h | grep Mem
+            python -c "import gc; gc.collect()"
+          done
+          
+          echo ""
+          echo "=== Final test run for coverage ==="
+          # If individual tests passed, run once more for unified coverage
+          if [ $OVERALL_EXIT -eq 0 ]; then
+            timeout 2400s pytest \
+              --maxfail=50 \
+              --timeout=300 \
+              --import-mode=importlib \
+              --cov=generator \
+              --cov=omnicore_engine \
+              --cov=self_fixing_engineer \
+              --cov-report=xml:coverage.xml \
+              --cov-report=term \
+              -v \
+              2>&1 | tee test-output.log || OVERALL_EXIT=$?
+          else
+            echo "✗ Skipping coverage run due to failures in: $FAILED_DIRS"
           fi
           
           echo ""
-          echo "=== All tests completed successfully ==="
+          echo "=== Final memory usage ==="
+          free -h
+          
+          if [ $OVERALL_EXIT -ne 0 ]; then
+            echo ""
+            echo "ERROR: Tests failed with exit code $OVERALL_EXIT"
+            echo "Failed directories: $FAILED_DIRS"
+            exit $OVERALL_EXIT
+          fi
+          
+          echo ""
+          echo "✓ All tests completed successfully"
           
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
