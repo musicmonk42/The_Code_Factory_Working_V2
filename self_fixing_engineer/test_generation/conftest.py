@@ -67,7 +67,8 @@ def _alias_test_generation_if_needed() -> None:
     logger.warning("Aliased %s -> %s for pytest collection", primary, alt)
 
 
-# Skip expensive module aliasing during pytest collection to avoid CPU timeout
+# Skip expensive module aliasing during pytest collection to improve collection performance
+# Set PYTEST_COLLECTING=1 environment variable in root conftest.py during collection phase
 if os.environ.get("PYTEST_COLLECTING") != "1":
     _alias_test_generation_if_needed()
 
@@ -147,7 +148,8 @@ def _repair_gen_agent_package():
             setattr(pkg, "agents", sys.modules[f"{pkg_name}.agents"])
 
 
-# Skip expensive package repair during pytest collection to avoid CPU timeout
+# Skip expensive package repair during pytest collection to improve collection performance
+# Set PYTEST_COLLECTING=1 environment variable in root conftest.py during collection phase
 if os.environ.get("PYTEST_COLLECTING") != "1":
     try:
         _repair_gen_agent_package()

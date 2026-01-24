@@ -158,7 +158,8 @@ def _setup_opentelemetry_context():
 
 
 # Run the OpenTelemetry context setup immediately, but only if not in collection phase
-# Skip during pytest collection to avoid CPU timeout (pytest sets PYTEST_COLLECTING during collection)
+# PYTEST_COLLECTING is a custom environment variable set during collection phase to skip expensive operations
+# This improves pytest collection performance by deferring OpenTelemetry initialization until test runtime
 if os.environ.get("PYTEST_COLLECTING") != "1":
     _setup_opentelemetry_context()
 
@@ -448,7 +449,8 @@ def _install_inmemory_exporter():
 
 # Try the standard import first; if it fails or the attribute is absent, install our shim.
 _USING_SHIM = False
-# Skip expensive imports during pytest collection to avoid CPU timeout
+# Skip expensive imports during pytest collection to improve collection performance
+# PYTEST_COLLECTING is a custom environment variable set during collection phase
 if os.environ.get("PYTEST_COLLECTING") != "1":
     try:
         # Try to import the real InMemorySpanExporter
