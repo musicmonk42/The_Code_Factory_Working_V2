@@ -35,10 +35,18 @@ ArbiterConfig = None
 # Track if we've already loaded components
 _components_loaded = False
 
+# Components that support lazy loading via __getattr__
+_LAZY_COMPONENT_NAMES = {"arbiter", "Arbiter", "ArbiterArena", "FeedbackManager", "ArbiterConfig"}
+
 
 def _load_components():
     """Load all components lazily. Called on first access."""
-    global arbiter, Arbiter, ArbiterArena, FeedbackManager, ArbiterConfig, _components_loaded
+    global arbiter
+    global Arbiter
+    global ArbiterArena
+    global FeedbackManager
+    global ArbiterConfig
+    global _components_loaded
     
     if _components_loaded:
         return
@@ -142,9 +150,6 @@ def __getattr__(name):
     This allows 'from arbiter import Arbiter' to work while deferring
     actual import until runtime.
     """
-    # Components that need lazy loading
-    component_names = {"arbiter", "Arbiter", "ArbiterArena", "FeedbackManager", "ArbiterConfig"}
-    
     # Special lazy imports for circular dependency handling
     lazy_imports = {
         "HumanInLoop": _get_human_loop,
@@ -157,7 +162,7 @@ def __getattr__(name):
             raise ImportError(f"Cannot import name '{name}' from 'arbiter'")
         return result
     
-    if name in component_names:
+    if name in _LAZY_COMPONENT_NAMES:
         # Load components on first access
         _load_components()
         # Return the now-loaded component
