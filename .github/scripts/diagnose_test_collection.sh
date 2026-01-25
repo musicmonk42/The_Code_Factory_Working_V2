@@ -26,7 +26,6 @@ test_single_file() {
         else
             echo "⚠️  FAILED (exit $EXIT_CODE)"
         fi
-        PROBLEM_FILES+=("$test_file")
         return 1
     fi
 }
@@ -41,9 +40,12 @@ for test_dir in "tests" "self_fixing_engineer/tests" "omnicore_engine/tests" "om
     echo "Directory: $test_dir"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
-    find "$test_dir" -name "test_*.py" -type f 2>/dev/null | while read -r test_file; do
-        test_single_file "$test_file"
-    done
+    # Use process substitution to avoid subshell
+    while IFS= read -r test_file; do
+        if ! test_single_file "$test_file"; then
+            PROBLEM_FILES+=("$test_file")
+        fi
+    done < <(find "$test_dir" -name "test_*.py" -type f 2>/dev/null)
     
     echo ""
 done
