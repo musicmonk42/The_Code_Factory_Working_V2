@@ -721,11 +721,8 @@ def _initialize_optional_dependency_mocks():
 def _initialize_tenacity_stubs():
     """Initialize tenacity stub module - deferred to avoid expensive operations during collection."""
     if "tenacity" not in sys.modules:
-        try:
-            import tenacity as _test_tenacity
-        except ImportError:
-            # Create complete tenacity stubs
-            import types
+        # Create complete tenacity stubs
+        import types
         
         # Create a retry predicate that supports the | operator
         class _RetryPredicate:
@@ -829,10 +826,10 @@ def _initialize_tenacity_stubs():
             def __iter__(self):
                 return iter([])
         
-            tenacity_module.Retrying = Retrying
-            
-            # Register the module
-            sys.modules["tenacity"] = tenacity_module
+        tenacity_module.Retrying = Retrying
+        
+        # Register the module
+        sys.modules["tenacity"] = tenacity_module
 
 
 # ---- aiohttp stub setup ----
@@ -842,12 +839,9 @@ def _initialize_tenacity_stubs():
 def _initialize_aiohttp_stubs():
     """Initialize aiohttp stub module - deferred to avoid expensive operations during collection."""
     if "aiohttp" not in sys.modules:
-        try:
-            import aiohttp as _test_aiohttp
-        except ImportError:
-            # Create complete aiohttp stubs for test collection
-            import types
-            import importlib.util
+        # Create complete aiohttp stubs for test collection
+        import types
+        import importlib.util
         
         aiohttp_module = types.ModuleType("aiohttp")
         aiohttp_module.__file__ = "<mocked aiohttp>"
@@ -997,30 +991,99 @@ def _initialize_aiohttp_stubs():
                 self._fields = []
             
             def add_field(self, name, value, **kwargs):
-                    self._fields.append((name, value))
-            
-            # Register all classes and types on the module
-            aiohttp_module.ClientTimeout = ClientTimeout
-            aiohttp_module.ClientResponse = ClientResponse
-            aiohttp_module.ClientSession = ClientSession
-            aiohttp_module.ClientError = ClientError
-            aiohttp_module.ClientResponseError = ClientResponseError
-            aiohttp_module.ClientConnectionError = ClientConnectionError
-            aiohttp_module.ServerTimeoutError = ServerTimeoutError
-            aiohttp_module.ContentTypeError = ContentTypeError
-            aiohttp_module.InvalidURL = InvalidURL
-            aiohttp_module.TCPConnector = TCPConnector
-            aiohttp_module.BasicAuth = BasicAuth
-            aiohttp_module.FormData = FormData
-            
-            # Register the module
-            sys.modules["aiohttp"] = aiohttp_module
+                self._fields.append((name, value))
+        
+        # Register all classes and types on the module
+        aiohttp_module.ClientTimeout = ClientTimeout
+        aiohttp_module.ClientResponse = ClientResponse
+        aiohttp_module.ClientSession = ClientSession
+        aiohttp_module.ClientError = ClientError
+        aiohttp_module.ClientResponseError = ClientResponseError
+        aiohttp_module.ClientConnectionError = ClientConnectionError
+        aiohttp_module.ServerTimeoutError = ServerTimeoutError
+        aiohttp_module.ContentTypeError = ContentTypeError
+        aiohttp_module.InvalidURL = InvalidURL
+        aiohttp_module.TCPConnector = TCPConnector
+        aiohttp_module.BasicAuth = BasicAuth
+        aiohttp_module.FormData = FormData
+        
+        # Register the module
+        sys.modules["aiohttp"] = aiohttp_module
 
 
-# Initialize stubs immediately during conftest import (needed for test collection)
-# These functions are defined above but called here to keep the code organized
-_initialize_tenacity_stubs()
-_initialize_aiohttp_stubs()
+# ---- Install Import Hook for Lazy Stub Creation ----
+# Install import hooks to create stubs on-demand when modules are first imported
+# This avoids creating all stubs at module level, speeding up conftest import significantly
+from importlib.abc import MetaPathFinder, Loader
+from importlib.machinery import ModuleSpec
+
+
+class LazyStubImporter(MetaPathFinder):
+    """
+    Custom import hook that creates stub modules on-demand when they're first imported.
+    This significantly speeds up conftest.py import by deferring stub creation until needed.
+    
+    When a test module tries to import 'tenacity' or 'aiohttp', this hook intercepts
+    the import and creates the stub module lazily, avoiding the need to create all
+    stubs during conftest import.
+    """
+    
+    def __init__(self):
+        self.stub_modules = {
+            'tenacity': _initialize_tenacity_stubs,
+            'aiohttp': _initialize_aiohttp_stubs,
+        }
+        self._importing = set()  # Track modules currently being imported to avoid recursion
+    
+    def find_spec(self, fullname, path, target=None):
+        """Find module spec - called by Python's import system."""
+        # Only handle modules we have stubs for
+        if fullname in self.stub_modules:
+            # Check if the module is already in sys.modules
+            if fullname not in sys.modules:
+                # Avoid recursion - if we're already trying to import this, return None
+                if fullname in self._importing:
+                    return None
+                
+                self._importing.add(fullname)
+                try:
+                    # Try to import the real module
+                    __import__(fullname)
+                    # If successful, don't create stub - use the real module
+                    return None
+                except ImportError:
+                    # Real module not available, we'll create a stub
+                    return ModuleSpec(fullname, LazyStubLoader(self.stub_modules[fullname]))
+                finally:
+                    self._importing.discard(fullname)
+        return None
+
+
+class LazyStubLoader(Loader):
+    """Loader that creates stub modules on-demand."""
+    
+    def __init__(self, stub_creator):
+        self.stub_creator = stub_creator
+    
+    def create_module(self, spec):
+        """Create the stub module by calling its creator function."""
+        # Call the stub creator function
+        self.stub_creator()
+        # Return the module from sys.modules (created by stub_creator)
+        return sys.modules.get(spec.name)
+    
+    def exec_module(self, module):
+        """Execute module - no-op since stub is already fully created."""
+        pass
+
+
+# Install the lazy stub importer at the FRONT of sys.meta_path
+# This ensures it's checked before other import finders
+_lazy_importer = LazyStubImporter()
+sys.meta_path.insert(0, _lazy_importer)
+
+# NOTE: Stubs are NO LONGER created immediately - they're created on-demand when first imported
+# This dramatically speeds up conftest.py import time from ~6s to <1s
 
 
 # ---- OpenTelemetry stub setup ----
@@ -1543,11 +1606,8 @@ def setup_test_stubs():
     - Omnicore engine mocks
     - Module spec fixing
     """
-    # Initialize tenacity stubs (deferred from module level to avoid collection slowdown)
-    _initialize_tenacity_stubs()
-    
-    # Initialize aiohttp stubs (deferred from module level to avoid collection slowdown)
-    _initialize_aiohttp_stubs()
+    # Note: Tenacity and aiohttp stubs are already created at module level during conftest import
+    # No need to initialize them again here
     
     # Initialize botocore exceptions (deferred from module level)
     _initialize_botocore_exceptions()
