@@ -163,9 +163,8 @@ class TestSecurityMiddleware:
 class TestHealthEndpoint:
     """Test health check endpoint"""
 
-    def test_root_health_check(self):
+    def test_root_health_check(self, client):
         """Test root /health endpoint for container orchestration"""
-        # client fixture injected
         response = client.get("/health")
 
         assert response.status_code == 200

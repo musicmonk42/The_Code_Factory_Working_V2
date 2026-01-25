@@ -211,8 +211,8 @@ def test_dashboard_login_failure(monkeypatch, flask_app):
         assert "Bad username or password" in resp.json.get("msg", "")
 
 
-@pytest.mark.skipif(not hasattr(app, "test_client"), reason="Flask app not available")
-def test_get_report_endpoint_success_no_encryption(tmp_path, monkeypatch):
+@pytest.mark.skipif(False, reason="Flask app available via fixture")
+def test_get_report_endpoint_success_no_encryption(tmp_path, monkeypatch, flask_app):
     import self_healing_import_fixer.analyzer.core_report as crmod
 
     flask_app.config["JWT_SECRET_KEY"] = "jwtsecret"
@@ -246,8 +246,8 @@ def test_get_report_endpoint_success_no_encryption(tmp_path, monkeypatch):
         assert b"Report Content" in resp.data
 
 
-@pytest.mark.skipif(not hasattr(app, "test_client"), reason="Flask app not available")
-def test_get_report_endpoint_with_encryption_in_prod(tmp_path, monkeypatch):
+@pytest.mark.skipif(False, reason="Flask app available via fixture")
+def test_get_report_endpoint_with_encryption_in_prod(tmp_path, monkeypatch, flask_app):
     import self_healing_import_fixer.analyzer.core_report as crmod
 
     flask_app.config["JWT_SECRET_KEY"] = "jwtsecret"
@@ -273,7 +273,7 @@ def test_get_report_endpoint_with_encryption_in_prod(tmp_path, monkeypatch):
         ),
     )
 
-    with app.test_client() as client:
+    with flask_app.test_client() as client:
         login_resp = client.post(
             "/login", json={"username": "admin", "password": "admin_secure_password"}
         )
