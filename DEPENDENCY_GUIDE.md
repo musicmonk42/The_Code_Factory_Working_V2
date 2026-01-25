@@ -325,22 +325,22 @@ This ensures that packages like `libvirt-python` (if uncommented) can be install
 All workflows implement automatic fallback from Poetry to pip:
 
 ```yaml
-# Simplified example - actual workflows include additional error handling
+# Simplified example - actual workflows include additional flags and error handling
 - name: Install dependencies
   run: |
     # Try Poetry first
     if [ -f pyproject.toml ] && command -v poetry &> /dev/null; then
       poetry install --no-cache --no-root || {
         # Fallback to pip if Poetry fails
-        pip install -r requirements.txt -c .github/constraints.txt
+        pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt
       }
     else
       # Use pip directly if Poetry not available
-      pip install -r requirements.txt -c .github/constraints.txt
+      pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt
     fi
 ```
 
-**Note**: The actual implementation includes retry logic, error messages, and hints for troubleshooting. See the workflow files for complete details.
+**Note**: The actual implementation includes retry logic, error messages, and hints for troubleshooting. The `--no-cache-dir` flag is used consistently to avoid cache-related issues. See the workflow files for complete details.
 
 **Benefits**:
 - Handles Poetry cache corruption gracefully

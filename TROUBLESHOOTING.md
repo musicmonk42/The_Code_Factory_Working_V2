@@ -203,9 +203,9 @@ protobuf 6.x.x is installed but protobuf<6 is required
    pip install -r requirements.txt -c .github/constraints.txt
    ```
 
-2. **Force reinstall with correct version**:
+2. **Force reinstall with correct version** (using constraints file):
    ```bash
-   pip install --force-reinstall 'protobuf>=3.20.2,!=4.21.*,<6.0.0'
+   pip install --force-reinstall -c .github/constraints.txt protobuf
    ```
 
 ### Self-Fixing Engineer (SFE) Package Not Found
