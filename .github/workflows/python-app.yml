@@ -44,27 +44,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 pytest pytest-asyncio
         
-        # Install dependencies with Poetry fallback
-        if [ -f pyproject.toml ] && command -v poetry &> /dev/null; then
-          echo "Attempting Poetry installation..."
-          poetry install --no-cache --no-root || {
-            echo "WARNING: Poetry installation failed. Falling back to pip..."
-            if [ -f requirements.txt ]; then 
-              pip install -r requirements.txt || {
-                echo "ERROR: pip installation also failed"
-                echo "Hint: Ensure system packages (libvirt-dev, pkg-config) are installed."
-                exit 1
-              }
-            fi
+        # Install dependencies from requirements.txt with error handling
+        if [ -f requirements.txt ]; then 
+          pip install -r requirements.txt || {
+            echo "ERROR: pip installation failed"
+            echo "Hint: Ensure system packages (libvirt-dev, pkg-config) are installed."
+            exit 1
           }
-        else
-          if [ -f requirements.txt ]; then 
-            pip install -r requirements.txt || {
-              echo "ERROR: pip installation failed"
-              echo "Hint: Ensure system packages (libvirt-dev, pkg-config) are installed."
-              exit 1
-            }
-          fi
         fi
     - name: Lint with flake8
       continue-on-error: true

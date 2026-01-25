@@ -23,6 +23,9 @@ jobs:
   # Note: All three modules (generator, omnicore_engine, self_fixing_engineer) are
   # treated as a single unified platform and tested together.
   
+  # TODO: Consider extracting system dependency installation into a reusable composite action
+  # to reduce duplication across jobs. For now, explicit steps ensure clarity and maintainability.
+  
   lint:
     name: Lint Unified Platform
     runs-on: ubuntu-latest

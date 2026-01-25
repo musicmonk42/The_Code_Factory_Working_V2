@@ -122,9 +122,8 @@ This guide helps you diagnose and resolve common issues with the Code Factory pl
    # Install missing system library
    sudo apt-get install -y libvirt-dev
    
-   # If libvirt-python is commented out in requirements.txt, uncomment it:
-   # Edit requirements.txt and uncomment the line:
-   # libvirt-python==12.0.0
+   # If libvirt-python is commented out in requirements.txt, uncomment it
+   # See requirements.txt for the current version to uncomment
    ```
 
    **SIGXCPU (CPU time limit exceeded)**:

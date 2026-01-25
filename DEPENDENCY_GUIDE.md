@@ -325,6 +325,7 @@ This ensures that packages like `libvirt-python` (if uncommented) can be install
 All workflows implement automatic fallback from Poetry to pip:
 
 ```yaml
+# Simplified example - actual workflows include additional error handling
 - name: Install dependencies
   run: |
     # Try Poetry first
@@ -338,6 +339,8 @@ All workflows implement automatic fallback from Poetry to pip:
       pip install -r requirements.txt -c .github/constraints.txt
     fi
 ```
+
+**Note**: The actual implementation includes retry logic, error messages, and hints for troubleshooting. See the workflow files for complete details.
 
 **Benefits**:
 - Handles Poetry cache corruption gracefully
