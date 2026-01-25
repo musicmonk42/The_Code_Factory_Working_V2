@@ -871,20 +871,10 @@ class Runner(ABC):
                 original_payload = prio_task.task
                 
                 # Create a copy of the task payload to avoid mutating the original
+                # Using Pydantic's model_copy() for proper deep copy that handles all fields
                 # This ensures the original payload remains unchanged if used elsewhere
-                task_payload = TaskPayload(
-                    task_id=original_payload.task_id or str(uuid.uuid4()),
-                    test_files=original_payload.test_files,
-                    code_files=original_payload.code_files,
-                    output_path=original_payload.output_path,
-                    command=original_payload.command,
-                    timeout=original_payload.timeout,
-                    dry_run=original_payload.dry_run,
-                    priority=original_payload.priority,
-                    tags=original_payload.tags,
-                    environment=original_payload.environment,
-                )
-                task_id = task_payload.task_id
+                task_id = original_payload.task_id or str(uuid.uuid4())
+                task_payload = original_payload.model_copy(update={"task_id": task_id})
                 
                 # Log task dispatch event
                 logger.info(

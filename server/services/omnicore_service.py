@@ -178,32 +178,41 @@ class OmniCoreService:
         
         This helps users understand that the system is idle and waiting for input.
         """
-        logger.info("=" * 60)
-        logger.info("SYSTEM STATUS: Ready and waiting for input")
-        logger.info("=" * 60)
-        
-        # Log LLM status
+        # Build LLM status message
         if self._llm_status["configured"]:
-            logger.info(f"  LLM Provider: {self._llm_status['provider']} (configured)")
+            llm_msg = f"LLM Provider: {self._llm_status['provider']} (configured)"
         else:
-            logger.warning(f"  LLM Provider: {self._llm_status['provider']} (NOT CONFIGURED - jobs will fail)")
+            llm_msg = f"LLM Provider: {self._llm_status['provider']} (NOT CONFIGURED - jobs will fail)"
         
-        # Log agent status
+        # Build agent status message
         available_agents = [k for k, v in self.agents_available.items() if v]
-        logger.info(f"  Available Agents: {', '.join(available_agents) if available_agents else 'None'}")
+        agents_msg = ', '.join(available_agents) if available_agents else 'None'
         
-        # Clarify system behavior
-        logger.info("")
-        logger.info("IMPORTANT: Agents are now PASSIVE and waiting for jobs.")
-        logger.info("No code will be generated until you submit a job request.")
-        logger.info("")
-        logger.info("To trigger code generation, use one of these methods:")
-        logger.info("  1. POST /api/jobs/ - Create a new job")
-        logger.info("  2. POST /api/generator/upload - Upload a README file")
-        logger.info("  3. POST /api/omnicore/route - Route a job directly")
-        logger.info("")
-        logger.info("Monitor job status at: GET /api/jobs/{job_id}/progress")
-        logger.info("=" * 60)
+        # Log as a single structured message for better log readability
+        status_message = (
+            "\n"
+            "============================================================\n"
+            "SYSTEM STATUS: Ready and waiting for input\n"
+            "============================================================\n"
+            f"  {llm_msg}\n"
+            f"  Available Agents: {agents_msg}\n"
+            "\n"
+            "IMPORTANT: Agents are now PASSIVE and waiting for jobs.\n"
+            "No code will be generated until you submit a job request.\n"
+            "\n"
+            "To trigger code generation, use one of these methods:\n"
+            "  1. POST /api/jobs/ - Create a new job\n"
+            "  2. POST /api/generator/upload - Upload a README file\n"
+            "  3. POST /api/omnicore/route - Route a job directly\n"
+            "\n"
+            "Monitor job status at: GET /api/jobs/{job_id}/progress\n"
+            "============================================================"
+        )
+        
+        if self._llm_status["configured"]:
+            logger.info(status_message)
+        else:
+            logger.warning(status_message)
     
     def _load_agents(self):
         """

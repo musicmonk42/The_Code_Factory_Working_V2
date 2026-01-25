@@ -35,6 +35,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 
+def _is_path_safe(file_path: Path, base_dir: Path) -> bool:
+    """
+    Securely check if a file path is within a base directory.
+    
+    This function provides robust path traversal prevention that:
+    - Uses is_relative_to() on Python 3.9+ for accurate validation
+    - Handles symlinks safely by checking the resolved path
+    - Falls back to path component comparison on older Python versions
+    
+    Args:
+        file_path: The resolved path to check (must be already resolved)
+        base_dir: The base directory (must be already resolved)
+        
+    Returns:
+        True if file_path is safely within base_dir, False otherwise
+    """
+    try:
+        # Python 3.9+ provides is_relative_to method
+        return file_path.is_relative_to(base_dir)
+    except AttributeError:
+        # Fallback for Python < 3.9: compare path parts
+        try:
+            file_path.relative_to(base_dir)
+            return True
+        except ValueError:
+            return False
+
+
 def get_generator_service() -> GeneratorService:
     """Dependency for GeneratorService."""
     omnicore = get_omnicore_service()
@@ -568,37 +596,20 @@ async def download_single_file(job_id: str, file_path: str):
         job_dir_resolved = job_dir.resolve()
         
         # Security check: ensure the file is within the job directory
-        # Use is_relative_to() for robust path validation (handles symlinks and case sensitivity)
-        try:
-            # Python 3.9+ provides is_relative_to method
-            if not requested_file.is_relative_to(job_dir_resolved):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid file path: path traversal not allowed"
-                )
-        except AttributeError:
-            # Fallback for Python < 3.9: use string comparison with proper normalization
-            if not str(requested_file).startswith(str(job_dir_resolved) + "/"):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid file path: path traversal not allowed"
-                )
+        if not _is_path_safe(requested_file, job_dir_resolved):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file path: path traversal not allowed"
+            )
         
         # Additional security: reject symlinks that point outside the job directory
         if requested_file.is_symlink():
             real_path = requested_file.resolve()
-            try:
-                if not real_path.is_relative_to(job_dir_resolved):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Invalid file path: symlinks pointing outside job directory not allowed"
-                    )
-            except AttributeError:
-                if not str(real_path).startswith(str(job_dir_resolved) + "/"):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Invalid file path: symlinks pointing outside job directory not allowed"
-                    )
+            if not _is_path_safe(real_path, job_dir_resolved):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid file path: symlinks pointing outside job directory not allowed"
+                )
                     
     except HTTPException:
         raise
