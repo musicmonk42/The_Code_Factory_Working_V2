@@ -54,11 +54,24 @@ async def websocket_endpoint(websocket: WebSocket):
     };
     ```
     """
-    await websocket.accept()
-    active_connections.append(websocket)
-    logger.info(
-        f"WebSocket client connected. Total connections: {len(active_connections)}"
-    )
+    try:
+        await websocket.accept()
+        active_connections.append(websocket)
+        client_info = {
+            "host": websocket.client.host if websocket.client else "unknown",
+            "port": websocket.client.port if websocket.client else "unknown",
+        }
+        logger.info(
+            f"WebSocket client connected from {client_info['host']}:{client_info['port']}. "
+            f"Total connections: {len(active_connections)}"
+        )
+    except Exception as accept_error:
+        error_type = type(accept_error).__name__
+        logger.error(
+            f"Failed to accept WebSocket connection: {error_type} - {accept_error}",
+            exc_info=True
+        )
+        return
 
     try:
         # Initialize OmniCore service for this connection
@@ -122,7 +135,12 @@ async def websocket_endpoint(websocket: WebSocket):
                         severity="info",
                     )
                     
-                    await websocket.send_json(event_msg.to_json_dict())
+                    try:
+                        await websocket.send_json(event_msg.to_json_dict())
+                    except Exception as send_error:
+                        error_type = type(send_error).__name__
+                        logger.error(f"Failed to send event: {error_type} - {send_error}")
+                        break
                     
                 except asyncio.TimeoutError:
                     # Send heartbeat if no events for 30 seconds
@@ -133,34 +151,51 @@ async def websocket_endpoint(websocket: WebSocket):
                         data={"status": "healthy"},
                         severity="info",
                     )
-                    await websocket.send_json(heartbeat.to_json_dict())
+                    try:
+                        await websocket.send_json(heartbeat.to_json_dict())
+                    except Exception as send_error:
+                        logger.error(f"Failed to send heartbeat: {type(send_error).__name__} - {send_error}")
+                        break
                     
                 except Exception as e:
-                    logger.error(f"Error processing event: {e}")
+                    error_type = type(e).__name__
+                    logger.error(f"Error processing event: {error_type} - {str(e)}", exc_info=True)
                     break
         else:
             # Fallback: Use mock heartbeats
             logger.info("Message bus not available, using fallback heartbeat mode")
             
             while True:
-                # Placeholder: send heartbeat
-                await asyncio.sleep(30)
-                event = EventMessage(
-                    event_type=EventType.PLATFORM_STATUS,
-                    timestamp=datetime.now(timezone.utc),
-                    message="Platform operational (fallback mode)",
-                    data={"status": "healthy", "mode": "fallback"},
-                    severity="info",
-                )
-                await websocket.send_json(event.to_json_dict())
+                try:
+                    # Placeholder: send heartbeat
+                    await asyncio.sleep(30)
+                    event = EventMessage(
+                        event_type=EventType.PLATFORM_STATUS,
+                        timestamp=datetime.now(timezone.utc),
+                        message="Platform operational (fallback mode)",
+                        data={"status": "healthy", "mode": "fallback"},
+                        severity="info",
+                    )
+                    await websocket.send_json(event.to_json_dict())
+                except Exception as fallback_error:
+                    error_type = type(fallback_error).__name__
+                    logger.error(f"Fallback mode error: {error_type} - {fallback_error}", exc_info=True)
+                    break
 
     except WebSocketDisconnect:
-        active_connections.remove(websocket)
+        if websocket in active_connections:
+            active_connections.remove(websocket)
         logger.info(
             f"WebSocket client disconnected. Total connections: {len(active_connections)}"
         )
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        error_type = type(e).__name__
+        connection_count = len(active_connections)
+        logger.error(
+            f"WebSocket error: {error_type} - {str(e)} | "
+            f"Active connections: {connection_count}",
+            exc_info=True
+        )
         if websocket in active_connections:
             active_connections.remove(websocket)
 
