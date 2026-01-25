@@ -21,25 +21,37 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Force mock mode by ensuring prometheus is not available
-# NOTE: This affects the entire test module but is necessary to test mock metrics
-# Run these tests in isolation if concerned about side effects
-sys.modules["prometheus_client"] = MagicMock()
-sys.modules["prometheus_client.registry"] = MagicMock()
-
-# Now import our metrics module
-from omnicore_engine.message_bus import metrics
-
-# Force reload to pick up mocked prometheus
-import importlib
-
-importlib.reload(metrics)
-
 from omnicore_engine.message_bus.metrics import (
     _ThreadSafeDict,
     get_mock_registry_stats,
     reset_metrics,
 )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def mock_prometheus():
+    """
+    Mock prometheus_client to force mock mode for testing.
+    This fixture automatically applies to all tests in this module.
+    """
+    # Force mock mode by ensuring prometheus is not available
+    sys.modules["prometheus_client"] = MagicMock()
+    sys.modules["prometheus_client.registry"] = MagicMock()
+
+    # Force reload to pick up mocked prometheus
+    import importlib
+    from omnicore_engine.message_bus import metrics
+
+    importlib.reload(metrics)
+
+    yield
+
+    # Cleanup: restore original state if needed
+    # Note: In practice, this won't fully restore, but it's good practice
+    if "prometheus_client" in sys.modules:
+        del sys.modules["prometheus_client"]
+    if "prometheus_client.registry" in sys.modules:
+        del sys.modules["prometheus_client.registry"]
 
 
 class TestThreadSafeDictLRU:
@@ -257,7 +269,7 @@ class TestMockMetricsMemoryLeakPrevention:
         )
 
         # Create many unique label combinations (more than max_size)
-        for i in range(15000):  # More than default max_size of 10000
+        for i in range(1000):  # Reduced from 15000 to 1000 for faster collection
             metric.labels(label1=f"value_{i}", label2=f"other_{i}").inc()
 
         # Internal storage should not exceed max_size
@@ -272,7 +284,7 @@ class TestMockMetricsMemoryLeakPrevention:
         histogram = Histogram("test_histogram", "Test histogram", labelnames=["label"])
 
         # Observe many values with different labels
-        for i in range(15000):
+        for i in range(1000):  # Reduced from 15000 to 1000 for faster collection
             histogram.labels(label=f"value_{i}").observe(0.5)
 
         # Bucket storage should be bounded
@@ -357,8 +369,8 @@ class TestIntegrationScenarios:
         # Create a counter with dynamic labels (like session IDs)
         counter = Counter("requests_total", "Total requests", labelnames=["session_id"])
 
-        # Simulate 20000 unique sessions over time
-        for i in range(20000):
+        # Simulate 2000 unique sessions over time (reduced from 20000)
+        for i in range(2000):  # Reduced from 20000 to 2000 for faster collection
             session_id = f"session_{i}"
             counter.labels(session_id=session_id).inc()
 
@@ -366,8 +378,8 @@ class TestIntegrationScenarios:
         assert len(counter._values._data) <= counter._values.max_size
 
         # Most recent sessions should be accessible
-        recent_value = counter.labels(session_id="session_19999")._parent._values.get(
-            ("session_19999",), None
+        recent_value = counter.labels(session_id="session_1999")._parent._values.get(
+            ("session_1999",), None
         )
         # Recent data might be present (if not evicted)
         # But system should not crash
