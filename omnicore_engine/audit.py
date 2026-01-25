@@ -56,6 +56,9 @@ def _create_fallback_settings():
         LOG_LEVEL="INFO",
         database_path="sqlite:///./omnicore.db",
         DB_PATH="sqlite:///./omnicore.db",
+        # FIX: Add plugin_dir for PolicyEngine initialization
+        plugin_dir=os.getenv("PLUGIN_DIR", "./plugins"),
+        PLUGIN_DIR=os.getenv("PLUGIN_DIR", "./plugins"),
         ENCRYPTION_KEY=encryption_key,
         ENCRYPTION_KEY_BYTES=encryption_key_bytes,
         AUDIT_BUFFER_SIZE=100,
@@ -64,6 +67,8 @@ def _create_fallback_settings():
         WEB3_PROVIDER_URL=None,
         API_HOST="0.0.0.0",
         API_PORT=8000,
+        # FIX: Add PLUGINS_ENABLED for plugin system compatibility
+        PLUGINS_ENABLED=True,
     )
 
 
