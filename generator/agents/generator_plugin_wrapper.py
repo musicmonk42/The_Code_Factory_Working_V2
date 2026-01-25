@@ -64,9 +64,47 @@ if not logger.handlers:
 # This avoids version compatibility issues and respects OTEL_* environment variables
 try:
     tracer = trace.get_tracer(__name__)
-except TypeError:
-    # Fallback for older OpenTelemetry versions
+except (TypeError, Exception) as e:
+    # Fallback for older OpenTelemetry versions or when OpenTelemetry is not available
+    logger.warning(f"OpenTelemetry tracer not available: {e}. Tracing will be disabled.")
     tracer = None
+
+
+# Helper to safely use tracer
+from contextlib import contextmanager
+from typing import Optional
+
+
+# No-op span class for when OpenTelemetry is unavailable
+class NoOpSpan:
+    """A no-op span that implements the minimal span interface."""
+    
+    def set_attribute(self, key, value):
+        """No-op set_attribute."""
+        pass
+    
+    def record_exception(self, exception):
+        """No-op record_exception."""
+        pass
+
+
+@contextmanager
+def safe_span(span_name: str, attributes: Optional[Dict[str, Any]] = None):
+    """Context manager that safely handles tracing even when tracer is None.
+    
+    Args:
+        span_name: Name of the span
+        attributes: Optional attributes dict for the span
+        
+    Yields:
+        A span object (real or no-op)
+    """
+    if tracer is not None:
+        with tracer.start_as_current_span(span_name, attributes=attributes or {}) as span:
+            yield span
+    else:
+        yield NoOpSpan()
+
 
 # Prometheus metrics
 _metrics_lock = threading.Lock()
@@ -334,9 +372,7 @@ async def run_generator_workflow(
     correlation_id = str(uuid.uuid4())
     start_time = time.time()
 
-    with tracer.start_as_current_span(
-        "generator_workflow", attributes={"correlation_id": correlation_id}
-    ) as span:
+    with safe_span("generator_workflow", {"correlation_id": correlation_id}) as span:
         try:
             input_data = WorkflowInput(
                 requirements=requirements,

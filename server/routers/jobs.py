@@ -324,10 +324,47 @@ async def get_job_progress(
     )
 
 
+@router.post("/{job_id}/cancel", response_model=SuccessResponse)
+async def cancel_job_post(job_id: str) -> SuccessResponse:
+    """
+    Cancel a running job (POST endpoint).
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Returns:**
+    - Success confirmation
+
+    **Errors:**
+    - 404: Job not found
+    - 400: Job cannot be cancelled (already completed/failed)
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    job = jobs_db[job_id]
+
+    if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job {job_id} is {job.status.value} and cannot be cancelled",
+        )
+
+    job.status = JobStatus.CANCELLED
+    job.updated_at = datetime.utcnow()
+
+    logger.info(f"Cancelled job {job_id}")
+
+    return SuccessResponse(
+        success=True,
+        message=f"Job {job_id} cancelled successfully",
+    )
+
+
 @router.delete("/{job_id}", response_model=SuccessResponse)
 async def cancel_job(job_id: str) -> SuccessResponse:
     """
-    Cancel a running job.
+    Cancel a running job (DELETE endpoint, legacy).
 
     **Path Parameters:**
     - job_id: Unique job identifier
