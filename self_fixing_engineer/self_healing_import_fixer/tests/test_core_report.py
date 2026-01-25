@@ -3,11 +3,18 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
-from self_healing_import_fixer.analyzer.core_report import app  # for Flask test client
+# Flask app import moved to fixture to avoid expensive initialization during collection
 from self_healing_import_fixer.analyzer.core_report import (
     AnalyzerCriticalError,
     ReportGenerator,
 )
+
+
+@pytest.fixture
+def flask_app():
+    """Lazy-load the Flask app to avoid expensive initialization during collection."""
+    from self_healing_import_fixer.analyzer.core_report import app
+    return app
 
 
 # --- ReportGenerator Initialization Tests ---
@@ -152,10 +159,10 @@ def test_public_generate_report_calls_encryption_in_prod(tmp_path, monkeypatch):
 # --- Dashboard Integration Tests (now using Flask test client) ---
 
 
-@pytest.mark.skipif(not hasattr(app, "test_client"), reason="Flask app not available")
-def test_dashboard_login_success(monkeypatch):
+@pytest.mark.skipif(False, reason="Flask app available via fixture")
+def test_dashboard_login_success(monkeypatch, flask_app):
 
-    app.config["JWT_SECRET_KEY"] = "jwtsecret"
+    flask_app.config["JWT_SECRET_KEY"] = "jwtsecret"
     monkeypatch.setattr(
         "self_healing_import_fixer.analyzer.core_report.SECRETS_MANAGER",
         MagicMock(
@@ -170,7 +177,7 @@ def test_dashboard_login_success(monkeypatch):
         "self_healing_import_fixer.analyzer.core_report.audit_logger",
         MagicMock(log_event=MagicMock()),
     )
-    with app.test_client() as client:
+    with flask_app.test_client() as client:
         resp = client.post(
             "/login", json={"username": "admin", "password": "admin_secure_password"}
         )
@@ -178,10 +185,10 @@ def test_dashboard_login_success(monkeypatch):
         assert "access_token" in resp.json
 
 
-@pytest.mark.skipif(not hasattr(app, "test_client"), reason="Flask app not available")
-def test_dashboard_login_failure(monkeypatch):
+@pytest.mark.skipif(False, reason="Flask app available via fixture")
+def test_dashboard_login_failure(monkeypatch, flask_app):
 
-    app.config["JWT_SECRET_KEY"] = "jwtsecret"
+    flask_app.config["JWT_SECRET_KEY"] = "jwtsecret"
     monkeypatch.setattr(
         "self_healing_import_fixer.analyzer.core_report.SECRETS_MANAGER",
         MagicMock(
@@ -196,7 +203,7 @@ def test_dashboard_login_failure(monkeypatch):
         "self_healing_import_fixer.analyzer.core_report.audit_logger",
         MagicMock(log_event=MagicMock()),
     )
-    with app.test_client() as client:
+    with flask_app.test_client() as client:
         resp = client.post(
             "/login", json={"username": "admin", "password": "wrong_password"}
         )
@@ -208,11 +215,11 @@ def test_dashboard_login_failure(monkeypatch):
 def test_get_report_endpoint_success_no_encryption(tmp_path, monkeypatch):
     import self_healing_import_fixer.analyzer.core_report as crmod
 
-    app.config["JWT_SECRET_KEY"] = "jwtsecret"
+    flask_app.config["JWT_SECRET_KEY"] = "jwtsecret"
     report_dir = tmp_path / "reports"
     report_dir.mkdir()
     (report_dir / "my_report.html").write_text("<html>Report Content</html>")
-    app.config["REPORTS_DIR"] = str(report_dir)
+    flask_app.config["REPORTS_DIR"] = str(report_dir)
 
     monkeypatch.setattr(crmod, "audit_logger", MagicMock(log_event=MagicMock()))
     monkeypatch.setattr(
@@ -227,7 +234,7 @@ def test_get_report_endpoint_success_no_encryption(tmp_path, monkeypatch):
         ),
     )
 
-    with app.test_client() as client:
+    with flask_app.test_client() as client:
         login_resp = client.post(
             "/login", json={"username": "admin", "password": "admin_secure_password"}
         )
@@ -243,11 +250,11 @@ def test_get_report_endpoint_success_no_encryption(tmp_path, monkeypatch):
 def test_get_report_endpoint_with_encryption_in_prod(tmp_path, monkeypatch):
     import self_healing_import_fixer.analyzer.core_report as crmod
 
-    app.config["JWT_SECRET_KEY"] = "jwtsecret"
+    flask_app.config["JWT_SECRET_KEY"] = "jwtsecret"
     report_dir = tmp_path / "reports"
     report_dir.mkdir()
     (report_dir / "my_report.html").write_bytes(b"encrypted_content")
-    app.config["REPORTS_DIR"] = str(report_dir)
+    flask_app.config["REPORTS_DIR"] = str(report_dir)
 
     def decrypt(content):
         return b"decrypted_content"

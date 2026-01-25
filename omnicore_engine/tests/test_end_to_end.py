@@ -4,12 +4,18 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from omnicore_engine.fastapi_app import app
 from omnicore_engine.plugin_registry import PlugInKind, plugin
 
 
+@pytest.fixture
+def app():
+    """Lazy-load the FastAPI app to avoid expensive initialization during collection."""
+    from omnicore_engine.fastapi_app import app
+    return app
+
+
 @pytest.mark.asyncio
-async def test_end_to_end_plugin_api(tmp_path):
+async def test_end_to_end_plugin_api(tmp_path, app):
     """
     Test the fix-imports endpoint with a mock AIManager.
     Note: This test mocks the AIManager since the self_healing_import_fixer
