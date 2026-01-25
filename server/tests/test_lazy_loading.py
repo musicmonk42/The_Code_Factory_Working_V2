@@ -107,94 +107,103 @@ class TestSchemas:
 # These are marked to be skipped if FastAPI dependencies are not available
 try:
     from fastapi.testclient import TestClient
-    from server.main import app
-    
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
+
+
+@pytest.fixture
+def app():
+    """Lazy-load the FastAPI app only when needed for tests.
+    Import deferred to fixture to avoid expensive initialization during collection.
+    """
+    if not FASTAPI_AVAILABLE:
+        pytest.skip("FastAPI not available")
+    from server.main import app
+    return app
+
+
+@pytest.fixture
+def client(app):
+    """Create a test client for the FastAPI app."""
+    return TestClient(app)
 
 
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestHealthEndpoint:
     """Test suite for /health endpoint."""
     
-    def test_health_endpoint_always_returns_200(self):
+    def test_health_endpoint_always_returns_200(self, client):
         """Test that /health endpoint always returns HTTP 200."""
-        with TestClient(app) as client:
-            response = client.get("/health")
-            assert response.status_code == 200
+        response = client.get("/health")
+        assert response.status_code == 200
     
-    def test_health_response_structure(self):
+    def test_health_response_structure(self, client):
         """Test that /health endpoint returns expected structure."""
-        with TestClient(app) as client:
-            response = client.get("/health")
-            data = response.json()
-            
-            # Check required fields
-            assert 'status' in data
-            assert 'version' in data
-            assert 'components' in data
-            assert 'timestamp' in data
-            
-            # Status should always be "healthy" if API is up
-            assert data['status'] == 'healthy'
-            
-            # Check components
-            assert 'api' in data['components']
-            assert 'agents_status' in data['components']
-            
-            # API should be healthy
-            assert data['components']['api'] == 'healthy'
+        response = client.get("/health")
+        data = response.json()
+        
+        # Check required fields
+        assert 'status' in data
+        assert 'version' in data
+        assert 'components' in data
+        assert 'timestamp' in data
+        
+        # Status should always be "healthy" if API is up
+        assert data['status'] == 'healthy'
+        
+        # Check components
+        assert 'api' in data['components']
+        assert 'agents_status' in data['components']
+        
+        # API should be healthy
+        assert data['components']['api'] == 'healthy'
     
-    def test_health_includes_agents_status(self):
+    def test_health_includes_agents_status(self, client):
         """Test that /health includes agents_status field."""
-        with TestClient(app) as client:
-            response = client.get("/health")
-            data = response.json()
-            
-            assert 'agents_status' in data['components']
-            # Should be one of: "loading", "ready", "degraded"
-            assert data['components']['agents_status'] in ['loading', 'ready', 'degraded']
+        response = client.get("/health")
+        data = response.json()
+        
+        assert 'agents_status' in data['components']
+        # Should be one of: "loading", "ready", "degraded"
+        assert data['components']['agents_status'] in ['loading', 'ready', 'degraded']
 
 
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestReadinessEndpoint:
     """Test suite for /ready endpoint."""
     
-    def test_ready_endpoint_exists(self):
+    def test_ready_endpoint_exists(self, client):
         """Test that /ready endpoint exists."""
-        with TestClient(app) as client:
-            response = client.get("/ready")
-            # Should return either 200 or 503
-            assert response.status_code in [200, 503]
+        response = client.get("/ready")
+        # Should return either 200 or 503
+        assert response.status_code in [200, 503]
     
-    def test_ready_response_structure(self):
+    def test_ready_response_structure(self, client):
         """Test that /ready endpoint returns expected structure."""
-        with TestClient(app) as client:
-            response = client.get("/ready")
-            data = response.json()
-            
-            # Check required fields
-            assert 'ready' in data
-            assert 'status' in data
-            assert 'checks' in data
-            assert 'timestamp' in data
-            
-            # Check types
-            assert isinstance(data['ready'], bool)
-            assert isinstance(data['status'], str)
-            assert isinstance(data['checks'], dict)
-            assert isinstance(data['timestamp'], str)
+        response = client.get("/ready")
+        data = response.json()
+        
+        # Check required fields
+        assert 'ready' in data
+        assert 'status' in data
+        assert 'checks' in data
+        assert 'timestamp' in data
+        
+        # Check types
+        assert isinstance(data['ready'], bool)
+        assert isinstance(data['status'], str)
+        assert isinstance(data['checks'], dict)
+        assert isinstance(data['timestamp'], str)
     
-    def test_ready_includes_required_checks(self):
+    def test_ready_includes_required_checks(self, client):
         """Test that /ready includes required checks."""
-        with TestClient(app) as client:
-            response = client.get("/ready")
-            data = response.json()
-            
-            # Should include api_available and agents_loaded checks
-            assert 'api_available' in data['checks']
-            assert 'agents_loaded' in data['checks']
+        response = client.get("/ready")
+        data = response.json()
+        
+        # Should include api_available and agents_loaded checks
+        assert 'api_available' in data['checks']
+        assert 'agents_loaded' in data['checks']
 
 
 if __name__ == '__main__':

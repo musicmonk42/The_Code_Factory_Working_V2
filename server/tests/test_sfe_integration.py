@@ -10,14 +10,16 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from server.main import app
 from server.schemas import Job, JobStatus
 from server.storage import jobs_db
 
 
 @pytest.fixture
 def client():
-    """Create a test client for the FastAPI app."""
+    """Create a test client for the FastAPI app.
+    Import deferred to fixture to avoid expensive initialization during collection.
+    """
+    from server.main import app
     return TestClient(app)
 
 
