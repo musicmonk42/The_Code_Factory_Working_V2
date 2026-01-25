@@ -279,8 +279,26 @@ class NodeNotFoundError(QueryError):
 logger = logging.getLogger("neo4j_kg")
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
+# Detect test/CI environment to skip thread-spawning OpenTelemetry initialization.
+# Resource.create() spawns threads for resource detection, which can cause
+# "can't start new thread" errors in resource-constrained CI environments.
+# Note: We use local detection here rather than Environment.current() from otel_config
+# to avoid potential circular imports and to include CI-specific checks (PYTEST_COLLECTING, CI)
+# that are critical for the test collection phase.
+_is_test_environment = any(
+    [
+        os.getenv("TESTING"),
+        os.getenv("PYTEST_CURRENT_TEST"),
+        os.getenv("PYTEST_COLLECTING"),
+        os.getenv("CI"),
+        "pytest" in sys.modules,
+        "unittest" in sys.modules,
+    ]
+)
+
 # OpenTelemetry setup - only set tracer provider if not already configured
-if HAS_OPENTELEMETRY:
+# Skip in test environments to avoid thread exhaustion issues
+if HAS_OPENTELEMETRY and not _is_test_environment:
     _existing_provider = trace.get_tracer_provider()
     _provider_needs_setup = (
         _existing_provider is None
@@ -321,6 +339,10 @@ if HAS_OPENTELEMETRY:
                 "Failed to initialize OpenTelemetry tracer due to version compatibility issues. "
                 "Using no-op tracer. Please ensure opentelemetry-api and opentelemetry-sdk versions match."
             )
+elif _is_test_environment:
+    # Test/CI environment detected - use no-op tracer to avoid thread exhaustion
+    tracer = NoOpTracer()
+    logger.info("Test environment detected - using no-op tracer for knowledge_graph_db")
 else:
     # OpenTelemetry not available, use no-op tracer
     tracer = NoOpTracer()
