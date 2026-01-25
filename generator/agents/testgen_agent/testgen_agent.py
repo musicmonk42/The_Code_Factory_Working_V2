@@ -85,7 +85,8 @@ def _get_presidio_analyzer():
         return None
     if _presidio_analyzer is None:
         try:
-            _presidio_analyzer = AnalyzerEngine()
+            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+            _presidio_analyzer = AnalyzerEngine(supported_languages=["en"])
         except Exception as e:
             import logging
 

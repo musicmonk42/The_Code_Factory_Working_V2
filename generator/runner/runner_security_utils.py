@@ -153,7 +153,11 @@ def _load_presidio_engine() -> bool:
             # Attempt to create NLP engine with configured model
             provider = NlpEngineProvider(nlp_configuration=configuration)
             nlp_engine = provider.create_engine()
-            _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(nlp_engine=nlp_engine)
+            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+            # This ensures only English recognizers are loaded, matching the NLP engine configuration
+            _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(
+                nlp_engine=nlp_engine, supported_languages=["en"]
+            )
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
             _PRESIDIO_NLP_MODE = True  # Full NLP mode available
@@ -170,7 +174,10 @@ def _load_presidio_engine() -> bool:
                 "Using regex-only PII detection mode for graceful degradation."
             )
             # Create analyzer without NLP engine - uses regex patterns only
-            _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(nlp_engine=None)
+            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+            _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(
+                nlp_engine=None, supported_languages=["en"]
+            )
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
             _PRESIDIO_NLP_MODE = False  # Degraded to regex-only mode
@@ -184,7 +191,10 @@ def _load_presidio_engine() -> bool:
                 "Using regex-only mode for PII detection."
             )
             # Graceful degradation: use presidio without NLP
-            _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(nlp_engine=None)
+            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+            _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(
+                nlp_engine=None, supported_languages=["en"]
+            )
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
             _PRESIDIO_NLP_MODE = False  # Degraded to regex-only mode

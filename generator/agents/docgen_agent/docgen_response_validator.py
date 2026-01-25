@@ -248,7 +248,8 @@ def scrub_text(text: str) -> str:
     if not text:
         return ""
 
-    analyzer = AnalyzerEngine()
+    # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+    analyzer = AnalyzerEngine(supported_languages=["en"])
     anonymizer = AnonymizerEngine()
 
     # Analyze text for PII
