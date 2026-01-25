@@ -971,21 +971,27 @@ class RedactionFilter(logging.Filter):
             ),  # URL Param
         ]
 
-    def _sync_redact(self, data: Any) -> Any:
+    def _sync_redact(self, data: Any, preserve_tuple: bool = False) -> Any:
         if isinstance(data, str):
             for pattern in self.patterns:
                 data = pattern.sub("[REDACTED]", data)
             return data
         elif isinstance(data, dict):
             return {k: self._sync_redact(v) for k, v in data.items()}
-        elif isinstance(data, (list, tuple)):
+        elif isinstance(data, tuple):
+            # Preserve tuple type for logging format strings
+            return tuple(self._sync_redact(item) for item in data)
+        elif isinstance(data, list):
             return [self._sync_redact(item) for item in data]
         return data
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:
             record.msg = self._sync_redact(record.msg)
-            if isinstance(record.args, (tuple, list, dict)):
+            if isinstance(record.args, tuple):
+                # Preserve tuple type for string formatting
+                record.args = self._sync_redact(record.args)
+            elif isinstance(record.args, (list, dict)):
                 record.args = self._sync_redact(record.args)
         except Exception as e:
             print(f"Error in RedactionFilter: {e}", file=sys.stderr)

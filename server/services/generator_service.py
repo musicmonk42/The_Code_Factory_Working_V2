@@ -217,27 +217,34 @@ class GeneratorService:
 
         # Route through OmniCore if available
         if self.omnicore_service:
-            payload = {
-                "action": "clarify_requirements",
-                "job_id": job_id,
-                "readme_content": readme_content,
-                "ambiguities": ambiguities or [],
-            }
-            result = await self.omnicore_service.route_job(
-                job_id=job_id,
-                source_module="api",
-                target_module="generator",
-                payload=payload,
-            )
-            logger.info(f"Clarification for job {job_id} routed to generator via OmniCore")
-            return result.get("data", {
-                "job_id": job_id,
-                "status": "clarification_initiated",
-                "message": "Clarification request sent to generator",
-            })
+            try:
+                payload = {
+                    "action": "clarify_requirements",
+                    "job_id": job_id,
+                    "readme_content": readme_content,
+                    "ambiguities": ambiguities or [],
+                }
+                result = await self.omnicore_service.route_job(
+                    job_id=job_id,
+                    source_module="api",
+                    target_module="generator",
+                    payload=payload,
+                )
+                logger.info(f"Clarification for job {job_id} routed to generator via OmniCore")
+                return result.get("data", {
+                    "job_id": job_id,
+                    "status": "clarification_initiated",
+                    "message": "Clarification request sent to generator",
+                })
+            except Exception as e:
+                logger.error(
+                    f"Error routing clarification through OmniCore for job {job_id}: {e}",
+                    exc_info=True
+                )
+                # Fall through to fallback response
 
-        # Fallback if OmniCore not available
-        logger.warning("OmniCore service not available, using direct fallback")
+        # Fallback if OmniCore not available or failed
+        logger.warning("OmniCore service not available or failed, using direct fallback")
         return {
             "job_id": job_id,
             "clarifications": [
@@ -246,6 +253,7 @@ class GeneratorService:
             ],
             "confidence": 0.85,
             "clarifier_module": "generator.clarifier (fallback)",
+            "questions_count": 2,
         }
 
     async def get_clarification_feedback(
