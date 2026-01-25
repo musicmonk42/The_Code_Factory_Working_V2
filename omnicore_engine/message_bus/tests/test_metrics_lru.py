@@ -369,8 +369,9 @@ class TestIntegrationScenarios:
         # Create a counter with dynamic labels (like session IDs)
         counter = Counter("requests_total", "Total requests", labelnames=["session_id"])
 
-        # Simulate 100 unique sessions over time (reduced from 2000)
-        for i in range(100):  # Reduced from 2000 to 100 to prevent memory exhaustion
+        # Simulate 100 unique sessions over time (reduced from 2000 to prevent memory exhaustion)
+        num_sessions = 100
+        for i in range(num_sessions):
             session_id = f"session_{i}"
             counter.labels(session_id=session_id).inc()
 
@@ -378,8 +379,9 @@ class TestIntegrationScenarios:
         assert len(counter._values._data) <= counter._values.max_size
 
         # Most recent sessions should be accessible
-        recent_value = counter.labels(session_id="session_99")._parent._values.get(
-            ("session_99",), None
+        recent_session_id = f"session_{num_sessions - 1}"
+        recent_value = counter.labels(session_id=recent_session_id)._parent._values.get(
+            (recent_session_id,), None
         )
         # Recent data might be present (if not evicted)
         # But system should not crash
