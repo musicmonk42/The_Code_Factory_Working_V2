@@ -77,13 +77,11 @@ class TestThreadSafeDictLRU:
 
     def test_initialization_with_max_size(self):
         """Test _ThreadSafeDict initializes with configurable max size."""
-        _lazy_import_metrics()
         d = _ThreadSafeDict(max_size=100)
         assert d.max_size == 100
 
     def test_small_capacity_no_eviction(self):
         """Test that no eviction occurs below capacity."""
-        _lazy_import_metrics()
         d = _ThreadSafeDict(max_size=10)
 
         for i in range(5):
@@ -96,7 +94,6 @@ class TestThreadSafeDictLRU:
 
     def test_eviction_at_capacity(self):
         """Test that LRU eviction occurs when capacity is reached."""
-        _lazy_import_metrics()
         d = _ThreadSafeDict(max_size=5)
 
         # Fill to capacity
@@ -118,7 +115,6 @@ class TestThreadSafeDictLRU:
 
     def test_lru_order_with_access(self):
         """Test that access order affects LRU eviction."""
-        _lazy_import_metrics()
         d = _ThreadSafeDict(max_size=3)
 
         d.set(("a",), 1)
@@ -142,7 +138,6 @@ class TestThreadSafeDictLRU:
 
     def test_inc_respects_lru(self):
         """Test that inc() operations respect LRU eviction."""
-        _lazy_import_metrics()
         d = _ThreadSafeDict(max_size=3)
 
         d.inc(("a",), 1.0)
@@ -160,7 +155,6 @@ class TestThreadSafeDictLRU:
 
     def test_clear_method(self):
         """Test that clear() properly resets everything."""
-        _lazy_import_metrics()
         d = _ThreadSafeDict(max_size=10)
 
         # Add some data
@@ -180,7 +174,6 @@ class TestThreadSafeDictLRU:
 
     def test_thread_safety_during_eviction(self):
         """Test thread safety during LRU eviction."""
-        _lazy_import_metrics()
         d = _ThreadSafeDict(max_size=50)
         errors = []
 
@@ -284,7 +277,6 @@ class TestMockMetricsMemoryLeakPrevention:
     def test_dynamic_metric_creation_bounded(self):
         """Test that creating many dynamic metrics doesn't cause unbounded growth."""
         # Reset metrics first
-        _lazy_import_metrics()
         reset_metrics()
 
         # Create a mock metric with labels
@@ -303,7 +295,6 @@ class TestMockMetricsMemoryLeakPrevention:
 
     def test_histogram_buckets_bounded(self):
         """Test that histogram bucket storage is bounded."""
-        _lazy_import_metrics()
         reset_metrics()
 
         from omnicore_engine.message_bus.metrics import Histogram
@@ -326,7 +317,6 @@ class TestGetMockRegistryStats:
 
     def test_get_stats_returns_dict(self):
         """Test that get_mock_registry_stats returns proper dict."""
-        _lazy_import_metrics()
         stats = get_mock_registry_stats()
 
         assert isinstance(stats, dict)
@@ -336,7 +326,6 @@ class TestGetMockRegistryStats:
 
     def test_stats_accuracy(self):
         """Test that stats accurately reflect registry state."""
-        _lazy_import_metrics()
         reset_metrics()
 
         # Create some metrics
@@ -356,7 +345,6 @@ class TestResetMetrics:
 
     def test_reset_clears_data(self):
         """Test that reset_metrics() clears all data."""
-        _lazy_import_metrics()
         from omnicore_engine.message_bus.metrics import Counter
 
         metric = Counter("test_reset", "Test reset", labelnames=["label"])
@@ -373,7 +361,6 @@ class TestResetMetrics:
 
     def test_reset_clears_warning_flags(self):
         """Test that reset_metrics() clears warning flags."""
-        _lazy_import_metrics()
         from omnicore_engine.message_bus.metrics import Counter
 
         metric = Counter("test_reset_warn", "Test reset warn", labelnames=["label"])
@@ -393,7 +380,6 @@ class TestIntegrationScenarios:
 
     def test_long_running_application_simulation(self):
         """Simulate a long-running application with dynamic metrics."""
-        _lazy_import_metrics()
         reset_metrics()
 
         from omnicore_engine.message_bus.metrics import Counter
@@ -420,7 +406,6 @@ class TestIntegrationScenarios:
 
     def test_concurrent_metric_updates_with_eviction(self):
         """Test concurrent updates don't cause issues during eviction."""
-        _lazy_import_metrics()
         reset_metrics()
 
         from omnicore_engine.message_bus.metrics import Counter

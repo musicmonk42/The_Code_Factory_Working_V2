@@ -96,8 +96,9 @@ def __getattr__(name: str):
     """
     Lazy load module attributes on first access (PEP 562).
     
-    This allows for fast import times during pytest collection while still
-    providing the same API as if all modules were imported at package load time.
+    This allows for fast import times by deferring the loading of heavy submodules
+    until they are actually needed. Benefits include faster package imports,
+    reduced memory usage at startup, and improved pytest collection times.
     """
     if name in _LAZY_IMPORTS:
         module_path, attr_name = _LAZY_IMPORTS[name]
