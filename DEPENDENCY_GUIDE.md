@@ -299,4 +299,101 @@ For issues not covered in this guide:
 1. Check the logs for specific error messages
 2. Review the configuration examples in `.env.example`
 3. See production configuration in `.env.production.template`
-4. Open an issue with dependency details and error messages
+4. **Check [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for comprehensive troubleshooting guide**
+5. Open an issue with dependency details and error messages
+
+## CI/CD Dependency Handling
+
+All GitHub Actions workflows now implement robust dependency handling:
+
+### System Dependencies Installation
+
+All workflows automatically install required system packages before Python dependencies:
+
+```yaml
+- name: Install system dependencies for Python packages
+  run: |
+    echo "Installing system dependencies for Python packages..."
+    sudo apt-get update
+    sudo apt-get install -y libvirt-dev pkg-config
+```
+
+This ensures that packages like `libvirt-python` (if uncommented) can be installed successfully.
+
+### Poetry → pip Fallback Mechanism
+
+All workflows implement automatic fallback from Poetry to pip:
+
+```yaml
+- name: Install dependencies
+  run: |
+    # Try Poetry first
+    if [ -f pyproject.toml ] && command -v poetry &> /dev/null; then
+      poetry install --no-cache --no-root || {
+        # Fallback to pip if Poetry fails
+        pip install -r requirements.txt -c .github/constraints.txt
+      }
+    else
+      # Use pip directly if Poetry not available
+      pip install -r requirements.txt -c .github/constraints.txt
+    fi
+```
+
+**Benefits**:
+- Handles Poetry cache corruption gracefully
+- Ensures builds don't fail due to Poetry-specific issues
+- Maintains compatibility with both installation methods
+
+### Clear Error Messages
+
+When dependency installation fails, workflows now provide actionable error messages:
+
+```
+ERROR: pip installation failed. Check dependency conflicts.
+Hint: Ensure system packages (libvirt-dev, pkg-config) are installed.
+Hint: Check if any dependencies require specific system libraries.
+```
+
+This helps developers quickly identify and fix issues.
+
+### Handling Optional Dependencies
+
+The platform handles optional dependencies gracefully:
+
+1. **libvirt-python**: Commented out by default in `requirements.txt`
+   - System dependencies (libvirt-dev, pkg-config) are always installed in CI
+   - Uncomment in requirements.txt only if libvirt functionality is needed
+
+2. **Heavy ML dependencies**: Already included but use lazy loading
+   - Set `LAZY_LOAD_ML=1` to defer loading until first use
+   - Reduces startup time and memory usage
+
+3. **Feature-specific dependencies**: Controlled by environment variables
+   - `ENABLE_FEATURE_STORE=0/1`
+   - `ENABLE_HSM=0/1`
+   - `ENABLE_LIBVIRT=0/1`
+
+### CI Workflow Best Practices
+
+1. **Always use constraints file** to prevent version conflicts:
+   ```bash
+   pip install -r requirements.txt -c .github/constraints.txt
+   ```
+
+2. **Check for dependency conflicts** after installation:
+   ```bash
+   pip check || echo "WARNING: Dependency conflicts detected"
+   ```
+
+3. **Install critical packages** (self_fixing_engineer) in editable mode:
+   ```bash
+   pip install -e ./self_fixing_engineer
+   pip install -e ./omnicore_engine
+   ```
+
+4. **Verify critical imports** before running tests:
+   ```bash
+   python -c "import arbiter; print('arbiter:', arbiter.__file__)"
+   ```
+
+See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for detailed CI/CD troubleshooting guidance.

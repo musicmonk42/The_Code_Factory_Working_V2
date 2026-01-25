@@ -45,6 +45,23 @@ jobs:
           rm -rf /home/runner/.cache/pip/* /tmp/* || true
           df -h
           
+      - name: Install system dependencies
+        run: |
+          # Install system dependencies required by Python packages
+          # libvirt-dev and pkg-config: required by libvirt-python (if uncommented in requirements.txt)
+          echo "Installing system dependencies for Python packages..."
+          sudo apt-get update || {
+            echo "ERROR: apt-get update failed. Retrying..."
+            sleep 5
+            sudo apt-get update
+          }
+          sudo apt-get install -y libvirt-dev pkg-config || {
+            echo "WARNING: Failed to install libvirt-dev or pkg-config"
+            echo "This may cause issues if libvirt-python is required."
+            echo "To fix: Uncomment libvirt-python in requirements.txt and ensure system packages are installed."
+          }
+          echo "System dependencies installed successfully"
+          
       - name: Install linting dependencies
         env:
           PIP_NO_CACHE_DIR: "1"
@@ -88,6 +105,23 @@ jobs:
           rm -rf /home/runner/.cache/pip/* /tmp/* || true
           df -h
           
+      - name: Install system dependencies for Python packages
+        run: |
+          # Install system dependencies required by Python packages
+          # libvirt-dev and pkg-config: required by libvirt-python (if uncommented in requirements.txt)
+          echo "Installing system dependencies for Python packages..."
+          sudo apt-get update || {
+            echo "ERROR: apt-get update failed. Retrying..."
+            sleep 5
+            sudo apt-get update
+          }
+          sudo apt-get install -y libvirt-dev pkg-config || {
+            echo "WARNING: Failed to install libvirt-dev or pkg-config"
+            echo "This may cause issues if libvirt-python is required."
+            echo "To fix: Uncomment libvirt-python in requirements.txt and ensure system packages are installed."
+          }
+          echo "System dependencies installed successfully"
+          
       - name: Install unified platform dependencies
         env:
           PIP_NO_CACHE_DIR: "1"
@@ -97,10 +131,32 @@ jobs:
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           pip install --no-cache-dir -c .github/constraints.txt protobuf
-          # Install unified platform requirements first
-          if [ -f requirements.txt ]; then
-            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt
+          
+          # Install unified platform requirements with Poetry fallback
+          echo "=== Installing dependencies with Poetry fallback ==="
+          if [ -f pyproject.toml ] && command -v poetry &> /dev/null; then
+            echo "Attempting Poetry installation..."
+            poetry install --no-cache --no-root || {
+              echo "WARNING: Poetry installation failed. Falling back to pip..."
+              if [ -f requirements.txt ]; then
+                pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || {
+                  echo "ERROR: pip installation also failed. Check dependency conflicts."
+                  echo "Hint: Ensure system packages (libvirt-dev, pkg-config) are installed."
+                  exit 1
+                }
+              fi
+            }
+          else
+            echo "Poetry not available or pyproject.toml not found. Using pip..."
+            if [ -f requirements.txt ]; then
+              pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || {
+                echo "ERROR: pip installation failed. Check dependency conflicts."
+                echo "Hint: Ensure system packages (libvirt-dev, pkg-config) are installed."
+                exit 1
+              }
+            fi
           fi
+          
           # Install additional test dependencies (versions aligned with requirements.txt)
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest-cov \
@@ -179,6 +235,18 @@ jobs:
           sudo apt-get install -y redis-tools
           redis-cli --version
           
+      - name: Install system dependencies for Python packages
+        run: |
+          # Install system dependencies required by Python packages
+          # libvirt-dev and pkg-config: required by libvirt-python (if uncommented in requirements.txt)
+          echo "Installing system dependencies for Python packages..."
+          sudo apt-get install -y libvirt-dev pkg-config || {
+            echo "WARNING: Failed to install libvirt-dev or pkg-config"
+            echo "This may cause issues if libvirt-python is required."
+            echo "To fix: Uncomment libvirt-python in requirements.txt and ensure system packages are installed."
+          }
+          echo "System dependencies installed successfully"
+          
       - name: Wait for Redis to be ready
         run: |
           # Wait loop to ensure Redis service is fully available before running tests
@@ -202,10 +270,34 @@ jobs:
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           pip install --no-cache-dir -c .github/constraints.txt protobuf
-          # Install unified platform requirements first
-          if [ -f requirements.txt ]; then
-            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
+          
+          # Install unified platform requirements with Poetry fallback
+          echo "=== Installing dependencies with Poetry fallback ==="
+          if [ -f pyproject.toml ] && command -v poetry &> /dev/null; then
+            echo "Attempting Poetry installation..."
+            poetry install --no-cache --no-root || {
+              echo "WARNING: Poetry installation failed. Falling back to pip..."
+              if [ -f requirements.txt ]; then
+                pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || {
+                  echo "ERROR: pip installation also failed. Check dependency conflicts."
+                  echo "Hint: Ensure system packages (libvirt-dev, pkg-config) are installed."
+                  echo "Hint: Check if any dependencies require specific system libraries."
+                  exit 1
+                }
+              fi
+            }
+          else
+            echo "Poetry not available or pyproject.toml not found. Using pip..."
+            if [ -f requirements.txt ]; then
+              pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || {
+                echo "ERROR: pip installation failed. Check dependency conflicts."
+                echo "Hint: Ensure system packages (libvirt-dev, pkg-config) are installed."
+                echo "Hint: Check if any dependencies require specific system libraries."
+                exit 1
+              }
+            fi
           fi
+          
           # Install self_fixing_engineer package (contains arbiter - CRITICAL) with verbose output
           echo "Installing self_fixing_engineer package (contains arbiter)..."
           python -m pip install -v --no-cache-dir -c .github/constraints.txt -e ./self_fixing_engineer || {
@@ -335,6 +427,18 @@ jobs:
           sudo apt-get install -y redis-tools
           redis-cli --version
           
+      - name: Install system dependencies for Python packages
+        run: |
+          # Install system dependencies required by Python packages
+          # libvirt-dev and pkg-config: required by libvirt-python (if uncommented in requirements.txt)
+          echo "Installing system dependencies for Python packages..."
+          sudo apt-get install -y libvirt-dev pkg-config || {
+            echo "WARNING: Failed to install libvirt-dev or pkg-config"
+            echo "This may cause issues if libvirt-python is required."
+            echo "To fix: Uncomment libvirt-python in requirements.txt and ensure system packages are installed."
+          }
+          echo "System dependencies installed successfully"
+          
       - name: Wait for Redis to be ready
         run: |
           # Wait loop to ensure Redis service is fully available before running tests
@@ -358,10 +462,32 @@ jobs:
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           pip install --no-cache-dir -c .github/constraints.txt protobuf
-          # Install unified platform requirements first
-          if [ -f requirements.txt ]; then
-            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt
+          
+          # Install unified platform requirements with Poetry fallback
+          echo "=== Installing dependencies with Poetry fallback ==="
+          if [ -f pyproject.toml ] && command -v poetry &> /dev/null; then
+            echo "Attempting Poetry installation..."
+            poetry install --no-cache --no-root || {
+              echo "WARNING: Poetry installation failed. Falling back to pip..."
+              if [ -f requirements.txt ]; then
+                pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || {
+                  echo "ERROR: pip installation also failed. Check dependency conflicts."
+                  echo "Hint: Ensure system packages (libvirt-dev, pkg-config) are installed."
+                  exit 1
+                }
+              fi
+            }
+          else
+            echo "Poetry not available or pyproject.toml not found. Using pip..."
+            if [ -f requirements.txt ]; then
+              pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || {
+                echo "ERROR: pip installation failed. Check dependency conflicts."
+                echo "Hint: Ensure system packages (libvirt-dev, pkg-config) are installed."
+                exit 1
+              }
+            fi
           fi
+          
           # Install additional test dependencies
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest-cov \
