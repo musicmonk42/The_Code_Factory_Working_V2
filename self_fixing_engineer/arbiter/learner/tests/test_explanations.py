@@ -46,14 +46,23 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # For testing, we need to keep the in-memory exporter
-in_memory_exporter = InMemorySpanExporter()
+# NOTE: Moved to fixture to avoid expensive initialization during collection
 
-# Get tracer using centralized config
-tracer = get_tracer(__name__)
+
+@pytest.fixture(scope="module")
+def test_tracer():
+    """Create tracer for tests - deferred to fixture to avoid collection overhead."""
+    return get_tracer(__name__)
+
+
+@pytest.fixture(scope="module")
+def in_memory_exporter():
+    """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    return InMemorySpanExporter()
 
 
 @pytest.fixture(autouse=True)
-def setup_opentelemetry(mocker):
+def setup_opentelemetry(mocker, in_memory_exporter):
     in_memory_exporter.clear()
     # Mock the tracer provider to use our in-memory exporter for testing
     from opentelemetry.sdk.resources import Resource

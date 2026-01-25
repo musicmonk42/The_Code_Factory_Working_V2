@@ -41,11 +41,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Setup for OpenTelemetry tracing with in-memory exporter for testing
-in_memory_exporter = InMemorySpanExporter()
 
-# Get tracer directly
-tracer = get_tracer_safe(__name__)
 
 # Sample environment variables for tests
 SAMPLE_ENV = {
@@ -67,6 +63,24 @@ async def setup_env(mocker: MockerFixture):
     # Clear environment variables after tests
     for key in SAMPLE_ENV:
         os.environ.pop(key, None)
+
+
+@pytest.fixture(scope="module")
+def test_tracer():
+    """Create tracer for tests - deferred to fixture to avoid collection overhead."""
+    from arbiter.otel_config import get_tracer, get_tracer_safe
+    try:
+        return get_tracer(__name__)
+    except:
+        return get_tracer_safe(__name__)
+
+
+@pytest.fixture(scope="module")
+def in_memory_exporter():
+    """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+    return InMemorySpanExporter()
+
 
 
 @pytest_asyncio.fixture
@@ -130,7 +144,7 @@ async def kg_client(mocker: MockerFixture):
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def clear_metrics_and_traces():
+async def clear_metrics_and_traces(in_memory_exporter):
     """Clear Prometheus metrics and OpenTelemetry traces before each test."""
     # Clear traces
     in_memory_exporter.clear()
