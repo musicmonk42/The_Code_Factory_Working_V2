@@ -971,7 +971,7 @@ class RedactionFilter(logging.Filter):
             ),  # URL Param
         ]
 
-    def _sync_redact(self, data: Any, preserve_tuple: bool = False) -> Any:
+    def _sync_redact(self, data: Any) -> Any:
         if isinstance(data, str):
             for pattern in self.patterns:
                 data = pattern.sub("[REDACTED]", data)
