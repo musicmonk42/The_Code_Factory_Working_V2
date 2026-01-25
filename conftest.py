@@ -43,15 +43,13 @@ if os.environ.get("TESTING") == "1":
     }
     
     # Check if omnicore_engine.database and omnicore_engine.message_bus actually exist
-    # If they don't exist, we'll stub them (but we don't stub their parent)
-    try:
-        import omnicore_engine.database
-    except ImportError:
+    # WITHOUT importing them (which would trigger expensive initialization)
+    # Use find_spec to check module existence WITHOUT importing
+    # This avoids triggering expensive initialization during test collection
+    if importlib.util.find_spec("omnicore_engine.database") is None:
         _stub_modules['omnicore_engine.database'] = 'omnicore_engine.database'
     
-    try:
-        import omnicore_engine.message_bus  
-    except ImportError:
+    if importlib.util.find_spec("omnicore_engine.message_bus") is None:
         _stub_modules['omnicore_engine.message_bus'] = 'omnicore_engine.message_bus'
 
     def _stub_getattr(name):
