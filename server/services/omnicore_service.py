@@ -71,6 +71,14 @@ class OmniCoreService:
             "clarifier": False,
         }
         
+        # Track LLM provider status
+        self._llm_status = {
+            "provider": None,
+            "configured": False,
+            "validated": False,
+            "error": None,
+        }
+        
         # Initialize core OmniCore components
         self._message_bus = None
         self._plugin_registry = None
@@ -82,6 +90,9 @@ class OmniCoreService:
             "metrics": False,
             "audit": False,
         }
+        
+        # Validate LLM provider configuration
+        self._validate_llm_configuration()
         
         # Try to import and cache agent modules
         self._load_agents()
@@ -102,6 +113,90 @@ class OmniCoreService:
                     f"STRICT_MODE enabled but agents unavailable: {', '.join(unavailable)}. "
                     "Check LLM configuration and dependencies."
                 )
+        
+        # Log system state and what triggers agent execution
+        self._log_system_ready_state()
+    
+    def _validate_llm_configuration(self):
+        """
+        Validate LLM provider configuration and log status.
+        
+        This helps diagnose issues where agents load but fail silently
+        due to missing or invalid API keys.
+        """
+        provider = None
+        api_key_configured = False
+        
+        if self.llm_config:
+            provider = self.llm_config.default_llm_provider
+            api_key_configured = self.llm_config.is_provider_configured(provider)
+            
+            if not api_key_configured:
+                # Try auto-detection
+                auto_provider = detect_available_llm_provider()
+                if auto_provider:
+                    provider = auto_provider
+                    api_key_configured = True
+                    logger.info(f"Auto-detected LLM provider: {auto_provider}")
+        else:
+            # Check environment directly
+            auto_provider = detect_available_llm_provider()
+            if auto_provider:
+                provider = auto_provider
+                api_key_configured = True
+        
+        self._llm_status["provider"] = provider or "openai"
+        self._llm_status["configured"] = api_key_configured
+        
+        if api_key_configured:
+            logger.info(f"✓ LLM provider '{provider}' is configured with API key")
+        else:
+            logger.warning(
+                f"⚠ LLM provider '{provider or 'openai'}' API key NOT configured. "
+                "Agents will load but may fail when executing jobs."
+            )
+            logger.warning(
+                "To configure an LLM provider, set one of the following environment variables:\n"
+                "  - OPENAI_API_KEY for OpenAI (GPT-4)\n"
+                "  - ANTHROPIC_API_KEY for Anthropic (Claude)\n"
+                "  - XAI_API_KEY or GROK_API_KEY for xAI (Grok)\n"
+                "  - GOOGLE_API_KEY for Google (Gemini)\n"
+                "  - OLLAMA_HOST for Ollama (local LLM)"
+            )
+            self._llm_status["error"] = "API key not configured"
+    
+    def _log_system_ready_state(self):
+        """
+        Log the system's ready state and clarify what triggers agent execution.
+        
+        This helps users understand that the system is idle and waiting for input.
+        """
+        logger.info("=" * 60)
+        logger.info("SYSTEM STATUS: Ready and waiting for input")
+        logger.info("=" * 60)
+        
+        # Log LLM status
+        if self._llm_status["configured"]:
+            logger.info(f"  LLM Provider: {self._llm_status['provider']} (configured)")
+        else:
+            logger.warning(f"  LLM Provider: {self._llm_status['provider']} (NOT CONFIGURED - jobs will fail)")
+        
+        # Log agent status
+        available_agents = [k for k, v in self.agents_available.items() if v]
+        logger.info(f"  Available Agents: {', '.join(available_agents) if available_agents else 'None'}")
+        
+        # Clarify system behavior
+        logger.info("")
+        logger.info("IMPORTANT: Agents are now PASSIVE and waiting for jobs.")
+        logger.info("No code will be generated until you submit a job request.")
+        logger.info("")
+        logger.info("To trigger code generation, use one of these methods:")
+        logger.info("  1. POST /api/jobs/ - Create a new job")
+        logger.info("  2. POST /api/generator/upload - Upload a README file")
+        logger.info("  3. POST /api/omnicore/route - Route a job directly")
+        logger.info("")
+        logger.info("Monitor job status at: GET /api/jobs/{job_id}/progress")
+        logger.info("=" * 60)
     
     def _load_agents(self):
         """
@@ -370,6 +465,11 @@ class OmniCoreService:
             logger.info(f"OmniCore components available: {', '.join(available_components)}")
         if unavailable_components:
             logger.info(f"OmniCore components unavailable (using fallback): {', '.join(unavailable_components)}")
+            # Clarify that fallback mode doesn't block task execution
+            logger.info(
+                "Note: Fallback mode is active for unavailable components. "
+                "Task execution will proceed normally - only logging/audit features may be limited."
+            )
     
     def _check_agent_available(self, agent_name: str) -> Tuple[bool, Optional[str]]:
         """
@@ -390,6 +490,49 @@ class OmniCoreService:
                 error_msg += " and LLM provider is configured (set API keys in .env)"
             return False, error_msg
         return True, None
+    
+    def get_llm_status(self) -> Dict[str, Any]:
+        """
+        Get the current LLM provider status.
+        
+        Returns:
+            Dictionary with LLM provider status information
+        """
+        return {
+            "provider": self._llm_status.get("provider", "unknown"),
+            "configured": self._llm_status.get("configured", False),
+            "validated": self._llm_status.get("validated", False),
+            "error": self._llm_status.get("error"),
+            "available_providers": (
+                self.llm_config.get_available_providers() if self.llm_config else []
+            ),
+        }
+    
+    def get_system_status(self) -> Dict[str, Any]:
+        """
+        Get comprehensive system status including agents and LLM.
+        
+        Returns:
+            Dictionary with full system status
+        """
+        return {
+            "state": "ready_idle",
+            "message": "System is ready and waiting for job requests",
+            "llm_status": self.get_llm_status(),
+            "agents": {
+                "available": [k for k, v in self.agents_available.items() if v],
+                "unavailable": [k for k, v in self.agents_available.items() if not v],
+            },
+            "components": {
+                "available": [k for k, v in self._omnicore_components_available.items() if v],
+                "unavailable": [k for k, v in self._omnicore_components_available.items() if not v],
+            },
+            "instructions": {
+                "to_generate_code": "POST /api/jobs/ with requirements",
+                "to_upload_readme": "POST /api/generator/upload",
+                "to_check_status": "GET /api/jobs/{job_id}/progress",
+            },
+        }
 
     async def route_job(
         self,
@@ -414,15 +557,20 @@ class OmniCoreService:
             >>> # from omnicore_engine.message_bus import publish_message
             >>> # await publish_message(topic=target_module, payload=payload)
         """
+        # Log intent parsing event when job is received
+        logger.info(f"Intent Parsed: Job {job_id} received from {source_module} targeting {target_module}")
+        logger.info(f"Job Received: {job_id} with action: {payload.get('action', 'unknown')}")
+        
         logger.info(f"Routing job {job_id} from {source_module} to {target_module}")
 
         # If target is generator, dispatch to actual generator agents
         if target_module == "generator":
             action = payload.get("action")
-            logger.info(f"Dispatching generator action: {action}")
+            logger.info(f"Task Dispatched: Job {job_id} dispatching generator action: {action}")
             
             try:
                 result = await self._dispatch_generator_action(job_id, action, payload)
+                logger.info(f"Task Completed: Job {job_id} action {action} finished successfully")
                 return {
                     "job_id": job_id,
                     "routed": True,
@@ -431,7 +579,7 @@ class OmniCoreService:
                     "data": result,
                 }
             except Exception as e:
-                logger.error(f"Error dispatching generator action {action}: {e}", exc_info=True)
+                logger.error(f"Task Failed: Job {job_id} action {action} failed: {e}", exc_info=True)
                 return {
                     "job_id": job_id,
                     "routed": False,

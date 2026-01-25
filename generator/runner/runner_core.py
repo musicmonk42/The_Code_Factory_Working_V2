@@ -533,6 +533,7 @@ class Runner(ABC):
         # [NEW] Background task references
         self._monitor_task: Optional[asyncio.Task] = None
         self._distributed_task: Optional[asyncio.Task] = None
+        self._queue_processor_task: Optional[asyncio.Task] = None
 
         # Backwards-compatible background task for existing integrations/tests
         try:
@@ -563,11 +564,27 @@ class Runner(ABC):
         if self._monitor_task is None or self._monitor_task.done():
             self._monitor_task = asyncio.create_task(self._monitor_queue())
 
-        # 3. Start distributed worker if configured
+        # 3. Start queue processor for background task execution
+        if self._queue_processor_task is None or self._queue_processor_task.done():
+            self._queue_processor_task = asyncio.create_task(self._process_queue())
+            logger.info("Queue processor started - tasks will be automatically processed")
+
+        # 4. Start distributed worker if configured
         if self.config.distributed and (
             self._distributed_task is None or self._distributed_task.done()
         ):
             self._distributed_task = asyncio.create_task(self._distributed_worker())
+
+        # Log queue status on startup
+        if self.queue:
+            logger.info(
+                json.dumps({
+                    "event": "startup_queue_status",
+                    "tasks_in_queue": len(self.queue),
+                    "task_ids": [pt.task_id for pt in self.queue],
+                    "message": "Tasks loaded from persisted queue will be processed"
+                })
+            )
 
         logger.info("Runner background services started.")
 
@@ -578,7 +595,7 @@ class Runner(ABC):
         """
         logger.info("Stopping Runner background services...")
 
-        tasks_to_cancel = [self._monitor_task, self._distributed_task]
+        tasks_to_cancel = [self._monitor_task, self._distributed_task, self._queue_processor_task]
         # Include legacy alias if present
         bg_task = getattr(self, "background_task", None)
         if bg_task is not None:
@@ -592,6 +609,7 @@ class Runner(ABC):
 
         self._monitor_task = None
         self._distributed_task = None
+        self._queue_processor_task = None
         if hasattr(self, "background_task"):
             self.background_task = None
 
@@ -772,6 +790,136 @@ class Runner(ABC):
                 await asyncio.sleep(
                     self.config.metrics_interval_seconds
                 )  # Avoid fast loop on error
+
+    async def _process_queue(self) -> None:
+        """
+        Background worker that processes tasks from the queue.
+        
+        This method runs continuously and processes tasks that have been
+        enqueued via the enqueue() method or loaded from the persisted queue.
+        Tasks are processed in priority order (lower priority number = higher priority).
+        """
+        logger.info(
+            json.dumps({
+                "event": "queue_processor_started",
+                "message": "Queue processor is now active and will process enqueued tasks"
+            })
+        )
+        
+        # Configuration for queue processing
+        poll_interval = getattr(self.config, "queue_poll_interval_seconds", 1.0)
+        max_concurrent_tasks = getattr(self.config, "max_concurrent_tasks", 3)
+        
+        # Track running tasks
+        running_tasks: Dict[str, asyncio.Task] = {}
+        
+        while True:
+            try:
+                # Clean up completed tasks
+                completed_task_ids = [
+                    task_id for task_id, task in running_tasks.items()
+                    if task.done()
+                ]
+                for task_id in completed_task_ids:
+                    try:
+                        # Get result to propagate any exceptions to logs
+                        running_tasks[task_id].result()
+                    except Exception as e:
+                        logger.error(f"Task {task_id} failed with error: {e}", exc_info=True)
+                    del running_tasks[task_id]
+                
+                # Check if we can process more tasks
+                if len(running_tasks) >= max_concurrent_tasks:
+                    await asyncio.sleep(poll_interval)
+                    continue
+                
+                # Check if there are tasks in the queue
+                if not self.queue:
+                    await asyncio.sleep(poll_interval)
+                    continue
+                
+                # Pop the highest priority task (lowest number)
+                prio_task = heapq.heappop(self.queue)
+                task_payload = prio_task.task
+                task_id = task_payload.task_id or str(uuid.uuid4())
+                task_payload.task_id = task_id
+                
+                # Log task dispatch event
+                logger.info(
+                    json.dumps({
+                        "event": "task_dispatched",
+                        "task_id": task_id,
+                        "priority": prio_task.priority,
+                        "remaining_queue_size": len(self.queue),
+                        "message": f"Task {task_id} dispatched for execution"
+                    })
+                )
+                
+                # Create and track the execution task
+                execution_task = asyncio.create_task(
+                    self._execute_task_safely(task_payload)
+                )
+                running_tasks[task_id] = execution_task
+                
+                # Update queue persistence after removing task
+                self._persist_queue()
+                
+            except asyncio.CancelledError:
+                logger.info("Queue processor task cancelled.")
+                # Cancel all running tasks
+                for task_id, task in running_tasks.items():
+                    if not task.done():
+                        task.cancel()
+                break
+            except Exception as e:
+                logger.error(f"Error in queue processor: {e}", exc_info=True)
+                await asyncio.sleep(poll_interval)
+    
+    async def _execute_task_safely(self, task_payload: TaskPayload) -> None:
+        """
+        Safely execute a task and handle any errors.
+        
+        This wrapper ensures that task execution errors are properly logged
+        and don't crash the queue processor.
+        """
+        task_id = task_payload.task_id
+        try:
+            logger.info(
+                json.dumps({
+                    "event": "task_execution_started",
+                    "task_id": task_id,
+                    "dry_run": task_payload.dry_run,
+                })
+            )
+            
+            # Run the actual test execution
+            result = await self.run_tests(task_payload)
+            
+            logger.info(
+                json.dumps({
+                    "event": "task_execution_completed",
+                    "task_id": task_id,
+                    "status": result.status,
+                })
+            )
+            
+        except Exception as e:
+            logger.error(
+                json.dumps({
+                    "event": "task_execution_failed",
+                    "task_id": task_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                }),
+                exc_info=True
+            )
+            # Update task status to failed
+            await self._update_task_status(
+                task_id,
+                "failed",
+                finished_at=time.time(),
+                error={"error_code": "EXECUTION_ERROR", "message": str(e)},
+            )
 
     async def _distributed_worker(self) -> None:
         """Worker to send tasks to a distributed runner endpoint."""
@@ -1277,7 +1425,10 @@ class Runner(ABC):
         return "pytest"
 
     def _persist_queue(self) -> None:
-        queue_file = "runner_queue.json"
+        # Use Path for proper cross-platform path handling
+        # Save queue file in the generator directory for consistency
+        generator_dir = Path(__file__).parent.parent
+        queue_file = generator_dir / "runner_queue.json"
         tasks_list = []
         tmp_queue = []
         while self.queue:
@@ -1294,7 +1445,7 @@ class Runner(ABC):
         try:
             with open(queue_file, "w", encoding="utf-8") as f:
                 json.dump(tasks_list, f, indent=2)
-            logger.info("Task queue persisted successfully for crash recovery.")
+            logger.info(f"Task queue persisted successfully to {queue_file} for crash recovery.")
         except Exception as e:
             logger.error(f"Failed to persist task queue: {e}", exc_info=True)
             RUN_ERRORS.labels(
@@ -1304,8 +1455,12 @@ class Runner(ABC):
             ).inc()
 
     def _load_persisted_queue(self) -> None:
-        queue_file = "runner_queue.json"
-        if os.path.exists(queue_file):
+        # Use Path for proper cross-platform path handling
+        # Load queue file from the generator directory for consistency
+        generator_dir = Path(__file__).parent.parent
+        queue_file = generator_dir / "runner_queue.json"
+        
+        if queue_file.exists():
             try:
                 with open(queue_file, "r", encoding="utf-8") as f:
                     tasks_list = json.load(f)
@@ -1314,8 +1469,17 @@ class Runner(ABC):
                         self.queue,
                         PrioritizedTask(t["priority"], TaskPayload(**t["task"])),
                     )
-                os.remove(queue_file)
-                logger.info(f"Loaded {len(tasks_list)} tasks from persisted queue.")
+                logger.info(
+                    json.dumps({
+                        "event": "persisted_queue_loaded",
+                        "tasks_loaded": len(tasks_list),
+                        "task_ids": [t["task"].get("task_id", "unknown") for t in tasks_list],
+                        "queue_file": str(queue_file),
+                        "message": f"Loaded {len(tasks_list)} tasks from persisted queue - they will be processed automatically"
+                    })
+                )
+                # Remove the queue file after successful load to prevent duplicate processing
+                queue_file.unlink()
             except Exception as e:
                 logger.error(
                     f"Failed to load persisted queue from '{queue_file}': {e}. Starting with empty queue.",
@@ -1327,8 +1491,12 @@ class Runner(ABC):
                     instance_id=self.instance_id,
                 ).inc()
             finally:
-                if os.path.exists(queue_file):
-                    os.remove(queue_file)
+                # Clean up queue file if it still exists
+                if queue_file.exists():
+                    try:
+                        queue_file.unlink()
+                    except Exception:
+                        pass
 
     def _update_task_status_sync(
         self, task_id: str, status: str, **kwargs: Any
