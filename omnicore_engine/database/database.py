@@ -137,7 +137,7 @@ def _get_settings():
                         if hasattr(config, alt):
                             try:
                                 setattr(config, attr_name, getattr(config, alt))
-                            except (AttributeError, TypeError):
+                            except (AttributeError, TypeError, ValueError):
                                 pass  # Some config objects may not allow setattr
                             break
         

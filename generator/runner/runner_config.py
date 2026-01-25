@@ -112,6 +112,10 @@ class RunnerConfig(BaseModel):
         "",
         description="URL for distributed coordinator or remote config fetch endpoint.",
     )
+    redis_url: str = Field(
+        "redis://localhost:6379",
+        description="Redis URL for distributed coordination, caching, and LLMClient connectivity.",
+    )
 
     # Custom Commands
     custom_setup: str = Field(

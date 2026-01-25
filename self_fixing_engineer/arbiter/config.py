@@ -1063,6 +1063,11 @@ class ArbiterConfig(BaseSettings):
         """Alias for DB_PATH for backward compatibility."""
         return self.DB_PATH
 
+    @property
+    def log_level(self) -> str:
+        """Lowercase alias for LOG_LEVEL for compatibility with components expecting lowercase config names."""
+        return self.LOG_LEVEL
+
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def load_persona_dict() -> Dict[str, str]:
