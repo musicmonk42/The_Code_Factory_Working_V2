@@ -214,6 +214,13 @@ jobs:
           rm -rf /home/runner/.cache/pip/* /tmp/* || true
           df -h
           
+      - name: Diagnose test collection issues
+        if: always()  # Run even if previous steps failed
+        run: |
+          chmod +x .github/scripts/diagnose_test_collection.sh
+          ./.github/scripts/diagnose_test_collection.sh || true
+        continue-on-error: true
+          
       - name: Run all tests from repository root
         env:
           TESTING: "1"
@@ -354,6 +361,20 @@ jobs:
           
           echo ""
           echo "✓ All tests completed successfully"
+          
+      - name: Profile test collection (on failure)
+        if: failure()
+        run: |
+          echo "=== Running test collection with CPU profiling ==="
+          timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
+            --collect-only --quiet --import-mode=importlib --tb=short \
+            --ignore=self_fixing_engineer/simulation/tests 2>&1 || true
+          
+          if [ -f collection_profile.stats ]; then
+            echo "=== Top 30 CPU-consuming functions ==="
+            python -c "import pstats; p = pstats.Stats('collection_profile.stats'); p.sort_stats('cumulative').print_stats(30)"
+          fi
+        continue-on-error: true
           
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
