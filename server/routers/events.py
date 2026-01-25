@@ -33,6 +33,17 @@ def get_omnicore_service() -> OmniCoreService:
 active_connections: list[WebSocket] = []
 
 
+def _remove_connection_safely(websocket: WebSocket) -> None:
+    """
+    Safely remove a WebSocket from active connections.
+    
+    Args:
+        websocket: WebSocket connection to remove
+    """
+    if websocket in active_connections:
+        active_connections.remove(websocket)
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """
@@ -183,8 +194,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     break
 
     except WebSocketDisconnect:
-        if websocket in active_connections:
-            active_connections.remove(websocket)
+        _remove_connection_safely(websocket)
         logger.info(
             f"WebSocket client disconnected. Total connections: {len(active_connections)}"
         )
@@ -196,8 +206,7 @@ async def websocket_endpoint(websocket: WebSocket):
             f"Active connections: {connection_count}",
             exc_info=True
         )
-        if websocket in active_connections:
-            active_connections.remove(websocket)
+        _remove_connection_safely(websocket)
 
 
 async def event_stream(
@@ -377,5 +386,4 @@ async def broadcast_event(event: EventMessage):
 
     # Remove disconnected clients
     for connection in disconnected:
-        if connection in active_connections:
-            active_connections.remove(connection)
+        _remove_connection_safely(connection)

@@ -141,11 +141,11 @@ function connectWebSocket() {
     };
     
     websocket.onerror = (error) => {
-        const errorMsg = error.message || 'Unknown error';
-        const errorCode = error.code || 'N/A';
+        // Note: Browser WebSocket error events typically don't provide detailed error properties
+        // The close event (onclose) will provide the actual status code and reason
         console.error('WebSocket error:', error);
-        console.error('Error details:', { code: errorCode, message: errorMsg, type: error.type });
-        addEvent('System', `Connection error (Code: ${errorCode}, ${errorMsg})`, 'error');
+        console.error('Error details:', { type: error.type, target: error.target?.url });
+        addEvent('System', `Connection error - Check console for details`, 'error');
     };
     
     websocket.onclose = (event) => {
