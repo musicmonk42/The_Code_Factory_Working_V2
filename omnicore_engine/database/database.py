@@ -563,7 +563,14 @@ class Database:
                     fallback = _create_fallback_settings()
                     for attr in missing_attrs:
                         if hasattr(fallback, attr):
-                            setattr(config, attr, getattr(fallback, attr))
+                            # Safety check: only set attribute if config supports it
+                            if hasattr(config, attr) or hasattr(config, '__dict__'):
+                                try:
+                                    setattr(config, attr, getattr(fallback, attr))
+                                except (AttributeError, TypeError, ValueError):
+                                    # Config object may not allow setattr for this attribute
+                                    logger.debug(f"Could not set attribute {attr} on config")
+                                    pass
                 
                 if config_valid:
                     # Initialize PolicyEngine with validated config

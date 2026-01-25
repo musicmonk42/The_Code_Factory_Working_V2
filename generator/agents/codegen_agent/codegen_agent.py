@@ -111,7 +111,7 @@ class JsonConsoleAuditLogger(AuditLogger):
             "audit_logger": "JsonConsoleAuditLogger",
             "output_target": "console",
         }
-        log_audit_event(action, enriched_details)
+        await log_audit_event(action, enriched_details)
         # Also output directly to console as JSON for immediate visibility
         audit_record = {
             "timestamp": datetime.now().isoformat(),
@@ -177,7 +177,7 @@ class FileAuditLogger(AuditLogger):
             "audit_logger": "FileAuditLogger",
             "output_target": self.log_file,
         }
-        log_audit_event(action, enriched_details)
+        await log_audit_event(action, enriched_details)
 
         # Also write directly to the audit log file if handler is available
         if self.file_handler:
@@ -715,14 +715,14 @@ async def hitl_review(
                     resp.raise_for_status()
                     webhook_sent = True
                     # --- Audit/Logging Change: Use log_audit_event ---
-                    log_audit_event(
+                    await log_audit_event(
                         "HITLWebhookSent", {"req_hash": req_hash, "attempt": i + 1}
                     )
                     # --- End Audit/Logging Change ---
                     break
         except Exception as e:
             # --- Audit/Logging Change: Use log_audit_event ---
-            log_audit_event(
+            await log_audit_event(
                 "HITLWebhookFailed",
                 {"req_hash": req_hash, "attempt": i + 1, "error": str(e)},
             )
@@ -738,7 +738,7 @@ async def hitl_review(
 
     # Wait for review submission via Pub/Sub
     # --- Audit/Logging Change: Use log_audit_event ---
-    log_audit_event("HITLPubSubSubscribed", {"req_hash": req_hash})
+    await log_audit_event("HITLPubSubSubscribed", {"req_hash": req_hash})
     # --- End Audit/Logging Change ---
     pubsub = redis_client.pubsub()
     await pubsub.subscribe(f"hitl:review_status:{req_hash}")
@@ -934,7 +934,7 @@ if PLUGIN_AVAILABLE:
                         )
                         if violations:
                             # --- Audit/Logging Change: Use log_audit_event ---
-                            log_audit_event(
+                            await log_audit_event(
                                 "Compliance Violation", {"violations": violations}
                             )
                             # --- End Audit/Logging Change ---
@@ -957,7 +957,7 @@ if PLUGIN_AVAILABLE:
                         )
                     if status != "approved":
                         # --- Audit/Logging Change: Use log_audit_event ---
-                        log_audit_event("HITL Rejection", {"feedback": feedback})
+                        await log_audit_event("HITL Rejection", {"feedback": feedback})
                         # --- End Audit/Logging Change ---
                         return {
                             "error.txt": f"Code rejected by human review. Feedback: {feedback}"
@@ -967,7 +967,7 @@ if PLUGIN_AVAILABLE:
                     status, feedback = ("approved", None)
 
                 # --- Audit/Logging Change: Use log_audit_event ---
-                log_audit_event(
+                await log_audit_event(
                     "Code Generation Completed",
                     {"files": list(code_files.keys()), "model": backend_used},
                 )
@@ -977,7 +977,7 @@ if PLUGIN_AVAILABLE:
             except Exception as e:
                 logger.exception(f"Code generation failed: {e}")
                 # --- Audit/Logging Change: Use log_audit_event ---
-                log_audit_event(
+                await log_audit_event(
                     "Code Generation Failed", {"error": str(e), "traceback": repr(e)}
                 )
                 # --- End Audit/Logging Change ---
@@ -1131,7 +1131,7 @@ else:
                         )
                         if violations:
                             # --- Audit/Logging Change: Use log_audit_event ---
-                            log_audit_event(
+                            await log_audit_event(
                                 "Compliance Violation", {"violations": violations}
                             )
                             # --- End Audit/Logging Change ---
@@ -1154,7 +1154,7 @@ else:
                         )
                     if status != "approved":
                         # --- Audit/Logging Change: Use log_audit_event ---
-                        log_audit_event("HITL Rejection", {"feedback": feedback})
+                        await log_audit_event("HITL Rejection", {"feedback": feedback})
                         # --- End Audit/Logging Change ---
                         return {
                             "error.txt": f"Code rejected by human review. Feedback: {feedback}"
@@ -1164,7 +1164,7 @@ else:
                     status, feedback = ("approved", None)
 
                 # --- Audit/Logging Change: Use log_audit_event ---
-                log_audit_event(
+                await log_audit_event(
                     "Code Generation Completed",
                     {"files": list(code_files.keys()), "model": backend_used},
                 )
@@ -1174,7 +1174,7 @@ else:
             except Exception as e:
                 logger.exception(f"Code generation failed: {e}")
                 # --- Audit/Logging Change: Use log_audit_event ---
-                log_audit_event(
+                await log_audit_event(
                     "Code Generation Failed", {"error": str(e), "traceback": repr(e)}
                 )
                 # --- End Audit/Logging Change ---
@@ -1290,7 +1290,7 @@ async def submit_review(review_submission: Dict[str, Any]):
 
     # Best-effort: in real deployment this would persist feedback
     # Here we just log it.
-    log_audit_event(
+    await log_audit_event(
         "HITL Review Submitted",
         {
             "req_hash": req_hash,

@@ -45,7 +45,7 @@ except ImportError as e:
     # Fallback stubs for degraded / test environments.
     logging.critical(f"CRITIQUE AGENT FAILED TO LOAD RUNNER DEPENDENCIES: {e}")
 
-    def log_audit_event(*args, **kwargs) -> None:
+    async def log_audit_event(*args, **kwargs) -> None:
         logging.warning("Audit logging disabled.")
 
     def scan_for_vulnerabilities(*args, **kwargs):
@@ -204,12 +204,16 @@ CRITIQUE_VULNERABILITIES_FOUND = _get_or_create_metric(
 
 # Audit Logger wrapper
 class JsonConsoleAuditLogger:
-    def log_action(self, *args, **kwargs) -> None:
-        log_audit_event(*args, **kwargs)
+    async def log_action(self, *args, **kwargs) -> None:
+        await log_audit_event(*args, **kwargs)
 
 
 _audit_logger = JsonConsoleAuditLogger()
-log_action = _audit_logger.log_action
+
+
+async def log_action(*args, **kwargs) -> None:
+    """Async wrapper for audit logging."""
+    await _audit_logger.log_action(*args, **kwargs)
 
 
 # --- Production-Ready Configuration Schema ---
@@ -994,7 +998,7 @@ async def resilient_step(
                     )
                     raise RuntimeError(f"Triggering self-healing retry: {score}")
 
-                log_action(
+                await log_action(
                     "step_success",
                     {
                         "step": step_name,
@@ -1415,7 +1419,7 @@ async def orchestrate_critique_pipeline(
         results["code_files"] = code_files
         # --- END FIX ---
 
-        log_action(
+        await log_action(
             "Critique Pipeline Completed",
             {
                 "final_results_summary": {

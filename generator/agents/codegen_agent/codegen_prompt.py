@@ -78,7 +78,7 @@ except ImportError:
                 "Using dummy log_audit_event as runner utility is unavailable."
             )
 
-    def log_audit_event(*args, **kwargs):
+    async def log_audit_event(*args, **kwargs):
         logging.warning("Using dummy log_audit_event as runner utility is unavailable.")
 
     def redact_secrets(text):
@@ -730,7 +730,7 @@ async def build_code_generation_prompt(
                                 ].strip()
                         prompt += f"\n\n--- Self-Correction Advisory ---\n{critique}\n--- End Advisory ---"
                         # --- Logging Change: Replace audit_logger.log_action with log_audit_event ---
-                        log_audit_event("Prompt Self-Refined", {"refinement": critique})
+                        await log_audit_event("Prompt Self-Refined", {"refinement": critique})
                         # --- End Logging Change ---
                     except Exception as e:
                         logger.error(f"Meta-LLM critique failed: {e}")
@@ -749,7 +749,7 @@ async def build_code_generation_prompt(
                 )
 
             # --- Logging Change: Replace audit_logger.log_action with log_audit_event ---
-            log_audit_event(
+            await log_audit_event(
                 "Code Generation Prompt Built",
                 {
                     "prompt_length": len(prompt),
