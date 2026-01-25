@@ -145,14 +145,21 @@ class OmniCoreService:
                 provider = auto_provider
                 api_key_configured = True
         
-        self._llm_status["provider"] = provider or "openai"
+        # Use explicit status when no provider is configured
+        if api_key_configured:
+            self._llm_status["provider"] = provider
+        else:
+            # Keep the intended provider for diagnostics, but indicate it's not configured
+            self._llm_status["provider"] = provider or "none"
+        
         self._llm_status["configured"] = api_key_configured
         
         if api_key_configured:
             logger.info(f"✓ LLM provider '{provider}' is configured with API key")
         else:
+            intended_provider = provider or "openai (default)"
             logger.warning(
-                f"⚠ LLM provider '{provider or 'openai'}' API key NOT configured. "
+                f"⚠ LLM provider '{intended_provider}' API key NOT configured. "
                 "Agents will load but may fail when executing jobs."
             )
             logger.warning(

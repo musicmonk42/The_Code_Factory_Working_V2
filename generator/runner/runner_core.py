@@ -109,6 +109,34 @@ RUNNER_LABEL_BACKEND = "backend"
 RUNNER_LABEL_FRAMEWORK = "framework"
 RUNNER_LABEL_INSTANCE_ID = "instance_id"
 
+# --- Constants for queue processing ---
+DEFAULT_QUEUE_POLL_INTERVAL_SECONDS = 1.0
+DEFAULT_MAX_CONCURRENT_TASKS = 3
+
+# --- Queue persistence configuration ---
+# The queue file path can be configured via environment variable for containerized environments
+# Falls back to the generator directory if not specified
+DEFAULT_QUEUE_FILE_NAME = "runner_queue.json"
+
+def _get_queue_file_path() -> Path:
+    """
+    Get the path to the queue persistence file.
+    
+    Supports configuration via:
+    1. RUNNER_QUEUE_FILE environment variable (absolute or relative path)
+    2. Default: generator/runner_queue.json
+    
+    Returns:
+        Path object for the queue file
+    """
+    env_path = os.environ.get("RUNNER_QUEUE_FILE")
+    if env_path:
+        return Path(env_path)
+    
+    # Default to generator directory
+    generator_dir = Path(__file__).parent.parent
+    return generator_dir / DEFAULT_QUEUE_FILE_NAME
+
 # --- Expanded Frameworks with auto-detection logic ---
 # Gold Standard: Ensure parsers are directly callable and return schema objects (via decorators in parsers.py)
 FRAMEWORKS: Dict[str, Dict[str, Any]] = {
@@ -806,9 +834,9 @@ class Runner(ABC):
             })
         )
         
-        # Configuration for queue processing
-        poll_interval = getattr(self.config, "queue_poll_interval_seconds", 1.0)
-        max_concurrent_tasks = getattr(self.config, "max_concurrent_tasks", 3)
+        # Configuration for queue processing - use constants as defaults
+        poll_interval = getattr(self.config, "queue_poll_interval_seconds", DEFAULT_QUEUE_POLL_INTERVAL_SECONDS)
+        max_concurrent_tasks = getattr(self.config, "max_concurrent_tasks", DEFAULT_MAX_CONCURRENT_TASKS)
         
         # Track running tasks
         running_tasks: Dict[str, asyncio.Task] = {}
@@ -840,9 +868,23 @@ class Runner(ABC):
                 
                 # Pop the highest priority task (lowest number)
                 prio_task = heapq.heappop(self.queue)
-                task_payload = prio_task.task
-                task_id = task_payload.task_id or str(uuid.uuid4())
-                task_payload.task_id = task_id
+                original_payload = prio_task.task
+                
+                # Create a copy of the task payload to avoid mutating the original
+                # This ensures the original payload remains unchanged if used elsewhere
+                task_payload = TaskPayload(
+                    task_id=original_payload.task_id or str(uuid.uuid4()),
+                    test_files=original_payload.test_files,
+                    code_files=original_payload.code_files,
+                    output_path=original_payload.output_path,
+                    command=original_payload.command,
+                    timeout=original_payload.timeout,
+                    dry_run=original_payload.dry_run,
+                    priority=original_payload.priority,
+                    tags=original_payload.tags,
+                    environment=original_payload.environment,
+                )
+                task_id = task_payload.task_id
                 
                 # Log task dispatch event
                 logger.info(
@@ -1425,10 +1467,12 @@ class Runner(ABC):
         return "pytest"
 
     def _persist_queue(self) -> None:
-        # Use Path for proper cross-platform path handling
-        # Save queue file in the generator directory for consistency
-        generator_dir = Path(__file__).parent.parent
-        queue_file = generator_dir / "runner_queue.json"
+        """
+        Persist the task queue to disk for crash recovery.
+        
+        Uses configurable path via RUNNER_QUEUE_FILE environment variable.
+        """
+        queue_file = _get_queue_file_path()
         tasks_list = []
         tmp_queue = []
         while self.queue:
@@ -1443,6 +1487,8 @@ class Runner(ABC):
             heapq.heappush(self.queue, pt)
 
         try:
+            # Ensure parent directory exists
+            queue_file.parent.mkdir(parents=True, exist_ok=True)
             with open(queue_file, "w", encoding="utf-8") as f:
                 json.dump(tasks_list, f, indent=2)
             logger.info(f"Task queue persisted successfully to {queue_file} for crash recovery.")
@@ -1455,10 +1501,13 @@ class Runner(ABC):
             ).inc()
 
     def _load_persisted_queue(self) -> None:
-        # Use Path for proper cross-platform path handling
-        # Load queue file from the generator directory for consistency
-        generator_dir = Path(__file__).parent.parent
-        queue_file = generator_dir / "runner_queue.json"
+        """
+        Load persisted queue from disk on startup.
+        
+        Uses configurable path via RUNNER_QUEUE_FILE environment variable.
+        Tasks are loaded and will be automatically processed by the queue processor.
+        """
+        queue_file = _get_queue_file_path()
         
         if queue_file.exists():
             try:
