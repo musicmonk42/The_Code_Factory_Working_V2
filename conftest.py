@@ -717,12 +717,15 @@ def _initialize_optional_dependency_mocks():
 
 # ---- Tenacity stub setup ----
 # Tenacity requires special handling for its retry decorator and combinable conditions
-if "tenacity" not in sys.modules:
-    try:
-        import tenacity as _test_tenacity
-    except ImportError:
-        # Create complete tenacity stubs
-        import types
+# DEFERRED: Moved to _initialize_tenacity_stubs() to avoid expensive module-level execution
+def _initialize_tenacity_stubs():
+    """Initialize tenacity stub module - deferred to avoid expensive operations during collection."""
+    if "tenacity" not in sys.modules:
+        try:
+            import tenacity as _test_tenacity
+        except ImportError:
+            # Create complete tenacity stubs
+            import types
         
         # Create a retry predicate that supports the | operator
         class _RetryPredicate:
@@ -826,22 +829,25 @@ if "tenacity" not in sys.modules:
             def __iter__(self):
                 return iter([])
         
-        tenacity_module.Retrying = Retrying
-        
-        # Register the module
-        sys.modules["tenacity"] = tenacity_module
+            tenacity_module.Retrying = Retrying
+            
+            # Register the module
+            sys.modules["tenacity"] = tenacity_module
 
 
 # ---- aiohttp stub setup ----
 # aiohttp requires comprehensive stubbing for async HTTP client functionality
 # This is needed because many modules use aiohttp.ClientSession for HTTP requests
-if "aiohttp" not in sys.modules:
-    try:
-        import aiohttp as _test_aiohttp
-    except ImportError:
-        # Create complete aiohttp stubs for test collection
-        import types
-        import importlib.util
+# DEFERRED: Moved to _initialize_aiohttp_stubs() to avoid expensive module-level execution
+def _initialize_aiohttp_stubs():
+    """Initialize aiohttp stub module - deferred to avoid expensive operations during collection."""
+    if "aiohttp" not in sys.modules:
+        try:
+            import aiohttp as _test_aiohttp
+        except ImportError:
+            # Create complete aiohttp stubs for test collection
+            import types
+            import importlib.util
         
         aiohttp_module = types.ModuleType("aiohttp")
         aiohttp_module.__file__ = "<mocked aiohttp>"
@@ -991,24 +997,30 @@ if "aiohttp" not in sys.modules:
                 self._fields = []
             
             def add_field(self, name, value, **kwargs):
-                self._fields.append((name, value))
-        
-        # Register all classes and types on the module
-        aiohttp_module.ClientTimeout = ClientTimeout
-        aiohttp_module.ClientResponse = ClientResponse
-        aiohttp_module.ClientSession = ClientSession
-        aiohttp_module.ClientError = ClientError
-        aiohttp_module.ClientResponseError = ClientResponseError
-        aiohttp_module.ClientConnectionError = ClientConnectionError
-        aiohttp_module.ServerTimeoutError = ServerTimeoutError
-        aiohttp_module.ContentTypeError = ContentTypeError
-        aiohttp_module.InvalidURL = InvalidURL
-        aiohttp_module.TCPConnector = TCPConnector
-        aiohttp_module.BasicAuth = BasicAuth
-        aiohttp_module.FormData = FormData
-        
-        # Register the module
-        sys.modules["aiohttp"] = aiohttp_module
+                    self._fields.append((name, value))
+            
+            # Register all classes and types on the module
+            aiohttp_module.ClientTimeout = ClientTimeout
+            aiohttp_module.ClientResponse = ClientResponse
+            aiohttp_module.ClientSession = ClientSession
+            aiohttp_module.ClientError = ClientError
+            aiohttp_module.ClientResponseError = ClientResponseError
+            aiohttp_module.ClientConnectionError = ClientConnectionError
+            aiohttp_module.ServerTimeoutError = ServerTimeoutError
+            aiohttp_module.ContentTypeError = ContentTypeError
+            aiohttp_module.InvalidURL = InvalidURL
+            aiohttp_module.TCPConnector = TCPConnector
+            aiohttp_module.BasicAuth = BasicAuth
+            aiohttp_module.FormData = FormData
+            
+            # Register the module
+            sys.modules["aiohttp"] = aiohttp_module
+
+
+# Initialize stubs immediately during conftest import (needed for test collection)
+# These functions are defined above but called here to keep the code organized
+_initialize_tenacity_stubs()
+_initialize_aiohttp_stubs()
 
 
 # ---- OpenTelemetry stub setup ----
@@ -1521,6 +1533,8 @@ def setup_test_stubs():
     This runs AFTER test collection is complete, keeping collection fast.
     
     Includes:
+    - Tenacity stub setup
+    - Aiohttp stub setup
     - Botocore exceptions setup
     - Aiohttp type protection
     - Cryptography exception protection
@@ -1529,6 +1543,12 @@ def setup_test_stubs():
     - Omnicore engine mocks
     - Module spec fixing
     """
+    # Initialize tenacity stubs (deferred from module level to avoid collection slowdown)
+    _initialize_tenacity_stubs()
+    
+    # Initialize aiohttp stubs (deferred from module level to avoid collection slowdown)
+    _initialize_aiohttp_stubs()
+    
     # Initialize botocore exceptions (deferred from module level)
     _initialize_botocore_exceptions()
     
