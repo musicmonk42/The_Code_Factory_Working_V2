@@ -157,8 +157,8 @@ class DistributedLock:
             # Basic URL validation for security
             if not redis_url.startswith(("redis://", "rediss://")):
                 logger.error(
-                    f"Invalid REDIS_URL scheme. Must start with 'redis://' or 'rediss://'. "
-                    f"Distributed locking disabled."
+                    "Invalid REDIS_URL scheme. Must start with 'redis://' or 'rediss://'. "
+                    "Distributed locking disabled."
                 )
                 return None
             

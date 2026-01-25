@@ -15,7 +15,7 @@ def test_all_endpoints():
     sfe_routes = [r for r in routes if '/sfe' in r.path]
     
     print(f"✓ Total API routes: {len(routes)}")
-    print(f"\n📊 Route Summary:")
+    print("\n📊 Route Summary:")
     print(f"  - Generator routes: {len(generator_routes)}")
     print(f"  - OmniCore routes: {len(omnicore_routes)}")
     print(f"  - SFE routes: {len(sfe_routes)}")
@@ -59,22 +59,22 @@ def test_all_endpoints():
         print(f"  {status} {endpoint}")
     
     # Print all routes for verification
-    print(f"\n📋 All Generator Routes:")
+    print("\n📋 All Generator Routes:")
     for r in generator_routes:
         methods = ', '.join(sorted(r.methods))
         print(f"  {methods:8} {r.path}")
     
-    print(f"\n📋 All OmniCore Routes:")
+    print("\n📋 All OmniCore Routes:")
     for r in omnicore_routes:
         methods = ', '.join(sorted(r.methods))
         print(f"  {methods:8} {r.path}")
     
-    print(f"\n📋 All SFE Routes:")
+    print("\n📋 All SFE Routes:")
     for r in sfe_routes:
         methods = ', '.join(sorted(r.methods))
         print(f"  {methods:8} {r.path}")
     
-    print(f"\n✅ Endpoint validation complete!")
+    print("\n✅ Endpoint validation complete!")
     print(f"Total routes implemented: {len(routes)}")
 
 if __name__ == "__main__":

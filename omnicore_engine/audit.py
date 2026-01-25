@@ -804,7 +804,7 @@ class ExplainAudit:
         try:
             # Try to get the running loop first
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()  # Raises RuntimeError if no loop
                 asyncio.create_task(coro)
             except RuntimeError:
                 # No running loop - try to run it synchronously
@@ -1593,7 +1593,7 @@ class ExplainAudit:
                 
             # Try to create the periodic flush task
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()  # Raises RuntimeError if no loop
                 asyncio.create_task(periodic_flush_coro())
                 logger.info("Periodic audit flush task created.")
             except RuntimeError:

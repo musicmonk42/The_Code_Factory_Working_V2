@@ -265,6 +265,9 @@ class TestRedisConnectionFallback:
 
                 client = compat_core._get_redis_client()
 
+                # Verify the client is None on connection failure
+                assert client is None
+
                 # Verify warning was logged
                 assert mock_logger.warning.called
                 call_args = mock_logger.warning.call_args[0][0]

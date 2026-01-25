@@ -558,7 +558,7 @@ class ShardedMessageBus:
         """Starts asynchronous dispatcher tasks for each queue."""
         # Check if we're in an async context with a running event loop
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()  # Raises RuntimeError if no loop
         except RuntimeError:
             # No running event loop - defer dispatcher startup
             logger.debug(

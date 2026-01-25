@@ -409,8 +409,15 @@ except ImportError:
                 pass
         
         Counter = Gauge = Histogram = _StubMetric
-        CollectorRegistry = lambda *a, **kw: None
-        generate_latest = lambda *a, **kw: b""
+        
+        def _stub_collector_registry(*a, **kw):
+            return None
+        CollectorRegistry = _stub_collector_registry
+        
+        def _stub_generate_latest(*a, **kw):
+            return b""
+        generate_latest = _stub_generate_latest
+        
         _metrics_registry = None
         _metrics_lock = threading.Lock()
         

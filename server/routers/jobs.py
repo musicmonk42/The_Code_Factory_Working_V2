@@ -173,7 +173,7 @@ async def get_job_progress(
     is_completed = job.status == JobStatus.COMPLETED
     is_failed = job.status == JobStatus.FAILED
     is_running = job.status == JobStatus.RUNNING
-    is_pending = job.status == JobStatus.PENDING
+    is_pending = job.status == JobStatus.PENDING  # noqa: F841 - reserved for future use
 
     # Build stages list based on actual job state
     stages = []
@@ -348,7 +348,7 @@ async def delete_job(job_id: str) -> SuccessResponse:
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    job = jobs_db[job_id]
+    _ = jobs_db[job_id]  # Verify job exists before deletion
 
     # Delete job files if they exist
     import shutil

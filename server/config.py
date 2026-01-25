@@ -475,7 +475,6 @@ def validate_configuration() -> Dict[str, Any]:
         # Load configurations
         llm_config = get_llm_config()
         agent_config = get_agent_config()
-        server_config = get_server_config()
         
         # Check LLM providers
         available_providers = llm_config.get_available_providers()

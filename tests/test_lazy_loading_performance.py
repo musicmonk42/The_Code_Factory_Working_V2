@@ -60,7 +60,7 @@ def test_lazy_module_aliasing():
     
     # Verify arbiter is now in sys.modules
     assert 'arbiter' in sys.modules
-    print(f"✓ Lazy loading mechanism working correctly")
+    print("✓ Lazy loading mechanism working correctly")
 
 
 def test_test_generation_lazy_onboard():
@@ -91,12 +91,12 @@ def test_test_generation_lazy_onboard():
         config = test_generation.OnboardConfig
         # If it loaded successfully, verify it's not None
         if config is not None:
-            print(f"✓ OnboardConfig lazy loaded successfully")
+            print("✓ OnboardConfig lazy loaded successfully")
     except AttributeError:
         # If onboard is truly unavailable, that's OK for this test
         pytest.skip("onboard module not available")
     
-    print(f"✓ test_generation lazy loading working correctly")
+    print("✓ test_generation lazy loading working correctly")
 
 
 def test_project_root_validation_skipped_in_ci():
