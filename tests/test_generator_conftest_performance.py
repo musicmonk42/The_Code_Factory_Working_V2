@@ -54,10 +54,10 @@ def test_mock_setup_is_deferred():
     if hasattr(conftest, '_mocks_initialized'):
         assert not conftest._mocks_initialized, \
             "Mocks should not be initialized at import time"
-        print(f"✓ Mock setup is properly deferred")
+        print("✓ Mock setup is properly deferred")
     else:
         # The consolidated conftest may not have this attribute
-        print(f"✓ Mock setup attribute not present (consolidated conftest)")
+        print("✓ Mock setup attribute not present (consolidated conftest)")
 
 
 def test_mock_setup_function():
@@ -93,7 +93,7 @@ def test_mock_setup_function():
         
         print(f"✓ Mock setup function works correctly ({elapsed_time:.3f}s)")
     else:
-        print(f"✓ Mock setup function not present (consolidated conftest)")
+        print("✓ Mock setup function not present (consolidated conftest)")
 
 
 def test_no_cpu_timeout_on_import():
@@ -142,7 +142,7 @@ def test_environment_variables_still_set():
     # Verify environment variables are set
     assert os.environ.get('TESTING') == '1', "TESTING environment variable not set"
     
-    print(f"✓ Environment variables properly set at import time")
+    print("✓ Environment variables properly set at import time")
 
 
 def test_opentelemetry_stub_available():
@@ -155,9 +155,9 @@ def test_opentelemetry_stub_available():
     if 'opentelemetry' in sys.modules:
         import opentelemetry
         if hasattr(opentelemetry, 'trace'):
-            print(f"✓ OpenTelemetry available with trace module")
+            print("✓ OpenTelemetry available with trace module")
         else:
-            print(f"✓ OpenTelemetry module available")
+            print("✓ OpenTelemetry module available")
     else:
         # OpenTelemetry might be stubbed differently
-        print(f"✓ OpenTelemetry handling configured")
+        print("✓ OpenTelemetry handling configured")

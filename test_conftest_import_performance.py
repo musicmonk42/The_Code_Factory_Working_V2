@@ -46,7 +46,7 @@ def test_deferred_mock_initialization():
     
     # If not already initialized, check the flag is False
     # Note: In a real test session, the fixture will have run, so this might be True
-    print(f"✓ Mock initialization functions are properly defined")
+    print("✓ Mock initialization functions are properly defined")
     print(f"  Mocks initialized: {conftest._mocks_initialized}")
 
 
@@ -70,7 +70,7 @@ def test_mock_functionality():
     # Check that tiktoken is either real or mocked (should be in sys.modules)
     assert 'tiktoken' in sys.modules, "tiktoken should be available (real or mocked)"
     
-    print(f"✓ Mock initialization completed successfully")
+    print("✓ Mock initialization completed successfully")
     print(f"  Total modules in sys.modules: {len(sys.modules)}")
 
 

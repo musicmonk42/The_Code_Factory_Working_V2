@@ -419,10 +419,6 @@ def test_idempotent_metric_registration():
         assert hasattr(ca1, "analyzer_ops_total")
         assert hasattr(ca1, "analyzer_errors_total")
 
-        # Store references to first import
-        ops_total_1 = ca1.analyzer_ops_total
-        errors_total_1 = ca1.analyzer_errors_total
-
         # Remove from cache again
         for key in ["codebase_analyzer", "arbiter.codebase_analyzer"]:
             if key in sys.modules:

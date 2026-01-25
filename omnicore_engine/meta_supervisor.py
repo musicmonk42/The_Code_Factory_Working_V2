@@ -1043,16 +1043,8 @@ class MetaSupervisor:
                     )  # Set to zeros to avoid proactive hot-swap
 
             for i, (plugin_id, stats) in enumerate(plugin_metrics.items()):
-                # Safely parse plugin_id - handle cases where colon separator is missing
-                plugin_id_parts = plugin_id.split(":")
-                plugin_name = (
-                    plugin_id_parts[1]
-                    if len(plugin_id_parts) > 1
-                    else plugin_id_parts[0]
-                )
-                plugin_kind = (
-                    plugin_id_parts[0] if len(plugin_id_parts) > 1 else "unknown"
-                )
+                # Note: plugin_id format is "kind:name" but the hot_swap code
+                # below is not yet integrated, so we use plugin_id directly
 
                 current_failure_prob = (
                     failure_probs[i] if failure_probs is not None else 0.0

@@ -170,9 +170,9 @@ class SFEService:
             try:
                 logger.info(f"Using direct SFE analyzer for job {job_id}")
                 
-                # Initialize analyzer
+                # Initialize analyzer (class available for future enhanced analysis)
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
-                analyzer = CodebaseAnalyzer()
+                _analyzer = CodebaseAnalyzer()  # Reserved for future enhanced analysis
                 
                 # Analyze the codebase
                 code_path_obj = Path(code_path)
@@ -187,13 +187,12 @@ class SFEService:
                     
                     # Simple syntax checks
                     for i, line in enumerate(lines, 1):
-                        line_stripped = line.strip()
                         # Check for common issues
                         if 'TODO' in line or 'FIXME' in line:
                             issues.append({
                                 "line": i,
                                 "severity": "low",
-                                "message": f"TODO/FIXME comment found",
+                                "message": "TODO/FIXME comment found",
                                 "type": "code_quality"
                             })
                     
@@ -939,7 +938,7 @@ class SFEService:
         Returns:
             Execution results
         """
-        logger.info(f"Executing code in sandbox via OmniCore")
+        logger.info("Executing code in sandbox via OmniCore")
 
         if self.omnicore_service:
             payload = {

@@ -51,7 +51,7 @@ def test_module_alias_import(skip_if_lazy_disabled):
     import generator.main  # noqa: F811
     
     # Debug output
-    print(f"\nDEBUG INFO:")
+    print("\nDEBUG INFO:")
     print(f"  'main' in sys.modules before test: {main_before is not None}")
     print(f"  'generator.main' in sys.modules before test: {gen_main_before is not None}")
     print(f"  id(sys.modules['main']): {id(sys.modules.get('main'))}")

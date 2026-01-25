@@ -647,7 +647,6 @@ class OmniCoreService:
         
         try:
             code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
-            test_type = payload.get("test_type", "unit")
             coverage_target = payload.get("coverage_target", 80.0)
             
             # Create policy for test generation
@@ -714,7 +713,6 @@ class OmniCoreService:
         try:
             code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
             platform = payload.get("platform", "docker")
-            include_ci_cd = payload.get("include_ci_cd", True)
             
             repo_path = Path(code_path)
             if not repo_path.exists():
@@ -725,10 +723,10 @@ class OmniCoreService:
             
             # Initialize and run deploy agent
             logger.info(f"Running deploy agent for job {job_id} with platform: {platform}")
-            agent = self._deploy_class(repo_path=str(repo_path))
+            _agent = self._deploy_class(repo_path=str(repo_path))  # Agent ready for integration
             
             # Deploy agent uses async generate method
-            # Note: The actual interface may vary, adjust as needed
+            # TODO: Integrate actual agent call when interface is finalized
             result = {
                 "status": "completed",
                 "generated_files": ["Dockerfile", "docker-compose.yml"],
@@ -774,10 +772,10 @@ class OmniCoreService:
             
             logger.info(f"Running docgen agent for job {job_id} with doc_type: {doc_type}, format: {format}")
             
-            # Initialize docgen agent
-            agent = self._docgen_class(repo_path=str(repo_path))
+            # Initialize docgen agent (ready for integration)
+            _agent = self._docgen_class(repo_path=str(repo_path))
             
-            # Docgen agent result
+            # TODO: Integrate actual agent call when interface is finalized
             result = {
                 "status": "completed",
                 "generated_docs": ["docs/API.md", "docs/README.md"],
@@ -824,10 +822,10 @@ class OmniCoreService:
             
             logger.info(f"Running critique agent for job {job_id} with scan_types: {scan_types}, auto_fix: {auto_fix}")
             
-            # Initialize critique agent
-            agent = self._critique_class(repo_path=str(repo_path))
+            # Initialize critique agent (ready for integration)
+            _agent = self._critique_class(repo_path=str(repo_path))
             
-            # Critique agent result
+            # TODO: Integrate actual agent call when interface is finalized
             result = {
                 "status": "completed",
                 "issues_found": 0,
@@ -863,7 +861,6 @@ class OmniCoreService:
         """
         try:
             readme_content = payload.get("readme_content", "")
-            ambiguities = payload.get("ambiguities", [])
             
             if not readme_content:
                 return {
@@ -1109,7 +1106,6 @@ class OmniCoreService:
             provider = payload.get("provider", "openai")
             api_key = payload.get("api_key")
             model = payload.get("model")
-            config = payload.get("config", {})
             
             # Store configuration in environment or config file
             import os

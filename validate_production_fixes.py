@@ -104,9 +104,8 @@ def main():
     # Test 3: Production Mode Checks
     print_header("Test 3: Production Mode Validation")
     try:
-        import os as os_module  # Avoid shadowing
-        os_module.environ["PRODUCTION_MODE"] = "1"
-        os_module.environ["TESTING"] = "0"
+        os.environ["PRODUCTION_MODE"] = "1"
+        os.environ["TESTING"] = "0"
         
         # Import the helper function
         from omnicore_engine.fastapi_app import check_production_mode_usage
@@ -116,13 +115,13 @@ def main():
             check_production_mode_usage("TestComponent", "test_method")
             test_result("Production mode validation", False, 
                        "Should raise RuntimeError")
-        except RuntimeError as e:
+        except RuntimeError:
             test_result("Production mode validation", True, 
                        "Correctly raises RuntimeError")
         
         # Reset environment
-        os_module.environ["PRODUCTION_MODE"] = "0"
-        os_module.environ["TESTING"] = "1"
+        os.environ["PRODUCTION_MODE"] = "0"
+        os.environ["TESTING"] = "1"
         
         print("✅ Production mode validation: ALL TESTS PASSED")
     except Exception as e:
@@ -132,10 +131,9 @@ def main():
         all_passed = False
         # Reset environment
         try:
-            import os as os_module
-            os_module.environ["PRODUCTION_MODE"] = "0"
-            os_module.environ["TESTING"] = "1"
-        except:
+            os.environ["PRODUCTION_MODE"] = "0"
+            os.environ["TESTING"] = "1"
+        except Exception:
             pass
     
     # Test 4: Time Usage
@@ -158,8 +156,6 @@ def main():
     # Test 5: Documentation
     print_header("Test 5: Documentation Completeness")
     try:
-        import os.path
-        
         # Check DEPENDENCY_GUIDE.md exists
         dep_guide = os.path.exists("DEPENDENCY_GUIDE.md")
         test_result("DEPENDENCY_GUIDE.md exists", dep_guide)

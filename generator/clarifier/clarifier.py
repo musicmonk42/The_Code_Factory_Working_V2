@@ -470,7 +470,7 @@ def load_config() -> Dynaconf:
                 
             if warnings:
                 get_logger().warning(
-                    f"PRODUCTION CONFIGURATION WARNINGS:\n  - " + "\n  - ".join(warnings) +
+                    "PRODUCTION CONFIGURATION WARNINGS:\n  - " + "\n  - ".join(warnings) +
                     "\nConsider setting explicit CLARIFIER_* environment variables for production deployments."
                 )
     except Exception as e:

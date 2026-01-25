@@ -61,7 +61,7 @@ class TestPluginsEnabledAttribute:
         
         if missing:
             pytest.fail(
-                f"The following configs are missing PLUGINS_ENABLED:\n" + 
+                "The following configs are missing PLUGINS_ENABLED:\n" + 
                 "\n".join(f"  - {m}" for m in missing)
             )
     

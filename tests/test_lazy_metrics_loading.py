@@ -90,7 +90,7 @@ def test_all_metrics_accessible():
     assert MESSAGE_BUS_CIRCUIT_STATE is not None
     assert MESSAGE_BUS_DLQ_TOTAL is not None
     
-    print(f"✓ All 16 metrics are accessible")
+    print("✓ All 16 metrics are accessible")
 
 
 def test_metric_functionality_preserved():
@@ -155,7 +155,7 @@ def test_metric_definition_count():
     }
     
     assert set(_METRIC_DEFINITIONS.keys()) == expected_metrics, "Metric definitions should match expected set"
-    print(f"✓ All 16 expected metrics are defined")
+    print("✓ All 16 expected metrics are defined")
 
 
 if __name__ == "__main__":
