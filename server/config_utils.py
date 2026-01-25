@@ -94,6 +94,70 @@ MAX_STARTUP_TIMEOUT = 600  # Maximum startup timeout in seconds (10 minutes)
 DEFAULT_STARTUP_TIMEOUT = 90  # Default startup timeout in seconds
 
 
+def sanitize_env_value(value: Optional[str]) -> Optional[str]:
+    """
+    Sanitize environment variable values by removing wrapping quotes and whitespace.
+    
+    Railway and other cloud providers sometimes provide environment variables
+    with wrapping quotes or extra whitespace that cause validation failures.
+    
+    This function:
+    1. Strips leading/trailing whitespace
+    2. Removes wrapping quotes (both single and double) only if they wrap the entire value
+    
+    Args:
+        value: Raw environment variable value
+        
+    Returns:
+        Sanitized value with wrapping quotes and leading/trailing whitespace removed,
+        or None if the input is None or empty after sanitization
+        
+    Examples:
+        >>> sanitize_env_value('"sk-abc123"')  # Wrapped in double quotes
+        'sk-abc123'
+        >>> sanitize_env_value("'sk-abc123'")  # Wrapped in single quotes
+        'sk-abc123'
+        >>> sanitize_env_value('  sk-abc123  ')  # Extra whitespace
+        'sk-abc123'
+        >>> sanitize_env_value('key-with-"quote"-inside')  # Quote in middle preserved
+        'key-with-"quote"-inside'
+    """
+    if value is None:
+        return None
+    
+    # Strip whitespace first
+    sanitized = value.strip()
+    
+    # Remove wrapping quotes only (preserves quotes in the middle of values)
+    if len(sanitized) >= 2:
+        if (sanitized.startswith('"') and sanitized.endswith('"')) or \
+           (sanitized.startswith("'") and sanitized.endswith("'")):
+            sanitized = sanitized[1:-1]
+    
+    return sanitized if sanitized else None
+
+
+def get_sanitized_env(key: str, default: Optional[str] = None) -> Optional[str]:
+    """
+    Get an environment variable with automatic sanitization.
+    
+    This function retrieves environment variables and automatically sanitizes
+    them by removing quotes and whitespace that cloud providers (especially Railway)
+    may inadvertently include.
+    
+    Args:
+        key: Environment variable name
+        default: Default value if not set
+        
+    Returns:
+        Sanitized environment variable value, or default if not set
+    """
+    value = os.environ.get(key)
+    if value is None:
+        return default
+    return sanitize_env_value(value) or default
+
+
 @dataclass
 class PlatformConfig:
     """
@@ -232,8 +296,16 @@ def get_config() -> PlatformConfig:
     ]
     
     for key_var in api_key_vars:
-        if os.getenv(key_var):
-            config.available_api_keys.add(key_var)
+        raw_key = os.getenv(key_var)
+        if raw_key:
+            # FIX: Sanitize API key values from Railway/cloud providers that may include
+            # wrapping quotes or whitespace that cause API key validation failures
+            sanitized_key = sanitize_env_value(raw_key)
+            if sanitized_key:
+                config.available_api_keys.add(key_var)
+                # Log if sanitization changed the value (indicates potential config issue)
+                if raw_key != sanitized_key:
+                    logger.debug(f"API key {key_var} was sanitized (removed wrapping quotes/whitespace)")
     
     # Define required keys for production
     if config.is_production:
