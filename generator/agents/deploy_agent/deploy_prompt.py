@@ -185,7 +185,8 @@ def scrub_text(text: str) -> str:
     # Try Presidio path if available
     if AnalyzerEngine is not None and AnonymizerEngine is not None:
         try:
-            analyzer = AnalyzerEngine()
+            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+            analyzer = AnalyzerEngine(supported_languages=["en"])
             anonymizer = AnonymizerEngine()
 
             entities = [

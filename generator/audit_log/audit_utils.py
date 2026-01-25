@@ -60,7 +60,8 @@ try:
     from presidio_anonymizer import AnonymizerEngine
 
     PRESIDIO_AVAILABLE = True
-    analyzer = AnalyzerEngine()
+    # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+    analyzer = AnalyzerEngine(supported_languages=["en"])
     anonymizer = AnonymizerEngine()
 except (ImportError, OSError):
     PRESIDIO_AVAILABLE = False

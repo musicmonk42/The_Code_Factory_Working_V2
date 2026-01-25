@@ -168,7 +168,8 @@ def scrub_text(text: str) -> str:
         return ""
 
     try:
-        analyzer = AnalyzerEngine()
+        # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+        analyzer = AnalyzerEngine(supported_languages=["en"])
         anonymizer = AnonymizerEngine()
 
         # Define entities for Presidio to analyze (comprehensive standard list)
