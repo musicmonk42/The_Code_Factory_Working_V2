@@ -1092,85 +1092,93 @@ sys.meta_path.insert(0, _lazy_importer)
 
 # ---- Pydantic decorator safety shim ----
 # Prevents test collection-time errors when pydantic decorators are replaced with non-callables
-try:
-    import pydantic
+# DEFERRED: Moved to _initialize_pydantic_safety() to avoid import during collection
+def _initialize_pydantic_safety():
+    """Initialize pydantic decorator safety shim - deferred to avoid expensive operations during collection."""
+    try:
+        import pydantic
 
-    # No-op decorator that preserves function/class behavior used by Pydantic decorators
-    def _noop_validator(*args, **kwargs):
-        def decorator(func):
-            return func
+        # No-op decorator that preserves function/class behavior used by Pydantic decorators
+        def _noop_validator(*args, **kwargs):
+            def decorator(func):
+                return func
 
-        return decorator
+            return decorator
 
-    # Helper function to safely set pydantic decorators
-    def _set_pydantic_decorator_safely(decorator_name):
-        """Set a pydantic decorator to no-op if it's not callable."""
-        try:
-            if not callable(getattr(pydantic, decorator_name, None)):
-                setattr(pydantic, decorator_name, _noop_validator)
-        except (AttributeError, TypeError):
-            # Attribute doesn't exist or has unexpected type
-            setattr(pydantic, decorator_name, _noop_validator)  # best-effort
+        # Helper function to safely set pydantic decorators
+        def _set_pydantic_decorator_safely(decorator_name):
+            """Set a pydantic decorator to no-op if it's not callable."""
+            try:
+                if not callable(getattr(pydantic, decorator_name, None)):
+                    setattr(pydantic, decorator_name, _noop_validator)
+            except (AttributeError, TypeError):
+                # Attribute doesn't exist or has unexpected type
+                setattr(pydantic, decorator_name, _noop_validator)  # best-effort
 
-    # Apply to commonly mocked decorators
-    _set_pydantic_decorator_safely("field_validator")
-    _set_pydantic_decorator_safely("model_validator")
-    # If your tests also mock other pydantic decorators, add them here:
-    # _set_pydantic_decorator_safely("field_serializer")
-    # _set_pydantic_decorator_safely("validator")
+        # Apply to commonly mocked decorators
+        _set_pydantic_decorator_safely("field_validator")
+        _set_pydantic_decorator_safely("model_validator")
+        # If your tests also mock other pydantic decorators, add them here:
+        # _set_pydantic_decorator_safely("field_serializer")
+        # _set_pydantic_decorator_safely("validator")
 
-except ImportError:
-    # pydantic not installed, skip shim
-    pass
+    except ImportError:
+        # pydantic not installed, skip shim
+        pass
+
 
 # ---- Tenacity exception safety ----
 # Ensure tenacity exceptions are proper Exception classes
-try:
-    from tenacity import RetryError, TryAgain
-
-    # Verify these are actual exception classes
-    if not issubclass(RetryError, BaseException):
-        # If somehow mocked, restore proper exception behavior
-        class RetryError(Exception):
-            """Raised when all retry attempts have failed."""
-
-            pass
-
-        import tenacity
-
-        tenacity.RetryError = RetryError
-    if not issubclass(TryAgain, BaseException):
-
-        class TryAgain(Exception):
-            """Signal to retry the operation."""
-
-            pass
-
-        import tenacity
-
-        tenacity.TryAgain = TryAgain
-except ImportError:
-    # tenacity not installed, skip
-    pass
-except TypeError:
-    # If issubclass check fails, create proper exceptions
+# DEFERRED: Moved to _initialize_tenacity_safety() to avoid import during collection  
+def _initialize_tenacity_safety():
+    """Initialize tenacity exception safety - deferred to avoid expensive operations during collection."""
     try:
-        import tenacity
+        from tenacity import RetryError, TryAgain
 
-        class RetryError(Exception):
-            """Raised when all retry attempts have failed."""
+        # Verify these are actual exception classes
+        if not issubclass(RetryError, BaseException):
+            # If somehow mocked, restore proper exception behavior
+            class RetryError(Exception):
+                """Raised when all retry attempts have failed."""
 
-            pass
+                pass
 
-        class TryAgain(Exception):
-            """Signal to retry the operation."""
+            import tenacity
 
-            pass
+            tenacity.RetryError = RetryError
+        if not issubclass(TryAgain, BaseException):
 
-        tenacity.RetryError = RetryError
-        tenacity.TryAgain = TryAgain
-    except:
+            class TryAgain(Exception):
+                """Signal to retry the operation."""
+
+                pass
+
+            import tenacity
+
+            tenacity.TryAgain = TryAgain
+    except ImportError:
+        # tenacity not installed, skip
         pass
+    except TypeError:
+        # If issubclass check fails, create proper exceptions
+        try:
+            import tenacity
+
+            class RetryError(Exception):
+                """Raised when all retry attempts have failed."""
+
+                pass
+
+            class TryAgain(Exception):
+                """Signal to retry the operation."""
+
+                pass
+
+            tenacity.RetryError = RetryError
+            tenacity.TryAgain = TryAgain
+        except:
+            pass
+
 
 
 # ---- Protect aiohttp types from being mocked ----
@@ -1606,8 +1614,14 @@ def setup_test_stubs():
     - Omnicore engine mocks
     - Module spec fixing
     """
-    # Note: Tenacity and aiohttp stubs are already created at module level during conftest import
-    # No need to initialize them again here
+    # Note: Tenacity and aiohttp stubs are created on-demand via LazyStubImporter
+    # when test modules first import them
+    
+    # Initialize pydantic safety (deferred from module level)
+    _initialize_pydantic_safety()
+    
+    # Initialize tenacity safety (deferred from module level)
+    _initialize_tenacity_safety()
     
     # Initialize botocore exceptions (deferred from module level)
     _initialize_botocore_exceptions()
