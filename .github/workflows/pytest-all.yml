@@ -50,6 +50,10 @@ jobs:
       SKIP_BACKGROUND_TASKS: '1'
       NO_MONITORING: '1'
       DISABLE_TELEMETRY: '1'
+      # Prevent OpenBLAS/MKL/OMP threading issues in CI environment (RLIMIT_NPROC limits)
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
     
     steps:
       - name: Checkout code

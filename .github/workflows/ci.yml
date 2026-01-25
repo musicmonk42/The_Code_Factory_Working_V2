@@ -245,6 +245,10 @@ jobs:
         env:
           REDIS_URL: redis://localhost:6379
           APP_ENV: test
+          # Prevent OpenBLAS/MKL/OMP threading issues in CI environment (RLIMIT_NPROC limits)
+          OPENBLAS_NUM_THREADS: '1'
+          MKL_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
           if [ -d omnicore_engine/tests ]; then
@@ -380,6 +384,10 @@ jobs:
         env:
           REDIS_URL: redis://localhost:6379
           APP_ENV: test
+          # Prevent OpenBLAS/MKL/OMP threading issues in CI environment (RLIMIT_NPROC limits)
+          OPENBLAS_NUM_THREADS: '1'
+          MKL_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
         run: |
           if [ -f conftest.py ]; then
             pytest -v --tb=short --timeout=120 -n 2
