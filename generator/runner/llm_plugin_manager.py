@@ -107,6 +107,11 @@ except ImportError:
     )
 
     class DummyCounter:
+        """No-op Counter compatible with prometheus_client Counter interface."""
+        def __init__(self, *args, **kwargs):
+            # Accept constructor arguments: name, documentation, labelnames, etc.
+            pass
+            
         def labels(self, *args, **kwargs):
             return self
 
@@ -114,6 +119,11 @@ except ImportError:
             pass
 
     class DummyGauge:
+        """No-op Gauge compatible with prometheus_client Gauge interface."""
+        def __init__(self, *args, **kwargs):
+            # Accept constructor arguments: name, documentation, labelnames, etc.
+            pass
+            
         def labels(self, *args, **kwargs):
             return self
 

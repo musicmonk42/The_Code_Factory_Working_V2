@@ -624,9 +624,14 @@ class RegulatoryAuditLogger:
                                 entry = json.loads(last_line)
                                 canonical_bytes = json.dumps(entry, sort_keys=True).encode("utf-8")
                                 return hashlib.sha256(canonical_bytes).hexdigest()
-                            except json.JSONDecodeError:
-                                # Fallback to raw bytes if JSON parsing fails
-                                return hashlib.sha256(last_line.encode("utf-8")).hexdigest()
+                            except json.JSONDecodeError as e:
+                                # Log warning about corrupted entry - this could break hash chain
+                                logger.warning(
+                                    f"Failed to parse last audit log entry as JSON: {e}. "
+                                    "This may indicate log corruption and could break hash chain integrity."
+                                )
+                                # Return None to start fresh chain - safer than inconsistent fallback
+                                return None
             else:
                 with open(self.primary_log, "rb") as f:
                     lines = f.readlines()
@@ -638,8 +643,12 @@ class RegulatoryAuditLogger:
                                 entry = json.loads(last_line)
                                 canonical_bytes = json.dumps(entry, sort_keys=True).encode("utf-8")
                                 return hashlib.sha256(canonical_bytes).hexdigest()
-                            except json.JSONDecodeError:
-                                return hashlib.sha256(last_line.encode("utf-8")).hexdigest()
+                            except json.JSONDecodeError as e:
+                                logger.warning(
+                                    f"Failed to parse last audit log entry as JSON: {e}. "
+                                    "This may indicate log corruption and could break hash chain integrity."
+                                )
+                                return None
         except (OSError, IOError, ValueError, UnicodeDecodeError) as e:
             logger.debug(f"Failed to get previous hash: {e}")
             pass

@@ -10,6 +10,7 @@ import re
 import sys
 import threading
 import time
+import types  # FIX: Added for SimpleNamespace type check
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
@@ -470,13 +471,14 @@ class PolicyEngine:
         with tracer.start_as_current_span("policy_engine_init") as span:
             # FIX: Accept both ArbiterConfig and config-like objects with required attributes
             # This allows fallback settings (SimpleNamespace) to work while maintaining type safety
+            # Check for specific config markers or required attributes rather than broad __dict__ check
             is_valid_config = (
                 isinstance(config, ArbiterConfig) or
                 (hasattr(config, '__config_type__') and config.__config_type__ == 'ArbiterConfig') or
-                hasattr(config, '__dict__')  # Accept dict-like config objects
+                isinstance(config, types.SimpleNamespace)  # Accept fallback SimpleNamespace
             )
             if not is_valid_config:
-                raise ValueError("Config must be an instance of ArbiterConfig or compatible config object")
+                raise ValueError("Config must be an instance of ArbiterConfig or compatible config object (e.g., SimpleNamespace)")
             if arbiter_instance is not None and not hasattr(arbiter_instance, "plugin_registry"):
                 logger.warning(
                     "Arbiter instance lacks plugin_registry; some functionality may be limited"
@@ -503,14 +505,19 @@ class PolicyEngine:
                 "POLICY_CONFIG_FILE_PATH": os.path.abspath("./policies.json"),
                 "POLICY_PAUSE_POLLING_INTERVAL": 5.0,
             }
+            missing_keys = []
             for key in required_config_keys:
                 if not hasattr(config, key):
+                    missing_keys.append(key)
                     logger.warning(f"Missing config key '{key}', using default: {defaults.get(key)}")
                     try:
                         setattr(config, key, defaults.get(key))
-                    except (AttributeError, TypeError):
-                        # Config may be frozen, create a wrapper
-                        pass
+                    except (AttributeError, TypeError) as e:
+                        # Config may be frozen - log and continue with defaults
+                        logger.debug(f"Could not set default for '{key}' on frozen config: {e}")
+            
+            if missing_keys:
+                logger.info(f"PolicyEngine initialized with default values for: {missing_keys}")
             if (
                 not isinstance(getattr(config, 'POLICY_REFRESH_INTERVAL_SECONDS', 300.0), (int, float))
                 or getattr(config, 'POLICY_REFRESH_INTERVAL_SECONDS', 300.0) <= 0
