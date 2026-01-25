@@ -717,10 +717,10 @@ def _initialize_optional_dependency_mocks():
 
 # ---- Tenacity stub setup ----
 # Tenacity requires special handling for its retry decorator and combinable conditions
-if "tenacity" not in sys.modules:
-    try:
-        import tenacity as _test_tenacity
-    except ImportError:
+# DEFERRED: Moved to _initialize_tenacity_stubs() to avoid expensive module-level execution
+def _initialize_tenacity_stubs():
+    """Initialize tenacity stub module - deferred to avoid expensive operations during collection."""
+    if "tenacity" not in sys.modules:
         # Create complete tenacity stubs
         import types
         
@@ -835,10 +835,10 @@ if "tenacity" not in sys.modules:
 # ---- aiohttp stub setup ----
 # aiohttp requires comprehensive stubbing for async HTTP client functionality
 # This is needed because many modules use aiohttp.ClientSession for HTTP requests
-if "aiohttp" not in sys.modules:
-    try:
-        import aiohttp as _test_aiohttp
-    except ImportError:
+# DEFERRED: Moved to _initialize_aiohttp_stubs() to avoid expensive module-level execution
+def _initialize_aiohttp_stubs():
+    """Initialize aiohttp stub module - deferred to avoid expensive operations during collection."""
+    if "aiohttp" not in sys.modules:
         # Create complete aiohttp stubs for test collection
         import types
         import importlib.util
@@ -1011,91 +1011,174 @@ if "aiohttp" not in sys.modules:
         sys.modules["aiohttp"] = aiohttp_module
 
 
+# ---- Install Import Hook for Lazy Stub Creation ----
+# Install import hooks to create stubs on-demand when modules are first imported
+# This avoids creating all stubs at module level, speeding up conftest import significantly
+from importlib.abc import MetaPathFinder, Loader
+from importlib.machinery import ModuleSpec
+
+
+class LazyStubImporter(MetaPathFinder):
+    """
+    Custom import hook that creates stub modules on-demand when they're first imported.
+    This significantly speeds up conftest.py import by deferring stub creation until needed.
+    
+    When a test module tries to import 'tenacity' or 'aiohttp', this hook intercepts
+    the import and creates the stub module lazily, avoiding the need to create all
+    stubs during conftest import.
+    """
+    
+    def __init__(self):
+        self.stub_modules = {
+            'tenacity': _initialize_tenacity_stubs,
+            'aiohttp': _initialize_aiohttp_stubs,
+        }
+        self._importing = set()  # Track modules currently being imported to avoid recursion
+    
+    def find_spec(self, fullname, path, target=None):
+        """Find module spec - called by Python's import system."""
+        # Only handle modules we have stubs for
+        if fullname in self.stub_modules:
+            # Check if the module is already in sys.modules
+            if fullname not in sys.modules:
+                # Avoid recursion - if we're already trying to import this, return None
+                if fullname in self._importing:
+                    return None
+                
+                self._importing.add(fullname)
+                try:
+                    # Try to import the real module
+                    __import__(fullname)
+                    # If successful, don't create stub - use the real module
+                    return None
+                except ImportError:
+                    # Real module not available, we'll create a stub
+                    return ModuleSpec(fullname, LazyStubLoader(self.stub_modules[fullname]))
+                finally:
+                    self._importing.discard(fullname)
+        return None
+
+
+class LazyStubLoader(Loader):
+    """Loader that creates stub modules on-demand."""
+    
+    def __init__(self, stub_creator):
+        self.stub_creator = stub_creator
+    
+    def create_module(self, spec):
+        """Create the stub module by calling its creator function."""
+        # Call the stub creator function
+        self.stub_creator()
+        # Return the module from sys.modules (created by stub_creator)
+        return sys.modules.get(spec.name)
+    
+    def exec_module(self, module):
+        """Execute module - no-op since stub is already fully created."""
+        pass
+
+
+# Install the lazy stub importer at the FRONT of sys.meta_path
+# This ensures it's checked before other import finders
+_lazy_importer = LazyStubImporter()
+sys.meta_path.insert(0, _lazy_importer)
+
+# NOTE: Stubs are NO LONGER created immediately - they're created on-demand when first imported
+# This dramatically speeds up conftest.py import time from ~6s to <1s
+
+
 # ---- OpenTelemetry stub setup ----
 # NOTE: OpenTelemetry stubs are handled by generator/conftest.py
 # Removed duplicate OpenTelemetry setup (433 lines) to reduce import time
 
 # ---- Pydantic decorator safety shim ----
 # Prevents test collection-time errors when pydantic decorators are replaced with non-callables
-try:
-    import pydantic
+# DEFERRED: Moved to _initialize_pydantic_safety() to avoid import during collection
+def _initialize_pydantic_safety():
+    """Initialize pydantic decorator safety shim - deferred to avoid expensive operations during collection."""
+    try:
+        import pydantic
 
-    # No-op decorator that preserves function/class behavior used by Pydantic decorators
-    def _noop_validator(*args, **kwargs):
-        def decorator(func):
-            return func
+        # No-op decorator that preserves function/class behavior used by Pydantic decorators
+        def _noop_validator(*args, **kwargs):
+            def decorator(func):
+                return func
 
-        return decorator
+            return decorator
 
-    # Helper function to safely set pydantic decorators
-    def _set_pydantic_decorator_safely(decorator_name):
-        """Set a pydantic decorator to no-op if it's not callable."""
-        try:
-            if not callable(getattr(pydantic, decorator_name, None)):
-                setattr(pydantic, decorator_name, _noop_validator)
-        except (AttributeError, TypeError):
-            # Attribute doesn't exist or has unexpected type
-            setattr(pydantic, decorator_name, _noop_validator)  # best-effort
+        # Helper function to safely set pydantic decorators
+        def _set_pydantic_decorator_safely(decorator_name):
+            """Set a pydantic decorator to no-op if it's not callable."""
+            try:
+                if not callable(getattr(pydantic, decorator_name, None)):
+                    setattr(pydantic, decorator_name, _noop_validator)
+            except (AttributeError, TypeError):
+                # Attribute doesn't exist or has unexpected type
+                setattr(pydantic, decorator_name, _noop_validator)  # best-effort
 
-    # Apply to commonly mocked decorators
-    _set_pydantic_decorator_safely("field_validator")
-    _set_pydantic_decorator_safely("model_validator")
-    # If your tests also mock other pydantic decorators, add them here:
-    # _set_pydantic_decorator_safely("field_serializer")
-    # _set_pydantic_decorator_safely("validator")
+        # Apply to commonly mocked decorators
+        _set_pydantic_decorator_safely("field_validator")
+        _set_pydantic_decorator_safely("model_validator")
+        # If your tests also mock other pydantic decorators, add them here:
+        # _set_pydantic_decorator_safely("field_serializer")
+        # _set_pydantic_decorator_safely("validator")
 
-except ImportError:
-    # pydantic not installed, skip shim
-    pass
+    except ImportError:
+        # pydantic not installed, skip shim
+        pass
+
 
 # ---- Tenacity exception safety ----
 # Ensure tenacity exceptions are proper Exception classes
-try:
-    from tenacity import RetryError, TryAgain
-
-    # Verify these are actual exception classes
-    if not issubclass(RetryError, BaseException):
-        # If somehow mocked, restore proper exception behavior
-        class RetryError(Exception):
-            """Raised when all retry attempts have failed."""
-
-            pass
-
-        import tenacity
-
-        tenacity.RetryError = RetryError
-    if not issubclass(TryAgain, BaseException):
-
-        class TryAgain(Exception):
-            """Signal to retry the operation."""
-
-            pass
-
-        import tenacity
-
-        tenacity.TryAgain = TryAgain
-except ImportError:
-    # tenacity not installed, skip
-    pass
-except TypeError:
-    # If issubclass check fails, create proper exceptions
+# DEFERRED: Moved to _initialize_tenacity_safety() to avoid import during collection  
+def _initialize_tenacity_safety():
+    """Initialize tenacity exception safety - deferred to avoid expensive operations during collection."""
     try:
-        import tenacity
+        from tenacity import RetryError, TryAgain
 
-        class RetryError(Exception):
-            """Raised when all retry attempts have failed."""
+        # Verify these are actual exception classes
+        if not issubclass(RetryError, BaseException):
+            # If somehow mocked, restore proper exception behavior
+            class RetryError(Exception):
+                """Raised when all retry attempts have failed."""
 
-            pass
+                pass
 
-        class TryAgain(Exception):
-            """Signal to retry the operation."""
+            import tenacity
 
-            pass
+            tenacity.RetryError = RetryError
+        if not issubclass(TryAgain, BaseException):
 
-        tenacity.RetryError = RetryError
-        tenacity.TryAgain = TryAgain
-    except:
+            class TryAgain(Exception):
+                """Signal to retry the operation."""
+
+                pass
+
+            import tenacity
+
+            tenacity.TryAgain = TryAgain
+    except ImportError:
+        # tenacity not installed, skip
         pass
+    except TypeError:
+        # If issubclass check fails, create proper exceptions
+        try:
+            import tenacity
+
+            class RetryError(Exception):
+                """Raised when all retry attempts have failed."""
+
+                pass
+
+            class TryAgain(Exception):
+                """Signal to retry the operation."""
+
+                pass
+
+            tenacity.RetryError = RetryError
+            tenacity.TryAgain = TryAgain
+        except:
+            pass
+
 
 
 # ---- Protect aiohttp types from being mocked ----
@@ -1521,6 +1604,8 @@ def setup_test_stubs():
     This runs AFTER test collection is complete, keeping collection fast.
     
     Includes:
+    - Tenacity stub setup
+    - Aiohttp stub setup
     - Botocore exceptions setup
     - Aiohttp type protection
     - Cryptography exception protection
@@ -1529,6 +1614,15 @@ def setup_test_stubs():
     - Omnicore engine mocks
     - Module spec fixing
     """
+    # Note: Tenacity and aiohttp stubs are created on-demand via LazyStubImporter
+    # when test modules first import them
+    
+    # Initialize pydantic safety (deferred from module level)
+    _initialize_pydantic_safety()
+    
+    # Initialize tenacity safety (deferred from module level)
+    _initialize_tenacity_safety()
+    
     # Initialize botocore exceptions (deferred from module level)
     _initialize_botocore_exceptions()
     

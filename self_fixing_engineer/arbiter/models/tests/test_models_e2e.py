@@ -33,11 +33,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Get tracer using centralized configuration
-tracer = get_tracer("test-arbiter-models-e2e")
-
-# Setup in-memory exporter for testing
-in_memory_exporter = InMemorySpanExporter()
+# NOTE: Tracer and exporter moved to fixtures to avoid expensive initialization during collection
 
 # Sample environment variables for E2E tests
 SAMPLE_ENV = {

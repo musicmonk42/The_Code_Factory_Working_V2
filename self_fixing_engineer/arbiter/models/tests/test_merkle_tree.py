@@ -32,15 +32,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Setup for OpenTelemetry tracing with in-memory exporter for testing
-in_memory_exporter = InMemorySpanExporter()
+# NOTE: Tracer and exporter moved to fixtures to avoid expensive initialization during collection
 
-# Get tracer using centralized configuration
-tracer = get_tracer(__name__)
+
+@pytest.fixture(scope="module")
+def test_tracer():
+    """Create tracer for tests - deferred to fixture to avoid collection overhead."""
+    return get_tracer(__name__)
+
+
+@pytest.fixture(scope="module")
+def in_memory_exporter():
+    """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    return InMemorySpanExporter()
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def clear_metrics_and_traces():
+async def clear_metrics_and_traces(in_memory_exporter):
     """Clear Prometheus metrics and OpenTelemetry traces before each test."""
     # Clear traces
     in_memory_exporter.clear()

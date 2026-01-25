@@ -22,11 +22,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Get tracer using centralized configuration
-tracer = get_tracer("test-redis-client")
+# NOTE: Tracer and exporter moved to fixtures to avoid expensive initialization during collection
 
-# Setup in-memory exporter for testing
-in_memory_exporter = InMemorySpanExporter()
 
 # Sample environment variables for tests
 SAMPLE_ENV = {
@@ -54,6 +51,18 @@ async def setup_env(mocker: MockerFixture):
     yield
     for key in SAMPLE_ENV:
         os.environ.pop(key, None)
+
+
+@pytest.fixture(scope="module")
+def test_tracer():
+    """Create tracer for tests - deferred to fixture to avoid collection overhead."""
+    return get_tracer("test-redis-client")
+
+
+@pytest.fixture(scope="module")
+def in_memory_exporter():
+    """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    return InMemorySpanExporter()
 
 
 @pytest_asyncio.fixture
@@ -96,7 +105,7 @@ async def redis_client(mocker: MockerFixture):
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def clear_metrics_and_traces():
+async def clear_metrics_and_traces(in_memory_exporter):
     """Clear Prometheus metrics and OpenTelemetry traces before each test."""
     in_memory_exporter.clear()
     yield
