@@ -141,7 +141,6 @@ jobs:
           # Install pytest plugins
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest-cov \
-            pytest-timeout \
             pytest-xdist \
             pytest-asyncio \
             pytest-html \
@@ -166,7 +165,6 @@ jobs:
           python -c "import pytest; print(f'pytest {pytest.__version__}')"
           python -c "import pytest_cov; print('pytest-cov OK')"
           python -c "import pytest_asyncio; print('pytest-asyncio OK')"
-          python -c "import pytest_timeout; print('pytest-timeout OK')"
           python -c "import xdist; print('pytest-xdist OK')"
           python -c "import aiofiles; print('aiofiles OK')"
           python -c "import tiktoken; print('tiktoken OK')"
