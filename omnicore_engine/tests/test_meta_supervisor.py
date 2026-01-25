@@ -15,6 +15,9 @@ import numpy as np
 import pytest
 
 # Handle torch import error gracefully
+# Note: This module-level import is necessary for @pytest.mark.skipif decorators
+# which are evaluated during test collection. Torch import is relatively fast
+# when it fails (ImportError), and only slow when it succeeds and loads the full framework.
 try:
     import torch
 
