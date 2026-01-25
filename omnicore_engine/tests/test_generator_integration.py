@@ -15,16 +15,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-# Use centralized path_setup instead of manual sys.path manipulation
-import path_setup
-
-from omnicore_engine.engines import (
-    ENGINE_REGISTRY,
-    OmniCoreOmega,
-    PluginService,
-    get_engine,
-    register_engine,
-)
+# Defer heavy imports to test functions to reduce memory during collection
+# import path_setup - moved to test functions
+# from omnicore_engine.engines import (...) - moved to test functions
 
 
 class TestGeneratorIntegration:
@@ -32,8 +25,11 @@ class TestGeneratorIntegration:
 
     def setup_method(self):
         """Clear registry before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+
         ENGINE_REGISTRY.clear()
 
+    @pytest.mark.integration
     def test_generator_imports_available(self):
         """Test that generator imports are accessible"""
         # Import the module to trigger lazy imports
@@ -47,6 +43,7 @@ class TestGeneratorIntegration:
         assert hasattr(engines_module, "is_agent_available")
         assert hasattr(engines_module, "IntentParser")
 
+    @pytest.mark.integration
     def test_get_available_agents_fallback(self):
         """Test that get_available_agents fallback works"""
         from omnicore_engine.engines import get_available_agents
@@ -55,6 +52,7 @@ class TestGeneratorIntegration:
         agents = get_available_agents()
         assert isinstance(agents, dict)
 
+    @pytest.mark.integration
     def test_is_agent_available_fallback(self):
         """Test that is_agent_available fallback works"""
         from omnicore_engine.engines import is_agent_available
@@ -63,8 +61,11 @@ class TestGeneratorIntegration:
         result = is_agent_available("codegen")
         assert isinstance(result, bool)
 
+    @pytest.mark.integration
     def test_omnicore_omega_init_with_generator_components(self):
         """Test OmniCoreOmega initialization with generator components"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         # Create mocks for all required components
         mock_db = Mock()
         mock_message_bus = Mock()
@@ -103,8 +104,11 @@ class TestGeneratorIntegration:
         assert omega.intent_parser == mock_intent_parser
         assert omega.llm_client == mock_llm_client
 
+    @pytest.mark.integration
     def test_omnicore_omega_init_without_generator_components(self):
         """Test OmniCoreOmega initialization without generator components"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         # Create mocks for all required components
         mock_db = Mock()
         mock_message_bus = Mock()
@@ -135,8 +139,15 @@ class TestGeneratorIntegration:
         assert omega.llm_client is None
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_engine_registry_all_engines(self):
         """Test that all engines are registered in ENGINE_REGISTRY"""
+        from omnicore_engine.engines import (
+            ENGINE_REGISTRY,
+            get_engine,
+            register_engine,
+        )
+
         ENGINE_REGISTRY.clear()
 
         # Register all engines as OmniCoreOmega would
@@ -174,8 +185,11 @@ class TestMessageBusIntegration:
     """Test message bus integration for generator"""
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_plugin_service_generator_subscriptions(self):
         """Test that PluginService subscribes to generator topics"""
+        from omnicore_engine.engines import PluginService
+
         with patch("omnicore_engine.engines.Database") as mock_db_class:
             with patch("omnicore_engine.engines.ShardedMessageBus") as mock_bus_class:
                 with patch("omnicore_engine.engines.ArbiterConfig") as mock_config:
@@ -203,8 +217,11 @@ class TestMessageBusIntegration:
                     assert "workflow:sfe_to_generator" in subscribed_topics
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_handle_codegen_request(self):
         """Test codegen request handler"""
+        from omnicore_engine.engines import PluginService, register_engine
+
         with patch("omnicore_engine.engines.Database"):
             with patch("omnicore_engine.engines.ShardedMessageBus") as mock_bus_class:
                 with patch("omnicore_engine.engines.ArbiterConfig") as mock_config:
@@ -236,8 +253,11 @@ class TestMessageBusIntegration:
                     assert mock_bus_instance.publish.called
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_handle_sfe_to_generator_workflow(self):
         """Test SFE to generator workflow handler"""
+        from omnicore_engine.engines import PluginService
+
         with patch("omnicore_engine.engines.Database"):
             with patch("omnicore_engine.engines.ShardedMessageBus") as mock_bus_class:
                 with patch("omnicore_engine.engines.ArbiterConfig") as mock_config:
@@ -271,6 +291,7 @@ class TestMessageBusIntegration:
 class TestPathSetup:
     """Test centralized path setup module"""
 
+    @pytest.mark.integration
     def test_path_setup_module_exists(self):
         """Test that path_setup.py module can be imported"""
         import path_setup
@@ -279,6 +300,7 @@ class TestPathSetup:
         assert hasattr(path_setup, "COMPONENT_PATHS")
         assert hasattr(path_setup, "setup_paths")
 
+    @pytest.mark.integration
     def test_component_paths_defined(self):
         """Test that all component paths are defined"""
         import path_setup
@@ -288,6 +310,7 @@ class TestPathSetup:
         assert "self_fixing_engineer" in paths
         assert "omnicore_engine" in paths
 
+    @pytest.mark.integration
     def test_setup_paths_function(self):
         """Test setup_paths function"""
         import path_setup
@@ -298,6 +321,7 @@ class TestPathSetup:
         # Should return a list
         assert isinstance(added, list)
 
+    @pytest.mark.integration
     def test_get_component_path(self):
         """Test get_component_path function"""
         import path_setup
@@ -310,6 +334,7 @@ class TestPathSetup:
         with pytest.raises(KeyError):
             path_setup.get_component_path("nonexistent")
 
+    @pytest.mark.integration
     def test_validate_paths(self):
         """Test validate_paths function"""
         import path_setup
@@ -324,8 +349,11 @@ class TestPathSetup:
 class TestCrewConfigHelper:
     """Test crew config helper function"""
 
+    @pytest.mark.integration
     def test_find_crew_config_static_method(self):
         """Test that _find_crew_config is a static method"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         assert hasattr(OmniCoreOmega, "_find_crew_config")
 
         # Should be callable
@@ -338,6 +366,7 @@ class TestCrewConfigHelper:
 class TestAuditLogManagerFallback:
     """Test audit log manager fallback logic"""
 
+    @pytest.mark.integration
     @patch("omnicore_engine.engines.Database")
     @patch("omnicore_engine.engines.ShardedMessageBus")
     @patch("omnicore_engine.engines.PluginService")
@@ -359,6 +388,8 @@ class TestAuditLogManagerFallback:
         mock_db,
     ):
         """Test that audit log manager tries fallbacks in correct order"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         # Configure mocks
         mock_config.return_value.DB_PATH = "sqlite:///test.db"
         mock_db.return_value = Mock()

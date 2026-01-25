@@ -14,14 +14,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from omnicore_engine.engines import (
-    ENGINE_REGISTRY,
-    OmniCoreOmega,
-    PluginService,
-    get_engine,
-    register_engine,
-    run_import_fixer,
-)
+# Defer heavy imports to test functions to reduce memory during collection
+# from omnicore_engine.engines import (...) - moved to test functions
 
 
 class TestEngineRegistry:
@@ -29,10 +23,15 @@ class TestEngineRegistry:
 
     def setup_method(self):
         """Clear registry before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+
         ENGINE_REGISTRY.clear()
 
+    @pytest.mark.integration
     def test_register_engine_success(self):
         """Test successful engine registration"""
+        from omnicore_engine.engines import ENGINE_REGISTRY, register_engine
+
         entrypoints = {"initialize": Mock(), "shutdown": Mock(), "execute": Mock()}
 
         register_engine("test_engine", entrypoints)
@@ -40,24 +39,33 @@ class TestEngineRegistry:
         assert "test_engine" in ENGINE_REGISTRY
         assert ENGINE_REGISTRY["test_engine"] == entrypoints
 
+    @pytest.mark.integration
     def test_register_engine_invalid_entrypoints(self):
         """Test registration with invalid entrypoints"""
+        from omnicore_engine.engines import register_engine
+
         with pytest.raises(TypeError, match="Entrypoints must be a dictionary"):
             register_engine("bad_engine", "not_a_dict")
 
         with pytest.raises(TypeError, match="Entrypoints must be a dictionary"):
             register_engine("bad_engine", ["list", "not", "dict"])
 
+    @pytest.mark.integration
     def test_get_engine_exists(self):
         """Test retrieving an existing engine"""
+        from omnicore_engine.engines import ENGINE_REGISTRY, get_engine
+
         entrypoints = {"func": Mock()}
         ENGINE_REGISTRY["existing_engine"] = entrypoints
 
         result = get_engine("existing_engine")
         assert result == entrypoints
 
+    @pytest.mark.integration
     def test_get_engine_not_exists(self):
         """Test retrieving non-existent engine"""
+        from omnicore_engine.engines import get_engine
+
         result = get_engine("nonexistent_engine")
         assert result is None
 
@@ -86,8 +94,11 @@ class TestPluginService:
                     }
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_plugin_service_initialization(self, mock_dependencies):
         """Test PluginService initialization"""
+        from omnicore_engine.engines import PluginService
+
         service = PluginService(mock_dependencies["registry"])
 
         assert service.plugin_registry == mock_dependencies["registry"]
@@ -104,8 +115,11 @@ class TestPluginService:
         assert "shif:fix_import_request" in topics
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_handle_arbiter_bug(self, mock_dependencies):
         """Test handling arbiter bug events"""
+        from omnicore_engine.engines import PluginService
+
         service = PluginService(mock_dependencies["registry"])
 
         with patch("omnicore_engine.engines.BugManager") as mock_bug_manager:
@@ -121,8 +135,11 @@ class TestPluginService:
             mock_manager_instance.report_bug.assert_called_once_with(message.payload)
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_handle_shif_request_with_path(self, mock_dependencies):
         """Test handling SHIF request with file path"""
+        from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
+
         service = PluginService(mock_dependencies["registry"])
 
         # Setup mock import fixer engine
@@ -142,8 +159,11 @@ class TestPluginService:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_handle_shif_request_with_code(self, mock_dependencies):
         """Test handling SHIF request with code string"""
+        from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
+
         service = PluginService(mock_dependencies["registry"])
 
         mock_fixer = Mock()
@@ -161,8 +181,11 @@ class TestPluginService:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_handle_shif_request_no_engine(self, mock_dependencies):
         """Test handling SHIF request when engine not registered"""
+        from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
+
         service = PluginService(mock_dependencies["registry"])
         ENGINE_REGISTRY.clear()
 
@@ -175,8 +198,11 @@ class TestPluginService:
         service.message_bus.publish.assert_not_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_handle_shif_request_error(self, mock_dependencies):
         """Test handling SHIF request when fixer raises error"""
+        from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
+
         service = PluginService(mock_dependencies["registry"])
 
         mock_fixer = Mock()
@@ -193,8 +219,11 @@ class TestPluginService:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_get_companies_success(self, mock_dependencies):
         """Test getting companies list"""
+        from omnicore_engine.engines import PluginService
+
         service = PluginService(mock_dependencies["registry"])
 
         mock_fetcher = AsyncMock(return_value=["Company1", "Company2"])
@@ -206,8 +235,11 @@ class TestPluginService:
         mock_dependencies["registry"].get.assert_called_with("company_list")
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_get_companies_no_plugin(self, mock_dependencies):
         """Test getting companies when plugin not registered"""
+        from omnicore_engine.engines import PluginService
+
         service = PluginService(mock_dependencies["registry"])
         mock_dependencies["registry"].get.return_value = None
 
@@ -215,8 +247,11 @@ class TestPluginService:
             await service.get_companies()
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_get_esg_success(self, mock_dependencies):
         """Test getting ESG report"""
+        from omnicore_engine.engines import PluginService
+
         service = PluginService(mock_dependencies["registry"])
 
         mock_fetcher = AsyncMock(return_value={"score": 85})
@@ -228,8 +263,11 @@ class TestPluginService:
         mock_fetcher.assert_called_with("AAPL")
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_run_sim_success(self, mock_dependencies):
         """Test running simulation"""
+        from omnicore_engine.engines import PluginService
+
         service = PluginService(mock_dependencies["registry"])
 
         mock_simulator = AsyncMock(return_value={"results": "simulation data"})
@@ -244,9 +282,12 @@ class TestPluginService:
 class TestRunImportFixer:
     """Test the run_import_fixer helper function"""
 
+    @pytest.mark.integration
     @patch("omnicore_engine.engines.asyncio.get_event_loop")
     def test_run_import_fixer(self, mock_get_loop):
         """Test synchronous import fixer wrapper"""
+        from omnicore_engine.engines import ENGINE_REGISTRY, run_import_fixer
+
         mock_fixer = Mock()
         mock_fixer.fix_file = AsyncMock(return_value="fixed code")
         ENGINE_REGISTRY["import_fixer"] = {"engine": mock_fixer}
@@ -279,8 +320,11 @@ class TestOmniCoreOmega:
             "import_fixer_engine": Mock(),
         }
 
+    @pytest.mark.integration
     def test_initialization(self, mock_components):
         """Test OmniCoreOmega initialization"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         omega = OmniCoreOmega(**mock_components, num_arbiters=3)
 
         assert omega.db == mock_components["database"]
@@ -291,6 +335,7 @@ class TestOmniCoreOmega:
         assert not omega._is_initialized
         assert omega.arbiters == []
 
+    @pytest.mark.integration
     @patch("omnicore_engine.engines.Database")
     @patch("omnicore_engine.engines.ShardedMessageBus")
     @patch("omnicore_engine.engines.PluginService")
@@ -311,6 +356,8 @@ class TestOmniCoreOmega:
         mock_db,
     ):
         """Test factory method create_and_initialize"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         mock_fixer.return_value = Mock()
 
         omega = OmniCoreOmega.create_and_initialize()
@@ -321,6 +368,7 @@ class TestOmniCoreOmega:
         mock_sim.assert_called_once()
         mock_crew.assert_called_once()
 
+    @pytest.mark.integration
     @patch("builtins.open", side_effect=FileNotFoundError)
     @patch("omnicore_engine.engines.Database")
     @patch("omnicore_engine.engines.ShardedMessageBus")
@@ -341,6 +389,8 @@ class TestOmniCoreOmega:
         mock_file,
     ):
         """Test create_and_initialize when crew_config.yaml not found"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         mock_fixer.return_value = Mock()
 
         omega = OmniCoreOmega.create_and_initialize()
@@ -348,8 +398,11 @@ class TestOmniCoreOmega:
         assert isinstance(omega, OmniCoreOmega)
         # Should continue without loading agents
 
+    @pytest.mark.integration
     def test_initialize_arbiters(self, mock_components):
         """Test arbiter initialization"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         omega = OmniCoreOmega(**mock_components, num_arbiters=2)
 
         mock_components["database"].engine = Mock()
@@ -367,8 +420,11 @@ class TestOmniCoreOmega:
                     assert mock_arbiter.call_count == 2
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_initialize_asset_data(self, mock_components):
         """Test asset data initialization"""
+        from omnicore_engine.engines import ENGINE_REGISTRY, OmniCoreOmega
+
         omega = OmniCoreOmega(**mock_components, num_arbiters=1)
 
         mock_components["import_fixer_engine"].initialize = AsyncMock()
@@ -388,8 +444,11 @@ class TestOmniCoreOmega:
             assert "import_fixer" in ENGINE_REGISTRY
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_initialize_asset_data_component_error(self, mock_components):
         """Test asset initialization with component error"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         omega = OmniCoreOmega(**mock_components, num_arbiters=1)
 
         mock_components["import_fixer_engine"].initialize = AsyncMock()
@@ -405,8 +464,11 @@ class TestOmniCoreOmega:
             assert omega._is_initialized
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_get_companies(self, mock_components):
         """Test get_companies delegation"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         omega = OmniCoreOmega(**mock_components)
 
         mock_components["plugin_service"].get_companies = AsyncMock(
@@ -419,8 +481,11 @@ class TestOmniCoreOmega:
         mock_components["plugin_service"].get_companies.assert_called_once()
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_get_esg(self, mock_components):
         """Test get_esg delegation"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         omega = OmniCoreOmega(**mock_components)
 
         mock_components["plugin_service"].get_esg = AsyncMock(
@@ -433,8 +498,11 @@ class TestOmniCoreOmega:
         mock_components["plugin_service"].get_esg.assert_called_once_with("AAPL")
 
     @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_run_sim(self, mock_components):
         """Test run_sim delegation"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         omega = OmniCoreOmega(**mock_components)
 
         mock_components["plugin_service"].run_sim = AsyncMock(
@@ -452,6 +520,7 @@ class TestOmniCoreOmega:
 class TestCrewConfigLoading:
     """Test crew configuration loading"""
 
+    @pytest.mark.integration
     @patch("builtins.open", new_callable=mock_open)
     @patch("omnicore_engine.engines.yaml.safe_load")
     @patch("omnicore_engine.engines.Database")
@@ -474,6 +543,8 @@ class TestCrewConfigLoading:
         mock_file,
     ):
         """Test loading crew config with agents"""
+        from omnicore_engine.engines import OmniCoreOmega
+
         mock_fixer.return_value = Mock()
         mock_crew_instance = Mock()
         mock_crew_instance.add_agent = Mock()
