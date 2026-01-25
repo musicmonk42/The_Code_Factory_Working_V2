@@ -141,7 +141,6 @@ jobs:
           # Install pytest plugins
           pip install --no-cache-dir -c .github/constraints.txt \
             pytest-cov \
-            pytest-timeout \
             pytest-xdist \
             pytest-asyncio \
             pytest-html \
@@ -166,7 +165,6 @@ jobs:
           python -c "import pytest; print(f'pytest {pytest.__version__}')"
           python -c "import pytest_cov; print('pytest-cov OK')"
           python -c "import pytest_asyncio; print('pytest-asyncio OK')"
-          python -c "import pytest_timeout; print('pytest-timeout OK')"
           python -c "import xdist; print('pytest-xdist OK')"
           python -c "import aiofiles; print('aiofiles OK')"
           python -c "import tiktoken; print('tiktoken OK')"
@@ -281,10 +279,7 @@ jobs:
             # Run with timeout - 10 minutes per directory
             timeout 600s pytest "$test_dir" \
               --maxfail=10 \
-              --timeout=120 \
               --import-mode=importlib \
-              --ignore=tests/test_lazy_loading_performance.py \
-              --ignore=tests/test_generator_conftest_performance.py \
               --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
               -v \
               2>&1 || {
@@ -311,10 +306,7 @@ jobs:
           if [ $OVERALL_EXIT -eq 0 ]; then
             timeout 2400s pytest \
               --maxfail=50 \
-              --timeout=300 \
               --import-mode=importlib \
-              --ignore=tests/test_lazy_loading_performance.py \
-              --ignore=tests/test_generator_conftest_performance.py \
               --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
               --cov=generator \
               --cov=omnicore_engine \
