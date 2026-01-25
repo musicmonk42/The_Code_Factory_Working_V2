@@ -281,10 +281,7 @@ jobs:
             # Run with timeout - 10 minutes per directory
             timeout 600s pytest "$test_dir" \
               --maxfail=10 \
-              --timeout=120 \
               --import-mode=importlib \
-              --ignore=tests/test_lazy_loading_performance.py \
-              --ignore=tests/test_generator_conftest_performance.py \
               --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
               -v \
               2>&1 || {
@@ -311,10 +308,7 @@ jobs:
           if [ $OVERALL_EXIT -eq 0 ]; then
             timeout 2400s pytest \
               --maxfail=50 \
-              --timeout=300 \
               --import-mode=importlib \
-              --ignore=tests/test_lazy_loading_performance.py \
-              --ignore=tests/test_generator_conftest_performance.py \
               --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
               --cov=generator \
               --cov=omnicore_engine \
