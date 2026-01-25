@@ -135,3 +135,29 @@ class LogsResponse(BaseModel):
     job_id: str = Field(..., description="Job identifier")
     logs: List[LogEntry] = Field(..., description="List of log entries")
     count: int = Field(..., description="Number of log entries returned")
+
+
+class GeneratedFile(BaseModel):
+    """Information about a generated file."""
+
+    name: str = Field(..., description="File name")
+    path: str = Field(..., description="Relative path within the job output directory")
+    size: int = Field(..., description="File size in bytes")
+    mime_type: Optional[str] = Field(None, description="MIME type of the file")
+    created_at: Optional[datetime] = Field(None, description="File creation timestamp")
+
+
+class JobFilesResponse(BaseModel):
+    """Response for listing generated files for a job."""
+
+    job_id: str = Field(..., description="Job identifier")
+    status: JobStatus = Field(..., description="Job status")
+    output_directory: str = Field(..., description="Path to output directory")
+    files: List[GeneratedFile] = Field(
+        default_factory=list, description="List of generated files"
+    )
+    total_files: int = Field(0, description="Total number of files")
+    total_size: int = Field(0, description="Total size of all files in bytes")
+    download_url: Optional[str] = Field(
+        None, description="URL to download all files as a zip archive"
+    )

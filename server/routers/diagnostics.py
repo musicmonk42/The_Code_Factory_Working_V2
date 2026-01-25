@@ -347,3 +347,99 @@ async def validate_agents_for_production(
             status_code=500,
             detail=f"Failed to validate agents: {str(e)}"
         )
+
+
+@router.get("/system-status", response_model=Dict[str, Any])
+async def get_system_status() -> Dict[str, Any]:
+    """
+    Get comprehensive system status including LLM provider and agent availability.
+    
+    This endpoint provides a complete overview of the system's current state,
+    including:
+    - Whether the system is idle or processing
+    - LLM provider configuration status
+    - Agent availability
+    - Instructions on how to trigger code generation
+    
+    This is useful for diagnosing why the system appears to "do nothing" -
+    typically because it's waiting for job requests.
+    
+    **Returns:**
+    - System state (ready_idle, processing, error)
+    - LLM provider status
+    - Available and unavailable agents
+    - Instructions for triggering code generation
+    
+    **Response Example:**
+    ```json
+    {
+      "state": "ready_idle",
+      "message": "System is ready and waiting for job requests",
+      "llm_status": {
+        "provider": "openai",
+        "configured": true,
+        "validated": false
+      },
+      "agents": {
+        "available": ["codegen", "testgen", "clarifier"],
+        "unavailable": ["deploy", "docgen", "critique"]
+      },
+      "instructions": {
+        "to_generate_code": "POST /api/jobs/ with requirements",
+        "to_upload_readme": "POST /api/generator/upload",
+        "to_check_status": "GET /api/jobs/{job_id}/progress"
+      }
+    }
+    ```
+    """
+    try:
+        from server.services.omnicore_service import OmniCoreService
+        
+        service = OmniCoreService()
+        return service.get_system_status()
+        
+    except Exception as e:
+        logger.error(f"Error getting system status: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve system status: {str(e)}"
+        )
+
+
+@router.get("/llm-status", response_model=Dict[str, Any])
+async def get_llm_status() -> Dict[str, Any]:
+    """
+    Get current LLM provider configuration status.
+    
+    This endpoint helps diagnose issues where the LLM provider is not properly
+    configured, which would cause agents to fail silently when processing jobs.
+    
+    **Returns:**
+    - Current LLM provider
+    - Whether API key is configured
+    - Whether connectivity has been validated
+    - List of available providers
+    
+    **Response Example:**
+    ```json
+    {
+      "provider": "openai",
+      "configured": false,
+      "validated": false,
+      "error": "API key not configured",
+      "available_providers": []
+    }
+    ```
+    """
+    try:
+        from server.services.omnicore_service import OmniCoreService
+        
+        service = OmniCoreService()
+        return service.get_llm_status()
+        
+    except Exception as e:
+        logger.error(f"Error getting LLM status: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve LLM status: {str(e)}"
+        )

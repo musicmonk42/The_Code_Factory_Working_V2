@@ -35,9 +35,11 @@ from .generator_schemas import (
     TestgenRequest,
 )
 from .jobs import (
+    GeneratedFile,
     GeneratorStatus,
     Job,
     JobCreateRequest,
+    JobFilesResponse,
     JobListResponse,
     JobProgress,
     JobStage,
@@ -94,9 +96,11 @@ __all__ = [
     "StatusResponse",
     "SuccessResponse",
     # Jobs
+    "GeneratedFile",
     "GeneratorStatus",
     "Job",
     "JobCreateRequest",
+    "JobFilesResponse",
     "JobListResponse",
     "JobProgress",
     "JobStage",
