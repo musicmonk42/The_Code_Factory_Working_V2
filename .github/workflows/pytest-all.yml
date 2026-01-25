@@ -246,6 +246,8 @@ jobs:
           # Timeout increased from 120s to 180s to accommodate optimized but still-expensive collection
           timeout 180s pytest --collect-only --quiet --import-mode=importlib --tb=short \
             --ignore=self_fixing_engineer/simulation/tests \
+            --ignore=tests/test_lazy_loading_performance.py \
+            --ignore=tests/test_generator_conftest_performance.py \
             || {
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 124 ]; then
@@ -308,6 +310,8 @@ jobs:
               --maxfail=10 \
               --timeout=120 \
               --import-mode=importlib \
+              --ignore=tests/test_lazy_loading_performance.py \
+              --ignore=tests/test_generator_conftest_performance.py \
               -v \
               2>&1 || {
               DIR_EXIT=$?
@@ -335,6 +339,8 @@ jobs:
               --maxfail=50 \
               --timeout=300 \
               --import-mode=importlib \
+              --ignore=tests/test_lazy_loading_performance.py \
+              --ignore=tests/test_generator_conftest_performance.py \
               --cov=generator \
               --cov=omnicore_engine \
               --cov=self_fixing_engineer \

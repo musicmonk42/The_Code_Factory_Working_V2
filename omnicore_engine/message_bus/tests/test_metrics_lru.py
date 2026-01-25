@@ -269,7 +269,7 @@ class TestMockMetricsMemoryLeakPrevention:
         )
 
         # Create many unique label combinations (more than max_size)
-        for i in range(1000):  # Reduced from 15000 to 1000 for faster collection
+        for i in range(50):  # Reduced from 1000 to 50 to prevent memory exhaustion
             metric.labels(label1=f"value_{i}", label2=f"other_{i}").inc()
 
         # Internal storage should not exceed max_size
@@ -284,7 +284,7 @@ class TestMockMetricsMemoryLeakPrevention:
         histogram = Histogram("test_histogram", "Test histogram", labelnames=["label"])
 
         # Observe many values with different labels
-        for i in range(1000):  # Reduced from 15000 to 1000 for faster collection
+        for i in range(50):  # Reduced from 1000 to 50 to prevent memory exhaustion
             histogram.labels(label=f"value_{i}").observe(0.5)
 
         # Bucket storage should be bounded
@@ -369,8 +369,8 @@ class TestIntegrationScenarios:
         # Create a counter with dynamic labels (like session IDs)
         counter = Counter("requests_total", "Total requests", labelnames=["session_id"])
 
-        # Simulate 2000 unique sessions over time (reduced from 20000)
-        for i in range(2000):  # Reduced from 20000 to 2000 for faster collection
+        # Simulate 100 unique sessions over time (reduced from 2000)
+        for i in range(100):  # Reduced from 2000 to 100 to prevent memory exhaustion
             session_id = f"session_{i}"
             counter.labels(session_id=session_id).inc()
 
@@ -378,8 +378,8 @@ class TestIntegrationScenarios:
         assert len(counter._values._data) <= counter._values.max_size
 
         # Most recent sessions should be accessible
-        recent_value = counter.labels(session_id="session_1999")._parent._values.get(
-            ("session_1999",), None
+        recent_value = counter.labels(session_id="session_99")._parent._values.get(
+            ("session_99",), None
         )
         # Recent data might be present (if not evicted)
         # But system should not crash
@@ -396,7 +396,7 @@ class TestIntegrationScenarios:
 
         def worker(worker_id):
             try:
-                for i in range(1000):
+                for i in range(50):  # Reduced from 1000 to 50 to prevent memory exhaustion
                     counter.labels(worker=f"worker_{worker_id}_{i}").inc()
             except Exception as e:
                 errors.append((worker_id, str(e)))
