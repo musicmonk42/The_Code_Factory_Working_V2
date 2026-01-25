@@ -21,26 +21,33 @@ os.environ["JWT_SECRET_KEY"] = "test-secret-key-integration"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["GENERATOR_API_KEY"] = "test-api-key-integration"
 
-# Mock all dependencies
-sys.modules["runner.runner_config"] = MagicMock()
-sys.modules["runner.runner_core"] = MagicMock()
-sys.modules["runner.runner_logging"] = MagicMock()
-sys.modules["runner.runner_metrics"] = MagicMock()
-sys.modules["runner.runner_utils"] = MagicMock()
-sys.modules["runner.alerting"] = MagicMock()
-sys.modules["intent_parser.intent_parser"] = MagicMock()
-sys.modules["engine"] = MagicMock()
-sys.modules["clarifier_updater"] = MagicMock()
-sys.modules["opentelemetry"] = MagicMock()
-sys.modules["opentelemetry.sdk.trace"] = MagicMock()
-sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
-sys.modules["opentelemetry.sdk.resources"] = MagicMock()
-sys.modules["opentelemetry.instrumentation.fastapi"] = MagicMock()
-sys.modules["opentelemetry.instrumentation.logging"] = MagicMock()
-sys.modules["opentelemetry.exporter.otlp.proto.grpc.trace_exporter"] = MagicMock()
-sys.modules["opentelemetry.semconv.trace"] = MagicMock()
-sys.modules["opentelemetry.trace"] = MagicMock()
-sys.modules["uvicorn"] = MagicMock()
+
+# Module-level mocking moved to fixture to avoid expensive operations during pytest collection
+@pytest.fixture(scope="session", autouse=True)
+def mock_expensive_modules():
+    """Mock all expensive module dependencies before any imports."""
+    # Mock all dependencies
+    sys.modules["runner.runner_config"] = MagicMock()
+    sys.modules["runner.runner_core"] = MagicMock()
+    sys.modules["runner.runner_logging"] = MagicMock()
+    sys.modules["runner.runner_metrics"] = MagicMock()
+    sys.modules["runner.runner_utils"] = MagicMock()
+    sys.modules["runner.alerting"] = MagicMock()
+    sys.modules["intent_parser.intent_parser"] = MagicMock()
+    sys.modules["engine"] = MagicMock()
+    sys.modules["clarifier_updater"] = MagicMock()
+    sys.modules["opentelemetry"] = MagicMock()
+    sys.modules["opentelemetry.sdk.trace"] = MagicMock()
+    sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
+    sys.modules["opentelemetry.sdk.resources"] = MagicMock()
+    sys.modules["opentelemetry.instrumentation.fastapi"] = MagicMock()
+    sys.modules["opentelemetry.instrumentation.logging"] = MagicMock()
+    sys.modules["opentelemetry.exporter.otlp.proto.grpc.trace_exporter"] = MagicMock()
+    sys.modules["opentelemetry.semconv.trace"] = MagicMock()
+    sys.modules["opentelemetry.trace"] = MagicMock()
+    sys.modules["uvicorn"] = MagicMock()
+    yield
+    # Cleanup not strictly necessary as these are test mocks
 
 from click.testing import CliRunner
 from fastapi.testclient import TestClient

@@ -38,39 +38,44 @@ from sqlalchemy import create_engine  # ADDED as per Step 1
 from sqlalchemy.orm import sessionmaker
 
 # --- Fixture Setup for Test Database ---
-# Create a new sessionmaker for the test database
-# MODIFIED as per Step 1: Create a single engine and connection for in-memory DB
-engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-conn = engine.connect()  # Create a single, shared connection
-
-# Create a new sessionmaker bound to the shared connection
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=conn)
+# Database initialization moved to session-scoped fixture to avoid
+# expensive operations during pytest collection
 
 
-# Dependency override for get_db
-def override_get_db():
-    """Override the get_db dependency to use a test database session."""
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
+@pytest.fixture(scope="session")
+def test_db_engine():
+    """Create a test database engine for the entire test session."""
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    conn = engine.connect()
+    yield conn
+    conn.close()
 
 
-# Apply the override to the FastAPI app
-api.dependency_overrides[get_db] = override_get_db
-# ----------------------------------------
+@pytest.fixture(scope="session")
+def test_sessionmaker(test_db_engine):
+    """Create a sessionmaker bound to the test database connection."""
+    return sessionmaker(autocommit=False, autoflush=False, bind=test_db_engine)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def session_cleanup():
-    """
-    This fixture ensures the global 'conn' is closed once,
-    at the very end of the test session.
-    """
+def setup_db_override(test_sessionmaker, test_db_engine):
+    """Apply the database override to the FastAPI app for the entire session."""
+    def override_get_db():
+        """Override the get_db dependency to use a test database session."""
+        try:
+            db = test_sessionmaker()
+            yield db
+        finally:
+            db.close()
+    
+    api.dependency_overrides[get_db] = override_get_db
+    # Create tables
+    Base.metadata.create_all(bind=test_db_engine)
     yield
-    # This code runs after all tests are complete
-    conn.close()
+    # Cleanup
+    api.dependency_overrides.clear()
+    Base.metadata.drop_all(bind=test_db_engine)
+# ----------------------------------------
 
 
 @pytest.fixture
@@ -111,24 +116,11 @@ def mock_dependencies():
 def test_app(mock_dependencies):
     """
     Create a test FastAPI application.
-    This fixture creates the database tables before yielding the client
-    and drops them after.
+    Database setup is handled by the session-scoped setup_db_override fixture.
     """
-    # Create all tables defined in api.py (User, APIKey)
-    # MODIFIED as per Step 1: Bind to the shared connection
-    Base.metadata.create_all(bind=conn)
-
     # Use TestClient as a context manager to run startup/shutdown events
     with TestClient(api) as client:
         yield client
-
-    # Drop all tables after the tests are done
-    # MODIFIED as per Step 1: Bind to the shared connection
-    Base.metadata.drop_all(bind=conn)
-
-    # REMOVED: conn.close()
-    # This global connection should not be closed by a function-scoped fixture.
-    # It will be closed by the 'session_cleanup' fixture at the end of the run.
 
 
 @pytest.fixture

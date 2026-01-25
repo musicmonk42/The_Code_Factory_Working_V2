@@ -18,14 +18,20 @@ os.environ["TESTING"] = "true"
 os.environ["GENERATOR_API_KEY"] = "test-api-key"
 os.environ["GENERATOR_API_BASE_URL"] = "http://localhost:8000/api/v1"
 
-# Mock dependencies before importing gui
-# We still mock these so the *real* gui.py can import them
-sys.modules["runner.runner_core"] = MagicMock()
-sys.modules["runner.runner_config"] = MagicMock()
-sys.modules["runner.runner_logging"] = MagicMock()
-sys.modules["runner.runner_metrics"] = MagicMock()
-sys.modules["runner.runner_utils"] = MagicMock()
-sys.modules["intent_parser.intent_parser"] = MagicMock()
+
+# Module-level mocking moved to fixture to avoid expensive operations during pytest collection
+@pytest.fixture(scope="session", autouse=True)
+def mock_expensive_modules():
+    """Mock all expensive module dependencies before any imports."""
+    # Mock dependencies before importing gui
+    sys.modules["runner.runner_core"] = MagicMock()
+    sys.modules["runner.runner_config"] = MagicMock()
+    sys.modules["runner.runner_logging"] = MagicMock()
+    sys.modules["runner.runner_metrics"] = MagicMock()
+    sys.modules["runner.runner_utils"] = MagicMock()
+    sys.modules["intent_parser.intent_parser"] = MagicMock()
+    yield
+    # Cleanup not strictly necessary as these are test mocks
 
 
 @pytest.fixture
