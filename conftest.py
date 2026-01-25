@@ -1079,8 +1079,11 @@ class LazyStubLoader(Loader):
 
 # Install the lazy stub importer at the FRONT of sys.meta_path
 # This ensures it's checked before other import finders
-_lazy_importer = LazyStubImporter()
-sys.meta_path.insert(0, _lazy_importer)
+if not os.environ.get('DISABLE_LAZY_IMPORTER'):
+    _lazy_importer = LazyStubImporter()
+    sys.meta_path.insert(0, _lazy_importer)
+else:
+    print("⚠️  LazyStubImporter disabled via DISABLE_LAZY_IMPORTER env var")
 
 # NOTE: Stubs are NO LONGER created immediately - they're created on-demand when first imported
 # This dramatically speeds up conftest.py import time from ~6s to <1s
