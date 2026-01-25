@@ -20,9 +20,10 @@ class SimpleRedactionFilter(logging.Filter):
     
     def __init__(self):
         super().__init__()
-        # Simulate what happens when %d and %s get redacted
+        # Simulate what happens when format specifiers get redacted
+        # Covers common Python format specifiers: %d, %s, %f, %x, %o, %r, %i, etc.
         self.patterns = [
-            re.compile(r'%[ds]'),  # Simulate redaction of format placeholders
+            re.compile(r'%[diouxXeEfFgGcrsb]'),  # Common format specifiers
         ]
     
     def filter(self, record: logging.LogRecord) -> bool:

@@ -109,10 +109,11 @@ class LevelPrefixFormatter(logging.Formatter):
             # Formatting failed, likely due to corrupted format string
             # Fall back to simple string representation
             try:
-                # Try to get the message without formatting
-                formatted = f"{record.asctime if hasattr(record, 'asctime') else ''} - {record.name} - {record.levelname} - {str(record.msg)}"
+                # Use formatTime for reliable timestamp formatting
+                timestamp = self.formatTime(record, self.datefmt)
+                formatted = f"{timestamp} - {record.name} - {record.levelname} - {str(record.msg)}"
             except Exception:
-                # If all else fails, just use the raw message
+                # If all else fails, just use the raw message without timestamp
                 formatted = f"{record.levelname} - {str(record.msg)}"
         
         # Check if prefix already added (prevent duplicate prefixes)
