@@ -38,6 +38,11 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --exclude=test_project*,bad_syntax.py,many_bad_files
     - name: Test with pytest
       continue-on-error: true
+      env:
+        # Prevent OpenBLAS/MKL/OMP threading issues in CI environment (RLIMIT_NPROC limits)
+        OPENBLAS_NUM_THREADS: '1'
+        MKL_NUM_THREADS: '1'
+        OMP_NUM_THREADS: '1'
       run: |
         # Create basic test structure if tests don't exist
         TEST_EXISTS=false
