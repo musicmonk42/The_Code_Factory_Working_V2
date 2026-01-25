@@ -148,12 +148,18 @@ class LLMProviderConfig(BaseSettings):
         """
         provider = provider or self.default_llm_provider
         
+        def _sanitize_api_key(key: Optional[str]) -> Optional[str]:
+            """Sanitize API key by removing quotes and whitespace from Railway env vars."""
+            if key:
+                return key.strip().replace('"', '').replace("'", '')
+            return key
+        
         # Special handling for xAI/Grok - check both xai_api_key and grok_api_key
         if provider == "grok":
             # Prefer XAI_API_KEY, fallback to GROK_API_KEY
             xai_key = self.xai_api_key or self.grok_api_key
             if xai_key:
-                return xai_key.get_secret_value()
+                return _sanitize_api_key(xai_key.get_secret_value())
             return None
         
         # Ollama doesn't use API keys
@@ -168,7 +174,7 @@ class LLMProviderConfig(BaseSettings):
         
         secret_str = key_mapping.get(provider)
         if secret_str:
-            return secret_str.get_secret_value()
+            return _sanitize_api_key(secret_str.get_secret_value())
         return None
     
     def get_provider_model(self, provider: Optional[str] = None) -> str:

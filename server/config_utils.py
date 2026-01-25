@@ -94,6 +94,47 @@ MAX_STARTUP_TIMEOUT = 600  # Maximum startup timeout in seconds (10 minutes)
 DEFAULT_STARTUP_TIMEOUT = 90  # Default startup timeout in seconds
 
 
+def sanitize_env_value(value: Optional[str]) -> Optional[str]:
+    """
+    Sanitize environment variable values by removing quotes and whitespace.
+    
+    Railway and other cloud providers sometimes provide environment variables
+    with hidden quotes or whitespace that cause validation failures.
+    
+    Args:
+        value: Raw environment variable value
+        
+    Returns:
+        Sanitized value with quotes and leading/trailing whitespace removed,
+        or None if the input is None or empty after sanitization
+    """
+    if value is None:
+        return None
+    sanitized = value.strip().replace('"', '').replace("'", '')
+    return sanitized if sanitized else None
+
+
+def get_sanitized_env(key: str, default: Optional[str] = None) -> Optional[str]:
+    """
+    Get an environment variable with automatic sanitization.
+    
+    This function retrieves environment variables and automatically sanitizes
+    them by removing quotes and whitespace that cloud providers (especially Railway)
+    may inadvertently include.
+    
+    Args:
+        key: Environment variable name
+        default: Default value if not set
+        
+    Returns:
+        Sanitized environment variable value, or default if not set
+    """
+    value = os.environ.get(key)
+    if value is None:
+        return default
+    return sanitize_env_value(value) or default
+
+
 @dataclass
 class PlatformConfig:
     """
@@ -232,8 +273,16 @@ def get_config() -> PlatformConfig:
     ]
     
     for key_var in api_key_vars:
-        if os.getenv(key_var):
-            config.available_api_keys.add(key_var)
+        raw_key = os.getenv(key_var)
+        if raw_key:
+            # FIX: Sanitize API key values from Railway/cloud providers that may include
+            # hidden quotes, whitespace, or control characters that cause API key validation failures
+            sanitized_key = raw_key.strip().replace('"', '').replace("'", '')
+            if sanitized_key:
+                config.available_api_keys.add(key_var)
+                # Log if sanitization changed the value (indicates potential config issue)
+                if raw_key != sanitized_key:
+                    logger.debug(f"API key {key_var} was sanitized (removed quotes/whitespace)")
     
     # Define required keys for production
     if config.is_production:

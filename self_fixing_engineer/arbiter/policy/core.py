@@ -526,6 +526,13 @@ class PolicyEngine:
                     "POLICY_REFRESH_INTERVAL_SECONDS must be a positive number"
                 )
             llm_provider = getattr(config, 'LLM_PROVIDER', 'openai')
+            # FIX: Sanitize LLM_PROVIDER value to handle Railway env vars with quotes/whitespace
+            if isinstance(llm_provider, str):
+                llm_provider = llm_provider.strip().replace('"', '').replace("'", '').lower()
+                try:
+                    setattr(config, 'LLM_PROVIDER', llm_provider)
+                except (AttributeError, TypeError):
+                    pass  # Config may be frozen
             if not isinstance(llm_provider, str) or llm_provider not in {
                 "openai",
                 "anthropic",

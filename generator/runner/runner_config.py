@@ -826,6 +826,10 @@ def load_config(
     for env_key, field_name in env_map.items():
         if env_val := os.getenv(env_key):
             try:
+                # FIX: Sanitize environment variables from Railway/cloud providers that may include
+                # hidden quotes, whitespace, or control characters
+                env_val = env_val.strip().replace('"', '').replace("'", '')
+                
                 # Use model_fields for robust metadata access in V2
                 field_info = RunnerConfig.model_fields[field_name]
                 field_type_info = field_info.annotation
