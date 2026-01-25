@@ -141,18 +141,27 @@ function connectWebSocket() {
     };
     
     websocket.onerror = (error) => {
+        // Note: Browser WebSocket error events typically don't provide detailed error properties
+        // The close event (onclose) will provide the actual status code and reason
         console.error('WebSocket error:', error);
-        addEvent('System', 'Connection error', 'error');
+        console.error('Error details:', { type: error.type, target: error.target?.url });
+        addEvent('System', `Connection error - Check console for details`, 'error');
     };
     
-    websocket.onclose = () => {
+    websocket.onclose = (event) => {
+        const closeCode = event.code || 1006; // 1006 = abnormal closure
+        const closeReason = event.reason || 'No reason provided';
+        const wasClean = event.wasClean ? 'clean' : 'unclean';
+        
+        console.log(`WebSocket closed. Code: ${closeCode}, Reason: ${closeReason}, Clean: ${wasClean}`);
+        
         document.getElementById('stream-status').textContent = 'Disconnected';
         document.getElementById('stream-status').style.background = 'rgba(176, 184, 212, 0.1)';
         document.getElementById('stream-status').style.color = 'var(--text-secondary)';
         document.getElementById('connect-stream').disabled = false;
         document.getElementById('disconnect-stream').disabled = true;
         
-        addEvent('System', 'Disconnected from event stream', 'warning');
+        addEvent('System', `Disconnected (HTTP ${closeCode}: ${closeReason})`, 'warning');
     };
 }
 
