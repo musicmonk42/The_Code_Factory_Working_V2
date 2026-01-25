@@ -1064,6 +1064,16 @@ class ArbiterConfig(BaseSettings):
         return self.DB_PATH
 
     @property
+    def database_path(self) -> str:
+        """Alias for DB_PATH for backward compatibility with omnicore_engine."""
+        return self.DB_PATH
+
+    @property
+    def plugin_dir(self) -> str:
+        """Alias for PLUGIN_DIR for backward compatibility with omnicore_engine."""
+        return self.PLUGIN_DIR
+
+    @property
     def log_level(self) -> str:
         """Lowercase alias for LOG_LEVEL for compatibility with components expecting lowercase config names."""
         return self.LOG_LEVEL
