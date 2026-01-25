@@ -563,7 +563,21 @@ class Database:
                     fallback = _create_fallback_settings()
                     for attr in missing_attrs:
                         if hasattr(fallback, attr):
-                            setattr(config, attr, getattr(fallback, attr))
+                            # Industry-standard safety check: attempt setattr in a try/except
+                            # to handle immutable config objects gracefully. This prevents
+                            # ValueError/AttributeError when config is a frozen dataclass,
+                            # Pydantic model with extra='forbid', or other immutable object.
+                            try:
+                                setattr(config, attr, getattr(fallback, attr))
+                                logger.debug(
+                                    f"Successfully set fallback attribute '{attr}' on config"
+                                )
+                            except (AttributeError, TypeError, ValueError) as e:
+                                # Config object may be immutable or have validation
+                                # that rejects the fallback value. Log but don't fail.
+                                logger.debug(
+                                    f"Could not set attribute '{attr}' on config: {e}"
+                                )
                 
                 if config_valid:
                     # Initialize PolicyEngine with validated config
