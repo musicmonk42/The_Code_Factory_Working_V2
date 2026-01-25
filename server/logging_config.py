@@ -96,9 +96,25 @@ class LevelPrefixFormatter(logging.Formatter):
         Note:
             This method is called for every log message, so it must be fast.
             Current implementation is O(1) with minimal overhead.
+            
+            Includes error handling for cases where PII redaction may corrupt
+            format strings (e.g., "%d" becomes "[REDACTED]"), preventing crashes.
         """
-        # Format message using parent class formatter
-        formatted = super().format(record)
+        # Format message using parent class formatter with error handling
+        # This is necessary because PII redaction filters may corrupt format strings
+        # before the formatter runs (e.g., "Loaded %d plugins" -> "Loaded [REDACTED] plugins")
+        try:
+            formatted = super().format(record)
+        except (ValueError, TypeError, KeyError) as e:
+            # Formatting failed, likely due to corrupted format string
+            # Fall back to simple string representation
+            try:
+                # Use formatTime for reliable timestamp formatting
+                timestamp = self.formatTime(record, self.datefmt)
+                formatted = f"{timestamp} - {record.name} - {record.levelname} - {str(record.msg)}"
+            except Exception:
+                # If all else fails, just use the raw message without timestamp
+                formatted = f"{record.levelname} - {str(record.msg)}"
         
         # Check if prefix already added (prevent duplicate prefixes)
         if formatted.startswith(LOG_PREFIX_INFO) or formatted.startswith(LOG_PREFIX_ERROR):

@@ -382,7 +382,7 @@ try:
 
     MULTI_MODAL_SCHEMAS_AVAILABLE = True
 except ImportError:
-    logger.warning("multi_modal_schemas_missing", message="Using dummy MultiModalData")
+    logger.warning("multi_modal_schemas_missing: Using dummy MultiModalData")
 
     class MultiModalData(BaseModel):
         data_type: str
