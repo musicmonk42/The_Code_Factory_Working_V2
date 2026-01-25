@@ -19,6 +19,7 @@ from prometheus_client.core import Counter, Gauge, Histogram
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import after mocking to prevent server startup
+# This patch at module level prevents expensive Prometheus HTTP server initialization
 with patch("omnicore_engine.metrics.start_http_server"):
     from omnicore_engine.metrics import (  # Import specific metrics for testing
         ACTIVE_SIMULATIONS,

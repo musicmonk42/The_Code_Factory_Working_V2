@@ -23,13 +23,20 @@ from click.testing import CliRunner
 # Set testing environment variables
 os.environ["TESTING"] = "true"
 
-# Mock dependencies before importing cli
-sys.modules["engine"] = MagicMock()
-sys.modules["runner.runner_config"] = MagicMock()
-sys.modules["runner.runner_logging"] = MagicMock()
-sys.modules["runner.runner_metrics"] = MagicMock()
-sys.modules["runner.runner_utils"] = MagicMock()
-sys.modules["clarifier_updater"] = MagicMock()
+
+# Module-level mocking moved to fixture to avoid expensive operations during pytest collection
+@pytest.fixture(scope="session", autouse=True)
+def mock_expensive_modules():
+    """Mock all expensive module dependencies before any imports."""
+    # Mock dependencies before importing cli
+    sys.modules["engine"] = MagicMock()
+    sys.modules["runner.runner_config"] = MagicMock()
+    sys.modules["runner.runner_logging"] = MagicMock()
+    sys.modules["runner.runner_metrics"] = MagicMock()
+    sys.modules["runner.runner_utils"] = MagicMock()
+    sys.modules["clarifier_updater"] = MagicMock()
+    yield
+    # Cleanup not strictly necessary as these are test mocks
 
 
 # FIX: Replaced old cli_runner with new one that creates config.yaml in an isolated filesystem

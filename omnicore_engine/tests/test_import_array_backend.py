@@ -18,6 +18,7 @@ def test_import_array_backend():
     works correctly and doesn't fail with NameError: config_instance not defined.
     """
     # Clear the module from cache if it exists to test fresh import
+    # Moved inside test function to avoid expensive operation during collection
     if "omnicore_engine.array_backend" in sys.modules:
         del sys.modules["omnicore_engine.array_backend"]
 

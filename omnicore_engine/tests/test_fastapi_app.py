@@ -18,7 +18,18 @@ from fastapi.testclient import TestClient
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from omnicore_engine.fastapi_app import app
+
+@pytest.fixture
+def app():
+    """Lazy-load the FastAPI app to avoid expensive initialization during collection."""
+    from omnicore_engine.fastapi_app import app
+    return app
+
+
+@pytest.fixture
+def client(app):
+    """Create a test client for the FastAPI app."""
+    return TestClient(app)
 
 
 class TestStartupShutdown:
@@ -80,9 +91,9 @@ class TestStartupShutdown:
 class TestSecurityMiddleware:
     """Test security middleware and authentication"""
 
-    def test_size_limit_middleware(self):
+    def test_size_limit_middleware(self, client):
         """Test request size limiting"""
-        client = TestClient(app)
+        # client fixture injected
 
         # Create large payload
         large_data = "x" * 11_000_000  # 11MB
@@ -96,15 +107,15 @@ class TestSecurityMiddleware:
         assert response.status_code == 413
         assert "Request too large" in response.json()["error"]
 
-    def test_csrf_protection(self):
+    def test_csrf_protection(self, client):
         """Test CSRF protection"""
-        client = TestClient(app)
+        # client fixture injected
 
         # Request without CSRF token should fail for protected endpoints
         # This would need actual CSRF testing setup
         pass
 
-    def test_jwt_authentication(self):
+    def test_jwt_authentication(self, client):
         """Test JWT token validation"""
         # For this test, we'll use a patched settings with a known secret
         test_secret = "test-jwt-secret-key-for-testing"
@@ -152,9 +163,8 @@ class TestSecurityMiddleware:
 class TestHealthEndpoint:
     """Test health check endpoint"""
 
-    def test_root_health_check(self):
+    def test_root_health_check(self, client):
         """Test root /health endpoint for container orchestration"""
-        client = TestClient(app)
         response = client.get("/health")
 
         assert response.status_code == 200
@@ -198,9 +208,9 @@ class TestChatEndpoint:
         assert response.json()["status"] == "success"
 
     @patch("omnicore_engine.fastapi_app.ARBITER_AVAILABLE", False)
-    def test_chat_unavailable(self):
+    def test_chat_unavailable(self, client):
         """Test chat when arbiter not available"""
-        client = TestClient(app)
+        # client fixture injected
         response = client.post(
             "/api/chat", json={"user_id": "user123", "message": "Hello", "context": {}}
         )
@@ -233,9 +243,9 @@ class TestSimulationEndpoints:
         assert response.json()["result"]["result"] == "simulation_completed"
 
     @patch("omnicore_engine.fastapi_app.simulation_module", None)
-    def test_execute_simulation_not_initialized(self):
+    def test_execute_simulation_not_initialized(self, client):
         """Test simulation when module not initialized"""
-        client = TestClient(app)
+        # client fixture injected
         response = client.post("/api/simulation/execute", json={"config": {}})
 
         assert response.status_code == 500
@@ -309,7 +319,7 @@ class TestAdminEndpoints:
             algorithm="HS256",
         )
 
-    def test_admin_api_disabled(self):
+    def test_admin_api_disabled(self, client):
         """Test admin API when disabled"""
         from omnicore_engine.fastapi_app import settings
 
@@ -320,7 +330,7 @@ class TestAdminEndpoints:
             # Disable experimental features
             settings.EXPERIMENTAL_FEATURES_ENABLED = False
 
-            client = TestClient(app)
+            # client fixture injected
             response = client.get("/admin/feature-flag")
 
             assert response.status_code == 404
@@ -519,9 +529,9 @@ class TestImportFixerEndpoint:
         finally:
             os.unlink(temp_file)
 
-    def test_fix_imports_invalid_file_type(self):
+    def test_fix_imports_invalid_file_type(self, client):
         """Test import fixer with invalid file type"""
-        client = TestClient(app)
+        # client fixture injected
 
         response = client.post(
             "/fix-imports/", files={"file": ("test.txt", b"not python", "text/plain")}
@@ -534,9 +544,9 @@ class TestImportFixerEndpoint:
 class TestUtilityEndpoints:
     """Test utility endpoints"""
 
-    def test_notify_endpoint(self):
+    def test_notify_endpoint(self, client):
         """Test notification endpoint"""
-        client = TestClient(app)
+        # client fixture injected
 
         response = client.post(
             "/api/notify", json={"message": "Test notification", "type": "info"}
@@ -545,9 +555,9 @@ class TestUtilityEndpoints:
         assert response.status_code == 200
         assert response.json()["status"] == "received"
 
-    def test_custom_docs_endpoints(self):
+    def test_custom_docs_endpoints(self, client):
         """Test custom documentation endpoints"""
-        client = TestClient(app)
+        # client fixture injected
 
         # Swagger UI
         response = client.get("/docs")
