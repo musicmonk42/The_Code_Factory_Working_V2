@@ -249,21 +249,24 @@ class FileAuditLogger(AuditLogger):
 
         # Also write directly to the audit log file if handler is available
         if self.file_handler:
-            audit_record = {
-                "timestamp": datetime.now().isoformat(),
-                "action": action,
-                "details": enriched_details,
-            }
-            log_record = logging.LogRecord(
-                name="audit",
-                level=logging.INFO,
-                pathname="",
-                lineno=0,
-                msg=json.dumps(audit_record),
-                args=(),
-                exc_info=None,
-            )
-            self.file_handler.emit(log_record)
+            try:
+                audit_record = {
+                    "timestamp": datetime.now().isoformat(),
+                    "action": action,
+                    "details": enriched_details,
+                }
+                log_record = logging.LogRecord(
+                    name="audit",
+                    level=logging.INFO,
+                    pathname="",
+                    lineno=0,
+                    msg=json.dumps(audit_record),
+                    args=(),
+                    exc_info=None,
+                )
+                self.file_handler.emit(log_record)
+            except Exception as e:
+                logger.warning(f"Failed to write audit record to file: {e}")
 
 
 # Standard application logging
