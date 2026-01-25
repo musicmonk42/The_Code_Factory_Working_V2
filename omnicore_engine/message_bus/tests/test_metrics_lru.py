@@ -21,11 +21,26 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from omnicore_engine.message_bus.metrics import (
-    _ThreadSafeDict,
-    get_mock_registry_stats,
-    reset_metrics,
-)
+# Lazy import to avoid issues during test collection when dependencies may not be available.
+# The metrics module requires the message_bus package which has heavy dependencies.
+# Import is deferred to fixture/test execution time when pytest has fully initialized.
+_ThreadSafeDict = None
+get_mock_registry_stats = None
+reset_metrics = None
+
+
+def _lazy_import_metrics():
+    """Import metrics module lazily to avoid collection-time errors."""
+    global _ThreadSafeDict, get_mock_registry_stats, reset_metrics
+    if _ThreadSafeDict is None:
+        from omnicore_engine.message_bus.metrics import (
+            _ThreadSafeDict as _TSD,
+            get_mock_registry_stats as _gmrs,
+            reset_metrics as _rm,
+        )
+        _ThreadSafeDict = _TSD
+        get_mock_registry_stats = _gmrs
+        reset_metrics = _rm
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -43,6 +58,9 @@ def mock_prometheus():
     from omnicore_engine.message_bus import metrics
 
     importlib.reload(metrics)
+    
+    # Now perform the lazy import after metrics module is properly loaded
+    _lazy_import_metrics()
 
     yield
 
