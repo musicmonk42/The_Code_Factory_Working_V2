@@ -72,24 +72,39 @@ except (TypeError, Exception) as e:
 
 # Helper to safely use tracer
 from contextlib import contextmanager
+from typing import Optional
+
+
+# No-op span class for when OpenTelemetry is unavailable
+class NoOpSpan:
+    """A no-op span that implements the minimal span interface."""
+    
+    def set_attribute(self, key, value):
+        """No-op set_attribute."""
+        pass
+    
+    def record_exception(self, exception):
+        """No-op record_exception."""
+        pass
 
 
 @contextmanager
-def safe_span(span_name: str, attributes: Dict[str, Any] = None):
-    """Context manager that safely handles tracing even when tracer is None."""
+def safe_span(span_name: str, attributes: Optional[Dict[str, Any]] = None):
+    """Context manager that safely handles tracing even when tracer is None.
+    
+    Args:
+        span_name: Name of the span
+        attributes: Optional attributes dict for the span
+        
+    Yields:
+        A span object (real or no-op)
+    """
     if tracer is not None:
         with tracer.start_as_current_span(span_name, attributes=attributes or {}) as span:
             yield span
     else:
-        # Create a no-op span-like object
-        class NoOpSpan:
-            def set_attribute(self, key, value):
-                pass
-            
-            def record_exception(self, exception):
-                pass
-        
         yield NoOpSpan()
+
 
 # Prometheus metrics
 _metrics_lock = threading.Lock()
