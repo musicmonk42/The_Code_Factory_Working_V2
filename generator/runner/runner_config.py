@@ -827,8 +827,14 @@ def load_config(
         if env_val := os.getenv(env_key):
             try:
                 # FIX: Sanitize environment variables from Railway/cloud providers that may include
-                # hidden quotes, whitespace, or control characters
-                env_val = env_val.strip().replace('"', '').replace("'", '')
+                # wrapping quotes or whitespace that cause validation failures
+                sanitized_val = env_val.strip()
+                # Remove wrapping quotes only (preserves quotes in the middle of values)
+                if len(sanitized_val) >= 2:
+                    if (sanitized_val.startswith('"') and sanitized_val.endswith('"')) or \
+                       (sanitized_val.startswith("'") and sanitized_val.endswith("'")):
+                        sanitized_val = sanitized_val[1:-1]
+                env_val = sanitized_val
                 
                 # Use model_fields for robust metadata access in V2
                 field_info = RunnerConfig.model_fields[field_name]

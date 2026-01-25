@@ -526,13 +526,21 @@ class PolicyEngine:
                     "POLICY_REFRESH_INTERVAL_SECONDS must be a positive number"
                 )
             llm_provider = getattr(config, 'LLM_PROVIDER', 'openai')
-            # FIX: Sanitize LLM_PROVIDER value to handle Railway env vars with quotes/whitespace
+            # FIX: Sanitize LLM_PROVIDER value to handle Railway env vars with wrapping quotes/whitespace
             if isinstance(llm_provider, str):
-                llm_provider = llm_provider.strip().replace('"', '').replace("'", '').lower()
+                sanitized_provider = llm_provider.strip().lower()
+                # Remove wrapping quotes only
+                if len(sanitized_provider) >= 2:
+                    if (sanitized_provider.startswith('"') and sanitized_provider.endswith('"')) or \
+                       (sanitized_provider.startswith("'") and sanitized_provider.endswith("'")):
+                        sanitized_provider = sanitized_provider[1:-1]
+                llm_provider = sanitized_provider
                 try:
                     setattr(config, 'LLM_PROVIDER', llm_provider)
-                except (AttributeError, TypeError):
-                    pass  # Config may be frozen
+                except (AttributeError, TypeError) as e:
+                    # Config may be frozen (e.g., Pydantic frozen model or named tuple)
+                    # Log at debug level since we continue with the sanitized value anyway
+                    logger.debug(f"Could not update frozen config with sanitized LLM_PROVIDER: {e}")
             if not isinstance(llm_provider, str) or llm_provider not in {
                 "openai",
                 "anthropic",

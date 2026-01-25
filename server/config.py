@@ -149,10 +149,16 @@ class LLMProviderConfig(BaseSettings):
         provider = provider or self.default_llm_provider
         
         def _sanitize_api_key(key: Optional[str]) -> Optional[str]:
-            """Sanitize API key by removing quotes and whitespace from Railway env vars."""
-            if key:
-                return key.strip().replace('"', '').replace("'", '')
-            return key
+            """Sanitize API key by removing wrapping quotes and whitespace from Railway env vars."""
+            if not key:
+                return None
+            sanitized = key.strip()
+            # Remove wrapping quotes only (preserves quotes in the middle of values)
+            if len(sanitized) >= 2:
+                if (sanitized.startswith('"') and sanitized.endswith('"')) or \
+                   (sanitized.startswith("'") and sanitized.endswith("'")):
+                    sanitized = sanitized[1:-1]
+            return sanitized if sanitized else None
         
         # Special handling for xAI/Grok - check both xai_api_key and grok_api_key
         if provider == "grok":

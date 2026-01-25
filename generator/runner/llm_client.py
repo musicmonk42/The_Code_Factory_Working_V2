@@ -90,16 +90,23 @@ class SecretsManager:
             return self._cache[secret_name]
 
         # In a real app, this should prioritize the environment variable over anything loaded by dotenv
-        secret = os.environ.get(secret_name)
+        raw_secret = os.environ.get(secret_name)
         
         # FIX: Sanitize environment variables from Railway/cloud providers that may include
-        # hidden quotes, whitespace, or control characters that cause API key validation failures
-        if secret:
-            secret = secret.strip().replace('"', '').replace("'", '')
+        # wrapping quotes or whitespace that cause API key validation failures
+        secret = None
+        if raw_secret:
+            sanitized = raw_secret.strip()
+            # Remove wrapping quotes only (preserves quotes in the middle of values)
+            if len(sanitized) >= 2:
+                if (sanitized.startswith('"') and sanitized.endswith('"')) or \
+                   (sanitized.startswith("'") and sanitized.endswith("'")):
+                    sanitized = sanitized[1:-1]
+            secret = sanitized if sanitized else None
+            
             # Log if sanitization changed the value (indicates potential config issue)
-            original = os.environ.get(secret_name)
-            if original and original != secret:
-                logger.debug(f"SecretsManager: Sanitized {secret_name} (removed quotes/whitespace)")
+            if raw_secret != secret:
+                logger.debug(f"SecretsManager: Sanitized {secret_name} (removed wrapping quotes/whitespace)")
         
         self._cache[secret_name] = secret
         return secret
