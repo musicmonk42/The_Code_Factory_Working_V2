@@ -577,6 +577,57 @@ class OmniCoreService:
                 "missing_dependencies": error.missing_dependencies if error else [],
             }
         
+        # Check if LLM provider is configured
+        llm_available = False
+        llm_provider = None
+        
+        if self.llm_config:
+            provider = self.llm_config.default_llm_provider
+            if self.llm_config.is_provider_configured(provider):
+                llm_available = True
+                llm_provider = provider
+            else:
+                # Try auto-detection
+                auto_provider = detect_available_llm_provider()
+                if auto_provider:
+                    llm_available = True
+                    llm_provider = auto_provider
+        else:
+            # Check environment variables directly
+            auto_provider = detect_available_llm_provider()
+            if auto_provider:
+                llm_available = True
+                llm_provider = auto_provider
+        
+        if not llm_available:
+            logger.error(
+                f"No LLM provider configured for code generation job {job_id}. "
+                "Please set one of the following environment variables:\n"
+                "  - OPENAI_API_KEY for OpenAI\n"
+                "  - ANTHROPIC_API_KEY for Anthropic/Claude\n"
+                "  - XAI_API_KEY or GROK_API_KEY for xAI/Grok\n"
+                "  - GOOGLE_API_KEY for Google/Gemini\n"
+                "  - OLLAMA_HOST for Ollama (local)"
+            )
+            return {
+                "status": "error",
+                "message": (
+                    "No LLM provider configured. Code generation requires an LLM API key. "
+                    "Please set OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, GOOGLE_API_KEY, "
+                    "or OLLAMA_HOST environment variable."
+                ),
+                "error_type": "LLMNotConfigured",
+                "configuration_help": {
+                    "openai": "Set OPENAI_API_KEY environment variable",
+                    "anthropic": "Set ANTHROPIC_API_KEY environment variable",
+                    "grok": "Set XAI_API_KEY or GROK_API_KEY environment variable",
+                    "google": "Set GOOGLE_API_KEY environment variable",
+                    "ollama": "Set OLLAMA_HOST environment variable (e.g., http://localhost:11434)",
+                },
+            }
+        
+        logger.info(f"Using LLM provider '{llm_provider}' for job {job_id}")
+        
         try:
             requirements = payload.get("requirements", "")
             language = payload.get("language", "python")

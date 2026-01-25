@@ -448,6 +448,8 @@ def load_config() -> Dynaconf:
             Validator("HISTORY_LOOKBACK_LIMIT", default=10, gte=1, lte=100),
             Validator("CIRCUIT_BREAKER_THRESHOLD", default=5, gte=1),
             Validator("CIRCUIT_BREAKER_TIMEOUT", default=30, gte=1),
+            # Schema version for requirements data - used by clarifier_updater
+            Validator("SCHEMA_VERSION", default=3, is_type_of=int, gte=1),
         ],
     )
     

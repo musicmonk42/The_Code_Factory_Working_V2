@@ -53,8 +53,12 @@ TESTING = (
     or os.getenv("PYTEST_ADDOPTS") is not None
 )
 
+# Default plugin directory - use ./plugins if not specified
+DEFAULT_PLUGIN_DIR = os.getenv("PLUGIN_DIR") or os.getenv("LLM_PLUGIN_PLUGIN_DIR") or "./plugins"
+
 REQUIRED_VALIDATORS = [
-    Validator("PLUGIN_DIR", must_exist=True, is_type_of=str),
+    # FIX: Provide default value for PLUGIN_DIR to prevent startup failures
+    Validator("PLUGIN_DIR", default=DEFAULT_PLUGIN_DIR, is_type_of=str),
     Validator("HASH_MANIFEST", default="", is_type_of=str),
     Validator("AUTO_RELOAD", default=False, is_type_of=bool),
 ]
@@ -66,7 +70,7 @@ if TESTING:
         # Use a temp plugin directory by default; tests override as needed.
         settings.set("PLUGIN_DIR", str(Path(tempfile.gettempdir()) / "plugins"))
 else:
-    # In normal/production mode, enforce validators.
+    # In normal/production mode, use validators with default PLUGIN_DIR.
     settings = Dynaconf(
         env="main",
         environments=True,
@@ -74,6 +78,18 @@ else:
         settings_files=[],
         validators=REQUIRED_VALIDATORS,
     )
+    # Ensure PLUGIN_DIR is set even if validators don't run
+    if not settings.get("PLUGIN_DIR"):
+        settings.set("PLUGIN_DIR", DEFAULT_PLUGIN_DIR)
+        logger.info(f"PLUGIN_DIR not configured, using default: {DEFAULT_PLUGIN_DIR}")
+    # Ensure the plugin directory exists
+    plugin_dir_path = Path(settings.PLUGIN_DIR)
+    if not plugin_dir_path.exists():
+        try:
+            plugin_dir_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Created plugin directory: {plugin_dir_path}")
+        except OSError as e:
+            logger.warning(f"Could not create plugin directory {plugin_dir_path}: {e}")
 
 # ============================================================================
 # Metrics
@@ -91,6 +107,11 @@ except ImportError:
     )
 
     class DummyCounter:
+        """No-op Counter compatible with prometheus_client Counter interface."""
+        def __init__(self, *args, **kwargs):
+            # Accept constructor arguments: name, documentation, labelnames, etc.
+            pass
+            
         def labels(self, *args, **kwargs):
             return self
 
@@ -98,6 +119,11 @@ except ImportError:
             pass
 
     class DummyGauge:
+        """No-op Gauge compatible with prometheus_client Gauge interface."""
+        def __init__(self, *args, **kwargs):
+            # Accept constructor arguments: name, documentation, labelnames, etc.
+            pass
+            
         def labels(self, *args, **kwargs):
             return self
 

@@ -373,25 +373,27 @@ class RegulatoryAuditLogger:
         }
 
         # Atomic write to primary log
+        # FIX: Use sort_keys=True for consistent serialization (matches verification)
         try:
+            serialized_entry = json.dumps(signed_entry, sort_keys=True) + "\n"
             if AIOFILES_AVAILABLE:
                 async with aiofiles.open(self.primary_log, "ab") as f:
-                    await f.write((json.dumps(signed_entry) + "\n").encode("utf-8"))
+                    await f.write(serialized_entry.encode("utf-8"))
                     await f.flush()
                     os.fsync(f.fileno())  # Force write to disk
             else:
                 with open(self.primary_log, "ab") as f:
-                    f.write((json.dumps(signed_entry) + "\n").encode("utf-8"))
+                    f.write(serialized_entry.encode("utf-8"))
                     f.flush()
                     os.fsync(f.fileno())
 
             # Also write to backup
             if AIOFILES_AVAILABLE:
                 async with aiofiles.open(self.backup_log, "ab") as f:
-                    await f.write((json.dumps(signed_entry) + "\n").encode("utf-8"))
+                    await f.write(serialized_entry.encode("utf-8"))
             else:
                 with open(self.backup_log, "ab") as f:
-                    f.write((json.dumps(signed_entry) + "\n").encode("utf-8"))
+                    f.write(serialized_entry.encode("utf-8"))
 
         except IOError as e:
             alert_operator(
@@ -604,7 +606,11 @@ class RegulatoryAuditLogger:
             return 1
 
     async def _get_previous_hash(self) -> Optional[str]:
-        """Get hash of previous log entry for chaining."""
+        """Get hash of previous log entry for chaining.
+        
+        FIX: Use consistent serialization with sort_keys=True to match verification.
+        This ensures the hash chain remains valid across writes and verification.
+        """
         try:
             if AIOFILES_AVAILABLE:
                 async with aiofiles.open(self.primary_log, "rb") as f:
@@ -612,18 +618,37 @@ class RegulatoryAuditLogger:
                     if lines:
                         last_line = lines[-1].decode("utf-8").strip()
                         if last_line:
-                            # Re-encode and hash the entire signed entry, including signature
-                            last_entry_bytes = last_line.encode("utf-8")
-                            return hashlib.sha256(last_entry_bytes).hexdigest()
+                            # FIX: Parse JSON and re-serialize with sort_keys=True
+                            # This ensures consistent hashing regardless of original serialization
+                            try:
+                                entry = json.loads(last_line)
+                                canonical_bytes = json.dumps(entry, sort_keys=True).encode("utf-8")
+                                return hashlib.sha256(canonical_bytes).hexdigest()
+                            except json.JSONDecodeError as e:
+                                # Log warning about corrupted entry - this could break hash chain
+                                logger.warning(
+                                    f"Failed to parse last audit log entry as JSON: {e}. "
+                                    "This may indicate log corruption and could break hash chain integrity."
+                                )
+                                # Return None to start fresh chain - safer than inconsistent fallback
+                                return None
             else:
                 with open(self.primary_log, "rb") as f:
                     lines = f.readlines()
                     if lines:
                         last_line = lines[-1].decode("utf-8").strip()
                         if last_line:
-                            # Re-encode and hash the entire signed entry, including signature
-                            last_entry_bytes = last_line.encode("utf-8")
-                            return hashlib.sha256(last_entry_bytes).hexdigest()
+                            # FIX: Parse JSON and re-serialize with sort_keys=True
+                            try:
+                                entry = json.loads(last_line)
+                                canonical_bytes = json.dumps(entry, sort_keys=True).encode("utf-8")
+                                return hashlib.sha256(canonical_bytes).hexdigest()
+                            except json.JSONDecodeError as e:
+                                logger.warning(
+                                    f"Failed to parse last audit log entry as JSON: {e}. "
+                                    "This may indicate log corruption and could break hash chain integrity."
+                                )
+                                return None
         except (OSError, IOError, ValueError, UnicodeDecodeError) as e:
             logger.debug(f"Failed to get previous hash: {e}")
             pass

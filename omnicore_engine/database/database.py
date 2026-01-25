@@ -117,9 +117,29 @@ def _get_settings():
     try:
         config = ArbiterConfig()
         
-        # Validate that config has expected attributes
-        required_attrs = ['log_level', 'database_path', 'plugin_dir']
-        missing_attrs = [attr for attr in required_attrs if not hasattr(config, attr)]
+        # Validate that config has expected attributes (check both cases)
+        # ArbiterConfig uses uppercase, some code expects lowercase
+        required_attrs_map = {
+            'log_level': ['log_level', 'LOG_LEVEL'],
+            'database_path': ['database_path', 'DB_PATH'],
+            'plugin_dir': ['plugin_dir', 'PLUGIN_DIR']
+        }
+        
+        missing_attrs = []
+        for attr_name, alternatives in required_attrs_map.items():
+            found = any(hasattr(config, alt) for alt in alternatives)
+            if not found:
+                missing_attrs.append(attr_name)
+            else:
+                # Add lowercase alias if only uppercase exists
+                if not hasattr(config, attr_name):
+                    for alt in alternatives[1:]:  # Check non-primary names
+                        if hasattr(config, alt):
+                            try:
+                                setattr(config, attr_name, getattr(config, alt))
+                            except (AttributeError, TypeError):
+                                pass  # Some config objects may not allow setattr
+                            break
         
         if missing_attrs:
             logger.warning(

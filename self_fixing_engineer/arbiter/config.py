@@ -283,6 +283,34 @@ class ArbiterConfig(BaseSettings):
     SIMILARITY_THRESHOLD: float = Field(default=0.8, env="SIMILARITY_THRESHOLD")
     POLICY_CONFIG_FILE: str = Field(default="./policies.json", env="POLICY_CONFIG_FILE")
 
+    # --- PolicyEngine Required Settings ---
+    # These are required by PolicyEngine for initialization
+    POLICY_REFRESH_INTERVAL_SECONDS: float = Field(
+        default=300.0, env="POLICY_REFRESH_INTERVAL_SECONDS"
+    )
+    LLM_PROVIDER: str = Field(default="openai", env="LLM_PROVIDER")
+    LLM_MODEL: str = Field(default="gpt-4", env="LLM_MODEL")
+    DECISION_OPTIMIZER_SETTINGS: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "max_iterations": 100,
+            "convergence_threshold": 0.01,
+            "learning_rate": 0.1
+        },
+        env="DECISION_OPTIMIZER_SETTINGS"
+    )
+    CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL: float = Field(
+        default=0.1, env="CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL"
+    )
+    VALID_DOMAIN_PATTERN: str = Field(
+        default=r"^[a-zA-Z0-9_.-]+$", env="VALID_DOMAIN_PATTERN"
+    )
+    POLICY_CONFIG_FILE_PATH: str = Field(
+        default="./policies.json", env="POLICY_CONFIG_FILE_PATH"
+    )
+    POLICY_PAUSE_POLLING_INTERVAL: float = Field(
+        default=5.0, env="POLICY_PAUSE_POLLING_INTERVAL"
+    )
+
     # --- Audit Settings ---
     AUDIT_BUFFER_SIZE: int = Field(default=100, env="AUDIT_BUFFER_SIZE")
     AUDIT_FLUSH_INTERVAL: float = Field(default=1.0, env="AUDIT_FLUSH_INTERVAL")
