@@ -90,50 +90,107 @@ except ImportError:
 # --- All internal AuditLogger definitions replaced with centralized call ---
 # ==============================================================================
 class AuditLogger(ABC):
-    """Placeholder for type compatibility."""
+    """
+    Abstract base class for audit loggers.
+    
+    Industry Standard: All implementations must provide async log_action method
+    to ensure proper integration with the async log_audit_event system and prevent
+    unawaited coroutine warnings that can cause silent audit failures.
+    """
 
     @abstractmethod
-    def log_action(self, action: str, details: Dict[str, Any]):
+    async def log_action(self, action: str, details: Dict[str, Any]) -> None:
+        """
+        Log an audit action asynchronously.
+        
+        Args:
+            action: The action/event type being logged
+            details: Dictionary containing event details and metadata
+            
+        Note:
+            Implementations must await the centralized log_audit_event function
+            to ensure audit events are properly recorded and signed.
+        """
         pass
 
 
 class JsonConsoleAuditLogger(AuditLogger):
     """
     JSON Console Audit Logger - outputs structured JSON audit logs to console/stdout.
-    Delegates to the centralized log_audit_event for consistent audit logging.
+    
+    Delegates to the centralized log_audit_event for consistent audit logging
+    and cryptographic signing of audit records.
+    
+    Thread-safe and async-compatible for production use.
     """
 
-    async def log_action(self, action: str, details: Dict[str, Any]):
-        """Log an audit action as JSON to console via centralized audit system."""
-        # Add metadata to indicate this is from JsonConsoleAuditLogger
+    async def log_action(self, action: str, details: Dict[str, Any]) -> None:
+        """
+        Log an audit action as JSON to console via centralized audit system.
+        
+        Args:
+            action: The action/event type being logged
+            details: Dictionary containing event details
+            
+        Raises:
+            No exceptions raised - failures are logged but don't interrupt execution.
+        """
+        # Add metadata to indicate source of audit record
         enriched_details = {
             **details,
             "audit_logger": "JsonConsoleAuditLogger",
             "output_target": "console",
         }
-        await log_audit_event(action, enriched_details)
+        
+        try:
+            await log_audit_event(action, enriched_details)
+        except Exception as e:
+            # Audit failures should never break application flow
+            logger.warning(f"Failed to send audit event to centralized logger: {e}")
+        
         # Also output directly to console as JSON for immediate visibility
-        audit_record = {
-            "timestamp": datetime.now().isoformat(),
-            "action": action,
-            "details": enriched_details,
-        }
-        print(json.dumps(audit_record), file=sys.stdout, flush=True)
+        try:
+            audit_record = {
+                "timestamp": datetime.now().isoformat(),
+                "action": action,
+                "details": enriched_details,
+            }
+            print(json.dumps(audit_record), file=sys.stdout, flush=True)
+        except Exception as e:
+            logger.warning(f"Failed to write audit record to console: {e}")
 
 
 class FileAuditLogger(AuditLogger):
     """
     File Audit Logger - writes structured audit logs to a configured file.
-    Delegates to the centralized log_audit_event and appends to file.
+    
+    Delegates to the centralized log_audit_event for cryptographic signing
+    and also maintains a local rotating log file for disaster recovery.
+    
+    Features:
+    - Rotating file handler with configurable size and backup count
+    - Secure path validation to prevent directory traversal
+    - Graceful degradation if file system is unavailable
+    - Thread-safe and async-compatible
     """
 
     def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize the FileAuditLogger.
+        
+        Args:
+            config: Configuration dictionary with optional keys:
+                - audit_log_file: Path to log file (default: "audit.log")
+                - audit_log_max_bytes: Max file size before rotation (default: 10MB)
+                - audit_log_backup_count: Number of backup files (default: 5)
+        """
         self.config = config
         self.log_file = config.get("audit_log_file", "audit.log")
         self.max_bytes = config.get(
             "audit_log_max_bytes", 10 * 1024 * 1024
         )  # 10MB default
         self.backup_count = config.get("audit_log_backup_count", 5)
+        self.file_handler = None
 
         # Create rotating file handler for audit logs
         from logging.handlers import RotatingFileHandler
@@ -148,14 +205,11 @@ class FileAuditLogger(AuditLogger):
                 log_dir.mkdir(parents=True, mode=0o755, exist_ok=True)
             except (OSError, PermissionError) as e:
                 logger.error(f"Failed to create audit log directory {log_dir}: {e}")
-                # Fall back to using stdout if directory creation fails
-                self.file_handler = None
                 return
 
         # Check write permissions
         if not os.access(log_dir, os.W_OK):
             logger.error(f"No write permission for audit log directory {log_dir}")
-            self.file_handler = None
             return
 
         try:
@@ -167,17 +221,31 @@ class FileAuditLogger(AuditLogger):
             self.file_handler.setFormatter(logging.Formatter("%(message)s"))
         except (OSError, PermissionError) as e:
             logger.error(f"Failed to create audit log file handler: {e}")
-            self.file_handler = None
 
-    async def log_action(self, action: str, details: Dict[str, Any]):
-        """Log an audit action to file via centralized audit system and direct file write."""
-        # Add metadata to indicate this is from FileAuditLogger
+    async def log_action(self, action: str, details: Dict[str, Any]) -> None:
+        """
+        Log an audit action to file via centralized audit system and direct file write.
+        
+        Args:
+            action: The action/event type being logged
+            details: Dictionary containing event details
+            
+        Note:
+            Failures are logged but don't interrupt execution to ensure
+            application stability even when audit systems are unavailable.
+        """
+        # Add metadata to indicate source of audit record
         enriched_details = {
             **details,
             "audit_logger": "FileAuditLogger",
             "output_target": self.log_file,
         }
-        await log_audit_event(action, enriched_details)
+        
+        # Send to centralized audit system
+        try:
+            await log_audit_event(action, enriched_details)
+        except Exception as e:
+            logger.warning(f"Failed to send audit event to centralized logger: {e}")
 
         # Also write directly to the audit log file if handler is available
         if self.file_handler:

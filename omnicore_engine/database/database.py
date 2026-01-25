@@ -563,14 +563,32 @@ class Database:
                     fallback = _create_fallback_settings()
                     for attr in missing_attrs:
                         if hasattr(fallback, attr):
-                            # Safety check: only set attribute if config supports it
-                            if hasattr(config, attr) or hasattr(config, '__dict__'):
+                            # Industry-standard safety check: verify config object
+                            # supports attribute assignment before attempting setattr.
+                            # This prevents ValueError/AttributeError when config is
+                            # a frozen dataclass, Pydantic model with extra='forbid',
+                            # or other immutable configuration object.
+                            config_supports_setattr = (
+                                hasattr(config, '__dict__') or 
+                                hasattr(config, '__slots__') or
+                                hasattr(config, attr)
+                            )
+                            if config_supports_setattr:
                                 try:
                                     setattr(config, attr, getattr(fallback, attr))
-                                except (AttributeError, TypeError, ValueError):
-                                    # Config object may not allow setattr for this attribute
-                                    logger.debug(f"Could not set attribute {attr} on config")
-                                    pass
+                                    logger.debug(
+                                        f"Successfully set fallback attribute '{attr}' on config"
+                                    )
+                                except (AttributeError, TypeError, ValueError) as e:
+                                    # Config object may be immutable or have validation
+                                    # that rejects the fallback value. Log but don't fail.
+                                    logger.debug(
+                                        f"Could not set attribute '{attr}' on config: {e}"
+                                    )
+                            else:
+                                logger.debug(
+                                    f"Config does not support setattr for attribute '{attr}'"
+                                )
                 
                 if config_valid:
                     # Initialize PolicyEngine with validated config
