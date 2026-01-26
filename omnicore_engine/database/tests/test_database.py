@@ -451,9 +451,11 @@ class TestSnapshotOperations:
             "agents": ["agent1", "agent2"],
             "timestamp": datetime.utcnow().isoformat(),
         }
-        encrypted_state = database.encrypter.encrypt(
+        encrypted = database.encrypter.encrypt(
             json.dumps(state).encode()
-        ).decode()
+        )
+        # Handle both bytes and string returns from encrypt
+        encrypted_state = encrypted.decode() if isinstance(encrypted, bytes) else encrypted
         user_id = "test_user"
 
         await database.snapshot_audit_state(snapshot_id, encrypted_state, user_id)

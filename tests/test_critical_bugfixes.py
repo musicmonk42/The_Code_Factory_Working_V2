@@ -96,7 +96,12 @@ class TestLLMProviderLoading:
         from generator.runner.llm_client import LLMClient
         
         # Create a config
-        config = RunnerConfig(redis_url="redis://localhost:6379")
+        config = RunnerConfig(
+            backend="docker",
+            framework="pytest",
+            instance_id="test_instance",
+            redis_url="redis://localhost:6379"
+        )
         
         # Mock the provider directory to not exist
         with patch("pathlib.Path.exists", return_value=False):
@@ -108,7 +113,12 @@ class TestLLMProviderLoading:
         from generator.runner.runner_config import RunnerConfig
         from generator.runner.llm_client import LLMClient
         
-        config = RunnerConfig(redis_url="redis://localhost:6379")
+        config = RunnerConfig(
+            backend="docker",
+            framework="pytest",
+            instance_id="test_instance",
+            redis_url="redis://localhost:6379"
+        )
         
         # Mock the provider path to be a file, not a directory
         with patch("pathlib.Path.exists", return_value=True):
