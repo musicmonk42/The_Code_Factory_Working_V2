@@ -776,6 +776,17 @@ class Database:
     async def create_tables(self):
         DB_OPERATIONS.labels(operation="create_tables").inc()
         try:
+            # CRITICAL: Ensure all models are imported before creating tables
+            # This is necessary because the defensive import strategy in models.py
+            # may not register all tables with Base.metadata at module import time
+            from .models import (
+                AgentState,
+                Base,
+                ExplainAuditRecord,
+                GeneratorAgentState,
+                SFEAgentState,
+            )
+            
             # Run DDL operations first (Issue #9 fix - run migrations separately)
             async with self.engine.begin() as conn:
                 # Use checkfirst=True to avoid "already exists" errors

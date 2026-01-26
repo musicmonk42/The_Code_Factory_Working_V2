@@ -81,6 +81,15 @@ async def database(mock_settings, mock_security_config, temp_db_path):
                 mock_security_instance.decrypt = lambda x: base64.b64decode(x.encode())
                 mock_security.return_value = mock_security_instance
 
+                # CRITICAL FIX: Import all models to register them with Base.metadata
+                from omnicore_engine.database.models import (
+                    AgentState,
+                    Base,
+                    ExplainAuditRecord,
+                    GeneratorAgentState,
+                    SFEAgentState,
+                )
+
                 db = Database(f"sqlite+aiosqlite:///{temp_db_path}")
                 await db.initialize()
                 yield db
