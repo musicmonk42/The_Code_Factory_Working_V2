@@ -3,7 +3,7 @@
 import asyncio
 import sys
 import time
-import unittest
+import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -15,10 +15,11 @@ from omnicore_engine.message_bus.message_types import Message
 from omnicore_engine.message_bus.resilience import CircuitBreaker
 
 
-class TestDeadLetterQueue(unittest.TestCase):
+class TestDeadLetterQueue:
     """Test suite for DeadLetterQueue class."""
 
-    def setUp(self):
+    @pytest.fixture(autouse=True)
+    async def setup(self):
         """Set up test fixtures before each test."""
         # Create mock database
         self.mock_db = Mock()
@@ -43,33 +44,35 @@ class TestDeadLetterQueue(unittest.TestCase):
                 kafka_bridge=self.mock_kafka_bridge,
                 priority_threshold=5,
             )
+        
+        yield
+        
+        # Teardown
+        await self.dlq.shutdown()
 
-    async def tearDown_async(self):
-        """Async teardown to properly shutdown DLQ."""
-        if hasattr(self, "dlq"):
-            await self.dlq.shutdown()
-
-    def tearDown(self):
-        """Synchronous teardown wrapper."""
-        asyncio.run(self.tearDown_async())
-
-    def test_initialization(self):
+    @pytest.mark.asyncio
+    async def test_initialization(self):
         """Test DeadLetterQueue initialization."""
-        self.assertEqual(self.dlq.db, self.mock_db)
-        self.assertEqual(self.dlq.kafka_bridge, self.mock_kafka_bridge)
-        self.assertEqual(self.dlq.priority_threshold, 5)
-        self.assertTrue(self.dlq.running)
-        self.assertIsNotNone(self.dlq.queue)
-        self.assertEqual(self.dlq.max_retries, 3)
-        self.assertEqual(self.dlq.backoff_factor, 1.5)
+        assert self.dlq.db == self.mock_db
+        assert self.dlq.kafka_bridge == self.mock_kafka_bridge
+        assert self.dlq.priority_threshold == 5
+        assert self.dlq.running is True
+        assert self.dlq.queue is not None
+        assert self.dlq.max_retries == 3
+        assert self.dlq.backoff_factor == 1.5
 
-    def test_initialization_without_kafka(self):
+    @pytest.mark.asyncio
+    async def test_initialization_without_kafka(self):
         """Test initialization without Kafka bridge."""
         dlq = DeadLetterQueue(db=self.mock_db, kafka_bridge=None, priority_threshold=5)
 
-        self.assertIsNone(dlq.kafka_bridge)
-        self.assertEqual(dlq.priority_threshold, 5)
+        assert dlq.kafka_bridge is None
+        assert dlq.priority_threshold == 5
+        
+        # Clean up
+        await dlq.shutdown()
 
+    @pytest.mark.asyncio
     @patch("message_bus.dead_letter_queue.logger")
     async def test_add_message_basic(self, mock_logger):
         """Test adding a message to DLQ."""
@@ -86,25 +89,26 @@ class TestDeadLetterQueue(unittest.TestCase):
         await self.dlq.add(message, error)
 
         # Verify message was queued
-        self.assertEqual(self.dlq.queue.qsize(), 1)
+        assert self.dlq.queue.qsize() == 1
 
         # Verify database persistence was called
         self.mock_db.save_preferences.assert_called_once()
         call_args = self.mock_db.save_preferences.call_args
 
         # Check user_id format
-        self.assertTrue(call_args[1]["user_id"].startswith("dlq_message_"))
+        assert call_args[1]["user_id"].startswith("dlq_message_")
 
         # Check preferences content
         prefs = call_args[1]["prefs"]
-        self.assertEqual(prefs["topic"], "test.topic")
-        self.assertEqual(prefs["original_trace_id"], "trace_123")
-        self.assertEqual(prefs["idempotency_key"], "key_123")
-        self.assertIn("Error Type:", prefs["error"])
+        assert prefs["topic"] == "test.topic"
+        assert prefs["original_trace_id"] == "trace_123"
+        assert prefs["idempotency_key"] == "key_123"
+        assert "Error Type:" in prefs["error"]
 
         # Verify logging
         mock_logger.error.assert_called()
 
+    @pytest.mark.asyncio
     @patch("message_bus.dead_letter_queue.logger")
     async def test_add_message_db_persistence_failure(self, mock_logger):
         """Test handling database persistence failure."""
@@ -117,13 +121,14 @@ class TestDeadLetterQueue(unittest.TestCase):
         await self.dlq.add(message, "Test error")
 
         # Message should still be queued despite DB error
-        self.assertEqual(self.dlq.queue.qsize(), 1)
+        assert self.dlq.queue.qsize() == 1
 
         # Error should be logged
         mock_logger.error.assert_any_call(
             "Failed to persist DLQ message to database: DB error", trace_id="trace_123"
         )
 
+    @pytest.mark.asyncio
     @patch("message_bus.dead_letter_queue.logger")
     @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_kafka_success(self, mock_sleep, mock_logger):
@@ -152,6 +157,7 @@ class TestDeadLetterQueue(unittest.TestCase):
             "DLQ message published to Kafka bridge.", trace_id="trace_123"
         )
 
+    @pytest.mark.asyncio
     @patch("message_bus.dead_letter_queue.logger")
     @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_kafka_failure_with_retry(self, mock_sleep, mock_logger):
@@ -177,10 +183,11 @@ class TestDeadLetterQueue(unittest.TestCase):
         mock_sleep.assert_called_once_with(1.5)  # backoff_factor * (2 ** 0)
 
         # Verify message was re-queued with incremented retry count
-        self.assertEqual(self.dlq.queue.qsize(), 1)
+        assert self.dlq.queue.qsize() == 1
         requeued_item = await self.dlq.queue.get()
-        self.assertEqual(requeued_item[2], 1)  # retry count should be 1
+        assert requeued_item[2] == 1  # retry count should be 1
 
+    @pytest.mark.asyncio
     @patch("message_bus.dead_letter_queue.logger")
     @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_max_retries_exceeded(self, mock_sleep, mock_logger):
@@ -200,14 +207,13 @@ class TestDeadLetterQueue(unittest.TestCase):
         await self.dlq._process_dlq()
 
         # Message should not be re-queued
-        self.assertEqual(self.dlq.queue.qsize(), 0)
+        assert self.dlq.queue.qsize() == 0
 
         # Critical log should be generated
         mock_logger.critical.assert_called_once()
-        self.assertIn(
-            "failed to process after 3 attempts", mock_logger.critical.call_args[0][0]
-        )
+        assert "failed to process after 3 attempts" in mock_logger.critical.call_args[0][0]
 
+    @pytest.mark.asyncio
     @patch("message_bus.dead_letter_queue.logger")
     async def test_process_dlq_circuit_open(self, mock_logger):
         """Test behavior when Kafka circuit breaker is open."""
@@ -233,6 +239,7 @@ class TestDeadLetterQueue(unittest.TestCase):
             trace_id="trace_123",
         )
 
+    @pytest.mark.asyncio
     @patch("message_bus.dead_letter_queue.KAFKA_AVAILABLE", True)
     @patch("message_bus.dead_letter_queue.logger")
     async def test_process_dlq_kafka_available_but_no_bridge(self, mock_logger):
@@ -257,6 +264,7 @@ class TestDeadLetterQueue(unittest.TestCase):
 
         await dlq.shutdown()
 
+    @pytest.mark.asyncio
     @patch("message_bus.dead_letter_queue.logger")
     @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_cancellation(self, mock_sleep, mock_logger):
@@ -269,6 +277,7 @@ class TestDeadLetterQueue(unittest.TestCase):
         # Should handle cancellation gracefully
         mock_logger.info.assert_called_with("DLQ processing task cancelled.")
 
+    @pytest.mark.asyncio
     @patch("message_bus.dead_letter_queue.logger")
     @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_unexpected_error(self, mock_sleep, mock_logger):
@@ -301,6 +310,7 @@ class TestDeadLetterQueue(unittest.TestCase):
         # Should sleep before retry
         mock_sleep.assert_any_call(1)
 
+    @pytest.mark.asyncio
     async def test_shutdown(self):
         """Test DLQ shutdown."""
         # Add some messages to queue
@@ -311,11 +321,12 @@ class TestDeadLetterQueue(unittest.TestCase):
         await self.dlq.shutdown()
 
         # Verify state
-        self.assertFalse(self.dlq.running)
+        assert self.dlq.running is False
 
         # Task should be cancelled
-        self.assertTrue(self.dlq._dlq_task.cancelled() or self.dlq._dlq_task.done())
+        assert self.dlq._dlq_task.cancelled() or self.dlq._dlq_task.done()
 
+    @pytest.mark.asyncio
     @patch("message_bus.dead_letter_queue.logger")
     async def test_multiple_messages_processing(self, mock_logger):
         """Test processing multiple messages in sequence."""
@@ -349,8 +360,9 @@ class TestDeadLetterQueue(unittest.TestCase):
             except:
                 break
 
-        self.assertEqual(processed_count, 3)
+        assert processed_count == 3
 
+    @pytest.mark.asyncio
     async def test_backoff_calculation(self):
         """Test exponential backoff calculation."""
         backoff_factor = 1.5
@@ -364,19 +376,21 @@ class TestDeadLetterQueue(unittest.TestCase):
 
         for retry_count, expected_delay in expected_delays:
             actual_delay = backoff_factor * (2**retry_count)
-            self.assertEqual(actual_delay, expected_delay)
+            assert actual_delay == expected_delay
 
-    def test_error_formatting(self):
+    @pytest.mark.asyncio
+    async def test_error_formatting(self):
         """Test error message formatting."""
         error = ValueError("Test error")
         full_error = f"Error Type: {type(error).__name__}, Message: {error}"
 
-        self.assertEqual(full_error, "Error Type: ValueError, Message: Test error")
+        assert full_error == "Error Type: ValueError, Message: Test error"
 
 
-class TestDeadLetterQueueIntegration(unittest.TestCase):
+class TestDeadLetterQueueIntegration:
     """Integration tests for DeadLetterQueue."""
 
+    @pytest.mark.asyncio
     async def test_full_flow_with_real_queue(self):
         """Test full DLQ flow with real async queue."""
         mock_db = Mock()
@@ -402,38 +416,8 @@ class TestDeadLetterQueueIntegration(unittest.TestCase):
         await asyncio.sleep(0.1)
 
         # Verify all messages were persisted
-        self.assertEqual(mock_db.save_preferences.call_count, 5)
+        assert mock_db.save_preferences.call_count == 5
 
         # Shutdown and verify
         await dlq.shutdown()
-        self.assertFalse(dlq.running)
-
-
-def run_async_test(coro):
-    """Helper to run async tests."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-if __name__ == "__main__":
-    # Run standard unit tests
-    unittest.main(argv=[""], exit=False, verbosity=2)
-
-    # Run async integration tests
-    print("\n" + "=" * 70)
-    print("Running Async Integration Tests")
-    print("=" * 70)
-
-    integration_suite = unittest.TestLoader().loadTestsFromTestCase(
-        TestDeadLetterQueueIntegration
-    )
-    for test in integration_suite:
-        test_method = getattr(test, test._testMethodName)
-        if asyncio.iscoroutinefunction(test_method):
-            print(f"Running: {test._testMethodName}")
-            run_async_test(test_method())
-            print("✓ Passed")
+        assert dlq.running is False

@@ -799,12 +799,25 @@ async def verify_audit_integrity():
 def _cleanup_audit_system():
     """Final integrity check on shutdown."""
     try:
+        # Skip cleanup in test environments to avoid event loop conflicts
+        if os.getenv("TESTING") == "1" or os.getenv("PYTEST_CURRENT_TEST"):
+            return
+            
         logger = get_audit_logger()
-        asyncio.run(
-            logger.log_critical_event("AUDIT_SYSTEM_SHUTDOWN", clean_shutdown=True)
-        )
-        asyncio.run(logger.verify_integrity())
-    except (RuntimeError, Exception):
+        try:
+            loop = asyncio.get_running_loop()
+            # If loop exists, create tasks on it. These tasks won't be awaited
+            # because we can't await in a synchronous atexit handler, but they
+            # will execute asynchronously on the existing loop.
+            loop.create_task(logger.log_critical_event("AUDIT_SYSTEM_SHUTDOWN", clean_shutdown=True))
+            loop.create_task(logger.verify_integrity())
+        except RuntimeError:
+            # No loop running, safe to use asyncio.run()
+            asyncio.run(
+                logger.log_critical_event("AUDIT_SYSTEM_SHUTDOWN", clean_shutdown=True)
+            )
+            asyncio.run(logger.verify_integrity())
+    except Exception:
         # Ignore errors during shutdown cleanup
         pass
 
