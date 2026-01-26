@@ -113,10 +113,7 @@ class DeadLetterQueue:
     async def add(self, message: Message, error: str):
         full_error = f"Error Type: {type(error).__name__}, Message: {error}"
         logger.error(
-            "Adding message to DLQ",
-            topic=message.topic,
-            trace_id=message.trace_id,
-            error=full_error,
+            f"Adding message to DLQ: topic={message.topic}, trace_id={message.trace_id}, error={full_error}"
         )
 
         await self.queue.put(
@@ -137,12 +134,11 @@ class DeadLetterQueue:
                 },
             )
             logger.debug(
-                "DLQ message persisted to database.", trace_id=message.trace_id
+                f"DLQ message persisted to database. trace_id={message.trace_id}"
             )
         except Exception as e:
             logger.error(
-                f"Failed to persist DLQ message to database: {e}",
-                trace_id=message.trace_id,
+                f"Failed to persist DLQ message to database: {e}, trace_id={message.trace_id}"
             )
 
     async def _process_dlq(self):
@@ -150,10 +146,7 @@ class DeadLetterQueue:
             try:
                 message, error, retries = await self.queue.get()
                 logger.info(
-                    "DLQ consumer received message (in-memory).",
-                    topic=message.topic,
-                    trace_id=message.trace_id,
-                    current_retries=retries,
+                    f"DLQ consumer received message (in-memory). topic={message.topic}, trace_id={message.trace_id}, current_retries={retries}"
                 )
 
                 if self.kafka_bridge:
@@ -162,14 +155,12 @@ class DeadLetterQueue:
                         try:
                             await self.kafka_bridge.publish(message, topic="dlq_events")
                             logger.info(
-                                "DLQ message published to Kafka bridge.",
-                                trace_id=message.trace_id,
+                                f"DLQ message published to Kafka bridge. trace_id={message.trace_id}"
                             )
                         except Exception as e:
                             self.kafka_bridge.circuit.record_failure()
                             logger.error(
-                                f"Failed to publish DLQ message to Kafka: {e}",
-                                trace_id=message.trace_id,
+                                f"Failed to publish DLQ message to Kafka: {e}, trace_id={message.trace_id}"
                             )
 
                             # If publish fails, check retry count and re-queue
@@ -177,20 +168,15 @@ class DeadLetterQueue:
                                 await asyncio.sleep(self.backoff_factor * (2**retries))
                                 await self.queue.put((message, error, retries + 1))
                                 logger.warning(
-                                    "Re-queued DLQ message for retry.",
-                                    trace_id=message.trace_id,
-                                    next_retry=retries + 1,
+                                    f"Re-queued DLQ message for retry. trace_id={message.trace_id}, next_retry={retries + 1}"
                                 )
                             else:
                                 logger.critical(
-                                    f"DLQ message failed to process after {self.max_retries} attempts. Dropping message.",
-                                    trace_id=message.trace_id,
-                                    error=error,
+                                    f"DLQ message failed to process after {self.max_retries} attempts. Dropping message. trace_id={message.trace_id}, error={error}"
                                 )
                     else:
                         logger.warning(
-                            "Kafka circuit is open. Skipping DLQ message publish to Kafka.",
-                            trace_id=message.trace_id,
+                            f"Kafka circuit is open. Skipping DLQ message publish to Kafka. trace_id={message.trace_id}"
                         )
                 elif KAFKA_AVAILABLE and self.kafka_bridge is None:
                     logger.warning(
