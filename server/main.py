@@ -614,7 +614,7 @@ async def root(request: Request):
     accept_header = request.headers.get("accept", "")
     if "text/html" in accept_header:
         # Serve the web UI
-        return templates.TemplateResponse("index.html", {"request": request})
+        return templates.TemplateResponse(request, "index.html")
 
     # Otherwise return JSON API info
     return {
