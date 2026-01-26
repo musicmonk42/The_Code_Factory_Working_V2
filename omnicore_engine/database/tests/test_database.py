@@ -73,7 +73,7 @@ def temp_db_path():
 @pytest.fixture
 async def database(mock_settings, mock_security_config, temp_db_path):
     """Create a Database instance for testing."""
-    with patch("omnicore_engine.database.database.ArbiterConfig", return_value=mock_settings):
+    with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
         with patch("omnicore_engine.database.database.get_security_config", return_value=mock_security_config):
             with patch("omnicore_engine.database.database.EnterpriseSecurityUtils") as mock_security:
                 mock_security_instance = Mock()
@@ -148,7 +148,7 @@ class TestDatabaseInit:
 
     @pytest.mark.asyncio
     async def test_init_sqlite(self, mock_settings, mock_security_config, temp_db_path):
-        with patch("omnicore_engine.database.database.ArbiterConfig", return_value=mock_settings):
+        with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
             with patch(
                 "omnicore_engine.database.database.get_security_config", return_value=mock_security_config
             ):
@@ -161,7 +161,7 @@ class TestDatabaseInit:
     @pytest.mark.asyncio
     async def test_init_postgresql(self, mock_settings, mock_security_config):
         mock_settings.database_path = "postgresql://user:pass@localhost/db"
-        with patch("omnicore_engine.database.database.ArbiterConfig", return_value=mock_settings):
+        with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
             with patch(
                 "omnicore_engine.database.database.get_security_config", return_value=mock_security_config
             ):
@@ -171,7 +171,7 @@ class TestDatabaseInit:
                     assert db.sqlite_db_file_path is None
 
     def test_init_invalid_path(self, mock_settings, mock_security_config):
-        with patch("omnicore_engine.database.database.ArbiterConfig", return_value=mock_settings):
+        with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
             with patch(
                 "omnicore_engine.database.database.get_security_config", return_value=mock_security_config
             ):

@@ -3,6 +3,17 @@ import sys
 import types
 from pathlib import Path
 
+# Pre-configure matplotlib backend BEFORE any imports that might use it
+# This prevents "can't start new thread" errors during font manager initialization
+# Must be set before ANY matplotlib imports occur
+os.environ.setdefault("MPLBACKEND", "Agg")
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+except (ImportError, RuntimeError):
+    # If matplotlib is not installed or already initialized, continue
+    pass
+
 # Add the project root to Python path (highest priority)
 project_root = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
@@ -2615,11 +2626,18 @@ def setup_sfe_otel():
         ConsoleSpanExporter = _SFE_OTEL_IMPORTS['ConsoleSpanExporter']
         SimpleSpanProcessor = _SFE_OTEL_IMPORTS['SimpleSpanProcessor']
         
-        provider = TracerProvider()
-        exporter = ConsoleSpanExporter()
-        processor = SimpleSpanProcessor(exporter)
-        provider.add_span_processor(processor)
-        trace.set_tracer_provider(provider)
+        try:
+            provider = TracerProvider()
+            exporter = ConsoleSpanExporter()
+            processor = SimpleSpanProcessor(exporter)
+            provider.add_span_processor(processor)
+            trace.set_tracer_provider(provider)
+        except RuntimeError as e:
+            # Skip OTEL setup if thread creation fails (e.g., in pytest-asyncio test context)
+            if "can't start new thread" in str(e):
+                pass
+            else:
+                raise
 
     yield
 
