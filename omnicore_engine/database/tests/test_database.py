@@ -71,8 +71,8 @@ def temp_db_path():
 
 
 @pytest.fixture
-async def database(mock_settings, mock_security_config, temp_db_path):
-    """Create a Database instance for testing."""
+async def database(mock_settings, mock_security_config):
+    """Create a Database instance for testing with in-memory SQLite."""
     with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
         with patch("omnicore_engine.database.database.get_security_config", return_value=mock_security_config):
             with patch("omnicore_engine.database.database.EnterpriseSecurityUtils") as mock_security:
@@ -81,9 +81,11 @@ async def database(mock_settings, mock_security_config, temp_db_path):
                 mock_security_instance.decrypt = lambda x: base64.b64decode(x.encode())
                 mock_security.return_value = mock_security_instance
 
-                db = Database(f"sqlite+aiosqlite:///{temp_db_path}")
+                # Use in-memory database to avoid file persistence issues
+                db = Database("sqlite+aiosqlite:///:memory:")
                 await db.initialize()
                 yield db
+                # Proper cleanup
                 await db.engine.dispose()
 
 

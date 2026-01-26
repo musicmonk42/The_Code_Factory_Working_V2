@@ -130,9 +130,15 @@ class ExplainAuditRecord(Base):
     """
 
     __tablename__ = "explain_audit"
+    # Define indexes inline with table args for proper checkfirst behavior
     # Allow table redefinition during test collection to prevent
     # "Table 'explain_audit' is already defined" errors when modules are imported multiple times
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        Index("ix_explain_audit_kind", "kind"),
+        Index("ix_explain_audit_ts", "ts"),
+        Index("ix_explain_audit_agent_id", "agent_id"),
+        {"extend_existing": True}
+    )
 
     uuid: Mapped[str] = mapped_column(String, primary_key=True)
     kind: Mapped[str] = mapped_column(String, nullable=False)
@@ -227,9 +233,7 @@ class SFEAgentState(AgentState):
 # GeneratorAgentState and SFEAgentState inherit this column via joined-table
 # inheritance, so they automatically benefit from the parent's index.
 # No additional indexes on 'name' are needed for child tables.
-Index("ix_explain_audit_kind", ExplainAuditRecord.kind)
-Index("ix_explain_audit_ts", ExplainAuditRecord.ts)
-Index("ix_explain_audit_agent_id", ExplainAuditRecord.agent_id)
+# Indexes for ExplainAuditRecord are now defined inline in the class's __table_args__
 
 
 # ----------------------------------------------------------------------
