@@ -45,6 +45,7 @@ jobs:
       OTEL_SDK_DISABLED: '1'
       PYTEST_CURRENT_TEST: 'true'
       REDIS_URL: redis://localhost:6379
+      ENCRYPTION_KEY: "0mRtqFHlMkj0xTZO14sBFr1H6jkmmI0LWyK97sGyGew="
       APP_ENV: test
       SKIP_IMPORT_TIME_VALIDATION: '1'  # Skip expensive validation during import
       SKIP_BACKGROUND_TASKS: '1'
