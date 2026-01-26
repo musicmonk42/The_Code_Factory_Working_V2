@@ -52,8 +52,6 @@ class TestDeadLetterQueue:
 
     @pytest.mark.asyncio
     async def test_initialization(self):
-    @pytest.mark.asyncio
-    async def test_initialization(self):
         """Test DeadLetterQueue initialization."""
         assert self.dlq.db == self.mock_db
         assert self.dlq.kafka_bridge == self.mock_kafka_bridge
