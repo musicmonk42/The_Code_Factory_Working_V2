@@ -27,17 +27,6 @@ from omnicore_engine.database import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _skip_global_metadata_clear(monkeypatch):
-    """
-    Skip the global SQLAlchemy metadata clearing for database tests.
-    
-    The global conftest.py now checks for database tests automatically,
-    but this fixture is kept for clarity and to ensure proper test isolation.
-    """
-    pass
-
-
 @pytest.fixture
 def mock_settings():
     """Mock ArbiterConfig settings."""

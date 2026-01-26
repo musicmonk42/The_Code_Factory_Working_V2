@@ -776,9 +776,12 @@ class Database:
     async def create_tables(self):
         DB_OPERATIONS.labels(operation="create_tables").inc()
         try:
-            # CRITICAL FIX: pytest conftest.py has an autouse fixture that clears Base.metadata
-            # before each test. We must explicitly re-import and reference all model classes
-            # to ensure they are re-registered with Base.metadata.
+            # WORKAROUND: pytest's conftest.py has an autouse fixture that clears Base.metadata
+            # before each test to prevent table redefinition errors. However, this breaks database
+            # tests that need the metadata to create tables. The conftest.py now skips clearing
+            # for database tests, but we explicitly import all model classes here as a defensive
+            # measure to ensure they are registered with Base.metadata.
+            # TODO: Consider using pytest markers (@pytest.mark.database) for more robust detection
             from .models import (
                 AgentState,
                 Base,
