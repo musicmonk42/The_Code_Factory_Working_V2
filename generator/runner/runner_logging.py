@@ -626,13 +626,20 @@ def self_healing(
                 if on_error:
                     on_error(e)
                 if alert_on_fail:
-                    asyncio.create_task(
-                        send_alert(
-                            f"Critical Failure: {func.__name__} failed after {max_tries} retries.",
-                            f"Error: {e}\nTraceback: {traceback.format_exc()}",
-                            severity="critical",
+                    # FIX: Wrap asyncio.create_task in try-except to handle missing event loop
+                    try:
+                        asyncio.create_task(
+                            send_alert(
+                                f"Critical Failure: {func.__name__} failed after {max_tries} retries.",
+                                f"Error: {e}\nTraceback: {traceback.format_exc()}",
+                                severity="critical",
+                            )
                         )
-                    )
+                    except RuntimeError:
+                        # No event loop running - skip alert
+                        logger.debug(
+                            f"Skipping alert for {func.__name__} failure (no event loop)"
+                        )
                     ANOMALY_DETECTED_TOTAL.labels(
                         type="function_failure", severity="critical"
                     ).inc()
