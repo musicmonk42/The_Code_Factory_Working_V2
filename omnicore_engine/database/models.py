@@ -62,6 +62,13 @@ except ImportError as e:
         energy: Mapped[float] = mapped_column(Float, default=100.0)
         world_size: Mapped[int] = mapped_column(Integer, default=100)
         agent_type: Mapped[str] = mapped_column(String, nullable=False)
+        
+        # Add JSON fields that parent class expects (stored as JSON dicts/lists)
+        inventory: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True, default=dict)
+        language: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True, default=dict)
+        memory: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True, default=dict)
+        personality: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True, default=dict)
+        custom_attributes: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True, default=dict)
 
         def __repr__(self) -> str:
             return (

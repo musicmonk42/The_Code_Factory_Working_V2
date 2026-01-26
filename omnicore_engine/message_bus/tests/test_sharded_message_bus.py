@@ -139,6 +139,11 @@ class TestShardedMessageBus(unittest.TestCase):
         self.mock_config.MESSAGE_DEDUP_CACHE_SIZE = 100
         self.mock_config.MESSAGE_DEDUP_TTL = 3600
         self.mock_config.BACKPRESSURE_THRESHOLD = 0.8
+        # FIX: Add missing circuit breaker config attributes to avoid Mock comparison errors
+        self.mock_config.KAFKA_CIRCUIT_THRESHOLD = 5
+        self.mock_config.KAFKA_CIRCUIT_TIMEOUT = 60
+        self.mock_config.REDIS_CIRCUIT_THRESHOLD = 5
+        self.mock_config.REDIS_CIRCUIT_TIMEOUT = 60
 
         # Mock database
         self.mock_db = Mock()

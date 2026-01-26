@@ -84,6 +84,11 @@ async def database(mock_settings, mock_security_config):
                 # Use in-memory database to avoid file persistence issues
                 db = Database("sqlite+aiosqlite:///:memory:")
                 await db.initialize()
+                
+                # FIX: Ensure all tables (including legacy) are created before tests
+                await db.create_tables()
+                await db._initialize_legacy_tables_async()
+                
                 yield db
                 # Proper cleanup
                 await db.engine.dispose()
@@ -162,13 +167,14 @@ class TestDatabaseInit:
 
     @pytest.mark.asyncio
     async def test_init_postgresql(self, mock_settings, mock_security_config):
-        mock_settings.database_path = "postgresql://user:pass@localhost/db"
+        # FIX: Use asyncpg driver for async SQLAlchemy
+        mock_settings.database_path = "postgresql+asyncpg://user:pass@localhost/db"
         with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
             with patch(
                 "omnicore_engine.database.database.get_security_config", return_value=mock_security_config
             ):
                 with patch("omnicore_engine.database.database.EnterpriseSecurityUtils"):
-                    db = Database("postgresql://user:pass@localhost/db")
+                    db = Database("postgresql+asyncpg://user:pass@localhost/db")
                     assert db.is_postgres is True
                     assert db.sqlite_db_file_path is None
 
