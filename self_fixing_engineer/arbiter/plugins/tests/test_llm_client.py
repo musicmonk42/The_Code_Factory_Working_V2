@@ -114,7 +114,7 @@ class TestLLMClient:
         with pytest.raises(ValueError, match="Unsupported LLM provider"):
             LLMClient("unknown_provider", "api-key", "model")
 
-    @patch("arbiter.plugins.llm_client.AsyncOpenAI")
+    @patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncOpenAI")
     def test_init_openai_success(self, mock_openai):
         """Test successful OpenAI client initialization."""
         client = LLMClient("openai", "test-key", "gpt-4o-mini")
@@ -123,7 +123,7 @@ class TestLLMClient:
         assert client.circuit_breaker_state == "closed"
         mock_openai.assert_called_once()
 
-    @patch("arbiter.plugins.llm_client.AsyncAnthropic")
+    @patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncAnthropic")
     def test_init_anthropic_success(self, mock_anthropic):
         """Test successful Anthropic client initialization."""
         client = LLMClient("anthropic", "test-key", "claude-3")
@@ -132,8 +132,8 @@ class TestLLMClient:
         assert client.circuit_breaker_state == "closed"
         mock_anthropic.assert_called_once()
 
-    @patch("arbiter.plugins.llm_client.genai.configure")
-    @patch("arbiter.plugins.llm_client.genai.GenerativeModel")
+    @patch("self_fixing_engineer.arbiter.plugins.llm_client.genai.configure")
+    @patch("self_fixing_engineer.arbiter.plugins.llm_client.genai.GenerativeModel")
     def test_init_gemini_success(self, mock_model, mock_configure):
         """Test successful Gemini client initialization."""
         mock_model.return_value = Mock()

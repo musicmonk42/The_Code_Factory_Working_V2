@@ -186,7 +186,7 @@ class TestSecretsManager:
         assert sm.get_secret("OPENAI_API_KEY") == "env_key"
 
     @patch.dict(os.environ, {})
-    @patch("runner.llm_client.load_dotenv")
+    @patch("generator.runner.llm_client.load_dotenv")
     @patch.object(
         os.environ,
         "get",
@@ -450,7 +450,7 @@ async def test_call_llm_api_token_counting(initialized_client, mock_provider):
 
 class TestGlobalFunctions:
     @pytest.mark.asyncio
-    @patch("runner.llm_client.LLMClient", new_callable=MagicMock)
+    @patch("generator.runner.llm_client.LLMClient", new_callable=MagicMock)
     async def test_global_call_llm_api(self, MockLLMClient, mock_config, mock_imports):
         MockLLMClient.return_value._is_initialized = asyncio.Future()
         MockLLMClient.return_value._is_initialized.set_result(True)
@@ -467,7 +467,7 @@ class TestGlobalFunctions:
         MockLLMClient.return_value.call_llm_api.assert_awaited_once()
 
     @pytest.mark.asyncio
-    @patch("runner.llm_client.LLMClient")
+    @patch("generator.runner.llm_client.LLMClient")
     async def test_global_shutdown_llm_client(
         self, MockLLMClient, mock_config, mock_imports
     ):

@@ -363,7 +363,7 @@ class TestPluginHealth:
     """Test suite for plugin health check."""
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     async def test_health_check_success(
         self, mock_environment, mock_credentials, mock_gcs_client, mock_jobs_client
     ):
@@ -381,7 +381,7 @@ class TestPluginHealth:
             )
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     async def test_health_check_no_credentials(self, mock_environment):
         """Test health check with missing credentials."""
         with patch(
@@ -395,7 +395,7 @@ class TestPluginHealth:
             )
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     async def test_health_check_gcs_failure(
         self, mock_environment, mock_credentials, mock_gcs_client
     ):
@@ -413,7 +413,7 @@ class TestPluginHealth:
             assert any("GCS connectivity" in d for d in result["details"])
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", False)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", False)
     async def test_health_check_no_gcp_libraries(self):
         """Test health check when GCP libraries aren't available."""
         result = await plugin_health()
@@ -433,7 +433,7 @@ class TestRunCloudRunJob:
     """Test suite for run_cloud_run_job function."""
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     async def test_successful_job_execution(
         self,
         valid_job_config,
@@ -501,7 +501,7 @@ class TestRunCloudRunJob:
         assert "test-exec" in result["executionName"]
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     async def test_failed_job_execution(
         self,
         valid_job_config,
@@ -575,7 +575,7 @@ class TestRunCloudRunJob:
         assert result["raw_log"] is not None
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     @patch(
         "plugins.gcp_cloud_run_runner_plugin.retry", lambda *args, **kwargs: lambda f: f
     )  # Disable retry decorator
@@ -634,7 +634,7 @@ class TestRunCloudRunJob:
                         assert valid_job_config.get("_reduced_resources_once")
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     async def test_gcs_download_failure(
         self,
         valid_job_config,
@@ -701,7 +701,7 @@ class TestRunCloudRunJob:
         assert "Output file not found" in result["reason"]
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", False)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", False)
     async def test_run_job_no_gcp_libraries(self, valid_job_config, temp_project_dir):
         """Test that run_cloud_run_job fails gracefully when GCP libraries aren't available."""
         with tempfile.TemporaryDirectory() as output_dir:
@@ -869,7 +869,7 @@ class TestEdgeCases:
     """Test suite for edge cases and error conditions."""
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     async def test_monitoring_timeout(
         self,
         valid_job_config,
@@ -949,7 +949,7 @@ class TestEdgeCases:
         assert "Monitoring timed out" in result.get("statusReason", "")
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     async def test_invalid_job_config(self, temp_project_dir):
         """Test with invalid job configuration."""
         invalid_config = {
@@ -968,7 +968,7 @@ class TestEdgeCases:
         assert "Invalid job config" in result["reason"]
 
     @pytest.mark.asyncio
-    @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
+    @patch("self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     @patch(
         "plugins.gcp_cloud_run_runner_plugin.retry", lambda *args, **kwargs: lambda f: f
     )  # Disable retry decorator

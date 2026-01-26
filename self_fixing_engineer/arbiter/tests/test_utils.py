@@ -90,7 +90,7 @@ async def test_get_system_metrics_async_error(mock_to_thread):
 
 
 @pytest.mark.asyncio
-@patch("arbiter.utils.get_health_session")
+@patch("self_fixing_engineer.arbiter.utils.get_health_session")
 async def test_check_service_health_success(mock_get_session):
     # Create mock response
     mock_response = AsyncMock()
@@ -109,7 +109,7 @@ async def test_check_service_health_success(mock_get_session):
 
 
 @pytest.mark.asyncio
-@patch("arbiter.utils.get_health_session")
+@patch("self_fixing_engineer.arbiter.utils.get_health_session")
 async def test_check_service_health_non_json(mock_get_session):
     # Create mock response
     mock_response = AsyncMock()
@@ -133,7 +133,7 @@ async def test_check_service_health_non_json(mock_get_session):
 
 
 @pytest.mark.asyncio
-@patch("arbiter.utils.get_health_session")
+@patch("self_fixing_engineer.arbiter.utils.get_health_session")
 async def test_check_service_health_client_error(mock_get_session):
     # Create mock response that raises on raise_for_status
     mock_response = AsyncMock()
@@ -156,7 +156,7 @@ async def test_check_service_health_client_error(mock_get_session):
 
 
 @pytest.mark.asyncio
-@patch("arbiter.utils.get_health_session")
+@patch("self_fixing_engineer.arbiter.utils.get_health_session")
 async def test_check_service_health_timeout(mock_get_session):
     # Create mock session that raises on entering context
     mock_session = MagicMock()
@@ -172,7 +172,7 @@ async def test_check_service_health_timeout(mock_get_session):
 
 
 @pytest.mark.asyncio
-@patch("arbiter.utils.get_health_session")
+@patch("self_fixing_engineer.arbiter.utils.get_health_session")
 async def test_check_service_health_unexpected_error(mock_get_session):
     # Create mock session that raises a generic exception
     mock_session = MagicMock()
@@ -188,7 +188,7 @@ async def test_check_service_health_unexpected_error(mock_get_session):
 
 
 @pytest.mark.asyncio
-@patch("arbiter.utils.get_health_session")
+@patch("self_fixing_engineer.arbiter.utils.get_health_session")
 async def test_check_service_health_invalid_url(mock_get_session):
     # Create mock session that raises InvalidURL
     mock_session = MagicMock()

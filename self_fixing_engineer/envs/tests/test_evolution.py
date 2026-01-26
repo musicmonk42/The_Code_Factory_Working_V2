@@ -477,7 +477,7 @@ class TestGeneticOptimizer:
 class TestWithoutDEAP:
     """Test behavior when DEAP is not available"""
 
-    @patch("evolution.DEAP_AVAILABLE", False)
+    @patch("self_fixing_engineer.envs.evolution.DEAP_AVAILABLE", False)
     def test_optimizer_without_deap(self):
         """Test that optimizer raises error without DEAP"""
         with pytest.raises(ImportError, match="DEAP library required"):

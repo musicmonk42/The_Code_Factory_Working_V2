@@ -134,7 +134,7 @@ def test_log_audit(mock_audit_log, monkeypatch):
 # --- Tests for verify_audit_log_integrity ---
 
 
-@patch("simulation.sandbox.glob.glob", return_value=[])
+@patch("self_fixing_engineer.simulation.sandbox.glob.glob", return_value=[])
 def test_verify_audit_log_integrity_recent(mock_glob, mock_audit_log, monkeypatch):
     """Test audit log integrity verification with a recent integrity file."""
     audit_log, integrity_file = mock_audit_log
@@ -150,7 +150,7 @@ def test_verify_audit_log_integrity_recent(mock_glob, mock_audit_log, monkeypatc
     assert verify_audit_log_integrity()
 
 
-@patch("simulation.sandbox.glob.glob", return_value=[])
+@patch("self_fixing_engineer.simulation.sandbox.glob.glob", return_value=[])
 def test_verify_audit_log_integrity_mismatch(mock_glob, mock_audit_log, monkeypatch):
     """Test audit log integrity verification with signature mismatch."""
     audit_log, integrity_file = mock_audit_log

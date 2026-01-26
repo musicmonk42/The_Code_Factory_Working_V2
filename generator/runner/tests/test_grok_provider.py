@@ -205,14 +205,14 @@ def mock_cfg(key: str | None = None) -> MagicMock:
     return cfg
 
 
-@patch("runner.providers.grok_provider.load_config")
+@patch("generator.runner.providers.grok_provider.load_config")
 def test_get_provider_with_config_key(mock_load: MagicMock) -> None:
     mock_load.return_value = mock_cfg("cfg-key")
     p = get_provider()
     assert p.api_key == "cfg-key"
 
 
-@patch("runner.providers.grok_provider.load_config")
+@patch("generator.runner.providers.grok_provider.load_config")
 @patch.dict(os.environ, {"GROK_API_KEY": "env-key"})
 def test_get_provider_with_env_key(mock_load: MagicMock) -> None:
     mock_load.return_value = mock_cfg(None)
@@ -220,7 +220,7 @@ def test_get_provider_with_env_key(mock_load: MagicMock) -> None:
     assert p.api_key == "env-key"
 
 
-@patch("runner.providers.grok_provider.load_config")
+@patch("generator.runner.providers.grok_provider.load_config")
 @patch.dict(os.environ, clear=True)
 def test_get_provider_no_key(mock_load: MagicMock) -> None:
     mock_load.return_value = mock_cfg(None)

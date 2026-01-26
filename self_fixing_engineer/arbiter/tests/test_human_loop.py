@@ -85,8 +85,8 @@ def test_human_in_loop_init_development(default_config):
     assert hil._pending_approvals == {}
 
 
-@patch("arbiter.human_loop.DB_CLIENTS_AVAILABLE", True)
-@patch("arbiter.human_loop.PostgresClient")
+@patch("self_fixing_engineer.arbiter.human_loop.DB_CLIENTS_AVAILABLE", True)
+@patch("self_fixing_engineer.arbiter.human_loop.PostgresClient")
 def test_human_in_loop_init_production(mock_pg_class, production_config):
     """Test HumanInLoop initialization with PostgreSQL in production"""
     mock_pg_instance = MagicMock()

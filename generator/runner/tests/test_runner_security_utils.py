@@ -237,7 +237,7 @@ async def test_encrypt_data_invalid_algo():
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
 # FIX: Patch boto3, which is what 'aws_sm' source uses, not aiohttp
-@patch("runner.runner_security_utils.boto3")
+@patch("generator.runner.runner_security_utils.boto3")
 async def test_fetch_secret_success(mock_boto3: MagicMock):
     # Setup the mock for boto3
     mock_client = MagicMock()
