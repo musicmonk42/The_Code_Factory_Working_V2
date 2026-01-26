@@ -158,8 +158,8 @@ class TestDeadLetterQueue:
         # Verify circuit breaker was checked
         self.mock_kafka_bridge.circuit.can_attempt.assert_called_once()
 
-        # Verify logging
-        # Note: Manual processing won't trigger logger calls from _process_dlq
+        # Note: Manual processing doesn't trigger the logger from _process_dlq,
+        # so we verify behavior instead of logging
 
     @pytest.mark.asyncio
     @patch("omnicore_engine.message_bus.dead_letter_queue.logger")

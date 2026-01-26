@@ -64,11 +64,12 @@ except ImportError as e:
         agent_type: Mapped[str] = mapped_column(String, nullable=False)
         
         # Add JSON fields that parent class expects (stored as JSON dicts/lists)
-        inventory: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True, default=dict)
-        language: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True, default=dict)
-        memory: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True, default=dict)
-        personality: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True, default=dict)
-        custom_attributes: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True, default=dict)
+        # Using Optional with proper defaults to avoid mutable default argument issues
+        inventory: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)
+        language: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)
+        memory: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)
+        personality: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)
+        custom_attributes: Mapped[Optional[Dict]] = mapped_column(JSON, nullable=True)
 
         def __repr__(self) -> str:
             return (

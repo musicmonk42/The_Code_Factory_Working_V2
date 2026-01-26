@@ -867,7 +867,7 @@ class Database:
                 # FIX: For in-memory databases, use SQLAlchemy engine instead of aiosqlite.connect
                 # to ensure we're working with the same database instance
                 is_memory_db = (
-                    self.db_path and (':memory:' in self.db_path or self.sqlite_db_file_path == Path(':memory:'))
+                    self.db_path and (':memory:' in str(self.db_path) or str(self.sqlite_db_file_path) == ':memory:')
                 )
                 
                 if is_memory_db:
