@@ -218,5 +218,16 @@ class DeadLetterQueue:
                 await self._dlq_task
             except asyncio.CancelledError:
                 pass
-        await self.queue.join()
+            # Wait for queue to finish processing (task was running)
+            await self.queue.join()
+        else:
+            # No processing task exists (e.g., during tests with PYTEST_CURRENT_TEST set)
+            # Drain the queue to prevent join() from blocking indefinitely
+            # Use exception handling as primary control flow to handle race conditions
+            while True:
+                try:
+                    self.queue.get_nowait()
+                    self.queue.task_done()
+                except asyncio.QueueEmpty:
+                    break
         logger.info("DeadLetterQueue shutdown complete.")
