@@ -107,7 +107,7 @@ class TestConfiguration:
         with pytest.raises(DLTClientConfigurationError):
             SimpleDLTClient(invalid_config, mock_off_chain_client)
 
-    @patch("simulation.plugins.dlt_clients.dlt_simple_clients.PRODUCTION_MODE", True)
+    @patch("self_fixing_engineer.simulation.plugins.dlt_clients.dlt_simple_clients.PRODUCTION_MODE", True)
     def test_production_requires_chain_path(self):
         """Test production mode requires chain state path."""
         with pytest.raises(ValidationError) as exc:

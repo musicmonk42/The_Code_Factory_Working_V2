@@ -70,7 +70,7 @@ class TestBackpressureManager(unittest.TestCase):
             BackpressureManager(self.mock_message_bus, threshold=-0.5)
         self.assertIn("between 0 and 1", str(context.exception))
 
-    @patch("message_bus.backpressure.logger")
+    @patch("omnicore_engine.message_bus.backpressure.logger")
     async def test_check_and_notify_no_backpressure(self, mock_logger):
         """Test check_and_notify when no backpressure is needed."""
         shard_id = 0
@@ -86,7 +86,7 @@ class TestBackpressureManager(unittest.TestCase):
         self.mock_message_bus.publish.assert_not_called()
         self.assertFalse(self.manager.is_paused[shard_id])
 
-    @patch("message_bus.backpressure.logger")
+    @patch("omnicore_engine.message_bus.backpressure.logger")
     async def test_check_and_notify_trigger_pause(self, mock_logger):
         """Test triggering pause when queue reaches threshold."""
         shard_id = 0
@@ -114,7 +114,7 @@ class TestBackpressureManager(unittest.TestCase):
         # Verify warning was logged
         mock_logger.warning.assert_called_once()
 
-    @patch("message_bus.backpressure.logger")
+    @patch("omnicore_engine.message_bus.backpressure.logger")
     async def test_check_and_notify_trigger_pause_hp_queue(self, mock_logger):
         """Test triggering pause when high-priority queue reaches threshold."""
         shard_id = 1
@@ -128,7 +128,7 @@ class TestBackpressureManager(unittest.TestCase):
         self.mock_message_bus.pause_publishes.assert_called_once_with(shard_id)
         self.assertTrue(self.manager.is_paused[shard_id])
 
-    @patch("message_bus.backpressure.logger")
+    @patch("omnicore_engine.message_bus.backpressure.logger")
     async def test_check_and_notify_trigger_resume(self, mock_logger):
         """Test triggering resume when queue drops below threshold."""
         shard_id = 0
@@ -155,7 +155,7 @@ class TestBackpressureManager(unittest.TestCase):
         # Verify info was logged
         mock_logger.info.assert_called_once()
 
-    @patch("message_bus.backpressure.logger")
+    @patch("omnicore_engine.message_bus.backpressure.logger")
     async def test_check_and_notify_already_paused(self, mock_logger):
         """Test check_and_notify when already paused and still over threshold."""
         shard_id = 0
@@ -175,7 +175,7 @@ class TestBackpressureManager(unittest.TestCase):
         # Should remain paused
         self.assertTrue(self.manager.is_paused[shard_id])
 
-    @patch("message_bus.backpressure.logger")
+    @patch("omnicore_engine.message_bus.backpressure.logger")
     async def test_check_and_notify_pause_exception_handling(self, mock_logger):
         """Test exception handling when pause_publishes fails."""
         shard_id = 0
@@ -197,7 +197,7 @@ class TestBackpressureManager(unittest.TestCase):
         # Should still mark as paused
         self.assertTrue(self.manager.is_paused[shard_id])
 
-    @patch("message_bus.backpressure.logger")
+    @patch("omnicore_engine.message_bus.backpressure.logger")
     async def test_check_and_notify_resume_exception_handling(self, mock_logger):
         """Test exception handling when resume_publishes fails."""
         shard_id = 0
@@ -222,7 +222,7 @@ class TestBackpressureManager(unittest.TestCase):
         # Should still mark as not paused
         self.assertFalse(self.manager.is_paused[shard_id])
 
-    @patch("message_bus.backpressure.logger")
+    @patch("omnicore_engine.message_bus.backpressure.logger")
     async def test_check_and_notify_publish_notification_failure(self, mock_logger):
         """Test handling when publishing notification fails."""
         shard_id = 0

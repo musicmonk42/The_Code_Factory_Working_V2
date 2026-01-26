@@ -137,9 +137,9 @@ class TestHealthEndpoints:
         assert response.status == 200
         assert response.text == "OK"
 
-    @patch("agents.testgen_agent.testgen_validator.web.Application")
-    @patch("agents.testgen_agent.testgen_validator.web.AppRunner")
-    @patch("agents.testgen_agent.testgen_validator.web.TCPSite")
+    @patch("generator.agents.testgen_agent.testgen_validator.web.Application")
+    @patch("generator.agents.testgen_agent.testgen_validator.web.AppRunner")
+    @patch("generator.agents.testgen_agent.testgen_validator.web.TCPSite")
     @pytest.mark.asyncio
     async def test_start_health_server(self, mock_tcp_site, mock_app_runner, mock_app):
         """Test starting the health server."""
@@ -759,7 +759,7 @@ class TestValidatorRegistry:
 class TestPublicAPI:
     """Test public API functions."""
 
-    @patch("agents.testgen_agent.testgen_validator.VALIDATORS")
+    @patch("generator.agents.testgen_agent.testgen_validator.VALIDATORS")
     @pytest.mark.asyncio
     async def test_validate_test_quality_success(self, mock_validators):
         """Test successful test quality validation."""
@@ -780,7 +780,7 @@ class TestPublicAPI:
             code_files, test_files, "python"
         )
 
-    @patch("agents.testgen_agent.testgen_validator.VALIDATORS")
+    @patch("generator.agents.testgen_agent.testgen_validator.VALIDATORS")
     @pytest.mark.asyncio
     async def test_validate_test_quality_invalid_strategy(self, mock_validators):
         """Test validation with invalid strategy."""

@@ -351,8 +351,8 @@ async def test_run_agent_task_error():
 
 
 @pytest.mark.asyncio
-@patch("arbiter.run_exploration.ArbiterArena")
-@patch("arbiter.run_exploration.start_health_server")
+@patch("self_fixing_engineer.arbiter.run_exploration.ArbiterArena")
+@patch("self_fixing_engineer.arbiter.run_exploration.start_health_server")
 @patch("os.makedirs")
 @patch("builtins.open", new_callable=mock_open)
 async def test_run_agentic_workflow_success(
@@ -391,8 +391,8 @@ async def test_run_agentic_workflow_success(
 
 
 @pytest.mark.asyncio
-@patch("arbiter.run_exploration.ArbiterArena")
-@patch("arbiter.run_exploration.start_health_server")
+@patch("self_fixing_engineer.arbiter.run_exploration.ArbiterArena")
+@patch("self_fixing_engineer.arbiter.run_exploration.start_health_server")
 @patch("os.makedirs")
 async def test_run_agentic_workflow_with_errors(
     mock_makedirs, mock_health_server, mock_arena_class, mock_config
@@ -424,9 +424,9 @@ async def test_run_agentic_workflow_with_errors(
 
 @pytest.mark.asyncio
 @patch("sys.argv", ["run_exploration.py"])
-@patch("arbiter.run_exploration.setup_logging")
-@patch("arbiter.run_exploration.start_health_server")
-@patch("arbiter.run_exploration.run_agentic_workflow")
+@patch("self_fixing_engineer.arbiter.run_exploration.setup_logging")
+@patch("self_fixing_engineer.arbiter.run_exploration.start_health_server")
+@patch("self_fixing_engineer.arbiter.run_exploration.run_agentic_workflow")
 @patch("asyncio.Event")
 async def test_main_no_args(mock_event, mock_workflow, mock_health, mock_setup):
     """Test main function without arguments."""
@@ -465,8 +465,8 @@ async def test_main_no_args(mock_event, mock_workflow, mock_health, mock_setup):
 
 @pytest.mark.asyncio
 @patch("sys.argv", ["run_exploration.py", "config.json"])
-@patch("arbiter.run_exploration.setup_logging")
-@patch("arbiter.run_exploration.start_health_server")
+@patch("self_fixing_engineer.arbiter.run_exploration.setup_logging")
+@patch("self_fixing_engineer.arbiter.run_exploration.start_health_server")
 async def test_main_with_config_file(mock_health, mock_setup):
     """Test main function with config file argument."""
     # Mock health server

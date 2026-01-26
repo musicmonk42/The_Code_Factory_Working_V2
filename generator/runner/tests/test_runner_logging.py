@@ -250,7 +250,7 @@ def test_log_action(caplog):  # [FIX] Use caplog, not LOG_HISTORY
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
 # [FIX] Mock the async safe_sign function
-@patch("runner.runner_logging.safe_sign", new_callable=AsyncMock)
+@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
 async def test_log_audit_event(mock_safe_sign, caplog, mock_config):
     # [FIX] Configure logging to set the key ID from the mock_config
     configure_logging_from_config(mock_config)

@@ -136,7 +136,7 @@ class TestMessageCache(unittest.TestCase):
         self.assertIsNotNone(cache.get("key4"))
         self.assertEqual(len(cache.cache), 3)
 
-    @patch("message_bus.cache.logger")
+    @patch("omnicore_engine.message_bus.cache.logger")
     def test_evict_expired_items(self, mock_logger):
         """Test eviction of expired items when cache is full."""
         # Create cache with short TTL
@@ -286,7 +286,7 @@ class TestMessageCache(unittest.TestCase):
         self.assertIsNone(cache.get("key_0"))
         self.assertIsNone(cache.get("key_1"))
 
-    @patch("message_bus.cache.logger")
+    @patch("omnicore_engine.message_bus.cache.logger")
     def test_logging_initialization(self, mock_logger):
         """Test that initialization is logged."""
         cache = MessageCache(maxsize=50, ttl=3600)
@@ -294,7 +294,7 @@ class TestMessageCache(unittest.TestCase):
         call_args = mock_logger.info.call_args
         self.assertIn("MessageCache initialized", call_args[0][0])
 
-    @patch("message_bus.cache.logger")
+    @patch("omnicore_engine.message_bus.cache.logger")
     def test_logging_eviction(self, mock_logger):
         """Test that evictions are logged."""
         cache = MessageCache(maxsize=2, ttl=100)

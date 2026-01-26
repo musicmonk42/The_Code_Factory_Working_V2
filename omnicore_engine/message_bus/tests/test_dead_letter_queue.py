@@ -73,7 +73,7 @@ class TestDeadLetterQueue:
         await dlq.shutdown()
 
     @pytest.mark.asyncio
-    @patch("message_bus.dead_letter_queue.logger")
+    @patch("omnicore_engine.message_bus.dead_letter_queue.logger")
     async def test_add_message_basic(self, mock_logger):
         """Test adding a message to DLQ."""
         message = Message(
@@ -109,7 +109,7 @@ class TestDeadLetterQueue:
         mock_logger.error.assert_called()
 
     @pytest.mark.asyncio
-    @patch("message_bus.dead_letter_queue.logger")
+    @patch("omnicore_engine.message_bus.dead_letter_queue.logger")
     async def test_add_message_db_persistence_failure(self, mock_logger):
         """Test handling database persistence failure."""
         self.mock_db.save_preferences.side_effect = Exception("DB error")
@@ -129,8 +129,8 @@ class TestDeadLetterQueue:
         )
 
     @pytest.mark.asyncio
-    @patch("message_bus.dead_letter_queue.logger")
-    @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
+    @patch("omnicore_engine.message_bus.dead_letter_queue.logger")
+    @patch("omnicore_engine.message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_kafka_success(self, mock_sleep, mock_logger):
         """Test successful processing of DLQ message to Kafka."""
         message = Message(
@@ -158,8 +158,8 @@ class TestDeadLetterQueue:
         )
 
     @pytest.mark.asyncio
-    @patch("message_bus.dead_letter_queue.logger")
-    @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
+    @patch("omnicore_engine.message_bus.dead_letter_queue.logger")
+    @patch("omnicore_engine.message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_kafka_failure_with_retry(self, mock_sleep, mock_logger):
         """Test Kafka publish failure with retry logic."""
         message = Message(
@@ -188,8 +188,8 @@ class TestDeadLetterQueue:
         assert requeued_item[2] == 1  # retry count should be 1
 
     @pytest.mark.asyncio
-    @patch("message_bus.dead_letter_queue.logger")
-    @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
+    @patch("omnicore_engine.message_bus.dead_letter_queue.logger")
+    @patch("omnicore_engine.message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_max_retries_exceeded(self, mock_sleep, mock_logger):
         """Test message dropped after max retries."""
         message = Message(
@@ -214,7 +214,7 @@ class TestDeadLetterQueue:
         assert "failed to process after 3 attempts" in mock_logger.critical.call_args[0][0]
 
     @pytest.mark.asyncio
-    @patch("message_bus.dead_letter_queue.logger")
+    @patch("omnicore_engine.message_bus.dead_letter_queue.logger")
     async def test_process_dlq_circuit_open(self, mock_logger):
         """Test behavior when Kafka circuit breaker is open."""
         # Set circuit to open
@@ -240,8 +240,8 @@ class TestDeadLetterQueue:
         )
 
     @pytest.mark.asyncio
-    @patch("message_bus.dead_letter_queue.KAFKA_AVAILABLE", True)
-    @patch("message_bus.dead_letter_queue.logger")
+    @patch("omnicore_engine.message_bus.dead_letter_queue.KAFKA_AVAILABLE", True)
+    @patch("omnicore_engine.message_bus.dead_letter_queue.logger")
     async def test_process_dlq_kafka_available_but_no_bridge(self, mock_logger):
         """Test when Kafka is available but bridge is not initialized."""
         # Create DLQ without Kafka bridge
@@ -265,8 +265,8 @@ class TestDeadLetterQueue:
         await dlq.shutdown()
 
     @pytest.mark.asyncio
-    @patch("message_bus.dead_letter_queue.logger")
-    @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
+    @patch("omnicore_engine.message_bus.dead_letter_queue.logger")
+    @patch("omnicore_engine.message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_cancellation(self, mock_sleep, mock_logger):
         """Test graceful cancellation of DLQ processing."""
         # Make queue.get block indefinitely
@@ -278,8 +278,8 @@ class TestDeadLetterQueue:
         mock_logger.info.assert_called_with("DLQ processing task cancelled.")
 
     @pytest.mark.asyncio
-    @patch("message_bus.dead_letter_queue.logger")
-    @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
+    @patch("omnicore_engine.message_bus.dead_letter_queue.logger")
+    @patch("omnicore_engine.message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_unexpected_error(self, mock_sleep, mock_logger):
         """Test handling of unexpected errors in processing loop."""
         # Make queue.get raise unexpected error
@@ -327,7 +327,7 @@ class TestDeadLetterQueue:
         assert self.dlq._dlq_task.cancelled() or self.dlq._dlq_task.done()
 
     @pytest.mark.asyncio
-    @patch("message_bus.dead_letter_queue.logger")
+    @patch("omnicore_engine.message_bus.dead_letter_queue.logger")
     async def test_multiple_messages_processing(self, mock_logger):
         """Test processing multiple messages in sequence."""
         messages = [

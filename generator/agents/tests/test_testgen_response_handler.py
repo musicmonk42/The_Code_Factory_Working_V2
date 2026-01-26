@@ -210,7 +210,7 @@ def test_another():
         assert result is not None
         assert len(result) >= 1
 
-    @patch("agents.testgen_agent.testgen_response_handler.call_llm_api")
+    @patch("generator.agents.testgen_agent.testgen_response_handler.call_llm_api")
     @pytest.mark.asyncio
     async def test_llm_auto_heal_success(self, mock_llm_call, parser):
         """Test successful LLM auto-healing."""
@@ -435,7 +435,7 @@ class TestErrorHandling:
 class TestComplianceMode:
     """Test compliance mode functionality."""
 
-    @patch("agents.testgen_agent.testgen_response_handler.COMPLIANCE_MODE", True)
+    @patch("generator.agents.testgen_agent.testgen_response_handler.COMPLIANCE_MODE", True)
     @pytest.mark.asyncio
     async def test_compliance_mode_enabled(self):
         """Test behavior when compliance mode is enabled."""

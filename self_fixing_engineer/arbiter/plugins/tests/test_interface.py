@@ -314,7 +314,7 @@ class TestDummyMultiModalPlugin:
         with pytest.raises(NotImplementedError):
             await plugin.analyze_text_async("test")
 
-    @patch("arbiter.plugins.multimodal.interface.time.sleep")
+    @patch("self_fixing_engineer.arbiter.plugins.multimodal.interface.time.sleep")
     def test_metrics_tracking(self, mock_sleep, plugin):
         """Test that metrics are properly tracked."""
         # Mock sleep to speed up tests

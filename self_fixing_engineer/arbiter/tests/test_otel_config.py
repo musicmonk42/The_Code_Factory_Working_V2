@@ -225,7 +225,7 @@ class TestOpenTelemetryConfig:
         config = OpenTelemetryConfig.get_instance()
         assert isinstance(config.tracer, NoOpTracer)
 
-    @patch("arbiter.otel_config.OTEL_AVAILABLE", False)
+    @patch("self_fixing_engineer.arbiter.otel_config.OTEL_AVAILABLE", False)
     def test_missing_opentelemetry_uses_noop_tracer(self):
         """Test fallback to NoOpTracer when OpenTelemetry is not available."""
         with patch.object(Environment, "current", return_value=Environment.DEVELOPMENT):
@@ -276,7 +276,7 @@ class TestOpenTelemetryConfig:
         insecure_endpoint.is_reachable = MagicMock(return_value=True)
         assert config._validate_endpoint(insecure_endpoint) is True
 
-    @patch("arbiter.otel_config.CONSUL_AVAILABLE", True)
+    @patch("self_fixing_engineer.arbiter.otel_config.CONSUL_AVAILABLE", True)
     @patch.dict(os.environ, {"CONSUL_ENABLED": "true", "CONSUL_HOST": "consul.local"})
     def test_discover_from_consul(self):
         """Test service discovery from Consul."""

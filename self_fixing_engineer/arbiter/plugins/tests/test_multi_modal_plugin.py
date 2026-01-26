@@ -71,8 +71,8 @@ class TestMetricsCollector:
         collector.increment_failed_requests("text")
         collector.observe_latency("audio", 100)
 
-    @patch("arbiter.plugins.multi_modal_plugin.get_or_create_counter")
-    @patch("arbiter.plugins.multi_modal_plugin.get_or_create_histogram")
+    @patch("self_fixing_engineer.arbiter.plugins.multi_modal_plugin.get_or_create_counter")
+    @patch("self_fixing_engineer.arbiter.plugins.multi_modal_plugin.get_or_create_histogram")
     def test_metrics_collector_enabled(self, mock_histogram, mock_counter):
         """Test MetricsCollector when enabled."""
         config = Mock()

@@ -37,7 +37,7 @@ class TestArbiterConfig:
         assert ArbiterConfig.LLM_PROVIDER == "openai"
         assert ArbiterConfig.LLM_MODEL == "gpt-4o-mini"
 
-    @patch("arbiter.learner.encryption.boto3.client")
+    @patch("self_fixing_engineer.arbiter.learner.encryption.boto3.client")
     def test_load_keys_from_ssm_success(self, mock_boto_client):
         """Test successful key loading from AWS SSM."""
         # Setup mock SSM client
@@ -78,7 +78,7 @@ class TestArbiterConfig:
             assert "v2" in keys
             assert all(isinstance(k, Fernet) for k in keys.values())
 
-    @patch("arbiter.learner.encryption.boto3.client")
+    @patch("self_fixing_engineer.arbiter.learner.encryption.boto3.client")
     def test_load_keys_from_ssm_failure_fallback(self, mock_boto_client):
         """Test fallback to in-memory key when SSM fails."""
         # Make SSM client raise an error
@@ -101,7 +101,7 @@ class TestArbiterConfig:
             assert "v1" in keys
             assert isinstance(keys["v1"], Fernet)
 
-    @patch("arbiter.learner.encryption.boto3.client")
+    @patch("self_fixing_engineer.arbiter.learner.encryption.boto3.client")
     def test_load_keys_no_ssm_paths(self, mock_boto_client):
         """Test handling when SSM paths are not configured."""
         mock_ssm = MagicMock()

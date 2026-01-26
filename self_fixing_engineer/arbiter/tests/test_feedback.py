@@ -32,8 +32,8 @@ def clear_registry():
 
 
 # Test conditional imports
-@patch("arbiter.feedback.SQLLITE_AVAILABLE", False)
-@patch("arbiter.feedback.POSTGRES_AVAILABLE", False)
+@patch("self_fixing_engineer.arbiter.feedback.SQLLITE_AVAILABLE", False)
+@patch("self_fixing_engineer.arbiter.feedback.POSTGRES_AVAILABLE", False)
 def test_conditional_imports(caplog):
     # Test that imports are handled gracefully when not available
     # This mainly validates that the module doesn't crash
@@ -60,8 +60,8 @@ def test_get_or_create_metric_thread_safe():
 
 
 # Test FeedbackManager init with SQLiteClient (default in dev mode)
-@patch("arbiter.feedback.SQLiteClient")
-@patch("arbiter.feedback.IS_PRODUCTION", False)
+@patch("self_fixing_engineer.arbiter.feedback.SQLiteClient")
+@patch("self_fixing_engineer.arbiter.feedback.IS_PRODUCTION", False)
 def test_init_default_sqlite(mock_sqlite_class):
     mock_sqlite_instance = MagicMock()
     mock_sqlite_class.return_value = mock_sqlite_instance
@@ -73,7 +73,7 @@ def test_init_default_sqlite(mock_sqlite_class):
 
 
 # Test init with provided SQLiteClient
-@patch("arbiter.feedback.SQLLITE_AVAILABLE", True)
+@patch("self_fixing_engineer.arbiter.feedback.SQLLITE_AVAILABLE", True)
 def test_init_with_sqlite_client():
     mock_client = MagicMock(spec=SQLiteClient)
     fm = FeedbackManager(db_client=mock_client)
@@ -81,9 +81,9 @@ def test_init_with_sqlite_client():
 
 
 # Test init with PostgresClient
-@patch("arbiter.feedback.PostgresClient")
-@patch("arbiter.feedback.DB_CLIENTS_AVAILABLE", True)
-@patch("arbiter.feedback.POSTGRES_AVAILABLE", True)
+@patch("self_fixing_engineer.arbiter.feedback.PostgresClient")
+@patch("self_fixing_engineer.arbiter.feedback.DB_CLIENTS_AVAILABLE", True)
+@patch("self_fixing_engineer.arbiter.feedback.POSTGRES_AVAILABLE", True)
 def test_init_with_postgres_url(mock_pg_class):
     mock_pg_instance = MagicMock()
     mock_pg_class.return_value = mock_pg_instance
@@ -100,7 +100,7 @@ def test_init_with_postgres_url(mock_pg_class):
 
 
 # Test init in production without DATABASE_URL raises error
-@patch("arbiter.feedback.IS_PRODUCTION", True)
+@patch("self_fixing_engineer.arbiter.feedback.IS_PRODUCTION", True)
 def test_init_production_no_db_url():
     mock_config = MagicMock()
     mock_config.DATABASE_URL = None

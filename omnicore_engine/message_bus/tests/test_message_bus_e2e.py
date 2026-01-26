@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class TestMessage:
+class MessageData:
     """Test message for tracking in e2e tests."""
 
     id: str

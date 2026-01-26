@@ -162,9 +162,9 @@ class TestShardedMessageBus(unittest.TestCase):
         """Clean up after each test."""
         self.security_patcher.stop()
 
-    @patch("message_bus.sharded_message_bus.KafkaBridge")
-    @patch("message_bus.sharded_message_bus.RedisBridge")
-    @patch("message_bus.sharded_message_bus.DeadLetterQueue")
+    @patch("omnicore_engine.message_bus.sharded_message_bus.KafkaBridge")
+    @patch("omnicore_engine.message_bus.sharded_message_bus.RedisBridge")
+    @patch("omnicore_engine.message_bus.sharded_message_bus.DeadLetterQueue")
     def test_initialization(self, mock_dlq_class, mock_redis_class, mock_kafka_class):
         """Test ShardedMessageBus initialization."""
         bus = ShardedMessageBus(

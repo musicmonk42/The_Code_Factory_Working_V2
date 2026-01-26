@@ -340,14 +340,14 @@ def mock_cfg(key: str | None = None) -> MagicMock:
     return cfg
 
 
-@patch("runner.providers.local_provider.load_config")
+@patch("generator.runner.providers.local_provider.load_config")
 def test_get_provider_cfg_key(mock_load: MagicMock) -> None:
     mock_load.return_value = mock_cfg("cfg")
     p = get_provider()
     assert p.api_key == "cfg"
 
 
-@patch("runner.providers.local_provider.load_config")
+@patch("generator.runner.providers.local_provider.load_config")
 @patch.dict(os.environ, {"LOCAL_API_KEY": "env"})
 def test_get_provider_env_key(mock_load: MagicMock) -> None:
     mock_load.return_value = mock_cfg(None)
@@ -355,7 +355,7 @@ def test_get_provider_env_key(mock_load: MagicMock) -> None:
     assert p.api_key == "env"
 
 
-@patch("runner.providers.local_provider.load_config")
+@patch("generator.runner.providers.local_provider.load_config")
 @patch.dict(os.environ, clear=True)
 def test_get_provider_no_key(mock_load: MagicMock) -> None:
     # FIX: Local provider doesn't require a key, so this test should pass

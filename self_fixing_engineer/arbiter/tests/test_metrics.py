@@ -261,7 +261,7 @@ def test_register_dynamic_metric_unsupported():
 
 
 # Test error handling in register_dynamic_metric
-@patch("arbiter.metrics.get_or_create_counter", side_effect=Exception("Mock error"))
+@patch("self_fixing_engineer.arbiter.metrics.get_or_create_counter", side_effect=Exception("Mock error"))
 def test_register_dynamic_metric_error(mock_create, mock_logger):
     _, error, _ = mock_logger
     with pytest.raises(Exception, match="Mock error"):
@@ -271,7 +271,7 @@ def test_register_dynamic_metric_error(mock_create, mock_logger):
 
 
 # Test metric registration time observation
-@patch("arbiter.metrics.time")
+@patch("self_fixing_engineer.arbiter.metrics.time")
 def test_metric_registration_time(mock_time):
     # Set up time() to return 0 then 1.0 to simulate 1 second elapsed
     mock_time.side_effect = [0, 1.0]

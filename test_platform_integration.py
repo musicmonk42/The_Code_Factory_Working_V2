@@ -48,7 +48,7 @@ logger = logging.getLogger("platform_integration_test")
 
 
 @dataclass
-class TestResult:
+class IntegrationTestResult:
     """Result of a single test"""
 
     name: str
@@ -68,7 +68,7 @@ class PlatformIntegrationTest:
     def log_test(self, name: str, passed: bool, message: str = "", error: str = None):
         """Record a test result"""
         duration = time.time() - self.start_time
-        result = TestResult(
+        result = IntegrationTestResult(
             name=name, passed=passed, duration=duration, message=message, error=error
         )
         self.results.append(result)

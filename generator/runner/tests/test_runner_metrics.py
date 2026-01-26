@@ -271,7 +271,7 @@ async def started_metrics_exporter(
 
 
 # Update patch target from 'runner.metrics' to 'runner.runner_metrics'
-@patch("runner.runner_metrics.prom.start_http_server")
+@patch("generator.runner.runner_metrics.prom.start_http_server")
 def test_start_prometheus_server_once(mock_start_http):
     m._prom_started = False  # Reset global flag
 

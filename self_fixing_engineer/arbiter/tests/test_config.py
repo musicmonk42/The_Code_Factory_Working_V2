@@ -46,8 +46,8 @@ def test_arbiter_config_init():
         "DB_PATH": "sqlite:///./test.db",
     },
 )
-@patch("arbiter.config.CONFIG_ACCESS")
-@patch("arbiter.config.CONFIG_ERRORS")
+@patch("self_fixing_engineer.arbiter.config.CONFIG_ACCESS")
+@patch("self_fixing_engineer.arbiter.config.CONFIG_ERRORS")
 def test_initialize_singleton(mock_errors, mock_access):
     # Setup mock metrics
     mock_access.labels.return_value.inc = MagicMock()
@@ -90,7 +90,7 @@ def test_decrypt_sensitive_fields():
 
 # Test to_dict - patch the metric
 @patch.dict(os.environ, {"ENCRYPTION_KEY": Fernet.generate_key().decode()})
-@patch("arbiter.config.CONFIG_ACCESS")
+@patch("self_fixing_engineer.arbiter.config.CONFIG_ACCESS")
 def test_to_dict(mock_access):
     mock_access.labels.return_value.inc = MagicMock()
 
@@ -112,8 +112,8 @@ def test_required_fields_validation():
 
 # Test thread safety
 @patch.dict(os.environ, {"ENCRYPTION_KEY": Fernet.generate_key().decode()})
-@patch("arbiter.config.CONFIG_ACCESS")
-@patch("arbiter.config.CONFIG_ERRORS")
+@patch("self_fixing_engineer.arbiter.config.CONFIG_ACCESS")
+@patch("self_fixing_engineer.arbiter.config.CONFIG_ERRORS")
 def test_config_singleton_thread_safe(mock_errors, mock_access):
     mock_access.labels.return_value.inc = MagicMock()
     mock_errors.labels.return_value.inc = MagicMock()

@@ -140,7 +140,7 @@ class TestCircuitBreaker(unittest.TestCase):
 
         self.assertIn("recovery_timeout must be positive", str(context.exception))
 
-    @patch("message_bus.resilience.logger")
+    @patch("omnicore_engine.message_bus.resilience.logger")
     def test_record_failure_below_threshold(self, mock_logger):
         """Test recording failures below threshold."""
         cb = CircuitBreaker(failure_threshold=3)
@@ -159,7 +159,7 @@ class TestCircuitBreaker(unittest.TestCase):
         # Still closed, no logging yet
         mock_logger.warning.assert_not_called()
 
-    @patch("message_bus.resilience.logger")
+    @patch("omnicore_engine.message_bus.resilience.logger")
     def test_record_failure_reaches_threshold(self, mock_logger):
         """Test circuit opens when failure threshold is reached."""
         cb = CircuitBreaker(failure_threshold=3)
@@ -178,7 +178,7 @@ class TestCircuitBreaker(unittest.TestCase):
         call_args = mock_logger.warning.call_args[0][0]
         self.assertIn("Circuit breaker opened", call_args)
 
-    @patch("message_bus.resilience.logger")
+    @patch("omnicore_engine.message_bus.resilience.logger")
     def test_record_failure_when_already_open(self, mock_logger):
         """Test recording failure when circuit is already open."""
         cb = CircuitBreaker(failure_threshold=2)
@@ -197,7 +197,7 @@ class TestCircuitBreaker(unittest.TestCase):
         # Should not log again
         mock_logger.warning.assert_called_once()
 
-    @patch("message_bus.resilience.logger")
+    @patch("omnicore_engine.message_bus.resilience.logger")
     def test_record_success_resets_state(self, mock_logger):
         """Test recording success resets the circuit."""
         cb = CircuitBreaker(failure_threshold=3)
@@ -213,7 +213,7 @@ class TestCircuitBreaker(unittest.TestCase):
         self.assertEqual(cb.failure_count, 0)
         self.assertEqual(cb.state, "closed")
 
-    @patch("message_bus.resilience.logger")
+    @patch("omnicore_engine.message_bus.resilience.logger")
     def test_record_success_from_open_state(self, mock_logger):
         """Test recording success from open state."""
         cb = CircuitBreaker(failure_threshold=2)
@@ -250,8 +250,8 @@ class TestCircuitBreaker(unittest.TestCase):
         # Immediately after opening
         self.assertFalse(cb.can_attempt())
 
-    @patch("message_bus.resilience.time.time")
-    @patch("message_bus.resilience.logger")
+    @patch("omnicore_engine.message_bus.resilience.time.time")
+    @patch("omnicore_engine.message_bus.resilience.logger")
     def test_can_attempt_when_open_after_timeout(self, mock_logger, mock_time):
         """Test can_attempt returns True after recovery timeout (half-open)."""
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=10)
