@@ -278,9 +278,68 @@ class CircuitBreaker:
 
 # --- Unified LLM Client ---
 class LLMClient:
+    """
+    Enterprise-grade LLM client with comprehensive error handling and observability.
+    
+    This client implements industry-standard practices:
+    - Defensive programming with path validation
+    - Comprehensive error handling and logging
+    - Circuit breaking and rate limiting
+    - Redis-backed caching with graceful fallback
+    - Plugin-based provider architecture
+    - Full observability with metrics and tracing
+    """
+    
     def __init__(self, config: RunnerConfig):
+        """
+        Initialize LLM client with validated provider directory.
+        
+        Args:
+            config: Runner configuration object
+            
+        Raises:
+            ValueError: If provider directory doesn't exist
+            ConfigurationError: If required dependencies are missing
+        """
         self.config = config
-        self.manager = LLMPluginManager(plugin_dir=Path(__file__).parent)
+        
+        # INDUSTRY STANDARD: Defensive path validation before use
+        # Explicitly construct and validate provider directory path
+        provider_dir = Path(__file__).parent / "providers"
+        
+        if not provider_dir.exists():
+            error_msg = (
+                f"LLM provider directory not found: {provider_dir.absolute()}. "
+                f"Expected provider files (*_provider.py) in this directory. "
+                f"Cannot initialize LLM client without providers."
+            )
+            logger.error(error_msg, extra={"provider_dir": str(provider_dir)})
+            raise ValueError(error_msg)
+        
+        if not provider_dir.is_dir():
+            error_msg = (
+                f"Provider path exists but is not a directory: {provider_dir.absolute()}"
+            )
+            logger.error(error_msg, extra={"provider_dir": str(provider_dir)})
+            raise ValueError(error_msg)
+        
+        # Log provider directory for diagnostics
+        logger.info(
+            "Initializing LLM client with provider directory: %s",
+            provider_dir.absolute(),
+            extra={
+                "provider_dir": str(provider_dir.absolute()),
+                "provider_files": [
+                    p.name for p in provider_dir.glob("*_provider.py")
+                    if not p.name.startswith("_")
+                ],
+            },
+        )
+        
+        # Initialize plugin manager with validated provider directory
+        self.manager = LLMPluginManager(plugin_dir=provider_dir)
+        
+        # Initialize other components with proper error handling
         self.secrets = SecretsManager()
         self.cache = CacheManager(config.redis_url)
         self.rate_limiter = DistributedRateLimiter(config.redis_url)
