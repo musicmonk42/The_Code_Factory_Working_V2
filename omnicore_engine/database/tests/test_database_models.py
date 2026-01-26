@@ -80,8 +80,8 @@ class TestAgentState:
 
     def test_agent_state_with_json_fields(self, session):
         """Test AgentState with JSON fields."""
-        inventory = {"sword": 1, "potion": 3}
-        language = {"en": True, "es": False}
+        inventory = ["sword", "potion", "potion", "potion"]  # List format for arbiter compatibility
+        language = ["en", "es"]  # List format for arbiter compatibility
         memory = ["found_treasure", "defeated_boss"]
         personality = {"courage": 0.8, "wisdom": 0.6}
         custom_attrs = {"level": 10, "class": "warrior"}
@@ -324,7 +324,7 @@ class TestGeneratorAgentState:
             y=200,
             energy=75,
             world_size=5000,
-            inventory={"tools": ["compiler", "debugger"]},
+            inventory=["compiler", "debugger"],  # List format for arbiter compatibility
             memory=["generated_function_1", "generated_class_1"],
             generated_code="class MyClass: pass",
         )
@@ -336,7 +336,7 @@ class TestGeneratorAgentState:
         assert generator.x == 100
         assert generator.y == 200
         assert generator.energy == 75
-        assert generator.inventory == {"tools": ["compiler", "debugger"]}
+        assert generator.inventory == ["compiler", "debugger"]
         assert generator.memory == ["generated_function_1", "generated_class_1"]
 
         # Test generator-specific fields
