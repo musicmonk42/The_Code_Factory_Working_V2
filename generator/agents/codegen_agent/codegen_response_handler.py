@@ -27,7 +27,7 @@ import subprocess
 import sys
 import tempfile
 from functools import lru_cache
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -328,7 +328,7 @@ def _is_tool_available(tool: str) -> bool:
 # ==============================================================================
 
 
-def parse_llm_response(response: str, lang: str = "python") -> Dict[str, str]:
+def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python") -> Dict[str, str]:
     """
     Parses the LLM response, handling both multi-file JSON and single-file code.
 
@@ -348,8 +348,36 @@ def parse_llm_response(response: str, lang: str = "python") -> Dict[str, str]:
     - For non-JSON:
         - Treat as a single file; validate.
         - Return DEFAULT_FILENAME or ERROR_FILENAME accordingly.
+    
+    Args:
+        response: Either a string (legacy behavior) or a dict (OpenAI API response format)
+        lang: Target programming language for syntax validation
+    
+    Returns:
+        Dictionary mapping filenames to code content
     """
-    raw = response.strip()
+    # Handle dict response from OpenAI API
+    if isinstance(response, dict):
+        # Extract content from OpenAI chat completion response
+        raw = ''
+        try:
+            # Try OpenAI chat completion format first
+            if 'choices' in response and response['choices']:
+                raw = response['choices'][0].get('message', {}).get('content', '')
+        except (KeyError, TypeError):
+            # KeyError: unexpected dict structure
+            # TypeError: choices is not subscriptable or message is not a dict
+            pass
+        
+        # Fallback: try to get 'content' or 'text' directly if extraction failed
+        if not raw:
+            raw = response.get('content', response.get('text', ''))
+        
+        logger.debug("Extracted content from dict response, length: %d", len(raw) if raw else 0)
+    else:
+        raw = response
+    
+    raw = raw.strip() if raw else ''
     # For robustness, strip outer code fences before JSON parsing attempt.
     cleaned_for_json = _clean_code_block(raw)
 

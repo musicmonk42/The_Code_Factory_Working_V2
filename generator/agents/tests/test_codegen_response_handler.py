@@ -227,3 +227,124 @@ def test_monitor_and_scan_code_handles_scan_exceptions(monkeypatch):
     assert any(
         "Unified SAST Scan Error" in e[0] or "SAST" in e[0] for e in captured["events"]
     )
+
+
+def test_parse_llm_response_dict_openai_format():
+    """
+    When response is a dict in OpenAI chat completion format,
+    parse_llm_response should extract content from choices[0].message.content
+    """
+    response_dict = {
+        'choices': [
+            {
+                'message': {
+                    'content': 'print("hello from dict")',
+                    'role': 'assistant'
+                }
+            }
+        ],
+        'model': 'gpt-4',
+        'usage': {'total_tokens': 100}
+    }
+    
+    files = crh.parse_llm_response(response_dict, lang="python")
+    assert crh.DEFAULT_FILENAME in files
+    assert files[crh.DEFAULT_FILENAME] == 'print("hello from dict")'
+
+
+def test_parse_llm_response_dict_with_content_key():
+    """
+    When response is a dict with a direct 'content' key,
+    parse_llm_response should extract it as a fallback
+    """
+    response_dict = {
+        'content': 'x = 42',
+        'metadata': 'some info'
+    }
+    
+    files = crh.parse_llm_response(response_dict, lang="python")
+    assert crh.DEFAULT_FILENAME in files
+    assert files[crh.DEFAULT_FILENAME] == 'x = 42'
+
+
+def test_parse_llm_response_dict_with_text_key():
+    """
+    When response is a dict with a 'text' key (fallback),
+    parse_llm_response should extract it
+    """
+    response_dict = {
+        'text': 'y = 100',
+        'other_data': 'ignored'
+    }
+    
+    files = crh.parse_llm_response(response_dict, lang="python")
+    assert crh.DEFAULT_FILENAME in files
+    assert files[crh.DEFAULT_FILENAME] == 'y = 100'
+
+
+def test_parse_llm_response_dict_multi_file_json():
+    """
+    When response is a dict containing multi-file JSON in OpenAI format,
+    parse_llm_response should extract and parse it correctly
+    """
+    json_content = json.dumps({
+        "files": {
+            "app.py": "print('app')",
+            "utils.py": "def helper(): pass"
+        }
+    })
+    
+    response_dict = {
+        'choices': [
+            {
+                'message': {
+                    'content': json_content,
+                    'role': 'assistant'
+                }
+            }
+        ]
+    }
+    
+    files = crh.parse_llm_response(response_dict, lang="python")
+    assert "app.py" in files
+    assert "utils.py" in files
+    assert files["app.py"] == "print('app')"
+    assert "def helper(): pass" in files["utils.py"]
+    assert crh.ERROR_FILENAME not in files
+
+
+def test_parse_llm_response_dict_empty_content():
+    """
+    When response is a dict with empty or missing content,
+    parse_llm_response should handle gracefully
+    """
+    response_dict = {
+        'choices': [
+            {
+                'message': {
+                    'content': '',
+                    'role': 'assistant'
+                }
+            }
+        ]
+    }
+    
+    files = crh.parse_llm_response(response_dict, lang="python")
+    # Empty content should result in error file
+    assert crh.ERROR_FILENAME in files
+
+
+def test_parse_llm_response_dict_malformed():
+    """
+    When response is a dict with unexpected structure,
+    parse_llm_response should handle gracefully with fallback
+    """
+    response_dict = {
+        'unexpected': 'structure',
+        'no_content': 'here'
+    }
+    
+    files = crh.parse_llm_response(response_dict, lang="python")
+    # Should return error file since no valid content found
+    assert crh.ERROR_FILENAME in files
+
