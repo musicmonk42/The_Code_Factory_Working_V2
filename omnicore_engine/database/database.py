@@ -776,6 +776,24 @@ class Database:
     async def create_tables(self):
         DB_OPERATIONS.labels(operation="create_tables").inc()
         try:
+            # WORKAROUND: pytest's conftest.py has an autouse fixture that clears Base.metadata
+            # before each test to prevent table redefinition errors. However, this breaks database
+            # tests that need the metadata to create tables. The conftest.py now skips clearing
+            # for database tests, but we explicitly import all model classes here as a defensive
+            # measure to ensure they are registered with Base.metadata.
+            # TODO: Consider using pytest markers (@pytest.mark.database) for more robust detection
+            from .models import (
+                AgentState,
+                Base,
+                ExplainAuditRecord,
+                GeneratorAgentState,
+                SFEAgentState,
+            )
+            
+            # The act of importing these classes ensures they are registered with Base.metadata
+            # even if metadata was cleared by pytest's autouse fixture
+            logger.info(f"create_tables: Creating tables: {list(Base.metadata.tables.keys())}")
+            
             # Run DDL operations first (Issue #9 fix - run migrations separately)
             async with self.engine.begin() as conn:
                 # Use checkfirst=True to avoid "already exists" errors
@@ -784,6 +802,8 @@ class Database:
                         sync_conn, checkfirst=True
                     )
                 )
+                logger.info("create_tables: Tables created successfully")
+
 
             # Run migrations separately outside DDL transaction
             try:
