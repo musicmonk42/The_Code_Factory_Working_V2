@@ -9,9 +9,8 @@ from datetime import datetime
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from models import (
+# Import models from the correct package path to avoid duplicate Base objects
+from omnicore_engine.database.models import (
     AgentState,
     Base,
     ExplainAuditRecord,
