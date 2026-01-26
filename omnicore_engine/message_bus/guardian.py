@@ -83,30 +83,55 @@ except ImportError:
 #  Prometheus metrics (optional but always defined)
 # --------------------------------------------------------------------------- #
 if _PROMETHEUS_AVAILABLE and Counter is not None:  # pragma: no cover
-    METRIC_GUARDIAN_CHECKS_TOTAL = Counter(
-        "omnicore_guardian_checks_total",
-        "Total health checks performed by the guardian",
-        ["result"],
-    )
-    METRIC_GUARDIAN_ALERTS_TOTAL = Counter(
-        "omnicore_guardian_alerts_total",
-        "Total alerts sent by the guardian",
-        ["result"],
-    )
-    METRIC_GUARDIAN_HEALING_ATTEMPTS = Counter(
-        "omnicore_guardian_healing_attempts_total",
-        "Total self-healing attempts",
-        ["result"],
-    )
-    METRIC_GUARDIAN_CHECK_DURATION = Histogram(
-        "omnicore_guardian_check_duration_seconds",
-        "Duration of health checks",
-    )
-    METRIC_GUARDIAN_COMPONENT_STATUS = Gauge(
-        "omnicore_guardian_component_status",
-        "Status of registered components (1=healthy, 0=unhealthy)",
-        ["component"],
-    )
+    try:
+        METRIC_GUARDIAN_CHECKS_TOTAL = Counter(
+            "omnicore_guardian_checks_total",
+            "Total health checks performed by the guardian",
+            ["result"],
+        )
+    except (ValueError, Exception):
+        # Metric already registered, retrieve it
+        from prometheus_client import REGISTRY
+        METRIC_GUARDIAN_CHECKS_TOTAL = REGISTRY._names_to_collectors.get("omnicore_guardian_checks_total")
+    
+    try:
+        METRIC_GUARDIAN_ALERTS_TOTAL = Counter(
+            "omnicore_guardian_alerts_total",
+            "Total alerts sent by the guardian",
+            ["result"],
+        )
+    except (ValueError, Exception):
+        from prometheus_client import REGISTRY
+        METRIC_GUARDIAN_ALERTS_TOTAL = REGISTRY._names_to_collectors.get("omnicore_guardian_alerts_total")
+    
+    try:
+        METRIC_GUARDIAN_HEALING_ATTEMPTS = Counter(
+            "omnicore_guardian_healing_attempts_total",
+            "Total self-healing attempts",
+            ["result"],
+        )
+    except (ValueError, Exception):
+        from prometheus_client import REGISTRY
+        METRIC_GUARDIAN_HEALING_ATTEMPTS = REGISTRY._names_to_collectors.get("omnicore_guardian_healing_attempts_total")
+    
+    try:
+        METRIC_GUARDIAN_CHECK_DURATION = Histogram(
+            "omnicore_guardian_check_duration_seconds",
+            "Duration of health checks",
+        )
+    except (ValueError, Exception):
+        from prometheus_client import REGISTRY
+        METRIC_GUARDIAN_CHECK_DURATION = REGISTRY._names_to_collectors.get("omnicore_guardian_check_duration_seconds")
+    
+    try:
+        METRIC_GUARDIAN_COMPONENT_STATUS = Gauge(
+            "omnicore_guardian_component_status",
+            "Status of registered components (1=healthy, 0=unhealthy)",
+            ["component"],
+        )
+    except (ValueError, Exception):
+        from prometheus_client import REGISTRY
+        METRIC_GUARDIAN_COMPONENT_STATUS = REGISTRY._names_to_collectors.get("omnicore_guardian_component_status")
 else:  # pragma: no cover
     METRIC_GUARDIAN_CHECKS_TOTAL = None
     METRIC_GUARDIAN_ALERTS_TOTAL = None

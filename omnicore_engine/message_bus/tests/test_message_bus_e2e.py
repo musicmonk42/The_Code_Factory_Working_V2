@@ -95,7 +95,7 @@ class MessageBusE2ETest(unittest.TestCase):
         self.patchers = []
 
         # Patch security utils
-        security_patcher = patch("message_bus.sharded_message_bus.get_security_utils")
+        security_patcher = patch("omnicore_engine.message_bus.sharded_message_bus.get_security_utils")
         self.patchers.append(security_patcher)
         mock_security = security_patcher.start()
         mock_security.return_value = Mock(
@@ -105,12 +105,12 @@ class MessageBusE2ETest(unittest.TestCase):
 
         # Patch Kafka and Redis if not testing them
         if not self.config.USE_KAFKA:
-            kafka_patcher = patch("message_bus.sharded_message_bus.KafkaBridge")
+            kafka_patcher = patch("omnicore_engine.message_bus.sharded_message_bus.KafkaBridge")
             self.patchers.append(kafka_patcher)
             kafka_patcher.start().return_value = None
 
         if not self.config.USE_REDIS:
-            redis_patcher = patch("message_bus.sharded_message_bus.RedisBridge")
+            redis_patcher = patch("omnicore_engine.message_bus.sharded_message_bus.RedisBridge")
             self.patchers.append(redis_patcher)
             redis_patcher.start().return_value = None
 
@@ -121,7 +121,7 @@ class MessageBusE2ETest(unittest.TestCase):
 
     async def create_message_bus(self):
         """Create a message bus instance for testing."""
-        from message_bus.sharded_message_bus import ShardedMessageBus
+        from omnicore_engine.message_bus.sharded_message_bus import ShardedMessageBus
 
         bus = ShardedMessageBus(config=self.config, db=self.mock_db, audit_client=None)
 
