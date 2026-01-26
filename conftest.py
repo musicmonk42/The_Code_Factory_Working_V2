@@ -1598,6 +1598,16 @@ pytest_plugins = ["pytest_asyncio"]
 import pytest
 
 
+@pytest.fixture(scope="function")
+def event_loop():
+    """Create an event loop for each test."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    loop.close()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_stubs():
     """

@@ -224,7 +224,6 @@ jobs:
           TESTING: "1"
           AWS_REGION: ""
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"  # Speed up collection
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
           
