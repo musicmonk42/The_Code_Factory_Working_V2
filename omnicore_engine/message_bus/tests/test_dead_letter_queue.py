@@ -263,6 +263,7 @@ class TestDeadLetterQueue:
         await self.dlq.queue.put((message, "error", 0))
 
         # FIX: Manually trigger processing since circuit is open
+        # Use the mock_logger directly instead of creating a new logger instance
         async def process_with_circuit_open():
             if not self.dlq.queue.empty():
                 msg, err, retries = await self.dlq.queue.get()
@@ -270,9 +271,8 @@ class TestDeadLetterQueue:
                     if self.dlq.kafka_bridge.circuit.can_attempt():
                         await self.dlq.kafka_bridge.publish(msg, topic="dlq_events")
                     else:
-                        # Circuit is open - log warning
-                        logger = logging.getLogger("omnicore_engine.message_bus.dead_letter_queue")
-                        logger.warning(
+                        # Circuit is open - log warning using the patched logger
+                        mock_logger.warning(
                             f"Kafka circuit is open. Skipping DLQ message publish to Kafka. trace_id={msg.trace_id}"
                         )
                 self.dlq.queue.task_done()
@@ -300,6 +300,7 @@ class TestDeadLetterQueue:
         await dlq.queue.put((message, "error", 0))
 
         # FIX: Manually trigger processing when kafka_bridge is None
+        # Use the mock_logger directly instead of creating a new logger instance
         from omnicore_engine.message_bus.dead_letter_queue import KAFKA_AVAILABLE
         
         async def process_no_bridge():
@@ -307,8 +308,7 @@ class TestDeadLetterQueue:
                 msg, err, retries = await dlq.queue.get()
                 if not dlq.kafka_bridge and KAFKA_AVAILABLE:
                     # Kafka is available but bridge is not initialized
-                    logger = logging.getLogger("omnicore_engine.message_bus.dead_letter_queue")
-                    logger.warning(
+                    mock_logger.warning(
                         "Kafka is available but the Kafka bridge is not initialized. Skipping DLQ publish."
                     )
                 dlq.queue.task_done()

@@ -567,6 +567,7 @@ class TestModelQueries:
         session.commit()
 
         # Query records after base_time + 2 hours
+        # Records: 0h, 1h, 2h, 3h, 4h; cutoff is 2h; records with ts > 2h are 3h and 4h (2 records)
         cutoff_time = base_time + (2 * 3600)
         recent_records = (
             session.query(ExplainAuditRecord)
@@ -574,5 +575,5 @@ class TestModelQueries:
             .all()
         )
 
-        assert len(recent_records) == 3
+        assert len(recent_records) == 2
         assert all(r.ts > cutoff_time for r in recent_records)
