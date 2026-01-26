@@ -223,7 +223,7 @@ class SFEAgentState(AgentState):
 #  Indexes for performance
 # ----------------------------------------------------------------------
 # Note: ix_agentstate_name index is already defined in the parent
-# arbiter/agent_state.py model (line 560) on the agent_state.name column.
+# arbiter/agent_state.py model on the agent_state.name column.
 # GeneratorAgentState and SFEAgentState inherit this column via joined-table
 # inheritance, so they automatically benefit from the parent's index.
 # No additional indexes on 'name' are needed for child tables.
