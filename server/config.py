@@ -330,7 +330,7 @@ class ServerConfig(BaseSettings):
     
     # Redis Configuration
     redis_url: str = Field(
-        default="redis://localhost:6379",
+        default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379"),
         description="Redis connection URL"
     )
     

@@ -113,7 +113,7 @@ class RunnerConfig(BaseModel):
         description="URL for distributed coordinator or remote config fetch endpoint.",
     )
     redis_url: str = Field(
-        "redis://localhost:6379",
+        default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379"),
         description="Redis URL for distributed coordination, caching, and LLMClient connectivity.",
     )
 
@@ -749,7 +749,7 @@ class RunnerConfig(BaseModel):
 
 
 def load_config(
-    config_file: str, overrides: Optional[Dict[str, Any]] = None
+    config_file: str = "generator/config.yaml", overrides: Optional[Dict[str, Any]] = None
 ) -> RunnerConfig:
     """
     Load config from YAML, apply env overrides, handle versioning/migrations.
