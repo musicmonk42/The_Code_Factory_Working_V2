@@ -1964,8 +1964,13 @@ def runner_event_loop():
 # ============ Fixtures from omnicore_engine/database/tests/conftest.py ============
 
 @pytest.fixture(autouse=True)
-def clear_sqlalchemy_metadata():
+def clear_sqlalchemy_metadata(request):
     """Clear SQLAlchemy metadata before each test to avoid table redefinition errors."""
+    # Skip clearing for database tests that need the metadata to create tables
+    if "database" in request.fixturenames or "test_database" in str(request.fspath):
+        yield
+        return
+        
     try:
         from omnicore_engine.database import models
         if hasattr(models, "Base") and hasattr(models.Base, "metadata"):
