@@ -44,7 +44,9 @@ def mock_settings():
     settings.DB_RETRY_DELAY = 1
     settings.DB_CIRCUIT_THRESHOLD = 5
     settings.DB_CIRCUIT_TIMEOUT = 60
-    settings.EXPERIMENTAL_FEATURES_ENABLED = False
+    # FIX: Enable experimental features to use v2 encrypted fields instead of direct fields
+    # This avoids issues with custom_attributes not being in ArbiterAgentState
+    settings.EXPERIMENTAL_FEATURES_ENABLED = True
     settings.MAX_BACKUPS = 10
     return settings
 
@@ -71,22 +73,26 @@ def temp_db_path():
 
 
 @pytest.fixture
-async def database(mock_settings, mock_security_config):
-    """Create a Database instance for testing with in-memory SQLite."""
+async def database(mock_settings, mock_security_config, temp_db_path):
+    """Create a Database instance for testing with temporary file-based SQLite."""
     with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
         with patch("omnicore_engine.database.database.get_security_config", return_value=mock_security_config):
-            with patch("omnicore_engine.database.database.EnterpriseSecurityUtils") as mock_security:
-                mock_security_instance = Mock()
-                mock_security_instance.encrypt = lambda x: base64.b64encode(x).decode()
-                mock_security_instance.decrypt = lambda x: base64.b64decode(x.encode())
-                mock_security.return_value = mock_security_instance
+            # FIX: Patch the global settings variable as well
+            with patch("omnicore_engine.database.database.settings", mock_settings):
+                with patch("omnicore_engine.database.database.EnterpriseSecurityUtils") as mock_security:
+                    mock_security_instance = Mock()
+                    mock_security_instance.encrypt = lambda x: base64.b64encode(x).decode()
+                    # FIX: decrypt receives str (base64-encoded), not bytes
+                    mock_security_instance.decrypt = lambda x: base64.b64decode(x if isinstance(x, str) else x.decode())
+                    mock_security.return_value = mock_security_instance
 
-                # Use in-memory database to avoid file persistence issues
-                db = Database("sqlite+aiosqlite:///:memory:")
-                await db.initialize()
-                yield db
-                # Proper cleanup
-                await db.engine.dispose()
+                    # FIX: Use temporary file-based database instead of in-memory to avoid
+                    # connection sharing issues between SQLAlchemy and aiosqlite
+                    db = Database(f"sqlite+aiosqlite:///{temp_db_path}")
+                    await db.initialize()
+                    yield db
+                    # Proper cleanup
+                    await db.engine.dispose()
 
 
 class TestSafeSerialize:
@@ -162,13 +168,14 @@ class TestDatabaseInit:
 
     @pytest.mark.asyncio
     async def test_init_postgresql(self, mock_settings, mock_security_config):
-        mock_settings.database_path = "postgresql://user:pass@localhost/db"
+        # FIX: Use asyncpg driver for async SQLAlchemy
+        mock_settings.database_path = "postgresql+asyncpg://user:pass@localhost/db"
         with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
             with patch(
                 "omnicore_engine.database.database.get_security_config", return_value=mock_security_config
             ):
                 with patch("omnicore_engine.database.database.EnterpriseSecurityUtils"):
-                    db = Database("postgresql://user:pass@localhost/db")
+                    db = Database("postgresql+asyncpg://user:pass@localhost/db")
                     assert db.is_postgres is True
                     assert db.sqlite_db_file_path is None
 
@@ -301,8 +308,9 @@ class TestAgentStateOperations:
             "y": 20,
             "world_size": 100,
             "agent_type": "explorer",
-            "inventory": {"item1": 1},
-            "language": {"en": True},
+            # FIX: inventory, language, memory must be lists, not dicts
+            "inventory": [{"item": "item1", "count": 1}],
+            "language": ["en"],
             "memory": ["event1"],
             "personality": {"trait": 0.5},
             "custom_attributes": {"special": True},
@@ -327,8 +335,9 @@ class TestAgentStateOperations:
             "y": 20,
             "world_size": 100,
             "agent_type": "explorer",
-            "inventory": {},
-            "language": {},
+            # FIX: inventory, language, memory must be lists, not dicts
+            "inventory": [],
+            "language": [],
             "memory": [],
             "personality": {},
             "custom_attributes": {},
@@ -362,8 +371,9 @@ class TestAgentStateOperations:
                 "y": i * 20,
                 "world_size": 100,
                 "agent_type": "explorer",
-                "inventory": {},
-                "language": {},
+                # FIX: inventory, language, memory must be lists, not dicts
+                "inventory": [],
+                "language": [],
                 "memory": [],
                 "personality": {},
                 "custom_attributes": {},
@@ -467,8 +477,9 @@ class TestSnapshotOperations:
                 "y": i * 20,
                 "world_size": 100,
                 "agent_type": "explorer",
-                "inventory": {},
-                "language": {},
+                # FIX: inventory, language, memory must be lists, not dicts
+                "inventory": [],
+                "language": [],
                 "memory": [],
                 "personality": {},
                 "custom_attributes": {},
@@ -576,8 +587,9 @@ class TestConcurrency:
                 "y": 0,
                 "world_size": 100,
                 "agent_type": "test",
-                "inventory": {},
-                "language": {},
+                # FIX: inventory, language, memory must be lists, not dicts
+                "inventory": [],
+                "language": [],
                 "memory": [],
                 "personality": {},
                 "custom_attributes": {},

@@ -423,7 +423,7 @@ class Database:
         }
 
         # Set connect_args conditionally per database type (Issue #7 fix)
-        if self.db_path.startswith("postgresql://"):
+        if self.db_path.startswith("postgresql://") or self.db_path.startswith("postgresql+asyncpg://"):
             engine_params["connect_args"] = {
                 "timeout": 30,
                 "options": "-c statement_timeout=30000",
@@ -864,69 +864,138 @@ class Database:
 
         with DB_LATENCY_LOCAL.labels(operation="initialize_legacy_tables_async").time():
             try:
-                if self.sqlite_db_file_path is None:
-                    raise ValueError(
-                        "SQLite database path is not set for legacy table initialization."
-                    )
+                # FIX: For in-memory databases, use SQLAlchemy engine instead of aiosqlite.connect
+                # to ensure we're working with the same database instance
+                is_memory_db = (
+                    self.db_path and (':memory:' in str(self.db_path) or str(self.sqlite_db_file_path) == ':memory:')
+                )
+                
+                if is_memory_db:
+                    # Use SQLAlchemy's raw connection for in-memory databases
+                    async with self.AsyncSessionLocal() as session:
+                        await session.execute(text("""
+                            CREATE TABLE IF NOT EXISTS preferences (
+                                user_id TEXT PRIMARY KEY,
+                                data TEXT NOT NULL,
+                                encrypted INTEGER DEFAULT 0,
+                                deleted INTEGER DEFAULT 0,
+                                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                            )
+                        """))
+                        await session.execute(text("""
+                            CREATE TABLE IF NOT EXISTS simulations (
+                                sim_id TEXT PRIMARY KEY,
+                                user_id TEXT,
+                                request_data TEXT,
+                                result TEXT,
+                                status TEXT,
+                                encrypted INTEGER DEFAULT 0,
+                                deleted INTEGER DEFAULT 0,
+                                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                            )
+                        """))
+                        await session.execute(text("""
+                            CREATE TABLE IF NOT EXISTS plugins (
+                                kind TEXT,
+                                name TEXT,
+                                meta TEXT,
+                                encrypted INTEGER DEFAULT 0,
+                                deleted INTEGER DEFAULT 0,
+                                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                                PRIMARY KEY (kind, name)
+                            )
+                        """))
+                        await session.execute(text("""
+                            CREATE TABLE IF NOT EXISTS feedback (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                type TEXT,
+                                message TEXT,
+                                timestamp TEXT
+                            )
+                        """))
+                        await session.execute(text("""
+                            CREATE TABLE IF NOT EXISTS audit_snapshots (
+                                snapshot_id TEXT PRIMARY KEY,
+                                timestamp TEXT NOT NULL,
+                                state TEXT NOT NULL,
+                                user_id TEXT NOT NULL
+                            )
+                        """))
+                        await session.execute(text("""
+                            CREATE TABLE IF NOT EXISTS world_snapshots (
+                                snapshot_id TEXT PRIMARY KEY,
+                                timestamp TEXT NOT NULL,
+                                state TEXT NOT NULL,
+                                user_id TEXT NOT NULL
+                            )
+                        """))
+                        await session.commit()
+                else:
+                    # For file-based databases, use aiosqlite connection
+                    if self.sqlite_db_file_path is None:
+                        raise ValueError(
+                            "SQLite database path is not set for legacy table initialization."
+                        )
 
-                async with aiosqlite.connect(self.sqlite_db_file_path) as conn:
-                    await conn.execute("""
-                        CREATE TABLE IF NOT EXISTS preferences (
-                            user_id TEXT PRIMARY KEY,
-                            data TEXT NOT NULL,
-                            encrypted INTEGER DEFAULT 0,
-                            deleted INTEGER DEFAULT 0,
-                            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-                        )
-                    """)
-                    await conn.execute("""
-                        CREATE TABLE IF NOT EXISTS simulations (
-                            sim_id TEXT PRIMARY KEY,
-                            user_id TEXT,
-                            request_data TEXT,
-                            result TEXT,
-                            status TEXT,
-                            encrypted INTEGER DEFAULT 0,
-                            deleted INTEGER DEFAULT 0,
-                            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-                        )
-                    """)
-                    await conn.execute("""
-                        CREATE TABLE IF NOT EXISTS plugins (
-                            kind TEXT,
-                            name TEXT,
-                            meta TEXT,
-                            encrypted INTEGER DEFAULT 0,
-                            deleted INTEGER DEFAULT 0,
-                            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                            PRIMARY KEY (kind, name)
-                        )
-                    """)
-                    await conn.execute("""
-                        CREATE TABLE IF NOT EXISTS feedback (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            type TEXT,
-                            message TEXT,
-                            timestamp TEXT
-                        )
-                    """)
-                    await conn.execute("""
-                        CREATE TABLE IF NOT EXISTS audit_snapshots (
-                            snapshot_id TEXT PRIMARY KEY,
-                            timestamp TEXT NOT NULL,
-                            state TEXT NOT NULL,
-                            user_id TEXT NOT NULL
-                        )
-                    """)
-                    await conn.execute("""
-                        CREATE TABLE IF NOT EXISTS world_snapshots (
-                            snapshot_id TEXT PRIMARY KEY,
-                            timestamp TEXT NOT NULL,
-                            state TEXT NOT NULL,
-                            user_id TEXT NOT NULL
-                        )
-                    """)
-                    await conn.commit()
+                    async with aiosqlite.connect(self.sqlite_db_file_path) as conn:
+                        await conn.execute("""
+                            CREATE TABLE IF NOT EXISTS preferences (
+                                user_id TEXT PRIMARY KEY,
+                                data TEXT NOT NULL,
+                                encrypted INTEGER DEFAULT 0,
+                                deleted INTEGER DEFAULT 0,
+                                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                            )
+                        """)
+                        await conn.execute("""
+                            CREATE TABLE IF NOT EXISTS simulations (
+                                sim_id TEXT PRIMARY KEY,
+                                user_id TEXT,
+                                request_data TEXT,
+                                result TEXT,
+                                status TEXT,
+                                encrypted INTEGER DEFAULT 0,
+                                deleted INTEGER DEFAULT 0,
+                                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                            )
+                        """)
+                        await conn.execute("""
+                            CREATE TABLE IF NOT EXISTS plugins (
+                                kind TEXT,
+                                name TEXT,
+                                meta TEXT,
+                                encrypted INTEGER DEFAULT 0,
+                                deleted INTEGER DEFAULT 0,
+                                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                                PRIMARY KEY (kind, name)
+                            )
+                        """)
+                        await conn.execute("""
+                            CREATE TABLE IF NOT EXISTS feedback (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                type TEXT,
+                                message TEXT,
+                                timestamp TEXT
+                            )
+                        """)
+                        await conn.execute("""
+                            CREATE TABLE IF NOT EXISTS audit_snapshots (
+                                snapshot_id TEXT PRIMARY KEY,
+                                timestamp TEXT NOT NULL,
+                                state TEXT NOT NULL,
+                                user_id TEXT NOT NULL
+                            )
+                        """)
+                        await conn.execute("""
+                            CREATE TABLE IF NOT EXISTS world_snapshots (
+                                snapshot_id TEXT PRIMARY KEY,
+                                timestamp TEXT NOT NULL,
+                                state TEXT NOT NULL,
+                                user_id TEXT NOT NULL
+                            )
+                        """)
+                        await conn.commit()
+                        
                 logger.info(
                     "Legacy/non-ORM tables ensured (preferences, simulations, plugins, feedback, audit_snapshots, world_snapshots) asynchronously."
                 )
