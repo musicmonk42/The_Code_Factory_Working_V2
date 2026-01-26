@@ -24,7 +24,7 @@ from collections import deque
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Deque, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Deque, Dict, List, Optional, Union
 
 import aiohttp
 import backoff
@@ -554,7 +554,7 @@ ALERT_COOLDOWN = 300  # 5 minutes
 # ============================================================================
 
 def _safe_create_async_task(
-    coro: Any,
+    coro: Awaitable[Any],
     task_name: str,
     context: Optional[Dict[str, Any]] = None,
     fail_silently: bool = False,
@@ -572,7 +572,7 @@ def _safe_create_async_task(
     - Clear visibility into when tasks are skipped
     
     Args:
-        coro: Coroutine to execute asynchronously
+        coro: Awaitable/Coroutine to execute asynchronously
         task_name: Human-readable name for logging/debugging
         context: Optional context dict for enhanced logging
         fail_silently: If True, use debug logging; if False, use warning
@@ -1113,6 +1113,9 @@ def add_custom_metrics_hook(hook: Callable[[str, float, Dict[str, Any]], None]) 
     # Register the hook
     register_metrics_hook(hook)
     
+    # Calculate timestamp once for efficiency
+    timestamp = datetime.now(timezone.utc).isoformat()
+    
     # Log to audit trail using industry-standard async task handling
     success = _safe_create_async_task(
         log_audit_event(
@@ -1120,7 +1123,7 @@ def add_custom_metrics_hook(hook: Callable[[str, float, Dict[str, Any]], None]) 
             data={
                 "hook_name": hook.__name__,
                 "hook_module": getattr(hook, "__module__", "unknown"),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": timestamp,
             },
         ),
         task_name="metrics_hook_registration_audit",
@@ -1163,6 +1166,9 @@ def add_custom_logging_hook(hook: Callable[[logging.LogRecord], None]) -> bool:
     # Register the hook
     register_logging_hook(hook)
     
+    # Calculate timestamp once for efficiency
+    timestamp = datetime.now(timezone.utc).isoformat()
+    
     # Log to audit trail using industry-standard async task handling
     success = _safe_create_async_task(
         log_audit_event(
@@ -1170,7 +1176,7 @@ def add_custom_logging_hook(hook: Callable[[logging.LogRecord], None]) -> bool:
             data={
                 "hook_name": hook.__name__,
                 "hook_module": getattr(hook, "__module__", "unknown"),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": timestamp,
             },
         ),
         task_name="logging_hook_registration_audit",
