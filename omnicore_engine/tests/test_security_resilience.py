@@ -30,6 +30,9 @@ class MockMerkleTree:
         self.counter += 1
         self.root = f"root_{self.counter}_{hashlib.sha256(b''.join(self.leaves)).hexdigest()[:8]}"
 
+    def get_root(self):
+        return self.root
+
     def get_merkle_root(self):
         return self.root
 
