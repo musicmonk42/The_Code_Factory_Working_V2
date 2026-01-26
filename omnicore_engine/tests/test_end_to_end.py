@@ -73,7 +73,7 @@ async def test_end_to_end_plugin_cli(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_end_to_end_audit_workflow(tmp_path):
+async def test_end_to_end_audit_workflow(tmp_path, app):
     """
     Test the audit export endpoint with mocked audit system.
     """
@@ -102,7 +102,7 @@ async def test_end_to_end_audit_workflow(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_plugin_execution(tmp_path):
+async def test_concurrent_plugin_execution(tmp_path, app):
     """
     Test concurrent execution of the fix-imports endpoint.
     """

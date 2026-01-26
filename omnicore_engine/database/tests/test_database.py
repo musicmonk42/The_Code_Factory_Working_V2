@@ -73,9 +73,9 @@ def temp_db_path():
 @pytest.fixture
 async def database(mock_settings, mock_security_config, temp_db_path):
     """Create a Database instance for testing."""
-    with patch("database.ArbiterConfig", return_value=mock_settings):
-        with patch("database.get_security_config", return_value=mock_security_config):
-            with patch("database.EnterpriseSecurityUtils") as mock_security:
+    with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
+        with patch("omnicore_engine.database.database.get_security_config", return_value=mock_security_config):
+            with patch("omnicore_engine.database.database.EnterpriseSecurityUtils") as mock_security:
                 mock_security_instance = Mock()
                 mock_security_instance.encrypt = lambda x: base64.b64encode(x).decode()
                 mock_security_instance.decrypt = lambda x: base64.b64decode(x.encode())
@@ -148,11 +148,11 @@ class TestDatabaseInit:
 
     @pytest.mark.asyncio
     async def test_init_sqlite(self, mock_settings, mock_security_config, temp_db_path):
-        with patch("database.ArbiterConfig", return_value=mock_settings):
+        with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
             with patch(
-                "database.get_security_config", return_value=mock_security_config
+                "omnicore_engine.database.database.get_security_config", return_value=mock_security_config
             ):
-                with patch("database.EnterpriseSecurityUtils"):
+                with patch("omnicore_engine.database.database.EnterpriseSecurityUtils"):
                     db = Database(f"sqlite+aiosqlite:///{temp_db_path}")
                     assert db.db_path == f"sqlite+aiosqlite:///{temp_db_path}"
                     assert db.is_postgres is False
@@ -161,21 +161,21 @@ class TestDatabaseInit:
     @pytest.mark.asyncio
     async def test_init_postgresql(self, mock_settings, mock_security_config):
         mock_settings.database_path = "postgresql://user:pass@localhost/db"
-        with patch("database.ArbiterConfig", return_value=mock_settings):
+        with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
             with patch(
-                "database.get_security_config", return_value=mock_security_config
+                "omnicore_engine.database.database.get_security_config", return_value=mock_security_config
             ):
-                with patch("database.EnterpriseSecurityUtils"):
+                with patch("omnicore_engine.database.database.EnterpriseSecurityUtils"):
                     db = Database("postgresql://user:pass@localhost/db")
                     assert db.is_postgres is True
                     assert db.sqlite_db_file_path is None
 
     def test_init_invalid_path(self, mock_settings, mock_security_config):
-        with patch("database.ArbiterConfig", return_value=mock_settings):
+        with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
             with patch(
-                "database.get_security_config", return_value=mock_security_config
+                "omnicore_engine.database.database.get_security_config", return_value=mock_security_config
             ):
-                with patch("database.EnterpriseSecurityUtils"):
+                with patch("omnicore_engine.database.database.EnterpriseSecurityUtils"):
                     with pytest.raises(
                         ValueError, match="db_path must be a non-empty string"
                     ):
