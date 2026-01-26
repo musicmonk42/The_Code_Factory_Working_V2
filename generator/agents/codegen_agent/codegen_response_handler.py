@@ -364,7 +364,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             # Try OpenAI chat completion format first
             if 'choices' in response and response['choices']:
                 raw = response['choices'][0].get('message', {}).get('content', '')
-        except (IndexError, KeyError, TypeError):
+        except (KeyError, TypeError):
+            # KeyError: unexpected dict structure
+            # TypeError: choices is not subscriptable or message is not a dict
             pass
         
         # Fallback: try to get 'content' or 'text' directly if extraction failed
