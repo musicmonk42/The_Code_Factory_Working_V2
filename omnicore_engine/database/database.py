@@ -303,6 +303,12 @@ def safe_serialize(obj: Any, _seen: Optional[Set[int]] = None) -> Any:
         return obj.tolist()
     if isinstance(obj, (set, frozenset)):
         return list(obj)
+    # Handle file-like objects that may not be readable
+    if hasattr(obj, 'read'):
+        if hasattr(obj, 'readable') and not obj.readable():
+            return "<non-readable file object>"
+        # For readable file objects, just return a placeholder
+        return f"<file object: {getattr(obj, 'name', 'unknown')}>"
     if isinstance(obj, collections.abc.Mapping):
         return {k: safe_serialize(v, _seen) for k, v in obj.items()}
     if isinstance(obj, collections.abc.Iterable) and not isinstance(obj, str):

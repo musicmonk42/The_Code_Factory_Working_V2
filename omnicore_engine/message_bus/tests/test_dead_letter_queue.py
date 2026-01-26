@@ -234,8 +234,8 @@ class TestDeadLetterQueue:
                             await self.dlq.queue.put((msg, err, retries + 1))
                         else:
                             # Max retries exceeded - log critical and drop
-                            logger = logging.getLogger("omnicore_engine.message_bus.dead_letter_queue")
-                            logger.critical(
+                            # Use the mocked logger (via the patch decorator)
+                            mock_logger.critical(
                                 f"DLQ message failed to process after {self.dlq.max_retries} attempts. Dropping message. trace_id={msg.trace_id}, error={err}"
                             )
                 self.dlq.queue.task_done()
