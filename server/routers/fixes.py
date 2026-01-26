@@ -43,7 +43,7 @@ async def list_fixes(
     **Returns:**
     - List of fixes matching the criteria
     """
-    logger.debug(f"Listing fixes (job_id={job_id}, status={status})")
+    logger.debug("Listing fixes (job_id=%s, status=%s)", job_id, status)
 
     # Query through OmniCore for centralized fix tracking
     # In real implementation:

@@ -579,10 +579,11 @@ async def clarify_requirements(
             file_path = job_upload_path / filename
             
             logger.debug(
-                f"Checking README candidate: {filename}",
-                file_path=str(file_path.absolute()),
-                exists=file_path.exists(),
-                is_file=file_path.is_file() if file_path.exists() else False
+                "Checking README candidate: %s (file_path=%s, exists=%s, is_file=%s)",
+                filename,
+                str(file_path.absolute()),
+                file_path.exists(),
+                file_path.is_file() if file_path.exists() else False
             )
             
             try:
@@ -601,9 +602,11 @@ async def clarify_requirements(
                     
                 if readme_content.strip():
                     logger.info(
-                        f"Successfully read README for job {job_id}: {filename}",
-                        content_length=len(readme_content),
-                        file_path=str(file_path.absolute())
+                        "Successfully read README for job %s: %s (content_length=%d, file_path=%s)",
+                        job_id,
+                        filename,
+                        len(readme_content),
+                        str(file_path.absolute())
                     )
                     break
                 else:
@@ -611,8 +614,11 @@ async def clarify_requirements(
                     
             except UnicodeDecodeError as e:
                 logger.error(
-                    f"Encoding error reading file {filename} for job {job_id}: {e}",
-                    file_path=str(file_path.absolute())
+                    "Encoding error reading file %s for job %s: %s (file_path=%s)",
+                    filename,
+                    job_id,
+                    str(e),
+                    str(file_path.absolute())
                 )
                 # Try with different encoding
                 try:
@@ -625,13 +631,19 @@ async def clarify_requirements(
                     logger.error(f"Failed to read {filename} with fallback encoding: {e2}")
             except PermissionError as e:
                 logger.error(
-                    f"Permission denied reading file {filename} for job {job_id}: {e}",
-                    file_path=str(file_path.absolute())
+                    "Permission denied reading file %s for job %s: %s (file_path=%s)",
+                    filename,
+                    job_id,
+                    str(e),
+                    str(file_path.absolute())
                 )
             except Exception as e:
                 logger.error(
-                    f"Unexpected error reading file {filename} for job {job_id}: {e}",
-                    file_path=str(file_path.absolute()),
+                    "Unexpected error reading file %s for job %s: %s (file_path=%s)",
+                    filename,
+                    job_id,
+                    str(e),
+                    str(file_path.absolute()),
                     exc_info=True
                 )
 
@@ -654,8 +666,10 @@ async def clarify_requirements(
             }
         }
         logger.error(
-            f"No valid README content found for job {job_id}",
-            **error_detail
+            "No valid README content found for job %s: %s",
+            job_id,
+            error_detail,
+            extra={"error_detail": error_detail}
         )
         raise HTTPException(
             status_code=400,
