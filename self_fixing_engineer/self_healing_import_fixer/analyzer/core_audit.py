@@ -806,7 +806,9 @@ def _cleanup_audit_system():
         logger = get_audit_logger()
         try:
             loop = asyncio.get_running_loop()
-            # If loop exists, create task instead
+            # If loop exists, create tasks on it. These tasks won't be awaited
+            # because we can't await in a synchronous atexit handler, but they
+            # will execute asynchronously on the existing loop.
             loop.create_task(logger.log_critical_event("AUDIT_SYSTEM_SHUTDOWN", clean_shutdown=True))
             loop.create_task(logger.verify_integrity())
         except RuntimeError:

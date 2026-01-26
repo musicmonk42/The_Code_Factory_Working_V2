@@ -6,7 +6,12 @@ from prometheus_client import REGISTRY
 
 @pytest.fixture(autouse=True, scope="function")
 def reset_prometheus_collectors():
-    """Reset Prometheus collectors before each test to prevent duplicates."""
+    """Reset Prometheus collectors before each test to prevent duplicates.
+    
+    Note: Uses private API `_collector_to_names` as the public API doesn't
+    provide a way to iterate collectors for cleanup. This is wrapped in
+    defensive try-except blocks to handle potential API changes gracefully.
+    """
     # Store collectors to remove using a defensive approach
     try:
         collectors = list(REGISTRY._collector_to_names.keys())
