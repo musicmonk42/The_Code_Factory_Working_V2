@@ -71,7 +71,7 @@ class TestAgentState:
         session.add(agent)
         session.commit()
 
-        assert agent.agent_type == "generic"
+        assert agent.agent_type == "Arbiter"  # Matches arbiter model default
         assert agent.inventory == {}
         assert agent.language == {}
         assert agent.memory == {}
