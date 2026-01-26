@@ -280,7 +280,8 @@ class CircuitBreaker:
 class LLMClient:
     def __init__(self, config: RunnerConfig):
         self.config = config
-        self.manager = LLMPluginManager(plugin_dir=Path(__file__).parent)
+        # FIX: Point to providers subdirectory where actual provider files are located
+        self.manager = LLMPluginManager(plugin_dir=Path(__file__).parent / "providers")
         self.secrets = SecretsManager()
         self.cache = CacheManager(config.redis_url)
         self.rate_limiter = DistributedRateLimiter(config.redis_url)

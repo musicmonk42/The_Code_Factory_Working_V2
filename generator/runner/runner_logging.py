@@ -568,18 +568,25 @@ def detect_anomaly(
             )
         except RuntimeError:
             pass
-        asyncio.create_task(
-            log_audit_event(
-                action="anomaly_detected",
-                data={
-                    "metric": metric_name,
-                    "value": value,
-                    "threshold": threshold,
-                    "type": anomaly_type,
-                    "severity": severity,
-                },
+        # FIX: Wrap log_audit_event in try-except to handle missing event loop
+        try:
+            asyncio.create_task(
+                log_audit_event(
+                    action="anomaly_detected",
+                    data={
+                        "metric": metric_name,
+                        "value": value,
+                        "threshold": threshold,
+                        "type": anomaly_type,
+                        "severity": severity,
+                    },
+                )
             )
-        )
+        except RuntimeError:
+            # No event loop running - skip audit logging
+            logger.debug(
+                f"Skipping audit log for anomaly (no event loop): {metric_name}"
+            )
 
 
 # Self-healing decorator
@@ -935,17 +942,31 @@ def util_decorator(func: Callable):
 def add_custom_metrics_hook(hook: Callable[[str, float, Dict[str, Any]], None]):
     """Dynamically adds a custom metrics hook."""
     register_metrics_hook(hook)
-    asyncio.create_task(
-        log_audit_event(action="add_metrics_hook", data={"hook_name": hook.__name__})
-    )
+    # FIX: Wrap log_audit_event in try-except to handle missing event loop
+    try:
+        asyncio.create_task(
+            log_audit_event(action="add_metrics_hook", data={"hook_name": hook.__name__})
+        )
+    except RuntimeError:
+        # No event loop running - skip audit logging
+        logger.debug(
+            f"Skipping audit log for metrics hook (no event loop): {hook.__name__}"
+        )
 
 
 def add_custom_logging_hook(hook: Callable[[logging.LogRecord], None]):
     """Dynamically adds a custom logging hook."""
     register_logging_hook(hook)
-    asyncio.create_task(
-        log_audit_event(action="add_logging_hook", data={"hook_name": hook.__name__})
-    )
+    # FIX: Wrap log_audit_event in try-except to handle missing event loop
+    try:
+        asyncio.create_task(
+            log_audit_event(action="add_logging_hook", data={"hook_name": hook.__name__})
+        )
+    except RuntimeError:
+        # No event loop running - skip audit logging
+        logger.debug(
+            f"Skipping audit log for logging hook (no event loop): {hook.__name__}"
+        )
 
 
 # [FIX] This class is now self-contained and synchronous
