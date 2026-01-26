@@ -570,7 +570,10 @@ class TestEncryption:
     def test_decrypt_json_encrypted(self, database):
         data = {"key": "value"}
         json_str = json.dumps(data)
-        encrypted = database.encrypter.encrypt(json_str.encode()).decode()
+        # The mock encrypter.encrypt returns a string (base64-encoded), not bytes
+        encrypted_result = database.encrypter.encrypt(json_str.encode())
+        # Handle both bytes (real Fernet) and string (mock) return values
+        encrypted = encrypted_result.decode() if isinstance(encrypted_result, bytes) else encrypted_result
         result = database._decrypt_json(encrypted, encrypted=True)
         assert result == data
 

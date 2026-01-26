@@ -170,7 +170,7 @@ def _get_settings():
 
 from omnicore_engine.message_bus.encryption import FernetEncryption
 
-from .metrics_helpers import get_or_create_counter_local, get_or_create_histogram_local
+from omnicore_engine.database.metrics_helpers import get_or_create_counter_local, get_or_create_histogram_local
 
 # Local imports from the refactored structure
 from .models import (
@@ -305,7 +305,13 @@ def safe_serialize(obj: Any, _seen: Optional[Set[int]] = None) -> Any:
         return list(obj)
     # Handle file-like objects that may not be readable
     if hasattr(obj, 'read'):
-        if hasattr(obj, 'readable') and not obj.readable():
+        try:
+            # Check if readable is a callable method and call it safely
+            readable_attr = getattr(obj, 'readable', None)
+            if callable(readable_attr) and not readable_attr():
+                return "<non-readable file object>"
+        except (TypeError, OSError):
+            # Handle edge cases where readable() fails (e.g., IOBase class objects)
             return "<non-readable file object>"
         # For readable file objects, just return a placeholder
         return f"<file object: {getattr(obj, 'name', 'unknown')}>"
