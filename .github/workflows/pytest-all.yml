@@ -248,15 +248,18 @@ jobs:
           OVERALL_EXIT=0
           FAILED_DIRS=""
           
-          # Test directories in order of increasing complexity
-          TEST_DIRS=(
-            "tests"
-            "self_fixing_engineer/tests"
-            "omnicore_engine/tests"
-            "omnicore_engine/database/tests"
-            "omnicore_engine/message_bus/tests"
-            "generator/tests"
-          )
+          # Dynamically discover all test directories that contain test_*.py files
+          # This ensures we don't miss any test directories
+          echo "Discovering test directories..."
+          TEST_DIRS=()
+          while IFS= read -r dir; do
+            # Exclude known problematic directories
+            if [[ "$dir" != *"simulation/tests"* ]]; then
+              TEST_DIRS+=("$dir")
+            fi
+          done < <(find . -type d -name 'tests' -exec sh -c 'ls "$1"/test_*.py 2>/dev/null | head -1 | grep -q . && echo "${1#./}"' _ {} \; 2>/dev/null | sort)
+          
+          echo "Found ${#TEST_DIRS[@]} test directories: ${TEST_DIRS[*]}"
           
           for test_dir in "${TEST_DIRS[@]}"; do
             if [ ! -d "$test_dir" ]; then
