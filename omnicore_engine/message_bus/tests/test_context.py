@@ -122,14 +122,23 @@ class TestExecutionContext(unittest.TestCase):
         self.assertEqual(context["dict_val"], {"a": 1, "b": 2})
         self.assertIsNone(context["none_val"])
 
-    def test_context_modification_affects_original(self):
-        """Test that modifying returned context affects the original."""
+    def test_context_modification_does_not_affect_original(self):
+        """Test that modifying returned context does NOT affect the original.
+
+        The get_current() method returns a copy to prevent external modification
+        of the internal context state.
+        """
+        # Set some initial context
+        ExecutionContext.set(initial_key="initial_value")
+
         context = ExecutionContext.get_current()
         context["manual_key"] = "manual_value"
 
-        # Get context again and verify modification persists
+        # Get context again - modification should NOT persist since we modify a copy
         new_context = ExecutionContext.get_current()
-        self.assertEqual(new_context["manual_key"], "manual_value")
+        self.assertNotIn("manual_key", new_context)
+        # Original values should still be there
+        self.assertEqual(new_context["initial_key"], "initial_value")
 
     def test_multiple_clear_calls(self):
         """Test that multiple clear calls don't cause errors."""

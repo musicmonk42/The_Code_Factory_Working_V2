@@ -281,7 +281,7 @@ class TestRegistryIntegration:
 
         assert counter1 is counter2
 
-    @patch("metrics_helpers.REGISTRY._names_to_collectors", new_callable=dict)
+    @patch("omnicore_engine.database.metrics_helpers.REGISTRY._names_to_collectors", new_callable=dict)
     def test_registry_lookup(self, mock_names):
         """Test the registry lookup mechanism."""
         # Set up mock registry
@@ -313,7 +313,7 @@ class TestErrorScenarios:
         counter = get_or_create_counter_local("test_counter", None)
         assert isinstance(counter, Counter)
 
-    @patch("metrics_helpers.logger")
+    @patch("omnicore_engine.database.metrics_helpers.logger")
     def test_logging_on_reuse(self, mock_logger):
         """Test that appropriate logging occurs when reusing metrics."""
         # Create a counter

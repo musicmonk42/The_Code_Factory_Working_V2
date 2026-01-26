@@ -33,7 +33,7 @@ class TestConsistentHashRing(unittest.TestCase):
         # Check ring has correct number of entries (nodes * replicas)
         self.assertEqual(len(ring.ring), 2 * 50)
 
-    @patch("message_bus.hash_ring.logger")
+    @patch("omnicore_engine.message_bus.hash_ring.logger")
     def test_initialization_empty_nodes(self, mock_logger):
         """Test initialization with empty node list."""
         ring = ConsistentHashRing(nodes=[], replicas=100)
@@ -68,7 +68,7 @@ class TestConsistentHashRing(unittest.TestCase):
         # Verify nodes are sorted
         self.assertEqual(ring.nodes, sorted(ring.nodes))
 
-    @patch("message_bus.hash_ring.logger")
+    @patch("omnicore_engine.message_bus.hash_ring.logger")
     def test_add_duplicate_node(self, mock_logger):
         """Test adding a duplicate node."""
         ring = ConsistentHashRing(nodes=["node1"], replicas=10)
@@ -105,7 +105,7 @@ class TestConsistentHashRing(unittest.TestCase):
         for _, node in ring.ring:
             self.assertNotEqual(node, "node1")
 
-    @patch("message_bus.hash_ring.logger")
+    @patch("omnicore_engine.message_bus.hash_ring.logger")
     def test_remove_nonexistent_node(self, mock_logger):
         """Test removing a node that doesn't exist."""
         ring = ConsistentHashRing(nodes=["node1"], replicas=10)
@@ -237,7 +237,7 @@ class TestConsistentHashRing(unittest.TestCase):
         # Callback should be called
         rebalance_callback.assert_called_once_with("node3", [])
 
-    @patch("message_bus.hash_ring.logger")
+    @patch("omnicore_engine.message_bus.hash_ring.logger")
     def test_add_node_dynamic_duplicate(self, mock_logger):
         """Test dynamic addition of duplicate node."""
         ring = ConsistentHashRing(nodes=["node1"], replicas=10)
@@ -267,7 +267,7 @@ class TestConsistentHashRing(unittest.TestCase):
         # Callback should be called
         rebalance_callback.assert_called_once_with("node1", [])
 
-    @patch("message_bus.hash_ring.logger")
+    @patch("omnicore_engine.message_bus.hash_ring.logger")
     def test_remove_node_dynamic_nonexistent(self, mock_logger):
         """Test dynamic removal of non-existent node."""
         ring = ConsistentHashRing(nodes=["node1"], replicas=10)
