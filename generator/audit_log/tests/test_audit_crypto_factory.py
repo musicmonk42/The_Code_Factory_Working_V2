@@ -347,20 +347,20 @@ class TestHelpers:
         monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         monkeypatch.delenv("RUNNING_TESTS", raising=False)
         monkeypatch.delenv("DEV_MODE", raising=False)
-        
+
         # Set production environment with disabled crypto mode
         monkeypatch.setenv("APP_ENV", "production")
         monkeypatch.setenv("AUDIT_CRYPTO_MODE", "disabled")
-        
+
         # Override PYTEST_CURRENT_TEST to simulate non-test environment
         monkeypatch.setenv("PYTEST_CURRENT_TEST", "")
-        
+
         # Verify production is detected
         assert is_production_environment() is True
         
         # Verify dev mode is NOT detected (this is the key fix)
         assert _is_test_or_dev_mode() is False
-        
+
         # This configuration should NOT raise a security conflict error
 
     def test_production_with_dev_crypto_mode_raises_error(self, monkeypatch):
@@ -380,20 +380,20 @@ class TestHelpers:
         monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         monkeypatch.delenv("RUNNING_TESTS", raising=False)
         monkeypatch.delenv("DEV_MODE", raising=False)
-        
+
         # Set production environment with dev crypto mode (WRONG configuration)
         monkeypatch.setenv("APP_ENV", "production")
         monkeypatch.setenv("AUDIT_CRYPTO_MODE", "dev")
-        
+
         # Override PYTEST_CURRENT_TEST to simulate non-test environment
         monkeypatch.setenv("PYTEST_CURRENT_TEST", "")
-        
+
         # Verify production is detected
         assert is_production_environment() is True
-        
+
         # Verify dev mode IS detected (this is the problem)
         assert _is_test_or_dev_mode() is True
-        
+
         # This configuration SHOULD raise a security conflict error when get_provider() is called
 
     def test_sensitive_data_filter(self, caplog):
