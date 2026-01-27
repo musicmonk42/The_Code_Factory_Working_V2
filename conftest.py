@@ -340,6 +340,7 @@ _OPTIONAL_DEPENDENCIES = [
     "torch",  # PyTorch - causes DLL errors on Windows
     "sentence_transformers",  # Uses torch, causes DLL errors
     "transformers",  # Uses torch, causes DLL errors
+    "psutil",  # Process and system utilities - required by transformers for accelerate support
     "spacy",  # Uses torch via thinc, causes DLL errors
     "presidio_analyzer",  # Uses spacy, causes DLL errors
     "presidio_anonymizer",  # Uses spacy, causes DLL errors
