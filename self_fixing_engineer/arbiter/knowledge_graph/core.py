@@ -154,22 +154,40 @@ from .utils import (
 )
 
 # Imports for StateBackends and AuditLedgerClient
+# Try multiple import paths to support different execution contexts
+AuditLedgerClient = None
+RedisClient = None
+
+# Try short path first (works when self_fixing_engineer is in sys.path)
 try:
     from arbiter.models.audit_ledger_client import AuditLedgerClient
     from arbiter.models.redis_client import RedisClient
 except ImportError:
-    logger.warning(
-        "Warning: Could not import one or more client classes for state and audit logging. Falling back to mocks."
+    pass
+
+# Try full path if short path failed
+if AuditLedgerClient is None or RedisClient is None:
+    try:
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditLedgerClient
+        from self_fixing_engineer.arbiter.models.redis_client import RedisClient
+    except ImportError:
+        pass
+
+# Fall back to mocks if both paths failed
+if AuditLedgerClient is None or RedisClient is None:
+    logger.debug(
+        "Using mock client classes for state and audit logging. "
+        "This is expected in standalone mode or when Redis is not configured."
     )
     RedisClient = None
 
     class DummyAuditLedgerClient:
         def __init__(self, *args, **kwargs):
             self._logger = logging.getLogger("DummyAuditLedgerClient")
-            self._logger.warning("Using dummy AuditLedgerClient.")
+            self._logger.debug("Using mock AuditLedgerClient (standalone mode).")
 
         async def log_event(self, *args, **kwargs):
-            self._logger.info("Dummy log_event called. Event not recorded.")
+            self._logger.debug("Mock log_event called. Event not recorded.")
             return True
 
     AuditLedgerClient = DummyAuditLedgerClient

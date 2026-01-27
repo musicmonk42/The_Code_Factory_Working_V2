@@ -43,7 +43,7 @@ class TestPromptTemplateLoading:
                     assert "loaded from file" in mock_logger.info.call_args[0][0]
 
     def test_load_templates_file_not_found(self):
-        """Test fallback when template file is not found"""
+        """Test fallback when template file is not found (uses debug level)"""
         with patch("builtins.open", side_effect=FileNotFoundError()):
             with patch(
                 "arbiter.knowledge_graph.prompt_strategies.logger"
@@ -53,8 +53,10 @@ class TestPromptTemplateLoading:
                 ):
                     _load_templates()
 
-                    mock_logger.warning.assert_called_once()
-                    assert "not found" in mock_logger.warning.call_args[0][0]
+                    # Changed from warning to debug level for cleaner logs
+                    mock_logger.debug.assert_called_once()
+                    assert "not found" in mock_logger.debug.call_args[0][0].lower() or \
+                           "fallback" in mock_logger.debug.call_args[0][0].lower()
 
     def test_load_templates_json_decode_error(self):
         """Test fallback when JSON file is malformed"""

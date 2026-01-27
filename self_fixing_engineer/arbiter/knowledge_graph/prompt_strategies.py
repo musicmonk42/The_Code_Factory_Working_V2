@@ -52,37 +52,55 @@ Your final, corrected response: """,
 def _load_templates() -> None:
     """
     Loads prompt templates from a JSON file, or falls back to hardcoded defaults.
+    Checks the following locations in order:
+    1. Path specified by PROMPT_TEMPLATE_FILE env var (or default "prompt_templates.json")
+    2. Same directory as this module
     """
     global PROMPT_TEMPLATES
-    try:
-        with open(PROMPT_TEMPLATE_FILE, "r", encoding="utf-8") as f:
-            PROMPT_TEMPLATES = json.load(f)
-        logger.info(
-            "Prompt templates loaded from file.",
-            extra={
-                "file": PROMPT_TEMPLATE_FILE,
-                "templates": list(PROMPT_TEMPLATES.keys()),
-            },
-        )
-    except FileNotFoundError:
-        logger.warning(
-            "Prompt template file not found. Using hardcoded fallback templates.",
-            extra={"file": PROMPT_TEMPLATE_FILE},
-        )
-        PROMPT_TEMPLATES = PROMPT_TEMPLATES_FALLBACK
-    except json.JSONDecodeError as e:
-        logger.error(
-            "Failed to parse prompt template file. Using hardcoded fallback.",
-            extra={"file": PROMPT_TEMPLATE_FILE, "error": str(e)},
-        )
-        PROMPT_TEMPLATES = PROMPT_TEMPLATES_FALLBACK
-    except Exception as e:
-        logger.error(
-            "An unexpected error occurred while loading prompt templates. Using hardcoded fallback.",
-            extra={"error": str(e)},
-            exc_info=True,
-        )
-        PROMPT_TEMPLATES = PROMPT_TEMPLATES_FALLBACK
+    
+    # Paths to try in order
+    module_dir = os.path.dirname(os.path.abspath(__file__))
+    paths_to_try = [
+        PROMPT_TEMPLATE_FILE,
+        os.path.join(module_dir, "prompt_templates.json"),
+    ]
+    
+    for template_path in paths_to_try:
+        try:
+            with open(template_path, "r", encoding="utf-8") as f:
+                PROMPT_TEMPLATES = json.load(f)
+            logger.info(
+                "Prompt templates loaded from file.",
+                extra={
+                    "file": template_path,
+                    "templates": list(PROMPT_TEMPLATES.keys()),
+                },
+            )
+            return
+        except FileNotFoundError:
+            continue
+        except json.JSONDecodeError as e:
+            logger.error(
+                "Failed to parse prompt template file. Using hardcoded fallback.",
+                extra={"file": template_path, "error": str(e)},
+            )
+            PROMPT_TEMPLATES = PROMPT_TEMPLATES_FALLBACK
+            return
+        except Exception as e:
+            logger.error(
+                "An unexpected error occurred while loading prompt templates. Using hardcoded fallback.",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
+            PROMPT_TEMPLATES = PROMPT_TEMPLATES_FALLBACK
+            return
+    
+    # If no file was found, use hardcoded fallback
+    logger.debug(
+        "No prompt template file found. Using hardcoded fallback templates.",
+        extra={"tried_paths": paths_to_try},
+    )
+    PROMPT_TEMPLATES = PROMPT_TEMPLATES_FALLBACK
 
 
 _load_templates()

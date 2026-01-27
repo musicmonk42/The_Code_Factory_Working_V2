@@ -105,7 +105,7 @@ def _load_prompt_templates() -> None:
             templates=list(EXPLANATION_PROMPT_TEMPLATES.keys()),
         )
     except FileNotFoundError:
-        logger.warning(
+        logger.debug(
             "Prompt template file not found, using fallback templates",
             path=EXPLANATION_PROMPT_TEMPLATE_PATH,
         )
