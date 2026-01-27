@@ -27,8 +27,17 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 from unittest.mock import MagicMock
+
+# --- Path Setup for Analyzer Module ---
+# The analyzer package is located in the self_healing_import_fixer directory.
+# We need to add it to sys.path to allow imports like "from analyzer.core_utils import ..."
+# This must happen early, before any code tries to use find_spec("analyzer.*").
+_self_healing_import_fixer_dir = str(Path(__file__).resolve().parent.parent)
+if _self_healing_import_fixer_dir not in sys.path:
+    sys.path.insert(0, _self_healing_import_fixer_dir)
 
 # POSIX-only: guard resource import for Windows
 try:
