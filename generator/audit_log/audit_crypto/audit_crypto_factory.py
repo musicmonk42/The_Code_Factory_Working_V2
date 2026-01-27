@@ -793,6 +793,27 @@ class CryptoProviderFactory:
             # If called from a synchronous context before the event loop starts
             pass
 
+    def _create_dummy_provider(self) -> CryptoProvider:
+        """
+        Creates and caches a DummyCryptoProvider instance for graceful degradation.
+        
+        This private helper is used when AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set
+        and the real crypto provider fails to initialize.
+        
+        Returns:
+            CryptoProvider: A DummyCryptoProvider instance.
+        """
+        if "dummy" in self._instances:
+            return self._instances["dummy"]
+        dummy_cls = self._registry.get("dummy", DummyCryptoProvider)
+        dummy_instance = dummy_cls(
+            software_key_master_accessor=_ensure_software_key_master,
+            fallback_hmac_secret_accessor=_ensure_fallback_hmac_secret,
+            settings=settings,
+        )
+        self._instances["dummy"] = dummy_instance
+        return dummy_instance
+
     # --- START OF PATCH 3 ---
     def get_provider(
         self, provider_type: str = settings.PROVIDER_TYPE
@@ -926,19 +947,39 @@ class CryptoProviderFactory:
             error_msg = f"Failed to initialize provider '{provider_type}': {e}"
             logger.error(error_msg, exc_info=True)
 
+            # Check if graceful degradation is allowed via AUDIT_CRYPTO_ALLOW_INIT_FAILURE
+            allow_init_failure = os.getenv("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "0").lower() in ("1", "true", "yes")
+
             # SECURITY: In production, we only allow fallback from HSM to software
             # Never to dummy, and software itself has no fallback
+            # EXCEPTION: When AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set, allow fallback to DummyCryptoProvider
             if provider_type_lower == "software":
-                # No fallback possible from software - this is fatal
-                critical_msg = (
-                    f"CRITICAL: Failed to initialize 'software' crypto provider: {e}. "
-                    "This is a fatal error. The application cannot provide cryptographic "
-                    "guarantees and must not start. Check configuration and secret access."
-                )
-                logger.critical(
-                    critical_msg, extra={"operation": "get_provider_software_init_fail"}
-                )
-                raise CryptoInitializationError(critical_msg) from e
+                if allow_init_failure:
+                    # User explicitly requested graceful degradation
+                    # Return DummyCryptoProvider with strong security warnings
+                    logger.critical(
+                        "SECURITY CRITICAL: AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set. "
+                        f"Failed to initialize 'software' crypto provider due to: {e}. "
+                        "Falling back to DummyCryptoProvider which provides NO REAL SECURITY. "
+                        "Audit log integrity is COMPROMISED. "
+                        "URGENT: Configure proper AWS credentials and secrets, then set "
+                        "AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 for production security.",
+                        extra={"operation": "get_provider_software_init_fail_graceful_degradation"},
+                    )
+                    return self._create_dummy_provider()
+                else:
+                    # No fallback possible from software - this is fatal
+                    critical_msg = (
+                        f"CRITICAL: Failed to initialize 'software' crypto provider: {e}. "
+                        "This is a fatal error. The application cannot provide cryptographic "
+                        "guarantees and must not start. Check configuration and secret access. "
+                        "If you need to start the application without proper crypto configuration, "
+                        "set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1 (NOT recommended for production)."
+                    )
+                    logger.critical(
+                        critical_msg, extra={"operation": "get_provider_software_init_fail"}
+                    )
+                    raise CryptoInitializationError(critical_msg) from e
 
             # HSM failed - attempt fallback to software provider
             # This is the ONLY allowed fallback path in production
@@ -972,14 +1013,32 @@ class CryptoProviderFactory:
                 )
                 return fallback_instance
             except Exception as fallback_e:
-                logger.critical(
-                    f"Failed to initialize fallback 'software' crypto provider: {fallback_e}. No crypto provider available. Exiting.",
-                    exc_info=True,
-                    extra={"operation": "get_provider_fallback_fail"},
-                )
-                raise CryptoInitializationError(
-                    f"No crypto provider available: {fallback_e}"
-                )
+                # Also check for AUDIT_CRYPTO_ALLOW_INIT_FAILURE when HSM fallback to software fails
+                if allow_init_failure:
+                    logger.critical(
+                        "SECURITY CRITICAL: AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set. "
+                        f"Both HSM and software crypto providers failed. HSM error: {e}. "
+                        f"Software fallback error: {fallback_e}. "
+                        "Falling back to DummyCryptoProvider which provides NO REAL SECURITY. "
+                        "Audit log integrity is COMPROMISED. "
+                        "URGENT: Configure proper AWS credentials and secrets, then set "
+                        "AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 for production security.",
+                        exc_info=True,
+                        extra={"operation": "get_provider_fallback_fail_graceful_degradation"},
+                    )
+                    return self._create_dummy_provider()
+                else:
+                    logger.critical(
+                        f"Failed to initialize fallback 'software' crypto provider: {fallback_e}. "
+                        "No crypto provider available. Exiting. "
+                        "If you need to start the application without proper crypto configuration, "
+                        "set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1 (NOT recommended for production).",
+                        exc_info=True,
+                        extra={"operation": "get_provider_fallback_fail"},
+                    )
+                    raise CryptoInitializationError(
+                        f"No crypto provider available: {fallback_e}"
+                    )
 
     # --- END OF PATCH 3 ---
 
