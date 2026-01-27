@@ -793,6 +793,27 @@ class CryptoProviderFactory:
             # If called from a synchronous context before the event loop starts
             pass
 
+    def _create_dummy_provider(self) -> CryptoProvider:
+        """
+        Creates and caches a DummyCryptoProvider instance for graceful degradation.
+        
+        This private helper is used when AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set
+        and the real crypto provider fails to initialize.
+        
+        Returns:
+            CryptoProvider: A DummyCryptoProvider instance.
+        """
+        if "dummy" in self._instances:
+            return self._instances["dummy"]
+        dummy_cls = self._registry.get("dummy", DummyCryptoProvider)
+        dummy_instance = dummy_cls(
+            software_key_master_accessor=_ensure_software_key_master,
+            fallback_hmac_secret_accessor=_ensure_fallback_hmac_secret,
+            settings=settings,
+        )
+        self._instances["dummy"] = dummy_instance
+        return dummy_instance
+
     # --- START OF PATCH 3 ---
     def get_provider(
         self, provider_type: str = settings.PROVIDER_TYPE
@@ -945,17 +966,7 @@ class CryptoProviderFactory:
                         "AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 for production security.",
                         extra={"operation": "get_provider_software_init_fail_graceful_degradation"},
                     )
-                    # Return or create the DummyCryptoProvider
-                    if "dummy" in self._instances:
-                        return self._instances["dummy"]
-                    dummy_cls = self._registry.get("dummy", DummyCryptoProvider)
-                    dummy_instance = dummy_cls(
-                        software_key_master_accessor=_ensure_software_key_master,
-                        fallback_hmac_secret_accessor=_ensure_fallback_hmac_secret,
-                        settings=settings,
-                    )
-                    self._instances["dummy"] = dummy_instance
-                    return dummy_instance
+                    return self._create_dummy_provider()
                 else:
                     # No fallback possible from software - this is fatal
                     critical_msg = (
@@ -1015,17 +1026,7 @@ class CryptoProviderFactory:
                         exc_info=True,
                         extra={"operation": "get_provider_fallback_fail_graceful_degradation"},
                     )
-                    # Return or create the DummyCryptoProvider
-                    if "dummy" in self._instances:
-                        return self._instances["dummy"]
-                    dummy_cls = self._registry.get("dummy", DummyCryptoProvider)
-                    dummy_instance = dummy_cls(
-                        software_key_master_accessor=_ensure_software_key_master,
-                        fallback_hmac_secret_accessor=_ensure_fallback_hmac_secret,
-                        settings=settings,
-                    )
-                    self._instances["dummy"] = dummy_instance
-                    return dummy_instance
+                    return self._create_dummy_provider()
                 else:
                     logger.critical(
                         f"Failed to initialize fallback 'software' crypto provider: {fallback_e}. "
