@@ -7,6 +7,7 @@ import hashlib
 import os
 import sys
 import time
+import types
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -50,7 +51,6 @@ class MockAPIError(Exception):
 
 
 # Create proper module mock for openai with __spec__ attribute
-import types
 mock_openai = types.ModuleType("openai")
 mock_openai.__spec__ = types.SimpleNamespace(
     name="openai",
