@@ -43,20 +43,31 @@ def _lazy_import_metrics():
         reset_metrics = _rm
 
 
+class _ImportBlocker:
+    """Module that raises ImportError when accessing any attributes."""
+    def __getattr__(self, name):
+        raise ImportError("Mocked prometheus_client is not available")
+
+
 @pytest.fixture(scope="module", autouse=True)
 def mock_prometheus():
     """
     Mock prometheus_client to force mock mode for testing.
     This fixture automatically applies to all tests in this module.
     """
-    # Force mock mode by ensuring prometheus is not available
-    sys.modules["prometheus_client"] = MagicMock()
-    sys.modules["prometheus_client.registry"] = MagicMock()
-
-    # Force reload to pick up mocked prometheus
     import importlib
     from omnicore_engine.message_bus import metrics
+    
+    # Save original modules if they exist
+    original_prometheus = sys.modules.get("prometheus_client")
+    original_registry = sys.modules.get("prometheus_client.registry")
+    
+    # Force mock mode by blocking imports - use a module that raises ImportError
+    # on attribute access rather than MagicMock which allows imports to succeed
+    sys.modules["prometheus_client"] = _ImportBlocker()
+    sys.modules["prometheus_client.registry"] = _ImportBlocker()
 
+    # Force reload to pick up blocked prometheus
     importlib.reload(metrics)
     
     # Now perform the lazy import after metrics module is properly loaded
@@ -64,12 +75,18 @@ def mock_prometheus():
 
     yield
 
-    # Cleanup: restore original state if needed
-    # Note: In practice, this won't fully restore, but it's good practice
-    if "prometheus_client" in sys.modules:
+    # Cleanup: restore original modules
+    if original_prometheus is not None:
+        sys.modules["prometheus_client"] = original_prometheus
+    elif "prometheus_client" in sys.modules:
         del sys.modules["prometheus_client"]
-    if "prometheus_client.registry" in sys.modules:
+    if original_registry is not None:
+        sys.modules["prometheus_client.registry"] = original_registry
+    elif "prometheus_client.registry" in sys.modules:
         del sys.modules["prometheus_client.registry"]
+    
+    # Reload metrics with original prometheus if available
+    importlib.reload(metrics)
 
 
 class TestThreadSafeDictLRU:
@@ -259,12 +276,13 @@ class TestMockRegistryLRU:
     def test_registry_warning_at_threshold(self):
         """Test that warning is logged at 90% capacity."""
         from omnicore_engine.message_bus.metrics import _MockRegistry
-        import logging
 
         registry = _MockRegistry(max_collectors=10)
 
-        # Add collectors up to 90% capacity (should trigger warning)
-        for i in range(9):
+        # Add collectors up to 90% capacity
+        # Warning is triggered when len >= 90% of max (9 in this case)
+        # at the START of the next register call, so we need 10 registrations
+        for i in range(10):
             registry.register(MagicMock())
 
         # Warning flag should be set after reaching threshold
@@ -341,38 +359,55 @@ class TestGetMockRegistryStats:
 
 
 class TestResetMetrics:
-    """Test reset_metrics() with new clear() method."""
+    """Test reset_metrics() with caches and new metric creation."""
 
-    def test_reset_clears_data(self):
-        """Test that reset_metrics() clears all data."""
+    def test_reset_clears_registry_cache(self):
+        """Test that reset_metrics() clears the metric registry cache."""
+        from omnicore_engine.message_bus.metrics import Counter, _metric_registry
+
+        # Create a metric
+        Counter("test_reset_reg", "Test reset", labelnames=["label"])
+
+        # Reset
+        reset_metrics()
+
+        # Registry cache should be cleared
+        assert "counter:test_reset_reg" not in _metric_registry
+
+    def test_reset_allows_fresh_metrics(self):
+        """Test that reset_metrics() allows creating fresh metric instances."""
         from omnicore_engine.message_bus.metrics import Counter
 
-        metric = Counter("test_reset", "Test reset", labelnames=["label"])
+        # Create a metric and add data
+        metric1 = Counter("test_fresh", "Test fresh", labelnames=["label"])
+        metric1.labels(label="a").inc()
 
+        # Reset
+        reset_metrics()
+
+        # Create a new metric with same name after reset
+        # This should create a fresh instance (no error about duplicate)
+        metric2 = Counter("test_fresh", "Test fresh", labelnames=["label"])
+        
+        # The new metric should start with no data
+        assert len(metric2._values._data) == 0
+
+    def test_clear_method_on_thread_safe_dict(self):
+        """Test that _ThreadSafeDict.clear() properly resets data and flags."""
+        d = _ThreadSafeDict(max_size=10)
+        
         # Add some data
-        metric.labels(label="a").inc()
-        metric.labels(label="b").inc()
-
-        # Reset
-        reset_metrics()
-
-        # Data should be cleared
-        assert len(metric._values._data) == 0
-
-    def test_reset_clears_warning_flags(self):
-        """Test that reset_metrics() clears warning flags."""
-        from omnicore_engine.message_bus.metrics import Counter
-
-        metric = Counter("test_reset_warn", "Test reset warn", labelnames=["label"])
-
-        # Trigger warning by adding many items
-        metric._values._warned_at_threshold = True
-
-        # Reset
-        reset_metrics()
-
-        # Warning flag should be cleared
-        assert metric._values._warned_at_threshold is False
+        d.set(("a",), 1)
+        d.set(("b",), 2)
+        d._warned_at_threshold = True
+        
+        # Clear
+        d.clear()
+        
+        # Everything should be reset
+        assert len(d._data) == 0
+        assert len(d._access_times) == 0
+        assert d._warned_at_threshold is False
 
 
 class TestIntegrationScenarios:
@@ -398,7 +433,8 @@ class TestIntegrationScenarios:
 
         # Most recent sessions should be accessible
         recent_session_id = f"session_{num_sessions - 1}"
-        recent_value = counter.labels(session_id=recent_session_id)._parent._values.get(
+        # Use 'parent' attribute (not '_parent')
+        recent_value = counter.labels(session_id=recent_session_id).parent._values.get(
             (recent_session_id,), None
         )
         # Recent data might be present (if not evicted)

@@ -286,42 +286,83 @@ from omnicore_engine.security_utils import EnterpriseSecurityUtils
 
 
 # This function should be moved to a separate utils.py file to avoid circular imports.
-def safe_serialize(obj: Any, _seen: Optional[Set[int]] = None) -> Any:
-    """Safely serializes objects, handling non-JSON-serializable types and circular references."""
+def safe_serialize(obj: Any, _seen: Optional[Set[int]] = None, _depth: int = 0) -> Any:
+    """Safely serializes objects, handling non-JSON-serializable types and circular references.
+    
+    Args:
+        obj: The object to serialize
+        _seen: Set of object ids already visited (for circular reference detection)
+        _depth: Current recursion depth (to prevent deep recursion)
+    """
+    # Maximum recursion depth to prevent stack overflow
+    MAX_DEPTH = 50
+    
+    if _depth > MAX_DEPTH:
+        return f"<max depth exceeded: {type(obj).__name__}>"
+    
     if _seen is None:
         _seen = set()
+    
+    # Handle None and primitives first (no need to track)
+    if obj is None:
+        return None
+    if isinstance(obj, (bool, int, float, str)):
+        return obj
+    
     obj_id = id(obj)
     if obj_id in _seen:
         return f"[Circular Reference: {type(obj).__name__}]"
     _seen.add(obj_id)
 
-    if isinstance(obj, (datetime, date)):
-        return obj.isoformat()
-    if isinstance(obj, (bytes, bytearray)):
-        return base64.b64encode(obj).decode("utf-8")
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    if isinstance(obj, (set, frozenset)):
-        return list(obj)
-    # Handle file-like objects that may not be readable
-    if hasattr(obj, 'read'):
-        try:
-            # Check if readable is a callable method and call it safely
-            readable_attr = getattr(obj, 'readable', None)
-            if callable(readable_attr) and not readable_attr():
+    try:
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        if isinstance(obj, (bytes, bytearray)):
+            return base64.b64encode(obj).decode("utf-8")
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (set, frozenset)):
+            return [safe_serialize(item, _seen, _depth + 1) for item in obj]
+        # Handle file-like objects that may not be readable
+        if hasattr(obj, 'read'):
+            try:
+                # Check if readable is a callable method and call it safely
+                readable_attr = getattr(obj, 'readable', None)
+                if callable(readable_attr) and not readable_attr():
+                    return "<non-readable file object>"
+            except (TypeError, OSError):
+                # Handle edge cases where readable() fails (e.g., IOBase class objects)
                 return "<non-readable file object>"
-        except (TypeError, OSError):
-            # Handle edge cases where readable() fails (e.g., IOBase class objects)
-            return "<non-readable file object>"
-        # For readable file objects, just return a placeholder
-        return f"<file object: {getattr(obj, 'name', 'unknown')}>"
-    if isinstance(obj, collections.abc.Mapping):
-        return {k: safe_serialize(v, _seen) for k, v in obj.items()}
-    if isinstance(obj, collections.abc.Iterable) and not isinstance(obj, str):
-        return [safe_serialize(item, _seen) for item in obj]
-    if isinstance(obj, object) and hasattr(obj, "__dict__"):
-        return safe_serialize(obj.__dict__, _seen)
-    return obj
+            # For readable file objects, just return a placeholder
+            return f"<file object: {getattr(obj, 'name', 'unknown')}>"
+        if isinstance(obj, collections.abc.Mapping):
+            return {str(k): safe_serialize(v, _seen, _depth + 1) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [safe_serialize(item, _seen, _depth + 1) for item in obj]
+        if isinstance(obj, collections.abc.Iterable) and not isinstance(obj, str):
+            # Limit iterable processing to prevent infinite iteration
+            result = []
+            for i, item in enumerate(obj):
+                if i >= 1000:  # Limit to 1000 items
+                    result.append("<truncated...>")
+                    break
+                result.append(safe_serialize(item, _seen, _depth + 1))
+            return result
+        # For objects with __dict__, try to serialize their attributes
+        # But only for types that look like data containers, not complex objects
+        if hasattr(obj, "__dict__") and not callable(obj):
+            # Skip complex objects like modules, classes, functions
+            obj_type = type(obj)
+            if obj_type.__module__ in ('builtins', 'types'):
+                return f"<{obj_type.__name__}>"
+            try:
+                return safe_serialize(obj.__dict__, _seen, _depth + 1)
+            except Exception:
+                return f"<{obj_type.__name__}: serialization failed>"
+        # Fallback: return string representation
+        return str(obj)
+    except Exception as e:
+        return f"<serialization error: {type(obj).__name__}: {str(e)[:50]}>"
 
 
 def validate_fernet_key(key: bytes) -> bool:
