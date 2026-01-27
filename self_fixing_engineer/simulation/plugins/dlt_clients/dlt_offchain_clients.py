@@ -97,8 +97,13 @@ try:
         try:
             return Counter(name, description, labelnames=labelnames)
         except ValueError:
-            # Metric already exists, get from registry
-            return REGISTRY._names_to_collectors.get(name.replace('_total', ''))
+            # Metric already exists - find it in the registry using public API
+            metric_name_base = name.replace('_total', '').replace('_created', '')
+            for collector in REGISTRY.collect():
+                if hasattr(collector, '_name') and collector._name == metric_name_base:
+                    return collector
+            # Fallback: return None to avoid errors
+            return None
 
     OFFCHAIN_METRICS = {
         "validation_failure": _get_or_create_counter(

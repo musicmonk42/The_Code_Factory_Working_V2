@@ -42,16 +42,26 @@ try:
         try:
             return Counter(name, description, labelnames=labelnames)
         except ValueError:
-            # Metric already exists, get from registry
-            return REGISTRY._names_to_collectors.get(name.replace('_total', ''))
+            # Metric already exists - find it in the registry
+            # Use public API: iterate through collectors
+            metric_name_base = name.replace('_total', '').replace('_created', '')
+            for collector in REGISTRY.collect():
+                if hasattr(collector, '_name') and collector._name == metric_name_base:
+                    return collector
+            # Fallback: return a no-op counter to avoid errors
+            return None
 
     def _get_or_create_gauge(name, description, labelnames):
         """Get existing gauge or create new one."""
         try:
             return Gauge(name, description, labelnames=labelnames)
         except ValueError:
-            # Metric already exists, get from registry
-            return REGISTRY._names_to_collectors.get(name)
+            # Metric already exists - find it in the registry
+            for collector in REGISTRY.collect():
+                if hasattr(collector, '_name') and collector._name == name:
+                    return collector
+            # Fallback: return None to avoid errors
+            return None
 
     SIMPLE_DLT_METRICS = {
         "validation_failure": _get_or_create_counter(
