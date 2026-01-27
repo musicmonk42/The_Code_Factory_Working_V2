@@ -140,16 +140,16 @@ sys.modules["opentelemetry.sdk.trace"] = MagicMock()
 sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
 
 # Import runner modules *after* mocks are in place
-from runner.runner_app import RunnerApp, TuiLogHandler
-from runner.runner_config import RunnerConfig
-from runner.runner_contracts import TaskResult
+from generator.runner.runner_app import RunnerApp, TuiLogHandler
+from generator.runner.runner_config import RunnerConfig
+from generator.runner.runner_contracts import TaskResult
 
 # --- FIX: Import the correct exception class name ---
-from runner.runner_errors import ExecutionError, TimeoutError
+from generator.runner.runner_errors import ExecutionError, TimeoutError
 
 # --- END FIX ---
-from runner.runner_logging import LOG_HISTORY, logger
-from runner.runner_metrics import (
+from generator.runner.runner_logging import LOG_HISTORY, logger
+from generator.runner.runner_metrics import (
     HEALTH_STATUS,
     RUN_PASS_RATE,
     RUN_QUEUE,

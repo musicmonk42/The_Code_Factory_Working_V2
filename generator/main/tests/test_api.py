@@ -33,7 +33,7 @@ from fastapi import (  # ADDED WebSocketDisconnect, Request as per Steps 4 & 5
 from fastapi.testclient import TestClient
 
 # Import app and DB components for fixture setup
-from main.api import Base, api, get_db
+from generator.main.api import Base, api, get_db
 from sqlalchemy import create_engine  # ADDED as per Step 1
 from sqlalchemy.orm import sessionmaker
 

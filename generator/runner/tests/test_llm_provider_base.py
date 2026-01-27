@@ -12,7 +12,7 @@ import unittest
 from typing import Any, AsyncGenerator, Dict, Union  # FIX: Added Union and List
 from unittest.mock import AsyncMock, patch
 
-from runner.llm_provider_base import LLMProvider, LLMResponse, LLMResult, LLMStream
+from generator.runner.llm_provider_base import LLMProvider, LLMResponse, LLMResult, LLMStream
 
 
 # --- 1. CONFORMING MOCK CLASS ---

@@ -520,7 +520,7 @@ async def connect(
     retries: int = 3,
     backoff_sec: float = 1.0,
     max_backoff_sec: float = 30.0,
-) -> grpc.aio.Channel:
+) -> "grpc.aio.Channel":  # Use string annotation to avoid evaluation when grpc is None
     """
     Connect to a gRPC server with retries and exponential backoff.
     In PRODUCTION_MODE, TLS is required.

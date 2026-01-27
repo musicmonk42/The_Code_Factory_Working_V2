@@ -1262,8 +1262,78 @@ def _initialize_aiohttp_protection():
                         setattr(aiohttp, name, original_type)
         
         _protect_aiohttp()
+        
+        # Add http_exceptions compatibility shim for older aiohttp_client_cache versions
+        # Modern aiohttp (3.9+) removed http_exceptions module, but some libraries still expect it
+        if not hasattr(aiohttp, 'http_exceptions'):
+            import types as _types
+            http_exceptions = _types.ModuleType("aiohttp.http_exceptions")
+            http_exceptions.__file__ = "<aiohttp.http_exceptions compatibility shim>"
+            http_exceptions.__path__ = []
+            
+            # Add common HTTP exceptions that were in aiohttp.http_exceptions
+            class HttpProcessingError(Exception):
+                """HTTP processing error."""
+                pass
+            
+            class BadHttpMessage(HttpProcessingError):
+                """Bad HTTP message error."""
+                pass
+            
+            class HttpBadRequest(BadHttpMessage):
+                """HTTP 400 Bad Request error."""
+                pass
+            
+            class PayloadEncodingError(BadHttpMessage):
+                """Payload encoding error."""
+                pass
+            
+            class ContentEncodingError(BadHttpMessage):
+                """Content encoding error."""
+                pass
+            
+            class TransferEncodingError(BadHttpMessage):
+                """Transfer encoding error."""
+                pass
+            
+            class LineTooLong(BadHttpMessage):
+                """Line too long error."""
+                pass
+            
+            class InvalidHeader(BadHttpMessage):
+                """Invalid header error."""
+                pass
+            
+            class BadStatusLine(BadHttpMessage):
+                """Bad status line error."""
+                pass
+            
+            class InvalidURLError(BadHttpMessage):
+                """Invalid URL error."""
+                pass
+            
+            http_exceptions.HttpProcessingError = HttpProcessingError
+            http_exceptions.BadHttpMessage = BadHttpMessage
+            http_exceptions.HttpBadRequest = HttpBadRequest
+            http_exceptions.PayloadEncodingError = PayloadEncodingError
+            http_exceptions.ContentEncodingError = ContentEncodingError
+            http_exceptions.TransferEncodingError = TransferEncodingError
+            http_exceptions.LineTooLong = LineTooLong
+            http_exceptions.InvalidHeader = InvalidHeader
+            http_exceptions.BadStatusLine = BadStatusLine
+            http_exceptions.InvalidURLError = InvalidURLError
+            
+            aiohttp.http_exceptions = http_exceptions
+            sys.modules["aiohttp.http_exceptions"] = http_exceptions
+            
     except ImportError:
         _ORIGINAL_AIOHTTP_TYPES = {}
+
+
+# ---- Initialize aiohttp http_exceptions shim IMMEDIATELY ----
+# This MUST run at module load time, before any test modules import aiohttp
+# or libraries that depend on aiohttp.http_exceptions (like aiohttp_client_cache)
+_initialize_aiohttp_protection()
 
 
 # ---- Protect common exception types from being mocked ----
@@ -1632,6 +1702,8 @@ def pytest_collectstart(collector):
     Ensures all modules have __spec__ to prevent collection errors.
     """
     _ensure_module_specs()
+    # Also ensure aiohttp compatibility for libraries that expect http_exceptions
+    _initialize_aiohttp_protection()
 
 
 def pytest_collection_finish(session):

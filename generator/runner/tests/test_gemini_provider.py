@@ -17,11 +17,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-GENERATOR_ROOT = (
-    Path(__file__).resolve().parents[2]
-)  # generator/runner/tests -> generator/
-if str(GENERATOR_ROOT) not in sys.path:
-    sys.path.insert(0, str(GENERATOR_ROOT))
+PROJECT_ROOT = (
+    Path(__file__).resolve().parents[4]
+)  # generator/runner/tests -> project root
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Check if Gemini SDK is available
 try:
@@ -31,9 +31,9 @@ try:
 except ImportError:
     HAS_GEMINI = False
 
-from runner.providers.gemini_provider import GeminiProvider, get_provider  # type: ignore
-from runner.runner_config import RunnerConfig  # type: ignore
-from runner.runner_errors import ConfigurationError, LLMError  # type: ignore
+from generator.runner.providers.gemini_provider import GeminiProvider, get_provider  # type: ignore
+from generator.runner.runner_config import RunnerConfig  # type: ignore
+from generator.runner.runner_errors import ConfigurationError, LLMError  # type: ignore
 
 
 @pytest.fixture
