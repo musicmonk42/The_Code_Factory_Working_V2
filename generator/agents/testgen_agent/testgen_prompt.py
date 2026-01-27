@@ -1047,6 +1047,15 @@ def build_agentic_prompt(prompt_type: str, builder_name: str = "test", **kwargs)
     return asyncio.run(builder.build(prompt_type, **kwargs))
 
 
+async def _add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs):
+    """Helper function to add all files to vector database collections."""
+    await vdb.add_files("codebase", code_files)
+    await vdb.add_files("tests", test_files)
+    await vdb.add_files("docs", doc_files)
+    await vdb.add_files("dependencies", dep_files)
+    await vdb.add_files("historical_failures", failure_logs)
+
+
 def initialize_codebase_for_rag(repo_path: str):
     """
     Initializes the vector database with codebase contents.
@@ -1084,11 +1093,24 @@ def initialize_codebase_for_rag(repo_path: str):
 
     # Get the multi_vdb instance using the lazy getter
     vdb = _get_multi_vdb()
-    asyncio.run(vdb.add_files("codebase", code_files))
-    asyncio.run(vdb.add_files("tests", test_files))
-    asyncio.run(vdb.add_files("docs", doc_files))
-    asyncio.run(vdb.add_files("dependencies", dep_files))
-    asyncio.run(vdb.add_files("historical_failures", failure_logs))
+    
+    # FIX: Use proper async handling instead of asyncio.run() from sync context
+    # Check if there's already a running event loop
+    try:
+        loop = asyncio.get_running_loop()
+        # If we're in an async context, we shouldn't be here, but handle it gracefully
+        logger.warning("initialize_codebase_for_rag called from async context")
+        # Use run_coroutine_threadsafe or create a new thread
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(
+                lambda: asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
+            )
+            future.result()
+    except RuntimeError:
+        # No running loop, safe to use asyncio.run()
+        asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
+    
     logger.info("Multi-RAG initialization complete. Indexed files across collections.")
 
     # REFACTORED: Use add_provenance
