@@ -22,6 +22,9 @@ def test_import_with_nameerror_in_arbiter_config():
         "omnicore_engine.array_backend",
         "arbiter.config",
         "arbiter",
+        "self_fixing_engineer.arbiter.config",
+        "self_fixing_engineer.arbiter",
+        "self_fixing_engineer",
     ]
     for mod in modules_to_clear:
         if mod in sys.modules:
@@ -32,9 +35,9 @@ def test_import_with_nameerror_in_arbiter_config():
 
     original_import = builtins.__import__
 
-    # Mock the arbiter.config import to raise NameError
+    # Mock the arbiter.config import to raise NameError (both paths)
     def mock_import(name, *args, **kwargs):
-        if name == "arbiter.config":
+        if name == "arbiter.config" or name == "self_fixing_engineer.arbiter.config":
             raise NameError("name 'config_instance' is not defined")
         return original_import(name, *args, **kwargs)
 
@@ -63,6 +66,9 @@ def test_import_with_attributeerror_in_arbiter_config():
         "omnicore_engine.array_backend",
         "arbiter.config",
         "arbiter",
+        "self_fixing_engineer.arbiter.config",
+        "self_fixing_engineer.arbiter",
+        "self_fixing_engineer",
     ]
     for mod in modules_to_clear:
         if mod in sys.modules:
@@ -73,9 +79,9 @@ def test_import_with_attributeerror_in_arbiter_config():
 
     original_import = builtins.__import__
 
-    # Mock the arbiter.config import to raise AttributeError
+    # Mock the arbiter.config import to raise AttributeError (both paths)
     def mock_import(name, *args, **kwargs):
-        if name == "arbiter.config":
+        if name == "arbiter.config" or name == "self_fixing_engineer.arbiter.config":
             raise AttributeError("module 'arbiter' has no attribute 'config'")
         return original_import(name, *args, **kwargs)
 
@@ -102,6 +108,9 @@ def test_import_with_runtimeerror_during_instantiation():
         "omnicore_engine.array_backend",
         "arbiter.config",
         "arbiter",
+        "self_fixing_engineer.arbiter.config",
+        "self_fixing_engineer.arbiter",
+        "self_fixing_engineer",
     ]
     for mod in modules_to_clear:
         if mod in sys.modules:
@@ -117,13 +126,13 @@ def test_import_with_runtimeerror_during_instantiation():
 
     original_import = builtins.__import__
 
-    # Mock the import to return our mock class
+    # Mock the import to return our mock class (both paths)
     def mock_import(name, *args, **kwargs):
-        if name == "arbiter.config":
+        if name == "arbiter.config" or name == "self_fixing_engineer.arbiter.config":
             # Create a mock module
             import types
 
-            mock_module = types.ModuleType("arbiter.config")
+            mock_module = types.ModuleType(name)
             mock_module.ArbiterConfig = MockArbiterConfig
             return mock_module
         return original_import(name, *args, **kwargs)
@@ -149,16 +158,26 @@ def test_settings_fallback_attributes():
     settings object is correctly created with the required attributes.
     """
     # Clear the module cache to force reimport
-    if "omnicore_engine.array_backend" in sys.modules:
-        del sys.modules["omnicore_engine.array_backend"]
+    modules_to_clear = [
+        "omnicore_engine.array_backend",
+        "arbiter.config",
+        "arbiter",
+        "self_fixing_engineer.arbiter.config",
+        "self_fixing_engineer.arbiter",
+        "self_fixing_engineer",
+    ]
+    for mod in modules_to_clear:
+        if mod in sys.modules:
+            del sys.modules[mod]
 
-    # Ensure arbiter.config is not available for this test
+    # Ensure arbiter.config is not available for this test (both paths)
     import builtins
 
     original_import = builtins.__import__
 
     def mock_import(name, *args, **kwargs):
-        if name == "arbiter.config" or name.startswith("arbiter."):
+        if name == "arbiter.config" or name.startswith("arbiter.") or \
+           name == "self_fixing_engineer.arbiter.config" or name.startswith("self_fixing_engineer.arbiter."):
             raise ModuleNotFoundError(f"No module named '{name}'")
         return original_import(name, *args, **kwargs)
 

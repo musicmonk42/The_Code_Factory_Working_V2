@@ -8,6 +8,15 @@ from omnicore_engine.plugin_registry import PluginRegistry, PlugInKind, plugin
 @pytest.mark.asyncio
 async def test_import_fixer_engine():
     """Test that OmniCoreOmega can be created with mocked dependencies."""
+    # Skip if aiohttp/aiobotocore incompatibility exists
+    try:
+        import aiohttp
+        # Check for the specific compatibility issue
+        if not hasattr(aiohttp, 'http_exceptions'):
+            pytest.skip("aiohttp version incompatible with aiobotocore (missing http_exceptions)")
+    except ImportError:
+        pass
+    
     # Mock all required dependencies
     with (
         patch("omnicore_engine.engines.Database") as MockDatabase,
