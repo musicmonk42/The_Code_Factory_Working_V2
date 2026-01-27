@@ -9,17 +9,25 @@ import structlog
 
 # Assuming `audit_log` and `metrics` modules are available in the project root.
 from self_fixing_engineer.arbiter.audit_log import log_event as audit_log
-from prometheus_client import Gauge
+from prometheus_client import Gauge, REGISTRY
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .metrics import learn_error_counter
 
 logger = structlog.get_logger(__name__)
 
-# Metric for CB state
-circuit_breaker_state = Gauge(
-    "circuit_breaker_state", "Circuit breaker state (1=open, 0=closed)", ["name"]
-)
+# Metric for CB state - use get_or_create pattern to handle re-imports
+def _get_circuit_breaker_metric():
+    """Get or create circuit_breaker_state metric safely."""
+    metric_name = "circuit_breaker_state"
+    # Check if metric already exists in the registry
+    for collector in list(REGISTRY._names_to_collectors.values()):
+        if hasattr(collector, '_name') and collector._name == metric_name:
+            return collector
+    # Create new metric if it doesn't exist
+    return Gauge(metric_name, "Circuit breaker state (1=open, 0=closed)", ["name"])
+
+circuit_breaker_state = _get_circuit_breaker_metric()
 
 
 class CircuitBreaker:

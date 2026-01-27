@@ -58,7 +58,22 @@ except ImportError:
 # For MetaLearning model persistence
 import pickle
 
-from ratelimit import limits, sleep_and_retry
+# Rate limiting - graceful fallback if not available
+try:
+    from ratelimit import limits, sleep_and_retry
+except ImportError:
+    logging.getLogger(__name__).warning(
+        "ratelimit module not found. Rate limiting will be disabled."
+    )
+    # Provide no-op decorators as fallback
+    def limits(calls=1, period=1):
+        def decorator(func):
+            return func
+        return decorator
+    
+    def sleep_and_retry(func):
+        return func
+
 from sklearn.exceptions import NotFittedError
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression

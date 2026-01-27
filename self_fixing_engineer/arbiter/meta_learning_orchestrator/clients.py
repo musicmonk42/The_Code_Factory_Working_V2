@@ -15,7 +15,15 @@ from aiohttp import (
     ClientTimeout,
     TCPConnector,
 )
-from aiohttp_client_cache import CachedSession, SQLiteBackend
+
+# Handle aiohttp/aiobotocore version incompatibility gracefully
+try:
+    from aiohttp_client_cache import CachedSession, SQLiteBackend
+except (ImportError, AttributeError) as e:
+    logging.warning(f"aiohttp_client_cache not available: {e}. Using standard aiohttp session.")
+    CachedSession = None
+    SQLiteBackend = None
+
 from opentelemetry import trace
 from prometheus_client import Counter, Histogram
 from tenacity import (
