@@ -342,7 +342,13 @@ class InMemoryBreakerStateManager:
         """
         # Validate and clamp failures to [0, 1000]
         if "failures" in state:
-            state["failures"] = min(max(int(state["failures"]), 0), 1000)
+            failures = state["failures"]
+            if not isinstance(failures, int):
+                try:
+                    failures = int(failures)
+                except (TypeError, ValueError):
+                    failures = 0
+            state["failures"] = min(max(failures, 0), 1000)
         self._state.update(state)
 
     def state_lock(self):
