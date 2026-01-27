@@ -26,6 +26,8 @@ In your Railway project dashboard:
 
 | Variable | How to Generate | Required | Purpose |
 |----------|----------------|----------|---------|
+| `USE_ENV_SECRETS` | Set to `true` | ✅ Yes | Enable environment variable secret manager for Railway |
+| `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` | Generate base64 key (see below) | ✅ Yes | Master encryption key for audit crypto |
 | `AGENTIC_AUDIT_HMAC_KEY` | `openssl rand -hex 32` | ✅ Yes | Audit log signing (64 hex chars) |
 | `ENCRYPTION_KEY` | Generate Fernet key (see below) | ✅ Yes | Data encryption at rest |
 | `SECRET_KEY` | `${{secret()}}` or generate | ✅ Yes | App secret |
@@ -35,6 +37,12 @@ In your Railway project dashboard:
 **Generate Commands:**
 
 ```bash
+# USE_ENV_SECRETS (enable environment variable secret manager for Railway)
+true
+
+# AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 (base64-encoded 32-byte key)
+python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
+
 # AGENTIC_AUDIT_HMAC_KEY (64 hex characters)
 openssl rand -hex 32
 
@@ -45,7 +53,10 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-> **⚠️ CRITICAL**: `AGENTIC_AUDIT_HMAC_KEY` is **required** for production audit logging. Without it, the application will fail at runtime when attempting to log security events. Must be exactly 64 hexadecimal characters.
+> **⚠️ CRITICAL**: 
+> - `USE_ENV_SECRETS=true` enables the environment variable secret manager for Railway deployment
+> - `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` is required for audit encryption to work
+> - `AGENTIC_AUDIT_HMAC_KEY` is **required** for production audit logging. Without it, the application will fail at runtime when attempting to log security events. Must be exactly 64 hexadecimal characters.
 
 ---
 
@@ -154,8 +165,15 @@ Railway will automatically inject `DATABASE_URL` and `REDIS_URL`.
 
 In the Railway dashboard, go to your service → **Variables** tab:
 
-1. **Generate and add security keys:**
+1. **Enable environment variable secret manager:**
+   - `USE_ENV_SECRETS` = `true`
+
+2. **Generate and add security keys:**
    ```bash
+   # Generate AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64
+   python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
+   # Copy output and add as Railway variable
+   
    # Generate AGENTIC_AUDIT_HMAC_KEY
    openssl rand -hex 32
    # Copy output and add as Railway variable
@@ -165,13 +183,15 @@ In the Railway dashboard, go to your service → **Variables** tab:
    # Copy output and add as Railway variable
    ```
 
-2. **Add generated keys to Railway:**
+3. **Add generated keys to Railway:**
+   - `USE_ENV_SECRETS` = `true` (enables Railway environment variable secret manager)
+   - `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` = (paste base64 key)
    - `AGENTIC_AUDIT_HMAC_KEY` = (paste 64-char hex key)
    - `ENCRYPTION_KEY` = (paste Fernet key)
    - `SECRET_KEY` = Use `${{secret()}}` or generate with Python
    - `JWT_SECRET_KEY` = Use `${{secret()}}` or generate with Python
 
-3. **Add your OpenAI API key:**
+4. **Add your OpenAI API key:**
    - `OPENAI_API_KEY` = (paste your OpenAI API key)
 
 ### Step 4: Deploy
@@ -222,6 +242,26 @@ Check the Railway logs for successful initialization:
 ---
 
 ## Troubleshooting
+
+### ❌ Critical: Secret Manager Error (NEW)
+
+**Error**: 
+```
+generator.audit_log.audit_crypto.secrets.SecretNotFoundError: Dummy secret manager: secret 'AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64' not available.
+```
+
+**Cause**: The application is not configured to use the environment variable secret manager for Railway.
+
+**Solution**:
+1. Add `USE_ENV_SECRETS=true` to Railway environment variables
+2. Generate and add the master encryption key:
+   ```bash
+   python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
+   ```
+3. Add the generated key as `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64`
+4. Redeploy
+
+**Note**: Railway uses environment variables for secrets, unlike AWS/GCP which have dedicated secret managers. Setting `USE_ENV_SECRETS=true` tells the application to read secrets from environment variables.
 
 ### ❌ Critical: Audit Logging Error
 
