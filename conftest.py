@@ -374,6 +374,10 @@ _OPTIONAL_DEPENDENCIES = [
     # Omnicore engine submodules that may have missing dependencies
     "omnicore_engine.database",  # May be missing aiosqlite or other dependencies
     "omnicore_engine.message_bus",  # May be missing structlog or other dependencies
+    "analyzer",  # Self-healing import fixer analyzer package
+    "analyzer.core_utils",  # Analyzer core utilities
+    "analyzer.core_audit",  # Analyzer audit logging
+    "analyzer.core_secrets",  # Analyzer secrets manager
 ]
 
 # Special handling for botocore.exceptions - must be proper exception classes
@@ -726,6 +730,40 @@ def _initialize_optional_dependency_mocks():
                     mock_module.Pool = MockPool
                     mock_module.create_pool = lambda *args, **kwargs: MockPool()
                     mock_module.connect = lambda *args, **kwargs: MockConnection()
+                
+                elif dep == "analyzer":
+                    # Create analyzer package stub with core submodules
+                    sys.modules["analyzer"] = mock_module
+                    
+                    # Create core_utils mock
+                    core_utils_mock = _create_mock_module("analyzer.core_utils")
+                    core_utils_mock.alert_operator = lambda msg, level="INFO": None
+                    core_utils_mock.scrub_secrets = lambda x: x
+                    sys.modules["analyzer.core_utils"] = core_utils_mock
+                    mock_module.core_utils = core_utils_mock
+                    
+                    # Create core_audit mock
+                    class MockAuditLogger:
+                        def log_event(self, event_type, **kwargs):
+                            pass
+                        def log(self, *args, **kwargs):
+                            pass
+                    
+                    core_audit_mock = _create_mock_module("analyzer.core_audit")
+                    core_audit_mock.audit_logger = MockAuditLogger()
+                    core_audit_mock.get_audit_logger = lambda: MockAuditLogger()
+                    sys.modules["analyzer.core_audit"] = core_audit_mock
+                    mock_module.core_audit = core_audit_mock
+                    
+                    # Create core_secrets mock
+                    class MockSecretsManager:
+                        def get_secret(self, key, required=False):
+                            return "mock_secret_value"
+                    
+                    core_secrets_mock = _create_mock_module("analyzer.core_secrets")
+                    core_secrets_mock.SECRETS_MANAGER = MockSecretsManager()
+                    sys.modules["analyzer.core_secrets"] = core_secrets_mock
+                    mock_module.core_secrets = core_secrets_mock
 
 # ---- Tenacity stub setup ----
 # Tenacity requires special handling for its retry decorator and combinable conditions
