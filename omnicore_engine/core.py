@@ -991,8 +991,6 @@ class OmniCoreEngine:
         self.components.clear()
         self._is_initialized = False
         self.logger.info("OmniCore Engine: All components shut down.")
-        self._is_initialized = False
-        self.logger.info("OmniCore Engine: All components shut down.")
 
     async def health_check(self) -> Dict[str, Any]:
         overall_status = "ok"
