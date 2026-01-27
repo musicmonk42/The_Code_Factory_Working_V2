@@ -467,33 +467,50 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
 
 def _clean_code_block(code_content: str) -> str:
     """
-    Removes markdown-style code fences from a string if present.
-
+    Removes markdown-style code fences and any conversational preamble/postamble.
+    
     Handles patterns like:
+        Here's the code:
         ```python
         code
         ```
-    and falls back gracefully if no fences exist.
+        Let me know if you need changes.
     """
     text = code_content.strip()
-    # Strict fenced match
-    fenced_pattern = r"^\s*```[a-zA-Z0-9_+-]*\n(.*?)\n```\\s*$"
-    m = re.search(fenced_pattern, text, flags=re.DOTALL)
-    if m:
-        return m.group(1).strip()
-
-    # More permissive removal of leading/trailing fences
-    if text.startswith("```") and "```" in text[3:]:
-        # Strip first line (```lang?) and last ``` line
-        lines = text.splitlines()
-        # remove first and last fence-like lines
-        if lines:
-            lines = lines[1:]
-        while lines and lines[-1].strip().startswith("```"):
-            lines = lines[:-1]
-        return "\n".join(lines).strip()
-
-    return text
+    
+    # Find ALL code blocks and extract the largest one (likely the main code)
+    # Pattern: ```language\ncode\n```
+    code_block_pattern = r'```(?:python|py)?\s*\n(.*?)```'
+    matches = re.findall(code_block_pattern, text, flags=re.DOTALL | re.IGNORECASE)
+    
+    if matches:
+        # Return the largest code block (most likely to be the actual code)
+        return max(matches, key=len).strip()
+    
+    # Try without language specifier
+    generic_pattern = r'```\s*\n(.*?)```'
+    matches = re.findall(generic_pattern, text, flags=re.DOTALL)
+    if matches:
+        return max(matches, key=len).strip()
+    
+    # No code fences found - try to strip common preamble patterns
+    # Remove lines that look like conversational text before actual code
+    lines = text.split('\n')
+    code_start_idx = 0
+    
+    for i, line in enumerate(lines):
+        stripped = line.strip().lower()
+        # Skip lines that look like conversational preamble
+        if stripped.startswith(('here', 'this', 'the following', 'below', 'i ', "i'")):
+            code_start_idx = i + 1
+            continue
+        # Stop at first line that looks like code
+        if stripped.startswith(('import ', 'from ', 'def ', 'class ', '#', '"""', "'''")):
+            break
+        if '=' in stripped and not stripped.startswith(('here', 'this')):
+            break
+    
+    return '\n'.join(lines[code_start_idx:]).strip()
 
 
 def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
