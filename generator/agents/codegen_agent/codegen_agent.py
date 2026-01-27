@@ -936,7 +936,7 @@ if PLUGIN_AVAILABLE:
                         )
                         prompt = (
                             "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
-                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}"
+                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}\n\n" + "CRITICAL: Output ONLY valid JSON or code. No explanations, no markdown fences, no conversational text."
                         )
                     except Exception as e:
                         logger.warning(
@@ -944,7 +944,7 @@ if PLUGIN_AVAILABLE:
                         )
                         prompt = (
                             "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
-                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}"
+                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}\n\n" + "CRITICAL: Output ONLY valid JSON or code. No explanations, no markdown fences, no conversational text."
                         )
 
                 # Generate Code
@@ -1133,7 +1133,7 @@ else:
                         )
                         prompt = (
                             "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
-                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}"
+                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}\n\n" + "CRITICAL: Output ONLY valid JSON or code. No explanations, no markdown fences, no conversational text."
                         )
                     except Exception as e:
                         logger.warning(
@@ -1141,7 +1141,7 @@ else:
                         )
                         prompt = (
                             "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
-                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}"
+                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}\n\n" + "CRITICAL: Output ONLY valid JSON or code. No explanations, no markdown fences, no conversational text."
                         )
 
                 # Generate Code

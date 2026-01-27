@@ -739,7 +739,43 @@ async def build_code_generation_prompt(
                         logger.error(f"Meta-LLM critique failed: {e}")
                         PROMPT_ERRORS.labels("MetaLLMFailure").inc()
 
-            # 8. Final token check
+            # 8. Add critical output requirements
+            # These requirements are appended to every prompt to ensure consistent,
+            # parseable output from the LLM regardless of the template used.
+            # This prevents common issues like markdown-wrapped responses and conversational text.
+            output_requirements = """
+
+========================================
+CRITICAL OUTPUT REQUIREMENTS
+========================================
+
+Your response MUST adhere to these requirements:
+
+1. CODE ONLY: Output ONLY executable code - no explanations, no markdown formatting, 
+   no conversational text like "Here's the code" or "Let me know if you need changes"
+
+2. NO MARKDOWN FENCES: Do NOT wrap code in markdown code fences (```python```)
+
+3. IMMEDIATE CODE: Start your response with the first line of code 
+   (import statements, docstrings, or actual code)
+
+4. VALID SYNTAX: The entire response must be valid {language} code that can be 
+   executed directly without modification
+
+5. MULTI-FILE FORMAT: If generating multiple files, respond with valid JSON ONLY:
+   {{"files": {{"filename.ext": "code content", "other.ext": "other code"}}}}
+
+FAILURE TO FOLLOW THESE REQUIREMENTS WILL RESULT IN PARSE ERRORS.
+""".format(language=target_language)
+            
+            prompt = prompt + output_requirements
+            
+            logger.debug(
+                "Added critical output requirements to prompt (target_language: %s)",
+                target_language
+            )
+
+            # 9. Final token check
             # --- Token Counting Change: Replace codegen_llm_call.get_token_count with count_tokens ---
             token_count = count_tokens(
                 prompt, META_LLM_MODEL
