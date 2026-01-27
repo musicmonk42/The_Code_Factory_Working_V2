@@ -1158,3 +1158,100 @@ class TestCryptoProviderFactory:
 
         provider = get_crypto_provider()
         assert provider is dummy
+
+    def test_allow_init_failure_falls_back_to_dummy(self, monkeypatch):
+        """Tests that AUDIT_CRYPTO_ALLOW_INIT_FAILURE enables graceful degradation to DummyCryptoProvider."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import (
+            CryptoInitializationError,
+            CryptoProvider,
+            CryptoProviderFactory,
+            DummyCryptoProvider,
+            SoftwareCryptoProvider,
+            crypto_provider_factory,
+        )
+
+        # Simulate production mode (not dev/test)
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode",
+            lambda: False,
+        )
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._is_production_env",
+            lambda: False,  # Prevent security conflict check
+        )
+
+        # Enable graceful degradation
+        monkeypatch.setenv("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "1")
+
+        # Mock SoftwareCryptoProvider to raise an error simulating NoCredentialsError
+        # Must inherit from CryptoProvider to pass the registration check
+        class FailingSoftwareCryptoProvider(CryptoProvider):
+            def __init__(self, *args, **kwargs):
+                raise CryptoInitializationError(
+                    "Failed to initialize software key master: Unable to locate credentials"
+                )
+
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory.SoftwareCryptoProvider",
+            FailingSoftwareCryptoProvider,
+        )
+
+        # Clear any cached instances
+        crypto_provider_factory._instances.clear()
+
+        # Re-create the factory with the failing mock
+        factory = crypto_provider_factory.__class__()
+
+        # With AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1, it should NOT raise but return DummyCryptoProvider
+        provider = factory.get_provider("software")
+
+        assert isinstance(provider, DummyCryptoProvider)
+
+    def test_no_allow_init_failure_raises_error(self, monkeypatch):
+        """Tests that without AUDIT_CRYPTO_ALLOW_INIT_FAILURE, init failures raise CryptoInitializationError."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import (
+            CryptoInitializationError,
+            CryptoProvider,
+            CryptoProviderFactory,
+            SoftwareCryptoProvider,
+            crypto_provider_factory,
+        )
+
+        # Simulate production mode (not dev/test)
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode",
+            lambda: False,
+        )
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._is_production_env",
+            lambda: False,  # Prevent security conflict check
+        )
+
+        # Ensure AUDIT_CRYPTO_ALLOW_INIT_FAILURE is NOT set
+        monkeypatch.delenv("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", raising=False)
+
+        # Mock SoftwareCryptoProvider to raise an error simulating NoCredentialsError
+        # Must inherit from CryptoProvider to pass the registration check
+        class FailingSoftwareCryptoProvider(CryptoProvider):
+            def __init__(self, *args, **kwargs):
+                raise CryptoInitializationError(
+                    "Failed to initialize software key master: Unable to locate credentials"
+                )
+
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory.SoftwareCryptoProvider",
+            FailingSoftwareCryptoProvider,
+        )
+
+        # Clear any cached instances
+        crypto_provider_factory._instances.clear()
+
+        # Re-create the factory with the failing mock
+        factory = crypto_provider_factory.__class__()
+
+        # Without AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1, it should raise CryptoInitializationError
+        with pytest.raises(
+            CryptoInitializationError,
+            match="CRITICAL: Failed to initialize 'software' crypto provider",
+        ):
+            factory.get_provider("software")
