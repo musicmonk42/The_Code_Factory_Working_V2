@@ -194,7 +194,7 @@ class TestFitnessEvaluator:
 
         assert key1 == key2  # Same individual
         assert key1 != key3  # Different individual
-        assert len(key1) == 32  # MD5 hash length
+        assert len(key1) == 64  # SHA-256 hash length (security improvement over MD5)
 
         evaluator.cleanup()
 
@@ -477,7 +477,7 @@ class TestGeneticOptimizer:
 class TestWithoutDEAP:
     """Test behavior when DEAP is not available"""
 
-    @patch("self_fixing_engineer.envs.evolution.DEAP_AVAILABLE", False)
+    @patch("evolution.DEAP_AVAILABLE", False)
     def test_optimizer_without_deap(self):
         """Test that optimizer raises error without DEAP"""
         with pytest.raises(ImportError, match="DEAP library required"):
