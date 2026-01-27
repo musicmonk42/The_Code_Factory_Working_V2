@@ -340,14 +340,6 @@ class TestErrorHandling:
     @patch("sys.argv", ["cli.py", "simulate", "--request_file", "nonexistent.json"])
     def test_file_not_found_error(self):
         """Test handling of file not found error"""
-        import asyncio
-        # Ensure an event loop exists for asyncio.run() compatibility with uvloop
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
         with pytest.raises(SystemExit) as exc_info:
             main()
 
@@ -356,14 +348,6 @@ class TestErrorHandling:
     @patch("sys.argv", ["cli.py", "simulate", "--request_file", "test.txt"])
     def test_invalid_file_extension_error(self):
         """Test handling of invalid file extension"""
-        import asyncio
-        # Ensure an event loop exists for asyncio.run() compatibility with uvloop
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("not json or yaml")
             f.flush()
