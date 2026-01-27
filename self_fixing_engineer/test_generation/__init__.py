@@ -356,5 +356,8 @@ def __getattr__(name: str) -> Any:
     
     # Try to import as submodule for subpackage access
     # This enables imports like "from test_generation.gen_agent import X"
-    # Don't catch the error - let it propagate so module initialization can handle it properly
-    return importlib.import_module(f".{name}", __name__)
+    # Catch ImportError and raise AttributeError for modules that don't exist
+    try:
+        return importlib.import_module(f".{name}", __name__)
+    except ImportError:
+        raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
