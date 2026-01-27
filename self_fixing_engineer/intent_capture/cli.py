@@ -59,11 +59,18 @@ import jwt
 import psutil
 from aiobreaker import CircuitBreaker
 from cachetools import TTLCache
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
+
+
+def _get_or_create_metric(metric_class, name, documentation, labelnames=()):
+    """Get existing metric or create new one to avoid duplication errors."""
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return metric_class(name, documentation, labelnames=labelnames) if labelnames else metric_class(name, documentation)
 
 try:
     import hvac
@@ -119,21 +126,23 @@ CONSOLE = Console()
 tracer = trace.get_tracer(__name__) if OTEL_AVAILABLE else None
 _shutdown_event = threading.Event()
 agent_breaker = CircuitBreaker(fail_max=5, timeout_duration=60)
-COMMAND_EXECUTION_TOTAL = Counter(
-    "cli_command_execution_total", "Commands executed", ["command", "status"]
+COMMAND_EXECUTION_TOTAL = _get_or_create_metric(
+    Counter, "cli_command_execution_total", "Commands executed", ["command", "status"]
 )
-COMMAND_LATENCY_SECONDS = Histogram(
-    "cli_command_latency_seconds", "Command execution latency", ["command"]
+COMMAND_LATENCY_SECONDS = _get_or_create_metric(
+    Histogram, "cli_command_latency_seconds", "Command execution latency", ["command"]
 )
-CLI_RESOURCE_USAGE = Gauge("cli_resource_usage_percent", "Resource usage", ["resource"])
-ACTIVE_COLLAB_CLIENTS = Gauge(
-    "cli_active_collab_clients_total", "Active collaboration clients"
+CLI_RESOURCE_USAGE = _get_or_create_metric(
+    Gauge, "cli_resource_usage_percent", "Resource usage", ["resource"]
 )
-SAFETY_VIOLATIONS_TOTAL = Counter(
-    "cli_safety_violations_total", "Safety violations in CLI responses"
+ACTIVE_COLLAB_CLIENTS = _get_or_create_metric(
+    Gauge, "cli_active_collab_clients_total", "Active collaboration clients"
 )
-TOKEN_USAGE = Counter(
-    "cli_llm_token_usage_total", "Total LLM tokens used", ["user", "provider"]
+SAFETY_VIOLATIONS_TOTAL = _get_or_create_metric(
+    Counter, "cli_safety_violations_total", "Safety violations in CLI responses"
+)
+TOKEN_USAGE = _get_or_create_metric(
+    Counter, "cli_llm_token_usage_total", "Total LLM tokens used", ["user", "provider"]
 )
 command_cache = TTLCache(maxsize=128, ttl=300)
 

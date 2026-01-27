@@ -597,8 +597,8 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
     lang_l = (lang or "").lower()
 
     if not code.strip():
-        logger.warning("Empty code block for %s; treating as valid.", filename)
-        return True, "Empty code treated as valid."
+        logger.warning("Empty code block for %s; treating as error.", filename)
+        return False, "Empty code block received - no valid code generated."
 
     # --- Python ---
     if lang_l in ("python", "py"):

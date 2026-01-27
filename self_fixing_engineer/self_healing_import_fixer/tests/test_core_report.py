@@ -9,6 +9,13 @@ from self_healing_import_fixer.analyzer.core_report import (
     ReportGenerator,
 )
 
+# Try to import app for skipif checks - don't fail if not available
+try:
+    from self_healing_import_fixer.analyzer.core_report import app as _test_app
+    _FLASK_APP_AVAILABLE = hasattr(_test_app, "test_client")
+except (ImportError, AttributeError):
+    _FLASK_APP_AVAILABLE = False
+
 
 @pytest.fixture
 def flask_app():
@@ -285,8 +292,9 @@ def test_get_report_endpoint_with_encryption_in_prod(tmp_path, monkeypatch, flas
         assert resp.data == b"decrypted_content"
 
 
-@pytest.mark.skipif(not hasattr(app, "test_client"), reason="Flask app not available")
+@pytest.mark.skipif(not _FLASK_APP_AVAILABLE, reason="Flask app not available")
 def test_get_report_endpoint_path_traversal_prevention(tmp_path, monkeypatch):
+    from self_healing_import_fixer.analyzer.core_report import app
     import self_healing_import_fixer.analyzer.core_report as crmod
 
     app.config["JWT_SECRET_KEY"] = "jwtsecret"

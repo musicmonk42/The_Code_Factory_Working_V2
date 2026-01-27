@@ -254,6 +254,17 @@ EXIT_CODE_VALIDATION_ERROR = 5
 
 
 def main():
+    # Ensure an event loop exists for asyncio.run() compatibility with uvloop/nest_asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        # No current event loop - create one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
     sanitize_env_vars()
     parser = argparse.ArgumentParser(
         description="OmniCore Omega Pro Engine CLI with DecisionOptimizer and audit integration",

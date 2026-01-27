@@ -149,7 +149,7 @@ async def test_build_prompt_valid_minimal(monkeypatch):
 
     events = []
 
-    def fake_log_audit_event(event_type, payload=None):
+    async def fake_log_audit_event(event_type, payload=None):
         events.append((event_type, payload or {}))
 
     monkeypatch.setattr(
@@ -370,7 +370,7 @@ async def test_build_prompt_with_meta_llm_critique(monkeypatch):
 
     events = []
 
-    def fake_log_audit_event(event_type, payload=None):
+    async def fake_log_audit_event(event_type, payload=None):
         events.append((event_type, payload or {}))
 
     def fake_redact_secrets(text: str) -> str:

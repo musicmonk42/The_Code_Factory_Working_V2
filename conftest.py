@@ -48,15 +48,17 @@ import importlib.util
 if os.environ.get("TESTING") == "1":
     # Define stubs only for modules that truly need stubbing (are optional/missing)
     # Do NOT create stubs for modules that exist and can be imported
-    _stub_modules = {
-        'intent_capture': 'intent_capture',
-        'audit_log': 'audit_log',
-    }
+    # NOTE: We no longer stub 'audit_log' because it exists in multiple locations
+    # (guardrails/audit_log.py, arbiter/audit_log.py, etc.) and stubbing it
+    # breaks tests that import the real module.
+    _stub_modules = {}
     
-    # Check if omnicore_engine.database and omnicore_engine.message_bus actually exist
-    # WITHOUT importing them (which would trigger expensive initialization)
-    # Use find_spec to check module existence WITHOUT importing
-    # This avoids triggering expensive initialization during test collection
+    # Check if modules actually exist WITHOUT importing them
+    # (which would trigger expensive initialization)
+    # Use find_spec to check module existence
+    if importlib.util.find_spec("intent_capture") is None:
+        _stub_modules['intent_capture'] = 'intent_capture'
+    
     if importlib.util.find_spec("omnicore_engine.database") is None:
         _stub_modules['omnicore_engine.database'] = 'omnicore_engine.database'
     

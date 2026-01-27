@@ -299,9 +299,8 @@ async def test_orchestrate_critique_pipeline_happy_path(
     monkeypatch.setattr(core, "detect_language", fake_detect_language, raising=False)
     monkeypatch.setattr(core, "get_plugin", fake_get_plugin, raising=False)
 
-    # Build config dict in way compatible with both Pydantic v1/v2
+    # Build config - use the object directly, not dict
     cfg = CritiqueConfig()
-    cfg_dict = cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict()
 
     code_files = {"main.py": "print('hello')"}
     test_files = {"test_main.py": "def test_ok(): assert 1 == 1"}
@@ -321,7 +320,7 @@ async def test_orchestrate_critique_pipeline_happy_path(
         elif name == "state_summary":
             kwargs[name] = state_summary
         elif name == "config":
-            kwargs[name] = cfg_dict
+            kwargs[name] = cfg
 
     result = await orchestrate_critique_pipeline(**kwargs)  # type: ignore[arg-type]
 
@@ -381,7 +380,6 @@ async def test_orchestrate_critique_pipeline_llm_failure_resilient(
     monkeypatch.setattr(core, "get_plugin", fake_get_plugin, raising=False)
 
     cfg = CritiqueConfig()
-    cfg_dict = cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict()
 
     code_files = {"main.py": "print('hello')"}
     test_files = {"test_main.py": "def test_ok(): assert 1 == 1"}
@@ -400,7 +398,7 @@ async def test_orchestrate_critique_pipeline_llm_failure_resilient(
         elif name == "state_summary":
             kwargs[name] = state_summary
         elif name == "config":
-            kwargs[name] = cfg_dict
+            kwargs[name] = cfg
 
     result = await orchestrate_critique_pipeline(**kwargs)  # type: ignore[arg-type]
 

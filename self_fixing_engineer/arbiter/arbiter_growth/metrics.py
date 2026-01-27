@@ -69,7 +69,8 @@ def get_or_create_metric(
                         f"Failed to unregister conflicting metric '{name}': {e}",
                         exc_info=True,
                     )
-                    # Proceed to try and create it anyway, it will likely fail but provides a clear error
+                    # If unregister fails, return the existing metric to avoid duplicate error
+                    return existing_metric
     except KeyError:
         # The metric does not exist in the registry
         pass

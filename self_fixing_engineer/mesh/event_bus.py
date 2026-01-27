@@ -164,6 +164,18 @@ except ImportError:
 
     PROMETHEUS_ASYNC_AVAILABLE = False
 
+# Import REGISTRY for get_or_create pattern
+from prometheus_client import REGISTRY
+
+
+def _get_or_create_metric(metric_class, name, documentation, labelnames=()):
+    """Get existing metric or create new one to avoid duplication errors."""
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    if labelnames:
+        return metric_class(name, documentation, labelnames)
+    return metric_class(name, documentation)
+
 try:
     from opentelemetry import trace
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -443,24 +455,30 @@ if PROMETHEUS_ASYNC_AVAILABLE:
     )
     logger.info("Prometheus async metrics enabled.")
 else:
-    EVENTS_PUBLISHED = Counter(
+    EVENTS_PUBLISHED = _get_or_create_metric(
+        Counter,
         "event_bus_published_total",
         "Total events published.",
         ["event_type", "status", "env", "tenant", "protocol"],
     )
-    EVENTS_SUBSCRIBED = Counter(
+    EVENTS_SUBSCRIBED = _get_or_create_metric(
+        Counter,
         "event_bus_subscribed_total",
         "Total events subscribed.",
         ["event_type", "status", "env", "tenant", "protocol"],
     )
-    PUBLISH_LATENCY = Histogram(
-        "event_bus_publish_latency_seconds", "Latency of publishing an event."
+    PUBLISH_LATENCY = _get_or_create_metric(
+        Histogram,
+        "event_bus_publish_latency_seconds",
+        "Latency of publishing an event.",
     )
-    SUBSCRIBE_LATENCY = Histogram(
+    SUBSCRIBE_LATENCY = _get_or_create_metric(
+        Histogram,
         "event_bus_subscribe_latency_seconds",
         "Latency of processing a subscribed event.",
     )
-    BUS_LIVENESS = Gauge(
+    BUS_LIVENESS = _get_or_create_metric(
+        Gauge,
         "event_bus_liveness_status",
         "Status of the event bus connection (1=live, 0=down).",
     )

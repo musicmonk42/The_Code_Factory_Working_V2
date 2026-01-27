@@ -316,7 +316,7 @@ def test_parse_llm_response_dict_multi_file_json():
 def test_parse_llm_response_dict_empty_content():
     """
     When response is a dict with empty or missing content,
-    parse_llm_response should handle gracefully
+    parse_llm_response should handle gracefully and return an error file.
     """
     response_dict = {
         'choices': [
@@ -337,7 +337,7 @@ def test_parse_llm_response_dict_empty_content():
 def test_parse_llm_response_dict_malformed():
     """
     When response is a dict with unexpected structure,
-    parse_llm_response should handle gracefully with fallback
+    parse_llm_response should handle gracefully with fallback and return error file.
     """
     response_dict = {
         'unexpected': 'structure',

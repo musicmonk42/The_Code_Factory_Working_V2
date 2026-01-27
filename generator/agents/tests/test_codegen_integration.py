@@ -112,7 +112,7 @@ def _patch_env_and_utils(monkeypatch):
     # Capture audit events emitted by codegen_prompt
     events = []
 
-    def fake_log_audit_event(event_type, payload=None):
+    async def fake_log_audit_event(event_type, payload=None):
         events.append((event_type, (payload or {})))
 
     monkeypatch.setattr(

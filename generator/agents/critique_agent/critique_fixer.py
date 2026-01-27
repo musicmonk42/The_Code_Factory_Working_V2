@@ -594,15 +594,13 @@ async def safety_check_fix(
             return True
 
         # Unified test runner call via runner utility
-        # Build payload to match runner_run_tests signature
         temp_dir = Path(tempfile.gettempdir())
-        payload = {
-            "test_files": test_files,
-            "code_files": code_files,
-            "output_path": str(temp_dir),
-            "config": {"language": lang, "timeout": 300},
-        }
-        result = await run_tests_in_sandbox(payload)
+        result = await run_tests_in_sandbox(
+            code_files=code_files,
+            test_files=test_files,
+            temp_path=str(temp_dir),
+            language=lang,
+        )
 
         pass_rate = result.get("pass_rate", 0.0)
 

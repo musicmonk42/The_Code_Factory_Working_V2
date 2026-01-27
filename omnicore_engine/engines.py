@@ -222,7 +222,7 @@ except ImportError as e:
 
 try:
     from intent_capture.api import app as intent_capture_api
-except ImportError as e:
+except (ImportError, AttributeError) as e:
     logging.info(
         f"Intent capture API not available: {e}. Intent capture features disabled."
     )

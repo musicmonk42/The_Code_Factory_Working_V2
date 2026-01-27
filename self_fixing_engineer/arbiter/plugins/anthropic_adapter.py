@@ -262,6 +262,7 @@ class AnthropicAdapter:
             self.logger.info(
                 f"Anthropic generation successful for correlation_id: {correlation_id}"
             )
+            self._update_circuit_breaker(success=True)
             return response_text
 
         # 2. Handle RetryError Explicitly
@@ -363,5 +364,5 @@ class AnthropicAdapter:
                     error_type=error_type,
                 ).inc()
 
-            # 8. Add Circuit Breaker
-            self._update_circuit_breaker(success)
+            # Circuit breaker is updated in exception handlers, not here
+            # to avoid double-counting failures

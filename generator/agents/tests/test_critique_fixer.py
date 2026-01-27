@@ -76,7 +76,7 @@ def test_hitl_review_fixes_with_callback():
 async def test_security_check_fix_all_clear():
     """
     In TESTING mode, underlying check_owasp_compliance / scan_for_vulnerabilities
-    stubs should yield an all-clear result.
+    should yield an all-clear result.
     """
     ok = await security_check_fix({"main.py": "print('safe')"}, "python")
     assert ok is True

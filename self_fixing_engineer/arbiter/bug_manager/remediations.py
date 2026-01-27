@@ -135,11 +135,9 @@ class MLRemediationModel:
             logger.info("MLRemediationModel HTTP session closed.")
 
     @tenacity.retry(
-        stop=tenacity.stop_after_attempt(
-            lambda retry_state: retry_state.args[0].retry_attempts
-        ),
-        wait=tenacity.wait.wait_exponential(
-            multiplier=lambda retry_state: retry_state.args[0].retry_delay_seconds,
+        stop=tenacity.stop_after_attempt(3),  # Fixed: use static value instead of lambda
+        wait=tenacity.wait_exponential(  # Fixed: correct API path
+            multiplier=1,
             min=1,
             max=10,
         ),
