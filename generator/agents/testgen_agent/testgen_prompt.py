@@ -31,6 +31,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 # Gold Standard Imports
 import chromadb
+import nest_asyncio  # For handling asyncio.run() in running event loops
 import tiktoken  # Imported for token counting
 from aiohttp import web
 from chromadb.utils import embedding_functions
@@ -1101,7 +1102,6 @@ def initialize_codebase_for_rag(repo_path: str):
         loop = asyncio.get_running_loop()
         # If we get here, we're in an async context
         # Use nest_asyncio to allow nested event loops
-        import nest_asyncio
         nest_asyncio.apply()
         # Now asyncio.run() will work even in a running loop
         asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
