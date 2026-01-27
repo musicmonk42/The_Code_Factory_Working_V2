@@ -618,7 +618,10 @@ async def build_code_generation_prompt(
     """
     Builds a production-ready, context-aware, and optimized prompt for code generation.
     """
-    with PROMPT_BUILD_LATENCY.time():
+    # Determine template name for metric labeling
+    template_name = f"{target_language}_{target_framework}" if target_framework else target_language
+    
+    with PROMPT_BUILD_LATENCY.labels(template=template_name).time():
         with tracer.start_as_current_span(
             "build_prompt",
             attributes={
