@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from unittest.mock import AsyncMock, patch
 
 # Force TESTING mode so critique_fixer uses safe local stubs where defined
 os.environ.setdefault("TESTING", "1")
@@ -78,8 +79,13 @@ async def test_security_check_fix_all_clear():
     In TESTING mode, underlying check_owasp_compliance / scan_for_vulnerabilities
     stubs should yield an all-clear result.
     """
-    ok = await security_check_fix({"main.py": "print('safe')"}, "python")
-    assert ok is True
+    # Mock scan_for_vulnerabilities to return an all-clear result
+    async def mock_scan(*args, **kwargs):
+        return {"vulnerabilities": []}
+    
+    with patch("agents.critique_agent.critique_fixer.scan_for_vulnerabilities", new=mock_scan):
+        ok = await security_check_fix({"main.py": "print('safe')"}, "python")
+        assert ok is True
 
 
 @pytest.mark.asyncio
@@ -87,9 +93,14 @@ async def test_safety_check_fix_all_tests_pass():
     """
     In TESTING mode, run_tests_in_sandbox stub returns pass_rate=1.0.
     """
-    ok = await safety_check_fix(
-        code_files={"main.py": "print('x')"},
-        test_files={"test_main.py": "def test_ok(): assert 1 == 1"},
-        lang="python",
-    )
-    assert ok is True
+    # Mock run_tests_in_sandbox to return pass_rate=1.0
+    async def mock_run_tests(*args, **kwargs):
+        return {"pass_rate": 1.0}
+    
+    with patch("agents.critique_agent.critique_fixer.run_tests_in_sandbox", new=mock_run_tests):
+        ok = await safety_check_fix(
+            code_files={"main.py": "print('x')"},
+            test_files={"test_main.py": "def test_ok(): assert 1 == 1"},
+            lang="python",
+        )
+        assert ok is True
