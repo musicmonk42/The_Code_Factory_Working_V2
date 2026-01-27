@@ -64,6 +64,7 @@ class CoroutineChecker(ast.NodeVisitor):
         'async_write',
         'async_read',
         'async_execute',
+        'add_files',  # MultiVectorDBManager.add_files
     }
     
     def __init__(self, filename: str):

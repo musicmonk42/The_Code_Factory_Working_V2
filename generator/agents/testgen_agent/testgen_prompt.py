@@ -31,6 +31,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 # Gold Standard Imports
 import chromadb
+import nest_asyncio  # For handling asyncio.run() in running event loops
 import tiktoken  # Imported for token counting
 from aiohttp import web
 from chromadb.utils import embedding_functions
@@ -1047,6 +1048,15 @@ def build_agentic_prompt(prompt_type: str, builder_name: str = "test", **kwargs)
     return asyncio.run(builder.build(prompt_type, **kwargs))
 
 
+async def _add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs):
+    """Helper function to add all files to vector database collections."""
+    await vdb.add_files("codebase", code_files)
+    await vdb.add_files("tests", test_files)
+    await vdb.add_files("docs", doc_files)
+    await vdb.add_files("dependencies", dep_files)
+    await vdb.add_files("historical_failures", failure_logs)
+
+
 def initialize_codebase_for_rag(repo_path: str):
     """
     Initializes the vector database with codebase contents.
@@ -1084,11 +1094,21 @@ def initialize_codebase_for_rag(repo_path: str):
 
     # Get the multi_vdb instance using the lazy getter
     vdb = _get_multi_vdb()
-    asyncio.run(vdb.add_files("codebase", code_files))
-    asyncio.run(vdb.add_files("tests", test_files))
-    asyncio.run(vdb.add_files("docs", doc_files))
-    asyncio.run(vdb.add_files("dependencies", dep_files))
-    asyncio.run(vdb.add_files("historical_failures", failure_logs))
+    
+    # FIX: Use proper async handling to avoid "asyncio.run() cannot be called from a running event loop"
+    # This function may be called from both sync and async contexts, so we need to handle both
+    try:
+        # Try to get the running loop
+        loop = asyncio.get_running_loop()
+        # If we get here, we're in an async context
+        # Use nest_asyncio to allow nested event loops
+        nest_asyncio.apply()
+        # Now asyncio.run() will work even in a running loop
+        asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
+    except RuntimeError:
+        # No running loop - safe to use asyncio.run() directly
+        asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
+    
     logger.info("Multi-RAG initialization complete. Indexed files across collections.")
 
     # REFACTORED: Use add_provenance
