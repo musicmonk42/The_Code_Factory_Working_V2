@@ -111,8 +111,24 @@ class TestGeneratorFileUpload:
             files=[],
         )
 
-        assert response.status_code in [400, 422]  # FastAPI returns 422 for validation errors
-        assert "No files provided" in response.json()["detail"]
+        # FastAPI returns 422 for validation errors when required field is missing
+        # or 400 if the endpoint's validation logic catches it
+        assert response.status_code in [400, 422]
+        response_data = response.json()
+        
+        # For 422 validation error, check the Pydantic error format
+        if response.status_code == 422:
+            assert "detail" in response_data
+            # Pydantic validation error will have a list of error dicts
+            if isinstance(response_data["detail"], list):
+                # Check that it's about missing 'files' field
+                assert any("files" in str(err).lower() for err in response_data["detail"])
+            else:
+                # Or the detail might be a string mentioning files
+                assert "files" in response_data["detail"].lower() or "no files" in response_data["detail"].lower()
+        else:
+            # For 400, the endpoint validation should return our custom message
+            assert "No files provided" in response_data["detail"]
 
     def test_upload_job_not_found(self, client):
         """Test error handling for non-existent job."""
@@ -225,10 +241,14 @@ class TestGeneratorStatusAndLogs:
     @patch("server.services.generator_service.GeneratorService.get_job_status")
     def test_get_generator_status(self, mock_status, client, sample_job):
         """Test getting generator status."""
+        from datetime import datetime, timezone
+        
         mock_status.return_value = {
             "job_id": sample_job.id,
             "stage": "code_generation",
-            "progress": 75.0,
+            "progress_percent": 75.0,
+            "status": "processing",
+            "updated_at": datetime.now(timezone.utc),
         }
 
         response = client.get(f"/api/generator/{sample_job.id}/status")
@@ -236,7 +256,9 @@ class TestGeneratorStatusAndLogs:
         assert response.status_code == 200
         data = response.json()
         assert "stage" in data
-        assert "progress" in data
+        assert "progress_percent" in data
+        assert "status" in data
+        assert "updated_at" in data
 
     @patch("server.services.generator_service.GeneratorService.get_job_logs")
     def test_get_generator_logs(self, mock_logs, client, sample_job):

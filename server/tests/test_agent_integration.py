@@ -200,7 +200,8 @@ class TestOmniCoreServiceInitialization:
     @patch("server.services.omnicore_service.CONFIG_AVAILABLE", True)
     @patch("server.services.omnicore_service.get_agent_config")
     @patch("server.services.omnicore_service.get_llm_config")
-    def test_service_strict_mode_raises_on_missing_agents(self, mock_llm_config, mock_agent_config):
+    @patch.object(OmniCoreService, "_load_agents")
+    def test_service_strict_mode_raises_on_missing_agents(self, mock_load_agents, mock_llm_config, mock_agent_config):
         """Test strict mode raises exception when agents unavailable."""
         mock_agent_config.return_value = Mock(
             strict_mode=True,
@@ -210,8 +211,11 @@ class TestOmniCoreServiceInitialization:
             get_available_providers=Mock(return_value=[]),
         )
         
+        # Mock _load_agents to simulate agents being unavailable
+        # The agents_available dict will remain False (initialized to False in __init__)
+        mock_load_agents.return_value = None
+        
         # Should raise because agents can't load without dependencies in strict mode
-        # In a real environment with all dependencies, this wouldn't raise
         with pytest.raises(RuntimeError, match="STRICT_MODE"):
             service = OmniCoreService()
 
@@ -224,7 +228,14 @@ class TestAgentIntegration:
         """Create service with mocked agents."""
         with patch("server.services.omnicore_service.CONFIG_AVAILABLE", True), \
              patch("server.services.omnicore_service.get_agent_config"), \
-             patch("server.services.omnicore_service.get_llm_config"):
+             patch("server.services.omnicore_service.get_llm_config"), \
+             patch("server.services.omnicore_service.get_agent_loader") as mock_get_loader:
+            
+            # Mock the agent loader to report all agents as available
+            mock_loader = MagicMock()
+            mock_loader.is_agent_available = MagicMock(return_value=True)
+            mock_loader.get_agent_error = MagicMock(return_value=None)
+            mock_get_loader.return_value = mock_loader
             
             service = OmniCoreService()
             
