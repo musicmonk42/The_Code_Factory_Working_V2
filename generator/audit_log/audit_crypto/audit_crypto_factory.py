@@ -187,8 +187,10 @@ def _is_test_or_dev_mode() -> bool:
     Keeps audit_crypto_factory from failing hard during tests.
     """
     # Check explicit audit crypto mode setting
+    # NOTE: "disabled" is NOT considered dev mode - it's a valid production setting
+    # when cryptographic secrets are not yet configured. Only "dev" triggers dev mode.
     audit_crypto_mode = os.getenv("AUDIT_CRYPTO_MODE", "").lower()
-    if audit_crypto_mode in ("dev", "disabled"):
+    if audit_crypto_mode == "dev":
         return True
     
     if os.getenv("AUDIT_LOG_DEV_MODE", "").lower() == "true":
