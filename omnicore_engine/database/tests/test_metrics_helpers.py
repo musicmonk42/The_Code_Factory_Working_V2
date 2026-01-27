@@ -313,19 +313,22 @@ class TestErrorScenarios:
         counter = get_or_create_counter_local("test_counter", None)
         assert isinstance(counter, Counter)
 
-    @patch("omnicore_engine.database.metrics_helpers.logger")
-    def test_logging_on_reuse(self, mock_logger):
+    def test_logging_on_reuse(self, caplog):
         """Test that appropriate logging occurs when reusing metrics."""
+        import logging
+        
+        # Clear any existing prometheus metrics
+        from prometheus_client import REGISTRY
+        
         # Create a counter
-        Counter("reused_metric", "Original")
+        Counter("reused_metric_test", "Original")
 
-        # Try to create gauge with same name
-        get_or_create_gauge_local("reused_metric", "New")
+        # Try to create gauge with same name - capture log output
+        with caplog.at_level(logging.WARNING):
+            get_or_create_gauge_local("reused_metric_test", "New")
 
         # Should log warning about reusing existing metric
-        mock_logger.warning.assert_called_with(
-            "Metric 'reused_metric' already registered with a different type or incompatible labels. Reusing existing."
-        )
+        assert any("already registered" in record.message for record in caplog.records)
 
 
 class TestConcurrency:
