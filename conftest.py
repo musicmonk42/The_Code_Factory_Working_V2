@@ -1312,6 +1312,10 @@ def _initialize_aiohttp_protection():
                 """Invalid URL error."""
                 pass
             
+            class BadHttpMethod(BadHttpMessage):
+                """Bad HTTP method error."""
+                pass
+            
             http_exceptions.HttpProcessingError = HttpProcessingError
             http_exceptions.BadHttpMessage = BadHttpMessage
             http_exceptions.HttpBadRequest = HttpBadRequest
@@ -1322,6 +1326,7 @@ def _initialize_aiohttp_protection():
             http_exceptions.InvalidHeader = InvalidHeader
             http_exceptions.BadStatusLine = BadStatusLine
             http_exceptions.InvalidURLError = InvalidURLError
+            http_exceptions.BadHttpMethod = BadHttpMethod
             
             aiohttp.http_exceptions = http_exceptions
             sys.modules["aiohttp.http_exceptions"] = http_exceptions

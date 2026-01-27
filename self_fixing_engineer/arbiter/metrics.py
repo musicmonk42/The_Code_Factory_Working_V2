@@ -20,7 +20,7 @@ from prometheus_client import (
 # Mock/Placeholder imports for a self-contained fix
 try:
     from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter_plugin_registry import PlugInKind, registry
+    from arbiter_plugin_registry import PlugInKind, PluginBase, registry
 except ImportError:
 
     class registry:
@@ -33,6 +33,19 @@ except ImportError:
 
     class PlugInKind:
         CORE_SERVICE = "core_service"
+
+    class PluginBase:
+        """Placeholder base class when arbiter_plugin_registry is not available."""
+        async def initialize(self):
+            pass
+        async def start(self):
+            pass
+        async def stop(self):
+            pass
+        async def health_check(self):
+            return True
+        async def get_capabilities(self):
+            return []
 
     class PIIRedactorFilter(logging.Filter):
         def filter(self, record):
@@ -520,27 +533,24 @@ def rotate_metrics_auth_token() -> str:
 
 
 # Register as a plugin for dynamic management
-class MetricsService:
-    @staticmethod
-    async def initialize():
+class MetricsService(PluginBase):
+    """Metrics service plugin for Prometheus metrics management."""
+
+    async def initialize(self):
         _metrics_logger.info("Initializing MetricsService plugin.")
 
-    @staticmethod
-    async def start():
+    async def start(self):
         # Start a server or similar, if necessary. For now, this is a no-op as metrics are passive.
         _metrics_logger.info("Starting MetricsService plugin.")
 
-    @staticmethod
-    async def stop():
+    async def stop(self):
         # Stop any background tasks. For now, this is a no-op as metrics are passive.
         _metrics_logger.info("Stopping MetricsService plugin.")
 
-    @staticmethod
-    async def health_check():
+    async def health_check(self):
         return health_check()
 
-    @staticmethod
-    async def get_capabilities():
+    async def get_capabilities(self):
         return [
             "prometheus_metrics_response",
             "register_dynamic_metric",

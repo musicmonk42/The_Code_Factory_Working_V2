@@ -14,11 +14,11 @@ from cryptography.fernet import Fernet
 # Add parent directory to path to import arbiter
 current_dir = os.path.dirname(os.path.abspath(__file__))
 arbiter_dir = os.path.dirname(current_dir)
-parent_dir = os.path.dirname(arbiter_dir)
+parent_dir = os.path.dirname(arbiter_dir)  # self_fixing_engineer directory
 
-for path in [parent_dir, arbiter_dir]:
-    if path not in sys.path:
-        sys.path.insert(0, path)
+# Only add self_fixing_engineer to path, NOT arbiter (arbiter.py would shadow the package)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 # Setup SQLAlchemy mocks
 from sqlalchemy.ext.asyncio import create_async_engine

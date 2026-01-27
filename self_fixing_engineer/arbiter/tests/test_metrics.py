@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import starlette
+import starlette.testclient  # Must import submodule before accessing it
 from fastapi import HTTPException, Response
 from prometheus_client import (
     REGISTRY,

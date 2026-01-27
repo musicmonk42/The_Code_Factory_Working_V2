@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import tempfile
+import types
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,9 +15,6 @@ import pytest
 # Save original modules before mocking
 _ORIGINAL_MODULES = {}
 _MODULES_TO_MOCK = [
-    "opentelemetry",
-    "opentelemetry.trace",
-    "opentelemetry.metrics",
     "plugins.dlt_backend",
     "syslog",
 ]
@@ -24,16 +22,30 @@ for _mod in _MODULES_TO_MOCK:
     if _mod in sys.modules:
         _ORIGINAL_MODULES[_mod] = sys.modules[_mod]
 
-# Mock third-party dependencies before importing
-# NOTE: Do NOT mock cryptography - other tests need the real module
-sys.modules["opentelemetry"] = MagicMock()
-sys.modules["opentelemetry.trace"] = MagicMock()
-sys.modules["opentelemetry.metrics"] = MagicMock()
-sys.modules["plugins.dlt_backend"] = MagicMock()
-sys.modules["syslog"] = MagicMock()
 
-# Add the parent directory to the path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Create proper stub modules with __path__ attribute to avoid breaking pytest collection
+def _create_stub_module(name):
+    """Create a proper stub module that won't break import machinery."""
+    stub = types.ModuleType(name)
+    stub.__file__ = f"<stub {name}>"
+    stub.__path__ = []
+    stub.__spec__ = None
+    return stub
+
+
+# Mock non-opentelemetry third-party dependencies before importing
+# NOTE: Do NOT mock opentelemetry - it's already installed and mocking it breaks other tests
+# NOTE: Do NOT mock cryptography - other tests need the real module
+if "plugins.dlt_backend" not in sys.modules:
+    sys.modules["plugins.dlt_backend"] = _create_stub_module("plugins.dlt_backend")
+if "syslog" not in sys.modules:
+    sys.modules["syslog"] = _create_stub_module("syslog")
+
+# Add self_fixing_engineer directory to the path (go up 3 levels from test file)
+# Note: Don't add arbiter dir directly because arbiter.py would shadow the package
+_sfe_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _sfe_dir not in sys.path:
+    sys.path.insert(0, _sfe_dir)
 
 # Import the module under test
 from arbiter.audit_log import (
@@ -52,8 +64,11 @@ def _restore_original_modules():
     for mod_name in _MODULES_TO_MOCK:
         if mod_name in _ORIGINAL_MODULES:
             sys.modules[mod_name] = _ORIGINAL_MODULES[mod_name]
-        elif mod_name in sys.modules and isinstance(sys.modules[mod_name], MagicMock):
-            del sys.modules[mod_name]
+        elif mod_name in sys.modules:
+            # Check if it's our stub module
+            module = sys.modules[mod_name]
+            if isinstance(module, types.ModuleType) and hasattr(module, '__file__') and '<stub' in str(module.__file__):
+                del sys.modules[mod_name]
 
 
 @pytest.fixture(scope="module", autouse=True)

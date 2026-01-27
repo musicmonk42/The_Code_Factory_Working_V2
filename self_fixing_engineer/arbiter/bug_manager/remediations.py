@@ -256,7 +256,7 @@ class MLRemediationModel:
         stop=tenacity.stop_after_attempt(
             lambda retry_state: retry_state.args[0].retry_attempts
         ),
-        wait=tenacity.wait.wait_exponential(
+        wait=tenacity.wait_exponential(
             multiplier=lambda retry_state: retry_state.args[0].retry_delay_seconds,
             min=1,
             max=10,

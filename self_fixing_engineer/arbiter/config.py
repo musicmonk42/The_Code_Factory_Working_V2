@@ -1123,10 +1123,7 @@ def load_persona_dict() -> Dict[str, str]:
 arbiter_config: Optional[ArbiterConfig] = None
 settings: Optional[ArbiterConfig] = None
 
-# Register as a plugin for dynamic management
-registry.register(
-    kind=PlugInKind.CORE_SERVICE,
-    name="ArbiterConfig",
-    version="1.0.0",
-    author="Arbiter Team",
-)(ArbiterConfig)
+# NOTE: ArbiterConfig is a Pydantic settings class (not a plugin service), so we don't
+# register it as a plugin. The plugin registry expects classes that inherit from PluginBase
+# with async lifecycle methods (initialize, start, stop, health_check, get_capabilities).
+# ArbiterConfig is a configuration container, not a service plugin.

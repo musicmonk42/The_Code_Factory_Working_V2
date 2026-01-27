@@ -641,12 +641,14 @@ class PluginRegistry:
                     self._verify_signature(plugin_class, meta)
 
                     existing_meta = self.get_metadata(kind, name)
-                    if existing_meta and version_parse(version) <= version_parse(
-                        existing_meta.version
-                    ):
-                        raise ValueError(
-                            f"Plugin [{kind.value}:{name}] version {version} is not newer than existing version {existing_meta.version}."
-                        )
+                    if existing_meta:
+                        if version_parse(version) < version_parse(existing_meta.version):
+                            raise ValueError(
+                                f"Plugin [{kind.value}:{name}] version {version} is older than existing version {existing_meta.version}."
+                            )
+                        elif version_parse(version) == version_parse(existing_meta.version):
+                            # Same version already registered - skip silently (idempotent)
+                            return plugin_class
 
                     self._plugins.setdefault(kind, {})[name] = plugin_class
                     self._meta.setdefault(kind, {})[name] = meta
