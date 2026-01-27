@@ -1,7 +1,7 @@
 # secrets.py
 """
 WARNING: In production, this module will ABORT if no production-grade secret manager is enabled.
-Allowed managers for production: AWSSecretsManager, GCPSecretManager, VaultSecretManager.
+Allowed managers for production: AWSSecretsManager, GCPSecretManager, VaultSecretManager, EnvVarSecretManager.
 DO NOT fetch secrets from environment variables, files, or code anywhere else in the application.
 All sensitive configurations MUST BE retrieved via the configured SECRET_MANAGER.
 """
@@ -473,6 +473,72 @@ class VaultSecretManager(SecretManager):
         return self._prod_ready
 
 
+class EnvVarSecretManager(SecretManager):
+    """
+    A SecretManager implementation that reads secrets from environment variables.
+    This is suitable for PaaS platforms like Railway, Heroku, or similar that use
+    environment variables for configuration and secrets.
+    
+    Security Note: While environment variables are a valid deployment pattern for
+    PaaS platforms, they may be visible in process listings and system logs.
+    For sensitive production workloads, consider using a dedicated secret manager
+    like AWS Secrets Manager, GCP Secret Manager, or HashiCorp Vault.
+    """
+
+    def __init__(self):
+        self.logger = logging.getLogger(f"{__name__}.EnvVarSecretManager")
+
+    async def get_secret(self, secret_name: str) -> Optional[bytes]:
+        """
+        Fetches a secret from environment variables.
+        
+        Args:
+            secret_name: The name of the environment variable to read
+            
+        Returns:
+            The secret value as bytes (UTF-8 encoded), or None if not found
+            
+        Raises:
+            SecretNotFoundError: If the environment variable is not set
+        """
+        secret_value = os.getenv(secret_name)
+        
+        if secret_value is None:
+            self.logger.warning(
+                f"EnvVarSecretManager: Environment variable '{secret_name}' not found.",
+                extra={"operation": "env_secret_access", "secret_name": secret_name},
+            )
+            await log_action(
+                "secret_access",
+                secret_name=secret_name,
+                source="environment_variables",
+                status="not_found",
+            )
+            raise SecretNotFoundError(
+                f"Environment variable '{secret_name}' not found."
+            )
+        
+        self.logger.debug(
+            f"Secret '{secret_name}' retrieved from environment variables."
+        )
+        await log_action(
+            "secret_access",
+            secret_name=secret_name,
+            source="environment_variables",
+            status="success",
+        )
+        return secret_value.encode("utf-8")
+
+    @property
+    def is_production_ready(self) -> bool:
+        """
+        Environment variables are considered production-ready for PaaS platforms.
+        While not as secure as dedicated secret managers, they are the standard
+        approach for platforms like Railway, Heroku, etc.
+        """
+        return True
+
+
 class DummySecretManager(SecretManager):
     """
     A dummy secret manager for development/testing environments.
@@ -549,6 +615,9 @@ elif os.getenv("USE_HASHICORP_VAULT", "false").lower() == "true":
             exc_info=True,
         )
         _secret_manager = DummySecretManager()
+elif os.getenv("USE_ENV_SECRETS", "false").lower() == "true":
+    _secret_manager = EnvVarSecretManager()
+    logger.info("Configured to use EnvVarSecretManager (reading secrets from environment variables).")
 else:
     # This path is for local development/testing where a real secret manager might not be configured.
     _secret_manager = DummySecretManager()
