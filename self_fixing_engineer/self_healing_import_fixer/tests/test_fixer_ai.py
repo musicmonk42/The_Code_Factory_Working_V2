@@ -7,6 +7,7 @@ import hashlib
 import os
 import sys
 import time
+import types
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -31,10 +32,8 @@ sys.modules["core_secrets"] = MagicMock()
 
 # Mock other dependencies that might be missing
 sys.modules["tiktoken"] = MagicMock()
-sys.modules["openai"] = MagicMock()
 sys.modules["httpx"] = MagicMock()
 sys.modules["tenacity"] = MagicMock()
-
 
 # Setup mock classes for OpenAI exceptions
 class MockRateLimitError(Exception):
@@ -51,9 +50,18 @@ class MockAPIError(Exception):
         self.body = body
 
 
-sys.modules["openai"].RateLimitError = MockRateLimitError
-sys.modules["openai"].APIError = MockAPIError
-sys.modules["openai"].AsyncOpenAI = MagicMock()
+# Create proper module mock for openai with __spec__ attribute
+mock_openai = types.ModuleType("openai")
+mock_openai.__spec__ = types.SimpleNamespace(
+    name="openai",
+    loader=None,
+    origin=None,
+    submodule_search_locations=None,
+)
+mock_openai.RateLimitError = MockRateLimitError
+mock_openai.APIError = MockAPIError
+mock_openai.AsyncOpenAI = MagicMock()
+sys.modules["openai"] = mock_openai
 
 
 # Mock httpx exceptions

@@ -227,19 +227,41 @@ class TestAgentIntegration:
     def mock_service(self):
         """Create service with mocked agents."""
         with patch("server.services.omnicore_service.CONFIG_AVAILABLE", True), \
-             patch("server.services.omnicore_service.get_agent_config"), \
-             patch("server.services.omnicore_service.get_llm_config"), \
+             patch("server.services.omnicore_service.get_agent_config") as mock_agent_cfg, \
+             patch("server.services.omnicore_service.get_llm_config") as mock_llm_cfg, \
              patch("server.services.omnicore_service.get_agent_loader") as mock_get_loader:
             
-            # Mock the agent loader to report all agents as available
+            # Configure mocks
+            mock_agent_cfg.return_value = Mock(
+                strict_mode=False,
+                use_llm_clarifier=False,
+            )
+            mock_llm_cfg.return_value = Mock(
+                get_available_providers=Mock(return_value=["openai"]),
+                default_llm_provider="openai",
+                get_provider_model=Mock(return_value="gpt-4"),
+                get_provider_api_key=Mock(return_value="test-key"),
+                enable_ensemble_mode=False,
+                llm_timeout=300,
+                llm_max_retries=3,
+                llm_temperature=0.7,
+                openai_base_url=None,
+            )
+            
+            # Mock the agent loader to return actual mock functions
             mock_loader = MagicMock()
             mock_loader.is_agent_available = MagicMock(return_value=True)
             mock_loader.get_agent_error = MagicMock(return_value=None)
+            
+            # Create mock agent functions
+            mock_codegen_func = AsyncMock(return_value={"main.py": "print('hello')"})
+            mock_loader.get_agent = MagicMock(return_value=mock_codegen_func)
+            
             mock_get_loader.return_value = mock_loader
             
             service = OmniCoreService()
             
-            # Mock agent availability
+            # Manually set agent availability and functions
             service.agents_available = {
                 "codegen": True,
                 "testgen": True,
@@ -249,26 +271,12 @@ class TestAgentIntegration:
                 "clarifier": True,
             }
             
-            # Mock agent functions
-            service._codegen_func = AsyncMock(return_value={"main.py": "print('hello')"})
+            service._codegen_func = mock_codegen_func
             service._testgen_class = Mock
             service._deploy_class = Mock
             service._docgen_class = Mock
             service._critique_class = Mock
-            service._clarifier_llm_class = None  # Use rule-based
-            
-            # Mock config
-            service.llm_config = Mock(
-                default_llm_provider="openai",
-                get_provider_model=Mock(return_value="gpt-4"),
-                get_provider_api_key=Mock(return_value="test-key"),
-                enable_ensemble_mode=False,
-                llm_timeout=300,
-                llm_max_retries=3,
-                llm_temperature=0.7,
-                openai_base_url=None,
-                get_available_providers=Mock(return_value=["openai"]),
-            )
+            service._clarifier_llm_class = None
             
             return service
 
@@ -370,13 +378,17 @@ class TestDispatcherIntegration:
     def mock_service(self):
         """Create service with mocked agents."""
         with patch("server.services.omnicore_service.CONFIG_AVAILABLE", True), \
-             patch("server.services.omnicore_service.get_agent_config"), \
-             patch("server.services.omnicore_service.get_llm_config"):
+             patch("server.services.omnicore_service.get_agent_config") as mock_agent_cfg, \
+             patch("server.services.omnicore_service.get_llm_config") as mock_llm_cfg, \
+             patch("server.services.omnicore_service.get_agent_loader") as mock_get_loader:
             
-            service = OmniCoreService()
-            service.agents_available["codegen"] = True
-            service._codegen_func = AsyncMock(return_value={"main.py": "code"})
-            service.llm_config = Mock(
+            # Configure mocks
+            mock_agent_cfg.return_value = Mock(
+                strict_mode=False,
+                use_llm_clarifier=False,
+            )
+            mock_llm_cfg.return_value = Mock(
+                get_available_providers=Mock(return_value=["openai"]),
                 default_llm_provider="openai",
                 get_provider_model=Mock(return_value="gpt-4"),
                 get_provider_api_key=Mock(return_value="key"),
@@ -385,8 +397,23 @@ class TestDispatcherIntegration:
                 llm_max_retries=3,
                 llm_temperature=0.7,
                 openai_base_url=None,
-                get_available_providers=Mock(return_value=["openai"]),
             )
+            
+            # Mock the agent loader
+            mock_loader = MagicMock()
+            mock_loader.is_agent_available = MagicMock(return_value=True)
+            mock_loader.get_agent_error = MagicMock(return_value=None)
+            
+            # Create mock agent function
+            mock_codegen_func = AsyncMock(return_value={"main.py": "code"})
+            mock_loader.get_agent = MagicMock(return_value=mock_codegen_func)
+            
+            mock_get_loader.return_value = mock_loader
+            
+            service = OmniCoreService()
+            service.agents_available["codegen"] = True
+            service._codegen_func = mock_codegen_func
+            
             return service
 
     @pytest.mark.asyncio
