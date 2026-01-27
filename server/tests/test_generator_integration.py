@@ -121,11 +121,11 @@ class TestGeneratorFileUpload:
             assert "detail" in response_data
             # Pydantic validation error will have a list of error dicts
             if isinstance(response_data["detail"], list):
-                # Check that it's about missing 'files' field
-                assert any("files" in str(err).lower() for err in response_data["detail"])
+                # Check that one of the errors is about the 'files' field
+                assert any("files" in err.get("loc", []) for err in response_data["detail"])
             else:
                 # Or the detail might be a string mentioning files
-                assert "files" in response_data["detail"].lower() or "no files" in response_data["detail"].lower()
+                assert "no files" in response_data["detail"].lower()
         else:
             # For 400, the endpoint validation should return our custom message
             assert "No files provided" in response_data["detail"]
