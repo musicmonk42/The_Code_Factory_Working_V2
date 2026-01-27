@@ -34,23 +34,40 @@ from .dlt_base import (
 
 # Specific SimpleDLT metrics
 try:
-    from prometheus_client import Counter, Gauge
+    from prometheus_client import Counter, Gauge, REGISTRY
+
+    # Check if metrics already exist in registry to avoid duplicates during test collection
+    def _get_or_create_counter(name, description, labelnames):
+        """Get existing counter or create new one."""
+        try:
+            return Counter(name, description, labelnames=labelnames)
+        except ValueError:
+            # Metric already exists, get from registry
+            return REGISTRY._names_to_collectors.get(name.replace('_total', ''))
+
+    def _get_or_create_gauge(name, description, labelnames):
+        """Get existing gauge or create new one."""
+        try:
+            return Gauge(name, description, labelnames=labelnames)
+        except ValueError:
+            # Metric already exists, get from registry
+            return REGISTRY._names_to_collectors.get(name)
 
     SIMPLE_DLT_METRICS = {
-        "validation_failure": Counter(
+        "validation_failure": _get_or_create_counter(
             "simple_dlt_validation_failure_total",
             "Total number of SimpleDLT validation failures",
-            labelnames=["client_type", "operation", "error_code"],
+            ["client_type", "operation", "error_code"],
         ),
-        "chain_operation": Counter(
+        "chain_operation": _get_or_create_counter(
             "simple_dlt_chain_operation_total",
             "Total number of SimpleDLT chain state operations",
-            labelnames=["client_type", "operation", "status", "error_code"],
+            ["client_type", "operation", "status", "error_code"],
         ),
-        "chain_size": Gauge(
+        "chain_size": _get_or_create_gauge(
             "simple_dlt_chain_size",
             "Current number of entries in the SimpleDLT chain",
-            labelnames=["client_type"],
+            ["client_type"],
         ),
     }
 except ImportError:

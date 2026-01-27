@@ -5,6 +5,17 @@ import os
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+# Skip the entire module if web3 is not installed
+try:
+    import web3
+    WEB3_AVAILABLE = True
+except ImportError:
+    WEB3_AVAILABLE = False
+
+if not WEB3_AVAILABLE:
+    pytest.skip("web3 library not installed - skipping EVM client tests", allow_module_level=True)
+
 from simulation.plugins.dlt_clients.dlt_base import (
     SECRETS_MANAGER,
     DLTClientConfigurationError,

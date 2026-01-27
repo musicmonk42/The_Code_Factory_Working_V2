@@ -90,23 +90,31 @@ except ImportError:
 
 # --- Metrics ---
 try:
-    from prometheus_client import Counter
+    from prometheus_client import Counter, REGISTRY
+
+    def _get_or_create_counter(name, description, labelnames):
+        """Get existing counter or create new one to avoid duplicate registration."""
+        try:
+            return Counter(name, description, labelnames=labelnames)
+        except ValueError:
+            # Metric already exists, get from registry
+            return REGISTRY._names_to_collectors.get(name.replace('_total', ''))
 
     OFFCHAIN_METRICS = {
-        "validation_failure": Counter(
+        "validation_failure": _get_or_create_counter(
             "offchain_validation_failure_total",
             "Total number of off-chain validation failures",
-            labelnames=["client_type", "operation"],
+            ["client_type", "operation"],
         ),
-        "secrets_unavailable_total": Counter(
+        "secrets_unavailable_total": _get_or_create_counter(
             "offchain_secrets_unavailable_total",
             "Total number of times a secrets backend was requested but unavailable",
-            labelnames=["client_type", "backend"],
+            ["client_type", "backend"],
         ),
-        "client_init_failure": Counter(
+        "client_init_failure": _get_or_create_counter(
             "offchain_client_init_failure_total",
             "Total failures during off-chain client initialization",
-            labelnames=["client_type", "error_type"],
+            ["client_type", "error_type"],
         ),
     }
 except ImportError:
