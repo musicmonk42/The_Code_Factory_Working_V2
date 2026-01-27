@@ -211,6 +211,10 @@ async def _sanitize_context(
         re.compile(p, re.IGNORECASE) for p in redact_patterns + default_redact_patterns
     ]
 
+    # Maximum string length for pattern matching to avoid regex catastrophic backtracking
+    # Sensitive values (emails, credit cards, SSNs, JWTs) are typically < 1000 chars
+    MAX_PATTERN_MATCH_LENGTH = 10000
+
     def _redact_value(key: str, value: Any) -> Any:
         """Helper to check for and redact sensitive values based on keys and regex patterns."""
         if key.lower() in redact_keys_lower:
@@ -218,12 +222,16 @@ async def _sanitize_context(
             return "[REDACTED]"
 
         if isinstance(value, str):
-            for pattern in compiled_patterns:
-                if pattern.search(value):
-                    METRICS["sensitive_data_redaction_total"].labels(
-                        redaction_type="pattern"
-                    ).inc()
-                    return "[REDACTED]"
+            # Skip expensive regex pattern matching for very large strings
+            # to avoid catastrophic backtracking. Sensitive values like emails,
+            # credit cards, SSNs, and JWTs are typically much shorter.
+            if len(value) <= MAX_PATTERN_MATCH_LENGTH:
+                for pattern in compiled_patterns:
+                    if pattern.search(value):
+                        METRICS["sensitive_data_redaction_total"].labels(
+                            redaction_type="pattern"
+                        ).inc()
+                        return "[REDACTED]"
 
         return value
 
