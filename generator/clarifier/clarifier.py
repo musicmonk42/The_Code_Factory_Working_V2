@@ -1396,6 +1396,37 @@ class Clarifier:
                     "Performing periodic context manager sync (conceptual)."
                 )
 
+    def _extract_json_from_markdown(self, response: str) -> str:
+        """
+        Extract JSON content from markdown code blocks.
+        
+        Handles cases like:
+        ```json
+        {"key": "value"}
+        ```
+        
+        Args:
+            response: The response string that may contain markdown code blocks
+            
+        Returns:
+            Cleaned string with code fence markers removed
+        """
+        response_clean = response.strip()
+        if not response_clean.startswith("```"):
+            return response_clean
+        
+        lines = response_clean.split("\n")
+        
+        # Remove opening fence (may have language identifier like ```json)
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        
+        # Remove closing fence
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        
+        return "\n".join(lines).strip()
+
     async def detect_ambiguities(self, readme_content: str) -> List[str]:
         """
         Detect ambiguities in the provided README content using LLM or rule-based analysis.
@@ -1424,13 +1455,7 @@ Format your response as a JSON array of strings, for example:
                 
                 # Try to parse JSON response
                 try:
-                    # Extract JSON from response if it's wrapped in markdown code blocks
-                    response_clean = response.strip()
-                    if response_clean.startswith("```"):
-                        # Remove markdown code block
-                        lines = response_clean.split("\n")
-                        response_clean = "\n".join([l for l in lines if not l.startswith("```")])
-                    
+                    response_clean = self._extract_json_from_markdown(response)
                     ambiguities = json.loads(response_clean)
                     if isinstance(ambiguities, list):
                         self.logger.info(f"LLM detected {len(ambiguities)} ambiguities")
@@ -1502,17 +1527,7 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                 
                 # Try to parse JSON response
                 try:
-                    # Extract JSON from response if it's wrapped in markdown code blocks
-                    response_clean = response.strip()
-                    if response_clean.startswith("```"):
-                        # Remove opening and closing code fences
-                        lines = response_clean.split("\n")
-                        if lines[0].startswith("```"):
-                            lines = lines[1:]  # Remove first line (opening fence)
-                        if lines and lines[-1].startswith("```"):
-                            lines = lines[:-1]  # Remove last line (closing fence)
-                        response_clean = "\n".join(lines)
-                    
+                    response_clean = self._extract_json_from_markdown(response)
                     questions = json.loads(response_clean)
                     if isinstance(questions, list) and len(questions) > 0:
                         # Validate structure
