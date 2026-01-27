@@ -327,14 +327,23 @@ class InMemoryBreakerStateManager:
         self._lock = asyncio.Lock()
 
     async def get_state(self) -> dict:
-        """Fetches the current circuit breaker state from memory."""
-        async with self._lock:
-            return self._state.copy()
+        """Fetches the current circuit breaker state from memory.
+        
+        Note: This method does NOT acquire the internal lock. Callers should
+        use state_lock() if they need atomic read-modify-write operations.
+        """
+        return self._state.copy()
 
     async def set_state(self, state: dict) -> None:
-        """Saves the current circuit breaker state to memory."""
-        async with self._lock:
-            self._state.update(state)
+        """Saves the current circuit breaker state to memory.
+        
+        Note: This method does NOT acquire the internal lock. Callers should
+        use state_lock() if they need atomic read-modify-write operations.
+        """
+        # Validate and clamp failures to [0, 1000]
+        if "failures" in state:
+            state["failures"] = min(max(int(state["failures"]), 0), 1000)
+        self._state.update(state)
 
     def state_lock(self):
         """Context manager for async-safe access to the state."""
@@ -836,7 +845,8 @@ async def cleanup_breaker_states() -> None:
                                 f"Skipping cleanup for critical provider: {_sanitize_provider(provider)}"
                             )
                             continue
-                        current_state = await state.get_state()
+                        async with state.state_lock():
+                            current_state = await state.get_state()
                         # Add provider-specific tracing attributes
                         span.set_attribute(
                             f"provider.{provider}.failures",
