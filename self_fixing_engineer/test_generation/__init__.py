@@ -300,18 +300,21 @@ except Exception as _e:
     logging.getLogger(__name__).debug("Plugin shim load failed: %s", _e)
 
 # Create a lightweight alias package: test_generation.gen_agent
-_ga_pkg = __name__ + ".gen_agent"
-if _ga_pkg not in sys.modules:
-    ga = types.ModuleType(_ga_pkg)
-    ga.__path__ = []  # mark as namespace-like package
-    ga.__package__ = __name__
-    sys.modules[_ga_pkg] = ga
+# NOTE: Commented out because there's now a real gen_agent package at
+# self_fixing_engineer/test_generation/gen_agent/ and this was preventing
+# its __init__.py from executing
+# _ga_pkg = __name__ + ".gen_agent"
+# if _ga_pkg not in sys.modules:
+#     ga = types.ModuleType(_ga_pkg)
+#     ga.__path__ = []  # mark as namespace-like package
+#     ga.__package__ = __name__
+#     sys.modules[_ga_pkg] = ga
 
-# Map test_generation.gen_agent.gen_plugins -> loaded top-level module
-if _loaded is not None:
-    # ensure attribute exists even if it was already loaded earlier
-    setattr(sys.modules[__name__], "gen_plugins", _loaded)  # <-- and this
-    sys.modules[_ga_pkg + ".gen_plugins"] = _loaded
+# # Map test_generation.gen_agent.gen_plugins -> loaded top-level module
+# if _loaded is not None:
+#     # ensure attribute exists even if it was already loaded earlier
+#     setattr(sys.modules[__name__], "gen_plugins", _loaded)  # <-- and this
+#     sys.modules[_ga_pkg + ".gen_plugins"] = _loaded
 
 # --- Lazy Onboard Module Loading ---
 # Defer expensive onboard import to avoid import-time overhead
@@ -350,4 +353,8 @@ def __getattr__(name: str) -> Any:
             return getattr(mod, name)
         # If still not available after loading, return None
         return None
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+    
+    # Try to import as submodule for subpackage access
+    # This enables imports like "from test_generation.gen_agent import X"
+    # Don't catch the error - let it propagate so module initialization can handle it properly
+    return importlib.import_module(f".{name}", __name__)
