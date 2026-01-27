@@ -41,8 +41,9 @@ os.environ.setdefault("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "1")
 
 # Set audit crypto mode to allow startup without full cryptographic secrets
 # Options: "full" (requires secrets), "dev" (uses dummy keys), "disabled" (no crypto signing)
-# Change to "full" once AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is configured
-os.environ.setdefault("AUDIT_CRYPTO_MODE", "dev")
+# CRITICAL: Use "disabled" in production to avoid security conflict with APP_ENV=production
+# Change to "full" once AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is properly configured
+os.environ.setdefault("AUDIT_CRYPTO_MODE", "disabled")
 
 # INJECT SIGNING KEY (Required for Production Audit Logging)
 # This prevents the "CRITICAL - FATAL: log_audit_event" crash
