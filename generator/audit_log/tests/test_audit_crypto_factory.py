@@ -356,10 +356,10 @@ class TestHelpers:
         monkeypatch.setenv("PYTEST_CURRENT_TEST", "")
 
         # Verify production is detected
-        assert is_production_environment() is True
-        
+        assert is_production_environment()
+
         # Verify dev mode is NOT detected (this is the key fix)
-        assert _is_test_or_dev_mode() is False
+        assert not _is_test_or_dev_mode()
 
         # This configuration should NOT raise a security conflict error
 
@@ -389,10 +389,10 @@ class TestHelpers:
         monkeypatch.setenv("PYTEST_CURRENT_TEST", "")
 
         # Verify production is detected
-        assert is_production_environment() is True
+        assert is_production_environment()
 
         # Verify dev mode IS detected (this is the problem)
-        assert _is_test_or_dev_mode() is True
+        assert _is_test_or_dev_mode()
 
         # This configuration SHOULD raise a security conflict error when get_provider() is called
 
