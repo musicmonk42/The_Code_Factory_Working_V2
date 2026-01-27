@@ -751,8 +751,8 @@ class NoOpCryptoProvider(CryptoProvider):
     
     Security Notes:
     - This provider offers NO SECURITY
-    - All signatures are deterministic no-op responses
-    - All verifications return True
+    - Signatures are empty (0 bytes)
+    - Verifications always return False (no signature validation)
     - Should ONLY be used when audit crypto is explicitly disabled
     """
 
@@ -762,34 +762,45 @@ class NoOpCryptoProvider(CryptoProvider):
         fallback_hmac_secret_accessor: Optional[Callable[[], Awaitable[bytes]]] = None,
         settings: Optional[Dynaconf] = None,
     ):
-        # NoOpCryptoProvider doesn't need parent initialization - it's truly stateless
-        # Don't call super().__init__ to avoid triggering any initialization logic
+        # Initialize parent class with None/mock values to maintain interface compatibility
+        # This ensures all expected attributes are set (self.settings, self.logger, etc.)
+        super().__init__(
+            software_key_master_accessor=software_key_master_accessor,
+            fallback_hmac_secret_accessor=fallback_hmac_secret_accessor,
+            settings=settings,
+        )
         self.key_id = "noop-key-id"
         
-        logger.info(
+        self.logger.info(
             "AUDIT_CRYPTO: Using NoOpCryptoProvider (AUDIT_CRYPTO_MODE=disabled). "
             "Cryptographic functionality is DISABLED. No audit log signatures will be generated.",
             extra={"operation": "noop_provider_init"},
         )
 
     async def generate_key(self, algo: str) -> str:
-        logger.debug("NoOpCryptoProvider.generate_key called (no-op)")
+        self.logger.debug("NoOpCryptoProvider.generate_key called (no-op)")
         return self.key_id
 
     async def sign(self, data: bytes, key_id: str) -> bytes:
-        logger.debug("NoOpCryptoProvider.sign called (no-op)")
+        self.logger.debug("NoOpCryptoProvider.sign called (no-op, returning empty signature)")
         return b""
 
     async def verify(self, data: bytes, signature: bytes, key_id: str) -> bool:
-        logger.debug("NoOpCryptoProvider.verify called (no-op, always returns True)")
-        return True
+        # Return False instead of True to make it explicit that verification is not performed
+        # This prevents masking signature verification failures
+        self.logger.warning(
+            "NoOpCryptoProvider.verify called - crypto is disabled, returning False. "
+            "No actual signature verification is performed when AUDIT_CRYPTO_MODE=disabled.",
+            extra={"operation": "noop_verify_called"}
+        )
+        return False
 
     async def rotate_key(self, key_id: str) -> str:
-        logger.debug("NoOpCryptoProvider.rotate_key called (no-op)")
+        self.logger.debug("NoOpCryptoProvider.rotate_key called (no-op)")
         return self.key_id
 
     async def close(self):
-        logger.debug("NoOpCryptoProvider.close called (no-op)")
+        self.logger.debug("NoOpCryptoProvider.close called (no-op)")
         pass
 
 
