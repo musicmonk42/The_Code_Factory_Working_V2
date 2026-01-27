@@ -496,7 +496,7 @@ class EnvVarSecretManager(SecretManager):
             secret_name: The name of the environment variable to read
             
         Returns:
-            The secret value as bytes (UTF-8 encoded), or None if not found
+            The secret value as bytes (UTF-8 encoded)
             
         Raises:
             SecretNotFoundError: If the environment variable is not set
