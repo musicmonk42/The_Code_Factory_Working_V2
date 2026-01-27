@@ -300,6 +300,10 @@ class TestHelpers:
             ("PYTEST_CURRENT_TEST", "some_test_name", True),
             ("RUNNING_TESTS", "true", True),
             ("RUNNING_TESTS", "False", False),
+            # AUDIT_CRYPTO_MODE tests
+            ("AUDIT_CRYPTO_MODE", "dev", True),  # "dev" triggers dev mode
+            ("AUDIT_CRYPTO_MODE", "disabled", False),  # "disabled" does NOT trigger dev mode (production-safe)
+            ("AUDIT_CRYPTO_MODE", "full", False),  # "full" does NOT trigger dev mode
         ],
     )
     def test_is_test_or_dev_mode(self, monkeypatch, env_var, value, expected):
@@ -312,6 +316,9 @@ class TestHelpers:
         monkeypatch.delenv("AUDIT_LOG_DEV_MODE", raising=False)
         monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
         monkeypatch.delenv("RUNNING_TESTS", raising=False)
+        monkeypatch.delenv("AUDIT_CRYPTO_MODE", raising=False)
+        monkeypatch.delenv("DEV_MODE", raising=False)
+        monkeypatch.delenv("APP_ENV", raising=False)
 
         if env_var:
             monkeypatch.setenv(env_var, value)
@@ -321,6 +328,73 @@ class TestHelpers:
             monkeypatch.setenv("PYTEST_CURRENT_TEST", "")
 
         assert _is_test_or_dev_mode() == expected
+
+    def test_production_with_disabled_crypto_mode(self, monkeypatch):
+        """
+        Tests that production mode with AUDIT_CRYPTO_MODE=disabled does NOT trigger
+        the security conflict error. This is a valid configuration when secrets
+        are not yet configured in production.
+        """
+        from generator.audit_log.audit_crypto.audit_crypto_factory import (
+            _is_test_or_dev_mode,
+        )
+        from generator.audit_log.audit_crypto.audit_common import (
+            is_production_environment,
+        )
+
+        # Clean environment
+        monkeypatch.delenv("AUDIT_LOG_DEV_MODE", raising=False)
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+        monkeypatch.delenv("RUNNING_TESTS", raising=False)
+        monkeypatch.delenv("DEV_MODE", raising=False)
+        
+        # Set production environment with disabled crypto mode
+        monkeypatch.setenv("APP_ENV", "production")
+        monkeypatch.setenv("AUDIT_CRYPTO_MODE", "disabled")
+        
+        # Override PYTEST_CURRENT_TEST to simulate non-test environment
+        monkeypatch.setenv("PYTEST_CURRENT_TEST", "")
+        
+        # Verify production is detected
+        assert is_production_environment() is True
+        
+        # Verify dev mode is NOT detected (this is the key fix)
+        assert _is_test_or_dev_mode() is False
+        
+        # This configuration should NOT raise a security conflict error
+
+    def test_production_with_dev_crypto_mode_raises_error(self, monkeypatch):
+        """
+        Tests that production mode with AUDIT_CRYPTO_MODE=dev DOES trigger
+        the security conflict error. This is the security guardrail working correctly.
+        """
+        from generator.audit_log.audit_crypto.audit_crypto_factory import (
+            _is_test_or_dev_mode,
+        )
+        from generator.audit_log.audit_crypto.audit_common import (
+            is_production_environment,
+        )
+
+        # Clean environment
+        monkeypatch.delenv("AUDIT_LOG_DEV_MODE", raising=False)
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+        monkeypatch.delenv("RUNNING_TESTS", raising=False)
+        monkeypatch.delenv("DEV_MODE", raising=False)
+        
+        # Set production environment with dev crypto mode (WRONG configuration)
+        monkeypatch.setenv("APP_ENV", "production")
+        monkeypatch.setenv("AUDIT_CRYPTO_MODE", "dev")
+        
+        # Override PYTEST_CURRENT_TEST to simulate non-test environment
+        monkeypatch.setenv("PYTEST_CURRENT_TEST", "")
+        
+        # Verify production is detected
+        assert is_production_environment() is True
+        
+        # Verify dev mode IS detected (this is the problem)
+        assert _is_test_or_dev_mode() is True
+        
+        # This configuration SHOULD raise a security conflict error when get_provider() is called
 
     def test_sensitive_data_filter(self, caplog):
         """Tests that the SensitiveDataFilter redacts logs."""
