@@ -1094,21 +1094,19 @@ def initialize_codebase_for_rag(repo_path: str):
     # Get the multi_vdb instance using the lazy getter
     vdb = _get_multi_vdb()
     
-    # FIX: Use proper async handling instead of asyncio.run() from sync context
-    # Check if there's already a running event loop
+    # FIX: Use proper async handling to avoid "asyncio.run() cannot be called from a running event loop"
+    # This function may be called from both sync and async contexts, so we need to handle both
     try:
+        # Try to get the running loop
         loop = asyncio.get_running_loop()
-        # If we're in an async context, we shouldn't be here, but handle it gracefully
-        logger.warning("initialize_codebase_for_rag called from async context")
-        # Use run_coroutine_threadsafe or create a new thread
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(
-                lambda: asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
-            )
-            future.result()
+        # If we get here, we're in an async context
+        # Use nest_asyncio to allow nested event loops
+        import nest_asyncio
+        nest_asyncio.apply()
+        # Now asyncio.run() will work even in a running loop
+        asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
     except RuntimeError:
-        # No running loop, safe to use asyncio.run()
+        # No running loop - safe to use asyncio.run() directly
         asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
     
     logger.info("Multi-RAG initialization complete. Indexed files across collections.")
