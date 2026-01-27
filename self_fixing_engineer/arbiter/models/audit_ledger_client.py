@@ -125,15 +125,18 @@ except ImportError:
 # Import OmniCore's ExplainAudit with a mock fallback for dependency resilience
 try:
     from omnicore_engine.audit import ExplainAudit
+    _EXPLAIN_AUDIT_REAL = True
 except ImportError:
     logging.getLogger(__name__).debug(
         "omnicore_engine.audit.ExplainAudit not found; using mock implementation."
     )
+    _EXPLAIN_AUDIT_REAL = False
 
     class ExplainAudit:  # type: ignore
         """Mock class for ExplainAudit if the library is not installed."""
 
-        def __init__(self, dlt_client: Any):
+        def __init__(self, **kwargs):
+            # Accept any keyword arguments for compatibility
             pass
 
 
@@ -466,7 +469,11 @@ class AuditLedgerClient:
         )  # Limit concurrent transactions
 
         # Initialize OmniCore's ExplainAudit client
-        self.explain_audit = ExplainAudit(dlt_client=self)
+        # Real ExplainAudit takes system_audit_merkle_tree, mock takes anything
+        if _EXPLAIN_AUDIT_REAL:
+            self.explain_audit = ExplainAudit()
+        else:
+            self.explain_audit = ExplainAudit(dlt_client=self)
 
         logger.info(
             f"AuditLedgerClient initialized for DLT type: {self.dlt_type}, URL: {self.audit_ledger_url}, Metrics Labels: {self.metric_labels}"

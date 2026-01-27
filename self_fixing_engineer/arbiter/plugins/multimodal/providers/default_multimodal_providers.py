@@ -62,11 +62,19 @@ logger = logging.getLogger(__name__)
 
 
 # Helper function to get or create metrics
+from prometheus_client import REGISTRY
+
 def get_or_create(metric):
     """
-    Helper function to wrap metric creation.
-    In production, this would handle thread-safe metric registration.
+    Helper function to get or create a metric, handling duplicates safely.
+    Returns existing metric if already registered, otherwise registers and returns the new one.
     """
+    metric_name = metric._name
+    # Check if metric already exists in the registry
+    for collector in list(REGISTRY._names_to_collectors.values()):
+        if hasattr(collector, '_name') and collector._name == metric_name:
+            return collector
+    # Metric doesn't exist, return the new one (it will be registered on first use)
     return metric
 
 
