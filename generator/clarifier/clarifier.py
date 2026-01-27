@@ -1448,7 +1448,7 @@ Format your response as a JSON array of strings, for example:
         if not any(db in content_lower for db in ['mysql', 'postgres', 'mongodb', 'sqlite', 'redis', 'database']):
             ambiguities.append("Database technology not specified")
         
-        if any(word in content_lower for word in ['api', 'endpoint', 'rest', 'graphql']) and \
+        if any(word in content_lower for word in ['api', 'endpoint']) and \
            not any(spec in content_lower for spec in ['rest', 'graphql']):
             ambiguities.append("API type (REST/GraphQL) not specified")
         
@@ -1505,8 +1505,13 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                     # Extract JSON from response if it's wrapped in markdown code blocks
                     response_clean = response.strip()
                     if response_clean.startswith("```"):
+                        # Remove opening and closing code fences
                         lines = response_clean.split("\n")
-                        response_clean = "\n".join([l for l in lines if not l.startswith("```")])
+                        if lines[0].startswith("```"):
+                            lines = lines[1:]  # Remove first line (opening fence)
+                        if lines and lines[-1].startswith("```"):
+                            lines = lines[:-1]  # Remove last line (closing fence)
+                        response_clean = "\n".join(lines)
                     
                     questions = json.loads(response_clean)
                     if isinstance(questions, list) and len(questions) > 0:
