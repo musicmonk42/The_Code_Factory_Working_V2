@@ -498,8 +498,32 @@ def load_config() -> Dynaconf:
 
 def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
     """Initializes Fernet encryption, fetching the key from KMS in production."""
+    aws_region = os.getenv("AWS_REGION")
+    
+    # Validate AWS_REGION is set before attempting KMS call
+    if not aws_region:
+        if is_prod:
+            get_logger().critical(
+                "CRITICAL: AWS_REGION environment variable is not set. "
+                "Cannot initialize KMS client for production encryption."
+            )
+            # Fall back to dummy key with critical warning in prod
+            get_logger().critical(
+                "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. Aborting startup."
+            )
+            sys.exit(1)
+        else:
+            get_logger().warning(
+                "AWS_REGION not set. Skipping KMS initialization and using local encryption key."
+            )
+            f = Fernet(Fernet.generate_key())
+            get_logger().warning(
+                "Using a dummy Fernet key. History encryption is INSECURE. DO NOT USE IN PRODUCTION WITHOUT A REAL KMS KEY."
+            )
+            return f
+    
     try:
-        kms_client = boto3.client("kms", region_name=os.getenv("AWS_REGION"))
+        kms_client = boto3.client("kms", region_name=aws_region)
         response = kms_client.decrypt(
             CiphertextBlob=base64.b64decode(
                 os.getenv("CLARIFIER_HISTORY_ENCRYPTION_KEY_B64", "")
@@ -1371,6 +1395,178 @@ class Clarifier:
                 self.logger.debug(
                     "Performing periodic context manager sync (conceptual)."
                 )
+
+    async def detect_ambiguities(self, readme_content: str) -> List[str]:
+        """
+        Detect ambiguities in the provided README content using LLM or rule-based analysis.
+        
+        Args:
+            readme_content: The README/requirements content to analyze
+            
+        Returns:
+            List of detected ambiguities as strings
+        """
+        self.logger.info("Detecting ambiguities in README content")
+        
+        # Try LLM-based detection if available
+        if self.llm and hasattr(self.llm, 'generate'):
+            try:
+                prompt = f"""Analyze the following requirements and identify ambiguities, missing details, or areas that need clarification.
+Return a JSON list of ambiguities found.
+
+Requirements:
+{readme_content}
+
+Format your response as a JSON array of strings, for example:
+["Ambiguity 1", "Ambiguity 2", "Ambiguity 3"]
+"""
+                response = await self.llm.generate(prompt, temperature=0.3)
+                
+                # Try to parse JSON response
+                try:
+                    # Extract JSON from response if it's wrapped in markdown code blocks
+                    response_clean = response.strip()
+                    if response_clean.startswith("```"):
+                        # Remove markdown code block
+                        lines = response_clean.split("\n")
+                        response_clean = "\n".join([l for l in lines if not l.startswith("```")])
+                    
+                    ambiguities = json.loads(response_clean)
+                    if isinstance(ambiguities, list):
+                        self.logger.info(f"LLM detected {len(ambiguities)} ambiguities")
+                        return ambiguities[:10]  # Limit to 10 ambiguities
+                except json.JSONDecodeError:
+                    self.logger.warning("Failed to parse LLM response as JSON, falling back to rule-based")
+            except Exception as e:
+                self.logger.warning(f"LLM-based ambiguity detection failed: {e}, using rule-based fallback")
+        
+        # Fallback to rule-based detection
+        ambiguities = []
+        content_lower = readme_content.lower()
+        
+        # Check for missing technical specifications
+        if not any(db in content_lower for db in ['mysql', 'postgres', 'mongodb', 'sqlite', 'redis', 'database']):
+            ambiguities.append("Database technology not specified")
+        
+        if any(word in content_lower for word in ['api', 'endpoint', 'rest', 'graphql']) and \
+           not any(spec in content_lower for spec in ['rest', 'graphql']):
+            ambiguities.append("API type (REST/GraphQL) not specified")
+        
+        if any(word in content_lower for word in ['web', 'frontend', 'ui']) and \
+           not any(fw in content_lower for fw in ['react', 'vue', 'angular', 'svelte']):
+            ambiguities.append("Frontend framework not specified")
+        
+        if any(word in content_lower for word in ['auth', 'login', 'user']) and \
+           not any(auth in content_lower for auth in ['jwt', 'oauth', 'session']):
+            ambiguities.append("Authentication method not specified")
+        
+        if any(word in content_lower for word in ['deploy', 'production']) and \
+           not any(platform in content_lower for platform in ['docker', 'kubernetes', 'aws', 'heroku']):
+            ambiguities.append("Deployment platform not specified")
+        
+        # Generic ambiguity if nothing specific found
+        if not ambiguities:
+            ambiguities.append("General technical specifications need clarification")
+        
+        self.logger.info(f"Rule-based detection found {len(ambiguities)} ambiguities")
+        return ambiguities[:5]  # Limit to 5 for rule-based
+
+    async def generate_questions(self, ambiguities: List[str]) -> List[Dict[str, Any]]:
+        """
+        Generate clarification questions for detected ambiguities.
+        
+        Args:
+            ambiguities: List of ambiguities to generate questions for
+            
+        Returns:
+            List of question dictionaries with 'question' and 'category' keys
+        """
+        self.logger.info(f"Generating questions for {len(ambiguities)} ambiguities")
+        
+        # Try LLM-based question generation if available
+        if self.llm and hasattr(self.llm, 'generate'):
+            try:
+                prompt = f"""Generate specific clarification questions for the following ambiguities.
+Each question should be clear, actionable, and help resolve the ambiguity.
+
+Ambiguities:
+{json.dumps(ambiguities, indent=2)}
+
+Format your response as a JSON array of objects with 'question' and 'category' fields, for example:
+[
+  {{"question": "What database system would you like to use?", "category": "database"}},
+  {{"question": "Should the API be RESTful or GraphQL?", "category": "api"}}
+]
+"""
+                response = await self.llm.generate(prompt, temperature=0.5)
+                
+                # Try to parse JSON response
+                try:
+                    # Extract JSON from response if it's wrapped in markdown code blocks
+                    response_clean = response.strip()
+                    if response_clean.startswith("```"):
+                        lines = response_clean.split("\n")
+                        response_clean = "\n".join([l for l in lines if not l.startswith("```")])
+                    
+                    questions = json.loads(response_clean)
+                    if isinstance(questions, list) and len(questions) > 0:
+                        # Validate structure
+                        if all(isinstance(q, dict) and 'question' in q for q in questions):
+                            self.logger.info(f"LLM generated {len(questions)} questions")
+                            return questions[:10]  # Limit to 10 questions
+                except json.JSONDecodeError:
+                    self.logger.warning("Failed to parse LLM response as JSON, falling back to rule-based")
+            except Exception as e:
+                self.logger.warning(f"LLM-based question generation failed: {e}, using rule-based fallback")
+        
+        # Fallback to rule-based question generation
+        questions = []
+        for ambiguity in ambiguities:
+            ambiguity_lower = ambiguity.lower()
+            
+            # Map ambiguities to specific questions
+            if 'database' in ambiguity_lower:
+                questions.append({
+                    "question": "What type of database would you like to use? (e.g., PostgreSQL, MongoDB, MySQL)",
+                    "category": "database"
+                })
+            elif 'api' in ambiguity_lower:
+                questions.append({
+                    "question": "Should the API be RESTful or GraphQL?",
+                    "category": "api"
+                })
+            elif 'frontend' in ambiguity_lower or 'framework' in ambiguity_lower:
+                questions.append({
+                    "question": "What frontend framework would you prefer? (e.g., React, Vue.js, Angular)",
+                    "category": "frontend"
+                })
+            elif 'auth' in ambiguity_lower:
+                questions.append({
+                    "question": "What authentication method should be used? (e.g., JWT, OAuth 2.0, session-based)",
+                    "category": "authentication"
+                })
+            elif 'deploy' in ambiguity_lower or 'platform' in ambiguity_lower:
+                questions.append({
+                    "question": "What deployment platform will you use? (e.g., Docker, Kubernetes, AWS, Heroku)",
+                    "category": "deployment"
+                })
+            else:
+                # Generic question for unmatched ambiguities
+                questions.append({
+                    "question": f"Please clarify: {ambiguity}",
+                    "category": "general"
+                })
+        
+        # Add default questions if none were generated
+        if not questions:
+            questions = [
+                {"question": "What is the primary programming language you'd like to use?", "category": "general"},
+                {"question": "Who are the target users of this application?", "category": "general"},
+                {"question": "Are there any specific third-party integrations required?", "category": "general"}
+            ]
+        
+        self.logger.info(f"Generated {len(questions)} questions")
+        return questions[:5]  # Limit to 5 questions
 
     async def get_clarifications(
         self, ambiguities: List[str], requirements: Dict[str, Any]
