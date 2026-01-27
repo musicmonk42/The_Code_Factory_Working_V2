@@ -17,7 +17,7 @@ This guide covers how to securely manage secrets in the Code Factory platform ac
 
 The Code Factory platform supports multiple secrets management providers:
 
-- **Environment Variables** (development only)
+- **Environment Variables** (for PaaS platforms like Railway, Heroku)
 - **AWS Secrets Manager** (recommended for AWS deployments)
 - **HashiCorp Vault** (recommended for multi-cloud or on-premise)
 - **Google Cloud Secret Manager** (recommended for GCP deployments)
@@ -25,19 +25,52 @@ The Code Factory platform supports multiple secrets management providers:
 
 ## Supported Providers
 
-### Environment Variables (Development)
+### Environment Variables (PaaS Platforms)
+
+**Use Case:** Production deployments on PaaS platforms (Railway, Heroku, Render, etc.)
+
+**Setup:**
+```bash
+# Set in Railway/Heroku dashboard or .env file for local dev
+USE_ENV_SECRETS=true
+AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64=your-base64-key
+OPENAI_API_KEY=your-api-key
+DATABASE_PASSWORD=your-password
+```
+
+**Production Ready:** ✅ Yes - when `USE_ENV_SECRETS=true` is set
+
+**Features:**
+- Native integration with PaaS platforms
+- Simple configuration
+- No additional services required
+- Automatic injection by platform
+
+**Security Notes:**
+- Secrets are stored in platform's secure environment variable storage
+- Platform handles encryption at rest
+- Access controlled by platform's IAM/RBAC
+- May be visible in process listings (platform-dependent)
+
+**When to use:**
+- Railway, Heroku, Render, or similar PaaS deployments
+- Quick prototyping and demos
+- Small to medium production workloads on PaaS
+
+**⚠️ NOTE:** While suitable for PaaS platforms, for high-security workloads consider using a dedicated secret manager (AWS Secrets Manager, Vault, etc.)
+
+### Environment Variables (Development Only - Legacy)
 
 **Use Case:** Local development only
 
 **Setup:**
 ```bash
-# Set in .env file
-SECRETS_PROVIDER=env
+# Set in .env file (DO NOT set USE_ENV_SECRETS in dev)
 OPENAI_API_KEY=your-api-key
 DATABASE_PASSWORD=your-password
 ```
 
-**⚠️ WARNING:** Never use environment variables in production or commit them to version control!
+**⚠️ WARNING:** Never use environment variables without `USE_ENV_SECRETS=true` in production or commit them to version control!
 
 ### AWS Secrets Manager
 
@@ -173,28 +206,33 @@ az keyvault secret set \
 
 ### Environment Variables
 
-Set the `SECRETS_PROVIDER` environment variable to choose your provider:
+Choose your secret manager provider by setting the appropriate environment variable:
 
 ```bash
-# Development (default)
-SECRETS_PROVIDER=env
+# PaaS Platforms (Railway, Heroku, Render)
+USE_ENV_SECRETS=true
 
 # AWS
-SECRETS_PROVIDER=aws
+USE_AWS_SECRETS=true
+AWS_REGION=us-east-1
 
 # HashiCorp Vault
-SECRETS_PROVIDER=vault
+USE_HASHICORP_VAULT=true
+VAULT_ADDR=https://vault.example.com:8200
+VAULT_TOKEN=your-token
 
 # Google Cloud
-SECRETS_PROVIDER=gcp
-
-# Azure
-SECRETS_PROVIDER=azure
+USE_GCP_SECRETS=true
+GCP_PROJECT_ID=your-project-id
 ```
 
 ### Required Secrets
 
 The following secrets should be configured for production:
+
+#### Audit Crypto (Required for Railway/PaaS)
+- `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` - Master encryption key for audit crypto (base64-encoded)
+- `AGENTIC_AUDIT_HMAC_KEY` - HMAC key for audit log signing (64 hex characters)
 
 #### API Keys
 - `GROK_API_KEY` - xAI Grok API key
