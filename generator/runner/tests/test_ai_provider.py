@@ -22,16 +22,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-# Make the *runner* package importable by adding generator/ to sys.path
-GENERATOR_ROOT = (
-    Path(__file__).resolve().parents[2]
-)  # generator/runner/tests -> generator/
-if str(GENERATOR_ROOT) not in sys.path:
-    sys.path.insert(0, str(GENERATOR_ROOT))
+# Make the *runner* package importable by adding project root to sys.path
+PROJECT_ROOT = (
+    Path(__file__).resolve().parents[4]
+)  # generator/runner/tests -> project root
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from runner.providers.ai_provider import OpenAIProvider, get_provider  # type: ignore
-from runner.runner_config import RunnerConfig  # type: ignore
-from runner.runner_errors import ConfigurationError, LLMError  # type: ignore
+from generator.runner.providers.ai_provider import OpenAIProvider, get_provider  # type: ignore
+from generator.runner.runner_config import RunnerConfig  # type: ignore
+from generator.runner.runner_errors import ConfigurationError, LLMError  # type: ignore
 
 
 # Fixtures

@@ -169,7 +169,7 @@ class TestCLIBasics:
 
     def test_cli_group_exists(self, cli_runner):
         """Test CLI group can be imported and invoked."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["--help"])
         assert result.exit_code == 0
@@ -177,7 +177,7 @@ class TestCLIBasics:
 
     def test_cli_help(self, cli_runner):
         """Test CLI help message."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["--help"])
         assert result.exit_code == 0
@@ -189,7 +189,7 @@ class TestRunCommand:
 
     def test_run_command_help(self, cli_runner):
         """Test run command help."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["run", "--help"])
         assert result.exit_code == 0
@@ -197,7 +197,7 @@ class TestRunCommand:
 
     def test_run_command_with_input(self, cli_runner, mock_dependencies):
         """Test run command with input file."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # FIX: Create files manually in the isolated filesystem
         Path("README.md").write_text("# Test Readme")
@@ -221,7 +221,7 @@ class TestRunCommand:
 
     def test_run_command_missing_input(self, cli_runner):
         """Test run command without required input."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["run"])
 
@@ -232,7 +232,7 @@ class TestRunCommand:
 
     def test_run_command_dry_run(self, cli_runner, mock_dependencies):
         """Test run command in dry-run mode."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # FIX: Create required input file
         Path("README.md").write_text("# Test Readme")
@@ -244,7 +244,7 @@ class TestRunCommand:
 
     def test_run_command_with_user_id(self, cli_runner, mock_dependencies):
         """Test run command with user ID."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # FIX: Create required input file
         Path("README.md").write_text("# Test Readme")
@@ -262,14 +262,14 @@ class TestStatusCommand:
 
     def test_status_command_help(self, cli_runner):
         """Test status command help."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["status", "--help"])
         assert result.exit_code == 0
 
     def test_status_command_execution(self, cli_runner, mock_dependencies):
         """Test status command execution."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["status"])
 
@@ -282,14 +282,14 @@ class TestHealthCommand:
 
     def test_health_command_help(self, cli_runner):
         """Test health command help."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["health", "--help"])
         assert result.exit_code == 0
 
     def test_health_command_execution(self, cli_runner, mock_dependencies):
         """Test health command execution."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         with patch("main.cli.WorkflowEngine") as MockEngine:
             mock_engine = MagicMock()
@@ -307,14 +307,14 @@ class TestLogsCommand:
 
     def test_logs_command_help(self, cli_runner):
         """Test logs command help."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["logs", "--help"])
         assert result.exit_code == 0
 
     def test_logs_command_with_query(self, cli_runner, mock_dependencies):
         """Test logs command with search query."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         with patch("main.cli.search_logs") as mock_search:
             mock_search.return_value = [
@@ -330,7 +330,7 @@ class TestLogsCommand:
 
     def test_logs_command_with_limit(self, cli_runner, mock_dependencies):
         """Test logs command with result limit."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["logs", "--query", "test", "--limit", "5"])
 
@@ -342,7 +342,7 @@ class TestMetricsCommand:
 
     def test_metrics_command_help(self, cli_runner):
         """Test metrics command help."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["metrics", "--help"])
         print(result.output)  # FIX: Added debug print
@@ -350,7 +350,7 @@ class TestMetricsCommand:
 
     def test_metrics_command_execution(self, cli_runner, mock_dependencies):
         """Test metrics command execution."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         with patch("main.cli.get_metrics_dict") as mock_metrics:
             mock_metrics.return_value = {
@@ -369,7 +369,7 @@ class TestConfigCommands:
 
     def test_config_show_command(self, cli_runner, mock_dependencies):
         """Test config show command."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # FIX: No --config-file needed, uses default from cli_runner
         result = cli_runner.invoke(cli, ["config", "show"])
@@ -378,7 +378,7 @@ class TestConfigCommands:
 
     def test_config_validate_command(self, cli_runner, mock_dependencies):
         """Test config validate command."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # FIX: No --config-file needed, uses default from cli_runner
         result = cli_runner.invoke(cli, ["config", "validate"])
@@ -387,7 +387,7 @@ class TestConfigCommands:
 
     def test_config_edit_command(self, cli_runner, mock_dependencies):
         """Test config edit command."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # Cannot test interactive editor, but can test command exists
         result = cli_runner.invoke(cli, ["config", "edit", "--help"])
@@ -396,7 +396,7 @@ class TestConfigCommands:
 
     def test_config_reload_command(self, cli_runner, mock_dependencies):
         """Test config reload command."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # FIX: Removed patch for console.print, will check result.output
         with patch("main.cli.aiohttp.ClientSession") as MockSession:  # Mock API call
@@ -429,14 +429,14 @@ class TestFeedbackCommand:
 
     def test_feedback_command_help(self, cli_runner):
         """Test feedback command help."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["feedback", "--help"])
         assert result.exit_code == 0
 
     def test_feedback_command_with_rating(self, cli_runner, mock_dependencies):
         """Test feedback command with rating."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         with patch("main.cli.aiohttp.ClientSession") as MockSession:
             mock_response = AsyncMock()
@@ -475,7 +475,7 @@ class TestPluginCommands:
 
     def test_plugin_list_command(self, cli_runner, mock_dependencies):
         """Test plugin list command."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["plugin", "list"])
 
@@ -483,7 +483,7 @@ class TestPluginCommands:
 
     def test_plugin_load_command(self, cli_runner, mock_dependencies):
         """Test plugin load command."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(
             cli,
@@ -503,7 +503,7 @@ class TestAgentCommands:
 
     def test_agent_list_command(self, cli_runner, mock_dependencies):
         """Test agent list command."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # 'agent list' is not a command, it's 'plugin list'
         with patch("main.cli.AGENT_REGISTRY", {"test_agent": "TestAgentClass"}):
@@ -514,7 +514,7 @@ class TestAgentCommands:
 
     def test_agent_swap_command(self, cli_runner, mock_dependencies):
         """Test agent hot-swap command."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # 'agent swap' is not a command
         # This test might be for a conceptual or removed feature.
@@ -529,7 +529,7 @@ class TestDocsCommands:
 
     def test_docs_generate_command(self, cli_runner, mock_dependencies):
         """Test docs generate command."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # FIX: Create source and output dirs in isolated filesystem
         Path("src").mkdir()
@@ -553,7 +553,7 @@ class TestDocsCommands:
 
     def test_docs_view_command(self, cli_runner):
         """Test docs view command."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # Create a test doc file
         doc_file = Path("test.md")
@@ -569,14 +569,14 @@ class TestShellMode:
 
     def test_shell_command_exists(self, cli_runner):
         """Test shell command exists."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["shell", "--help"])
         assert result.exit_code == 0
 
     def test_shell_mode_exit(self, cli_runner):
         """Test shell mode can be exited."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # Test with exit command
         result = cli_runner.invoke(cli, ["shell"], input="exit\n")
@@ -590,7 +590,7 @@ class TestErrorHandling:
 
     def test_invalid_command(self, cli_runner):
         """Test handling of invalid commands."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["nonexistent-command"])
 
@@ -599,7 +599,7 @@ class TestErrorHandling:
 
     def test_missing_required_argument(self, cli_runner):
         """Test handling of missing required arguments."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["run"])  # Missing --input
 
@@ -609,7 +609,7 @@ class TestErrorHandling:
 
     def test_invalid_file_path(self, cli_runner):
         """Test handling of invalid file paths."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["run", "--input", "/nonexistent/file.md"])
 
@@ -670,7 +670,7 @@ class TestDynamicCommandRegistry:
 
     def test_registered_command_execution(self, cli_runner):
         """Test executing a dynamically registered command."""
-        from main.cli import cli, register_cli_command
+        from generator.main.cli import cli, register_cli_command
 
         @register_cli_command(name="test-exec", help_text="Test execution")
         def test_exec_command():
@@ -688,7 +688,7 @@ class TestParallelExecution:
 
     def test_parallel_execution_option(self, cli_runner, mock_dependencies):
         """Test parallel execution with multiple workers."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # FIX: Create required input file
         Path("README.md").write_text("# Test Readme")
@@ -711,7 +711,7 @@ class TestColoredOutput:
 
     def test_colored_help_output(self, cli_runner):
         """Test help output uses colors."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["--help"])
 
@@ -746,7 +746,7 @@ class TestEnvironmentVariables:
 
     def test_env_var_override(self, cli_runner):
         """Test environment variable can override config."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         with patch.dict(os.environ, {"CONFIG_BACKEND": "override"}):
             # FIX: No --config-file needed
@@ -801,7 +801,7 @@ class TestExceptionHandling:
 
     def test_keyboard_interrupt_handling(self, cli_runner):
         """Test handling of keyboard interrupt."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # Difficult to simulate actual KeyboardInterrupt in tests
         # but we can test the command structure exists
@@ -809,7 +809,7 @@ class TestExceptionHandling:
 
     def test_system_exit_handling(self, cli_runner):
         """Test handling of system exit."""
-        from main.cli import cli
+        from generator.main.cli import cli
 
         # Commands should handle SystemExit gracefully
         result = cli_runner.invoke(cli, ["nonexistent"])

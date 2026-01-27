@@ -27,15 +27,15 @@ import yaml  # FIX: Added missing import
 from _pytest.logging import LogCaptureFixture
 from tenacity import RetryError
 
-# Make the *runner* package importable by adding generator/ to sys.path
-GENERATOR_ROOT = (
-    Path(__file__).resolve().parents[2]
-)  # generator/runner/tests -> generator/
-if str(GENERATOR_ROOT) not in sys.path:
-    sys.path.insert(0, str(GENERATOR_ROOT))
+# Make the *runner* package importable by adding project root to sys.path
+PROJECT_ROOT = (
+    Path(__file__).resolve().parents[4]
+)  # generator/runner/tests -> project root
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Imports corrected to use providers/ instead of llm_client_providers/
-from runner.providers.local_provider import (  # type: ignore
+from generator.runner.providers.local_provider import (  # type: ignore
     PRICING,
     LocalProvider,
     get_provider,
@@ -43,8 +43,8 @@ from runner.providers.local_provider import (  # type: ignore
     stream_chunk_latency,
     stream_chunks_total,
 )
-from runner.runner_config import RunnerConfig  # type: ignore
-from runner.runner_errors import LLMError  # type: ignore
+from generator.runner.runner_config import RunnerConfig  # type: ignore
+from generator.runner.runner_errors import LLMError  # type: ignore
 
 
 # Fixtures

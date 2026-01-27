@@ -56,9 +56,9 @@ except ImportError:
 
 
 # ---- Runner foundation imports ------------------------------------------------
-from runner.llm_provider_base import LLMProvider
-from runner.runner_config import load_config  # For loading API key in get_provider
-from runner.runner_errors import ConfigurationError, LLMError
+from ..llm_provider_base import LLMProvider
+from ..runner_config import load_config  # For loading API key in get_provider
+from ..runner_errors import ConfigurationError, LLMError
 from tenacity import (
     retry,
     retry_if_exception_type,
