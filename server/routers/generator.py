@@ -62,17 +62,19 @@ def detect_language_from_content(readme_content: str) -> str:
     if "typescript" in readme_lower:
         return "typescript"
     
+    # Java check - must come BEFORE JavaScript to avoid false detection
+    # Improved patterns to explicitly check for Java without JavaScript
+    if (re.search(r'\bjava\s', readme_lower, re.IGNORECASE) or 
+        re.search(r'\bjava\.', readme_lower, re.IGNORECASE) or 
+        re.search(r'\bjava\b(?!script)', readme_lower, re.IGNORECASE)):
+        return "java"
+    
     # JavaScript check with common patterns, using word boundaries for npm
     if ("javascript" in readme_lower or 
         "node.js" in readme_lower or 
         "nodejs" in readme_lower or 
         re.search(r'\bnpm\b', readme_lower)):
         return "javascript"
-    
-    # Java check - avoid matching "javascript" by using word boundary
-    # Pattern: matches "java " or "java." but not "javascript"
-    if re.search(r'\bjava\b(?!script)', readme_lower, re.IGNORECASE):
-        return "java"
     
     # Rust check
     if "rust" in readme_lower:
@@ -684,7 +686,7 @@ async def clarify_requirements(
         )
         logger.info(
             f"Clarification initiated successfully for job {job_id}",
-            result_keys=list(result.keys()) if isinstance(result, dict) else None
+            extra={"result_keys": list(result.keys()) if isinstance(result, dict) else None}
         )
         return result
     except Exception as e:

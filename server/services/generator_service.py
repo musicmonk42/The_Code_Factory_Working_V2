@@ -156,12 +156,16 @@ class GeneratorService:
             return result.get("data", {})
 
         # Fallback
+        from datetime import timezone
+        
         return {
             "job_id": job_id,
             "stage": "generator_generation",
-            "status": "running",
-            "progress": 35.0,
+            "status": "running",  # Required field
+            "progress_percent": 35.0,  # Changed from 'progress' to 'progress_percent'
             "message": "Generating code from README (direct fallback)",
+            "artifacts_generated": [],  # Required field
+            "updated_at": datetime.now(timezone.utc),  # Required field
         }
 
     async def get_job_logs(self, job_id: str, limit: int = 100) -> List[Dict[str, Any]]:
@@ -231,11 +235,11 @@ class GeneratorService:
                     payload=payload,
                 )
                 logger.info(f"Clarification for job {job_id} routed to generator via OmniCore")
-                return result.get("data", {
-                    "job_id": job_id,
-                    "status": "clarification_initiated",
-                    "message": "Clarification request sent to generator",
-                })
+                data = result.get("data", {})
+                # Ensure job_id is always included in the response
+                if "job_id" not in data:
+                    data["job_id"] = job_id
+                return data
             except Exception as e:
                 logger.error(
                     f"Error routing clarification through OmniCore for job {job_id}: {e}",

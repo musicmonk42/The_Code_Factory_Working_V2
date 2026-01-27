@@ -9,7 +9,8 @@ without eagerly importing the whole subpackage (and its optional deps).
 
 from __future__ import annotations
 
-import importlib
+# Change from lazy imports to explicit imports for pytest compatibility
+from . import agents, api, cli, graph, io_utils, runtime, atco_signal
 
 __all__ = [
     "agents",
@@ -20,13 +21,3 @@ __all__ = [
     "runtime",
     "atco_signal",
 ]
-
-
-def __getattr__(name: str):
-    if name in __all__:
-        return importlib.import_module(f"{__name__}.{name}")
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-def __dir__():
-    return sorted(list(globals().keys()) + __all__)

@@ -110,8 +110,8 @@ class OmniCoreService:
             logger.warning(f"Some agents unavailable: {', '.join(unavailable)}")
             if self.agent_config and self.agent_config.strict_mode:
                 raise RuntimeError(
-                    f"STRICT_MODE enabled but agents unavailable: {', '.join(unavailable)}. "
-                    "Check LLM configuration and dependencies."
+                    f"STRICT_MODE: Required agents are unavailable: {', '.join(unavailable)}. "
+                    f"Install required dependencies or disable strict mode."
                 )
         
         # Log system state and what triggers agent execution
@@ -738,6 +738,8 @@ class OmniCoreService:
             return {
                 "status": "error",
                 "message": f"Codegen agent not available: {error_msg}",
+                "agent_available": False,
+                "job_id": job_id,
                 "missing_dependencies": error.missing_dependencies if error else [],
             }
         
@@ -857,6 +859,8 @@ class OmniCoreService:
             return {
                 "status": "error",
                 "message": f"Testgen agent not available: {error_msg}",
+                "agent_available": False,
+                "job_id": job_id,
                 "missing_dependencies": error.missing_dependencies if error else [],
             }
         
@@ -922,6 +926,8 @@ class OmniCoreService:
             return {
                 "status": "error",
                 "message": f"Deploy agent not available: {error_msg}",
+                "agent_available": False,
+                "job_id": job_id,
                 "missing_dependencies": error.missing_dependencies if error else [],
             }
         
@@ -970,6 +976,8 @@ class OmniCoreService:
             return {
                 "status": "error",
                 "message": f"Docgen agent not available: {error_msg}",
+                "agent_available": False,
+                "job_id": job_id,
                 "missing_dependencies": error.missing_dependencies if error else [],
             }
         
@@ -1020,6 +1028,8 @@ class OmniCoreService:
             return {
                 "status": "error",
                 "message": f"Critique agent not available: {error_msg}",
+                "agent_available": False,
+                "job_id": job_id,
                 "missing_dependencies": error.missing_dependencies if error else [],
             }
         
