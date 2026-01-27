@@ -44,6 +44,36 @@
       "signature": null,
       "is_quarantined": false,
       "health": null
+    },
+    "MetricsService": {
+      "name": "MetricsService",
+      "kind": "core_service",
+      "version": "1.0.0",
+      "author": "Arbiter Team",
+      "description": null,
+      "tags": [],
+      "loaded_at": 1769530242.6396093,
+      "plugin_type": "class",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
+    },
+    "Utils": {
+      "name": "Utils",
+      "kind": "core_service",
+      "version": "1.0.0",
+      "author": "Arbiter Team",
+      "description": null,
+      "tags": [],
+      "loaded_at": 1769530243.1249166,
+      "plugin_type": "class",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
     }
   },
   "analytics": {

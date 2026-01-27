@@ -2,6 +2,7 @@
 
 import os
 import sys
+import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
@@ -13,7 +14,6 @@ _ORIGINAL_MODULES = {}
 _MOCKED_MODULE_NAMES = [
     "envs",
     "envs.evolution",
-    "arbiter.arbiter_array_backend",
 ]
 
 # Save original modules before mocking
@@ -21,20 +21,20 @@ for _mod in _MOCKED_MODULE_NAMES:
     if _mod in sys.modules:
         _ORIGINAL_MODULES[_mod] = sys.modules[_mod]
 
-# Mock modules before imports
-sys.modules["envs"] = MagicMock()
-sys.modules["envs.evolution"] = MagicMock()
+# Create proper stub modules instead of MagicMock (to avoid __path__ issues)
+def _create_stub_module(name):
+    """Create a proper stub module that won't break import machinery."""
+    stub = types.ModuleType(name)
+    stub.__file__ = f"<stub {name}>"
+    stub.__path__ = []
+    stub.__spec__ = None
+    return stub
 
-# Mock ArrayBackend
-mock_array_backend = MagicMock()
-mock_array_backend.array = lambda x: np.array(x)
-mock_array_backend.asnumpy = lambda x: (
-    np.array(x) if not isinstance(x, np.ndarray) else x
-)
-sys.modules["arbiter.arbiter_array_backend"] = MagicMock()
-sys.modules["arbiter.arbiter_array_backend"].ConcreteArrayBackend = MagicMock(
-    return_value=mock_array_backend
-)
+# Mock modules before imports with proper stubs
+if "envs" not in sys.modules or isinstance(sys.modules.get("envs"), MagicMock):
+    sys.modules["envs"] = _create_stub_module("envs")
+if "envs.evolution" not in sys.modules or isinstance(sys.modules.get("envs.evolution"), MagicMock):
+    sys.modules["envs.evolution"] = _create_stub_module("envs.evolution")
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
@@ -50,8 +50,10 @@ def _restore_original_modules():
     for mod_name in _MOCKED_MODULE_NAMES:
         if mod_name in _ORIGINAL_MODULES:
             sys.modules[mod_name] = _ORIGINAL_MODULES[mod_name]
-        elif mod_name in sys.modules and isinstance(sys.modules[mod_name], MagicMock):
-            del sys.modules[mod_name]
+        elif mod_name in sys.modules and isinstance(sys.modules[mod_name], types.ModuleType):
+            # Check if it's our stub module
+            if hasattr(sys.modules[mod_name], '__file__') and '<stub' in str(sys.modules[mod_name].__file__):
+                del sys.modules[mod_name]
 
 
 @pytest.fixture(scope="module", autouse=True)

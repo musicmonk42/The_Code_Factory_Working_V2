@@ -37,11 +37,12 @@ def _import_backend():
             pass
 
     here = Path(__file__).resolve()
-    repo_root = here.parents[2]
-    for p in (repo_root, repo_root / "arbiter"):
-        s = str(p)
-        if s not in sys.path:
-            sys.path.insert(0, s)
+    repo_root = here.parents[2]  # self_fixing_engineer directory
+    # Only add repo_root (self_fixing_engineer) to path, NOT repo_root/arbiter 
+    # because arbiter.py would shadow the arbiter package
+    s = str(repo_root)
+    if s not in sys.path:
+        sys.path.insert(0, s)
 
     for name in candidates:
         try:

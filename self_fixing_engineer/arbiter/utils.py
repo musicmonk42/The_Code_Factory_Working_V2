@@ -361,19 +361,3 @@ class UtilsPlugin(PluginBase):
 registry.register(
     kind=PlugInKind.CORE_SERVICE, name="Utils", version="1.0.0", author="Arbiter Team"
 )(UtilsPlugin)
-
-# Register as a plugin
-registry.register(
-    kind=PlugInKind.CORE_SERVICE, name="Utils", version="1.0.0", author="Arbiter Team"
-)(
-    type(
-        "Utils",
-        (object,),
-        {
-            "random_chance": staticmethod(random_chance),
-            "get_system_metrics": staticmethod(get_system_metrics),
-            "get_system_metrics_async": staticmethod(get_system_metrics_async),
-            "check_service_health": staticmethod(check_service_health),
-        },
-    )
-)
