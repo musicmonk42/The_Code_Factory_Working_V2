@@ -1,7 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from test_generation.gen_agent.gen_plugins import (
+from test_generation.gen_plugins import (
     LANGUAGE_GENERATORS,
     PythonTestGenerator,
     generate_tests,

@@ -1007,25 +1007,28 @@ def _get_alert_operator() -> Callable:
 
 
 # --- Core Initialization Logic ---
-try:
-    # Use a dummy stub for the missing modules during testing.
-    # This prevents the ModuleNotFoundError from being raised and allows the fallback logic to be tested.
+# Only register mock modules if the real ones are not available
+# This prevents breaking tests that need to import the real modules
+import importlib.util as _importlib_util
+
+if _importlib_util.find_spec("analyzer.core_utils") is None:
     class MockAnalyzerCoreUtils:
         alert_operator = MagicMock()
         scrub_secrets = MagicMock(side_effect=lambda x: x)
+        # Add commonly expected attributes for compatibility
+        SERVICE_NAME = "mock_service"
+    sys.modules["analyzer.core_utils"] = MockAnalyzerCoreUtils
 
+if _importlib_util.find_spec("analyzer.core_audit") is None:
     class MockAnalyzerCoreAudit:
         get_audit_logger = MagicMock(return_value=MagicMock())
         audit_logger = MagicMock()
+    sys.modules["analyzer.core_audit"] = MockAnalyzerCoreAudit
 
+if _importlib_util.find_spec("analyzer.core_secrets") is None:
     class MockAnalyzerCoreSecrets:
         SECRETS_MANAGER = MagicMock()
-
-    sys.modules["analyzer.core_utils"] = MockAnalyzerCoreUtils
-    sys.modules["analyzer.core_audit"] = MockAnalyzerCoreAudit
     sys.modules["analyzer.core_secrets"] = MockAnalyzerCoreSecrets
-except ImportError:
-    pass
 
 
 @tenacity.retry(
