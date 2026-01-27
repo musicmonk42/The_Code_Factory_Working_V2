@@ -1330,6 +1330,12 @@ def _initialize_aiohttp_protection():
         _ORIGINAL_AIOHTTP_TYPES = {}
 
 
+# ---- Initialize aiohttp http_exceptions shim IMMEDIATELY ----
+# This MUST run at module load time, before any test modules import aiohttp
+# or libraries that depend on aiohttp.http_exceptions (like aiohttp_client_cache)
+_initialize_aiohttp_protection()
+
+
 # ---- Protect common exception types from being mocked ----
 # Store references to common exception types before they can be mocked
 # DEFERRED: Moved to _initialize_crypto_protection() called from fixture

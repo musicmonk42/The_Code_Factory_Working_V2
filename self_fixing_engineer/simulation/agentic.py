@@ -60,6 +60,10 @@ def check_and_import(
             alert_operator(
                 f"CRITICAL: Missing required dependency '{package_name}'. Agentic service cannot start."
             )
+            # Don't exit during test collection - it breaks pytest
+            if os.environ.get("TESTING") == "1" or os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("PYTEST_COLLECTING"):
+                agentic_logger.warning(f"Skipping sys.exit in test environment for missing critical dependency: {package_name}")
+                return None
             sys.exit(1)
         else:
             agentic_logger.warning(
