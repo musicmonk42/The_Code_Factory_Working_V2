@@ -120,19 +120,25 @@ async def lifespan(app: FastAPI):
     logger.info("INITIALIZING PLATFORM CONFIGURATION")
     logger.info("=" * 80)
     
+    config = None
     try:
         config = initialize_config(log_summary=True)
         
-        # Validate API keys (fail-fast in production)
-        validate_required_api_keys(config, fail_fast=config.is_production)
+        # Validate API keys - log warnings but don't block startup
+        # This allows healthchecks to pass even if API keys aren't configured yet
+        # The /ready endpoint will indicate degraded state if keys are missing
+        api_keys_valid = validate_required_api_keys(config, fail_fast=False)
+        
+        if not api_keys_valid and config.is_production:
+            logger.warning("=" * 80)
+            logger.warning("WARNING: No LLM API keys configured!")
+            logger.warning("The server will start but LLM functionality will be unavailable.")
+            logger.warning("Configure at least one LLM API key for full functionality.")
+            logger.warning("=" * 80)
         
     except Exception as e:
         logger.error(f"Configuration initialization failed: {e}", exc_info=True)
-        if config and config.is_production:
-            # In production, fail fast on configuration errors
-            raise RuntimeError(f"Production configuration validation failed: {e}") from e
-        else:
-            logger.warning("Continuing startup despite configuration errors (non-production mode)")
+        logger.warning("Continuing startup despite configuration errors")
     
     # Start the server IMMEDIATELY - agent loading happens in background
     # Use distributed lock to prevent duplicate initialization across containers
