@@ -456,6 +456,136 @@ class TestClarifier(unittest.IsolatedAsyncioTestCase):
         # History should be loaded (might be empty if decryption fails, but no crash)
         self.assertIsInstance(new_clarifier.history, list)
 
+    async def test_detect_ambiguities_with_llm(self):
+        """Test detect_ambiguities with working LLM."""
+        # Setup mock LLM to return JSON list of ambiguities
+        mock_llm_instance.generate = AsyncMock(
+            return_value='["Database not specified", "API type unclear"]'
+        )
+        
+        readme_content = "Build a web application with user authentication"
+        result = await self.clarifier.detect_ambiguities(readme_content)
+        
+        # Should return list of ambiguities
+        self.assertIsInstance(result, list)
+        self.assertTrue(len(result) > 0)
+        mock_llm_instance.generate.assert_called_once()
+
+    async def test_detect_ambiguities_rule_based_fallback(self):
+        """Test detect_ambiguities falls back to rule-based when LLM fails."""
+        # Setup mock LLM to fail
+        mock_llm_instance.generate = AsyncMock(side_effect=Exception("LLM error"))
+        
+        readme_content = "Build a web application with database"
+        result = await self.clarifier.detect_ambiguities(readme_content)
+        
+        # Should return list of ambiguities from rule-based detection
+        self.assertIsInstance(result, list)
+        self.assertTrue(len(result) > 0)
+
+    async def test_detect_ambiguities_no_llm(self):
+        """Test detect_ambiguities with no LLM available."""
+        # Create clarifier without LLM
+        with patch(
+            "generator.clarifier.clarifier.setup_logging", return_value=mock_logger
+        ):
+            clarifier_no_llm = Clarifier(
+                llm=None,
+                prioritizer=mock_prioritizer_instance,
+                context_manager=self.context_manager_instance,
+            )
+        
+        readme_content = "Build a REST API with authentication"
+        result = await clarifier_no_llm.detect_ambiguities(readme_content)
+        
+        # Should use rule-based detection
+        self.assertIsInstance(result, list)
+        self.assertTrue(len(result) > 0)
+
+    async def test_generate_questions_with_llm(self):
+        """Test generate_questions with working LLM."""
+        # Setup mock LLM to return JSON list of questions
+        mock_llm_instance.generate = AsyncMock(
+            return_value='[{"question": "What database?", "category": "database"}]'
+        )
+        
+        ambiguities = ["Database not specified"]
+        result = await self.clarifier.generate_questions(ambiguities)
+        
+        # Should return list of question dictionaries
+        self.assertIsInstance(result, list)
+        self.assertTrue(len(result) > 0)
+        self.assertIsInstance(result[0], dict)
+        self.assertIn("question", result[0])
+        mock_llm_instance.generate.assert_called_once()
+
+    async def test_generate_questions_rule_based_fallback(self):
+        """Test generate_questions falls back to rule-based when LLM fails."""
+        # Setup mock LLM to fail
+        mock_llm_instance.generate = AsyncMock(side_effect=Exception("LLM error"))
+        
+        ambiguities = ["Database not specified", "API type unclear"]
+        result = await self.clarifier.generate_questions(ambiguities)
+        
+        # Should return list of questions from rule-based generation
+        self.assertIsInstance(result, list)
+        self.assertTrue(len(result) > 0)
+        self.assertIsInstance(result[0], dict)
+        self.assertIn("question", result[0])
+        self.assertIn("category", result[0])
+
+    async def test_generate_questions_no_llm(self):
+        """Test generate_questions with no LLM available."""
+        # Create clarifier without LLM
+        with patch(
+            "generator.clarifier.clarifier.setup_logging", return_value=mock_logger
+        ):
+            clarifier_no_llm = Clarifier(
+                llm=None,
+                prioritizer=mock_prioritizer_instance,
+                context_manager=self.context_manager_instance,
+            )
+        
+        ambiguities = ["Frontend framework not specified"]
+        result = await clarifier_no_llm.generate_questions(ambiguities)
+        
+        # Should use rule-based generation
+        self.assertIsInstance(result, list)
+        self.assertTrue(len(result) > 0)
+        self.assertIsInstance(result[0], dict)
+        self.assertIn("question", result[0])
+
+    async def test_detect_ambiguities_limits_results(self):
+        """Test that detect_ambiguities limits the number of results."""
+        # Setup mock LLM to return many ambiguities
+        many_ambiguities = [f"Ambiguity {i}" for i in range(20)]
+        mock_llm_instance.generate = AsyncMock(
+            return_value=json.dumps(many_ambiguities)
+        )
+        
+        readme_content = "Build something"
+        result = await self.clarifier.detect_ambiguities(readme_content)
+        
+        # Should limit to 10 for LLM-based
+        self.assertLessEqual(len(result), 10)
+
+    async def test_generate_questions_limits_results(self):
+        """Test that generate_questions limits the number of results."""
+        # Setup mock LLM to return many questions
+        many_questions = [
+            {"question": f"Question {i}?", "category": "general"} 
+            for i in range(20)
+        ]
+        mock_llm_instance.generate = AsyncMock(
+            return_value=json.dumps(many_questions)
+        )
+        
+        ambiguities = ["Something unclear"]
+        result = await self.clarifier.generate_questions(ambiguities)
+        
+        # Should limit to 10 for LLM-based
+        self.assertLessEqual(len(result), 10)
+
 
 class TestUtilityFunctions(unittest.TestCase):
     """Test utility functions."""
