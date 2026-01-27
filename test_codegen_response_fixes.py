@@ -31,14 +31,15 @@ def _clean_code_block(code_content: str) -> str:
     
     text = code_content.strip()
     
-    # Strategy 1: Extract from language-specific markdown fences
-    code_block_pattern = r'```(?:python|py)?\s*\n(.*?)```'
+    # Strategy 1: Extract from language-specific markdown fences (```python, ```py)
+    # Non-optional language specifier to avoid overlap with Strategy 2
+    code_block_pattern = r'```(?:python|py)\s*\n(.*?)```'
     matches = re.findall(code_block_pattern, text, flags=re.DOTALL | re.IGNORECASE)
     
     if matches:
         return max(matches, key=len).strip()
     
-    # Strategy 2: Extract from generic markdown fences
+    # Strategy 2: Extract from generic markdown fences (```)
     generic_pattern = r'```\s*\n(.*?)```'
     matches = re.findall(generic_pattern, text, flags=re.DOTALL)
     if matches:
@@ -48,8 +49,12 @@ def _clean_code_block(code_content: str) -> str:
     lines = text.split('\n')
     code_start_idx = 0
     
-    PREAMBLE_MARKERS = ('here', 'this', 'the following', 'below', 'i ', "i'", "i've")
-    CODE_MARKERS = ('import ', 'from ', 'def ', 'class ', '#', '"""', "'''", '@')
+    PREAMBLE_PATTERNS = (
+        'here is', 'here\'s', 'this is', 'this will', 
+        'the following', 'below is', 'below you',
+        'i will', 'i\'ve', 'i have'
+    )
+    CODE_MARKERS = ('import ', 'from ', 'def ', 'class ', '#', '"""', "'''", '@', 'if ', 'for ', 'while ')
     
     for i, line in enumerate(lines):
         stripped = line.strip().lower()
@@ -57,14 +62,14 @@ def _clean_code_block(code_content: str) -> str:
         if not stripped:
             continue
             
-        if stripped.startswith(PREAMBLE_MARKERS):
+        if any(stripped.startswith(pattern) for pattern in PREAMBLE_PATTERNS):
             code_start_idx = i + 1
             continue
             
         if stripped.startswith(CODE_MARKERS):
             break
             
-        if '=' in stripped and not any(stripped.startswith(marker) for marker in PREAMBLE_MARKERS):
+        if '=' in stripped and not any(stripped.startswith(pattern) for pattern in PREAMBLE_PATTERNS):
             break
     
     return '\n'.join(lines[code_start_idx:]).strip()
@@ -313,6 +318,30 @@ def func():
     print("✓ Test passed: Multiline docstring handling")
 
 
+def test_clean_code_block_no_false_positives():
+    """Test that legitimate variable names starting with preamble words are preserved."""
+    # Arrange - Variable names that might trigger false positives
+    input_text = """here_config = {'key': 'value'}
+this_module_name = 'example'
+the_following_items = [1, 2, 3]
+
+def process():
+    return here_config"""
+    expected = """here_config = {'key': 'value'}
+this_module_name = 'example'
+the_following_items = [1, 2, 3]
+
+def process():
+    return here_config"""
+    
+    # Act
+    result = _clean_code_block(input_text)
+    
+    # Assert
+    assert result == expected, f"Expected:\n{expected}\n\nGot:\n{result}"
+    print("✓ Test passed: No false positives on variable names")
+
+
 if __name__ == "__main__":
     print("=" * 70)
     print("Running comprehensive _clean_code_block test suite")
@@ -347,10 +376,11 @@ if __name__ == "__main__":
     print("-" * 70)
     test_clean_code_block_nested_quotes()
     test_clean_code_block_multiline_docstring()
+    test_clean_code_block_no_false_positives()
     
     print()
     print("=" * 70)
-    print("✅ All 13 tests passed successfully!")
+    print("✅ All 14 tests passed successfully!")
     print("=" * 70)
     print()
     print("Test Coverage Summary:")
@@ -359,4 +389,5 @@ if __name__ == "__main__":
     print("  - Multiple code blocks handling: ✓")
     print("  - Edge cases (empty, whitespace): ✓")
     print("  - Complex Python patterns: ✓")
+    print("  - False positive prevention: ✓")
 

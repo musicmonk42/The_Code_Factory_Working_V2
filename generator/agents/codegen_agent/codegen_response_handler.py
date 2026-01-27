@@ -512,8 +512,9 @@ def _clean_code_block(code_content: str) -> str:
     text = code_content.strip()
     
     # Strategy 1: Extract from language-specific markdown fences (```python, ```py)
-    # Pattern matches: ```python\ncode\n``` or ```py\ncode\n```
-    code_block_pattern = r'```(?:python|py)?\s*\n(.*?)```'
+    # Pattern matches ONLY: ```python\ncode\n``` or ```py\ncode\n```
+    # Note: Non-optional language specifier to avoid overlap with Strategy 2
+    code_block_pattern = r'```(?:python|py)\s*\n(.*?)```'
     matches = re.findall(code_block_pattern, text, flags=re.DOTALL | re.IGNORECASE)
     
     if matches:
@@ -526,6 +527,7 @@ def _clean_code_block(code_content: str) -> str:
         return largest_match
     
     # Strategy 2: Extract from generic markdown fences (```)
+    # This pattern matches ANY fence without a language specifier or with other languages
     generic_pattern = r'```\s*\n(.*?)```'
     matches = re.findall(generic_pattern, text, flags=re.DOTALL)
     if matches:
@@ -542,9 +544,14 @@ def _clean_code_block(code_content: str) -> str:
     code_start_idx = 0
     
     # Conversational markers that indicate non-code preamble
-    PREAMBLE_MARKERS = ('here', 'this', 'the following', 'below', 'i ', "i'", "i've")
+    # These are checked at line start after stripping and must be followed by space or colon
+    PREAMBLE_PATTERNS = (
+        'here is', 'here\'s', 'this is', 'this will', 
+        'the following', 'below is', 'below you',
+        'i will', 'i\'ve', 'i have'
+    )
     # Code markers that indicate the start of actual code
-    CODE_MARKERS = ('import ', 'from ', 'def ', 'class ', '#', '"""', "'''", '@')
+    CODE_MARKERS = ('import ', 'from ', 'def ', 'class ', '#', '"""', "'''", '@', 'if ', 'for ', 'while ')
     
     for i, line in enumerate(lines):
         stripped = line.strip().lower()
@@ -553,8 +560,8 @@ def _clean_code_block(code_content: str) -> str:
         if not stripped:
             continue
             
-        # Skip lines that look like conversational preamble
-        if stripped.startswith(PREAMBLE_MARKERS):
+        # Skip lines that look like conversational preamble (phrase-based, more specific)
+        if any(stripped.startswith(pattern) for pattern in PREAMBLE_PATTERNS):
             code_start_idx = i + 1
             continue
             
@@ -563,7 +570,7 @@ def _clean_code_block(code_content: str) -> str:
             break
             
         # Check for assignment statements (but not in conversational context)
-        if '=' in stripped and not any(stripped.startswith(marker) for marker in PREAMBLE_MARKERS):
+        if '=' in stripped and not any(stripped.startswith(pattern) for pattern in PREAMBLE_PATTERNS):
             break
     
     result = '\n'.join(lines[code_start_idx:]).strip()
