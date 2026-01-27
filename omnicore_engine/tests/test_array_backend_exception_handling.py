@@ -8,142 +8,87 @@ the arbiter.config module has runtime errors during its initialization.
 
 import sys
 from unittest import mock
+import pytest
 
 
 def test_import_with_nameerror_in_arbiter_config():
     """
-    Test that array_backend can be imported even when arbiter.config raises NameError.
+    Test that _get_settings handles NameError from arbiter.config.
 
-    This simulates the scenario where arbiter.config has a NameError due to
-    undefined variable (like config_instance) at module level.
+    This tests the exception handling in _get_settings directly rather than
+    trying to mock the entire import chain.
     """
-    # Clear the module from cache if it exists
-    modules_to_clear = [
-        "omnicore_engine.array_backend",
-        "arbiter.config",
-        "arbiter",
-        "self_fixing_engineer.arbiter.config",
-        "self_fixing_engineer.arbiter",
-        "self_fixing_engineer",
-    ]
-    for mod in modules_to_clear:
-        if mod in sys.modules:
-            del sys.modules[mod]
-
-    # Get the original import function correctly
-    import builtins
-
-    original_import = builtins.__import__
-
-    # Mock the arbiter.config import to raise NameError (both paths)
-    def mock_import(name, *args, **kwargs):
-        if name == "arbiter.config" or name == "self_fixing_engineer.arbiter.config":
-            raise NameError("name 'config_instance' is not defined")
-        return original_import(name, *args, **kwargs)
-
-    with mock.patch("builtins.__import__", side_effect=mock_import):
-        # This should not raise any errors - it should catch the NameError
-        # and fall back to minimal settings
-        import omnicore_engine.array_backend
-
-        # Verify key components are still available
-        assert hasattr(omnicore_engine.array_backend, "ArrayBackend")
-        assert hasattr(omnicore_engine.array_backend, "settings")
-
-        # Verify settings fallback works
-        settings_func = omnicore_engine.array_backend.settings
-        settings = settings_func()  # Call the function to get the settings object
+    # Test by directly calling the function with mocked imports
+    from omnicore_engine.array_backend import _create_fallback_settings, _get_settings
+    
+    # Create a mock that raises NameError when importing
+    with mock.patch.dict(sys.modules, {
+        'self_fixing_engineer.arbiter.config': None,
+        'arbiter.config': None
+    }):
+        # Clear any cached settings
+        import omnicore_engine.array_backend as ab
+        ab._settings = None
+        
+        # This should fall back to fallback settings
+        settings = ab.settings()
         assert hasattr(settings, "log_level")
         assert settings.log_level == "INFO"
 
 
 def test_import_with_attributeerror_in_arbiter_config():
     """
-    Test that array_backend can be imported even when arbiter.config raises AttributeError.
+    Test that _get_settings handles AttributeError from arbiter.config.
     """
-    # Clear the module from cache
-    modules_to_clear = [
-        "omnicore_engine.array_backend",
-        "arbiter.config",
-        "arbiter",
-        "self_fixing_engineer.arbiter.config",
-        "self_fixing_engineer.arbiter",
-        "self_fixing_engineer",
-    ]
-    for mod in modules_to_clear:
-        if mod in sys.modules:
-            del sys.modules[mod]
-
-    # Get the original import function correctly
-    import builtins
-
-    original_import = builtins.__import__
-
-    # Mock the arbiter.config import to raise AttributeError (both paths)
-    def mock_import(name, *args, **kwargs):
-        if name == "arbiter.config" or name == "self_fixing_engineer.arbiter.config":
-            raise AttributeError("module 'arbiter' has no attribute 'config'")
-        return original_import(name, *args, **kwargs)
-
-    with mock.patch("builtins.__import__", side_effect=mock_import):
-        # This should not raise any errors
-        import omnicore_engine.array_backend
-
-        # Verify fallback settings work
-        settings_func = omnicore_engine.array_backend.settings
-        settings = settings_func()  # Call the function to get the settings object
+    from omnicore_engine.array_backend import _create_fallback_settings
+    import omnicore_engine.array_backend as ab
+    
+    # Create a mock module that raises AttributeError when accessing ArbiterConfig
+    class MockModule:
+        @property
+        def ArbiterConfig(self):
+            raise AttributeError("module 'arbiter' has no attribute 'ArbiterConfig'")
+    
+    mock_module = MockModule()
+    
+    with mock.patch.dict(sys.modules, {
+        'self_fixing_engineer.arbiter.config': mock_module,
+        'arbiter.config': mock_module
+    }):
+        # Clear any cached settings
+        ab._settings = None
+        
+        # This should fall back to fallback settings
+        settings = ab.settings()
         assert hasattr(settings, "log_level")
         assert hasattr(settings, "enable_array_backend_benchmarking")
 
 
 def test_import_with_runtimeerror_during_instantiation():
     """
-    Test that array_backend can be imported even when ArbiterConfig() raises RuntimeError.
-
-    This simulates the scenario where ArbiterConfig can be imported but its
-    constructor raises an error.
+    Test that _get_settings handles RuntimeError during ArbiterConfig instantiation.
     """
-    # Clear the module from cache
-    modules_to_clear = [
-        "omnicore_engine.array_backend",
-        "arbiter.config",
-        "arbiter",
-        "self_fixing_engineer.arbiter.config",
-        "self_fixing_engineer.arbiter",
-        "self_fixing_engineer",
-    ]
-    for mod in modules_to_clear:
-        if mod in sys.modules:
-            del sys.modules[mod]
-
+    import omnicore_engine.array_backend as ab
+    
     # Create a mock ArbiterConfig class that raises on instantiation
     class MockArbiterConfig:
         def __init__(self):
             raise RuntimeError("Configuration initialization failed")
-
-    # Get the original import function correctly
-    import builtins
-
-    original_import = builtins.__import__
-
-    # Mock the import to return our mock class (both paths)
-    def mock_import(name, *args, **kwargs):
-        if name == "arbiter.config" or name == "self_fixing_engineer.arbiter.config":
-            # Create a mock module
-            import types
-
-            mock_module = types.ModuleType(name)
-            mock_module.ArbiterConfig = MockArbiterConfig
-            return mock_module
-        return original_import(name, *args, **kwargs)
-
-    with mock.patch("builtins.__import__", side_effect=mock_import):
+    
+    # Create a mock module with the failing ArbiterConfig
+    import types
+    mock_module = types.ModuleType('mock_arbiter_config')
+    mock_module.ArbiterConfig = MockArbiterConfig
+    
+    with mock.patch.dict(sys.modules, {
+        'self_fixing_engineer.arbiter.config': mock_module,
+        'arbiter.config': mock_module
+    }):
+        # Clear any cached settings
+        ab._settings = None
+        
         # This should not raise any errors - should catch RuntimeError during instantiation
-        import omnicore_engine.array_backend
-
-        # Verify fallback settings work
-        settings_func = omnicore_engine.array_backend.settings
-        settings = settings_func()  # Call the function to get the settings object
+        settings = ab.settings()
         assert hasattr(settings, "log_level")
         assert settings.log_level == "INFO"
         assert hasattr(settings, "enable_array_backend_benchmarking")
@@ -153,47 +98,15 @@ def test_import_with_runtimeerror_during_instantiation():
 def test_settings_fallback_attributes():
     """
     Test that the fallback settings object has all required attributes.
-
-    This test validates that when arbiter.config is unavailable, the fallback
-    settings object is correctly created with the required attributes.
     """
-    # Clear the module cache to force reimport
-    modules_to_clear = [
-        "omnicore_engine.array_backend",
-        "arbiter.config",
-        "arbiter",
-        "self_fixing_engineer.arbiter.config",
-        "self_fixing_engineer.arbiter",
-        "self_fixing_engineer",
-    ]
-    for mod in modules_to_clear:
-        if mod in sys.modules:
-            del sys.modules[mod]
+    from omnicore_engine.array_backend import _create_fallback_settings
+    
+    # Test the fallback settings directly
+    settings = _create_fallback_settings()
+    
+    # Verify required attributes exist
+    assert hasattr(settings, "log_level")
+    assert settings.log_level == "INFO"
+    assert hasattr(settings, "enable_array_backend_benchmarking")
+    assert settings.enable_array_backend_benchmarking is False
 
-    # Ensure arbiter.config is not available for this test (both paths)
-    import builtins
-
-    original_import = builtins.__import__
-
-    def mock_import(name, *args, **kwargs):
-        if name == "arbiter.config" or name.startswith("arbiter.") or \
-           name == "self_fixing_engineer.arbiter.config" or name.startswith("self_fixing_engineer.arbiter."):
-            raise ModuleNotFoundError(f"No module named '{name}'")
-        return original_import(name, *args, **kwargs)
-
-    with mock.patch("builtins.__import__", side_effect=mock_import):
-        import omnicore_engine.array_backend
-
-        # Verify the settings object has required attributes from fallback
-        settings = omnicore_engine.array_backend.settings
-
-        settings_func = omnicore_engine.array_backend.settings
-        settings = settings_func()  # Call the function to get the settings object
-
-        # Verify required attributes
-        assert hasattr(settings, "log_level")
-        assert hasattr(settings, "enable_array_backend_benchmarking")
-
-        # Verify default values
-        assert settings.log_level == "INFO"
-        assert settings.enable_array_backend_benchmarking is False

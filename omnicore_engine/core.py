@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import inspect
 import logging
+import sys
 import types
 from abc import ABC, abstractmethod
 from datetime import date, datetime
@@ -427,15 +428,19 @@ class OmniCoreEngine:
 
     async def _initialize_component_instance(
         self, name: str, component_class: Type[Base], *args, **kwargs
-    ):
-        """Helper to initialize and store a component, handling locks."""
+    ) -> Optional[Any]:
+        """Helper to initialize and store a component, handling locks.
+        
+        Returns:
+            The component instance if successful, or existing instance if already initialized.
+        """
         if name not in self.component_locks:
             self.component_locks[name] = asyncio.Lock()
 
         async with self.component_locks[name]:
             if name in self.components:
                 self.logger.debug(f"Component '{name}' already initialized.")
-                return
+                return self.components[name]
 
             try:
                 self.logger.info(f"Initializing component: {name}...")
@@ -447,6 +452,7 @@ class OmniCoreEngine:
                         instance.initialize()
                 self.components[name] = instance
                 self.logger.info(f"Component '{name}' initialized successfully.")
+                return instance
             except Exception as e:
                 self.logger.error(
                     f"Failed to initialize component '{name}': {e}", exc_info=True
@@ -969,15 +975,20 @@ class OmniCoreEngine:
             self.logger.info("OmniCore Engine: Already shut down.")
             return
         self.logger.info("OmniCore Engine: Shutting down application components...")
-        for name, component in self.components.items():
+        for name, component in list(self.components.items()):
             if hasattr(component, "shutdown") and callable(component.shutdown):
                 try:
-                    await component.shutdown()
+                    if asyncio.iscoroutinefunction(component.shutdown):
+                        await component.shutdown()
+                    else:
+                        component.shutdown()
                     self.logger.info(f"Component '{name}' shut down successfully.")
                 except Exception as e:
                     self.logger.error(
                         f"Error shutting down component '{name}': {e}", exc_info=True
                     )
+        # Clear components after shutdown
+        self.components.clear()
         self._is_initialized = False
         self.logger.info("OmniCore Engine: All components shut down.")
 
@@ -1014,6 +1025,95 @@ class OmniCoreEngine:
         return self._is_initialized and all(
             getattr(comp, "is_healthy", True) for comp in self.components.values()
         )
+
+    async def health_check_all(self) -> Dict[str, Any]:
+        """
+        Perform health checks on all registered components.
+        
+        Returns:
+            Dictionary mapping component names to their health status.
+        """
+        results = {}
+        for name, component in self.components.items():
+            if hasattr(component, "health_check") and callable(component.health_check):
+                try:
+                    if asyncio.iscoroutinefunction(component.health_check):
+                        status = await component.health_check()
+                    else:
+                        status = component.health_check()
+                    results[name] = {"status": "healthy", **status} if isinstance(status, dict) else {"status": "healthy"}
+                except Exception as e:
+                    results[name] = {"status": "error", "message": str(e)}
+            else:
+                results[name] = {"status": "unknown", "message": "No health_check method"}
+        return results
+
+    async def perform_task(self, task_name: str, **kwargs) -> Optional[Any]:
+        """
+        Perform a task using the plugin system.
+        
+        Args:
+            task_name: Name of the task to perform
+            **kwargs: Additional arguments to pass to the plugin
+            
+        Returns:
+            Task result or None if no plugin found or error occurred
+        """
+        try:
+            # Try to get plugin registry
+            plugin_registry_module = sys.modules.get("omnicore_engine.plugin_registry")
+            if plugin_registry_module is None:
+                try:
+                    import omnicore_engine.plugin_registry as plugin_registry_module
+                except ImportError:
+                    self.logger.warning("Plugin registry not available")
+                    return None
+            
+            registry = getattr(plugin_registry_module, "PLUGIN_REGISTRY", None)
+            if registry is None:
+                self.logger.warning("PLUGIN_REGISTRY not found")
+                return None
+            
+            plugin = registry.get_plugin_for_task(task_name)
+            if plugin is None:
+                self.logger.debug(f"No plugin found for task: {task_name}")
+                return None
+            
+            if asyncio.iscoroutinefunction(plugin.execute):
+                return await plugin.execute(action=task_name, **kwargs)
+            else:
+                return plugin.execute(action=task_name, **kwargs)
+        except Exception as e:
+            self.logger.error(f"Error performing task {task_name}: {e}")
+            return None
+
+    async def _shutdown_component_instance(self, name: str) -> bool:
+        """
+        Shutdown a specific component instance.
+        
+        Args:
+            name: Name of the component to shutdown
+            
+        Returns:
+            True if shutdown was successful, False otherwise
+        """
+        if name not in self.components:
+            self.logger.warning(f"Component '{name}' not found for shutdown")
+            return False
+        
+        component = self.components[name]
+        try:
+            if hasattr(component, "shutdown"):
+                if asyncio.iscoroutinefunction(component.shutdown):
+                    await component.shutdown()
+                else:
+                    component.shutdown()
+            del self.components[name]
+            self.logger.info(f"Component '{name}' shut down successfully")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error shutting down component '{name}': {e}")
+            return False
 
     async def _handle_shutdown(self, message: Dict[str, Any]):
         self.logger.info(

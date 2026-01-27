@@ -283,8 +283,8 @@ class TestRunImportFixer:
     """Test the run_import_fixer helper function"""
 
     @pytest.mark.integration
-    @patch("omnicore_engine.engines.asyncio.get_event_loop")
-    def test_run_import_fixer(self, mock_get_loop):
+    @patch("omnicore_engine.engines.asyncio.run")
+    def test_run_import_fixer(self, mock_asyncio_run):
         """Test synchronous import fixer wrapper"""
         from omnicore_engine.engines import ENGINE_REGISTRY, run_import_fixer
 
@@ -292,14 +292,12 @@ class TestRunImportFixer:
         mock_fixer.fix_file = AsyncMock(return_value="fixed code")
         ENGINE_REGISTRY["import_fixer"] = {"engine": mock_fixer}
 
-        mock_loop = Mock()
-        mock_loop.run_until_complete = Mock(return_value="fixed code")
-        mock_get_loop.return_value = mock_loop
+        mock_asyncio_run.return_value = "fixed code"
 
         result = run_import_fixer("/test/file.py")
 
         assert result == "fixed code"
-        mock_loop.run_until_complete.assert_called_once()
+        mock_asyncio_run.assert_called_once()
 
 
 class TestOmniCoreOmega:
@@ -530,8 +528,10 @@ class TestCrewConfigLoading:
     @patch("omnicore_engine.engines.CrewManager")
     @patch("omnicore_engine.engines.TestGenerationOrchestrator")
     @patch("omnicore_engine.engines.create_import_fixer_engine")
+    @patch("omnicore_engine.engines.OmniCoreOmega._find_crew_config")
     def test_load_crew_config_with_agents(
         self,
+        mock_find_config,
         mock_fixer,
         mock_test_gen,
         mock_crew_class,
@@ -545,6 +545,9 @@ class TestCrewConfigLoading:
         """Test loading crew config with agents"""
         from omnicore_engine.engines import OmniCoreOmega
 
+        # Make _find_crew_config return a valid path
+        mock_find_config.return_value = "/path/to/crew_config.yaml"
+        
         mock_fixer.return_value = Mock()
         mock_crew_instance = Mock()
         mock_crew_instance.add_agent = Mock()

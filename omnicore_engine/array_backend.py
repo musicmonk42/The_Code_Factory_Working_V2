@@ -204,27 +204,69 @@ def _log_debug(msg: str, **kwargs) -> None:
 #  Optional Prometheus
 # --------------------------------------------------------------------------- #
 try:
-    from prometheus_client import Counter, Gauge
+    from prometheus_client import Counter, Gauge, REGISTRY
+    from prometheus_client.registry import CollectorRegistry
 
     _PROMETHEUS_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _PROMETHEUS_AVAILABLE = False
-    Counter = Gauge = None
+    Counter = Gauge = REGISTRY = CollectorRegistry = None
 
-if _PROMETHEUS_AVAILABLE:
-    METRIC_BACKEND_SELECTED = Counter(
-        "omnicore_array_backend_selected_total",
-        "Which backend was selected at runtime",
-        ["backend"],
-    )
-    METRIC_BACKEND_FALLBACK = Counter(
-        "omnicore_array_backend_fallback_total",
-        "Number of times we fell back to NumPy",
-        ["reason"],
-    )
-else:
-    METRIC_BACKEND_SELECTED = None
-    METRIC_BACKEND_FALLBACK = None
+# Use a module-level flag to ensure metrics are only created once
+_METRICS_INITIALIZED = False
+METRIC_BACKEND_SELECTED = None
+METRIC_BACKEND_FALLBACK = None
+
+
+def _init_prometheus_metrics():
+    """Initialize Prometheus metrics only once, handling duplicate registration."""
+    global _METRICS_INITIALIZED, METRIC_BACKEND_SELECTED, METRIC_BACKEND_FALLBACK
+    
+    if _METRICS_INITIALIZED or not _PROMETHEUS_AVAILABLE:
+        return
+    
+    try:
+        # Check if metrics already exist in the registry
+        existing_names = set()
+        if REGISTRY and hasattr(REGISTRY, '_names_to_collectors'):
+            existing_names = set(REGISTRY._names_to_collectors.keys())
+        
+        # Only create if not already registered
+        if "omnicore_array_backend_selected_total" not in existing_names:
+            METRIC_BACKEND_SELECTED = Counter(
+                "omnicore_array_backend_selected_total",
+                "Which backend was selected at runtime",
+                ["backend"],
+            )
+        else:
+            # Get existing metric
+            for collector in REGISTRY._names_to_collectors.values():
+                if hasattr(collector, '_name') and collector._name == "omnicore_array_backend_selected":
+                    METRIC_BACKEND_SELECTED = collector
+                    break
+        
+        if "omnicore_array_backend_fallback_total" not in existing_names:
+            METRIC_BACKEND_FALLBACK = Counter(
+                "omnicore_array_backend_fallback_total",
+                "Number of times we fell back to NumPy",
+                ["reason"],
+            )
+        else:
+            # Get existing metric
+            for collector in REGISTRY._names_to_collectors.values():
+                if hasattr(collector, '_name') and collector._name == "omnicore_array_backend_fallback":
+                    METRIC_BACKEND_FALLBACK = collector
+                    break
+        
+        _METRICS_INITIALIZED = True
+    except Exception as e:
+        # Log but don't fail on metrics initialization errors
+        logging.debug(f"Failed to initialize Prometheus metrics: {e}")
+        _METRICS_INITIALIZED = True  # Mark as initialized to avoid repeated attempts
+
+
+# Initialize metrics at module load time
+_init_prometheus_metrics()
 
 
 def _inc_selected(backend: str) -> None:

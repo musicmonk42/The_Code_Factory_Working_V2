@@ -740,6 +740,10 @@ class TestMainLoop:
             supervisor.publish_meta_status = AsyncMock()
             # Mock _rate_limited_operation to return a dict with "changes" key
             supervisor._rate_limited_operation = AsyncMock(return_value={"changes": []})
+            # Mock db to prevent NoneType errors
+            mock_db = Mock()
+            mock_db.get_preferences = AsyncMock(return_value={})
+            supervisor.db = mock_db
 
             # Run with max iterations of 1 to verify focus works
             with patch("omnicore_engine.meta_supervisor.MAX_ITERATIONS", 1):
