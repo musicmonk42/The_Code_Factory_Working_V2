@@ -30,6 +30,7 @@ from generator.audit_log.audit_crypto import secrets
 from generator.audit_log.audit_crypto.secrets import (
     AWSSecretsManager,
     DummySecretManager,
+    EnvVarSecretManager,
     GCPSecretManager,
     SecretAccessRateLimitExceeded,
     SecretDecodingError,
@@ -268,6 +269,29 @@ class TestSecretManagerConfiguration:
             reloaded_secrets._secret_manager, reloaded_secrets.DummySecretManager
         )
 
+    def test_selects_envvar(self, mocker, reload_secrets_module):
+        """Test that EnvVarSecretManager is selected when USE_ENV_SECRETS=true."""
+        mocker.patch.dict(os.environ, {"USE_ENV_SECRETS": "true"})
+        reloaded_secrets = reload_secrets_module()
+        assert isinstance(
+            reloaded_secrets._secret_manager, reloaded_secrets.EnvVarSecretManager
+        )
+
+    def test_production_guardrail_passes_with_envvar(self, mocker, reload_secrets_module):
+        """Test that EnvVarSecretManager passes production guardrails."""
+        mocker.patch.dict(
+            os.environ,
+            {
+                "PYTHON_ENV": "production",
+                "AUDIT_LOG_DEV_MODE": "false",
+                "USE_ENV_SECRETS": "true",
+            },
+        )
+        reloaded_secrets = reload_secrets_module()
+        assert isinstance(
+            reloaded_secrets._secret_manager, reloaded_secrets.EnvVarSecretManager
+        )
+
 
 # --- FIX: Removed @pytest.mark.asyncio from class ---
 class TestAWSSecretsManager:
@@ -455,6 +479,46 @@ class TestDummySecretManager:
     def test_is_not_production_ready(self):
         manager = DummySecretManager()
         assert manager.is_production_ready is False
+
+
+# --- Tests for EnvVarSecretManager ---
+class TestEnvVarSecretManager:
+
+    @pytest.mark.asyncio
+    async def test_get_secret_success(self, mocker):
+        """Test that EnvVarSecretManager successfully retrieves a secret from env var."""
+        mocker.patch.dict(os.environ, {"MY_SECRET": "secret_value"})
+        manager = EnvVarSecretManager()
+        secret = await manager.get_secret("MY_SECRET")
+        assert secret == b"secret_value"
+
+    @pytest.mark.asyncio
+    async def test_get_secret_not_found(self):
+        """Test that EnvVarSecretManager raises SecretNotFoundError when env var is missing."""
+        manager = EnvVarSecretManager()
+        with pytest.raises(SecretNotFoundError, match="Environment variable 'MISSING_VAR' not found"):
+            await manager.get_secret("MISSING_VAR")
+
+    @pytest.mark.asyncio
+    async def test_get_secret_empty_string(self, mocker):
+        """Test that EnvVarSecretManager returns empty bytes for an empty env var."""
+        mocker.patch.dict(os.environ, {"EMPTY_SECRET": ""})
+        manager = EnvVarSecretManager()
+        secret = await manager.get_secret("EMPTY_SECRET")
+        assert secret == b""
+
+    @pytest.mark.asyncio
+    async def test_get_secret_unicode(self, mocker):
+        """Test that EnvVarSecretManager handles unicode characters correctly."""
+        mocker.patch.dict(os.environ, {"UNICODE_SECRET": "héllo wörld 🌍"})
+        manager = EnvVarSecretManager()
+        secret = await manager.get_secret("UNICODE_SECRET")
+        assert secret == "héllo wörld 🌍".encode("utf-8")
+
+    def test_is_production_ready(self):
+        """Test that EnvVarSecretManager is marked as production-ready."""
+        manager = EnvVarSecretManager()
+        assert manager.is_production_ready is True
 
 
 @pytest.mark.asyncio
