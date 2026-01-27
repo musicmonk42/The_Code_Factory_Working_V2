@@ -10,8 +10,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Add simulation directory to path for imports
+SIMULATION_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if SIMULATION_DIR not in sys.path:
+    sys.path.insert(0, SIMULATION_DIR)
 
 # Import the plugin - we'll handle missing dependencies gracefully
 try:
@@ -46,10 +48,10 @@ except ImportError:
 # Import plugin with proper error handling
 try:
     # First, we need to mock GCP_AVAILABLE before importing the plugin
-    import plugins.gcp_cloud_run_runner_plugin as gcp_plugin_module
+    from self_fixing_engineer.simulation.plugins import gcp_cloud_run_runner_plugin as gcp_plugin_module
 
     # Import the needed components
-    from plugins.gcp_cloud_run_runner_plugin import (
+    from self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin import (
         GCP_AVAILABLE,
         PLUGIN_MANIFEST,
         JobConfig,
@@ -776,7 +778,7 @@ class TestSecurity:
                 os.environ,
                 {"VAULT_URL": "https://vault.example.com", "VAULT_TOKEN": "mock-token"},
             ):
-                from plugins.gcp_cloud_run_runner_plugin import (
+                from self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin import (
                     _load_credentials_from_vault,
                 )
 
@@ -795,7 +797,7 @@ class TestSecurity:
                 "VAULT_TOKEN": "mock-token",
             },
         ):
-            from plugins.gcp_cloud_run_runner_plugin import _load_credentials_from_vault
+            from self_fixing_engineer.simulation.plugins.gcp_cloud_run_runner_plugin import _load_credentials_from_vault
 
             creds = await _load_credentials_from_vault()
 
