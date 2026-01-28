@@ -1753,6 +1753,17 @@ def _initialize_critical_collection_stubs():
         "backoff",
         # Testing utilities - imported by test files
         "faker",
+        "freezegun",
+        # gRPC - imported by audit_log tests
+        "grpc",
+        "grpc.aio",
+        # CLI utilities
+        "typer",
+        "click",
+        # Other common dependencies
+        "uvicorn",
+        "redis",
+        "redis.asyncio",
     ]
     
     for dep in _CRITICAL_COLLECTION_STUBS:
