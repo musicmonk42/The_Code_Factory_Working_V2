@@ -292,7 +292,7 @@ jobs:
         run: |
           echo "=== Running test collection with CPU profiling ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
-            --collect-only --quiet --import-mode=importlib --tb=short \
+            --collect-only --quiet --import-mode=prepend --tb=short \
             --ignore=self_fixing_engineer/simulation/tests 2>&1 || true
           
           if [ -f collection_profile.stats ]; then
