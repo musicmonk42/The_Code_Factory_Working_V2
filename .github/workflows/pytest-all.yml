@@ -226,6 +226,9 @@ jobs:
           AWS_REGION: ""
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
         run: |
+          # Enable pipefail to capture pytest exit code (not tee's)
+          set -o pipefail
+          
           export PYTHONPATH="$PYTHONPATH:$PWD"
           
           # Show initial memory
@@ -237,6 +240,24 @@ jobs:
           
           # Clear pytest cache to avoid stale data
           rm -rf .pytest_cache/
+          
+          # Verify test collection before running tests
+          echo ""
+          echo "=== Verifying test collection ==="
+          TEST_COUNT=$(pytest --collect-only -q \
+            --import-mode=importlib \
+            --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
+            2>/dev/null | grep -E "<(Function|Method|Class)" | wc -l || echo "0")
+          echo "Found $TEST_COUNT tests to run"
+          
+          if [ "$TEST_COUNT" -eq "0" ]; then
+            echo "ERROR: No tests collected! Running verbose collection for diagnostics..."
+            pytest --collect-only -v \
+              --import-mode=importlib \
+              --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py || true
+            echo "ERROR: Test collection failed - no tests found"
+            exit 1
+          fi
           
           echo ""
           echo "=== Running all tests in single pass ==="
@@ -265,6 +286,18 @@ jobs:
           echo ""
           echo "=== Final memory usage ==="
           free -h
+          
+          # Validate that tests actually ran
+          if [ -f test-results.xml ]; then
+            TESTS_RAN=$(grep -oP 'tests="\K[0-9]+' test-results.xml | head -1 || echo "0")
+            echo "Test results XML reports: $TESTS_RAN tests executed"
+            if [ -z "$TESTS_RAN" ] || [ "$TESTS_RAN" -eq "0" ]; then
+              echo "ERROR: No tests were executed despite successful collection!"
+              exit 1
+            fi
+          else
+            echo "WARNING: test-results.xml not found - cannot validate test execution"
+          fi
           
           if [ $EXIT_CODE -eq 124 ]; then
             echo "ERROR: Tests timed out after 1 hour"
