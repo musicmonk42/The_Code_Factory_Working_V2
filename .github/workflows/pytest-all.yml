@@ -247,7 +247,6 @@ jobs:
           # Run collection and capture both output and exit code
           COLLECTION_OUTPUT=$(timeout 120s pytest --collect-only -q \
             --import-mode=importlib \
-            --collect-in-process \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
             2>&1)
           COLLECTION_EXIT=$?
