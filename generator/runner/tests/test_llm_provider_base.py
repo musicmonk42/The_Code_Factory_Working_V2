@@ -71,9 +71,11 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
         # NonConformingProvider doesn't implement required abstract methods
 
         # Test 1: Check TypeError on instantiation (as Python enforces @abstractmethod)
+        # Note: Python 3.12+ changed the error message format from "with abstract methods"
+        # to "without an implementation for abstract methods"
         with self.assertRaisesRegex(
             TypeError,
-            "Can't instantiate abstract class NonConformingProvider with abstract methods",
+            r"Can't instantiate abstract class NonConformingProvider (with|without)",
         ):
             _ = (
                 NonConformingProvider()
