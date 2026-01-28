@@ -386,8 +386,43 @@ _OPTIONAL_DEPENDENCIES = [
     "cerberus",  # Schema validation - required by policy module
     "PIL",  # Pillow - image processing
     "pillow",  # Pillow alternative import name
-    # Note: prometheus_client and aiosqlite should be installed
-    # and should NOT be mocked as they are critical for proper type checking
+    "aiosqlite",  # Async SQLite - required by feedback module and omnicore_engine.database
+    "opentelemetry",  # OpenTelemetry - telemetry framework
+    "opentelemetry.trace",  # OpenTelemetry tracing
+    "opentelemetry.sdk",  # OpenTelemetry SDK
+    "opentelemetry.propagate",  # OpenTelemetry propagation
+    "opentelemetry.exporter",  # OpenTelemetry exporters
+    "opentelemetry.context",  # OpenTelemetry context
+    "google",  # Google Cloud - base package
+    "google.cloud",  # Google Cloud client library
+    "google.cloud.storage",  # Google Cloud Storage
+    "azure",  # Azure SDK - base package
+    "azure.core",  # Azure Core library
+    "azure.core.exceptions",  # Azure Core exceptions
+    "azure.storage",  # Azure Storage
+    "azure.storage.blob",  # Azure Blob Storage
+    "boto3",  # AWS SDK for Python
+    "botocore",  # AWS SDK core library
+    "botocore.exceptions",  # AWS SDK exceptions
+    "nest_asyncio",  # Nested asyncio support
+    "filelock",  # File locking library
+    "fastapi",  # FastAPI framework (but in _NEVER_MOCK too for special handling)
+    "aiokafka",  # Async Kafka client
+    "aiokafka.errors",  # Kafka errors
+    "aiolimiter",  # Async rate limiting
+    "aiormq",  # Async RabbitMQ client
+    "aiosmtplib",  # Async SMTP library
+    "bleach",  # HTML sanitization
+    "faker",  # Fake data generation
+    "graphviz",  # Graph visualization
+    "grpc",  # gRPC framework
+    "hcl2",  # HashiCorp Configuration Language
+    "hypothesis",  # Property-based testing
+    "langchain_core",  # LangChain core library
+    "matplotlib",  # Plotting library
+    "numpy",  # Numerical computing
+    # Note: prometheus_client should be installed and NOT be mocked during normal test runs
+    # However, during collection it's stubbed to avoid registry duplication
     # Omnicore engine submodules that may have missing dependencies
     "omnicore_engine.database",  # May be missing aiosqlite or other dependencies
     "omnicore_engine.message_bus",  # May be missing structlog or other dependencies
