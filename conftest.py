@@ -1790,7 +1790,7 @@ def _initialize_critical_collection_stubs():
         "scipy",
         "scipy.stats",
         "pandas",
-        # Network X - imported by arbiter tests
+        # NetworkX - imported by arbiter tests
         "networkx",
         # Retry library - imported by arbiter
         "tenacity",
@@ -2185,8 +2185,13 @@ def mock_modules(monkeypatch):
             mock_module.__file__ = f"<mocked {name}>"
             mock_module.__path__ = []
             mock_module.__spec__ = importlib.util.spec_from_loader(name, loader=None)
-            # Make all attribute access return MagicMock for flexibility
-            mock_module.__getattr__ = lambda attr: MagicMock()
+            # Use a dict to cache attribute mocks for consistent behavior
+            mock_module._attr_cache = {}
+            def _module_getattr(attr, cache=mock_module._attr_cache):
+                if attr not in cache:
+                    cache[attr] = MagicMock()
+                return cache[attr]
+            mock_module.__getattr__ = _module_getattr
             monkeypatch.setitem(sys.modules, name, mock_module)
 
     return _mock_modules
@@ -2949,8 +2954,13 @@ def mock_streamlit_setup():
     streamlit_mock.__file__ = "<mocked streamlit>"
     streamlit_mock.__path__ = []
     streamlit_mock.__spec__ = importlib.util.spec_from_loader("streamlit", loader=None)
-    # Make all attribute access return MagicMock for flexibility
-    streamlit_mock.__getattr__ = lambda name: mock.MagicMock()
+    # Use a dict to cache attribute mocks for consistent behavior
+    streamlit_mock._attr_cache = {}
+    def _streamlit_getattr(name):
+        if name not in streamlit_mock._attr_cache:
+            streamlit_mock._attr_cache[name] = mock.MagicMock()
+        return streamlit_mock._attr_cache[name]
+    streamlit_mock.__getattr__ = _streamlit_getattr
     streamlit_mock.session_state = mock_session_state
     
     with mock.patch.dict(sys.modules, {"streamlit": streamlit_mock}):
