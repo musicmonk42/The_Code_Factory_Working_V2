@@ -1113,131 +1113,17 @@ def _initialize_aiohttp_stubs():
         sys.modules["aiohttp"] = aiohttp_module
 
 
-# ---- Install Import Hook for Lazy Stub Creation ----
-# Install import hooks to create stubs on-demand when modules are first imported
-# This avoids creating all stubs at module level, speeding up conftest import significantly
-from importlib.abc import MetaPathFinder, Loader
-from importlib.machinery import ModuleSpec
-
-
-class LazyStubImporter(MetaPathFinder):
-    """
-    Custom import hook that creates stub modules on-demand when they're first imported.
-    This significantly speeds up conftest.py import by deferring stub creation until needed.
-    
-    When a test module tries to import missing optional dependencies, this hook intercepts
-    the import and creates a stub module lazily, avoiding the need to create all
-    stubs during conftest import.
-    """
-    
-    def __init__(self):
-        # Specific stub initializers for modules that need special handling
-        # Store as callables that will be evaluated later to avoid forward reference issues
-        self.stub_modules = {
-            'tenacity': lambda: _initialize_tenacity_stubs(),
-            'aiohttp': lambda: _initialize_aiohttp_stubs(),
-            'prometheus_client': lambda: _initialize_prometheus_stubs(),
-        }
-        self._importing = set()  # Track modules currently being imported to avoid recursion
-    
-    def _get_base_module(self, fullname):
-        """Extract the base module name from a dotted module name."""
-        return fullname.split('.')[0]
-    
-    def find_spec(self, fullname, path, target=None):
-        """Find module spec - called by Python's import system."""
-        # Check if this is a module we should stub
-        base_module = self._get_base_module(fullname)
-        
-        # Check if the base module is in our optional dependencies or specific stub modules
-        should_stub = (fullname in self.stub_modules or 
-                      base_module in self.stub_modules or
-                      fullname in _OPTIONAL_DEPENDENCIES or
-                      base_module in _OPTIONAL_DEPENDENCIES)
-        
-        if should_stub:
-            # Check if the module is already in sys.modules
-            if fullname not in sys.modules:
-                # Avoid recursion - if we're already trying to import this, return None
-                if fullname in self._importing:
-                    return None
-                
-                self._importing.add(fullname)
-                try:
-                    # Special handling for prometheus_client during test collection
-                    # Always use stub to avoid registry duplication issues
-                    if os.environ.get('PYTEST_COLLECTING') == '1' and base_module == 'prometheus_client':
-                        raise ImportError("Using stub during test collection")
-                    
-                    # Try to import the real module
-                    __import__(fullname)
-                    # If successful, don't create stub - use the real module
-                    return None
-                except ImportError:
-                    # Real module not available, we'll create a stub
-                    # Use specific initializer if available, otherwise use generic stub creator
-                    if fullname in self.stub_modules:
-                        stub_creator = self.stub_modules[fullname]
-                    elif base_module in self.stub_modules:
-                        stub_creator = self.stub_modules[base_module]
-                    else:
-                        # Create a generic stub creator for this module using factory function
-                        stub_creator = self._make_generic_stub_creator(fullname)
-                    return ModuleSpec(fullname, LazyStubLoader(stub_creator))
-                finally:
-                    self._importing.discard(fullname)
-        return None
-    
-    def _make_generic_stub_creator(self, module_name):
-        """Factory function to create a stub creator with proper closure."""
-        def creator():
-            self._create_generic_stub(module_name)
-        return creator
-    
-    def _create_generic_stub(self, name):
-        """Create a generic stub module using _create_mock_module."""
-        if name not in sys.modules:
-            mock_module = _create_mock_module(name)
-            sys.modules[name] = mock_module
-            
-            # Create parent modules for dotted packages if they don't exist
-            if "." in name:
-                parts = name.split(".")
-                for i in range(1, len(parts)):
-                    parent_name = ".".join(parts[:i])
-                    if parent_name not in sys.modules:
-                        parent_module = _create_mock_module(parent_name)
-                        sys.modules[parent_name] = parent_module
-
-
-class LazyStubLoader(Loader):
-    """Loader that creates stub modules on-demand."""
-    
-    def __init__(self, stub_creator):
-        self.stub_creator = stub_creator
-    
-    def create_module(self, spec):
-        """Create the stub module by calling its creator function."""
-        # Call the stub creator function
-        self.stub_creator()
-        # Return the module from sys.modules (created by stub_creator)
-        return sys.modules.get(spec.name)
-    
-    def exec_module(self, module):
-        """Execute module - no-op since stub is already fully created."""
-        pass
-
-
-# Install the lazy stub importer at the FRONT of sys.meta_path
-# This ensures it's checked before other import finders
-if not os.environ.get('DISABLE_LAZY_IMPORTER'):
-    _lazy_importer = LazyStubImporter()
-    sys.meta_path.insert(0, _lazy_importer)
-else:
-    print("⚠️  LazyStubImporter disabled via DISABLE_LAZY_IMPORTER env var")
-
-# NOTE: Stubs are NO LONGER created immediately - they're created on-demand when first imported
-# This dramatically speeds up conftest.py import time from ~6s to <1s
+# ---- Custom Import Hook REMOVED ----
+# The LazyStubImporter class with custom find_spec that called __import__() was causing
+# cascading import failures with boto3/botocore and other packages. Removed per:
+# https://github.com/musicmonk42/The_Code_Factory_Working_V2/issues/XXX
+#
+# Module stubs are now handled by:
+# 1. Simple module-level stubs created at the top of this file (for truly missing modules)
+# 2. The existing _initialize_*_stubs() helper functions (if needed by specific tests)
+#
+# If specific tests need module mocking, they should use proper pytest fixtures with
+# monkeypatch or unittest.mock.patch scoped to individual tests.
 
 
 # ---- OpenTelemetry stub setup ----
