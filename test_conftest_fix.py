@@ -5,6 +5,7 @@ This test specifically validates that the fix for the LazyStubImporter
 custom import finder allows normal Python imports to work correctly.
 """
 import sys
+import pytest
 
 
 def test_conftest_imports_without_errors():

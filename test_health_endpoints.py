@@ -6,18 +6,20 @@ This validates that:
 2. /ready returns appropriate status based on agent loading (readiness probe)
 """
 import sys
+import asyncio
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 # Add server to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Import server components after path setup
+from server.main import health_check, readiness_check
+from fastapi import Response
+
 
 def test_health_endpoint_structure():
     """Verify /health endpoint returns correct structure and always returns 200."""
-    # Import after path setup
-    from server.main import health_check
-    from unittest.mock import AsyncMock, patch
-    import asyncio
     
     # Mock the agent loader to simulate various states
     mock_loader = AsyncMock()
@@ -47,12 +49,9 @@ def test_health_endpoint_structure():
         print(f"  - Agents status: {response.components.get('agents_status', 'unknown')}")
 
 
+
 def test_readiness_endpoint_structure():
     """Verify /ready endpoint returns correct structure and status code."""
-    from server.main import readiness_check
-    from fastapi import Response
-    from unittest.mock import AsyncMock, patch
-    import asyncio
     
     # Test 1: Agents still loading - should return 503
     mock_loader = AsyncMock()
@@ -105,6 +104,7 @@ def test_readiness_endpoint_structure():
         print(f"  - Status code: {response_obj.status_code}")
 
 
+
 def test_health_vs_readiness_separation():
     """
     Verify that /health and /ready serve different purposes.
@@ -112,10 +112,6 @@ def test_health_vs_readiness_separation():
     /health (liveness): Always returns 200 if process is running
     /ready (readiness): Returns 503 if agents not loaded, 200 when ready
     """
-    from server.main import health_check, readiness_check
-    from fastapi import Response
-    from unittest.mock import AsyncMock, patch
-    import asyncio
     
     # Simulate agents still loading
     mock_loader = AsyncMock()

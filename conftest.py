@@ -1115,8 +1115,8 @@ def _initialize_aiohttp_stubs():
 
 # ---- Custom Import Hook REMOVED ----
 # The LazyStubImporter class with custom find_spec that called __import__() was causing
-# cascading import failures with boto3/botocore and other packages. Removed per:
-# https://github.com/musicmonk42/The_Code_Factory_Working_V2/issues/XXX
+# cascading import failures with boto3/botocore and other packages during pytest collection.
+# This resulted in AttributeError: module 'botocore.vendored.requests' has no attribute 'exceptions'
 #
 # Module stubs are now handled by:
 # 1. Simple module-level stubs created at the top of this file (for truly missing modules)
