@@ -1417,6 +1417,9 @@ def _initialize_prometheus_stubs():
                 pass
 
         prom_core.HistogramMetricFamily = _MockHistogramMetricFamily
+        
+        # Also add metric types to core (some tests import from prometheus_client.core)
+        # These will be defined below along with the main module classes
 
         # Add common classes/functions to main module
         class _MockCollectorRegistry:
@@ -1528,6 +1531,14 @@ def _initialize_prometheus_stubs():
         # Also expose REGISTRY on registry submodule (imported by some modules)
         prom_registry.REGISTRY = _shared_registry
         prom_registry.CollectorRegistry = _MockCollectorRegistry
+        
+        # Also expose metric types on core submodule (some tests import from there)
+        prom_core.Counter = _MockCounter
+        prom_core.Histogram = _MockHistogram
+        prom_core.Gauge = _MockGauge
+        prom_core.Info = _MockInfo
+        prom_core.Summary = _MockHistogram
+        prom_core.REGISTRY = _shared_registry
         
         prom_module.CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
 
@@ -1764,6 +1775,16 @@ def _initialize_critical_collection_stubs():
         "uvicorn",
         "redis",
         "redis.asyncio",
+        # SQLAlchemy - imported by many tests
+        "sqlalchemy",
+        "sqlalchemy.orm",
+        "sqlalchemy.ext",
+        "sqlalchemy.ext.asyncio",
+        # Hypothesis - imported by tests
+        "hypothesis",
+        # OpenTelemetry instrumentation
+        "opentelemetry.instrumentation",
+        "opentelemetry.instrumentation.fastapi",
     ]
     
     for dep in _CRITICAL_COLLECTION_STUBS:
