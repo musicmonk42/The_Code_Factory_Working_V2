@@ -39,37 +39,10 @@ include = ["generator*", "omnicore_engine*", "self_fixing_engineer*"]
 minversion = "7.4"
 addopts = "-ra -q --tb=short"
 testpaths = [
-    "tests",  # Root-level tests
-    "generator/tests",
-    "generator/agents/tests",
-    "generator/audit_log/tests",
-    "generator/clarifier/tests",
-    "generator/intent_parser/tests",
-    "generator/main/tests",
-    "generator/runner/tests",
-    "omnicore_engine/tests",
-    "omnicore_engine/database/tests",
-    "omnicore_engine/message_bus/tests",
-    "self_fixing_engineer/tests",
-    "self_fixing_engineer/agent_orchestration/tests",
-    "self_fixing_engineer/arbiter/tests",
-    "self_fixing_engineer/arbiter/arbiter_growth/tests",
-    "self_fixing_engineer/arbiter/bug_manager/tests",
-    "self_fixing_engineer/arbiter/explainable_reasoner/tests",
-    "self_fixing_engineer/arbiter/knowledge_graph/tests",
-    "self_fixing_engineer/arbiter/learner/tests",
-    "self_fixing_engineer/arbiter/meta_learning_orchestrator/tests",
-    "self_fixing_engineer/arbiter/models/tests",
-    "self_fixing_engineer/arbiter/plugins/tests",
-    "self_fixing_engineer/arbiter/policy/tests",
-    "self_fixing_engineer/envs/tests",
-    "self_fixing_engineer/guardrails/tests",
-    "self_fixing_engineer/intent_capture/tests",
-    "self_fixing_engineer/mesh/tests",
-    "self_fixing_engineer/plugins/tests",
-    "self_fixing_engineer/self_healing_import_fixer/tests",
-    "self_fixing_engineer/simulation/tests",
-    "self_fixing_engineer/test_generation/tests"
+    "tests",
+    "generator",
+    "omnicore_engine",
+    "self_fixing_engineer"
 ]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
