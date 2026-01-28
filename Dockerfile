@@ -167,6 +167,7 @@ LABEL org.opencontainers.image.description="Unified AI-driven platform for autom
 LABEL org.opencontainers.image.vendor="Novatrax Labs"
 LABEL org.opencontainers.image.version="1.0.0"
 LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.source="https://github.com/musicmonk42/The_Code_Factory_Working_V2"
 LABEL maintainer="support@novatraxlabs.com"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -212,8 +213,9 @@ EXPOSE 8000 9090
 # Uses curl to check the /health endpoint every 30 seconds
 # Starts checking after 60 seconds to allow startup time
 # Times out after 10 seconds, retries 3 times before marking unhealthy
+# Note: Uses PORT env var if set, otherwise defaults to 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Start the unified platform API server
 # Use PORT environment variable if set (Railway, Heroku, etc.), otherwise default to 8000
