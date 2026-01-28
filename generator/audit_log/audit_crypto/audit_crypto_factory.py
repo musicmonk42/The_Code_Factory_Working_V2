@@ -180,6 +180,16 @@ logger = logging.getLogger(__name__)
 logging.getLogger().setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
 
+# --- Helper for checking if crypto is disabled ---
+def _is_crypto_disabled() -> bool:
+    """
+    Returns True when audit crypto is explicitly disabled.
+    This allows the application to start without any crypto provider initialization.
+    """
+    audit_crypto_mode = os.getenv("AUDIT_CRYPTO_MODE", "").lower()
+    return audit_crypto_mode == "disabled"
+
+
 # --- Helper for DEV/TEST Mode ---
 def _is_test_or_dev_mode() -> bool:
     """
@@ -726,6 +736,74 @@ class DummyCryptoProvider(CryptoProvider):
         pass
 
 
+class NoOpCryptoProvider(CryptoProvider):
+    """
+    No-operation crypto provider for when AUDIT_CRYPTO_MODE=disabled.
+    
+    This provider is used when cryptographic functionality is explicitly disabled.
+    Unlike DummyCryptoProvider, it doesn't require any initialization, doesn't make
+    AWS calls, and doesn't perform any production environment checks.
+    
+    Use this when:
+    - AUDIT_CRYPTO_MODE=disabled is set
+    - Starting the application without crypto secrets configured
+    - No audit log cryptographic signatures are needed
+    
+    Security Notes:
+    - This provider offers NO SECURITY
+    - Signatures are empty (0 bytes)
+    - Verifications always return False (no signature validation)
+    - Should ONLY be used when audit crypto is explicitly disabled
+    """
+
+    def __init__(
+        self,
+        software_key_master_accessor: Optional[Callable[[], Awaitable[bytes]]] = None,
+        fallback_hmac_secret_accessor: Optional[Callable[[], Awaitable[bytes]]] = None,
+        settings: Optional[Dynaconf] = None,
+    ):
+        # Initialize parent class with None/mock values to maintain interface compatibility
+        # This ensures all expected attributes are set (self.settings, self.logger, etc.)
+        super().__init__(
+            software_key_master_accessor=software_key_master_accessor,
+            fallback_hmac_secret_accessor=fallback_hmac_secret_accessor,
+            settings=settings,
+        )
+        self.key_id = "noop-key-id"
+        
+        self.logger.info(
+            "AUDIT_CRYPTO: Using NoOpCryptoProvider (AUDIT_CRYPTO_MODE=disabled). "
+            "Cryptographic functionality is DISABLED. No audit log signatures will be generated.",
+            extra={"operation": "noop_provider_init"},
+        )
+
+    async def generate_key(self, algo: str) -> str:
+        self.logger.debug("NoOpCryptoProvider.generate_key called (no-op)")
+        return self.key_id
+
+    async def sign(self, data: bytes, key_id: str) -> bytes:
+        self.logger.debug("NoOpCryptoProvider.sign called (no-op, returning empty signature)")
+        return b""
+
+    async def verify(self, data: bytes, signature: bytes, key_id: str) -> bool:
+        # Return False instead of True to make it explicit that verification is not performed
+        # This prevents masking signature verification failures
+        self.logger.warning(
+            "NoOpCryptoProvider.verify called - crypto is disabled, returning False. "
+            "No actual signature verification is performed when AUDIT_CRYPTO_MODE=disabled.",
+            extra={"operation": "noop_verify_called"}
+        )
+        return False
+
+    async def rotate_key(self, key_id: str) -> str:
+        self.logger.debug("NoOpCryptoProvider.rotate_key called (no-op)")
+        return self.key_id
+
+    async def close(self):
+        self.logger.debug("NoOpCryptoProvider.close called (no-op)")
+        pass
+
+
 class CryptoProviderFactory:
     """
     Factory for creating and managing CryptoProvider instances.
@@ -741,6 +819,8 @@ class CryptoProviderFactory:
         self.register_provider("software", SoftwareCryptoProvider)
         if settings.HSM_ENABLED:
             self.register_provider("hsm", HSMCryptoProvider)
+        # Always register the noop provider for disabled mode
+        self.register_provider("noop", NoOpCryptoProvider)
         # Always register the dummy provider for test/dev mode fallback
         self.register_provider("dummy", DummyCryptoProvider)
 
@@ -828,6 +908,7 @@ class CryptoProviderFactory:
         - The 'software' provider can be used as fallback from 'hsm', but never 'dummy'
 
         Behavior by Environment:
+        - Disabled Mode: Returns NoOpCryptoProvider (no AWS calls, no initialization)
         - Production: Initializes requested provider, falls back to 'software' if HSM fails,
                       crashes if software fails (fail-closed security)
         - Dev/Test: Returns DummyCryptoProvider for safe, deterministic testing
@@ -844,6 +925,22 @@ class CryptoProviderFactory:
                                        In production, this is a fatal error that prevents
                                        application startup.
         """
+        # CRITICAL: Check if crypto is disabled FIRST, before any other logic
+        # This prevents AWS calls and initialization attempts when disabled
+        if _is_crypto_disabled():
+            if "noop" in self._instances:
+                return self._instances["noop"]
+            
+            # Initialize NoOpCryptoProvider - doesn't require any secrets or AWS calls
+            noop_cls = self._registry.get("noop", NoOpCryptoProvider)
+            noop_instance = noop_cls()
+            self._instances["noop"] = noop_instance
+            logger.info(
+                "AUDIT_CRYPTO_MODE=disabled - using NoOpCryptoProvider",
+                extra={"operation": "noop_provider_disabled_mode"},
+            )
+            return noop_instance
+        
         provider_type_lower = provider_type.lower()
 
         # Check if real provider is forced in test environment
@@ -1126,44 +1223,54 @@ crypto_provider_factory = CryptoProviderFactory()
 # --- Global Crypto Provider Instance (for backward compatibility or simple access) ---
 # This instance will be initialized once at module load time, with import-safe fallback.
 
-try:
-    # In DEV/TEST, get_provider will return DummyCryptoProvider, bypassing most config/secret checks.
-    crypto_provider: Optional[CryptoProvider] = crypto_provider_factory.get_provider(
-        settings.PROVIDER_TYPE
+# CRITICAL: Check if crypto is disabled FIRST to prevent AWS calls during import
+if _is_crypto_disabled():
+    # When disabled, use NoOpCryptoProvider - no AWS calls, no initialization
+    logger.info(
+        "AUDIT_CRYPTO_MODE=disabled detected. Skipping crypto provider initialization. "
+        "Using NoOpCryptoProvider for all crypto operations."
     )
-except CryptoInitializationError as e:
-    # Check if we should allow initialization failure
-    allow_init_failure = os.getenv("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "0").lower() in ("1", "true", "yes")
-    
-    if _is_test_or_dev_mode() or allow_init_failure:
-        logger.warning(
-            "AUDIT_CRYPTO: Failed to eagerly initialize crypto_provider (%s). "
-            "Tests/consumers will implicitly use or call get_provider() lazily, "
-            "which will return DummyCryptoProvider. "
-            "Set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 to enforce strict initialization.",
-            e,
+    crypto_provider: Optional[CryptoProvider] = crypto_provider_factory.get_provider("noop")
+else:
+    # Normal initialization path when crypto is enabled
+    try:
+        # In DEV/TEST, get_provider will return DummyCryptoProvider, bypassing most config/secret checks.
+        crypto_provider: Optional[CryptoProvider] = crypto_provider_factory.get_provider(
+            settings.PROVIDER_TYPE
         )
-        # Explicitly set to DummyCryptoProvider to ensure the backward-compatible global variable is safe
-        # even if the initial call failed in a test environment.
-        crypto_provider = crypto_provider_factory.get_provider("dummy")
+    except CryptoInitializationError as e:
+        # Check if we should allow initialization failure
+        allow_init_failure = os.getenv("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "0").lower() in ("1", "true", "yes")
         
-        if not _is_test_or_dev_mode() and allow_init_failure:
-            logger.critical(
-                "SECURITY CRITICAL: Using DummyCryptoProvider in PRODUCTION due to AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1. "
-                "This provides NO REAL SECURITY for audit log signatures and cryptographic operations. "
-                "Audit log integrity is COMPROMISED. "
-                "URGENT: Configure proper secrets (AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64) "
-                "and set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 immediately for production security. "
-                "This configuration should ONLY be used temporarily during initial deployment."
+        if _is_test_or_dev_mode() or allow_init_failure:
+            logger.warning(
+                "AUDIT_CRYPTO: Failed to eagerly initialize crypto_provider (%s). "
+                "Tests/consumers will implicitly use or call get_provider() lazily, "
+                "which will return DummyCryptoProvider. "
+                "Set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 to enforce strict initialization.",
+                e,
             )
-    else:
-        # In production with strict mode, this is fatal.
-        logger.critical(
-            "AUDIT_CRYPTO: Crypto provider initialization failed in production. "
-            "Configure AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 secret or "
-            "set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1 to allow graceful degradation."
-        )
-        raise
+            # Explicitly set to DummyCryptoProvider to ensure the backward-compatible global variable is safe
+            # even if the initial call failed in a test environment.
+            crypto_provider = crypto_provider_factory.get_provider("dummy")
+            
+            if not _is_test_or_dev_mode() and allow_init_failure:
+                logger.critical(
+                    "SECURITY CRITICAL: Using DummyCryptoProvider in PRODUCTION due to AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1. "
+                    "This provides NO REAL SECURITY for audit log signatures and cryptographic operations. "
+                    "Audit log integrity is COMPROMISED. "
+                    "URGENT: Configure proper secrets (AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64) "
+                    "and set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0 immediately for production security. "
+                    "This configuration should ONLY be used temporarily during initial deployment."
+                )
+        else:
+            # In production with strict mode, this is fatal.
+            logger.critical(
+                "AUDIT_CRYPTO: Crypto provider initialization failed in production. "
+                "Configure AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 secret or "
+                "set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1 to allow graceful degradation."
+            )
+            raise
 
 
 # --- FIX: Expose simple helper function ---
