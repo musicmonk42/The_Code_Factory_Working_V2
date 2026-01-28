@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
 *.pyo
 *.pyd
 *.so
@@ -11,6 +12,7 @@ dist/
 .venv/
 venv/
 env/
+node_modules/
 
 # Repo and tooling noise
 .git/

@@ -12,7 +12,7 @@ version: '3.8'
 services:
   # Redis for message bus and caching
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: codefactory-redis-prod
     ports:
       - "6379:6379"
@@ -175,7 +175,7 @@ services:
 
   # Prometheus for metrics collection
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.50.1
     container_name: codefactory-prometheus-prod
     ports:
       - "9091:9090"
@@ -193,7 +193,7 @@ services:
 
   # Grafana for visualization
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.3.3
     container_name: codefactory-grafana-prod
     ports:
       - "3000:3000"

@@ -161,6 +161,14 @@ COPY . /app
 ###############################################
 FROM python:3.11-slim AS runtime
 
+# Image metadata for better maintainability and security scanning
+LABEL org.opencontainers.image.title="Code Factory Platform"
+LABEL org.opencontainers.image.description="Unified AI-driven platform for automated software development and maintenance"
+LABEL org.opencontainers.image.vendor="Novatrax Labs"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL maintainer="support@novatraxlabs.com"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}" \
@@ -199,6 +207,13 @@ USER appuser
 
 # The FastAPI server runs on port 8000 (or PORT env var), Prometheus metrics on port 9090
 EXPOSE 8000 9090
+
+# Health check to verify the server is responding
+# Uses curl to check the /health endpoint every 30 seconds
+# Starts checking after 60 seconds to allow startup time
+# Times out after 10 seconds, retries 3 times before marking unhealthy
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Start the unified platform API server
 # Use PORT environment variable if set (Railway, Heroku, etc.), otherwise default to 8000
