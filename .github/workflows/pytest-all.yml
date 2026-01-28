@@ -213,13 +213,6 @@ jobs:
           rm -rf /home/runner/.cache/pip/* /tmp/* || true
           df -h
           
-      - name: Diagnose test collection issues
-        if: always()  # Run even if previous steps failed
-        run: |
-          chmod +x .github/scripts/diagnose_test_collection.sh
-          ./.github/scripts/diagnose_test_collection.sh || true
-        continue-on-error: true
-          
       - name: Run all tests
         env:
           TESTING: "1"
@@ -244,15 +237,15 @@ jobs:
             --tb=short \
             --maxfail=50 \
             --import-mode=importlib \
-            -n 2 \
+            -n 1 \
             --dist loadgroup \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
             --cov=generator \
             --cov=omnicore_engine \
             --cov=self_fixing_engineer \
             --cov-report=xml:coverage.xml \
-            --cov-report=term \
-            --html=test-report.html --self-contained-html \
+            --cov-report=term-missing:skip-covered \
+            --no-cov-on-fail \
             --json-report --json-report-file=test-report.json \
             --junitxml=test-results.xml \
             2>&1 | tee test-output.log
@@ -320,11 +313,12 @@ jobs:
           
       - name: Upload HTML test report
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && hashFiles('./test-report.html') != ''
         with:
           name: test-report-html
           path: test-report.html
           retention-days: 30
+        continue-on-error: true
           
       - name: Upload JSON test report
         uses: actions/upload-artifact@v4
