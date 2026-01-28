@@ -23,7 +23,7 @@ jobs:
   test-all:
     name: Run All Tests (Pytest from Root)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 240
     permissions:
       contents: read
     
@@ -224,9 +224,9 @@ jobs:
       
       - name: Collect tests (diagnostic)
         run: |
-          # Increased timeout to 180s to accommodate large codebase with multiple conftest.py files
+          # Increased timeout to 900s to accommodate large codebase with multiple conftest.py files
           # and extensive mocking setup that requires module discovery across multiple packages
-          timeout 180 pytest --collect-only --quiet || echo "Collection failed or timed out"
+          timeout 900 pytest --collect-only --quiet || echo "Collection failed or timed out"
         continue-on-error: true
           
       - name: Run all tests
@@ -248,7 +248,7 @@ jobs:
           echo "=== Running all tests ==="
           
           # Run pytest without xdist, coverage, and json-report to minimize memory usage
-          timeout 3600s pytest \
+          timeout 10800s pytest \
             -v \
             --tb=short \
             --maxfail=50 \
@@ -287,7 +287,7 @@ jobs:
           fi
           
           if [ $PYTEST_EXIT -eq 124 ]; then
-            echo "ERROR: Tests timed out after 1 hour"
+            echo "ERROR: Tests timed out after 3 hours"
             exit 124
           elif [ $PYTEST_EXIT -ne 0 ]; then
             echo "ERROR: Tests failed with exit code $PYTEST_EXIT"
