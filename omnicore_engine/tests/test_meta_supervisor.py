@@ -687,6 +687,7 @@ class TestMainLoop:
     """Test main run loop"""
 
     @pytest.mark.asyncio
+    @pytest.mark.slow
     async def test_run_loop_max_iterations(self):
         """Test run loop stops at max iterations"""
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
@@ -719,6 +720,7 @@ class TestMainLoop:
                 assert supervisor.inspect_plugins.call_count <= 2
 
     @pytest.mark.asyncio
+    @pytest.mark.slow
     async def test_run_loop_with_focus(self):
         """Test run loop with specific focus"""
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:

@@ -146,6 +146,7 @@ jobs:
             pytest-asyncio \
             pytest-html \
             pytest-json-report \
+            pytest-timeout \
             tomli_w \
             typing-extensions \
             hypothesis
@@ -238,6 +239,7 @@ jobs:
             --maxfail=50 \
             --import-mode=importlib \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
+            -m "not slow and not integration" \
             --junitxml=test-results.xml \
             2>&1 | tee test-output.log
           

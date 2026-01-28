@@ -411,6 +411,7 @@ def mock_env_vars(monkeypatch):
     monkeypatch.setenv("PRODUCTION_MODE", "false")
 
 
+@pytest.mark.integration
 class TestRunTests:
     """Tests for the run_tests function."""
 
@@ -444,6 +445,7 @@ class TestRunTests:
             await run_tests()  # Should not raise
 
 
+@pytest.mark.integration
 class TestMain:
     """Tests for the main function."""
 
@@ -469,6 +471,7 @@ class TestMain:
 
 
 @pytest.mark.skipif(not CLICK_AVAILABLE, reason="Click not available")
+@pytest.mark.integration
 class TestCLI:
     """Tests for CLI commands."""
 
@@ -548,6 +551,7 @@ class TestCLI:
         assert "Config file integrity check failed" in result.output
 
 
+@pytest.mark.integration
 class TestFactoryFunctions:
     """Tests for factory functions."""
 

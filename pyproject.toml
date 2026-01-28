@@ -46,6 +46,16 @@ testpaths = [
 ]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+# Timeout configuration - prevent individual tests from hanging
+timeout = 30
+timeout_method = "thread"
+timeout_func_only = true
+# Custom markers for test categorization
+markers = [
+    "slow: marks tests as slow (deselected by default in CI)",
+    "integration: marks tests as integration tests (deselected by default in CI)",
+    "requires_redis: marks tests that require Redis connection",
+]
 # Environment variables to set for all test runs
 env = [
     "PYTEST_COLLECTING=1",
