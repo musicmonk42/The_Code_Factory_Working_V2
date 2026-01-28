@@ -80,16 +80,28 @@ except Exception as e:
     )
 
 # AWS KMS for master key fetching
-try:
-    import boto3
-    import botocore.exceptions
+# NOTE: boto3 import is deferred until needed to avoid AWS calls when AUDIT_CRYPTO_MODE=disabled
+# This is critical for fast startup in environments without AWS credentials
+HAS_BOTO3 = False
+boto3 = None
+botocore = None
 
-    HAS_BOTO3 = True
-except ImportError:
-    HAS_BOTO3 = False
-    logging.warning(
-        "boto3 not found. KMS master key decryption will be unavailable if PROVIDER_TYPE is 'software'."
-    )
+def _ensure_boto3():
+    """Lazy-load boto3 only when actually needed."""
+    global HAS_BOTO3, boto3, botocore
+    if boto3 is None:
+        try:
+            import boto3 as _boto3
+            import botocore.exceptions as _botocore_exceptions
+            boto3 = _boto3
+            botocore = _botocore_exceptions
+            HAS_BOTO3 = True
+        except ImportError:
+            HAS_BOTO3 = False
+            logging.warning(
+                "boto3 not found. KMS master key decryption will be unavailable if PROVIDER_TYPE is 'software'."
+            )
+    return HAS_BOTO3
 
 import aiohttp  # For sending alerts
 
@@ -392,9 +404,9 @@ async def _ensure_software_key_master() -> bytes:
             )
 
         if not HAS_BOTO3:
-            raise CryptoInitializationError("boto3 not available for KMS decryption.")
-
-        import boto3  # local import to avoid issues if unused
+            # Try to lazy-load boto3 if not already loaded
+            if not _ensure_boto3():
+                raise CryptoInitializationError("boto3 not available for KMS decryption.")
 
         kms = boto3.client("kms", region_name=settings.AWS_REGION)
         response = await asyncio.to_thread(
