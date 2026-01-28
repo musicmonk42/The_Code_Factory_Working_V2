@@ -1,7 +1,7 @@
 services:
   # Redis for message bus and caching
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: codefactory-redis
     ports:
       - "6379:6379"
@@ -107,7 +107,7 @@ services:
   # Prometheus for metrics (optional)
   # Note: Running on different port (9091) to avoid conflict with app's Prometheus metrics server
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.50.1
     container_name: codefactory-prometheus
     ports:
       - "9091:9090"  # Map host 9091 to container 9090 to avoid conflict
@@ -121,7 +121,7 @@ services:
 
   # Grafana for visualization (optional)
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.3.3
     container_name: codefactory-grafana
     ports:
       - "3000:3000"
