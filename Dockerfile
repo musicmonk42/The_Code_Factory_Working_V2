@@ -213,16 +213,11 @@ EXPOSE 8080 9090
 
 # Docker healthcheck to verify the container is running properly
 # Checks the /health endpoint which returns 200 if the API is up
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
-
-# Health check to verify the server is responding
-# Uses curl to check the /health endpoint every 30 seconds
-# Starts checking after 60 seconds to allow startup time
+# Uses PORT env var if set (Railway sets it to 8080), otherwise defaults to 8080
+# Starts checking after 60 seconds to allow startup time (agents load in background)
 # Times out after 10 seconds, retries 3 times before marking unhealthy
-# Note: Uses PORT env var if set, otherwise defaults to 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Start the unified platform API server
 # Single worker mode for Railway deployment to ensure fast startup and reliable healthchecks
