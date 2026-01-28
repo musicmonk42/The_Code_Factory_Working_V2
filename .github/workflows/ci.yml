@@ -45,7 +45,10 @@ jobs:
         run: |
           # Remove apt lists, docs, and clear pip cache to free disk space
           sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
-          rm -rf /home/runner/.cache/pip/* /tmp/* || true
+          rm -rf /home/runner/.cache/pip/* || true
+          # Clean /tmp files owned by current user only (avoids permission errors for system directories)
+          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
+          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
           df -h
           
       - name: Install system dependencies
@@ -105,7 +108,10 @@ jobs:
         run: |
           # Remove apt lists, docs, and clear pip cache to free disk space
           sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
-          rm -rf /home/runner/.cache/pip/* /tmp/* || true
+          rm -rf /home/runner/.cache/pip/* || true
+          # Clean /tmp files owned by current user only (avoids permission errors for system directories)
+          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
+          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
           df -h
           
       - name: Install system dependencies for Python packages
@@ -225,7 +231,10 @@ jobs:
         run: |
           # Remove apt lists, docs, and clear pip cache to free disk space
           sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
-          rm -rf /home/runner/.cache/pip/* /tmp/* || true
+          rm -rf /home/runner/.cache/pip/* || true
+          # Clean /tmp files owned by current user only (avoids permission errors for system directories)
+          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
+          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
           df -h
           
       - name: Enable memory overcommit for Redis
@@ -333,7 +342,10 @@ jobs:
         run: |
           # Additional cleanup right before running tests
           sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
-          rm -rf /home/runner/.cache/pip/* /tmp/* || true
+          rm -rf /home/runner/.cache/pip/* || true
+          # Clean /tmp files owned by current user only (avoids permission errors for system directories)
+          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
+          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
           df -h
           
       - name: Run OmniCore tests
@@ -417,7 +429,10 @@ jobs:
         run: |
           # Remove apt lists, docs, and clear pip cache to free disk space
           sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
-          rm -rf /home/runner/.cache/pip/* /tmp/* || true
+          rm -rf /home/runner/.cache/pip/* || true
+          # Clean /tmp files owned by current user only (avoids permission errors for system directories)
+          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
+          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
           df -h
           
       - name: Enable memory overcommit for Redis
