@@ -1,7 +1,15 @@
 """Test configuration for omnicore_engine tests."""
 
+import os
 import pytest
 from prometheus_client import REGISTRY
+
+
+def pytest_configure(config):
+    """Skip expensive initialization during collection phase."""
+    if config.option.collectonly:
+        os.environ['SKIP_EXPENSIVE_INIT'] = '1'
+        os.environ['PYTEST_COLLECTING_ONLY'] = '1'
 
 
 @pytest.fixture(autouse=True, scope="function")

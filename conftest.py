@@ -39,6 +39,20 @@ os.environ.setdefault("SKIP_BACKGROUND_TASKS", "1")
 os.environ.setdefault("NO_MONITORING", "1")
 os.environ.setdefault("DISABLE_TELEMETRY", "1")
 
+# ---- Pytest hooks for collection optimization ----
+def pytest_configure(config):
+    """
+    Skip expensive initialization during collection phase.
+    This prevents OOM during test discovery.
+    """
+    if config.option.collectonly:
+        # Signal to modules that we're only collecting, not running tests
+        os.environ['SKIP_EXPENSIVE_INIT'] = '1'
+        os.environ['PYTEST_COLLECTING_ONLY'] = '1'
+        # Disable coverage during collection
+        if hasattr(config, '_cov'):
+            config._cov = None
+
 # ---- Add minimal stubs for missing modules (TEST ENVIRONMENT ONLY) ----
 # Create stub modules with minimal functionality to prevent import errors during test collection
 # IMPORTANT: Only create stubs during testing to avoid interfering with production imports

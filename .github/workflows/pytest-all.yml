@@ -245,8 +245,9 @@ jobs:
           echo ""
           echo "=== Verifying test collection ==="
           # Run collection and capture both output and exit code
-          COLLECTION_OUTPUT=$(pytest --collect-only -q \
+          COLLECTION_OUTPUT=$(timeout 120s pytest --collect-only -q \
             --import-mode=importlib \
+            --collect-in-process \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
             2>&1)
           COLLECTION_EXIT=$?
@@ -280,6 +281,8 @@ jobs:
             --tb=short \
             --maxfail=50 \
             --import-mode=importlib \
+            -n 2 \
+            --dist loadgroup \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
             --cov=generator \
             --cov=omnicore_engine \
