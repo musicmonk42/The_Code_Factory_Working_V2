@@ -226,6 +226,9 @@ jobs:
           AWS_REGION: ""
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
         run: |
+          # Enable pipefail to capture pytest exit code (not tee's)
+          set -o pipefail
+          
           export PYTHONPATH="$PYTHONPATH:$PWD"
           
           # Show initial memory
@@ -237,6 +240,34 @@ jobs:
           
           # Clear pytest cache to avoid stale data
           rm -rf .pytest_cache/
+          
+          # Verify test collection before running tests
+          echo ""
+          echo "=== Verifying test collection ==="
+          # Run collection and capture both output and exit code
+          COLLECTION_OUTPUT=$(pytest --collect-only -q \
+            --import-mode=importlib \
+            --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
+            2>&1)
+          COLLECTION_EXIT=$?
+          
+          if [ $COLLECTION_EXIT -ne 0 ]; then
+            echo "ERROR: Test collection failed with exit code $COLLECTION_EXIT"
+            echo "$COLLECTION_OUTPUT"
+            exit $COLLECTION_EXIT
+          fi
+          
+          TEST_COUNT=$(echo "$COLLECTION_OUTPUT" | grep -E "<(Function|Method|Class)" | wc -l)
+          echo "Found $TEST_COUNT tests to run"
+          
+          if [ "$TEST_COUNT" -eq "0" ]; then
+            echo "ERROR: No tests collected! Running verbose collection for diagnostics..."
+            pytest --collect-only -v \
+              --import-mode=importlib \
+              --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py || true
+            echo "ERROR: Test collection succeeded but found 0 tests"
+            exit 1
+          fi
           
           echo ""
           echo "=== Running all tests in single pass ==="
@@ -265,6 +296,24 @@ jobs:
           echo ""
           echo "=== Final memory usage ==="
           free -h
+          
+          # Validate that tests actually ran (only if pytest succeeded)
+          if [ $EXIT_CODE -eq 0 ]; then
+            if [ -f test-results.xml ]; then
+              # Use sed for portable XML attribute extraction
+              TESTS_RAN=$(sed -n 's/.*tests="\([0-9]*\)".*/\1/p' test-results.xml | head -1)
+              echo "Test results XML reports: $TESTS_RAN tests executed"
+              if [ -z "$TESTS_RAN" ] || [ "$TESTS_RAN" -eq "0" ]; then
+                echo "ERROR: No tests were executed despite successful collection!"
+                exit 1
+              fi
+            else
+              # Missing test results file when pytest succeeded is a critical error
+              echo "ERROR: test-results.xml not found despite pytest reporting success!"
+              echo "This indicates pytest did not generate the results file as expected."
+              exit 1
+            fi
+          fi
           
           if [ $EXIT_CODE -eq 124 ]; then
             echo "ERROR: Tests timed out after 1 hour"
