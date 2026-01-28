@@ -2,12 +2,12 @@
   {
     "priority": 0,
     "task": {
-      "task_id": "2eb4d6cb-55b1-4400-afea-d42840d4bef7",
+      "task_id": "667bac37-e714-4efe-a986-b1ebefc07f02",
       "test_files": {
         "test.py": "def test_ok(): assert True"
       },
       "code_files": {},
-      "output_path": "/tmp/tmpc0ij1na6/output",
+      "output_path": "/tmp/tmp72polup8/output",
       "command": null,
       "timeout": null,
       "dry_run": false,

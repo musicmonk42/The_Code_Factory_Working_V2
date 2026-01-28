@@ -108,12 +108,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         # FIX: Capture the mock object created by the patcher
         self.mock_log_audit = self.patch_log_audit.start()
 
-        # Patch backoff to avoid reraise error
-        self.patch_backoff = patch(
-            "runner.runner_core.backoff.on_exception",
-            return_value=lambda *a, **kw: lambda f: f,
-        )
-        self.patch_backoff.start()
+        # FIX: Removed backoff patch - backoff module is not used in runner_core.py
 
         # FIX: Removed unused subprocess_wrapper patch - tests now use backend.execute()
 
@@ -129,7 +124,6 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         ALL_BACKENDS.update(self.original_backends)
         self.patch_save_files.stop()
         self.patch_log_action.stop()
-        self.patch_backoff.stop()
         self.patch_log_audit.stop()
         self.patch_load_queue.stop()  # Stop the queue patch
 

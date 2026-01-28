@@ -718,7 +718,8 @@ class CircuitBreaker:
                 asyncio.get_running_loop()
                 asyncio.create_task(
                     send_alert(
-                        f"Clarifier circuit breaker tripped! Consecutive errors: {self._error_count}. Last error: {error}",
+                        subject="Circuit Breaker Tripped",
+                        message=f"Clarifier circuit breaker tripped! Consecutive errors: {self._error_count}. Last error: {error}",
                         severity="critical",
                     )
                 )
@@ -929,13 +930,13 @@ class SQLiteContextManager(ContextManager):
             )
             raise RuntimeError("SQLiteContextManager not connected.")
         try:
-            # FIX: Use LIKE with a BLOB pattern (b'%query%') for searching encrypted BLOBs
-            search_pattern_bytes = b"%" + query.encode("utf-8") + b"%"
+            # FIX: Use CAST to TEXT for LIKE matching on BLOB data
+            # SQLite's LIKE operator doesn't work directly on binary BLOB data
+            search_pattern = f"%{query}%"
             cursor = await asyncio.to_thread(
                 self.conn.execute,
-                # FIX: Use LIKE operator with a BLOB pattern
-                "SELECT encrypted_data FROM context WHERE encrypted_data LIKE ? ORDER BY timestamp DESC LIMIT ?",
-                (search_pattern_bytes, top_k),
+                "SELECT encrypted_data FROM context WHERE CAST(encrypted_data AS TEXT) LIKE ? ORDER BY timestamp DESC LIMIT ?",
+                (search_pattern, top_k),
             )
             rows = await asyncio.to_thread(cursor.fetchall)
             results = []
