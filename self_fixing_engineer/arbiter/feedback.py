@@ -175,6 +175,14 @@ def _get_or_create_metric(
     """
     Idempotently get or create a Prometheus metric in a thread-safe manner.
     """
+    # Guard against MagicMock objects (when metric_class is not actually a class)
+    # Must be checked before any isinstance() calls with metric_class
+    if not isinstance(metric_class, type):
+        # metric_class is not a class (e.g., it's a MagicMock)
+        # Return a mock instance instead
+        logger.warning(f"metric_class for '{name}' is not a type, returning as-is")
+        return metric_class() if callable(metric_class) else metric_class
+    
     with _metrics_lock:
         if name in REGISTRY._names_to_collectors:
             collector = REGISTRY._names_to_collectors[name]
@@ -182,6 +190,7 @@ def _get_or_create_metric(
                 return collector
             logger.warning(f"Metric '{name}' already registered with a different type")
             return collector
+        
         kwargs = {
             "name": name,
             "documentation": documentation,
