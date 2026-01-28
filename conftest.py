@@ -1087,22 +1087,36 @@ class LazyStubImporter(MetaPathFinder):
     Custom import hook that creates stub modules on-demand when they're first imported.
     This significantly speeds up conftest.py import by deferring stub creation until needed.
     
-    When a test module tries to import 'tenacity' or 'aiohttp', this hook intercepts
-    the import and creates the stub module lazily, avoiding the need to create all
+    When a test module tries to import missing optional dependencies, this hook intercepts
+    the import and creates a stub module lazily, avoiding the need to create all
     stubs during conftest import.
     """
     
     def __init__(self):
+        # Specific stub initializers for modules that need special handling
         self.stub_modules = {
             'tenacity': _initialize_tenacity_stubs,
             'aiohttp': _initialize_aiohttp_stubs,
+            'prometheus_client': _initialize_prometheus_stubs,
         }
         self._importing = set()  # Track modules currently being imported to avoid recursion
     
+    def _get_base_module(self, fullname):
+        """Extract the base module name from a dotted module name."""
+        return fullname.split('.')[0]
+    
     def find_spec(self, fullname, path, target=None):
         """Find module spec - called by Python's import system."""
-        # Only handle modules we have stubs for
-        if fullname in self.stub_modules:
+        # Check if this is a module we should stub
+        base_module = self._get_base_module(fullname)
+        
+        # Check if the base module is in our optional dependencies or specific stub modules
+        should_stub = (fullname in self.stub_modules or 
+                      base_module in self.stub_modules or
+                      fullname in _OPTIONAL_DEPENDENCIES or
+                      base_module in _OPTIONAL_DEPENDENCIES)
+        
+        if should_stub:
             # Check if the module is already in sys.modules
             if fullname not in sys.modules:
                 # Avoid recursion - if we're already trying to import this, return None
@@ -1117,10 +1131,33 @@ class LazyStubImporter(MetaPathFinder):
                     return None
                 except ImportError:
                     # Real module not available, we'll create a stub
-                    return ModuleSpec(fullname, LazyStubLoader(self.stub_modules[fullname]))
+                    # Use specific initializer if available, otherwise use generic stub creator
+                    if fullname in self.stub_modules:
+                        stub_creator = self.stub_modules[fullname]
+                    elif base_module in self.stub_modules:
+                        stub_creator = self.stub_modules[base_module]
+                    else:
+                        # Create a generic stub creator for this module
+                        stub_creator = lambda name=fullname: self._create_generic_stub(name)
+                    return ModuleSpec(fullname, LazyStubLoader(stub_creator))
                 finally:
                     self._importing.discard(fullname)
         return None
+    
+    def _create_generic_stub(self, name):
+        """Create a generic stub module using _create_mock_module."""
+        if name not in sys.modules:
+            mock_module = _create_mock_module(name)
+            sys.modules[name] = mock_module
+            
+            # Create parent modules for dotted packages if they don't exist
+            if "." in name:
+                parts = name.split(".")
+                for i in range(1, len(parts)):
+                    parent_name = ".".join(parts[:i])
+                    if parent_name not in sys.modules:
+                        parent_module = _create_mock_module(parent_name)
+                        sys.modules[parent_name] = parent_module
 
 
 class LazyStubLoader(Loader):
@@ -1945,14 +1982,16 @@ def protect_sys_modules():
 
     yield
 
-    # Restore critical modules if they were replaced with mocks
+    # Restore critical modules if they were replaced with mocks or missing required attributes
     for mod_name, original_module in saved_modules.items():
         if mod_name in sys.modules:
             current_module = sys.modules[mod_name]
-            # Check if it was replaced with a Mock
+            # Check if it was replaced with a Mock OR if it's missing required attributes
             if (
                 hasattr(current_module, "_mock_name")
                 or str(type(current_module).__name__) == "MagicMock"
+                or not hasattr(current_module, "__spec__")
+                or not hasattr(current_module, "__name__")
             ):
                 # Restore the original
                 sys.modules[mod_name] = original_module

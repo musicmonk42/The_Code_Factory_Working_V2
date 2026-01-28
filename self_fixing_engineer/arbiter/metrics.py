@@ -157,6 +157,21 @@ def get_or_create_metric(
     """
     if labelnames is None:
         labelnames = ()
+    
+    # Guard against non-class metric types (e.g., MagicMock objects)
+    if not isinstance(metric_type, type):
+        # metric_type is not a class (e.g., it's a MagicMock)
+        # Determine a safe type name for logging
+        try:
+            metric_type_name = str(metric_type)
+        except Exception:
+            metric_type_name = "unknown"
+        
+        _metrics_logger.warning(
+            f"metric_type for '{name}' is not a type ({metric_type_name}), returning mock instance"
+        )
+        # Return a mock instance instead
+        return metric_type() if callable(metric_type) else metric_type
 
     full_name = f"arbiter_{name}"
 
