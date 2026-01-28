@@ -220,7 +220,7 @@ jobs:
           ./.github/scripts/diagnose_test_collection.sh || true
         continue-on-error: true
           
-      - name: Run all tests from repository root
+      - name: Run all tests
         env:
           TESTING: "1"
           AWS_REGION: ""
@@ -239,100 +239,39 @@ jobs:
           rm -rf .pytest_cache/
           
           echo ""
-          echo "=== Skipping preflight collection (causes OOM) ==="
-          echo "Running tests directly in batches instead..."
+          echo "=== Running all tests in single pass ==="
+          echo "Using testpaths from pyproject.toml: tests, generator, omnicore_engine, self_fixing_engineer"
           
-          echo ""
-          echo "=== Running tests in batches with timeouts ==="
+          # Run all tests once with 1 hour timeout
+          # Let pytest auto-discover tests from pyproject.toml testpaths
+          timeout 3600s pytest \
+            -v \
+            --tb=short \
+            --maxfail=50 \
+            --import-mode=importlib \
+            --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
+            --cov=generator \
+            --cov=omnicore_engine \
+            --cov=self_fixing_engineer \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term \
+            --html=test-report.html --self-contained-html \
+            --json-report --json-report-file=test-report.json \
+            --junitxml=test-results.xml \
+            2>&1 | tee test-output.log
           
-          # Track overall success
-          OVERALL_EXIT=0
-          FAILED_DIRS=""
-          
-          # Dynamically discover all test directories that contain test_*.py files
-          # This ensures we don't miss any test directories
-          echo "Discovering test directories..."
-          TEST_DIRS=()
-          while IFS= read -r dir; do
-            # Exclude known problematic directories
-            if [[ "$dir" != *"simulation/tests"* ]]; then
-              TEST_DIRS+=("$dir")
-            fi
-          done < <(find . -type d -name 'tests' -exec sh -c 'ls "$1"/test_*.py 2>/dev/null | head -1 | grep -q . && echo "${1#./}"' _ {} \; 2>/dev/null | sort)
-          
-          echo "Found ${#TEST_DIRS[@]} test directories: ${TEST_DIRS[*]}"
-          
-          for test_dir in "${TEST_DIRS[@]}"; do
-            if [ ! -d "$test_dir" ]; then
-              echo "⊘ Skipping $test_dir (not found)"
-              continue
-            fi
-            
-            TEST_COUNT=$(find "$test_dir" -name 'test_*.py' 2>/dev/null | wc -l)
-            if [ "$TEST_COUNT" -eq 0 ]; then
-              echo "⊘ Skipping $test_dir (no test files)"
-              continue
-            fi
-            
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "Testing: $test_dir ($TEST_COUNT test files)"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            
-            # Run with timeout - 10 minutes per directory
-            timeout 600s pytest "$test_dir" \
-              --maxfail=10 \
-              --import-mode=importlib \
-              --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
-              -v \
-              2>&1 || {
-              DIR_EXIT=$?
-              if [ $DIR_EXIT -eq 124 ]; then
-                echo "✗ $test_dir TIMED OUT after 10 minutes"
-              else
-                echo "✗ $test_dir FAILED with exit code $DIR_EXIT"
-              fi
-              OVERALL_EXIT=$DIR_EXIT
-              FAILED_DIRS="$FAILED_DIRS $test_dir"
-            }
-            
-            # Memory check and GC between directories
-            echo ""
-            echo "Memory after $test_dir:"
-            free -h | grep Mem
-            python -c "import gc; gc.collect()"
-          done
-          
-          echo ""
-          echo "=== Final test run for coverage ==="
-          # If individual tests passed, run once more for unified coverage
-          if [ $OVERALL_EXIT -eq 0 ]; then
-            timeout 2400s pytest \
-              --maxfail=50 \
-              --import-mode=importlib \
-              --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
-              --cov=generator \
-              --cov=omnicore_engine \
-              --cov=self_fixing_engineer \
-              --cov-report=xml:coverage.xml \
-              --cov-report=term \
-              --html=test-report.html --self-contained-html \
-              --json-report --json-report-file=test-report.json \
-              -v \
-              2>&1 | tee test-output.log || OVERALL_EXIT=$?
-          else
-            echo "✗ Skipping coverage run due to failures in: $FAILED_DIRS"
-          fi
+          EXIT_CODE=$?
           
           echo ""
           echo "=== Final memory usage ==="
           free -h
           
-          if [ $OVERALL_EXIT -ne 0 ]; then
-            echo ""
-            echo "ERROR: Tests failed with exit code $OVERALL_EXIT"
-            echo "Failed directories: $FAILED_DIRS"
-            exit $OVERALL_EXIT
+          if [ $EXIT_CODE -eq 124 ]; then
+            echo "ERROR: Tests timed out after 1 hour"
+            exit $EXIT_CODE
+          elif [ $EXIT_CODE -ne 0 ]; then
+            echo "ERROR: Tests failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
           fi
           
           echo ""
@@ -383,3 +322,11 @@ jobs:
           name: test-output-log
           path: test-output.log
           retention-days: 7
+          
+      - name: Upload JUnit test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-xml
+          path: test-results.xml
+          retention-days: 30
