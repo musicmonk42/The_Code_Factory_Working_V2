@@ -1785,6 +1785,19 @@ def _initialize_critical_collection_stubs():
         # OpenTelemetry instrumentation
         "opentelemetry.instrumentation",
         "opentelemetry.instrumentation.fastapi",
+        # Scientific computing - imported by arbiter tests
+        "numpy",
+        "scipy",
+        "scipy.stats",
+        "pandas",
+        # Network X - imported by arbiter tests
+        "networkx",
+        # Retry library - imported by arbiter
+        "tenacity",
+        "tenacity.wait",
+        "tenacity.stop",
+        # Pydantic settings - imported by arbiter config
+        "pydantic_settings",
     ]
     
     for dep in _CRITICAL_COLLECTION_STUBS:
