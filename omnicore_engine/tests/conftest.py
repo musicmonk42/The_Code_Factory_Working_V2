@@ -17,6 +17,7 @@ except (ImportError, ValueError) as e:
         class MockRegistry:
             def __init__(self):
                 self._collector_to_names = {}
+                self._names_to_collectors = {}
             def unregister(self, collector):
                 pass
         

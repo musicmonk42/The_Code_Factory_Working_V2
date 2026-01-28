@@ -390,7 +390,7 @@ _OPTIONAL_DEPENDENCIES = [
     "opentelemetry",  # OpenTelemetry - telemetry framework
     "opentelemetry.trace",  # OpenTelemetry tracing
     "opentelemetry.sdk",  # OpenTelemetry SDK
-    "opentelemetry.propagate",  # OpenTelemetry propagation
+    "opentelemetry.propagators",  # OpenTelemetry propagators (not propagate)
     "opentelemetry.exporter",  # OpenTelemetry exporters
     "opentelemetry.context",  # OpenTelemetry context
     "google",  # Google Cloud - base package
@@ -1181,12 +1181,18 @@ class LazyStubImporter(MetaPathFinder):
                     elif base_module in self.stub_modules:
                         stub_creator = self.stub_modules[base_module]
                     else:
-                        # Create a generic stub creator for this module
-                        stub_creator = lambda name=fullname: self._create_generic_stub(name)
+                        # Create a generic stub creator for this module using factory function
+                        stub_creator = self._make_generic_stub_creator(fullname)
                     return ModuleSpec(fullname, LazyStubLoader(stub_creator))
                 finally:
                     self._importing.discard(fullname)
         return None
+    
+    def _make_generic_stub_creator(self, module_name):
+        """Factory function to create a stub creator with proper closure."""
+        def creator():
+            self._create_generic_stub(module_name)
+        return creator
     
     def _create_generic_stub(self, name):
         """Create a generic stub module using _create_mock_module."""
