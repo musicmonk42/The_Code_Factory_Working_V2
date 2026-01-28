@@ -37,7 +37,11 @@ include = ["generator*", "omnicore_engine*", "self_fixing_engineer*"]
 
 [tool.pytest.ini_options]
 minversion = "7.4"
-addopts = "-ra -q --tb=short"
+# Prevent expensive plugin loading during collection to avoid CPU timeout
+# - no:randomly: Disable pytest-randomly plugin (if installed) to reduce collection overhead
+# - no:cacheprovider: Disable pytest cache to avoid filesystem overhead during collection
+# - import-mode=importlib: Use importlib instead of prepend mode for cleaner imports
+addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider --import-mode=importlib"
 testpaths = [
     "tests",
     "generator",
@@ -50,6 +54,8 @@ asyncio_mode = "auto"
 timeout = 30
 timeout_method = "thread"
 timeout_func_only = true
+# Directories to ignore during collection to reduce overhead
+norecursedirs = ".git .github .venv venv env build dist *.egg-info node_modules __pycache__ .pytest_cache"
 # Custom markers for test categorization
 markers = [
     "slow: marks tests as slow (deselected by default in CI)",
