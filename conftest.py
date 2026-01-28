@@ -1521,7 +1521,14 @@ def _initialize_prometheus_stubs():
         prom_module.GC_COLLECTOR = None  # GC collector singleton
         prom_module.generate_latest = lambda *args, **kwargs: b""
         prom_module.start_http_server = lambda *args, **kwargs: None
-        prom_module.REGISTRY = _MockCollectorRegistry()
+        
+        # Create the shared REGISTRY instance
+        _shared_registry = _MockCollectorRegistry()
+        prom_module.REGISTRY = _shared_registry
+        # Also expose REGISTRY on registry submodule (imported by some modules)
+        prom_registry.REGISTRY = _shared_registry
+        prom_registry.CollectorRegistry = _MockCollectorRegistry
+        
         prom_module.CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
 
         # Create multiprocess submodule
@@ -1690,11 +1697,90 @@ def _ensure_module_specs():
 # Module spec fixing is deferred to session fixture to avoid import-time overhead
 
 
-# ---- Initialize Prometheus stubs with collection guard ----
-# Defer to fixture during collection to avoid expensive initialization
-# Only run at module level if NOT in collection phase
-if os.environ.get("PYTEST_COLLECTING") != "1":
-    _initialize_prometheus_stubs()
+# ---- Initialize Prometheus stubs ----
+# Initialize stubs unconditionally - they are needed during test collection
+# when test files import prometheus_client at module level
+_initialize_prometheus_stubs()
+
+
+# ---- Initialize critical collection-time stubs ----
+# These modules are commonly imported at module-level in test files and need
+# to be stubbed BEFORE test collection starts (fixture-based initialization is too late)
+def _initialize_critical_collection_stubs():
+    """
+    Initialize stubs for modules commonly imported at module-level in test files.
+    This must run at conftest.py import time, before pytest collects test files.
+    
+    Only includes modules that:
+    1. Are imported at module-level in test files or their dependencies
+    2. May not be installed in all environments
+    3. Cause collection failures if not stubbed
+    """
+    # Critical modules that test files import at module level
+    _CRITICAL_COLLECTION_STUBS = [
+        # Google Cloud - imported by audit_backend_cloud.py
+        "google",
+        "google.cloud", 
+        "google.cloud.storage",
+        # Azure - imported by audit_backend_cloud.py
+        "azure",
+        "azure.core",
+        "azure.core.exceptions",
+        "azure.storage",
+        "azure.storage.blob",
+        "azure.storage.blob.aio",
+        # OpenTelemetry - imported by arbiter modules
+        "opentelemetry",
+        "opentelemetry.trace",
+        "opentelemetry.sdk",
+        "opentelemetry.sdk.trace",
+        "opentelemetry.context",
+        "opentelemetry.propagate",
+        "opentelemetry.propagators",
+        # Circuit breaker libraries - imported by arbiter modules  
+        "pybreaker",
+        "circuitbreaker",
+        # Boto3/Botocore - imported by audit_backend_cloud.py
+        "boto3",
+        "botocore",
+        "botocore.exceptions",
+        # Streaming backends - imported by audit_backend
+        "aiokafka",
+        "aiokafka.errors",
+        "aiormq",
+        "aio_pika",
+        # Backoff - imported by runner modules
+        "backoff",
+        # Testing utilities - imported by test files
+        "faker",
+    ]
+    
+    for dep in _CRITICAL_COLLECTION_STUBS:
+        if dep not in sys.modules:
+            try:
+                __import__(dep)
+            except (ImportError, ModuleNotFoundError):
+                # Create stub for missing module
+                mock_module = _create_mock_module(dep)
+                sys.modules[dep] = mock_module
+                
+                # Also create parent modules for dotted names
+                if "." in dep:
+                    parts = dep.split(".")
+                    for i in range(1, len(parts)):
+                        parent_name = ".".join(parts[:i])
+                        if parent_name not in sys.modules:
+                            parent_mock = _create_mock_module(parent_name)
+                            sys.modules[parent_name] = parent_mock
+                        # Set child as attribute on parent
+                        parent = sys.modules[parent_name]
+                        child_name = parts[i]
+                        if not hasattr(parent, child_name):
+                            if ".".join(parts[:i+1]) in sys.modules:
+                                setattr(parent, child_name, sys.modules[".".join(parts[:i+1])])
+
+# Initialize critical stubs at module load time
+_initialize_critical_collection_stubs()
 
 
 # ---- Pytest hooks for collection-time fixes ----
@@ -2044,10 +2130,19 @@ def mock_modules(monkeypatch):
             mock_modules(['runner.runner_core', 'intent_parser.intent_parser'])
     """
     from unittest.mock import MagicMock
+    import importlib.util
 
     def _mock_modules(module_names):
         for name in module_names:
-            monkeypatch.setitem(sys.modules, name, MagicMock(name=f"mock_{name}"))
+            # Create a proper mock module with __spec__ and __path__ to prevent
+            # "AttributeError: __spec__" errors during import system operations
+            mock_module = types.ModuleType(name)
+            mock_module.__file__ = f"<mocked {name}>"
+            mock_module.__path__ = []
+            mock_module.__spec__ = importlib.util.spec_from_loader(name, loader=None)
+            # Make all attribute access return MagicMock for flexibility
+            mock_module.__getattr__ = lambda attr: MagicMock()
+            monkeypatch.setitem(sys.modules, name, mock_module)
 
     return _mock_modules
 
@@ -2798,12 +2893,22 @@ def setup_intent_capture_logging_and_warnings():
 def mock_streamlit_setup():
     """Mock Streamlit session state globally for intent_capture tests."""
     import unittest.mock as mock
+    import importlib.util
     
     mock_session_state = mock.MagicMock()
     mock_session_state.get.return_value = "test_user"
     
-    with mock.patch.dict(sys.modules, {"streamlit": mock.MagicMock()}):
-        sys.modules["streamlit"].session_state = mock_session_state
+    # Create a proper mock module with __spec__ and __path__ to prevent
+    # "AttributeError: __spec__" errors during import system operations
+    streamlit_mock = types.ModuleType("streamlit")
+    streamlit_mock.__file__ = "<mocked streamlit>"
+    streamlit_mock.__path__ = []
+    streamlit_mock.__spec__ = importlib.util.spec_from_loader("streamlit", loader=None)
+    # Make all attribute access return MagicMock for flexibility
+    streamlit_mock.__getattr__ = lambda name: mock.MagicMock()
+    streamlit_mock.session_state = mock_session_state
+    
+    with mock.patch.dict(sys.modules, {"streamlit": streamlit_mock}):
         yield
 
 
