@@ -244,10 +244,20 @@ jobs:
           # Verify test collection before running tests
           echo ""
           echo "=== Verifying test collection ==="
-          TEST_COUNT=$(pytest --collect-only -q \
+          # Run collection and capture both output and exit code
+          COLLECTION_OUTPUT=$(pytest --collect-only -q \
             --import-mode=importlib \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
-            2>&1 | grep -E "<(Function|Method|Class)" | wc -l || echo "0")
+            2>&1)
+          COLLECTION_EXIT=$?
+          
+          if [ $COLLECTION_EXIT -ne 0 ]; then
+            echo "ERROR: Test collection failed with exit code $COLLECTION_EXIT"
+            echo "$COLLECTION_OUTPUT"
+            exit $COLLECTION_EXIT
+          fi
+          
+          TEST_COUNT=$(echo "$COLLECTION_OUTPUT" | grep -E "<(Function|Method|Class)" | wc -l)
           echo "Found $TEST_COUNT tests to run"
           
           if [ "$TEST_COUNT" -eq "0" ]; then
@@ -255,7 +265,7 @@ jobs:
             pytest --collect-only -v \
               --import-mode=importlib \
               --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py || true
-            echo "ERROR: Test collection failed - no tests found"
+            echo "ERROR: Test collection succeeded but found 0 tests"
             exit 1
           fi
           
@@ -290,14 +300,18 @@ jobs:
           # Validate that tests actually ran (only if pytest succeeded)
           if [ $EXIT_CODE -eq 0 ]; then
             if [ -f test-results.xml ]; then
-              TESTS_RAN=$(grep -oP 'tests="\K[0-9]+' test-results.xml | head -1 || echo "0")
+              # Use sed for portable XML attribute extraction
+              TESTS_RAN=$(sed -n 's/.*tests="\([0-9]*\)".*/\1/p' test-results.xml | head -1)
               echo "Test results XML reports: $TESTS_RAN tests executed"
               if [ -z "$TESTS_RAN" ] || [ "$TESTS_RAN" -eq "0" ]; then
                 echo "ERROR: No tests were executed despite successful collection!"
                 exit 1
               fi
             else
-              echo "WARNING: test-results.xml not found - cannot validate test execution"
+              # Missing test results file when pytest succeeded is a critical error
+              echo "ERROR: test-results.xml not found despite pytest reporting success!"
+              echo "This indicates pytest did not generate the results file as expected."
+              exit 1
             fi
           fi
           
