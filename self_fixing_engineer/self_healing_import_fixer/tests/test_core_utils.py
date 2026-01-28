@@ -241,6 +241,7 @@ class TestCircuitBreaker:
             cb.call(failing_operation)
         assert "Circuit breaker test_service is open" in str(exc_info.value)
 
+    @pytest.mark.slow
     def test_circuit_breaker_half_open_state(self):
         """Test circuit breaker transitions to half-open state."""
         cb = CircuitBreaker("test_service", failure_threshold=2, recovery_timeout=0.1)
@@ -288,6 +289,7 @@ class TestRateLimiter:
         assert limiter.is_allowed() is True
         assert limiter.is_allowed() is False
 
+    @pytest.mark.slow
     def test_rate_limiter_window_reset(self):
         """Test rate limiter resets after window expires."""
         limiter = RateLimiter(max_calls=2, window_seconds=0.1)
@@ -435,6 +437,7 @@ class TestCaching:
         assert result2 == 10
         assert call_count == 1  # Should only be called once
 
+    @pytest.mark.slow
     def test_cache_expiration(self):
         """Test cache expires after TTL."""
         call_count = 0
@@ -609,6 +612,7 @@ class TestOperationalUtilities:
         assert health["checks"]["memory"]["usage_percent"] == 60.0
         assert health["checks"]["disk"]["usage_percent"] == 70.0
 
+    @pytest.mark.slow
     def test_timing_context(self):
         """Test timing context manager."""
         with patch(

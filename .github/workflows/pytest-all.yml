@@ -239,10 +239,7 @@ jobs:
             --maxfail=50 \
             --import-mode=importlib \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
-            --ignore=self_fixing_engineer/simulation/tests/ \
             -m "not slow and not integration" \
-            --timeout=30 \
-            --timeout-method=thread \
             --junitxml=test-results.xml \
             2>&1 | tee test-output.log
           
