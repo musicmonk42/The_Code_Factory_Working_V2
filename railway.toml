@@ -7,7 +7,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "python server/run.py"
+startCommand = "python -m uvicorn server.main:app --host 0.0.0.0 --port 8080 --workers 1"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
@@ -29,6 +29,15 @@ LOG_LEVEL = "INFO"
 APP_STARTUP = "1"
 SKIP_IMPORT_TIME_VALIDATION = "1"
 SPACY_WARNING_IGNORE = "W007"
+
+# === Port Configuration (REQUIRED for Railway deployment) ===
+PORT = "8080"
+
+# === Audit Crypto Configuration (REQUIRED for Railway deployment) ===
+# Disable audit crypto by default to prevent AWS/boto3 calls during startup
+# This ensures fast startup and no credential errors when AWS is not configured
+AUDIT_CRYPTO_MODE = "disabled"
+AUDIT_CRYPTO_ALLOW_INIT_FAILURE = "1"
 
 # =============================================================================
 # SECURITY - CRITICAL: SET THESE IN RAILWAY UI AS SECRETS
@@ -122,7 +131,8 @@ PROMETHEUS_PORT = "9090"
 # METRICS_PORT = "9090"
 
 # === Performance ===
-WORKER_COUNT = "4"
+# Single worker for Railway deployment to ensure fast startup and reliable healthchecks
+WORKER_COUNT = "1"
 MAX_CONCURRENT_TASKS = "50"
 
 # === Self-Fixing Engineer ===
