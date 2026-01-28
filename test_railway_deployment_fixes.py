@@ -27,7 +27,7 @@ def test_audit_crypto_disabled_mode():
     import generator.audit_log.audit_crypto.audit_crypto_factory as factory
     
     # Verify disabled mode is detected
-    assert factory._is_crypto_disabled() == True, "Disabled mode not detected"
+    assert factory._is_crypto_disabled(), "Disabled mode not detected"
     
     # Verify boto3 was not loaded (should still be None)
     assert factory.boto3 is None, "boto3 should not be loaded when disabled"
@@ -45,6 +45,7 @@ def test_railway_toml_configuration():
     
     # Check for single worker configuration
     assert "workers" in content.lower(), "railway.toml should mention workers"
+    assert "server/run.py" in content, "railway.toml should use server/run.py"
     
     # Check for required environment variables
     assert "AUDIT_CRYPTO_MODE" in content, "AUDIT_CRYPTO_MODE should be in railway.toml"
@@ -66,10 +67,11 @@ def test_dockerfile_single_worker():
     
     content = dockerfile_path.read_text()
     
-    # Check for uvicorn command with single worker
-    assert "uvicorn" in content, "Dockerfile should use uvicorn"
+    # Check for server/run.py command with single worker
+    assert "server/run.py" in content, "Dockerfile should use server/run.py"
     assert "--workers" in content, "Dockerfile should specify workers"
-    assert '"1"' in content or "'1'" in content, "Dockerfile should use single worker"
+    # Check for single worker
+    assert ('"1"' in content and "--workers" in content), "Dockerfile should use single worker"
     
     print("✓ Dockerfile configured for single worker")
 

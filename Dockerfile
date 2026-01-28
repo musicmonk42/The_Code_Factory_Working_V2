@@ -168,6 +168,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SKIP_IMPORT_TIME_VALIDATION=1 \
     SPACY_WARNING_IGNORE=W007 \
     AWS_REGION="" \
+    AUDIT_CRYPTO_MODE="disabled" \
+    AUDIT_CRYPTO_ALLOW_INIT_FAILURE="1" \
     FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
 
 # Optional: curl for debugging and healthchecks
@@ -197,10 +199,15 @@ COPY --from=builder --chown=appuser:appuser /app /app
 
 USER appuser
 
-# The FastAPI server runs on port 8000 (or PORT env var), Prometheus metrics on port 9090
-EXPOSE 8000 9090
+# The FastAPI server runs on port 8080 (Railway) or PORT env var, Prometheus metrics on port 9090
+EXPOSE 8080 9090
+
+# Docker healthcheck to verify the container is running properly
+# Checks the /health endpoint which returns 200 if the API is up
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Start the unified platform API server
-# Use PORT environment variable if set (Railway, Heroku, etc.), otherwise default to 8000
 # Single worker mode for Railway deployment to ensure fast startup and reliable healthchecks
-CMD ["python", "-m", "uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+# Using server/run.py which respects PORT environment variable (defaults to 8000, Railway sets to 8080)
+CMD ["python", "server/run.py", "--host", "0.0.0.0", "--workers", "1"]
