@@ -983,7 +983,7 @@ class Runner(ABC):
                     for _ in range(min(batch_size, len(self.queue))):
                         prio_task = heapq.heappop(self.queue)
                         tasks_to_send.append(prio_task.task)
-                        self._update_task_status(
+                        await self._update_task_status(
                             prio_task.task_id, "enqueued", started_at=time.time()
                         )
 
@@ -1075,7 +1075,7 @@ class Runner(ABC):
                                     heapq.heappush(
                                         self.queue, PrioritizedTask(task.priority, task)
                                     )
-                                    self._update_task_status(
+                                    await self._update_task_status(
                                         task.task_id,
                                         "pending",
                                         error=DistributedError(
@@ -1112,7 +1112,7 @@ class Runner(ABC):
                             heapq.heappush(
                                 self.queue, PrioritizedTask(task.priority, task)
                             )
-                            self._update_task_status(
+                            await self._update_task_status(
                                 task.task_id,
                                 "pending",
                                 error=DistributedError(
@@ -1148,7 +1148,7 @@ class Runner(ABC):
                             heapq.heappush(
                                 self.queue, PrioritizedTask(task.priority, task)
                             )
-                            self._update_task_status(
+                            await self._update_task_status(
                                 task.task_id,
                                 "pending",
                                 error=TimeoutError(
@@ -1183,7 +1183,7 @@ class Runner(ABC):
                             heapq.heappush(
                                 self.queue, PrioritizedTask(task.priority, task)
                             )
-                            self._update_task_status(
+                            await self._update_task_status(
                                 task.task_id,
                                 "pending",
                                 error=DistributedError(
@@ -1659,7 +1659,7 @@ class Runner(ABC):
         span.set_attribute("runner.framework_config", self.config.framework)
         span.set_attribute(RUNNER_LABEL_INSTANCE_ID, self.instance_id)
 
-        self._update_task_status(
+        await self._update_task_status(
             task_id,
             "running",
             started_at=time.time(),
@@ -1687,7 +1687,7 @@ class Runner(ABC):
                 tags=task_payload.tags,
                 environment=task_payload.environment,
             )
-            self._update_task_status(
+            await self._update_task_status(
                 task_id,
                 "completed",
                 results=simulated_results,
@@ -2355,7 +2355,7 @@ class Runner(ABC):
 
             final_results = parsed_results
 
-            self._update_task_status(
+            await self._update_task_status(
                 task_id, "completed", results=final_results, finished_at=time.time()
             )
             span.set_status(Status(StatusCode.OK))
@@ -2370,7 +2370,7 @@ class Runner(ABC):
             )
 
         except TimeoutError as e:  # Re-raise TimeoutError directly
-            self._update_task_status(
+            await self._update_task_status(
                 task_id, "timed_out", error=e.as_dict(), finished_at=time.time()
             )
             logger.error(
@@ -2382,7 +2382,7 @@ class Runner(ABC):
             span.record_exception(e)
             return self.task_status_map[task_id]
         except RunnerError as e:  # Catch all other structured Runner errors
-            self._update_task_status(
+            await self._update_task_status(
                 task_id, "failed", error=e.as_dict(), finished_at=time.time()
             )
             logger.error(
@@ -2401,7 +2401,7 @@ class Runner(ABC):
                 task_id=task_id,
                 cause=e,
             ).as_dict()
-            self._update_task_status(
+            await self._update_task_status(
                 task_id, "failed", error=error_dict, finished_at=time.time()
             )
             logger.error(
@@ -2438,7 +2438,7 @@ class Runner(ABC):
             task_payload.task_id = str(uuid.uuid4())
 
         # [FIX] Create the initial TaskResult in 'enqueued' state as per test requirements
-        self._update_task_status(
+        await self._update_task_status(
             task_payload.task_id,
             "enqueued",
             started_at=time.time(),  # Use 'started_at' for enqueue time
