@@ -387,6 +387,12 @@ _build/
 site/
 
 # ========================
+# Runtime State Files
+# ========================
+# Runner queue persistence (contains random UUIDs and temp paths)
+runner_queue.json
+
+# ========================
 # Cloud and Container Specific Ignores
 # ========================
 # Docker

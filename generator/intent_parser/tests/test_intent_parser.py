@@ -173,12 +173,6 @@ class TestIntentParser(unittest.TestCase):
         parser = IntentParser(config_path=str(config_path or self.config_path))
         self.parsers_to_cleanup.append(parser)
         return parser
-        self.temp_dir.cleanup()
-        # --- FIX: Reset lazy loaders after each test ---
-        global _spacy, _torch, _transformers
-        _spacy = None
-        _torch = None
-        _transformers = None
 
     # --- Config and Lazy Loading Tests ---
 
