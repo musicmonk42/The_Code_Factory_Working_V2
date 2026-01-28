@@ -35,6 +35,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+          --sysctl vm.overcommit_memory=1
         ports:
           - 6379:6379
     
@@ -226,27 +227,18 @@ jobs:
           free -h
           
           python -c "import gc; gc.collect(); print('Garbage collection completed')"
-          rm -rf .pytest_cache/
+          rm -rf .pytest_cache/ .coverage 2>/dev/null || true
           
           echo ""
           echo "=== Running all tests ==="
           
-          # Run pytest directly - no collection validation (causes OOM)
+          # Run pytest without xdist, coverage, and json-report to minimize memory usage
           timeout 3600s pytest \
             -v \
             --tb=short \
             --maxfail=50 \
             --import-mode=importlib \
-            -n 1 \
-            --dist loadgroup \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
-            --cov=generator \
-            --cov=omnicore_engine \
-            --cov=self_fixing_engineer \
-            --cov-report=xml:coverage.xml \
-            --cov-report=term-missing:skip-covered \
-            --no-cov-on-fail \
-            --json-report --json-report-file=test-report.json \
             --junitxml=test-results.xml \
             2>&1 | tee test-output.log
           
@@ -322,11 +314,12 @@ jobs:
           
       - name: Upload JSON test report
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && hashFiles('./test-report.json') != ''
         with:
           name: test-report-json
           path: test-report.json
           retention-days: 30
+        continue-on-error: true
           
       - name: Upload test output log
         uses: actions/upload-artifact@v4
