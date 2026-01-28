@@ -51,6 +51,8 @@ jobs:
       SKIP_BACKGROUND_TASKS: '1'
       NO_MONITORING: '1'
       DISABLE_TELEMETRY: '1'
+      # Prevent matplotlib from initializing GUI backends and loading font caches
+      MPLBACKEND: 'Agg'
       # Prevent OpenBLAS/MKL/OMP threading issues in CI environment (RLIMIT_NPROC limits)
       OPENBLAS_NUM_THREADS: '1'
       MKL_NUM_THREADS: '1'
@@ -222,7 +224,9 @@ jobs:
       
       - name: Collect tests (diagnostic)
         run: |
-          timeout 60 pytest --collect-only --quiet || echo "Collection failed or timed out"
+          # Increased timeout to 180s to accommodate large codebase with multiple conftest.py files
+          # and extensive mocking setup that requires module discovery across multiple packages
+          timeout 180 pytest --collect-only --quiet || echo "Collection failed or timed out"
         continue-on-error: true
           
       - name: Run all tests
