@@ -300,6 +300,7 @@ class TestRateLimiter:
 
         assert limiter.is_allowed() is True
 
+    @pytest.mark.slow
     def test_rate_limiter_wait_if_needed(self):
         """Test rate limiter blocking wait functionality."""
         limiter = RateLimiter(max_calls=1, window_seconds=0.2)

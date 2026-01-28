@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 # Add parent directory to path for imports
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -206,6 +208,7 @@ class TestCircuitBreaker(unittest.TestCase):
         self.cb.record_success()
         self.assertEqual(self.cb.failure_count, 0)
 
+    @pytest.mark.slow
     def test_circuit_breaker_closes_after_timeout(self):
         """Circuit breaker should close after timeout."""
         import time
