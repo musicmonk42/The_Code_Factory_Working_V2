@@ -2,7 +2,40 @@
 
 import os
 import pytest
-from prometheus_client import REGISTRY
+
+# Import prometheus_client safely - may not be available or may have registry issues
+try:
+    from prometheus_client import REGISTRY
+except (ImportError, ValueError) as e:
+    # If prometheus_client is not available or has registry issues, create a mock
+    import sys
+    import types
+    if 'prometheus_client' not in sys.modules:
+        # Create a minimal mock
+        prom_module = types.ModuleType('prometheus_client')
+        
+        class MockRegistry:
+            def __init__(self):
+                self._collector_to_names = {}
+            def unregister(self, collector):
+                pass
+        
+        prom_module.REGISTRY = MockRegistry()
+        sys.modules['prometheus_client'] = prom_module
+        REGISTRY = prom_module.REGISTRY
+    else:
+        # Module exists but has issues, try to get REGISTRY
+        try:
+            REGISTRY = sys.modules['prometheus_client'].REGISTRY
+        except AttributeError:
+            # Create a mock registry
+            class MockRegistry:
+                def __init__(self):
+                    self._collector_to_names = {}
+                def unregister(self, collector):
+                    pass
+            REGISTRY = MockRegistry()
+            sys.modules['prometheus_client'].REGISTRY = REGISTRY
 
 
 def pytest_configure(config):
