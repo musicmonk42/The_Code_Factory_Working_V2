@@ -105,6 +105,10 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         (echo "ERROR: uvicorn is not importable. Dependencies were not installed correctly." && exit 1); \
         python -c "import fastapi; print(f'✓ fastapi {fastapi.__version__} is installed')" || \
         (echo "ERROR: fastapi is not importable. Dependencies were not installed correctly." && exit 1); \
+        python -c "import pydantic; print(f'✓ pydantic {pydantic.__version__} is installed')" || \
+        (echo "ERROR: pydantic is not importable. Dependencies were not installed correctly." && exit 1); \
+        python -c "import starlette; print(f'✓ starlette {starlette.__version__} is installed')" || \
+        (echo "ERROR: starlette is not importable. Dependencies were not installed correctly." && exit 1); \
         python -c "import asyncpg; print(f'✓ asyncpg {asyncpg.__version__} is installed')" || \
         (echo "ERROR: asyncpg is not importable. Check SSL/network during pip install." && exit 1); \
         python -c "import defusedxml; print('✓ defusedxml is installed')" || \

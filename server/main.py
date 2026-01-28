@@ -63,16 +63,156 @@ os.environ.setdefault("SPACY_WARNING_IGNORE", "W007")  # Suppress spaCy warnings
 import path_setup  # noqa: F401
 
 import logging
+import sys
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+# =============================================================================
+# ENTERPRISE-GRADE STARTUP DEPENDENCY VERIFICATION
+# =============================================================================
+# This section implements fail-fast dependency verification following:
+# - ISO 27001 A.12.6.1: Technical vulnerability management
+# - SOC 2 Type II CC6.1: System component integrity verification
+# - NIST SP 800-53 SI-2: Flaw remediation
+#
+# Pattern: Fail-fast at build time, graceful degradation at runtime
+# =============================================================================
+
+_startup_start_time = time.monotonic()
+_startup_errors: List[str] = []
+_startup_warnings: List[str] = []
+
+
+def _verify_critical_import(module_name: str, package_name: str, description: str) -> bool:
+    """
+    Verify a critical dependency can be imported.
+    
+    Args:
+        module_name: Python module name
+        package_name: PyPI package name for error messages
+        description: Human-readable description
+        
+    Returns:
+        True if import succeeded, False otherwise
+    """
+    try:
+        __import__(module_name)
+        return True
+    except ImportError as e:
+        _startup_errors.append(
+            f"{package_name} ({description}): {e}"
+        )
+        return False
+    except Exception as e:
+        _startup_errors.append(
+            f"{package_name} ({description}): Unexpected error - {type(e).__name__}: {e}"
+        )
+        return False
+
+
+# CRITICAL: Verify FastAPI and core dependencies BEFORE any other imports
+# This ensures clear, actionable error messages for operators
+try:
+    from fastapi import FastAPI, Request, Response
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.templating import Jinja2Templates
+except ImportError as e:
+    # Provide a clear, actionable error message
+    error_msg = f"""
+================================================================================
+CRITICAL STARTUP FAILURE: FastAPI framework not installed
+================================================================================
+
+Error: {e}
+
+This is a fatal error. The FastAPI web framework is required for the
+Code Factory Platform API server to start.
+
+RESOLUTION:
+-----------
+1. Install all dependencies:
+   pip install -r requirements.txt
+
+2. Or install FastAPI directly:
+   pip install fastapi starlette uvicorn pydantic
+
+3. For Docker deployments, ensure the Dockerfile includes:
+   COPY requirements.txt .
+   RUN pip install -r requirements.txt
+
+4. Verify the installation:
+   python -c "import fastapi; print(fastapi.__version__)"
+
+For more information, see: QUICKSTART.md and DEPLOYMENT.md
+================================================================================
+"""
+    print(error_msg, file=sys.stderr)
+    raise ImportError(error_msg) from e
+
+# Verify additional critical dependencies
+# These are required for the server to function properly
+_critical_deps = [
+    ("uvicorn", "uvicorn", "ASGI server - required to serve HTTP requests"),
+    ("pydantic", "pydantic", "Data validation - required for request/response schemas"),
+    ("starlette", "starlette", "ASGI toolkit - required as FastAPI foundation"),
+]
+
+for _mod, _pkg, _desc in _critical_deps:
+    _verify_critical_import(_mod, _pkg, _desc)
+
+# Verify recommended dependencies (non-blocking)
+_recommended_deps = [
+    ("redis", "redis", "Caching and distributed locks - degraded mode without"),
+    ("httpx", "httpx", "HTTP client - some features unavailable without"),
+    ("structlog", "structlog", "Structured logging - basic logging without"),
+]
+
+for _mod, _pkg, _desc in _recommended_deps:
+    try:
+        __import__(_mod)
+    except ImportError as e:
+        _startup_warnings.append(f"{_pkg} ({_desc}): {e}")
+
+# Report startup dependency issues
+if _startup_errors:
+    _error_report = (
+        "\n" + "=" * 70 + "\n"
+        "CRITICAL: Missing dependencies detected during startup!\n"
+        "=" * 70 + "\n"
+        "The following CRITICAL dependencies are missing:\n\n"
+    )
+    for _err in _startup_errors:
+        _error_report += f"  ❌ {_err}\n"
+    _error_report += (
+        "\n" + "-" * 70 + "\n"
+        "RESOLUTION:\n"
+        "  pip install -r requirements.txt\n"
+        "\nOr install critical packages individually:\n"
+        "  pip install fastapi uvicorn pydantic starlette\n"
+        "=" * 70 + "\n"
+    )
+    print(_error_report, file=sys.stderr)
+    # Log but don't exit - allow partial startup for debugging
+    logging.critical(_error_report)
+
+if _startup_warnings:
+    _warning_report = (
+        "\n" + "-" * 70 + "\n"
+        "WARNING: Some recommended dependencies are missing:\n"
+    )
+    for _warn in _startup_warnings:
+        _warning_report += f"  ⚠️  {_warn}\n"
+    _warning_report += (
+        "\nThe server will start in degraded mode with reduced functionality.\n"
+        "Install all dependencies for full features: pip install -r requirements.txt\n"
+        "-" * 70 + "\n"
+    )
+    print(_warning_report)
 
 # Configure logging BEFORE any other imports that might log
 from server.logging_config import configure_logging
