@@ -213,6 +213,11 @@ jobs:
           sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
           rm -rf /home/runner/.cache/pip/* /tmp/* || true
           df -h
+      
+      - name: Collect tests (diagnostic)
+        run: |
+          timeout 60 pytest --collect-only --quiet || echo "Collection failed or timed out"
+        continue-on-error: true
           
       - name: Run all tests
         env:
@@ -237,7 +242,7 @@ jobs:
             -v \
             --tb=short \
             --maxfail=50 \
-            --import-mode=importlib \
+            --import-mode=prepend \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
             -m "not slow and not integration" \
             --junitxml=test-results.xml \
@@ -287,7 +292,7 @@ jobs:
         run: |
           echo "=== Running test collection with CPU profiling ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
-            --collect-only --quiet --import-mode=importlib --tb=short \
+            --collect-only --quiet --import-mode=prepend --tb=short \
             --ignore=self_fixing_engineer/simulation/tests 2>&1 || true
           
           if [ -f collection_profile.stats ]; then

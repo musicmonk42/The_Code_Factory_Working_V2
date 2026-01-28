@@ -3,16 +3,10 @@ import sys
 import types
 from pathlib import Path
 
-# Pre-configure matplotlib backend BEFORE any imports that might use it
-# This prevents "can't start new thread" errors during font manager initialization
-# Must be set before ANY matplotlib imports occur
+# REMOVED: matplotlib import causes expensive font cache initialization during import
+# Let individual tests import matplotlib if they need it
+# Tests that need matplotlib should set MPLBACKEND=Agg in their own setup
 os.environ.setdefault("MPLBACKEND", "Agg")
-try:
-    import matplotlib
-    matplotlib.use("Agg")
-except (ImportError, RuntimeError):
-    # If matplotlib is not installed or already initialized, continue
-    pass
 
 # Add the project root to Python path (highest priority)
 project_root = os.path.abspath(os.path.dirname(__file__))
@@ -70,16 +64,22 @@ if os.environ.get("TESTING") == "1":
     # breaks tests that import the real module.
     _stub_modules = {}
     
-    # Check if modules actually exist WITHOUT importing them
-    # (which would trigger expensive initialization)
-    # Use find_spec to check module existence
-    if importlib.util.find_spec("intent_capture") is None:
+    # Check if modules actually exist using simple import attempt
+    # find_spec() is expensive due to recursive module discovery
+    # Use try/except import instead
+    try:
+        import intent_capture
+    except ImportError:
         _stub_modules['intent_capture'] = 'intent_capture'
     
-    if importlib.util.find_spec("omnicore_engine.database") is None:
+    try:
+        import omnicore_engine.database
+    except ImportError:
         _stub_modules['omnicore_engine.database'] = 'omnicore_engine.database'
     
-    if importlib.util.find_spec("omnicore_engine.message_bus") is None:
+    try:
+        import omnicore_engine.message_bus
+    except ImportError:
         _stub_modules['omnicore_engine.message_bus'] = 'omnicore_engine.message_bus'
 
     def _stub_getattr(name):
@@ -1709,9 +1709,10 @@ def _ensure_module_specs():
 
 
 # ---- Initialize Prometheus stubs ----
+# DEFERRED: Too expensive during import - moved to setup_test_stubs fixture
 # Initialize stubs unconditionally - they are needed during test collection
 # when test files import prometheus_client at module level
-_initialize_prometheus_stubs()
+# _initialize_prometheus_stubs()  # DEFERRED: Moved to session fixture
 
 
 # ---- Initialize critical collection-time stubs ----
@@ -1825,7 +1826,9 @@ def _initialize_critical_collection_stubs():
                                 setattr(parent, child_name, sys.modules[".".join(parts[:i+1])])
 
 # Initialize critical stubs at module load time
-_initialize_critical_collection_stubs()
+# DEFERRED: Too expensive during import - causes CPU timeout
+# This function tries to import 50+ packages, causing collection to timeout
+# _initialize_critical_collection_stubs()  # DEFERRED: Too expensive during import
 
 
 # ---- Pytest hooks for collection-time fixes ----
