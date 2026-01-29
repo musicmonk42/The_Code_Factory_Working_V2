@@ -288,14 +288,14 @@ jobs:
           echo "=== Running fast tests (core modules only) ==="
           
           # Run only fast, critical tests with optimizations:
-          # -n auto: Enable parallel execution with pytest-xdist
+          # -n 2: Use 2 parallel workers for controlled resource usage
           # --disable-warnings: Skip warning collection
           # -p no:warnings: Disable warnings plugin
           # --maxfail=5: Fail fast after 5 failures (reduced for faster feedback)
           # --tb=line: Minimal traceback for speed
           # Focus on critical test files only (not broad directories)
           timeout 1200s pytest \
-            -n auto \
+            -n 2 \
             -v \
             --tb=line \
             --maxfail=5 \
