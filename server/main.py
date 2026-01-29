@@ -312,9 +312,16 @@ async def lifespan(app: FastAPI):
         logger.info("=" * 80)
         
         try:
-            # Acquire startup lock (non-blocking)
+            # Acquire startup lock with timeout to prevent blocking server startup
             startup_lock = get_startup_lock()
-            lock_acquired = await startup_lock.acquire(blocking=False)
+            try:
+                lock_acquired = await asyncio.wait_for(
+                    startup_lock.acquire(blocking=False),
+                    timeout=0.1  # 100ms max
+                )
+            except asyncio.TimeoutError:
+                lock_acquired = False
+                logger.info("⚠ Startup lock acquisition timed out - continuing anyway")
             
             # Track lock acquisition for cleanup
             app.state.startup_lock_acquired = lock_acquired
@@ -480,10 +487,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check() -> HealthResponse:
     """
-    Health check endpoint (Liveness Probe).
+    Ultra-fast health check endpoint (Liveness Probe).
 
     This endpoint ALWAYS returns HTTP 200 immediately if the API server is responding.
-    It does NOT wait for agents to load or check their availability.
+    It attempts a quick agent status check with 50ms timeout for informational purposes,
+    but failure is non-fatal and doesn't affect the health status.
     
     Purpose: Railway/Kubernetes liveness probe to determine if the container should be restarted.
     
@@ -496,21 +504,33 @@ async def health_check() -> HealthResponse:
     - Timestamp
     
     **Performance:**
-    - Response time: < 1ms guaranteed (no blocking operations)
-    - No I/O operations, no thread pool usage, no timeouts needed
+    - Response time: < 100ms guaranteed (50ms timeout for agent check)
+    - No blocking operations that could prevent returning 200
+    - Always returns "healthy" even if agent check times out or fails
     """
-    # Return immediately with static component status
-    # Agent status is always "loading" to avoid any blocking operations
+    # Start with default component status
     components = {
         "api": "healthy",
-        "omnicore": "healthy",
-        "database": "healthy",
-        "message_bus": "healthy",
-        "agents_status": "loading",  # Always report loading to avoid blocking
+        "agents_status": "loading",  # Default, updated below if quick check succeeds
     }
-
-    # IMPORTANT: Always return "healthy" overall status immediately
-    # This ensures deployment health checks pass within milliseconds when server starts
+    
+    # Try to get agent status with VERY short timeout - failure is OK
+    try:
+        loader = get_agent_loader()
+        status = await asyncio.wait_for(
+            asyncio.to_thread(loader.get_status),
+            timeout=0.05  # 50ms max
+        )
+        if status.get('loading_error'):
+            components["agents_status"] = "degraded"
+        elif status.get('total_agents', 0) > 0 and status.get('availability_rate', 0) > 0:
+            components["agents_status"] = "ready"
+    except (asyncio.TimeoutError, Exception):
+        # Any error or timeout: just leave as "loading"
+        # This is intentional - health check should never fail
+        pass
+    
+    # ALWAYS return healthy if we got here
     return HealthResponse(
         status="healthy",
         version=__version__,
@@ -546,10 +566,14 @@ async def readiness_check(response: Response) -> ReadinessResponse:
     - Individual check results (agents_loaded, api_available)
     - Timestamp
     """
-    # Get agent status from loader
+    # Get agent status from loader with timeout
     try:
         loader = get_agent_loader()
-        agent_status = loader.get_status()
+        # Add timeout to prevent readiness check from blocking too long
+        agent_status = await asyncio.wait_for(
+            asyncio.to_thread(loader.get_status),
+            timeout=1.0  # 1 second max for readiness check
+        )
         
         # Check if agents are still loading
         loading_in_progress = agent_status.get('loading_in_progress', False)
@@ -598,6 +622,14 @@ async def readiness_check(response: Response) -> ReadinessResponse:
                 ready = False
                 status_text = "degraded"
         
+    except asyncio.TimeoutError:
+        logger.warning("Readiness check timed out waiting for agent status")
+        checks = {
+            "api_available": "pass",
+            "agents_loaded": "timeout",
+        }
+        ready = False
+        status_text = "timeout"
     except Exception as e:
         logger.error(f"Error checking readiness: {e}", exc_info=True)
         checks = {

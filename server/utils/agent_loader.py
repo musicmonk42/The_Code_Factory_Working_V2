@@ -902,6 +902,22 @@ class AgentLoader:
         status = self._agent_status.get(agent_type)
         return status is not None and status.available
     
+    def _get_availability_rate(self) -> float:
+        """
+        Calculate availability rate without any I/O.
+        
+        This is a fast helper method for get_status() that just does arithmetic.
+        No locking needed as it only reads immutable data structures.
+        
+        Returns:
+            Float between 0.0 and 1.0 representing percentage of available agents
+        """
+        total = len(self._agent_status)
+        if total == 0:
+            return 0.0
+        available = sum(1 for status in self._agent_status.values() if status.available)
+        return available / total
+    
     def get_agent_error(self, agent_type: str) -> Optional[AgentImportError]:
         """
         Get detailed error information for a failed agent import.
@@ -917,7 +933,10 @@ class AgentLoader:
     
     def get_status(self) -> Dict[str, Any]:
         """
-        Get comprehensive status of all agents.
+        Get comprehensive status of all agents - MUST be fast (< 10ms).
+        
+        This method is called by health/readiness endpoints and must not block.
+        Uses cached state and simple operations, no I/O or blocking calls.
         
         Returns:
             Dictionary with agent status and diagnostics
@@ -935,7 +954,7 @@ class AgentLoader:
             if status.error and status.error.missing_dependencies:
                 all_missing_deps.update(status.error.missing_dependencies)
         
-        # Check environment variables
+        # Check environment variables - os.getenv is fast (reads from process environment)
         env_status = {}
         for env_var in self._optional_env_vars:
             env_status[env_var] = "set" if os.getenv(env_var) else "not_set"
@@ -950,11 +969,7 @@ class AgentLoader:
             "total_agents": len(self._agent_status),
             "available_agents": available_agents,
             "unavailable_agents": unavailable_agents,
-            "availability_rate": (
-                len(available_agents) / len(self._agent_status)
-                if self._agent_status
-                else 0.0
-            ),
+            "availability_rate": self._get_availability_rate(),
             "missing_dependencies": sorted(list(all_missing_deps)),
             "environment_variables": env_status,
             "agents": {
