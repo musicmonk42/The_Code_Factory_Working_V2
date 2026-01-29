@@ -220,37 +220,201 @@ from server.logging_config import configure_logging
 configure_logging()
 
 from server import __version__
-from server.routers import (
-    api_keys_router,
-    diagnostics_router,
-    events_router,
-    fixes_router,
-    generator_router,
-    jobs_router,
-    omnicore_router,
-    sfe_router,
-)
-from server.utils.agent_loader import AgentType, get_agent_loader
-from server.schemas import ErrorResponse, HealthResponse, ReadinessResponse, DetailedHealthResponse
-from server.config_utils import initialize_config, validate_required_api_keys
-from server.distributed_lock import get_startup_lock
+
+# =============================================================================
+# CRITICAL: Defer router imports to allow /health to work even if imports fail
+# =============================================================================
+# Router imports are done lazily during startup to ensure the health endpoint
+# can respond immediately. This is critical for Railway/Kubernetes healthchecks.
+# =============================================================================
+import threading
+
+# Thread lock for router loading
+_router_load_lock = threading.Lock()
+
+# These will be populated during startup
+_routers_loaded = False
+_router_load_error: Optional[str] = None
+
+# Placeholders for lazy-loaded modules
+api_keys_router = None
+diagnostics_router = None
+events_router = None
+fixes_router = None
+generator_router = None
+jobs_router = None
+omnicore_router = None
+sfe_router = None
+
+# Agent loader type placeholder (will be imported lazily)
+AgentType = None
+get_agent_loader = None
+
+
+def _load_routers():
+    """
+    Load routers lazily. This allows the health endpoint to work even if
+    router imports fail (e.g., missing sse_starlette dependency).
+    
+    Thread-safe: uses a lock to prevent race conditions.
+    """
+    global _routers_loaded, _router_load_error
+    global api_keys_router, diagnostics_router, events_router, fixes_router
+    global generator_router, jobs_router, omnicore_router, sfe_router
+    global AgentType, get_agent_loader
+    
+    # Fast path: already loaded
+    if _routers_loaded:
+        return _router_load_error is None
+    
+    # Thread-safe loading
+    with _router_load_lock:
+        # Double-check after acquiring lock
+        if _routers_loaded:
+            return _router_load_error is None
+        
+        try:
+            from server.routers import (
+                api_keys_router as _api_keys_router,
+                diagnostics_router as _diagnostics_router,
+                events_router as _events_router,
+                fixes_router as _fixes_router,
+                generator_router as _generator_router,
+                jobs_router as _jobs_router,
+                omnicore_router as _omnicore_router,
+                sfe_router as _sfe_router,
+            )
+            from server.utils.agent_loader import AgentType as _AgentType, get_agent_loader as _get_agent_loader
+            
+            # Assign all values atomically (within the lock)
+            api_keys_router = _api_keys_router
+            diagnostics_router = _diagnostics_router
+            events_router = _events_router
+            fixes_router = _fixes_router
+            generator_router = _generator_router
+            jobs_router = _jobs_router
+            omnicore_router = _omnicore_router
+            sfe_router = _sfe_router
+            AgentType = _AgentType
+            get_agent_loader = _get_agent_loader
+            
+            _routers_loaded = True
+            logging.getLogger(__name__).info("✓ All routers loaded successfully")
+            return True
+        except Exception as e:
+            _routers_loaded = True
+            _router_load_error = f"{type(e).__name__}: {e}"
+            logging.getLogger(__name__).error(f"Failed to load routers: {_router_load_error}")
+            return False
+
+
+
+# Import minimal dependencies needed for health endpoint schemas
+# These are defined inline to avoid import failures
+from pydantic import BaseModel
+# Note: Dict already imported at line 72
+
+
+class MinimalHealthResponse(BaseModel):
+    """Minimal health response that works without full schema imports."""
+    status: str
+    version: str
+    components: Dict[str, str] = {}
+    timestamp: str
+
+
+# Try to import full schemas, fall back to minimal
+try:
+    from server.schemas import ErrorResponse, HealthResponse, ReadinessResponse, DetailedHealthResponse
+except ImportError as e:
+    logging.getLogger(__name__).warning(f"Could not import full schemas: {e}")
+    # Use minimal response
+    HealthResponse = MinimalHealthResponse
+    ReadinessResponse = MinimalHealthResponse
+    DetailedHealthResponse = MinimalHealthResponse
+    
+    class ErrorResponse(BaseModel):
+        error: str
+        message: str
+        details: Dict[str, Any] = {}
+
+
+# Try to import config utils, provide fallbacks
+try:
+    from server.config_utils import initialize_config, validate_required_api_keys
+except ImportError as e:
+    logging.getLogger(__name__).warning(f"Could not import config_utils: {e}")
+    def initialize_config(log_summary=False):
+        return None
+    def validate_required_api_keys(config, fail_fast=False):
+        return True
+
+
+# Try to import distributed lock, provide fallback
+try:
+    from server.distributed_lock import get_startup_lock
+except ImportError as e:
+    logging.getLogger(__name__).warning(f"Could not import distributed_lock: {e}")
+    class FakeStartupLock:
+        async def acquire(self, blocking=False):
+            return True
+        async def release(self):
+            pass
+        async def close(self):
+            pass
+    def get_startup_lock():
+        return FakeStartupLock()
+
 
 logger = logging.getLogger(__name__)
 
 # Get the directory where this file is located
 BASE_DIR = Path(__file__).resolve().parent
 
-# Configure templates and static files
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+# Configure templates and static files with fallbacks
+try:
+    templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+except Exception as e:
+    logger.warning(f"Could not load templates: {e}")
+    templates = None
+
 static_dir = BASE_DIR / "static"
 
 
-async def _background_initialization():
+async def _background_initialization(app_instance: FastAPI):
     """
     Background initialization task that runs AFTER the HTTP server is ready.
     
     This allows /health to respond immediately while initialization continues.
+    
+    Args:
+        app_instance: The FastAPI application instance to add routers to
     """
+    logger.info("=" * 80)
+    logger.info("LOADING ROUTERS (Background)")
+    logger.info("=" * 80)
+    
+    # Load routers first - this is critical for the API to function
+    routers_ok = _load_routers()
+    
+    if routers_ok:
+        # Include routers with /api prefix
+        try:
+            app_instance.include_router(api_keys_router, prefix="/api")
+            app_instance.include_router(diagnostics_router, prefix="/api")
+            app_instance.include_router(jobs_router, prefix="/api")
+            app_instance.include_router(generator_router, prefix="/api")
+            app_instance.include_router(omnicore_router, prefix="/api")
+            app_instance.include_router(sfe_router, prefix="/api")
+            app_instance.include_router(fixes_router, prefix="/api")
+            app_instance.include_router(events_router, prefix="/api")
+            logger.info("✓ All routers included in application")
+        except Exception as e:
+            logger.error(f"Failed to include routers: {e}", exc_info=True)
+    else:
+        logger.error(f"Router loading failed: {_router_load_error}")
+        logger.warning("API endpoints will not be available")
+    
     logger.info("=" * 80)
     logger.info("INITIALIZING PLATFORM CONFIGURATION (Background)")
     logger.info("=" * 80)
@@ -272,29 +436,32 @@ async def _background_initialization():
         logger.error(f"Configuration initialization failed: {e}", exc_info=True)
         logger.warning(f"Continuing startup despite configuration error: {type(e).__name__}")
     
-    # Start background agent loading
-    logger.info("=" * 80)
-    logger.info("STARTING BACKGROUND AGENT LOADING")
-    logger.info("=" * 80)
-    
-    try:
-        startup_lock = get_startup_lock()
-        lock_acquired = await startup_lock.acquire(blocking=False)
+    # Start background agent loading (only if routers loaded successfully)
+    if routers_ok and get_agent_loader is not None:
+        logger.info("=" * 80)
+        logger.info("STARTING BACKGROUND AGENT LOADING")
+        logger.info("=" * 80)
         
-        if lock_acquired:
-            logger.info("✓ Startup lock acquired - this instance will initialize agents")
-        else:
-            logger.info("⚠ Startup lock held by another instance - agents may already be loading")
-            logger.info("  This is normal in multi-instance deployments")
-        
-        loader = get_agent_loader()
-        loader.start_background_loading()
-        logger.info("✓ Background agent loading task started")
-        logger.info("✓ Check /health for liveness and /ready for readiness")
-        
-    except Exception as e:
-        logger.error(f"Error starting background agent loading: {e}", exc_info=True)
-        logger.warning("Continuing startup despite agent loading error")
+        try:
+            startup_lock = get_startup_lock()
+            lock_acquired = await startup_lock.acquire(blocking=False)
+            
+            if lock_acquired:
+                logger.info("✓ Startup lock acquired - this instance will initialize agents")
+            else:
+                logger.info("⚠ Startup lock held by another instance - agents may already be loading")
+                logger.info("  This is normal in multi-instance deployments")
+            
+            loader = get_agent_loader()
+            loader.start_background_loading()
+            logger.info("✓ Background agent loading task started")
+            logger.info("✓ Check /health for liveness and /ready for readiness")
+            
+        except Exception as e:
+            logger.error(f"Error starting background agent loading: {e}", exc_info=True)
+            logger.warning("Continuing startup despite agent loading error")
+    else:
+        logger.warning("Skipping agent loading due to router loading failure")
     
     logger.info("=" * 80)
     logger.info("Platform initialization complete")
@@ -317,7 +484,8 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 80)
     
     # Start background initialization WITHOUT awaiting
-    background_task = asyncio.create_task(_background_initialization())
+    # Pass the app instance so routers can be added
+    background_task = asyncio.create_task(_background_initialization(app))
     logger.info("Background initialization task created - HTTP server starting now")
     
     # IMMEDIATELY yield so FastAPI routes become available
@@ -484,78 +652,108 @@ async def readiness_check(response: Response) -> ReadinessResponse:
     - Individual check results (agents_loaded, api_available)
     - Timestamp
     """
-    # Get agent status from loader with timeout
-    try:
-        loader = get_agent_loader()
-        # Add timeout to prevent readiness check from blocking too long
-        agent_status = await asyncio.wait_for(
-            asyncio.to_thread(loader.get_status),
-            timeout=1.0  # 1 second max for readiness check
-        )
-        
-        # Check if agents are still loading
-        loading_in_progress = agent_status.get('loading_in_progress', False)
-        loading_error = agent_status.get('loading_error')
-        
-        # Build check results
+    # Check if routers are loaded first
+    if not _routers_loaded:
+        # Routers still loading - not ready
         checks = {
             "api_available": "pass",
+            "routers_loaded": "loading",
         }
-        
-        # Check agent loading status
-        if loading_in_progress:
-            checks["agents_loaded"] = "loading"
-            ready = False
-            status_text = "loading"
-        elif loading_error:
-            checks["agents_loaded"] = f"error: {loading_error}"
-            ready = False
-            status_text = "degraded"
-        else:
-            # Check if any agents are available
-            agent_availability = agent_status.get('availability_rate', 0.0)
-            total_agents = agent_status.get('total_agents', 0)
+        ready = False
+        status_text = "loading"
+    elif _router_load_error:
+        # Router loading failed
+        checks = {
+            "api_available": "pass",
+            "routers_loaded": f"error: {_router_load_error}",
+        }
+        ready = False
+        status_text = "degraded"
+    elif get_agent_loader is None:
+        # Agent loader not available
+        checks = {
+            "api_available": "pass",
+            "routers_loaded": "pass",
+            "agents_loaded": "unavailable",
+        }
+        ready = False
+        status_text = "degraded"
+    else:
+        # Get agent status from loader with timeout
+        try:
+            loader = get_agent_loader()
+            # Add timeout to prevent readiness check from blocking too long
+            agent_status = await asyncio.wait_for(
+                asyncio.to_thread(loader.get_status),
+                timeout=1.0  # 1 second max for readiness check
+            )
             
-            if total_agents == 0:
-                # No agents have been loaded yet
+            # Check if agents are still loading
+            loading_in_progress = agent_status.get('loading_in_progress', False)
+            loading_error = agent_status.get('loading_error')
+            
+            # Build check results
+            checks = {
+                "api_available": "pass",
+                "routers_loaded": "pass",
+            }
+            
+            # Check agent loading status
+            if loading_in_progress:
                 checks["agents_loaded"] = "loading"
                 ready = False
                 status_text = "loading"
-            elif agent_availability > 0:
-                # At least some agents are available
-                checks["agents_loaded"] = "pass"
-                ready = True
-                status_text = "ready"
-                
-                # Include details about available agents
-                available = agent_status.get('available_agents', [])
-                unavailable = agent_status.get('unavailable_agents', [])
-                checks["agents_available"] = f"{len(available)}/{total_agents}"
-                
-                if unavailable:
-                    checks["agents_unavailable"] = ", ".join(unavailable)
-            else:
-                # No agents are available
-                checks["agents_loaded"] = "fail"
+            elif loading_error:
+                checks["agents_loaded"] = f"error: {loading_error}"
                 ready = False
                 status_text = "degraded"
-        
-    except asyncio.TimeoutError:
-        logger.warning("Readiness check timed out waiting for agent status")
-        checks = {
-            "api_available": "pass",
-            "agents_loaded": "timeout",
-        }
-        ready = False
-        status_text = "timeout"
-    except Exception as e:
-        logger.error(f"Error checking readiness: {e}", exc_info=True)
-        checks = {
-            "api_available": "pass",
-            "agents_loaded": "error",
-        }
-        ready = False
-        status_text = "error"
+            else:
+                # Check if any agents are available
+                agent_availability = agent_status.get('availability_rate', 0.0)
+                total_agents = agent_status.get('total_agents', 0)
+                
+                if total_agents == 0:
+                    # No agents have been loaded yet
+                    checks["agents_loaded"] = "loading"
+                    ready = False
+                    status_text = "loading"
+                elif agent_availability > 0:
+                    # At least some agents are available
+                    checks["agents_loaded"] = "pass"
+                    ready = True
+                    status_text = "ready"
+                    
+                    # Include details about available agents
+                    available = agent_status.get('available_agents', [])
+                    unavailable = agent_status.get('unavailable_agents', [])
+                    checks["agents_available"] = f"{len(available)}/{total_agents}"
+                    
+                    if unavailable:
+                        checks["agents_unavailable"] = ", ".join(unavailable)
+                else:
+                    # No agents are available
+                    checks["agents_loaded"] = "fail"
+                    ready = False
+                    status_text = "degraded"
+            
+        except asyncio.TimeoutError:
+            logger.warning("Readiness check timed out waiting for agent status")
+            checks = {
+                "api_available": "pass",
+                "routers_loaded": "pass",
+                "agents_loaded": "timeout",
+            }
+            ready = False
+            status_text = "timeout"
+        except Exception as e:
+            logger.error(f"Error checking readiness: {e}", exc_info=True)
+            checks = {
+                "api_available": "pass",
+                "routers_loaded": "pass",
+                "agents_loaded": "error",
+            }
+            ready = False
+            status_text = "error"
     
     # Set HTTP status code based on readiness
     if not ready:
@@ -591,18 +789,28 @@ async def detailed_health_check() -> DetailedHealthResponse:
     """
     # Get agent status
     try:
-        loader = get_agent_loader()
-        agent_status = loader.get_status()
-        available_agents = agent_status.get('available_agents', {})
-        
-        # Map agent status
-        agents = {
-            "codegen": "available" if available_agents.get(AgentType.CODEGEN) else "unavailable",
-            "critique": "available" if available_agents.get(AgentType.CRITIQUE) else "unavailable",
-            "testgen": "available" if available_agents.get(AgentType.TESTGEN) else "unavailable",
-            "deploy": "available" if available_agents.get(AgentType.DEPLOY) else "unavailable",
-            "docgen": "available" if available_agents.get(AgentType.DOCGEN) else "unavailable",
-        }
+        if get_agent_loader is None or AgentType is None:
+            # Routers not loaded yet
+            agents = {
+                "codegen": "loading",
+                "critique": "loading",
+                "testgen": "loading",
+                "deploy": "loading",
+                "docgen": "loading",
+            }
+        else:
+            loader = get_agent_loader()
+            agent_status = loader.get_status()
+            available_agents = agent_status.get('available_agents', {})
+            
+            # Map agent status
+            agents = {
+                "codegen": "available" if available_agents.get(AgentType.CODEGEN) else "unavailable",
+                "critique": "available" if available_agents.get(AgentType.CRITIQUE) else "unavailable",
+                "testgen": "available" if available_agents.get(AgentType.TESTGEN) else "unavailable",
+                "deploy": "available" if available_agents.get(AgentType.DEPLOY) else "unavailable",
+                "docgen": "available" if available_agents.get(AgentType.DOCGEN) else "unavailable",
+            }
     except Exception as e:
         logger.error(f"Error checking agent status: {e}", exc_info=True)
         agents = {
@@ -733,15 +941,23 @@ async def root(request: Request):
     """
     # Check if client wants HTML
     accept_header = request.headers.get("accept", "")
-    if "text/html" in accept_header:
+    if "text/html" in accept_header and templates is not None:
         # Serve the web UI
-        return templates.TemplateResponse(request, "index.html")
+        try:
+            return templates.TemplateResponse(request, "index.html")
+        except Exception as e:
+            logger.warning(f"Could not render template: {e}")
+            # Fall through to JSON response
 
     # Otherwise return JSON API info
     return {
         "name": "Code Factory Platform API",
         "version": __version__,
         "description": "Enterprise-grade HTTP API for automated software development",
+        "startup_status": {
+            "routers_loaded": _routers_loaded,
+            "router_error": _router_load_error,
+        },
         "ui": {
             "web_interface": "/",
             "description": "Access the A.S.E web interface by visiting / in a browser",
@@ -762,18 +978,9 @@ async def root(request: Request):
         },
     }
 
-
-# Include routers with /api prefix
-app.include_router(api_keys_router, prefix="/api")
-app.include_router(diagnostics_router, prefix="/api")
-app.include_router(jobs_router, prefix="/api")
-app.include_router(generator_router, prefix="/api")
-app.include_router(omnicore_router, prefix="/api")
-app.include_router(sfe_router, prefix="/api")
-app.include_router(fixes_router, prefix="/api")
-app.include_router(events_router, prefix="/api")
-
-logger.info("FastAPI application configured successfully")
+# NOTE: Routers are now loaded lazily in _background_initialization()
+# This allows /health to respond immediately even if router imports fail
+logger.info("FastAPI application configured successfully (routers loaded in background)")
 
 
 # Allow running the server directly with `python -m server.main`
