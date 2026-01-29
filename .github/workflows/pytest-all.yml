@@ -308,22 +308,19 @@ jobs:
             omnicore_engine/tests/test_security_config.py \
             omnicore_engine/database/tests/ \
             --junitxml=test-results-fast.xml \
-            2>&1 | tee test-output-fast.log || {
-              PYTEST_EXIT=$?
-              if [ $PYTEST_EXIT -eq 152 ] || [ $PYTEST_EXIT -eq 137 ]; then
-                echo "ERROR: Tests exceeded CPU/memory limit (exit code $PYTEST_EXIT)"
-                echo "Consider running fewer tests or using more powerful runners"
-                exit $PYTEST_EXIT
-              elif [ $PYTEST_EXIT -eq 124 ]; then
-                echo "ERROR: Tests timed out after 40 minutes"
-                exit 124
-              elif [ $PYTEST_EXIT -ne 0 ]; then
-                echo "ERROR: Tests failed with exit code $PYTEST_EXIT"
-                exit $PYTEST_EXIT
-              fi
-            }
+            2>&1 | tee test-output-fast.log
           
           PYTEST_EXIT=${PIPESTATUS[0]}
+          
+          # Handle test failures with detailed error messages
+          if [ $PYTEST_EXIT -eq 152 ] || [ $PYTEST_EXIT -eq 137 ]; then
+            echo "ERROR: Tests exceeded CPU/memory limit (exit code $PYTEST_EXIT)"
+            echo "Consider running fewer tests or using more powerful runners"
+            exit $PYTEST_EXIT
+          elif [ $PYTEST_EXIT -eq 124 ]; then
+            echo "ERROR: Tests timed out after 40 minutes (job timeout: 45 minutes)"
+            exit 124
+          fi
           
           echo ""
           echo "=== Final memory usage ==="
@@ -425,7 +422,7 @@ jobs:
     # 2. On scheduled runs (nightly)
     # 3. Never on regular push/PR (too slow)
     if: |
-      github.event_name == 'schedule' || 
+      github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_full_tests == 'true')
     permissions:
       contents: read
@@ -622,6 +619,8 @@ jobs:
           echo "=== Running full test suite ==="
           
           # Run all tests with optimizations
+          # No path restrictions - runs complete test suite across all modules
+          # Still excludes: slow tests, integration tests (via markers)
           timeout 10800s pytest \
             -v \
             --tb=short \
@@ -632,22 +631,19 @@ jobs:
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
             -m "not slow and not integration" \
             --junitxml=test-results-full.xml \
-            2>&1 | tee test-output-full.log || {
-              PYTEST_EXIT=$?
-              if [ $PYTEST_EXIT -eq 152 ] || [ $PYTEST_EXIT -eq 137 ]; then
-                echo "ERROR: Tests exceeded CPU/memory limit (exit code $PYTEST_EXIT)"
-                echo "Full test suite requires more resources - consider splitting further"
-                exit $PYTEST_EXIT
-              elif [ $PYTEST_EXIT -eq 124 ]; then
-                echo "ERROR: Tests timed out after 3 hours"
-                exit 124
-              elif [ $PYTEST_EXIT -ne 0 ]; then
-                echo "ERROR: Tests failed with exit code $PYTEST_EXIT"
-                exit $PYTEST_EXIT
-              fi
-            }
+            2>&1 | tee test-output-full.log
           
           PYTEST_EXIT=${PIPESTATUS[0]}
+          
+          # Handle test failures with detailed error messages
+          if [ $PYTEST_EXIT -eq 152 ] || [ $PYTEST_EXIT -eq 137 ]; then
+            echo "ERROR: Tests exceeded CPU/memory limit (exit code $PYTEST_EXIT)"
+            echo "Full test suite requires more resources - consider splitting further"
+            exit $PYTEST_EXIT
+          elif [ $PYTEST_EXIT -eq 124 ]; then
+            echo "ERROR: Tests timed out after 3 hours (job timeout: 4 hours)"
+            exit 124
+          fi
           
           echo ""
           echo "=== Final memory usage ==="

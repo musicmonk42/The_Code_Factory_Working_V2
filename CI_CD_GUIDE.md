@@ -136,7 +136,8 @@ This workflow is optimized to handle a large test suite (400+ test files) effici
 **Jobs:**
 
 1. **fast-tests** - Quick feedback on core functionality (runs on every push/PR)
-   - Timeout: 45 minutes
+   - Timeout: 45 minutes (job level)
+   - Test execution timeout: 40 minutes (2400s)
    - Runs critical tests only: server/tests, core omnicore modules, database tests
    - Optimizations:
      - Collection timeout: 300s (down from 900s)
