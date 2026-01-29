@@ -57,7 +57,7 @@ jobs:
   fast-tests:
     name: Fast Tests (Core & Critical)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     permissions:
       contents: read
     
@@ -257,12 +257,13 @@ jobs:
           df -h
       
       - name: Collect tests (diagnostic)
+        if: false  # Disable for fast-tests to save time
         run: |
-          # Reduced timeout to 300s with collection optimization flags
+          # Reduced timeout to 180s with collection optimization flags
           # --disable-warnings: Skip warning collection for faster performance
           # -p no:warnings: Disable warnings plugin
           # --co: Alias for --collect-only
-          timeout 300 pytest --co --quiet --disable-warnings -p no:warnings || {
+          timeout 180 pytest --co --quiet --disable-warnings -p no:warnings || {
             echo "WARNING: Collection timed out or failed - will proceed with targeted test run"
             exit 0
           }
@@ -287,26 +288,29 @@ jobs:
           echo "=== Running fast tests (core modules only) ==="
           
           # Run only fast, critical tests with optimizations:
+          # -n auto: Enable parallel execution with pytest-xdist
           # --disable-warnings: Skip warning collection
           # -p no:warnings: Disable warnings plugin
-          # --maxfail=10: Fail fast after 10 failures
+          # --maxfail=5: Fail fast after 5 failures (reduced for faster feedback)
           # --tb=line: Minimal traceback for speed
-          # Focus on critical paths: server/tests, omnicore_engine/tests (excluding slow/integration)
-          timeout 2400s pytest \
+          # Focus on critical test files only (not broad directories)
+          timeout 1200s pytest \
+            -n auto \
             -v \
             --tb=line \
-            --maxfail=10 \
+            --maxfail=5 \
             --disable-warnings \
             -p no:warnings \
             --import-mode=prepend \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
             --ignore=self_fixing_engineer/simulation/tests \
+            --ignore=tests/test_integration*.py \
+            --ignore=tests/test_e2e*.py \
             -m "not slow and not integration" \
-            server/tests/ \
             omnicore_engine/tests/test_core.py \
             omnicore_engine/tests/test_fastapi_app.py \
             omnicore_engine/tests/test_security_config.py \
-            omnicore_engine/database/tests/ \
+            omnicore_engine/database/tests/test_database.py \
             --junitxml=test-results-fast.xml \
             2>&1 | tee test-output-fast.log
           
@@ -318,7 +322,7 @@ jobs:
             echo "Consider running fewer tests or using more powerful runners"
             exit $PYTEST_EXIT
           elif [ $PYTEST_EXIT -eq 124 ]; then
-            echo "ERROR: Tests timed out after 40 minutes (job timeout: 45 minutes)"
+            echo "ERROR: Tests timed out after 20 minutes (job timeout: 30 minutes)"
             exit 124
           fi
           
@@ -618,10 +622,12 @@ jobs:
           echo ""
           echo "=== Running full test suite ==="
           
-          # Run all tests with optimizations
+          # Run all tests with optimizations and controlled parallelization
+          # -n 2: Use 2 parallel workers (not auto) for controlled resource usage
           # No path restrictions - runs complete test suite across all modules
           # Still excludes: slow tests, integration tests (via markers)
           timeout 10800s pytest \
+            -n 2 \
             -v \
             --tb=short \
             --maxfail=25 \
