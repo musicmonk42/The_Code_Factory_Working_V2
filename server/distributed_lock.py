@@ -178,6 +178,12 @@ class DistributedLock:
         if self._redis_client is not None:
             return self._redis_client
         
+        # Check if Redis is explicitly disabled for startup optimization
+        # This allows faster startup in environments where Redis is not required
+        if os.getenv("SKIP_REDIS_LOCK", "").lower() in ("1", "true", "yes"):
+            logger.info("Redis distributed locking skipped (SKIP_REDIS_LOCK=1)")
+            return None
+        
         try:
             import redis.asyncio as redis
             
@@ -191,13 +197,13 @@ class DistributedLock:
                 )
                 return None
             
-            # STARTUP OPTIMIZATION: Reduced socket timeouts from 5s to 2s
+            # STARTUP OPTIMIZATION: Reduced socket timeouts to 1s
             # for faster startup when Redis is unavailable. The distributed lock
             # has a graceful fallback to single-instance mode.
             self._redis_client = redis.Redis.from_url(
                 redis_url,
-                socket_connect_timeout=2,  # Reduced from 5s for faster startup
-                socket_timeout=2,  # Reduced from 5s for faster startup
+                socket_connect_timeout=1,  # Reduced from 2s for faster startup
+                socket_timeout=1,  # Reduced from 2s for faster startup
                 decode_responses=True
             )
             
