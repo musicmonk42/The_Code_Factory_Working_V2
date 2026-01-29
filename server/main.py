@@ -491,34 +491,40 @@ async def health_check() -> HealthResponse:
     Health check endpoint (Liveness Probe).
 
     This endpoint ALWAYS returns HTTP 200 immediately if the API server is responding.
-    
+    It is designed for Railway/Kubernetes liveness probes to determine if the container
+    should be restarted.
+
+    **Purpose:**
+    - Liveness probe: checks if the API process is alive and responding
+    - Response time: < 100ms guaranteed (50ms timeout for agent check)
+    - For readiness checks (agents loaded), use the /ready endpoint instead
+
     **Returns:**
-    - Overall health status: always "healthy" if API is running  
-    - Component-level health information (non-blocking)
+    - Overall health status: always "healthy" if API is running
+    - Component-level health information (non-blocking, informational only)
     - API version
     - Timestamp
     """
     # Build basic component health status without blocking
+    # NOTE: Components marked as "healthy" are informational placeholders for liveness probe
+    # This endpoint does NOT perform actual dependency checks (database, redis, etc.)
+    # as those can be slow or time out. Use /ready endpoint for full dependency checks.
     components = {
         "api": "healthy",
-        "omnicore": "healthy", 
+        "omnicore": "healthy",
         "database": "healthy",
         "message_bus": "healthy",
         "agents_status": "loading",  # Default to loading
     }
-    
-    # Try to get agent status with a very short timeout (non-blocking)
+
+    # Try to get agent status with 50ms timeout (non-blocking)
     try:
-        async def get_agent_status_quickly():
-            loader = get_agent_loader()
-            return await asyncio.to_thread(loader.get_status)
-        
-        # Don't wait more than 50ms
+        loader = get_agent_loader()
         agent_status = await asyncio.wait_for(
-            get_agent_status_quickly(),
-            timeout=0.05
+            asyncio.to_thread(loader.get_status),
+            timeout=0.05  # 50 milliseconds - fast enough for liveness probe
         )
-        
+
         # Update agents_status based on loading state
         if agent_status.get('loading_in_progress', False):
             components["agents_status"] = "loading"
@@ -526,15 +532,15 @@ async def health_check() -> HealthResponse:
             components["agents_status"] = "degraded"
         else:
             agent_availability = agent_status.get('availability_rate', 0.0)
-            if agent_status.get('total_agents', 0) == 0:
+            total_agents = agent_status.get('total_agents', 0)
+            if total_agents == 0:
                 components["agents_status"] = "loading"
             elif agent_availability >= 0.5:
                 components["agents_status"] = "ready"
-            elif agent_availability > 0:
-                components["agents_status"] = "degraded"
             else:
+                # Less than 50% availability or no agents available
                 components["agents_status"] = "degraded"
-                
+
     except asyncio.TimeoutError:
         # Agent status check took too long, default to "loading"
         logger.debug("Agent status check timed out, defaulting to 'loading'")
