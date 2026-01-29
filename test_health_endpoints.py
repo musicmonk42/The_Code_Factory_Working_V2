@@ -3,7 +3,7 @@ Test to verify the health and readiness endpoints are correctly implemented.
 
 This validates that:
 1. /health returns HTTP 200 immediately (liveness probe)
-2. /ready returns appropriate status based on agent loading (readiness probe)
+2. /ready returns appropriate status based on router and agent loading (readiness probe)
 """
 import sys
 import asyncio
@@ -21,50 +21,47 @@ from fastapi import Response
 def test_health_endpoint_structure():
     """Verify /health endpoint returns correct structure and always returns 200."""
     
-    # Mock the agent loader to simulate various states
-    mock_loader = AsyncMock()
-    mock_loader.get_status.return_value = {
-        'loading_in_progress': True,
-        'loading_error': None,
-        'total_agents': 0,
-        'availability_rate': 0.0,
-        'available_agents': [],
-        'unavailable_agents': []
-    }
+    # Health endpoint should ALWAYS return healthy - it's a pure liveness probe
+    # It doesn't check agent status or any other dependencies
     
-    with patch('server.main.get_agent_loader', return_value=mock_loader):
-        # Run async function
-        response = asyncio.run(health_check())
-        
-        # Verify response structure
-        assert response.status == "healthy", \
-            "/health should ALWAYS return 'healthy' status (liveness probe)"
-        assert response.version is not None
-        assert 'api' in response.components
-        assert response.components['api'] == 'healthy'
-        assert 'agents_status' in response.components
-        
-        print("✓ /health endpoint returns 'healthy' status immediately")
-        print(f"  - Status: {response.status}")
-        print(f"  - Agents status: {response.components.get('agents_status', 'unknown')}")
+    # Run async function
+    response = asyncio.run(health_check())
+    
+    # Verify response structure
+    assert response.status == "healthy", \
+        "/health should ALWAYS return 'healthy' status (liveness probe)"
+    assert response.version is not None
+    assert 'api' in response.components
+    assert response.components['api'] == 'healthy'
+    # Note: agents_status is no longer included in /health - use /ready instead
+    
+    print("✓ /health endpoint returns 'healthy' status immediately")
+    print(f"  - Status: {response.status}")
+    print(f"  - Components: {response.components}")
 
 
 
 def test_readiness_endpoint_structure():
     """Verify /ready endpoint returns correct structure and status code."""
     
-    # Test 1: Agents still loading - should return 503
+    # Test 1: Routers and agents still loading - should return 503
+    # We need to patch both _routers_loaded and get_agent_loader
+    
     mock_loader = AsyncMock()
-    mock_loader.get_status.return_value = {
+    # Use a regular Mock for get_status since it's called synchronously via asyncio.to_thread
+    from unittest.mock import Mock
+    mock_loader.get_status = Mock(return_value={
         'loading_in_progress': True,
         'loading_error': None,
         'total_agents': 0,
         'availability_rate': 0.0,
         'available_agents': [],
         'unavailable_agents': []
-    }
+    })
     
-    with patch('server.main.get_agent_loader', return_value=mock_loader):
+    with patch('server.main._routers_loaded', True), \
+         patch('server.main._router_load_error', None), \
+         patch('server.main.get_agent_loader', return_value=mock_loader):
         response_obj = Response()
         response = asyncio.run(readiness_check(response_obj))
         
@@ -78,18 +75,20 @@ def test_readiness_endpoint_structure():
         print(f"  - Ready: {response.ready}")
         print(f"  - Status code: {response_obj.status_code}")
     
-    # Test 2: Agents loaded - should return 200
+    # Test 2: Routers and agents loaded - should return 200
     mock_loader = AsyncMock()
-    mock_loader.get_status.return_value = {
+    mock_loader.get_status = Mock(return_value={
         'loading_in_progress': False,
         'loading_error': None,
         'total_agents': 5,
         'availability_rate': 1.0,
         'available_agents': ['runner', 'omnicore_engine', 'arbiter', 'codegen', 'testgen'],
         'unavailable_agents': []
-    }
+    })
     
-    with patch('server.main.get_agent_loader', return_value=mock_loader):
+    with patch('server.main._routers_loaded', True), \
+         patch('server.main._router_load_error', None), \
+         patch('server.main.get_agent_loader', return_value=mock_loader):
         response_obj = Response()
         response = asyncio.run(readiness_check(response_obj))
         
@@ -110,21 +109,24 @@ def test_health_vs_readiness_separation():
     Verify that /health and /ready serve different purposes.
     
     /health (liveness): Always returns 200 if process is running
-    /ready (readiness): Returns 503 if agents not loaded, 200 when ready
+    /ready (readiness): Returns 503 if routers/agents not loaded, 200 when ready
     """
+    from unittest.mock import Mock
     
     # Simulate agents still loading
     mock_loader = AsyncMock()
-    mock_loader.get_status.return_value = {
+    mock_loader.get_status = Mock(return_value={
         'loading_in_progress': True,
         'loading_error': None,
         'total_agents': 0,
         'availability_rate': 0.0,
         'available_agents': [],
         'unavailable_agents': []
-    }
+    })
     
-    with patch('server.main.get_agent_loader', return_value=mock_loader):
+    with patch('server.main._routers_loaded', True), \
+         patch('server.main._router_load_error', None), \
+         patch('server.main.get_agent_loader', return_value=mock_loader):
         # Health should be "healthy" (200)
         health_response = asyncio.run(health_check())
         assert health_response.status == "healthy"
