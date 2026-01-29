@@ -62,6 +62,7 @@ os.environ.setdefault("SPACY_WARNING_IGNORE", "W007")  # Suppress spaCy warnings
 # Import path_setup first to ensure all component paths are in sys.path
 import path_setup  # noqa: F401
 
+import asyncio
 import logging
 import sys
 import time
@@ -428,67 +429,77 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check() -> HealthResponse:
     """
-    Health check endpoint.
+    Health check endpoint (Liveness Probe).
 
-    Returns the health status of the API server and all connected components,
-    including agent availability status.
+    This endpoint ALWAYS returns HTTP 200 immediately if the API server is responding.
+    It does NOT wait for agents to load or check their availability in a blocking manner.
     
-    This endpoint ALWAYS returns HTTP 200 if the API server is responding,
-    ensuring deployment healthchecks pass immediately on startup.
+    Purpose: Railway/Kubernetes liveness probe to determine if the container should be restarted.
+    
+    For checking if agents are ready, use the /ready endpoint instead.
 
     **Returns:**
-    - Overall health status (always "healthy" if API is running)
-    - Component-level health information including agent availability
+    - Overall health status: always "healthy" if API is running
+    - Component-level health information (non-blocking)
     - API version
     - Timestamp
     """
-    # Get agent status from loader
+    # Build basic component health status without blocking
+    components = {
+        "api": "healthy",
+        "omnicore": "healthy",
+        "database": "healthy",
+        "message_bus": "healthy",
+        "agents_status": "loading",  # Default to loading
+    }
+    
+    # Try to get agent status with a very short timeout
+    # This should NOT block the health check response
     try:
-        loader = get_agent_loader()
-        agent_status = loader.get_status()
+        # Use asyncio.wait_for with 0.1 second timeout to prevent blocking
+        # We use asyncio.to_thread to run the sync get_status in a thread pool
+        # This prevents it from blocking the async event loop
+        
+        async def get_agent_status_quickly():
+            loader = get_agent_loader()
+            # Run sync get_status in thread pool to avoid blocking
+            return await asyncio.to_thread(loader.get_status)
+        
+        # Try to get status but don't wait more than 100ms
+        agent_status = await asyncio.wait_for(
+            get_agent_status_quickly(),
+            timeout=0.1
+        )
         
         # Determine agents_status based on loading state
         if agent_status.get('loading_in_progress', False):
-            agents_health = "loading"
+            components["agents_status"] = "loading"
         elif agent_status.get('loading_error'):
-            agents_health = "degraded"
+            components["agents_status"] = "degraded"
         else:
             # Check agent availability
             agent_availability = agent_status.get('availability_rate', 0.0)
             
-            # Consider agents healthy if at least 50% are available
-            # or if no agents have been loaded yet (initial state)
             if agent_status.get('total_agents', 0) == 0:
-                agents_health = "loading"
+                components["agents_status"] = "loading"
             elif agent_availability >= 0.5:
-                agents_health = "ready"
+                components["agents_status"] = "ready"
             elif agent_availability > 0:
-                agents_health = "degraded"
+                components["agents_status"] = "degraded"
             else:
-                agents_health = "degraded"
-        
-        # Build component health status
-        components = {
-            "api": "healthy",
-            "omnicore": "healthy",
-            "database": "healthy",
-            "message_bus": "healthy",
-            "agents_status": agents_health,
-        }
-        
+                components["agents_status"] = "degraded"
+                
+    except asyncio.TimeoutError:
+        # Agent status check took too long, default to "loading"
+        logger.debug("Agent status check timed out, defaulting to 'loading'")
+        components["agents_status"] = "loading"
     except Exception as e:
-        logger.error(f"Error checking agent health: {e}", exc_info=True)
-        components = {
-            "api": "healthy",
-            "omnicore": "healthy",
-            "database": "healthy",
-            "message_bus": "healthy",
-            "agents_status": "loading",
-        }
+        # Any error checking agent status should not fail the health check
+        logger.debug(f"Could not check agent status: {e}")
+        components["agents_status"] = "loading"
 
-    # IMPORTANT: Always return "healthy" overall status if API is responding
-    # This ensures deployment healthchecks pass even if agents are still loading
-    # Agent status is informational only and doesn't affect overall health
+    # IMPORTANT: Always return "healthy" overall status
+    # This ensures deployment healthchecks pass immediately when server starts
     return HealthResponse(
         status="healthy",
         version=__version__,
