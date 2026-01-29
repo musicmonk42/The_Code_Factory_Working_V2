@@ -16,10 +16,11 @@ name: Pytest All - Run All Tests
 #
 # Optimizations Applied:
 # - Removed -n (pytest-xdist) to avoid SIGXCPU (exit code 152) caused by worker processes
-# - Added ulimit -t unlimited to remove CPU time limits on runners
+# - Removed timeout command wrapper to prevent CPU time limits during collection
+# - Using pytest's native --timeout flag for per-test timeouts (300s fast, 600s full)
 # - Added --disable-warnings and -p no:warnings for faster collection
 # - maxfail limits for faster failure detection (10 for fast, 50 for full)
-# - Error handling for resource limits (exit code 152=SIGXCPU, 137=SIGKILL/OOM)
+# - Error handling for memory limits (exit code 137=SIGKILL/OOM)
 #
 # To run full tests manually:
 # - Go to Actions tab → Select this workflow → Run workflow
@@ -282,8 +283,8 @@ jobs:
           echo "=== Initial memory usage ==="
           free -h
           
-          # Remove CPU time limit to prevent SIGXCPU (exit code 152)
-          # GitHub Actions runners have default RLIMIT_CPU that can be hit during test collection
+          # Note: ulimit -t unlimited is kept for compatibility but timeout command
+          # wrapper has been removed. Using pytest's --timeout flag instead for per-test limits.
           ulimit -t unlimited 2>/dev/null || true
           
           python -c "import gc; gc.collect(); print('Garbage collection completed')"
@@ -300,10 +301,11 @@ jobs:
           # --maxfail=10: Fail fast after 10 failures
           # --tb=short: Moderate traceback for debugging
           # Excludes slow and integration tests via markers for faster feedback
-          timeout 1200s pytest \
+          pytest \
             -v \
             --tb=short \
             --maxfail=10 \
+            --timeout=300 \
             --disable-warnings \
             -p no:warnings \
             --import-mode=prepend \
@@ -320,13 +322,10 @@ jobs:
           PYTEST_EXIT=${PIPESTATUS[0]}
           
           # Handle test failures with detailed error messages
-          if [ $PYTEST_EXIT -eq 152 ] || [ $PYTEST_EXIT -eq 137 ]; then
-            echo "ERROR: Tests exceeded CPU/memory limit (exit code $PYTEST_EXIT)"
+          if [ $PYTEST_EXIT -eq 137 ]; then
+            echo "ERROR: Tests exceeded memory limit (exit code $PYTEST_EXIT)"
             echo "Consider running fewer tests or using more powerful runners"
             exit $PYTEST_EXIT
-          elif [ $PYTEST_EXIT -eq 124 ]; then
-            echo "ERROR: Tests timed out after 20 minutes (job timeout: 30 minutes)"
-            exit 124
           fi
           
           echo ""
@@ -619,7 +618,8 @@ jobs:
           echo "=== Initial memory usage ==="
           free -h
           
-          # Remove CPU time limit to prevent SIGXCPU (exit code 152)
+          # Note: ulimit -t unlimited is kept for compatibility but timeout command
+          # wrapper has been removed. Using pytest's --timeout flag instead for per-test limits.
           ulimit -t unlimited 2>/dev/null || true
           
           python -c "import gc; gc.collect(); print('Garbage collection completed')"
@@ -633,11 +633,12 @@ jobs:
           # can hit CPU time limits on GitHub Actions runners.
           # Includes ALL test directories - comprehensive test coverage
           # Note: Full suite includes simulation tests and all other tests
-          # Timeout: 13500s (3h 45m) to allow completion within job timeout (4h)
-          timeout 13500s pytest \
+          # Per-test timeout: 600s (10 minutes) via pytest-timeout plugin
+          pytest \
             -v \
             --tb=short \
             --maxfail=50 \
+            --timeout=600 \
             --disable-warnings \
             -p no:warnings \
             --import-mode=prepend \
@@ -681,13 +682,10 @@ jobs:
           PYTEST_EXIT=${PIPESTATUS[0]}
           
           # Handle test failures with detailed error messages
-          if [ $PYTEST_EXIT -eq 152 ] || [ $PYTEST_EXIT -eq 137 ]; then
-            echo "ERROR: Tests exceeded CPU/memory limit (exit code $PYTEST_EXIT)"
+          if [ $PYTEST_EXIT -eq 137 ]; then
+            echo "ERROR: Tests exceeded memory limit (exit code $PYTEST_EXIT)"
             echo "Full test suite requires more resources - consider splitting further"
             exit $PYTEST_EXIT
-          elif [ $PYTEST_EXIT -eq 124 ]; then
-            echo "ERROR: Tests timed out after 3h 45m (job timeout: 4 hours)"
-            exit 124
           fi
           
           echo ""
