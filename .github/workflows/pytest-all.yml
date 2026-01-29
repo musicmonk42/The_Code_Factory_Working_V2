@@ -91,9 +91,6 @@ jobs:
       OPENBLAS_NUM_THREADS: '1'
       MKL_NUM_THREADS: '1'
       OMP_NUM_THREADS: '1'
-      # Pytest-xdist configuration for parallel test execution
-      PYTEST_XDIST_WORKER_COUNT: "auto"  # Use available CPU cores
-      PYTEST_XDIST_AUTO_NUM_WORKERS: "2"  # Max 2 workers on GitHub runners
     
     steps:
       - name: Checkout code
@@ -462,9 +459,6 @@ jobs:
       OPENBLAS_NUM_THREADS: '1'
       MKL_NUM_THREADS: '1'
       OMP_NUM_THREADS: '1'
-      # Pytest-xdist configuration for parallel test execution
-      PYTEST_XDIST_WORKER_COUNT: "2"  # Fixed 2 workers for full test suite
-      PYTEST_XDIST_AUTO_NUM_WORKERS: "2"  # Max 2 workers on GitHub runners
     
     steps:
       - name: Checkout code
