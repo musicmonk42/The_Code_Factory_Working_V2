@@ -510,7 +510,7 @@ async def health_check() -> HealthResponse:
     }
 
     # IMPORTANT: Always return "healthy" overall status immediately
-    # This ensures deployment healthchecks pass within milliseconds when server starts
+    # This ensures deployment health checks pass within milliseconds when server starts
     return HealthResponse(
         status="healthy",
         version=__version__,
