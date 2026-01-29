@@ -5,6 +5,8 @@ This test validates that:
 1. AUDIT_CRYPTO_MODE=disabled prevents boto3 initialization
 2. Server can start with single worker configuration
 3. Health endpoint is accessible
+4. Configuration files are consistent (Procfile, railway.json, railway.toml)
+5. Redis is marked as optional/recommended (not critical)
 """
 
 import os
@@ -47,6 +49,9 @@ def test_railway_toml_configuration():
     assert "workers" in content.lower(), "railway.toml should mention workers"
     assert "server/run.py" in content, "railway.toml should use server/run.py"
     
+    # Check for verbose logging (--log-level debug)
+    assert "--log-level debug" in content, "railway.toml should use --log-level debug for verbose logging"
+    
     # Check for required environment variables
     assert "AUDIT_CRYPTO_MODE" in content, "AUDIT_CRYPTO_MODE should be in railway.toml"
     assert "AUDIT_CRYPTO_ALLOW_INIT_FAILURE" in content, "AUDIT_CRYPTO_ALLOW_INIT_FAILURE should be in railway.toml"
@@ -57,6 +62,43 @@ def test_railway_toml_configuration():
     assert "/health" in content, "/health endpoint should be configured"
     
     print("✓ railway.toml has correct configuration")
+
+
+def test_railway_json_configuration():
+    """Test that railway.json has correct configuration."""
+    railway_json_path = project_root / "railway.json"
+    
+    assert railway_json_path.exists(), "railway.json should exist"
+    
+    content = railway_json_path.read_text()
+    
+    # Check start command uses server/run.py (not python -m server.main)
+    assert "server/run.py" in content, "railway.json should use server/run.py"
+    assert "--log-level debug" in content, "railway.json should use --log-level debug"
+    assert "--host 0.0.0.0" in content, "railway.json should use --host 0.0.0.0"
+    
+    # Check for healthcheck configuration
+    assert "healthcheckPath" in content, "healthcheckPath should be configured"
+    assert "/health" in content, "/health endpoint should be configured"
+    
+    print("✓ railway.json has correct configuration")
+
+
+def test_procfile_configuration():
+    """Test that Procfile has correct configuration."""
+    procfile_path = project_root / "Procfile"
+    
+    assert procfile_path.exists(), "Procfile should exist"
+    
+    content = procfile_path.read_text()
+    
+    # Check for server/run.py command with single worker
+    assert "server/run.py" in content, "Procfile should use server/run.py"
+    assert "--workers" in content, "Procfile should specify workers"
+    assert "--log-level debug" in content, "Procfile should use --log-level debug"
+    assert "--host 0.0.0.0" in content, "Procfile should use --host 0.0.0.0"
+    
+    print("✓ Procfile has correct configuration")
 
 
 def test_dockerfile_single_worker():
@@ -74,6 +116,49 @@ def test_dockerfile_single_worker():
     assert ('"1"' in content and "--workers" in content), "Dockerfile should use single worker"
     
     print("✓ Dockerfile configured for single worker")
+
+
+def test_redis_is_optional_dependency():
+    """Test that Redis is listed as optional/recommended, not critical."""
+    verify_deps_path = project_root / "server" / "verify_dependencies.py"
+    
+    assert verify_deps_path.exists(), "verify_dependencies.py should exist"
+    
+    content = verify_deps_path.read_text()
+    
+    # Find CRITICAL_DEPENDENCIES section
+    critical_start = content.find("CRITICAL_DEPENDENCIES")
+    recommended_start = content.find("RECOMMENDED_DEPENDENCIES")
+    
+    assert critical_start != -1, "CRITICAL_DEPENDENCIES should be defined"
+    assert recommended_start != -1, "RECOMMENDED_DEPENDENCIES should be defined"
+    
+    # Redis should be in RECOMMENDED section, not CRITICAL
+    critical_section = content[critical_start:recommended_start]
+    recommended_section = content[recommended_start:]
+    
+    # Check that redis is NOT in critical section
+    # Note: Just checking the tuple, not comments
+    assert '("redis"' not in critical_section, "Redis should NOT be in CRITICAL_DEPENDENCIES"
+    
+    # Check that redis IS in recommended section
+    assert '("redis"' in recommended_section, "Redis should be in RECOMMENDED_DEPENDENCIES"
+    
+    print("✓ Redis is correctly marked as optional/recommended dependency")
+
+
+def test_distributed_lock_skip_option():
+    """Test that distributed lock can be skipped with environment variable."""
+    distributed_lock_path = project_root / "server" / "distributed_lock.py"
+    
+    assert distributed_lock_path.exists(), "distributed_lock.py should exist"
+    
+    content = distributed_lock_path.read_text()
+    
+    # Check for SKIP_REDIS_LOCK environment variable check
+    assert "SKIP_REDIS_LOCK" in content, "distributed_lock.py should support SKIP_REDIS_LOCK env var"
+    
+    print("✓ distributed_lock.py supports SKIP_REDIS_LOCK environment variable")
 
 
 def test_lazy_boto3_loading():
@@ -102,7 +187,11 @@ if __name__ == "__main__":
     try:
         # Configuration tests (don't require dependencies)
         test_railway_toml_configuration()
+        test_railway_json_configuration()
+        test_procfile_configuration()
         test_dockerfile_single_worker()
+        test_redis_is_optional_dependency()
+        test_distributed_lock_skip_option()
         
         # Import tests (require dependencies - skip if not available)
         try:

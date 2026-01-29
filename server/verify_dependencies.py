@@ -169,12 +169,12 @@ class DependencyVerifier:
         ("uvicorn", "uvicorn", "ASGI server - serves the FastAPI application"),
         ("pydantic", "pydantic", "Data validation - request/response schemas"),
         ("starlette", "starlette", "ASGI toolkit - FastAPI foundation"),
-        ("redis", "redis", "Redis client - caching and distributed locks"),
     ]
     
     # Recommended dependencies for full functionality
     # Application can start without these but with reduced features
     RECOMMENDED_DEPENDENCIES: List[Tuple[str, str, str]] = [
+        ("redis", "redis", "Redis client - caching and distributed locks (optional)"),
         ("httpx", "httpx", "HTTP client - async API calls and testing"),
         ("sqlalchemy", "SQLAlchemy", "SQL ORM - database persistence"),
         ("asyncpg", "asyncpg", "PostgreSQL driver - async database access"),
