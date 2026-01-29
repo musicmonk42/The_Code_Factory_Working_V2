@@ -313,7 +313,7 @@ jobs:
             omnicore_engine/tests/test_core.py \
             omnicore_engine/tests/test_fastapi_app.py \
             omnicore_engine/tests/test_security_config.py \
-            omnicore_engine/database/tests/test_connection.py \
+            omnicore_engine/database/tests/test_database.py \
             --junitxml=test-results-fast.xml \
             2>&1 | tee test-output-fast.log
           
