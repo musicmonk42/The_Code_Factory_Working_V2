@@ -1,5 +1,29 @@
 name: Pytest All - Run All Tests
 
+# This workflow is optimized to handle a large test suite (400+ test files) efficiently:
+#
+# Job Strategy:
+# 1. fast-tests: Runs on every push/PR
+#    - Executes critical/core tests only (server, core omnicore modules)
+#    - Timeout: 45 minutes
+#    - Optimized for quick feedback on routine commits
+#
+# 2. full-tests: Runs on schedule (nightly 2 AM UTC) or manual trigger
+#    - Executes comprehensive test suite
+#    - Timeout: 240 minutes (4 hours)
+#    - Only runs when explicitly triggered or on nightly schedule
+#
+# Optimizations Applied:
+# - Reduced collection timeout from 900s to 300s
+# - Added --disable-warnings and -p no:warnings for faster collection
+# - Reduced --maxfail for faster failure detection (10 for fast, 25 for full)
+# - Improved error handling for CPU/memory limit exceeded (exit codes 152, 137)
+# - Better test path selection to avoid loading all 400+ test files
+#
+# To run full tests manually:
+# - Go to Actions tab → Select this workflow → Run workflow
+# - Check "Run full test suite (slow)" option
+
 on:
   push:
     branches: [ main, develop, 'feature/**' ]
