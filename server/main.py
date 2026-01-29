@@ -312,16 +312,17 @@ async def lifespan(app: FastAPI):
         logger.info("=" * 80)
         
         try:
-            # Acquire startup lock with timeout to prevent blocking server startup
+            # Acquire startup lock with timeout to prevent slow Redis calls from blocking
+            # Even with blocking=False, the Redis connection could be slow or hang
             startup_lock = get_startup_lock()
             try:
                 lock_acquired = await asyncio.wait_for(
                     startup_lock.acquire(blocking=False),
-                    timeout=0.1  # 100ms max
+                    timeout=0.1  # 100ms max - protect against slow/hanging Redis
                 )
             except asyncio.TimeoutError:
                 lock_acquired = False
-                logger.info("⚠ Startup lock acquisition timed out - continuing anyway")
+                logger.info("⚠ Startup lock acquisition timed out (slow Redis?) - continuing anyway")
             
             # Track lock acquisition for cleanup
             app.state.startup_lock_acquired = lock_acquired
@@ -509,6 +510,12 @@ async def health_check() -> HealthResponse:
     - Always returns "healthy" even if agent check times out or fails
     """
     # Start with default component status
+    # NOTE: Only checking API and agents to keep health check ultra-fast
+    # Railway needs /health to return quickly for liveness probe
+    # Other components (database, redis, etc.) are not checked because:
+    # - They can be slow or timing out
+    # - Liveness probe should only check if API process is alive
+    # - Use /ready endpoint for full dependency checks
     components = {
         "api": "healthy",
         "agents_status": "loading",  # Default, updated below if quick check succeeds

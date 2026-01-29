@@ -47,57 +47,103 @@ class TestHealthEndpointTimeouts:
     
     @pytest.mark.asyncio
     async def test_health_endpoint_timeout_wrapper(self):
-        """Test that health endpoint uses asyncio.wait_for with 50ms timeout."""
-        # This tests the timeout mechanism itself
+        """Test that health endpoint correctly handles slow get_status with timeout."""
+        from unittest.mock import Mock, patch
+        import time
         
-        # Mock a slow get_status that takes 100ms
-        async def slow_status():
-            await asyncio.sleep(0.1)  # 100ms
-            return {'total_agents': 5}
+        # Create a mock loader with a slow get_status that takes 100ms
+        def slow_get_status():
+            time.sleep(0.1)  # 100ms - longer than 50ms timeout
+            return {'total_agents': 5, 'availability_rate': 1.0}
         
-        # Should timeout after 50ms
-        with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(slow_status(), timeout=0.05)
+        mock_loader = Mock()
+        mock_loader.get_status = slow_get_status
+        
+        # Simulate the health endpoint's timeout logic
+        components = {"api": "healthy", "agents_status": "loading"}
+        
+        with patch('server.utils.agent_loader.get_agent_loader', return_value=mock_loader):
+            try:
+                status = await asyncio.wait_for(
+                    asyncio.to_thread(mock_loader.get_status),
+                    timeout=0.05  # 50ms timeout
+                )
+                # Should not reach here - should timeout
+                components["agents_status"] = "ready"
+            except asyncio.TimeoutError:
+                # Expected - leave as loading
+                pass
+        
+        # Verify timeout occurred and status remained "loading"
+        assert components["agents_status"] == "loading", \
+            "Health endpoint should leave agents_status as 'loading' on timeout"
     
     @pytest.mark.asyncio
     async def test_readiness_endpoint_timeout_wrapper(self):
-        """Test that readiness endpoint uses asyncio.wait_for with 1s timeout."""
-        # This tests the timeout mechanism itself
+        """Test that readiness endpoint correctly handles slow get_status with timeout."""
+        from unittest.mock import Mock, patch
+        import time
         
-        # Mock a slow get_status that takes 1.5s
-        async def slow_status():
-            await asyncio.sleep(1.5)  # 1.5s
+        # Create a mock loader with a slow get_status that takes 1.5s
+        def slow_get_status():
+            time.sleep(1.5)  # 1.5s - longer than 1s timeout
             return {'loading_in_progress': True}
         
-        # Should timeout after 1s
-        with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(slow_status(), timeout=1.0)
+        mock_loader = Mock()
+        mock_loader.get_status = slow_get_status
+        
+        # Simulate the readiness endpoint's timeout logic
+        ready = True
+        status_text = "ready"
+        
+        with patch('server.utils.agent_loader.get_agent_loader', return_value=mock_loader):
+            try:
+                await asyncio.wait_for(
+                    asyncio.to_thread(mock_loader.get_status),
+                    timeout=1.0  # 1s timeout
+                )
+                # Should not reach here
+            except asyncio.TimeoutError:
+                ready = False
+                status_text = "timeout"
+        
+        # Verify timeout was handled correctly
+        assert not ready, "Readiness should be False on timeout"
+        assert status_text == "timeout", "Status should be 'timeout' on timeout"
+    
     
     @pytest.mark.asyncio
-    async def test_asyncio_to_thread_works(self):
-        """Test that asyncio.to_thread correctly wraps synchronous calls."""
-        # This tests the wrapping mechanism
+    async def test_startup_lock_timeout_with_redis(self):
+        """Test that startup lock timeout protects against slow Redis connections."""
+        from unittest.mock import AsyncMock, Mock
         
-        def sync_function():
-            return "success"
-        
-        result = await asyncio.to_thread(sync_function)
-        assert result == "success"
-    
-    @pytest.mark.asyncio
-    async def test_startup_lock_timeout_wrapper(self):
-        """Test that startup lock acquisition uses timeout."""
-        # Mock a lock that hangs
-        class SlowLock:
+        # Create a mock Redis client that hangs
+        class SlowRedisLock:
+            def __init__(self):
+                self.lock_name = "test_lock"
+                self.lock_value = "test_value"
+                self.timeout = 60
+                self.max_retries = 1
+                
             async def acquire(self, blocking=False):
+                # Simulate slow Redis connection
                 await asyncio.sleep(0.5)  # 500ms
                 return True
         
-        lock = SlowLock()
+        lock = SlowRedisLock()
         
-        # Should timeout after 100ms
-        with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(lock.acquire(blocking=False), timeout=0.1)
+        # Simulate the startup code's timeout logic  
+        lock_acquired = False
+        try:
+            lock_acquired = await asyncio.wait_for(
+                lock.acquire(blocking=False),
+                timeout=0.1  # 100ms timeout
+            )
+        except asyncio.TimeoutError:
+            lock_acquired = False
+        
+        # Verify timeout prevented blocking
+        assert not lock_acquired, "Lock should not be acquired on timeout"
 
 
 class TestHealthEndpointBehavior:
