@@ -75,6 +75,7 @@ def test_railway_json_configuration():
     # Check start command uses server/run.py (not python -m server.main)
     assert "server/run.py" in content, "railway.json should use server/run.py"
     assert "--log-level debug" in content, "railway.json should use --log-level debug"
+    assert "--host 0.0.0.0" in content, "railway.json should use --host 0.0.0.0"
     
     # Check for healthcheck configuration
     assert "healthcheckPath" in content, "healthcheckPath should be configured"
@@ -95,6 +96,7 @@ def test_procfile_configuration():
     assert "server/run.py" in content, "Procfile should use server/run.py"
     assert "--workers" in content, "Procfile should specify workers"
     assert "--log-level debug" in content, "Procfile should use --log-level debug"
+    assert "--host 0.0.0.0" in content, "Procfile should use --host 0.0.0.0"
     
     print("✓ Procfile has correct configuration")
 

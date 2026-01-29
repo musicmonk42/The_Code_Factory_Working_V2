@@ -202,8 +202,8 @@ class DistributedLock:
             # has a graceful fallback to single-instance mode.
             self._redis_client = redis.Redis.from_url(
                 redis_url,
-                socket_connect_timeout=1,  # Reduced from 2s for faster startup
-                socket_timeout=1,  # Reduced from 2s for faster startup
+                socket_connect_timeout=1,  # Reduced to 1s for faster startup
+                socket_timeout=1,  # Reduced to 1s for faster startup
                 decode_responses=True
             )
             
