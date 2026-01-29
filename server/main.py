@@ -272,6 +272,7 @@ async def lifespan(app: FastAPI):
     # Store initialization state for healthcheck
     app.state.initialization_complete = False
     app.state.initialization_error = None
+    app.state.startup_lock_acquired = False
     
     # ========================================================================
     # BACKGROUND INITIALIZATION (Fire-and-forget)
@@ -279,75 +280,72 @@ async def lifespan(app: FastAPI):
     
     async def initialize_platform():
         """Run all heavyweight initialization after HTTP server is ready."""
+        logger.info("=" * 80)
+        logger.info("INITIALIZING PLATFORM CONFIGURATION (Background)")
+        logger.info("=" * 80)
+        
+        # Load configuration
+        config = None
         try:
-            logger.info("=" * 80)
-            logger.info("INITIALIZING PLATFORM CONFIGURATION (Background)")
-            logger.info("=" * 80)
+            config = initialize_config(log_summary=True)
             
-            # Load configuration
-            config = None
-            try:
-                config = initialize_config(log_summary=True)
-                
-                # Validate API keys - log warnings but don't block
-                api_keys_valid = validate_required_api_keys(config, fail_fast=False)
-                
-                if not api_keys_valid:
-                    logger.warning("=" * 80)
-                    logger.warning("WARNING: No LLM API keys configured!")
-                    logger.warning("The server is running but LLM functionality will be unavailable.")
-                    logger.warning("Configure at least one LLM API key for full functionality.")
-                    if config.is_production:
-                        logger.warning("This is a PRODUCTION environment - please configure API keys.")
-                    logger.warning("=" * 80)
-                
-            except Exception as e:
-                logger.error(f"Configuration initialization failed: {e}", exc_info=True)
-                logger.warning(f"Continuing despite configuration error: {type(e).__name__}")
-                app.state.initialization_error = str(e)
+            # Validate API keys - log warnings but don't block
+            api_keys_valid = validate_required_api_keys(config, fail_fast=False)
             
-            # Start background agent loading
-            logger.info("=" * 80)
-            logger.info("STARTING BACKGROUND AGENT LOADING")
-            logger.info("=" * 80)
-            
-            try:
-                # Acquire startup lock (non-blocking)
-                startup_lock = get_startup_lock()
-                lock_acquired = await startup_lock.acquire(blocking=False)
-                
-                if lock_acquired:
-                    logger.info("✓ Startup lock acquired - this instance will initialize agents")
-                else:
-                    logger.info("⚠ Startup lock held by another instance - agents may already be loading")
-                    logger.info("  This is normal in multi-instance deployments")
-                
-                # Get the agent loader and start background loading
-                loader = get_agent_loader()
-                loader.start_background_loading()
-                logger.info("✓ Background agent loading task started")
-                logger.info("✓ Check /health for liveness and /ready for readiness")
-                
-            except Exception as e:
-                logger.error(f"Error starting background agent loading: {e}", exc_info=True)
-                logger.warning("Continuing despite agent loading error")
-                app.state.initialization_error = str(e)
-            
-            logger.info("=" * 80)
-            logger.info("Platform initialization complete")
-            logger.info("=" * 80)
-            
-            # Mark initialization as complete
-            app.state.initialization_complete = True
+            if not api_keys_valid:
+                logger.warning("=" * 80)
+                logger.warning("WARNING: No LLM API keys configured!")
+                logger.warning("The server is running but LLM functionality will be unavailable.")
+                logger.warning("Configure at least one LLM API key for full functionality.")
+                if config.is_production:
+                    logger.warning("This is a PRODUCTION environment - please configure API keys.")
+                logger.warning("=" * 80)
             
         except Exception as e:
-            logger.error(f"Platform initialization failed: {e}", exc_info=True)
+            logger.error(f"Configuration initialization failed: {e}", exc_info=True)
+            logger.warning(f"Continuing despite configuration error: {type(e).__name__}")
             app.state.initialization_error = str(e)
-            app.state.initialization_complete = True  # Mark as "done" even if failed
+        
+        # Start background agent loading
+        logger.info("=" * 80)
+        logger.info("STARTING BACKGROUND AGENT LOADING")
+        logger.info("=" * 80)
+        
+        try:
+            # Acquire startup lock (non-blocking)
+            startup_lock = get_startup_lock()
+            lock_acquired = await startup_lock.acquire(blocking=False)
+            
+            # Track lock acquisition for cleanup
+            app.state.startup_lock_acquired = lock_acquired
+            
+            if lock_acquired:
+                logger.info("✓ Startup lock acquired - this instance will initialize agents")
+            else:
+                logger.info("⚠ Startup lock held by another instance - agents may already be loading")
+                logger.info("  This is normal in multi-instance deployments")
+            
+            # Get the agent loader and start background loading
+            loader = get_agent_loader()
+            loader.start_background_loading()
+            logger.info("✓ Background agent loading task started")
+            logger.info("✓ Check /health for liveness and /ready for readiness")
+            
+        except Exception as e:
+            logger.error(f"Error starting background agent loading: {e}", exc_info=True)
+            logger.warning("Continuing despite agent loading error")
+            app.state.initialization_error = str(e)
+        
+        logger.info("=" * 80)
+        logger.info("Platform initialization complete")
+        logger.info("=" * 80)
+        
+        # Mark initialization as complete
+        app.state.initialization_complete = True
     
     # Start initialization in background - don't await!
-    # This allows the HTTP server to start immediately
-    asyncio.create_task(initialize_platform())
+    # Store task reference for proper cleanup during shutdown
+    app.state.init_task = asyncio.create_task(initialize_platform())
     logger.info("Background initialization task created - HTTP server starting now")
     
     # Yield IMMEDIATELY to let uvicorn bind to port and accept connections
@@ -360,14 +358,37 @@ async def lifespan(app: FastAPI):
     
     logger.info("Shutting down Code Factory API Server")
     
-    # Release startup lock if we acquired it
-    try:
-        startup_lock = get_startup_lock()
-        await startup_lock.release()
-        await startup_lock.close()
-    except Exception as e:
-        logger.warning(f"Error releasing startup lock during shutdown: {e}")
-
+    # Wait for or cancel background initialization if still running
+    if hasattr(app.state, 'init_task') and app.state.init_task:
+        if not app.state.init_task.done():
+            logger.info("Waiting for background initialization to complete...")
+            try:
+                await asyncio.wait_for(app.state.init_task, timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Background initialization did not complete in time, cancelling...")
+                app.state.init_task.cancel()
+                try:
+                    await app.state.init_task
+                except asyncio.CancelledError:
+                    logger.info("Background initialization task cancelled")
+        
+        # Check for exceptions in the task
+        if app.state.init_task.done() and not app.state.init_task.cancelled():
+            try:
+                app.state.init_task.result()  # This will raise if task had exception
+            except Exception as e:
+                logger.error(f"Background initialization task failed: {e}", exc_info=True)
+    
+    # Release startup lock only if we acquired it
+    if getattr(app.state, 'startup_lock_acquired', False):
+        try:
+            startup_lock = get_startup_lock()
+            await startup_lock.release()
+            await startup_lock.close()
+            logger.info("Startup lock released")
+        except Exception as e:
+            logger.warning(f"Error releasing startup lock during shutdown: {e}")
+    
     logger.info("API Server stopped")
 
 
