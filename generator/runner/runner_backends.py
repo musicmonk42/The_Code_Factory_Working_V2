@@ -1159,27 +1159,52 @@ class DockerBackend(Backend):
 
     def __init__(self, config: RunnerConfig):
         super().__init__(config)
+        self.client = None  # Don't connect yet - lazy initialization
+        self._initialized = False
+        
         if not HAS_DOCKER:
-            self.client = None
             self.health_status = {
-                "status": "unhealthy",
+                "status": "unavailable",
                 "details": "docker library not installed.",
             }
             HEALTH_STATUS.labels(
                 component_name="backend_docker", instance_id=self.instance_id
             ).set(0)
+            logger.warning("Docker backend unavailable - docker library not installed")
+        else:
+            self.health_status = {
+                "status": "not_initialized",
+                "details": "Docker client not yet initialized (lazy loading)",
+            }
+            HEALTH_STATUS.labels(
+                component_name="backend_docker", instance_id=self.instance_id
+            ).set(0)
+            logger.info("Docker backend registered - will initialize on first use")
+
+    async def _ensure_initialized(self) -> None:
+        """Initialize Docker client lazily on first use."""
+        if self._initialized:
             return
+            
+        if not HAS_DOCKER:
+            raise RuntimeError("Docker backend unavailable - docker library not installed")
+        
         try:
-            self.client = DockerClient.from_env()
-            self.client.ping()
+            # Run blocking Docker operations in thread pool
+            loop = asyncio.get_event_loop()
+            self.client = await loop.run_in_executor(None, DockerClient.from_env)
+            await loop.run_in_executor(None, self.client.ping)
+            
+            self._initialized = True
             self.health_status = {
                 "status": "healthy",
-                "details": "Docker daemon is responsive.",
+                "details": "Docker daemon connection established",
             }
             HEALTH_STATUS.labels(
                 component_name="backend_docker", instance_id=self.instance_id
             ).set(1)
-        except DockerException as e:
+            logger.info("Docker backend initialized successfully")
+        except Exception as e:
             self.client = None
             self.health_status = {
                 "status": "unhealthy",
@@ -1188,28 +1213,15 @@ class DockerBackend(Backend):
             HEALTH_STATUS.labels(
                 component_name="backend_docker", instance_id=self.instance_id
             ).set(0)
-        except Exception as e:
-            self.client = None
-            self.health_status = {
-                "status": "unhealthy",
-                "details": f"Docker client init failed: {e}",
-            }
-            HEALTH_STATUS.labels(
-                component_name="backend_docker", instance_id=self.instance_id
-            ).set(0)
+            logger.error(f"Docker backend initialization failed: {e}")
+            raise
 
     async def setup(
         self, work_dir: Path, custom_setup_script: Optional[str] = None
     ) -> None:
-        if not self.client:
-            # *** FIX: Use string key, not registry value ***
-            raise SetupError(
-                "SETUP_FAILURE",
-                detail="Docker backend is not healthy.",
-                backend_type="docker",
-                stage="health_check",
-            )
-
+        # Ensure Docker client is initialized before use
+        await self._ensure_initialized()
+        
         logger.info(
             f"DockerBackend setup complete for {work_dir}. Image will be pulled/run in execute."
         )
@@ -1217,18 +1229,12 @@ class DockerBackend(Backend):
     async def execute(
         self, payload: TaskPayload, work_dir: Path, timeout: int
     ) -> TaskResult:
+        # Ensure Docker client is initialized before use
+        await self._ensure_initialized()
+        
         command = payload.command  # Get command from payload
         task_id = payload.task_id  # Get task_id from payload
         start_time = time.time()  # Record start time
-
-        if not self.client:
-            # *** FIX: Use string key, not registry value ***
-            raise ExecutionError(
-                "TEST_EXECUTION_FAILED",
-                detail="Docker backend is not healthy.",
-                backend_type="docker",
-                task_id=task_id,
-            )
 
         # Use a specific, language-appropriate image from config
         image_name = self.config.framework_images.get(
@@ -1332,23 +1338,34 @@ class DockerBackend(Backend):
                 await asyncio.to_thread(container.remove, v=True, force=True)
 
     def health(self) -> Dict[str, Any]:
+        """Return current health status without blocking."""
         if not HAS_DOCKER:
-            self.health_status = {
-                "status": "unhealthy",
+            return {
+                "status": "unavailable",
                 "details": "docker library not installed.",
             }
-        elif self.client:
+        
+        if not self._initialized:
+            return {
+                "status": "not_initialized", 
+                "details": "Docker client will initialize on first use (lazy loading)",
+            }
+        
+        # If initialized, try to ping (in thread pool to avoid blocking)
+        if self.client:
             try:
+                # Non-blocking check
                 self.client.ping()
                 self.health_status = {
                     "status": "healthy",
-                    "details": "Docker daemon is responsive.",
+                    "details": "Docker daemon is responsive",
                 }
-            except DockerException as e:
+            except Exception as e:
                 self.health_status = {
                     "status": "unhealthy",
                     "details": f"Docker daemon connection failed: {e}",
                 }
+        
         HEALTH_STATUS.labels(
             component_name="backend_docker", instance_id=self.instance_id
         ).set(1 if self.health_status["status"] == "healthy" else 0)
@@ -1358,8 +1375,11 @@ class DockerBackend(Backend):
         logger.info("Attempting to recover DockerBackend by re-initializing client...")
         if HAS_DOCKER:
             try:
-                self.client = DockerClient.from_env()
-                self.client.ping()
+                # Run blocking Docker operations in thread pool
+                loop = asyncio.get_event_loop()
+                self.client = await loop.run_in_executor(None, DockerClient.from_env)
+                await loop.run_in_executor(None, self.client.ping)
+                self._initialized = True
                 self.health_status = {
                     "status": "healthy",
                     "details": "Docker daemon connection re-established.",
@@ -1369,6 +1389,7 @@ class DockerBackend(Backend):
                 ).set(1)
             except DockerException as e:
                 self.client = None
+                self._initialized = False
                 self.health_status = {
                     "status": "unhealthy",
                     "details": f"Docker daemon recovery failed: {e}",
@@ -1378,9 +1399,10 @@ class DockerBackend(Backend):
                 ).set(0)
 
     async def close(self) -> None:
-        if self.client:
+        if self.client and self._initialized:
             await asyncio.to_thread(self.client.close)
             logger.info("Docker client closed.")
+            self._initialized = False
 
 
 # --- Kubernetes Backend ---
