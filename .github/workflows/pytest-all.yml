@@ -1,11 +1,44 @@
 name: Pytest All - Run All Tests
 
+# This workflow is optimized to handle a large test suite (400+ test files) efficiently:
+#
+# Job Strategy:
+# 1. fast-tests: Runs on every push/PR
+#    - Executes critical/core tests only (server, core omnicore modules)
+#    - Timeout: 45 minutes
+#    - Optimized for quick feedback on routine commits
+#
+# 2. full-tests: Runs on schedule (nightly 2 AM UTC) or manual trigger
+#    - Executes comprehensive test suite
+#    - Timeout: 240 minutes (4 hours)
+#    - Only runs when explicitly triggered or on nightly schedule
+#
+# Optimizations Applied:
+# - Reduced collection timeout from 900s to 300s
+# - Added --disable-warnings and -p no:warnings for faster collection
+# - Reduced --maxfail for faster failure detection (10 for fast, 25 for full)
+# - Improved error handling for CPU/memory limit exceeded (exit codes 152, 137)
+# - Better test path selection to avoid loading all 400+ test files
+#
+# To run full tests manually:
+# - Go to Actions tab → Select this workflow → Run workflow
+# - Check "Run full test suite (slow)" option
+
 on:
   push:
     branches: [ main, develop, 'feature/**' ]
   pull_request:
     branches: [ main, develop ]
   workflow_dispatch:
+    inputs:
+      run_full_tests:
+        description: 'Run full test suite (slow)'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # Run full test suite nightly at 2 AM UTC
+    - cron: '0 2 * * *'
 
 env:
   PYTHON_VERSION: '3.11'
@@ -20,10 +53,11 @@ permissions:
   contents: read
 
 jobs:
-  test-all:
-    name: Run All Tests (Pytest from Root)
+  # Fast smoke tests - run on every push/PR
+  fast-tests:
+    name: Fast Tests (Core & Critical)
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 45
     permissions:
       contents: read
     
@@ -224,12 +258,17 @@ jobs:
       
       - name: Collect tests (diagnostic)
         run: |
-          # Increased timeout to 900s to accommodate large codebase with multiple conftest.py files
-          # and extensive mocking setup that requires module discovery across multiple packages
-          timeout 900 pytest --collect-only --quiet || echo "Collection failed or timed out"
+          # Reduced timeout to 300s with collection optimization flags
+          # --disable-warnings: Skip warning collection for faster performance
+          # -p no:warnings: Disable warnings plugin
+          # --co: Alias for --collect-only
+          timeout 300 pytest --co --quiet --disable-warnings -p no:warnings || {
+            echo "WARNING: Collection timed out or failed - will proceed with targeted test run"
+            exit 0
+          }
         continue-on-error: true
           
-      - name: Run all tests
+      - name: Run fast tests
         env:
           TESTING: "1"
           AWS_REGION: ""
@@ -245,30 +284,53 @@ jobs:
           rm -rf .pytest_cache/ .coverage 2>/dev/null || true
           
           echo ""
-          echo "=== Running all tests ==="
+          echo "=== Running fast tests (core modules only) ==="
           
-          # Run pytest without xdist, coverage, and json-report to minimize memory usage
-          timeout 10800s pytest \
+          # Run only fast, critical tests with optimizations:
+          # --disable-warnings: Skip warning collection
+          # -p no:warnings: Disable warnings plugin
+          # --maxfail=10: Fail fast after 10 failures
+          # --tb=line: Minimal traceback for speed
+          # Focus on critical paths: server/tests, omnicore_engine/tests (excluding slow/integration)
+          timeout 2400s pytest \
             -v \
-            --tb=short \
-            --maxfail=50 \
+            --tb=line \
+            --maxfail=10 \
+            --disable-warnings \
+            -p no:warnings \
             --import-mode=prepend \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
+            --ignore=self_fixing_engineer/simulation/tests \
             -m "not slow and not integration" \
-            --junitxml=test-results.xml \
-            2>&1 | tee test-output.log
+            server/tests/ \
+            omnicore_engine/tests/test_core.py \
+            omnicore_engine/tests/test_fastapi_app.py \
+            omnicore_engine/tests/test_security_config.py \
+            omnicore_engine/database/tests/ \
+            --junitxml=test-results-fast.xml \
+            2>&1 | tee test-output-fast.log
           
           PYTEST_EXIT=${PIPESTATUS[0]}
+          
+          # Handle test failures with detailed error messages
+          if [ $PYTEST_EXIT -eq 152 ] || [ $PYTEST_EXIT -eq 137 ]; then
+            echo "ERROR: Tests exceeded CPU/memory limit (exit code $PYTEST_EXIT)"
+            echo "Consider running fewer tests or using more powerful runners"
+            exit $PYTEST_EXIT
+          elif [ $PYTEST_EXIT -eq 124 ]; then
+            echo "ERROR: Tests timed out after 40 minutes (job timeout: 45 minutes)"
+            exit 124
+          fi
           
           echo ""
           echo "=== Final memory usage ==="
           free -h
           
           # Validate that tests actually ran by checking the XML report
-          if [ -f test-results.xml ]; then
-            TESTS_RAN=$(grep -oP 'tests="\K[0-9]+' test-results.xml | head -1 || echo "0")
-            FAILURES=$(grep -oP 'failures="\K[0-9]+' test-results.xml | head -1 || echo "0")
-            ERRORS=$(grep -oP 'errors="\K[0-9]+' test-results.xml | head -1 || echo "0")
+          if [ -f test-results-fast.xml ]; then
+            TESTS_RAN=$(grep -oP 'tests="\K[0-9]+' test-results-fast.xml | head -1 || echo "0")
+            FAILURES=$(grep -oP 'failures="\K[0-9]+' test-results-fast.xml | head -1 || echo "0")
+            ERRORS=$(grep -oP 'errors="\K[0-9]+' test-results-fast.xml | head -1 || echo "0")
             
             echo ""
             echo "=== Test Results Summary ==="
@@ -279,30 +341,27 @@ jobs:
             if [ "$TESTS_RAN" = "0" ] || [ -z "$TESTS_RAN" ]; then
               echo ""
               echo "ERROR: No tests were executed!"
-              echo "Check test-output.log for details"
+              echo "Check test-output-fast.log for details"
               exit 1
             fi
           else
-            echo "WARNING: test-results.xml not found"
+            echo "WARNING: test-results-fast.xml not found"
           fi
           
-          if [ $PYTEST_EXIT -eq 124 ]; then
-            echo "ERROR: Tests timed out after 3 hours"
-            exit 124
-          elif [ $PYTEST_EXIT -ne 0 ]; then
+          if [ $PYTEST_EXIT -ne 0 ]; then
             echo "ERROR: Tests failed with exit code $PYTEST_EXIT"
             exit $PYTEST_EXIT
           fi
           
           echo ""
-          echo "✓ All $TESTS_RAN tests completed successfully"
+          echo "✓ All $TESTS_RAN fast tests completed successfully"
           
       - name: Profile test collection (on failure)
         if: failure()
         run: |
           echo "=== Running test collection with CPU profiling ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
-            --collect-only --quiet --import-mode=prepend --tb=short \
+            --co --quiet --disable-warnings -p no:warnings --import-mode=prepend --tb=short \
             --ignore=self_fixing_engineer/simulation/tests 2>&1 || true
           
           if [ -f collection_profile.stats ]; then
@@ -316,14 +375,14 @@ jobs:
         if: always() && hashFiles('./coverage.xml') != ''
         with:
           files: ./coverage.xml
-          flags: pytest-all
+          flags: pytest-fast
           fail_ci_if_error: false
           
       - name: Upload HTML test report
         uses: actions/upload-artifact@v4
         if: always() && hashFiles('./test-report.html') != ''
         with:
-          name: test-report-html
+          name: test-report-html-fast
           path: test-report.html
           retention-days: 30
         continue-on-error: true
@@ -332,7 +391,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always() && hashFiles('./test-report.json') != ''
         with:
-          name: test-report-json
+          name: test-report-json-fast
           path: test-report.json
           retention-days: 30
         continue-on-error: true
@@ -341,14 +400,337 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-output-log
-          path: test-output.log
+          name: test-output-log-fast
+          path: test-output-fast.log
           retention-days: 7
           
       - name: Upload JUnit test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results-xml
-          path: test-results.xml
+          name: test-results-xml-fast
+          path: test-results-fast.xml
+          retention-days: 30
+
+  # Full comprehensive test suite - run manually or on schedule
+  full-tests:
+    name: Full Test Suite (All Tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    # Only run full tests:
+    # 1. On manual workflow_dispatch with run_full_tests=true
+    # 2. On scheduled runs (nightly)
+    # 3. Never on regular push/PR (too slow)
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_full_tests == 'true')
+    permissions:
+      contents: read
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    env:
+      TESTING: '1'
+      CI: '1'
+      SKIP_AUDIT_INIT: '1'
+      OTEL_SDK_DISABLED: '1'
+      PYTEST_CURRENT_TEST: 'true'
+      REDIS_URL: redis://localhost:6379
+      ENCRYPTION_KEY: "0mRtqFHlMkj0xTZO14sBFr1H6jkmmI0LWyK97sGyGew="
+      APP_ENV: test
+      SKIP_IMPORT_TIME_VALIDATION: '1'
+      SKIP_BACKGROUND_TASKS: '1'
+      NO_MONITORING: '1'
+      DISABLE_TELEMETRY: '1'
+      MPLBACKEND: 'Agg'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            .github/constraints.txt
+          
+      - name: Free disk space
+        run: |
+          sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
+          rm -rf /home/runner/.cache/pip/* || true
+          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
+          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
+          df -h
+          
+      - name: Enable memory overcommit for Redis
+        run: |
+          sudo sysctl -w vm.overcommit_memory=1
+          
+      - name: Install redis-cli on runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-tools
+          redis-cli --version
+          
+      - name: Install system dependencies for Python packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvirt-dev pkg-config
+          
+      - name: Wait for Redis to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if redis-cli -h localhost --raw incr ping_test >/dev/null 2>&1; then
+              echo "Redis is up and responding"
+              break
+            fi
+            echo "Waiting for Redis... attempt $i/30"
+            sleep 1
+          done
+          redis-cli -h localhost ping || (echo "ERROR: Redis is not available" && exit 1)
+          
+      - name: Install dependencies
+        env:
+          PIP_NO_CACHE_DIR: "1"
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir -c .github/constraints.txt protobuf
+          if [ -f requirements.txt ]; then
+            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
+          fi
+          echo "Installing self_fixing_engineer package (contains arbiter)..."
+          python -m pip install -v --no-cache-dir -c .github/constraints.txt -e ./self_fixing_engineer || {
+            echo "ERROR: Failed to install self_fixing_engineer package"
+            exit 1
+          }
+          echo "=== Verifying self_fixing_engineer package installation ==="
+          pip show self_fixing_engineer || {
+            echo "ERROR: self_fixing_engineer package not found"
+            exit 1
+          }
+          python -m pip install --no-cache-dir -c .github/constraints.txt -e ./omnicore_engine
+          pip install --no-cache-dir -c .github/constraints.txt PyYAML httpx PyJWT || true
+          pip install --no-cache-dir -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
+          pip install --no-cache-dir -c .github/constraints.txt deap hiredis || echo "WARNING: Some optional deps failed"
+          pip install --no-cache-dir -c .github/constraints.txt \
+            pytest-cov \
+            pytest-xdist \
+            pytest-asyncio \
+            pytest-html \
+            pytest-json-report \
+            pytest-timeout \
+            tomli_w \
+            typing-extensions \
+            hypothesis
+          pip install --force-reinstall -c .github/constraints.txt \
+            opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
+            opentelemetry-instrumentation-fastapi==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-instrumentation==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
+            opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
+            opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
+            opentelemetry-api==${{ env.OTEL_API_VERSION }}
+          pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
+          
+      - name: Verify critical test dependencies
+        run: |
+          echo "=== Verifying test dependencies can be imported ==="
+          python -c "import pytest; print(f'pytest {pytest.__version__}')"
+          python -c "import pytest_cov; print('pytest-cov OK')"
+          python -c "import pytest_asyncio; print('pytest-asyncio OK')"
+          python -c "import xdist; print('pytest-xdist OK')"
+          python -c "import aiofiles; print('aiofiles OK')"
+          python -c "import tiktoken; print('tiktoken OK')"
+          python -c "import aiohttp; print('aiohttp OK')"
+          
+          echo "=== Check if test files are syntactically valid ==="
+          for test_file in tests/test_*.py; do
+            if [ -f "$test_file" ] && [ "$(basename "$test_file")" != "__init__.py" ]; then
+              python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
+            fi
+          done
+          
+          if [ -d "generator/main/tests" ]; then
+            for test_file in generator/main/tests/test_*.py; do
+              [ -f "$test_file" ] && python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
+            done
+          fi
+          
+          if [ -d "omnicore_engine/tests" ]; then
+            for test_file in omnicore_engine/tests/test_*.py; do
+              [ -f "$test_file" ] && python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
+            done
+          fi
+          
+          echo "=== Verify conftest files syntax ==="
+          python -m py_compile conftest.py
+          [ -f generator/conftest.py ] && python -m py_compile generator/conftest.py
+          [ -f self_fixing_engineer/conftest.py ] && python -m py_compile self_fixing_engineer/conftest.py
+          echo "✓ All conftest files are syntactically valid"
+          
+      - name: Free more disk space before tests
+        run: |
+          sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
+          rm -rf /home/runner/.cache/pip/* || true
+          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
+          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
+          df -h
+      
+      - name: Collect tests (diagnostic)
+        run: |
+          # Optimized collection with reduced timeout
+          timeout 300 pytest --co --quiet --disable-warnings -p no:warnings || {
+            echo "WARNING: Collection timed out or failed - will proceed with test run"
+            exit 0
+          }
+        continue-on-error: true
+          
+      - name: Run full test suite
+        env:
+          TESTING: "1"
+          AWS_REGION: ""
+          FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PYTHONPATH:$PWD"
+          
+          echo "=== Initial memory usage ==="
+          free -h
+          
+          python -c "import gc; gc.collect(); print('Garbage collection completed')"
+          rm -rf .pytest_cache/ .coverage 2>/dev/null || true
+          
+          echo ""
+          echo "=== Running full test suite ==="
+          
+          # Run all tests with optimizations
+          # No path restrictions - runs complete test suite across all modules
+          # Still excludes: slow tests, integration tests (via markers)
+          timeout 10800s pytest \
+            -v \
+            --tb=short \
+            --maxfail=25 \
+            --disable-warnings \
+            -p no:warnings \
+            --import-mode=prepend \
+            --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
+            -m "not slow and not integration" \
+            --junitxml=test-results-full.xml \
+            2>&1 | tee test-output-full.log
+          
+          PYTEST_EXIT=${PIPESTATUS[0]}
+          
+          # Handle test failures with detailed error messages
+          if [ $PYTEST_EXIT -eq 152 ] || [ $PYTEST_EXIT -eq 137 ]; then
+            echo "ERROR: Tests exceeded CPU/memory limit (exit code $PYTEST_EXIT)"
+            echo "Full test suite requires more resources - consider splitting further"
+            exit $PYTEST_EXIT
+          elif [ $PYTEST_EXIT -eq 124 ]; then
+            echo "ERROR: Tests timed out after 3 hours (job timeout: 4 hours)"
+            exit 124
+          fi
+          
+          echo ""
+          echo "=== Final memory usage ==="
+          free -h
+          
+          # Validate that tests actually ran
+          if [ -f test-results-full.xml ]; then
+            TESTS_RAN=$(grep -oP 'tests="\K[0-9]+' test-results-full.xml | head -1 || echo "0")
+            FAILURES=$(grep -oP 'failures="\K[0-9]+' test-results-full.xml | head -1 || echo "0")
+            ERRORS=$(grep -oP 'errors="\K[0-9]+' test-results-full.xml | head -1 || echo "0")
+            
+            echo ""
+            echo "=== Test Results Summary ==="
+            echo "Tests run: $TESTS_RAN"
+            echo "Failures: $FAILURES"
+            echo "Errors: $ERRORS"
+            
+            if [ "$TESTS_RAN" = "0" ] || [ -z "$TESTS_RAN" ]; then
+              echo ""
+              echo "ERROR: No tests were executed!"
+              echo "Check test-output-full.log for details"
+              exit 1
+            fi
+          else
+            echo "WARNING: test-results-full.xml not found"
+          fi
+          
+          if [ $PYTEST_EXIT -ne 0 ]; then
+            echo "ERROR: Tests failed with exit code $PYTEST_EXIT"
+            exit $PYTEST_EXIT
+          fi
+          
+          echo ""
+          echo "✓ All $TESTS_RAN tests completed successfully"
+          
+      - name: Profile test collection (on failure)
+        if: failure()
+        run: |
+          echo "=== Running test collection with CPU profiling ==="
+          timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
+            --co --quiet --disable-warnings -p no:warnings --import-mode=prepend --tb=short \
+            --ignore=self_fixing_engineer/simulation/tests 2>&1 || true
+          
+          if [ -f collection_profile.stats ]; then
+            echo "=== Top 30 CPU-consuming functions ==="
+            python -c "import pstats; p = pstats.Stats('collection_profile.stats'); p.sort_stats('cumulative').print_stats(30)"
+          fi
+        continue-on-error: true
+          
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: always() && hashFiles('./coverage.xml') != ''
+        with:
+          files: ./coverage.xml
+          flags: pytest-full
+          fail_ci_if_error: false
+          
+      - name: Upload HTML test report
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('./test-report.html') != ''
+        with:
+          name: test-report-html-full
+          path: test-report.html
+          retention-days: 30
+        continue-on-error: true
+          
+      - name: Upload JSON test report
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('./test-report.json') != ''
+        with:
+          name: test-report-json-full
+          path: test-report.json
+          retention-days: 30
+        continue-on-error: true
+          
+      - name: Upload test output log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-output-log-full
+          path: test-output-full.log
+          retention-days: 7
+          
+      - name: Upload JUnit test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-xml-full
+          path: test-results-full.xml
           retention-days: 30

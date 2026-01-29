@@ -121,7 +121,81 @@ gh workflow run ci.yml
 - **Clear Feedback**: Know exactly which components were tested
 - **Strict Quality Control**: No error suppression - all issues must be fixed
 
-### 2. Security Scanning (`.github/workflows/security.yml`)
+### 2. Comprehensive Test Suite (`.github/workflows/pytest-all.yml`)
+
+**Triggers:**
+- Push to `main`, `develop`, or `feature/**` branches (runs fast-tests only)
+- Pull requests to `main` or `develop` (runs fast-tests only)
+- Manual workflow dispatch with option to run full test suite
+- Nightly at 2 AM UTC (runs full test suite)
+
+**Architecture:**
+
+This workflow is optimized to handle a large test suite (400+ test files) efficiently by splitting tests into two distinct jobs:
+
+**Jobs:**
+
+1. **fast-tests** - Quick feedback on core functionality (runs on every push/PR)
+   - Timeout: 45 minutes (job level)
+   - Test execution timeout: 40 minutes (2400s)
+   - Runs critical tests only: server/tests, core omnicore modules, database tests
+   - Optimizations:
+     - Collection timeout: 300s (down from 900s)
+     - Flags: `--disable-warnings -p no:warnings` for faster collection
+     - `--maxfail=10` for fast failure detection
+     - `--tb=line` for minimal tracebacks
+   - Ignores: heavy integration tests, simulation tests
+   - Redis service included
+   - JUnit XML and logs uploaded as artifacts
+
+2. **full-tests** - Comprehensive test coverage (runs on schedule/manual)
+   - Timeout: 240 minutes (4 hours, job level)
+   - Test execution timeout: 3 hours (10800s)
+   - Runs entire test suite across all modules (no path restrictions)
+   - Only executes on:
+     - Nightly schedule (2 AM UTC)
+     - Manual workflow dispatch with "Run full test suite" option checked
+   - Optimizations:
+     - Same collection optimizations as fast-tests
+     - `--maxfail=25` for reasonable failure detection
+     - Better error handling for CPU/memory limits (exit codes 152, 137)
+   - Redis service included
+   - Full artifact uploads (coverage, reports, logs)
+
+**Usage:**
+
+```bash
+# Fast tests run automatically on push/PR
+git push
+
+# To run full test suite manually:
+# 1. Go to Actions tab in GitHub
+# 2. Select "Pytest All - Run All Tests" workflow
+# 3. Click "Run workflow"
+# 4. Check "Run full test suite (slow)" option
+# 5. Click "Run workflow" button
+
+# Or using GitHub CLI:
+gh workflow run pytest-all.yml -f run_full_tests=true
+```
+
+**Optimizations Applied:**
+
+- **Collection Phase**: Reduced timeout from 900s to 300s with `--disable-warnings`
+- **Test Selection**: Fast tests only run ~20-30% of test suite (critical paths)
+- **Failure Detection**: Reduced `--maxfail` from 50 to 10 (fast) and 25 (full)
+- **Error Handling**: Better handling of CPU time limit exceeded (exit code 152)
+- **Artifact Management**: Separate artifacts for fast and full test runs
+
+**Benefits:**
+
+- **Quick Feedback**: Fast tests complete in under 45 minutes for routine commits
+- **Comprehensive Coverage**: Full test suite runs nightly to catch regressions
+- **Resource Efficiency**: Avoids running 400+ tests on every commit
+- **CI Stability**: No more CPU timeout failures on routine commits
+- **Flexibility**: Manual trigger available when full testing is needed
+
+### 3. Security Scanning (`.github/workflows/security.yml`)
 
 **Triggers:**
 - Push to `main` or `develop`
@@ -171,7 +245,7 @@ To fully utilize CodeQL and SARIF report uploads, GitHub Code Scanning must be e
 2. Enable "Code scanning" feature
 3. The workflow will continue to run without errors even if code scanning is not enabled, but SARIF uploads will be skipped
 
-### 3. Continuous Deployment (`.github/workflows/cd.yml`)
+### 4. Continuous Deployment (`.github/workflows/cd.yml`)
 
 **Triggers:**
 - Push to `main` branch
@@ -210,7 +284,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-### 4. Dependency Updates (`.github/workflows/dependency-updates.yml`)
+### 5. Dependency Updates (`.github/workflows/dependency-updates.yml`)
 
 **Triggers:**
 - Weekly on Monday at 3 AM UTC
