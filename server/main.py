@@ -485,7 +485,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # Health check endpoint
-@app.get("/health", response_model=HealthResponse, tags=["Health"])
+@app.get("/health", response_model=HealthResponse, tags=["Health"], status_code=200)
 async def health_check() -> HealthResponse:
     """
     Ultra-fast health check endpoint (Liveness Probe).
