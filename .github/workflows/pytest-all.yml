@@ -1,24 +1,25 @@
 name: Pytest All - Run All Tests
 
-# This workflow is optimized to handle a large test suite (400+ test files) efficiently:
+# This workflow runs pytests in the repository:
 #
 # Job Strategy:
 # 1. fast-tests: Runs on every push/PR
-#    - Executes critical/core tests only (server, core omnicore modules)
-#    - Timeout: 45 minutes
+#    - Executes core tests (tests/, omnicore_engine/, server/)
+#    - Runs WITHOUT parallelization to avoid SIGXCPU on GitHub runners
+#    - Timeout: 30 minutes (job level)
 #    - Optimized for quick feedback on routine commits
 #
 # 2. full-tests: Runs on schedule (nightly 2 AM UTC) or manual trigger
-#    - Executes comprehensive test suite
+#    - Executes comprehensive test suite including ALL test directories
 #    - Timeout: 240 minutes (4 hours)
-#    - Only runs when explicitly triggered or on nightly schedule
+#    - Includes integration tests - only runs on schedule or manual trigger
 #
 # Optimizations Applied:
-# - Reduced collection timeout from 900s to 300s
+# - Removed -n (pytest-xdist) to avoid SIGXCPU (exit code 152) caused by worker processes
+# - Added ulimit -t unlimited to remove CPU time limits on runners
 # - Added --disable-warnings and -p no:warnings for faster collection
-# - Reduced --maxfail for faster failure detection (10 for fast, 25 for full)
-# - Improved error handling for CPU/memory limit exceeded (exit codes 152, 137)
-# - Better test path selection to avoid loading all 400+ test files
+# - maxfail limits for faster failure detection (10 for fast, 50 for full)
+# - Error handling for resource limits (exit code 152=SIGXCPU, 137=SIGKILL/OOM)
 #
 # To run full tests manually:
 # - Go to Actions tab → Select this workflow → Run workflow
@@ -281,36 +282,38 @@ jobs:
           echo "=== Initial memory usage ==="
           free -h
           
+          # Remove CPU time limit to prevent SIGXCPU (exit code 152)
+          # GitHub Actions runners have default RLIMIT_CPU that can be hit during test collection
+          ulimit -t unlimited 2>/dev/null || true
+          
           python -c "import gc; gc.collect(); print('Garbage collection completed')"
           rm -rf .pytest_cache/ .coverage 2>/dev/null || true
           
           echo ""
-          echo "=== Running fast tests (core modules only) ==="
+          echo "=== Running fast tests (core modules) ==="
           
-          # Run only fast, critical tests with optimizations:
-          # -n 2: Use 2 parallel workers for controlled resource usage
+          # Run core pytests without parallelization to avoid SIGXCPU issues
+          # NOTE: We run WITHOUT -n (pytest-xdist) because spawning workers
+          # can hit CPU time limits on GitHub Actions runners.
           # --disable-warnings: Skip warning collection
           # -p no:warnings: Disable warnings plugin
-          # --maxfail=5: Fail fast after 5 failures (reduced for faster feedback)
-          # --tb=line: Minimal traceback for speed
-          # Focus on critical test files only (not broad directories)
+          # --maxfail=10: Fail fast after 10 failures
+          # --tb=short: Moderate traceback for debugging
+          # Excludes slow and integration tests via markers for faster feedback
           timeout 1200s pytest \
-            -n 2 \
             -v \
-            --tb=line \
-            --maxfail=5 \
+            --tb=short \
+            --maxfail=10 \
             --disable-warnings \
             -p no:warnings \
             --import-mode=prepend \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
             --ignore=self_fixing_engineer/simulation/tests \
-            --ignore=tests/test_integration*.py \
-            --ignore=tests/test_e2e*.py \
             -m "not slow and not integration" \
-            omnicore_engine/tests/test_core.py \
-            omnicore_engine/tests/test_fastapi_app.py \
-            omnicore_engine/tests/test_security_config.py \
-            omnicore_engine/database/tests/test_database.py \
+            tests/ \
+            omnicore_engine/tests/ \
+            omnicore_engine/database/tests/ \
+            server/tests/ \
             --junitxml=test-results-fast.xml \
             2>&1 | tee test-output-fast.log
           
@@ -616,26 +619,62 @@ jobs:
           echo "=== Initial memory usage ==="
           free -h
           
+          # Remove CPU time limit to prevent SIGXCPU (exit code 152)
+          ulimit -t unlimited 2>/dev/null || true
+          
           python -c "import gc; gc.collect(); print('Garbage collection completed')"
           rm -rf .pytest_cache/ .coverage 2>/dev/null || true
           
           echo ""
-          echo "=== Running full test suite ==="
+          echo "=== Running full test suite (ALL pytests) ==="
           
-          # Run all tests with optimizations and controlled parallelization
-          # -n 2: Use 2 parallel workers (not auto) for controlled resource usage
-          # No path restrictions - runs complete test suite across all modules
-          # Still excludes: slow tests, integration tests (via markers)
-          timeout 10800s pytest \
-            -n 2 \
+          # Run ALL tests WITHOUT parallelization to avoid SIGXCPU issues
+          # NOTE: We run WITHOUT -n (pytest-xdist) because spawning workers
+          # can hit CPU time limits on GitHub Actions runners.
+          # Includes ALL test directories - comprehensive test coverage
+          # Note: Full suite includes simulation tests and all other tests
+          # Timeout: 13500s (3h 45m) to allow completion within job timeout (4h)
+          timeout 13500s pytest \
             -v \
             --tb=short \
-            --maxfail=25 \
+            --maxfail=50 \
             --disable-warnings \
             -p no:warnings \
             --import-mode=prepend \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
-            -m "not slow and not integration" \
+            tests/ \
+            omnicore_engine/tests/ \
+            omnicore_engine/database/tests/ \
+            omnicore_engine/message_bus/tests/ \
+            server/tests/ \
+            self_fixing_engineer/tests/ \
+            self_fixing_engineer/arbiter/tests/ \
+            self_fixing_engineer/arbiter/arbiter_growth/tests/ \
+            self_fixing_engineer/arbiter/models/tests/ \
+            self_fixing_engineer/arbiter/meta_learning_orchestrator/tests/ \
+            self_fixing_engineer/arbiter/bug_manager/tests/ \
+            self_fixing_engineer/arbiter/knowledge_graph/tests/ \
+            self_fixing_engineer/arbiter/learner/tests/ \
+            self_fixing_engineer/arbiter/plugins/tests/ \
+            self_fixing_engineer/arbiter/policy/tests/ \
+            self_fixing_engineer/arbiter/explainable_reasoner/tests/ \
+            self_fixing_engineer/intent_capture/tests/ \
+            self_fixing_engineer/test_generation/tests/ \
+            self_fixing_engineer/mesh/tests/ \
+            self_fixing_engineer/self_healing_import_fixer/tests/ \
+            self_fixing_engineer/plugins/tests/ \
+            self_fixing_engineer/agent_orchestration/tests/ \
+            self_fixing_engineer/guardrails/tests/ \
+            self_fixing_engineer/envs/tests/ \
+            self_fixing_engineer/simulation/tests/ \
+            generator/tests/ \
+            generator/main/tests/ \
+            generator/agents/tests/ \
+            generator/audit_log/tests/ \
+            generator/clarifier/tests/ \
+            generator/intent_parser/tests/ \
+            generator/runner/tests/ \
+            generator/scripts/tests/ \
             --junitxml=test-results-full.xml \
             2>&1 | tee test-output-full.log
           
@@ -647,7 +686,7 @@ jobs:
             echo "Full test suite requires more resources - consider splitting further"
             exit $PYTEST_EXIT
           elif [ $PYTEST_EXIT -eq 124 ]; then
-            echo "ERROR: Tests timed out after 3 hours (job timeout: 4 hours)"
+            echo "ERROR: Tests timed out after 3h 45m (job timeout: 4 hours)"
             exit 124
           fi
           
