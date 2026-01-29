@@ -933,7 +933,7 @@ def _get_redis_client():
     return _redis_client
 
 
-def get_redis_connection_status() -> Dict[str, any]:
+def get_redis_connection_status() -> Dict[str, Any]:
     """
     Get detailed Redis connection status for health checks and diagnostics.
     
@@ -1549,15 +1549,18 @@ if (
         # Check if the port is already in use (another instance may have started)
         import socket
         test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        test_socket.settimeout(1)
-        result = test_socket.connect_ex(('localhost', int(METRICS_PORT)))
-        test_socket.close()
+        try:
+            test_socket.settimeout(1)
+            result = test_socket.connect_ex(('localhost', int(METRICS_PORT)))
+        finally:
+            test_socket.close()
         
         if result == 0:
             # Port already in use - likely another instance
             logger.info(
-                f"Prometheus metrics server already running on port {METRICS_PORT} "
+                "Prometheus metrics server already running on port %s "
                 "(another instance may have started it)",
+                METRICS_PORT,
                 extra={"data_classification": "internal"},
             )
             _prometheus_server_started = True
@@ -1566,25 +1569,32 @@ if (
             start_http_server(int(METRICS_PORT))
             _prometheus_server_started = True
             logger.info(
-                f"Prometheus metrics server started on port {METRICS_PORT}",
+                "Prometheus metrics server started on port %s",
+                METRICS_PORT,
                 extra={"data_classification": "internal"},
             )
     except OSError as e:
         # Common case: Address already in use
+        _prometheus_server_started = True  # Prevent retry attempts
         if "Address already in use" in str(e) or "EADDRINUSE" in str(e):
             logger.info(
-                f"Prometheus metrics port {METRICS_PORT} already in use - "
+                "Prometheus metrics port %s already in use - "
                 "metrics server likely started by another instance",
+                METRICS_PORT,
                 extra={"data_classification": "internal"},
             )
-            _prometheus_server_started = True
         else:
             logger.error(
-                f"Failed to start Prometheus server on port {METRICS_PORT}: {e}",
+                "Failed to start Prometheus server on port %s: %s",
+                METRICS_PORT,
+                type(e).__name__,
                 extra={"data_classification": "internal"},
             )
     except Exception as e:
+        # Prevent repeated failure attempts on any exception
+        _prometheus_server_started = True
         logger.error(
-            f"Failed to start Prometheus server: {e}",
+            "Failed to start Prometheus server: %s",
+            type(e).__name__,
             extra={"data_classification": "internal"},
         )

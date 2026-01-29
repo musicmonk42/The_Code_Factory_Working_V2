@@ -76,7 +76,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 # =============================================================================
 # LOGGING CONFIGURATION
@@ -302,7 +302,7 @@ def validate_shif_components() -> Dict[str, bool]:
     return status
 
 
-def get_path_setup_status() -> Dict[str, any]:
+def get_path_setup_status() -> Dict[str, Any]:
     """
     Get detailed status of the path setup operation.
     
