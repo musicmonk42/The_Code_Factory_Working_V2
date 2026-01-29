@@ -1,24 +1,24 @@
 name: Pytest All - Run All Tests
 
-# This workflow is optimized to handle a large test suite (400+ test files) efficiently:
+# This workflow runs ALL pytests in the repository (400+ test files):
 #
 # Job Strategy:
 # 1. fast-tests: Runs on every push/PR
-#    - Executes critical/core tests only (server, core omnicore modules)
-#    - Timeout: 45 minutes
+#    - Executes ALL pytests, excluding those marked as 'slow' or 'integration'
+#    - Timeout: 30 minutes (job level)
 #    - Optimized for quick feedback on routine commits
 #
 # 2. full-tests: Runs on schedule (nightly 2 AM UTC) or manual trigger
-#    - Executes comprehensive test suite
+#    - Executes comprehensive test suite including ALL tests
 #    - Timeout: 240 minutes (4 hours)
-#    - Only runs when explicitly triggered or on nightly schedule
+#    - Includes integration tests - only runs on schedule or manual trigger
 #
 # Optimizations Applied:
-# - Reduced collection timeout from 900s to 300s
+# - Uses -n 2 for parallel test execution with pytest-xdist
 # - Added --disable-warnings and -p no:warnings for faster collection
-# - Reduced --maxfail for faster failure detection (10 for fast, 25 for full)
+# - maxfail limits for faster failure detection (10 for fast, 50 for full)
 # - Improved error handling for CPU/memory limit exceeded (exit codes 152, 137)
-# - Better test path selection to avoid loading all 400+ test files
+# - All test directories are explicitly included to ensure complete coverage
 #
 # To run full tests manually:
 # - Go to Actions tab → Select this workflow → Run workflow
@@ -285,32 +285,59 @@ jobs:
           rm -rf .pytest_cache/ .coverage 2>/dev/null || true
           
           echo ""
-          echo "=== Running fast tests (core modules only) ==="
+          echo "=== Running fast tests (all pytests, excluding slow/integration) ==="
           
-          # Run only fast, critical tests with optimizations:
+          # Run ALL pytests with optimizations:
           # -n 2: Use 2 parallel workers for controlled resource usage
           # --disable-warnings: Skip warning collection
           # -p no:warnings: Disable warnings plugin
-          # --maxfail=5: Fail fast after 5 failures (reduced for faster feedback)
+          # --maxfail=10: Fail fast after 10 failures
           # --tb=line: Minimal traceback for speed
-          # Focus on critical test files only (not broad directories)
+          # Excludes slow and integration tests via markers for faster feedback
+          # Note: simulation tests are ignored due to extensive runtime requirements
           timeout 1200s pytest \
             -n 2 \
             -v \
             --tb=line \
-            --maxfail=5 \
+            --maxfail=10 \
             --disable-warnings \
             -p no:warnings \
             --import-mode=prepend \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
             --ignore=self_fixing_engineer/simulation/tests \
-            --ignore=tests/test_integration*.py \
-            --ignore=tests/test_e2e*.py \
             -m "not slow and not integration" \
-            omnicore_engine/tests/test_core.py \
-            omnicore_engine/tests/test_fastapi_app.py \
-            omnicore_engine/tests/test_security_config.py \
-            omnicore_engine/database/tests/test_database.py \
+            tests/ \
+            omnicore_engine/tests/ \
+            omnicore_engine/database/tests/ \
+            omnicore_engine/message_bus/tests/ \
+            server/tests/ \
+            self_fixing_engineer/tests/ \
+            self_fixing_engineer/arbiter/tests/ \
+            self_fixing_engineer/arbiter/arbiter_growth/tests/ \
+            self_fixing_engineer/arbiter/models/tests/ \
+            self_fixing_engineer/arbiter/meta_learning_orchestrator/tests/ \
+            self_fixing_engineer/arbiter/bug_manager/tests/ \
+            self_fixing_engineer/arbiter/knowledge_graph/tests/ \
+            self_fixing_engineer/arbiter/learner/tests/ \
+            self_fixing_engineer/arbiter/plugins/tests/ \
+            self_fixing_engineer/arbiter/policy/tests/ \
+            self_fixing_engineer/arbiter/explainable_reasoner/tests/ \
+            self_fixing_engineer/intent_capture/tests/ \
+            self_fixing_engineer/test_generation/tests/ \
+            self_fixing_engineer/mesh/tests/ \
+            self_fixing_engineer/self_healing_import_fixer/tests/ \
+            self_fixing_engineer/plugins/tests/ \
+            self_fixing_engineer/agent_orchestration/tests/ \
+            self_fixing_engineer/guardrails/tests/ \
+            self_fixing_engineer/envs/tests/ \
+            generator/tests/ \
+            generator/main/tests/ \
+            generator/agents/tests/ \
+            generator/audit_log/tests/ \
+            generator/clarifier/tests/ \
+            generator/intent_parser/tests/ \
+            generator/runner/tests/ \
+            generator/scripts/tests/ \
             --junitxml=test-results-fast.xml \
             2>&1 | tee test-output-fast.log
           
@@ -620,22 +647,54 @@ jobs:
           rm -rf .pytest_cache/ .coverage 2>/dev/null || true
           
           echo ""
-          echo "=== Running full test suite ==="
+          echo "=== Running full test suite (ALL pytests) ==="
           
-          # Run all tests with optimizations and controlled parallelization
+          # Run ALL tests with optimizations and controlled parallelization
           # -n 2: Use 2 parallel workers (not auto) for controlled resource usage
-          # No path restrictions - runs complete test suite across all modules
-          # Still excludes: slow tests, integration tests (via markers)
+          # Includes ALL test directories - comprehensive test coverage
+          # Note: Full suite includes simulation tests and all other tests
           timeout 10800s pytest \
             -n 2 \
             -v \
             --tb=short \
-            --maxfail=25 \
+            --maxfail=50 \
             --disable-warnings \
             -p no:warnings \
             --import-mode=prepend \
             --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
-            -m "not slow and not integration" \
+            tests/ \
+            omnicore_engine/tests/ \
+            omnicore_engine/database/tests/ \
+            omnicore_engine/message_bus/tests/ \
+            server/tests/ \
+            self_fixing_engineer/tests/ \
+            self_fixing_engineer/arbiter/tests/ \
+            self_fixing_engineer/arbiter/arbiter_growth/tests/ \
+            self_fixing_engineer/arbiter/models/tests/ \
+            self_fixing_engineer/arbiter/meta_learning_orchestrator/tests/ \
+            self_fixing_engineer/arbiter/bug_manager/tests/ \
+            self_fixing_engineer/arbiter/knowledge_graph/tests/ \
+            self_fixing_engineer/arbiter/learner/tests/ \
+            self_fixing_engineer/arbiter/plugins/tests/ \
+            self_fixing_engineer/arbiter/policy/tests/ \
+            self_fixing_engineer/arbiter/explainable_reasoner/tests/ \
+            self_fixing_engineer/intent_capture/tests/ \
+            self_fixing_engineer/test_generation/tests/ \
+            self_fixing_engineer/mesh/tests/ \
+            self_fixing_engineer/self_healing_import_fixer/tests/ \
+            self_fixing_engineer/plugins/tests/ \
+            self_fixing_engineer/agent_orchestration/tests/ \
+            self_fixing_engineer/guardrails/tests/ \
+            self_fixing_engineer/envs/tests/ \
+            self_fixing_engineer/simulation/tests/ \
+            generator/tests/ \
+            generator/main/tests/ \
+            generator/agents/tests/ \
+            generator/audit_log/tests/ \
+            generator/clarifier/tests/ \
+            generator/intent_parser/tests/ \
+            generator/runner/tests/ \
+            generator/scripts/tests/ \
             --junitxml=test-results-full.xml \
             2>&1 | tee test-output-full.log
           
