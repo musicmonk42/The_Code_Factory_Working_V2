@@ -245,158 +245,103 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 static_dir = BASE_DIR / "static"
 
 
+async def _background_initialization():
+    """
+    Background initialization task that runs AFTER the HTTP server is ready.
+    
+    This allows /health to respond immediately while initialization continues.
+    """
+    logger.info("=" * 80)
+    logger.info("INITIALIZING PLATFORM CONFIGURATION (Background)")
+    logger.info("=" * 80)
+    
+    config = None
+    try:
+        config = initialize_config(log_summary=True)
+        
+        # Validate API keys - log warnings but don't block
+        api_keys_valid = validate_required_api_keys(config, fail_fast=False)
+        
+        if not api_keys_valid:
+            logger.warning("=" * 80)
+            logger.warning("WARNING: No LLM API keys configured!")
+            logger.warning("The server will start but LLM functionality will be unavailable.")
+            logger.warning("=" * 80)
+        
+    except Exception as e:
+        logger.error(f"Configuration initialization failed: {e}", exc_info=True)
+        logger.warning(f"Continuing startup despite configuration error: {type(e).__name__}")
+    
+    # Start background agent loading
+    logger.info("=" * 80)
+    logger.info("STARTING BACKGROUND AGENT LOADING")
+    logger.info("=" * 80)
+    
+    try:
+        startup_lock = get_startup_lock()
+        lock_acquired = await startup_lock.acquire(blocking=False)
+        
+        if lock_acquired:
+            logger.info("✓ Startup lock acquired - this instance will initialize agents")
+        else:
+            logger.info("⚠ Startup lock held by another instance - agents may already be loading")
+            logger.info("  This is normal in multi-instance deployments")
+        
+        loader = get_agent_loader()
+        loader.start_background_loading()
+        logger.info("✓ Background agent loading task started")
+        logger.info("✓ Check /health for liveness and /ready for readiness")
+        
+    except Exception as e:
+        logger.error(f"Error starting background agent loading: {e}", exc_info=True)
+        logger.warning("Continuing startup despite agent loading error")
+    
+    logger.info("=" * 80)
+    logger.info("Platform initialization complete")
+    logger.info("=" * 80)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Application lifespan manager.
+    Application lifespan manager - MUST complete immediately to allow health checks.
     
-    CRITICAL: This function controls when uvicorn binds to the HTTP port.
-    Everything BEFORE yield delays server startup.
-    Everything AFTER yield runs during shutdown.
-    
-    To ensure fast startup, we:
-    1. Do minimal setup before yield
-    2. Start background initialization task (fire-and-forget)
-    3. Yield immediately to let uvicorn bind to port
+    All initialization happens in background tasks so the HTTP server can accept
+    connections immediately for Railway healthchecks.
     """
-    # ========================================================================
-    # BEFORE YIELD: MINIMAL SETUP ONLY - MUST BE FAST (<1 second)
-    # ========================================================================
-    
+    # Startup - DO NOT BLOCK HERE
     logger.info("Starting Code Factory API Server")
     logger.info(f"Version: {__version__}")
     logger.info("=" * 80)
     logger.info("HTTP SERVER STARTING - Minimal pre-initialization")
     logger.info("=" * 80)
     
-    # Store initialization state for healthcheck
-    app.state.initialization_complete = False
-    app.state.initialization_error = None
-    app.state.startup_lock_acquired = False
-    
-    # ========================================================================
-    # BACKGROUND INITIALIZATION (Fire-and-forget)
-    # ========================================================================
-    
-    async def initialize_platform():
-        """Run all heavyweight initialization after HTTP server is ready."""
-        logger.info("=" * 80)
-        logger.info("INITIALIZING PLATFORM CONFIGURATION (Background)")
-        logger.info("=" * 80)
-        
-        # Load configuration
-        config = None
-        try:
-            config = initialize_config(log_summary=True)
-            
-            # Validate API keys - log warnings but don't block
-            api_keys_valid = validate_required_api_keys(config, fail_fast=False)
-            
-            if not api_keys_valid:
-                logger.warning("=" * 80)
-                logger.warning("WARNING: No LLM API keys configured!")
-                logger.warning("The server is running but LLM functionality will be unavailable.")
-                logger.warning("Configure at least one LLM API key for full functionality.")
-                if config.is_production:
-                    logger.warning("This is a PRODUCTION environment - please configure API keys.")
-                logger.warning("=" * 80)
-            
-        except Exception as e:
-            logger.error(f"Configuration initialization failed: {e}", exc_info=True)
-            logger.warning(f"Continuing despite configuration error: {type(e).__name__}")
-            app.state.initialization_error = str(e)
-        
-        # Start background agent loading
-        logger.info("=" * 80)
-        logger.info("STARTING BACKGROUND AGENT LOADING")
-        logger.info("=" * 80)
-        
-        try:
-            # Acquire startup lock with timeout to prevent slow Redis calls from blocking
-            # Even with blocking=False, the Redis connection could be slow or hang
-            startup_lock = get_startup_lock()
-            try:
-                lock_acquired = await asyncio.wait_for(
-                    startup_lock.acquire(blocking=False),
-                    timeout=0.1  # 100ms max - protect against slow/hanging Redis
-                )
-            except asyncio.TimeoutError:
-                lock_acquired = False
-                logger.info("⚠ Startup lock acquisition timed out (slow Redis?) - continuing anyway")
-            
-            # Track lock acquisition for cleanup
-            app.state.startup_lock_acquired = lock_acquired
-            
-            if lock_acquired:
-                logger.info("✓ Startup lock acquired - this instance will initialize agents")
-            else:
-                logger.info("⚠ Startup lock held by another instance - agents may already be loading")
-                logger.info("  This is normal in multi-instance deployments")
-            
-            # Get the agent loader and start background loading
-            loader = get_agent_loader()
-            loader.start_background_loading()
-            logger.info("✓ Background agent loading task started")
-            logger.info("✓ Check /health for liveness and /ready for readiness")
-            
-        except Exception as e:
-            logger.error(f"Error starting background agent loading: {e}", exc_info=True)
-            logger.warning("Continuing despite agent loading error")
-            app.state.initialization_error = str(e)
-        
-        logger.info("=" * 80)
-        logger.info("Platform initialization complete")
-        logger.info("=" * 80)
-        
-        # Mark initialization as complete
-        app.state.initialization_complete = True
-    
-    # Start initialization in background - don't await!
-    # Store task reference for proper cleanup during shutdown
-    app.state.init_task = asyncio.create_task(initialize_platform())
+    # Start background initialization WITHOUT awaiting
+    background_task = asyncio.create_task(_background_initialization())
     logger.info("Background initialization task created - HTTP server starting now")
     
-    # Yield IMMEDIATELY to let uvicorn bind to port and accept connections
-    # This ensures /health endpoint is reachable within 2-3 seconds
+    # IMMEDIATELY yield so FastAPI routes become available
     yield
     
-    # ========================================================================
-    # AFTER YIELD: SHUTDOWN CLEANUP
-    # ========================================================================
-    
+    # Shutdown
     logger.info("Shutting down Code Factory API Server")
     
-    # Wait for or cancel background initialization if still running
-    if hasattr(app.state, 'init_task') and app.state.init_task:
-        if not app.state.init_task.done():
-            logger.info("Waiting for background initialization to complete...")
-            try:
-                await asyncio.wait_for(app.state.init_task, timeout=5.0)
-            except asyncio.TimeoutError:
-                logger.warning("Background initialization did not complete in time, cancelling...")
-                app.state.init_task.cancel()
-                try:
-                    await app.state.init_task
-                except asyncio.CancelledError:
-                    logger.info("Background initialization task cancelled")
-        
-        # Check for exceptions in the task
-        if app.state.init_task.done() and not app.state.init_task.cancelled():
-            try:
-                app.state.init_task.result()  # This will raise if task had exception
-            except Exception as e:
-                logger.error(f"Background initialization task failed: {e}", exc_info=True)
-    
-    # Release startup lock only if we acquired it
-    if getattr(app.state, 'startup_lock_acquired', False):
+    # Cancel background task if still running
+    if not background_task.done():
+        background_task.cancel()
         try:
-            startup_lock = get_startup_lock()
-            await startup_lock.release()
-            await startup_lock.close()
-            logger.info("Startup lock released")
-        except Exception as e:
-            logger.warning(f"Error releasing startup lock during shutdown: {e}")
+            await background_task
+        except asyncio.CancelledError:
+            pass
     
+    # Clean up connections
+    try:
+        startup_lock = get_startup_lock()
+        await startup_lock.release()
+        await startup_lock.close()
+    except Exception as e:
+        logger.warning(f"Error releasing startup lock during shutdown: {e}")
+
     logger.info("API Server stopped")
 
 
@@ -491,71 +436,23 @@ async def health_check() -> HealthResponse:
     Health check endpoint (Liveness Probe).
 
     This endpoint ALWAYS returns HTTP 200 immediately if the API server is responding.
-    It is designed for Railway/Kubernetes liveness probes to determine if the container
-    should be restarted.
-
-    **Purpose:**
-    - Liveness probe: checks if the API process is alive and responding
-    - Response time: < 100ms guaranteed (50ms timeout for agent check)
-    - For readiness checks (agents loaded), use the /ready endpoint instead
+    It does NOT check agent status or any other dependencies.
+    
+    Purpose: Railway/Kubernetes liveness probe - "is the container alive?"
+    
+    For checking if agents are ready, use the /ready endpoint instead.
 
     **Returns:**
-    - Overall health status: always "healthy" if API is running
-    - Component-level health information (non-blocking, informational only)
-    - API version
-    - Timestamp
+    - status: always "healthy" 
+    - version: API version
+    - timestamp: current UTC time
     """
-    # Build basic component health status without blocking
-    # NOTE: Components marked as "healthy" are informational placeholders for liveness probe
-    # This endpoint does NOT perform actual dependency checks (database, redis, etc.)
-    # as those can be slow or time out. Use /ready endpoint for full dependency checks.
-    components = {
-        "api": "healthy",
-        "omnicore": "healthy",
-        "database": "healthy",
-        "message_bus": "healthy",
-        "agents_status": "loading",  # Default to loading
-    }
-
-    # Try to get agent status with 50ms timeout (non-blocking)
-    try:
-        loader = get_agent_loader()
-        agent_status = await asyncio.wait_for(
-            asyncio.to_thread(loader.get_status),
-            timeout=0.05  # 50 milliseconds - fast enough for liveness probe
-        )
-
-        # Update agents_status based on loading state
-        if agent_status.get('loading_in_progress', False):
-            components["agents_status"] = "loading"
-        elif agent_status.get('loading_error'):
-            components["agents_status"] = "degraded"
-        else:
-            agent_availability = agent_status.get('availability_rate', 0.0)
-            total_agents = agent_status.get('total_agents', 0)
-            if total_agents == 0:
-                components["agents_status"] = "loading"
-            elif agent_availability >= 0.5:
-                components["agents_status"] = "ready"
-            else:
-                # Less than 50% availability or no agents available
-                components["agents_status"] = "degraded"
-
-    except asyncio.TimeoutError:
-        # Agent status check took too long, default to "loading"
-        logger.debug("Agent status check timed out, defaulting to 'loading'")
-        components["agents_status"] = "loading"
-    except Exception as e:
-        # Any error checking agent status should not fail the health check
-        logger.debug(f"Could not check agent status: {e}")
-        components["agents_status"] = "loading"
-
-    # CRITICAL: Always return 200 with "healthy" status
-    # This ensures Railway healthchecks pass immediately when server starts
     return HealthResponse(
-        status="healthy",  # Always "healthy" - never fail liveness probe
+        status="healthy",
         version=__version__,
-        components=components,
+        components={
+            "api": "healthy",
+        },
         timestamp=datetime.utcnow().isoformat(),
     )
 
