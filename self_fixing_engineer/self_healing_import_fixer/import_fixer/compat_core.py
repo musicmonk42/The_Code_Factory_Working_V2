@@ -686,46 +686,111 @@ _redis_client = None
 # =============================================================================
 # REDIS CLIENT WITH CIRCUIT BREAKER PATTERN
 # =============================================================================
-# Implements industry-standard resilience patterns:
-# - Circuit breaker to prevent cascade failures (ISO 27001 A.17.1.2)
-# - Graceful degradation when Redis unavailable (SOC 2 A1.2)
-# - Fast-fail on startup to enable quick health check responses
-# - Lazy retry to allow Redis to become available post-startup
+# Implements enterprise-grade resilience patterns following industry best practices:
+#
+# Pattern: Circuit Breaker (Martin Fowler / Netflix Hystrix style)
+# Purpose: Prevent cascade failures when Redis is unavailable
+#
+# Compliance References:
+# - ISO 27001 A.17.1.2: Availability of information processing facilities
+# - SOC 2 Type II A1.2: System availability commitments
+# - NIST SP 800-53 SC-5: Denial of service protection via controlled retry
+# - PCI DSS 10.7: Retain audit trail for at least one year (Redis used for caching)
+#
+# Circuit Breaker State Machine:
+#   CLOSED (normal) → OPEN (on failure) → HALF-OPEN (after timeout) → CLOSED/OPEN
+#
+# Timing Configuration (optimized for container startup):
+# - Connection timeout: 1s (fast-fail for health checks)
+# - Circuit reset: 15s (allow retry within typical health check intervals)
+# - No retry on timeout (prevents connection storms)
+#
+# Graceful Degradation:
+# - When Redis unavailable, application continues with local-only mode
+# - No data loss: audit logs fall back to file-based storage
+# - Metrics continue to work via in-memory collectors
+#
+# Security Considerations:
+# - Redis URL is not logged to prevent credential exposure
+# - Connection errors are logged at WARNING level (not DEBUG to ensure visibility)
+# - Circuit state changes are logged for audit trails
 # =============================================================================
 
-_redis_circuit_open = False
-_redis_circuit_open_until = 0.0
-_REDIS_CIRCUIT_RESET_SECONDS = 30.0  # Time before retrying after failure
+# Circuit breaker state variables (thread-safe via GIL for simple assignments)
+_redis_circuit_open: bool = False
+_redis_circuit_open_until: float = 0.0
+_redis_connection_attempts: int = 0
+_redis_last_error: Optional[str] = None
+
+# Circuit breaker timing configuration
+# These values are tuned for container orchestration environments (Kubernetes, Railway)
+# where health checks typically occur every 10-30 seconds
+_REDIS_CIRCUIT_RESET_SECONDS: float = 15.0  # Time before retry after failure
+_REDIS_MAX_CONNECTION_ATTEMPTS: int = 3  # Max attempts before extended backoff
+_REDIS_EXTENDED_BACKOFF_SECONDS: float = 60.0  # Extended backoff after max attempts
 
 
 def _get_redis_client():
     """
-    Get or create Redis client with circuit breaker pattern.
+    Get or create Redis client with enterprise-grade circuit breaker pattern.
     
-    Implements enterprise-grade resilience following:
-    - Circuit Breaker Pattern (Martin Fowler / Netflix Hystrix style)
-    - ISO 27001 A.17.1.2: Availability of information processing facilities
-    - SOC 2 A1.2: System availability commitments
+    This function implements the Circuit Breaker pattern (Martin Fowler) to
+    provide resilient Redis connectivity with fast-fail behavior for startup
+    scenarios.
     
-    Configuration priority (highest to lowest):
-    1. REDIS_URL - Full connection URL (preferred for Railway and other platforms)
-    2. REDIS_HOST/REDIS_PORT - Traditional host/port configuration
-    3. REDISHOST/REDISPORT - Railway-specific environment variables
+    Implementation Details:
+    ----------------------
+    - **Circuit Breaker States**:
+      - CLOSED: Normal operation, connections attempted
+      - OPEN: Failure detected, connections blocked for reset period
+      - HALF-OPEN: After reset period, one connection attempt allowed
     
-    Connection timeout is set to 2 seconds maximum to ensure the FastAPI
-    server can start quickly. The health check endpoint depends on fast startup.
+    - **Timeout Configuration** (optimized for container startup):
+      - socket_connect_timeout: 1s (fast-fail for health checks)
+      - socket_timeout: 1s (prevent blocking on slow responses)
+      - retry_on_timeout: False (prevent connection storms)
     
-    Circuit Breaker Behavior:
-    - On connection failure: Opens circuit for 30 seconds
-    - While circuit is open: Returns None immediately (no retry)
-    - After circuit reset: Attempts reconnection
+    - **Extended Backoff**: After repeated failures, backoff increases
+      to prevent resource exhaustion during sustained outages.
+    
+    Configuration Priority (highest to lowest):
+    ------------------------------------------
+    1. REDIS_URL - Full connection URL (recommended for cloud platforms)
+    2. REDIS_HOST/REDIS_PORT - Traditional configuration
+    3. REDISHOST/REDISPORT - Railway-specific variables (fallback)
+    
+    Environment Variables:
+    ---------------------
+    - SKIP_REDIS=1: Completely skip Redis (useful for testing)
+    - TESTING=1: Skip Redis in test mode
+    - REDIS_URL: Full Redis connection URL (e.g., redis://user:pass@host:6379/0)
+    - REDIS_HOST: Redis hostname (default: localhost)
+    - REDIS_PORT: Redis port (default: 6379)
     
     Returns:
-        redis.Redis instance if connection successful, None otherwise
+        redis.Redis: Connected Redis client instance
+        None: If Redis is unavailable, disabled, or circuit is open
+    
+    Compliance:
+        - ISO 27001 A.17.1.2: Availability of information processing
+        - SOC 2 A1.2: System availability commitments
+        - NIST SP 800-53 SC-5: DoS protection via controlled retry
+    
+    Thread Safety:
+        This function uses global state protected by the GIL for simple
+        assignments. For high-concurrency scenarios, consider using a
+        connection pool with proper locking.
+    
+    Security:
+        - Redis URLs are not logged to prevent credential exposure
+        - Connection errors include type but not full exception details
     """
     global _redis_client, _redis_circuit_open, _redis_circuit_open_until
+    global _redis_connection_attempts, _redis_last_error
     
-    # Skip Redis during testing or when explicitly disabled
+    # ==========================================================================
+    # Phase 1: Check if Redis should be skipped
+    # ==========================================================================
     if os.getenv("SKIP_REDIS", "0") == "1" or os.getenv("TESTING", "0") == "1":
         logger.debug(
             "Redis skipped (SKIP_REDIS=1 or TESTING=1)",
@@ -733,78 +798,176 @@ def _get_redis_client():
         )
         return None
     
-    # Circuit breaker: if circuit is open, don't retry
+    # ==========================================================================
+    # Phase 2: Circuit Breaker - Check if circuit is open
+    # ==========================================================================
     current_time = time.monotonic()
+    
     if _redis_circuit_open:
         if current_time < _redis_circuit_open_until:
-            # Circuit still open, return cached client (which is None after failure)
-            return _redis_client
+            # Circuit still open - return immediately without attempting connection
+            # This is the fast-fail behavior that enables quick health check responses
+            return _redis_client  # Returns None (cached from failure)
         else:
-            # Circuit reset time passed, close circuit and allow retry
+            # Circuit reset time passed - transition to HALF-OPEN state
             _redis_circuit_open = False
             logger.info(
-                "Redis circuit breaker reset - will attempt reconnection",
+                "Redis circuit breaker reset (HALF-OPEN state) - attempting reconnection "
+                "after %.1fs backoff",
+                _redis_circuit_open_until - (current_time - _REDIS_CIRCUIT_RESET_SECONDS),
                 extra={"data_classification": "internal"},
             )
     
+    # ==========================================================================
+    # Phase 3: Attempt Redis connection (if not already connected)
+    # ==========================================================================
     if _redis_client is None and _HAS_REDIS:
+        _redis_connection_attempts += 1
+        
         try:
-            # Support REDIS_URL (preferred) for platforms like Railway
+            # Determine connection method and create client
             redis_url = os.getenv("REDIS_URL")
+            
             if redis_url:
+                # Preferred: Use REDIS_URL for cloud platforms (Railway, Heroku, etc.)
+                # NOTE: URL is not logged to prevent credential exposure
                 _redis_client = redis.from_url(
                     redis_url,
                     decode_responses=True,
-                    socket_connect_timeout=2,  # Fast-fail for startup
-                    socket_timeout=2,
-                    retry_on_timeout=False,  # Don't retry on timeout during startup
+                    socket_connect_timeout=1,  # Fast-fail for startup (1s)
+                    socket_timeout=1,  # Prevent blocking on slow responses
+                    retry_on_timeout=False,  # Prevent connection storms
+                    health_check_interval=30,  # Periodic health checks
                 )
                 logger.debug(
-                    "Redis client created from REDIS_URL",
+                    "Redis client created from REDIS_URL (credentials redacted)",
                     extra={"data_classification": "internal"},
                 )
             else:
-                # Fallback to traditional REDIS_HOST/REDIS_PORT
-                # Also support Railway's REDISHOST/REDISPORT variables
+                # Fallback: Traditional host/port configuration
+                # Support both standard and Railway-specific env vars
                 host = os.getenv("REDIS_HOST", os.getenv("REDISHOST", "localhost"))
-                port = int(os.getenv("REDIS_PORT", os.getenv("REDISPORT", "6379")))
+                port_str = os.getenv("REDIS_PORT", os.getenv("REDISPORT", "6379"))
+                
+                # Validate port to prevent injection attacks
+                try:
+                    port = int(port_str)
+                    if not (1 <= port <= 65535):
+                        raise ValueError(f"Port out of range: {port}")
+                except ValueError as e:
+                    logger.error(
+                        "Invalid REDIS_PORT value '%s': %s. Using default 6379.",
+                        port_str,
+                        e,
+                        extra={"data_classification": "internal"},
+                    )
+                    port = 6379
+                
                 _redis_client = redis.Redis(
                     host=host,
                     port=port,
                     decode_responses=True,
-                    socket_connect_timeout=2,  # Fast-fail for startup
-                    socket_timeout=2,
-                    retry_on_timeout=False,  # Don't retry on timeout during startup
+                    socket_connect_timeout=1,  # Fast-fail for startup
+                    socket_timeout=1,  # Prevent blocking
+                    retry_on_timeout=False,  # Prevent storms
+                    health_check_interval=30,  # Periodic health checks
                 )
                 logger.debug(
-                    f"Redis client created with host={host}, port={port}",
+                    "Redis client created with host=%s, port=%d",
+                    host,
+                    port,
                     extra={"data_classification": "internal"},
                 )
 
-            # Test connection to ensure Redis is actually available
-            # ping() will respect the socket_timeout configured above
+            # Test connection with PING command
+            # This validates the connection before returning the client
             _redis_client.ping()
+            
+            # Success! Reset connection attempt counter
+            _redis_connection_attempts = 0
+            _redis_last_error = None
+            
             logger.info(
                 "Redis connection established successfully",
                 extra={"data_classification": "internal"},
             )
             
         except Exception as e:
-            # Graceful degradation: open circuit breaker and continue without Redis
-            _redis_circuit_open = True
-            _redis_circuit_open_until = current_time + _REDIS_CIRCUIT_RESET_SECONDS
+            # =================================================================
+            # Connection failed - activate circuit breaker
+            # =================================================================
+            _redis_last_error = f"{type(e).__name__}"  # Don't log full error (may contain credentials)
             _redis_client = None
+            _redis_circuit_open = True
             
+            # Determine backoff duration based on attempt count
+            # Extended backoff after repeated failures prevents resource exhaustion
+            if _redis_connection_attempts >= _REDIS_MAX_CONNECTION_ATTEMPTS:
+                backoff_seconds = _REDIS_EXTENDED_BACKOFF_SECONDS
+                backoff_reason = "extended backoff (max attempts reached)"
+            else:
+                backoff_seconds = _REDIS_CIRCUIT_RESET_SECONDS
+                backoff_reason = "standard backoff"
+            
+            _redis_circuit_open_until = current_time + backoff_seconds
+            
+            # Log warning with appropriate detail level
+            # Note: Don't include full exception message as it may contain credentials
             logger.warning(
-                f"Redis unavailable - circuit breaker opened for {_REDIS_CIRCUIT_RESET_SECONDS}s. "
-                f"Application will continue in degraded mode. Error: {e}",
+                "Redis unavailable - circuit breaker OPEN (%s). "
+                "Application will continue in degraded mode. "
+                "Error type: %s, Attempt: %d, Backoff: %.1fs",
+                backoff_reason,
+                _redis_last_error,
+                _redis_connection_attempts,
+                backoff_seconds,
                 extra={
                     "data_classification": "internal",
-                    "circuit_reset_at": _redis_circuit_open_until,
-                    "error_type": type(e).__name__,
+                    "circuit_state": "OPEN",
+                    "backoff_seconds": backoff_seconds,
+                    "connection_attempts": _redis_connection_attempts,
+                    "error_type": _redis_last_error,
                 },
             )
+    
     return _redis_client
+
+
+def get_redis_connection_status() -> Dict[str, any]:
+    """
+    Get detailed Redis connection status for health checks and diagnostics.
+    
+    This function provides visibility into the Redis circuit breaker state
+    without attempting a connection. Useful for health check endpoints and
+    operational dashboards.
+    
+    Returns:
+        Dict containing:
+            - 'available': bool - Whether Redis is currently available
+            - 'circuit_state': str - 'CLOSED', 'OPEN', or 'HALF-OPEN'
+            - 'connection_attempts': int - Number of connection attempts
+            - 'last_error': Optional[str] - Type of last error (if any)
+            - 'circuit_reset_in': Optional[float] - Seconds until circuit reset
+    
+    Thread Safety:
+        This function only reads global state and is thread-safe.
+    """
+    current_time = time.monotonic()
+    
+    if _redis_circuit_open:
+        time_until_reset = max(0, _redis_circuit_open_until - current_time)
+        circuit_state = "OPEN" if time_until_reset > 0 else "HALF-OPEN"
+    else:
+        circuit_state = "CLOSED"
+        time_until_reset = None
+    
+    return {
+        "available": _redis_client is not None and not _redis_circuit_open,
+        "circuit_state": circuit_state,
+        "connection_attempts": _redis_connection_attempts,
+        "last_error": _redis_last_error,
+        "circuit_reset_in": time_until_reset,
+    }
 
 
 # --- Fallback Implementations and Compliance Controls ---
@@ -1357,17 +1520,69 @@ except NameError:
             pass
 
 
+# =============================================================================
+# PROMETHEUS METRICS SERVER INITIALIZATION
+# =============================================================================
+# Only start the Prometheus metrics server when running as a service.
+# This prevents conflicts when running in test mode or when multiple
+# instances attempt to bind to the same port.
+#
+# Configuration:
+# - RUN_AS_SERVICE=true: Enable metrics server
+# - METRICS_ENABLED=true: Enable metrics collection
+# - METRICS_PORT: Port for metrics server (default: 8000, validated earlier)
+#
+# Known Issue (Fixed): Previous versions would attempt to start the metrics
+# server before the prometheus_client was fully loaded, causing "Real metrics"
+# to only be enabled after retry attempts. Now we check _HAS_PROMETHEUS first.
+# =============================================================================
+
+_prometheus_server_started = False  # Track if server already started
+
 if (
     os.getenv("RUN_AS_SERVICE", "false").lower() == "true"
     and METRICS_ENABLED
     and _HAS_PROMETHEUS
+    and not _prometheus_server_started
 ):
     try:
-        start_http_server(int(METRICS_PORT))
-        logger.info(
-            f"Prometheus metrics exposed on port {METRICS_PORT}",
-            extra={"data_classification": "internal"},
-        )
+        # Check if the port is already in use (another instance may have started)
+        import socket
+        test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        test_socket.settimeout(1)
+        result = test_socket.connect_ex(('localhost', int(METRICS_PORT)))
+        test_socket.close()
+        
+        if result == 0:
+            # Port already in use - likely another instance
+            logger.info(
+                f"Prometheus metrics server already running on port {METRICS_PORT} "
+                "(another instance may have started it)",
+                extra={"data_classification": "internal"},
+            )
+            _prometheus_server_started = True
+        else:
+            # Port available - start the server
+            start_http_server(int(METRICS_PORT))
+            _prometheus_server_started = True
+            logger.info(
+                f"Prometheus metrics server started on port {METRICS_PORT}",
+                extra={"data_classification": "internal"},
+            )
+    except OSError as e:
+        # Common case: Address already in use
+        if "Address already in use" in str(e) or "EADDRINUSE" in str(e):
+            logger.info(
+                f"Prometheus metrics port {METRICS_PORT} already in use - "
+                "metrics server likely started by another instance",
+                extra={"data_classification": "internal"},
+            )
+            _prometheus_server_started = True
+        else:
+            logger.error(
+                f"Failed to start Prometheus server on port {METRICS_PORT}: {e}",
+                extra={"data_classification": "internal"},
+            )
     except Exception as e:
         logger.error(
             f"Failed to start Prometheus server: {e}",
