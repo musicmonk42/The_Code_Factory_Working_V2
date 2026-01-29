@@ -152,21 +152,30 @@ class TestHealthEndpoint:
         # Status should always be "healthy" if API is up
         assert data['status'] == 'healthy'
         
-        # Check components
+        # Check components - should ONLY have api status (liveness probe)
         assert 'api' in data['components']
-        assert 'agents_status' in data['components']
         
         # API should be healthy
         assert data['components']['api'] == 'healthy'
+        
+        # /health should NOT include agents_status - use /ready for that
+        assert 'agents_status' not in data['components']
     
-    def test_health_includes_agents_status(self, client):
-        """Test that /health includes agents_status field."""
+    def test_health_does_not_check_agents(self, client):
+        """Test that /health does NOT check agent status (liveness probe).
+        
+        The /health endpoint is a liveness probe and should ALWAYS return 200
+        without checking any dependencies. Use /ready for agent status checks.
+        """
         response = client.get("/health")
         data = response.json()
         
-        assert 'agents_status' in data['components']
-        # Should be one of: "loading", "ready", "degraded"
-        assert data['components']['agents_status'] in ['loading', 'ready', 'degraded']
+        # Should NOT include agents_status (that's for /ready endpoint)
+        assert 'agents_status' not in data['components']
+        
+        # Should only have api status
+        assert len(data['components']) == 1
+        assert data['components'] == {'api': 'healthy'}
 
 
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
