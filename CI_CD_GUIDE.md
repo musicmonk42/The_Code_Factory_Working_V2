@@ -149,8 +149,9 @@ This workflow is optimized to handle a large test suite (400+ test files) effici
    - JUnit XML and logs uploaded as artifacts
 
 2. **full-tests** - Comprehensive test coverage (runs on schedule/manual)
-   - Timeout: 240 minutes (4 hours)
-   - Runs entire test suite across all modules
+   - Timeout: 240 minutes (4 hours, job level)
+   - Test execution timeout: 3 hours (10800s)
+   - Runs entire test suite across all modules (no path restrictions)
    - Only executes on:
      - Nightly schedule (2 AM UTC)
      - Manual workflow dispatch with "Run full test suite" option checked
