@@ -67,7 +67,7 @@ import logging
 import sys
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -613,7 +613,7 @@ async def health_check() -> HealthResponse:
         status="healthy",
         version=__version__,
         components={"api": "healthy"},
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -755,7 +755,7 @@ async def readiness_check(response: Response) -> ReadinessResponse:
         ready=ready,
         status=status_text,
         checks=checks,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -912,7 +912,7 @@ async def detailed_health_check() -> DetailedHealthResponse:
     return DetailedHealthResponse(
         status=status,
         version=__version__,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         agents=agents,
         dependencies=dependencies,
         optional_features=optional_features,
