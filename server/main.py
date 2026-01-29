@@ -249,95 +249,146 @@ static_dir = BASE_DIR / "static"
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-
-    Handles startup and shutdown events for the API server,
-    including initialization of connections to OmniCore and other modules.
+    
+    CRITICAL: This function controls when uvicorn binds to the HTTP port.
+    Everything BEFORE yield delays server startup.
+    Everything AFTER yield runs during shutdown.
+    
+    To ensure fast startup, we:
+    1. Do minimal setup before yield
+    2. Start background initialization task (fire-and-forget)
+    3. Yield immediately to let uvicorn bind to port
     """
-    # Startup
+    # ========================================================================
+    # BEFORE YIELD: MINIMAL SETUP ONLY - MUST BE FAST (<1 second)
+    # ========================================================================
+    
     logger.info("Starting Code Factory API Server")
     logger.info(f"Version: {__version__}")
-    
-    # Initialize configuration and validate
     logger.info("=" * 80)
-    logger.info("INITIALIZING PLATFORM CONFIGURATION")
+    logger.info("HTTP SERVER STARTING - Minimal pre-initialization")
     logger.info("=" * 80)
     
-    config = None
-    try:
-        config = initialize_config(log_summary=True)
-        
-        # Validate API keys - log warnings but don't block startup
-        # This allows healthchecks to pass even if API keys aren't configured yet
-        # The /ready endpoint will indicate degraded state if keys are missing
-        api_keys_valid = validate_required_api_keys(config, fail_fast=False)
-        
-        if not api_keys_valid:
-            logger.warning("=" * 80)
-            logger.warning("WARNING: No LLM API keys configured!")
-            logger.warning("The server will start but LLM functionality will be unavailable.")
-            logger.warning("Configure at least one LLM API key for full functionality.")
-            if config.is_production:
-                logger.warning("This is a PRODUCTION environment - please configure API keys.")
-            logger.warning("=" * 80)
-        
-    except Exception as e:
-        logger.error(f"Configuration initialization failed: {e}", exc_info=True)
-        logger.warning(f"Continuing startup despite configuration error: {type(e).__name__}")
+    # Store initialization state for healthcheck
+    app.state.initialization_complete = False
+    app.state.initialization_error = None
+    app.state.startup_lock_acquired = False
     
-    # Start the server IMMEDIATELY - agent loading happens in background
-    # Use distributed lock to prevent duplicate initialization across containers
-    logger.info("=" * 80)
-    logger.info("STARTING SERVER WITH BACKGROUND AGENT LOADING")
-    logger.info("=" * 80)
+    # ========================================================================
+    # BACKGROUND INITIALIZATION (Fire-and-forget)
+    # ========================================================================
     
-    try:
-        # Acquire startup lock (non-blocking for now - agents can handle concurrency)
-        # The lock is primarily informational and logged for debugging
-        startup_lock = get_startup_lock()
-        lock_acquired = await startup_lock.acquire(blocking=False)
+    async def initialize_platform():
+        """Run all heavyweight initialization after HTTP server is ready."""
+        logger.info("=" * 80)
+        logger.info("INITIALIZING PLATFORM CONFIGURATION (Background)")
+        logger.info("=" * 80)
         
-        if lock_acquired:
-            logger.info("✓ Startup lock acquired - this instance will initialize agents")
-        else:
-            logger.info("⚠ Startup lock held by another instance - agents may already be loading")
-            logger.info("  This is normal in multi-instance deployments")
+        # Load configuration
+        config = None
+        try:
+            config = initialize_config(log_summary=True)
+            
+            # Validate API keys - log warnings but don't block
+            api_keys_valid = validate_required_api_keys(config, fail_fast=False)
+            
+            if not api_keys_valid:
+                logger.warning("=" * 80)
+                logger.warning("WARNING: No LLM API keys configured!")
+                logger.warning("The server is running but LLM functionality will be unavailable.")
+                logger.warning("Configure at least one LLM API key for full functionality.")
+                if config.is_production:
+                    logger.warning("This is a PRODUCTION environment - please configure API keys.")
+                logger.warning("=" * 80)
+            
+        except Exception as e:
+            logger.error(f"Configuration initialization failed: {e}", exc_info=True)
+            logger.warning(f"Continuing despite configuration error: {type(e).__name__}")
+            app.state.initialization_error = str(e)
         
-        # Get the agent loader
-        loader = get_agent_loader()
+        # Start background agent loading
+        logger.info("=" * 80)
+        logger.info("STARTING BACKGROUND AGENT LOADING")
+        logger.info("=" * 80)
         
-        # Start background agent loading WITHOUT awaiting
-        # This allows the server to start accepting HTTP connections immediately
-        # The agent loader has its own internal lock to prevent duplicate loading
-        logger.info("Initiating background agent loading...")
-        loader.start_background_loading()
-        logger.info("✓ Background agent loading task started")
-        logger.info("✓ Server will accept HTTP connections immediately")
-        logger.info("✓ Check /health for liveness and /ready for readiness")
+        try:
+            # Acquire startup lock (non-blocking)
+            startup_lock = get_startup_lock()
+            lock_acquired = await startup_lock.acquire(blocking=False)
+            
+            # Track lock acquisition for cleanup
+            app.state.startup_lock_acquired = lock_acquired
+            
+            if lock_acquired:
+                logger.info("✓ Startup lock acquired - this instance will initialize agents")
+            else:
+                logger.info("⚠ Startup lock held by another instance - agents may already be loading")
+                logger.info("  This is normal in multi-instance deployments")
+            
+            # Get the agent loader and start background loading
+            loader = get_agent_loader()
+            loader.start_background_loading()
+            logger.info("✓ Background agent loading task started")
+            logger.info("✓ Check /health for liveness and /ready for readiness")
+            
+        except Exception as e:
+            logger.error(f"Error starting background agent loading: {e}", exc_info=True)
+            logger.warning("Continuing despite agent loading error")
+            app.state.initialization_error = str(e)
         
-    except Exception as e:
-        logger.error(f"Error starting background agent loading: {e}", exc_info=True)
-        logger.warning("Continuing startup despite agent loading error")
-
-    logger.info("=" * 80)
-    logger.info("API Server ready to accept connections")
-
+        logger.info("=" * 80)
+        logger.info("Platform initialization complete")
+        logger.info("=" * 80)
+        
+        # Mark initialization as complete
+        app.state.initialization_complete = True
+    
+    # Start initialization in background - don't await!
+    # Store task reference for proper cleanup during shutdown
+    app.state.init_task = asyncio.create_task(initialize_platform())
+    logger.info("Background initialization task created - HTTP server starting now")
+    
+    # Yield IMMEDIATELY to let uvicorn bind to port and accept connections
+    # This ensures /health endpoint is reachable within 2-3 seconds
     yield
-
-    # Shutdown
+    
+    # ========================================================================
+    # AFTER YIELD: SHUTDOWN CLEANUP
+    # ========================================================================
+    
     logger.info("Shutting down Code Factory API Server")
     
-    # Release startup lock if we acquired it
-    try:
-        startup_lock = get_startup_lock()
-        await startup_lock.release()
-        await startup_lock.close()
-    except Exception as e:
-        logger.warning(f"Error releasing startup lock during shutdown: {e}")
-
-    # Clean up connections
-    # Example:
-    # await shutdown_message_bus()
-
+    # Wait for or cancel background initialization if still running
+    if hasattr(app.state, 'init_task') and app.state.init_task:
+        if not app.state.init_task.done():
+            logger.info("Waiting for background initialization to complete...")
+            try:
+                await asyncio.wait_for(app.state.init_task, timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Background initialization did not complete in time, cancelling...")
+                app.state.init_task.cancel()
+                try:
+                    await app.state.init_task
+                except asyncio.CancelledError:
+                    logger.info("Background initialization task cancelled")
+        
+        # Check for exceptions in the task
+        if app.state.init_task.done() and not app.state.init_task.cancelled():
+            try:
+                app.state.init_task.result()  # This will raise if task had exception
+            except Exception as e:
+                logger.error(f"Background initialization task failed: {e}", exc_info=True)
+    
+    # Release startup lock only if we acquired it
+    if getattr(app.state, 'startup_lock_acquired', False):
+        try:
+            startup_lock = get_startup_lock()
+            await startup_lock.release()
+            await startup_lock.close()
+            logger.info("Startup lock released")
+        except Exception as e:
+            logger.warning(f"Error releasing startup lock during shutdown: {e}")
+    
     logger.info("API Server stopped")
 
 
