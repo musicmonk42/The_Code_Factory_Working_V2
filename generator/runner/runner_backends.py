@@ -1161,6 +1161,7 @@ class DockerBackend(Backend):
         super().__init__(config)
         self.client = None  # Don't connect yet - lazy initialization
         self._initialized = False
+        self._init_lock = asyncio.Lock()  # Prevent race conditions during initialization
         
         if not HAS_DOCKER:
             self.health_status = {
@@ -1183,38 +1184,42 @@ class DockerBackend(Backend):
 
     async def _ensure_initialized(self) -> None:
         """Initialize Docker client lazily on first use."""
-        if self._initialized:
-            return
+        # Use lock to prevent race conditions
+        async with self._init_lock:
+            # Double-check after acquiring lock
+            if self._initialized:
+                return
+                
+            if not HAS_DOCKER:
+                raise RuntimeError("Docker backend unavailable - docker library not installed")
             
-        if not HAS_DOCKER:
-            raise RuntimeError("Docker backend unavailable - docker library not installed")
-        
-        try:
-            # Run blocking Docker operations in thread pool
-            loop = asyncio.get_event_loop()
-            self.client = await loop.run_in_executor(None, DockerClient.from_env)
-            await loop.run_in_executor(None, self.client.ping)
-            
-            self._initialized = True
-            self.health_status = {
-                "status": "healthy",
-                "details": "Docker daemon connection established",
-            }
-            HEALTH_STATUS.labels(
-                component_name="backend_docker", instance_id=self.instance_id
-            ).set(1)
-            logger.info("Docker backend initialized successfully")
-        except Exception as e:
-            self.client = None
-            self.health_status = {
-                "status": "unhealthy",
-                "details": f"Docker daemon connection failed: {e}",
-            }
-            HEALTH_STATUS.labels(
-                component_name="backend_docker", instance_id=self.instance_id
-            ).set(0)
-            logger.error(f"Docker backend initialization failed: {e}")
-            raise
+            try:
+                # Run blocking Docker operations in thread pool
+                loop = asyncio.get_running_loop()
+                self.client = await loop.run_in_executor(None, DockerClient.from_env)
+                await loop.run_in_executor(None, self.client.ping)
+                
+                self._initialized = True
+                self.health_status = {
+                    "status": "healthy",
+                    "details": "Docker daemon connection established",
+                }
+                HEALTH_STATUS.labels(
+                    component_name="backend_docker", instance_id=self.instance_id
+                ).set(1)
+                logger.info("Docker backend initialized successfully")
+            except Exception as e:
+                self.client = None
+                self._initialized = False  # Ensure flag is reset on failure
+                self.health_status = {
+                    "status": "unhealthy",
+                    "details": f"Docker daemon connection failed: {e}",
+                }
+                HEALTH_STATUS.labels(
+                    component_name="backend_docker", instance_id=self.instance_id
+                ).set(0)
+                logger.error(f"Docker backend initialization failed: {e}")
+                raise
 
     async def setup(
         self, work_dir: Path, custom_setup_script: Optional[str] = None
@@ -1351,21 +1356,8 @@ class DockerBackend(Backend):
                 "details": "Docker client will initialize on first use (lazy loading)",
             }
         
-        # If initialized, try to ping (in thread pool to avoid blocking)
-        if self.client:
-            try:
-                # Non-blocking check
-                self.client.ping()
-                self.health_status = {
-                    "status": "healthy",
-                    "details": "Docker daemon is responsive",
-                }
-            except Exception as e:
-                self.health_status = {
-                    "status": "unhealthy",
-                    "details": f"Docker daemon connection failed: {e}",
-                }
-        
+        # Return cached health status to avoid blocking
+        # Actual health verification happens during _ensure_initialized() and recover()
         HEALTH_STATUS.labels(
             component_name="backend_docker", instance_id=self.instance_id
         ).set(1 if self.health_status["status"] == "healthy" else 0)
@@ -1373,30 +1365,37 @@ class DockerBackend(Backend):
 
     async def recover(self) -> None:
         logger.info("Attempting to recover DockerBackend by re-initializing client...")
-        if HAS_DOCKER:
-            try:
-                # Run blocking Docker operations in thread pool
-                loop = asyncio.get_event_loop()
-                self.client = await loop.run_in_executor(None, DockerClient.from_env)
-                await loop.run_in_executor(None, self.client.ping)
-                self._initialized = True
-                self.health_status = {
-                    "status": "healthy",
-                    "details": "Docker daemon connection re-established.",
-                }
-                HEALTH_STATUS.labels(
-                    component_name="backend_docker", instance_id=self.instance_id
-                ).set(1)
-            except DockerException as e:
-                self.client = None
-                self._initialized = False
-                self.health_status = {
-                    "status": "unhealthy",
-                    "details": f"Docker daemon recovery failed: {e}",
-                }
-                HEALTH_STATUS.labels(
-                    component_name="backend_docker", instance_id=self.instance_id
-                ).set(0)
+        if not HAS_DOCKER:
+            logger.warning("Cannot recover DockerBackend - docker library not installed")
+            self.health_status = {
+                "status": "unavailable",
+                "details": "docker library not installed.",
+            }
+            return
+            
+        try:
+            # Run blocking Docker operations in thread pool
+            loop = asyncio.get_running_loop()
+            self.client = await loop.run_in_executor(None, DockerClient.from_env)
+            await loop.run_in_executor(None, self.client.ping)
+            self._initialized = True
+            self.health_status = {
+                "status": "healthy",
+                "details": "Docker daemon connection re-established.",
+            }
+            HEALTH_STATUS.labels(
+                component_name="backend_docker", instance_id=self.instance_id
+            ).set(1)
+        except DockerException as e:
+            self.client = None
+            self._initialized = False
+            self.health_status = {
+                "status": "unhealthy",
+                "details": f"Docker daemon recovery failed: {e}",
+            }
+            HEALTH_STATUS.labels(
+                component_name="backend_docker", instance_id=self.instance_id
+            ).set(0)
 
     async def close(self) -> None:
         if self.client and self._initialized:
