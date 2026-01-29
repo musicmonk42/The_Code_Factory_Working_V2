@@ -1411,54 +1411,80 @@ class KubernetesBackend(Backend):
 
     def __init__(self, config: RunnerConfig):
         super().__init__(config)
+        self.core_v1 = None
+        self.batch_v1 = None
+        self._initialized = False
+        self._init_lock = asyncio.Lock()
+        self.namespace = self.config.k8s_namespace
+        
         if not HAS_KUBERNETES:
-            self.core_v1 = None
-            self.batch_v1 = None
             self.health_status = {
-                "status": "unhealthy",
+                "status": "unavailable",
                 "details": "kubernetes library not installed.",
             }
             HEALTH_STATUS.labels(
                 component_name="backend_kubernetes", instance_id=self.instance_id
             ).set(0)
-            return
-        try:
-            k8s_config.load_kube_config()  # Assumes kubeconfig is available
-            self.core_v1 = k8s_client.CoreV1Api()
-            self.batch_v1 = k8s_client.BatchV1Api()
-            self.namespace = self.config.k8s_namespace
-            self.core_v1.read_namespace_status(self.namespace)
+            logger.warning("Kubernetes backend unavailable - kubernetes library not installed")
+        else:
             self.health_status = {
-                "status": "healthy",
-                "details": f"Kubernetes API reachable. Namespace: {self.namespace}",
-            }
-            HEALTH_STATUS.labels(
-                component_name="backend_kubernetes", instance_id=self.instance_id
-            ).set(1)
-        except K8sApiException as e:
-            self.core_v1 = None
-            self.batch_v1 = None
-            self.health_status = {
-                "status": "unhealthy",
-                "details": f"Kubernetes API error: {e.reason}",
+                "status": "not_initialized",
+                "details": "Kubernetes API not yet initialized (lazy loading)",
             }
             HEALTH_STATUS.labels(
                 component_name="backend_kubernetes", instance_id=self.instance_id
             ).set(0)
-        except Exception as e:
-            self.core_v1 = None
-            self.batch_v1 = None
-            self.health_status = {
-                "status": "unhealthy",
-                "details": f"Kubernetes client init failed: {e}",
-            }
-            HEALTH_STATUS.labels(
-                component_name="backend_kubernetes", instance_id=self.instance_id
-            ).set(0)
+            logger.info("Kubernetes backend registered - will initialize on first use")
+    
+    async def _ensure_initialized(self) -> None:
+        """Initialize Kubernetes client lazily on first use."""
+        async with self._init_lock:
+            if self._initialized:
+                return
+            
+            if not HAS_KUBERNETES:
+                raise RuntimeError("Kubernetes backend unavailable - kubernetes library not installed")
+            
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, k8s_config.load_kube_config)
+                
+                self.core_v1 = k8s_client.CoreV1Api()
+                self.batch_v1 = k8s_client.BatchV1Api()
+                
+                # Verify connection
+                await loop.run_in_executor(
+                    None, self.core_v1.read_namespace_status, self.namespace
+                )
+                
+                self._initialized = True
+                self.health_status = {
+                    "status": "healthy",
+                    "details": f"Kubernetes API reachable. Namespace: {self.namespace}",
+                }
+                HEALTH_STATUS.labels(
+                    component_name="backend_kubernetes", instance_id=self.instance_id
+                ).set(1)
+                logger.info("Kubernetes backend initialized successfully")
+            except Exception as e:
+                self.core_v1 = None
+                self.batch_v1 = None
+                self._initialized = False
+                self.health_status = {
+                    "status": "unhealthy",
+                    "details": f"Kubernetes API error: {e}",
+                }
+                HEALTH_STATUS.labels(
+                    component_name="backend_kubernetes", instance_id=self.instance_id
+                ).set(0)
+                logger.error(f"Kubernetes backend initialization failed: {e}")
+                raise
 
     async def setup(
         self, work_dir: Path, custom_setup_script: Optional[str] = None
     ) -> None:
+        await self._ensure_initialized()
+        
         if not self.core_v1 or not self.batch_v1:
             # *** FIX: Use string key, not registry value ***
             raise SetupError(
@@ -1515,6 +1541,8 @@ class KubernetesBackend(Backend):
     async def execute(
         self, payload: TaskPayload, work_dir: Path, timeout: int
     ) -> TaskResult:
+        await self._ensure_initialized()
+        
         command = payload.command
         task_id = payload.task_id
         start_time = time.time()
@@ -1707,59 +1735,92 @@ class KubernetesBackend(Backend):
 
     def health(self) -> Dict[str, Any]:
         if not HAS_KUBERNETES:
-            self.health_status = {
-                "status": "unhealthy",
+            return {
+                "status": "unavailable",
                 "details": "kubernetes library not installed.",
             }
-        elif self.core_v1:
+        
+        if not self._initialized:
+            return self.health_status
+        
+        # Only check connection if already initialized
+        if self.core_v1:
             try:
+                # Quick non-blocking check
                 self.core_v1.read_namespace_status(self.namespace)
                 self.health_status = {
                     "status": "healthy",
                     "details": f"Kubernetes API reachable. Namespace: {self.namespace}",
                 }
+                HEALTH_STATUS.labels(
+                    component_name="backend_kubernetes", instance_id=self.instance_id
+                ).set(1)
             except K8sApiException as e:
                 self.health_status = {
                     "status": "unhealthy",
                     "details": f"Kubernetes API error: {e.reason}",
                 }
-        HEALTH_STATUS.labels(
-            component_name="backend_kubernetes", instance_id=self.instance_id
-        ).set(1 if self.health_status["status"] == "healthy" else 0)
+                HEALTH_STATUS.labels(
+                    component_name="backend_kubernetes", instance_id=self.instance_id
+                ).set(0)
+            except Exception as e:
+                self.health_status = {
+                    "status": "unhealthy",
+                    "details": f"Kubernetes API error: {e}",
+                }
+                HEALTH_STATUS.labels(
+                    component_name="backend_kubernetes", instance_id=self.instance_id
+                ).set(0)
+        
         return self.health_status
 
     async def recover(self) -> None:
         logger.info(
             "Attempting to recover KubernetesBackend by reloading kubeconfig..."
         )
-        if HAS_KUBERNETES:
-            try:
-                k8s_config.load_kube_config()
-                self.core_v1 = k8s_client.CoreV1Api()
-                self.batch_v1 = k8s_client.BatchV1Api()
-                self.namespace = self.config.k8s_namespace
-                self.core_v1.read_namespace_status(self.namespace)
-                self.health_status = {
-                    "status": "healthy",
-                    "details": "Kubernetes client reloaded and API reachable.",
-                }
-                HEALTH_STATUS.labels(
-                    component_name="backend_kubernetes", instance_id=self.instance_id
-                ).set(1)
-            except Exception as e:
-                self.core_v1 = None
-                self.batch_v1 = None
-                self.health_status = {
-                    "status": "unhealthy",
-                    "details": f"Kubernetes client recovery failed: {e}",
-                }
-                HEALTH_STATUS.labels(
-                    component_name="backend_kubernetes", instance_id=self.instance_id
-                ).set(0)
+        if not HAS_KUBERNETES:
+            logger.warning("Cannot recover KubernetesBackend - kubernetes library not installed")
+            self.health_status = {
+                "status": "unavailable",
+                "details": "kubernetes library not installed.",
+            }
+            return
+        
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, k8s_config.load_kube_config)
+            
+            self.core_v1 = k8s_client.CoreV1Api()
+            self.batch_v1 = k8s_client.BatchV1Api()
+            
+            await loop.run_in_executor(
+                None, self.core_v1.read_namespace_status, self.namespace
+            )
+            
+            self._initialized = True
+            self.health_status = {
+                "status": "healthy",
+                "details": "Kubernetes client reloaded and API reachable.",
+            }
+            HEALTH_STATUS.labels(
+                component_name="backend_kubernetes", instance_id=self.instance_id
+            ).set(1)
+        except Exception as e:
+            self.core_v1 = None
+            self.batch_v1 = None
+            self._initialized = False
+            self.health_status = {
+                "status": "unhealthy",
+                "details": f"Kubernetes client recovery failed: {e}",
+            }
+            HEALTH_STATUS.labels(
+                component_name="backend_kubernetes", instance_id=self.instance_id
+            ).set(0)
 
     async def close(self) -> None:
-        # k8s client doesn't have an explicit async close method for the client object itself
-        pass
+        if self._initialized:
+            self._initialized = False
+            logger.info("Kubernetes backend closed")
 
 
 # Other backends (Lambda, Libvirt, SSH, Firecracker) would follow a similar pattern
@@ -1768,42 +1829,85 @@ class KubernetesBackend(Backend):
 
 @register_backend("lambda")
 class LambdaBackend(Backend):
+    """Executes commands via AWS Lambda."""
+    
     def __init__(self, config: RunnerConfig):
         super().__init__(config)
+        self.client = None
+        self._initialized = False
+        self._init_lock = asyncio.Lock()
         self.function_name = config.lambda_function_name
+        
         if not HAS_BOTO3:
-            self.client = None
             self.health_status = {
-                "status": "unhealthy",
+                "status": "unavailable",
                 "details": "boto3 library not installed.",
             }
             HEALTH_STATUS.labels(
                 component_name="backend_lambda", instance_id=self.instance_id
             ).set(0)
-            return
-        try:
-            self.client = boto3.client("lambda", region_name=config.aws_region)
-            self.client.get_function_configuration(FunctionName=self.function_name)
+            logger.warning("Lambda backend unavailable - boto3 library not installed")
+        else:
             self.health_status = {
-                "status": "healthy",
-                "details": f"AWS Lambda function {self.function_name} is accessible.",
-            }
-            HEALTH_STATUS.labels(
-                component_name="backend_lambda", instance_id=self.instance_id
-            ).set(1)
-        except (BotoClientError, Exception) as e:
-            self.client = None
-            self.health_status = {
-                "status": "unhealthy",
-                "details": f"AWS Lambda client init failed: {e}",
+                "status": "not_initialized",
+                "details": "AWS Lambda client not yet initialized (lazy loading)",
             }
             HEALTH_STATUS.labels(
                 component_name="backend_lambda", instance_id=self.instance_id
             ).set(0)
+            logger.info("Lambda backend registered - will initialize on first use")
+    
+    async def _ensure_initialized(self) -> None:
+        """Initialize Lambda client lazily on first use."""
+        async with self._init_lock:
+            if self._initialized:
+                return
+            
+            if not HAS_BOTO3:
+                raise RuntimeError("Lambda backend unavailable - boto3 library not installed")
+            
+            try:
+                loop = asyncio.get_running_loop()
+                self.client = await loop.run_in_executor(
+                    None, boto3.client, 'lambda'
+                )
+                if hasattr(self.config, 'aws_region') and self.config.aws_region:
+                    self.client = await loop.run_in_executor(
+                        None, boto3.client, 'lambda', self.config.aws_region
+                    )
+                
+                # Verify connection by checking function exists
+                await loop.run_in_executor(
+                    None, self.client.get_function_configuration, FunctionName=self.function_name
+                )
+                
+                self._initialized = True
+                self.health_status = {
+                    "status": "healthy",
+                    "details": f"AWS Lambda function {self.function_name} is accessible.",
+                }
+                HEALTH_STATUS.labels(
+                    component_name="backend_lambda", instance_id=self.instance_id
+                ).set(1)
+                logger.info("Lambda backend initialized successfully")
+            except Exception as e:
+                self.client = None
+                self._initialized = False
+                self.health_status = {
+                    "status": "unhealthy",
+                    "details": f"AWS Lambda client initialization failed: {e}",
+                }
+                HEALTH_STATUS.labels(
+                    component_name="backend_lambda", instance_id=self.instance_id
+                ).set(0)
+                logger.error(f"Lambda backend initialization failed: {e}")
+                raise
 
     async def setup(
         self, work_dir: Path, custom_setup_script: Optional[str] = None
     ) -> None:
+        await self._ensure_initialized()
+        
         if not self.client:
             # *** FIX: Use string key, not registry value ***
             raise SetupError(
@@ -1819,6 +1923,8 @@ class LambdaBackend(Backend):
     async def execute(
         self, payload: TaskPayload, work_dir: Path, timeout: int
     ) -> TaskResult:
+        await self._ensure_initialized()
+        
         command = payload.command
         task_id = payload.task_id
         start_time = time.time()
@@ -1917,54 +2023,85 @@ class LambdaBackend(Backend):
 
     def health(self) -> Dict[str, Any]:
         if not HAS_BOTO3:
-            self.health_status = {
-                "status": "unhealthy",
+            return {
+                "status": "unavailable",
                 "details": "boto3 library not installed.",
             }
-        elif self.client:
+        
+        if not self._initialized:
+            return self.health_status
+        
+        # Only check connection if already initialized
+        if self.client:
             try:
+                # Quick non-blocking check
                 self.client.get_function_configuration(FunctionName=self.function_name)
                 self.health_status = {
                     "status": "healthy",
                     "details": f"AWS Lambda function {self.function_name} is accessible.",
                 }
+                HEALTH_STATUS.labels(
+                    component_name="backend_lambda", instance_id=self.instance_id
+                ).set(1)
             except (BotoClientError, Exception) as e:
                 self.health_status = {
                     "status": "unhealthy",
                     "details": f"AWS Lambda client error: {e}",
                 }
-        HEALTH_STATUS.labels(
-            component_name="backend_lambda", instance_id=self.instance_id
-        ).set(1 if self.health_status["status"] == "healthy" else 0)
+                HEALTH_STATUS.labels(
+                    component_name="backend_lambda", instance_id=self.instance_id
+                ).set(0)
+        
         return self.health_status
 
     async def recover(self) -> None:
         logger.info("Attempting to recover LambdaBackend by re-initializing client...")
-        if HAS_BOTO3:
-            try:
-                self.client = boto3.client("lambda", region_name=self.config.aws_region)
-                self.client.get_function_configuration(FunctionName=self.function_name)
-                self.health_status = {
-                    "status": "healthy",
-                    "details": "AWS Lambda client re-established.",
-                }
-                HEALTH_STATUS.labels(
-                    component_name="backend_lambda", instance_id=self.instance_id
-                ).set(1)
-            except (BotoClientError, Exception) as e:
-                self.client = None
-                self.health_status = {
-                    "status": "unhealthy",
-                    "details": f"AWS Lambda client recovery failed: {e}",
-                }
-                HEALTH_STATUS.labels(
-                    component_name="backend_lambda", instance_id=self.instance_id
-                ).set(0)
+        if not HAS_BOTO3:
+            logger.warning("Cannot recover LambdaBackend - boto3 library not installed")
+            self.health_status = {
+                "status": "unavailable",
+                "details": "boto3 library not installed.",
+            }
+            return
+        
+        try:
+            loop = asyncio.get_running_loop()
+            self.client = await loop.run_in_executor(
+                None, boto3.client, 'lambda'
+            )
+            if hasattr(self.config, 'aws_region') and self.config.aws_region:
+                self.client = await loop.run_in_executor(
+                    None, boto3.client, 'lambda', self.config.aws_region
+                )
+            
+            await loop.run_in_executor(
+                None, self.client.get_function_configuration, FunctionName=self.function_name
+            )
+            
+            self._initialized = True
+            self.health_status = {
+                "status": "healthy",
+                "details": "AWS Lambda client re-established.",
+            }
+            HEALTH_STATUS.labels(
+                component_name="backend_lambda", instance_id=self.instance_id
+            ).set(1)
+        except (BotoClientError, Exception) as e:
+            self.client = None
+            self._initialized = False
+            self.health_status = {
+                "status": "unhealthy",
+                "details": f"AWS Lambda client recovery failed: {e}",
+            }
+            HEALTH_STATUS.labels(
+                component_name="backend_lambda", instance_id=self.instance_id
+            ).set(0)
 
     async def close(self) -> None:
-        if self.client:
+        if self.client and self._initialized:
             await asyncio.to_thread(self.client.close)
-            logger.info("BBoto3 Lambda client closed.")
+            self._initialized = False
+            logger.info("Boto3 Lambda client closed.")
 
 
 async def rag_retrieve(
