@@ -67,7 +67,7 @@ import logging
 import sys
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -598,30 +598,22 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # Health check endpoint
-@app.get("/health", response_model=HealthResponse, tags=["Health"], status_code=200)
+@app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check() -> HealthResponse:
     """
-    Health check endpoint (Liveness Probe).
-
-    This endpoint ALWAYS returns HTTP 200 immediately if the API server is responding.
-    It does NOT check agent status or any other dependencies.
+    Liveness probe - returns immediately with HTTP 200 if server is running.
     
-    Purpose: Railway/Kubernetes liveness probe - "is the container alive?"
+    This endpoint is used by Railway/Kubernetes to determine if the container
+    should be restarted. It should ALWAYS return HTTP 200 if the process is alive.
     
-    For checking if agents are ready, use the /ready endpoint instead.
-
-    **Returns:**
-    - status: always "healthy" 
-    - version: API version
-    - timestamp: current UTC time
+    Use /ready for readiness checks (when agents/dependencies must be loaded).
     """
+    # Return success immediately - don't check anything
     return HealthResponse(
         status="healthy",
         version=__version__,
-        components={
-            "api": "healthy",
-        },
-        timestamp=datetime.utcnow().isoformat(),
+        components={"api": "healthy"},
+        timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -763,7 +755,7 @@ async def readiness_check(response: Response) -> ReadinessResponse:
         ready=ready,
         status=status_text,
         checks=checks,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -920,7 +912,7 @@ async def detailed_health_check() -> DetailedHealthResponse:
     return DetailedHealthResponse(
         status=status,
         version=__version__,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         agents=agents,
         dependencies=dependencies,
         optional_features=optional_features,
