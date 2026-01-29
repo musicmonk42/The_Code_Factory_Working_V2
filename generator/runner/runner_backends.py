@@ -1786,36 +1786,17 @@ class KubernetesBackend(Backend):
             }
             return
         
-        try:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, k8s_config.load_kube_config)
-            
-            self.core_v1 = k8s_client.CoreV1Api()
-            self.batch_v1 = k8s_client.BatchV1Api()
-            
-            await loop.run_in_executor(
-                None, self.core_v1.read_namespace_status, self.namespace
-            )
-            
-            self._initialized = True
-            self.health_status = {
-                "status": "healthy",
-                "details": "Kubernetes client reloaded and API reachable.",
-            }
-            HEALTH_STATUS.labels(
-                component_name="backend_kubernetes", instance_id=self.instance_id
-            ).set(1)
-        except Exception as e:
+        # Reset state and re-initialize using the same logic
+        async with self._init_lock:
             self.core_v1 = None
             self.batch_v1 = None
             self._initialized = False
-            self.health_status = {
-                "status": "unhealthy",
-                "details": f"Kubernetes client recovery failed: {e}",
-            }
-            HEALTH_STATUS.labels(
-                component_name="backend_kubernetes", instance_id=self.instance_id
-            ).set(0)
+        
+        try:
+            await self._ensure_initialized()
+            logger.info("KubernetesBackend recovered successfully")
+        except Exception as e:
+            logger.error(f"KubernetesBackend recovery failed: {e}")
 
     async def close(self) -> None:
         if self._initialized:
@@ -1868,17 +1849,16 @@ class LambdaBackend(Backend):
             
             try:
                 loop = asyncio.get_running_loop()
+                
+                # Create Lambda client with proper region handling
+                region = self.config.aws_region if hasattr(self.config, 'aws_region') and self.config.aws_region else None
                 self.client = await loop.run_in_executor(
-                    None, boto3.client, 'lambda'
+                    None, lambda: boto3.client('lambda', region_name=region)
                 )
-                if hasattr(self.config, 'aws_region') and self.config.aws_region:
-                    self.client = await loop.run_in_executor(
-                        None, boto3.client, 'lambda', self.config.aws_region
-                    )
                 
                 # Verify connection by checking function exists
                 await loop.run_in_executor(
-                    None, self.client.get_function_configuration, FunctionName=self.function_name
+                    None, lambda: self.client.get_function_configuration(FunctionName=self.function_name)
                 )
                 
                 self._initialized = True
@@ -2064,38 +2044,16 @@ class LambdaBackend(Backend):
             }
             return
         
-        try:
-            loop = asyncio.get_running_loop()
-            self.client = await loop.run_in_executor(
-                None, boto3.client, 'lambda'
-            )
-            if hasattr(self.config, 'aws_region') and self.config.aws_region:
-                self.client = await loop.run_in_executor(
-                    None, boto3.client, 'lambda', self.config.aws_region
-                )
-            
-            await loop.run_in_executor(
-                None, self.client.get_function_configuration, FunctionName=self.function_name
-            )
-            
-            self._initialized = True
-            self.health_status = {
-                "status": "healthy",
-                "details": "AWS Lambda client re-established.",
-            }
-            HEALTH_STATUS.labels(
-                component_name="backend_lambda", instance_id=self.instance_id
-            ).set(1)
-        except (BotoClientError, Exception) as e:
+        # Reset state and re-initialize using the same logic
+        async with self._init_lock:
             self.client = None
             self._initialized = False
-            self.health_status = {
-                "status": "unhealthy",
-                "details": f"AWS Lambda client recovery failed: {e}",
-            }
-            HEALTH_STATUS.labels(
-                component_name="backend_lambda", instance_id=self.instance_id
-            ).set(0)
+        
+        try:
+            await self._ensure_initialized()
+            logger.info("LambdaBackend recovered successfully")
+        except Exception as e:
+            logger.error(f"LambdaBackend recovery failed: {e}")
 
     async def close(self) -> None:
         if self.client and self._initialized:
