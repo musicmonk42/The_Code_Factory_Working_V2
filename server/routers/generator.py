@@ -448,8 +448,8 @@ async def upload_files(
             generator_service=generator_service,
         )
     else:
-        logger.warning(f"No README content found in uploads for job {job_id}")
-            f"No README.md found in uploaded files for job {job_id}. "
+        logger.warning(
+            f"No README content found in uploads for job {job_id}. "
             "Pipeline will not be auto-triggered."
         )
 
