@@ -378,6 +378,54 @@ def test_make_json_serializable_custom_object():
     assert result["data"].startswith("base64:")
 
 
+def test_make_json_serializable_mixed_type_set():
+    """Test that sets with mixed types are handled (unsorted fallback)."""
+    from runner.runner_logging import _make_json_serializable
+    
+    # Mixed type set that can't be sorted
+    test_set = {1, "string", 2.5}
+    result = _make_json_serializable(test_set)
+    
+    # Should return a list (may not be sorted due to mixed types)
+    assert isinstance(result, list)
+    assert len(result) == 3
+    assert set(result) == {1, "string", 2.5}
+
+
+def test_make_json_serializable_circular_reference():
+    """Test that circular references are detected and handled."""
+    from runner.runner_logging import _make_json_serializable
+    
+    # Create a circular reference
+    circular_dict = {"key": "value"}
+    circular_dict["self"] = circular_dict
+    
+    result = _make_json_serializable(circular_dict)
+    
+    # Should return a dict with the circular reference replaced
+    assert isinstance(result, dict)
+    assert result["key"] == "value"
+    assert result["self"] == "[CIRCULAR_REFERENCE]"
+
+
+def test_make_json_serializable_circular_list():
+    """Test that circular references in lists are detected."""
+    from runner.runner_logging import _make_json_serializable
+    
+    # Create a circular reference in a list
+    circular_list = [1, 2, 3]
+    circular_list.append(circular_list)
+    
+    result = _make_json_serializable(circular_list)
+    
+    # Should return a list with the circular reference replaced
+    assert isinstance(result, list)
+    assert result[0] == 1
+    assert result[1] == 2
+    assert result[2] == 3
+    assert result[3] == "[CIRCULAR_REFERENCE]"
+
+
 # --------------------------------------------------------------------------- #
 # Test log_audit_event with bytes data (integration test)
 # --------------------------------------------------------------------------- #

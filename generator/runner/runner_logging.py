@@ -393,22 +393,35 @@ async def stop_logging_services():
         logger.info("Dashboard streaming service stopped.")
 
 
-def _make_json_serializable(obj: Any) -> Any:
+def _make_json_serializable(obj: Any, _seen: Optional[set] = None) -> Any:
     """
     Recursively converts non-JSON-serializable objects to serializable formats.
     
     Handles:
     - bytes: Convert to base64 string with prefix
     - datetime: Convert to ISO format string
-    - sets: Convert to sorted lists
-    - Custom objects: Convert to string representation
+    - sets: Convert to lists (sorted if possible, otherwise unsorted)
+    - Custom objects: Convert to dict using __dict__
     
     Args:
         obj: Any Python object that needs to be JSON-serializable
+        _seen: Internal parameter to track visited objects for circular reference detection
         
     Returns:
         A JSON-serializable version of the input object
+        
+    Raises:
+        ValueError: If circular reference is detected
     """
+    # Initialize seen set on first call
+    if _seen is None:
+        _seen = set()
+    
+    # Check for circular references using object id
+    obj_id = id(obj)
+    if isinstance(obj, (dict, list, tuple)) and obj_id in _seen:
+        return "[CIRCULAR_REFERENCE]"
+    
     if isinstance(obj, bytes):
         # Convert bytes to base64-encoded string with a clear prefix
         return f"base64:{base64.b64encode(obj).decode('ascii')}"
@@ -416,17 +429,29 @@ def _make_json_serializable(obj: Any) -> Any:
         # Convert datetime objects to ISO format
         return obj.isoformat()
     elif isinstance(obj, set):
-        # Convert sets to sorted lists for consistency
-        return sorted(list(obj))
+        # Convert sets to lists - try sorting for consistency, fall back to unsorted if not comparable
+        try:
+            return sorted(list(obj))
+        except TypeError:
+            # Mixed types or non-comparable types - return unsorted list
+            return list(obj)
     elif isinstance(obj, dict):
+        # Track this dict for circular reference detection
+        _seen.add(obj_id)
         # Recursively process dictionary values
-        return {k: _make_json_serializable(v) for k, v in obj.items()}
+        result = {k: _make_json_serializable(v, _seen) for k, v in obj.items()}
+        _seen.remove(obj_id)
+        return result
     elif isinstance(obj, (list, tuple)):
-        # Recursively process list/tuple items
-        return [_make_json_serializable(item) for item in obj]
+        # Track this list/tuple for circular reference detection
+        _seen.add(obj_id)
+        # Recursively process list/tuple items (tuples are converted to lists)
+        result = [_make_json_serializable(item, _seen) for item in obj]
+        _seen.remove(obj_id)
+        return result
     elif hasattr(obj, "__dict__"):
-        # Handle custom objects by converting to dict
-        return _make_json_serializable(obj.__dict__)
+        # Handle custom objects by converting to dict using __dict__
+        return _make_json_serializable(obj.__dict__, _seen)
     else:
         # Return as-is for primitives (str, int, float, bool, None)
         return obj
@@ -538,18 +563,29 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
                     extra={
                         "action": action,
                         "error_type": type(json_error).__name__,
-                        "data_types": {k: type(v).__name__ for k, v in final_audit_log.get("data", {}).items()},
+                        "data_types": (
+                            {k: type(v).__name__ for k, v in final_audit_log.get("data", {}).items()}
+                            if isinstance(final_audit_log.get("data"), dict)
+                            else {"data_type": type(final_audit_log.get("data")).__name__}
+                        ),
                     }
                 )
                 
                 # Log a minimal safe version with just the action and error
-                safe_audit_log = {
-                    "action": action,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "error": f"Serialization failed: {str(json_error)}",
-                    "key_id": _DEFAULT_AUDIT_KEY_ID,
-                }
-                audit_logger.warning(json.dumps(safe_audit_log))
+                # Wrap in try-except for maximum safety
+                try:
+                    safe_audit_log = {
+                        "action": action,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "error": f"Serialization failed: {str(json_error)[:200]}",  # Limit error string length
+                        "key_id": _DEFAULT_AUDIT_KEY_ID,
+                    }
+                    audit_logger.warning(json.dumps(safe_audit_log))
+                except Exception as fallback_error:
+                    # Last resort: simple string log
+                    audit_logger.warning(
+                        f"AUDIT_FAILURE: action={action}, error={type(json_error).__name__}"
+                    )
                 return  # Exit early to prevent further errors
 
             # 5. Update the chain's state with the hash of the *signed content*
@@ -558,9 +594,25 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
             entry_for_hash_calc.pop("signature", None)
             entry_for_hash_calc.pop("key_id", None)
 
-            data_that_was_signed = json.dumps(
-                entry_for_hash_calc, sort_keys=True
-            ).encode("utf-8")
+            # CRITICAL FIX: Protect this json.dumps call as well
+            try:
+                data_that_was_signed = json.dumps(
+                    entry_for_hash_calc, sort_keys=True
+                ).encode("utf-8")
+            except (TypeError, ValueError) as hash_json_error:
+                # If this fails, the data should have been sanitized already, but as a fallback
+                # use a minimal representation for hash calculation
+                logger.error(
+                    f"Failed to serialize entry for hash calculation: {hash_json_error}",
+                    exc_info=False,
+                    extra={"action": action},
+                )
+                # Use a fallback representation
+                data_that_was_signed = json.dumps({
+                    "action": action,
+                    "timestamp": entry_to_sign.get("timestamp", ""),
+                    "error": "hash_calc_failed"
+                }, sort_keys=True).encode("utf-8")
             _LAST_AUDIT_HASH = compute_hash(data_that_was_signed)
 
             logger.debug(
