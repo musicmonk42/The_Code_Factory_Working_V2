@@ -823,16 +823,26 @@ class OmniCoreService:
             # Create output directory
             output_path = Path(f"./uploads/{job_id}/generated")
             output_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Created output directory: {output_path}")
             
             # Save generated files
             generated_files = []
             if isinstance(result, dict):
                 for filename, content in result.items():
-                    file_path = output_path / filename
-                    file_path.write_text(content)
-                    generated_files.append(str(file_path))
+                    try:
+                        file_path = output_path / filename
+                        # Create parent directories if filename contains subdirectories
+                        file_path.parent.mkdir(parents=True, exist_ok=True)
+                        file_path.write_text(content, encoding='utf-8')
+                        generated_files.append(str(file_path))
+                        logger.info(f"✓ Written file: {file_path} ({len(content)} bytes)")
+                    except Exception as write_error:
+                        logger.error(f"Failed to write file {filename}: {write_error}", exc_info=True)
+                        # Continue with other files
+            else:
+                logger.warning(f"Code generation returned non-dict result: {type(result)}")
             
-            logger.info(f"Code generation completed for job {job_id}: {len(generated_files)} files")
+            logger.info(f"Code generation completed for job {job_id}: {len(generated_files)} files written to {output_path}")
             
             return {
                 "status": "completed",

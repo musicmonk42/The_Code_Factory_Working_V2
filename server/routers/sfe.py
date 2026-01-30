@@ -505,15 +505,31 @@ async def control_arbiter(
 
     **Returns:**
     - Arbiter control result
-    """
-    result = await sfe_service.control_arbiter(
-        command=request.command.value,
-        job_id=request.job_id,
-        config=request.config,
-    )
 
-    logger.info(f"Arbiter control command executed: {request.command.value}")
-    return result
+    **Example Request:**
+    ```json
+    {
+        "command": "start",
+        "job_id": "abc123",
+        "config": {"max_iterations": 10}
+    }
+    ```
+    """
+    try:
+        result = await sfe_service.control_arbiter(
+            command=request.command.value,
+            job_id=request.job_id,
+            config=request.config,
+        )
+
+        logger.info(f"Arbiter control command executed: {request.command.value}")
+        return result
+    except ValueError as ve:
+        logger.error(f"Invalid arbiter control request: {ve}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error executing arbiter control: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.post("/arena/compete")

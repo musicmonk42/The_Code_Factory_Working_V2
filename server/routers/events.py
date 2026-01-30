@@ -76,6 +76,17 @@ async def websocket_endpoint(websocket: WebSocket):
             f"WebSocket client connected from {client_info['host']}:{client_info['port']}. "
             f"Total connections: {len(active_connections)}"
         )
+        
+        # Send connection acknowledgment
+        welcome_msg = EventMessage(
+            event_type=EventType.PLATFORM_STATUS,
+            timestamp=datetime.now(timezone.utc),
+            message="WebSocket connection established",
+            data={"status": "connected", "client": client_info},
+            severity="info",
+        )
+        await websocket.send_json(welcome_msg.to_json_dict())
+        
     except Exception as accept_error:
         error_type = type(accept_error).__name__
         logger.error(

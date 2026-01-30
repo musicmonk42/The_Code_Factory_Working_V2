@@ -668,8 +668,12 @@ class DeployPromptAgent:
         """
         examples = []
         if not os.path.exists(few_shot_dir):
-            os.makedirs(few_shot_dir)
-            logger.info("Created few-shot examples directory: %s", few_shot_dir)
+            try:
+                os.makedirs(few_shot_dir, exist_ok=True)
+                logger.info("Created few-shot examples directory: %s", few_shot_dir)
+            except Exception as dir_error:
+                logger.error("Failed to create few-shot directory %s: %s", few_shot_dir, dir_error, exc_info=True)
+                return examples
             
             # Create a default example file to prevent empty directory issues
             default_example = {
