@@ -669,7 +669,21 @@ class DeployPromptAgent:
         examples = []
         if not os.path.exists(few_shot_dir):
             os.makedirs(few_shot_dir)
-            logger.info("Created few-shot examples directory: %s.", few_shot_dir)
+            logger.info("Created few-shot examples directory: %s", few_shot_dir)
+            
+            # Create a default example file to prevent empty directory issues
+            default_example = {
+                "query": "Generate a basic Docker configuration",
+                "example": "FROM python:3.11-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install -r requirements.txt\nCOPY . .\nCMD [\"python\", \"app.py\"]"
+            }
+            default_file = os.path.join(few_shot_dir, "default_docker.json")
+            try:
+                with open(default_file, "w", encoding="utf-8") as f:
+                    json.dump(default_example, f, indent=2)
+                logger.info("Created default few-shot example: %s", default_file)
+            except Exception as e:
+                logger.warning("Failed to create default example: %s", e)
+            
             return examples  # Return empty if directory didn't exist
 
         for file in glob.glob(f"{few_shot_dir}/*.json"):
@@ -694,7 +708,7 @@ class DeployPromptAgent:
                     e,
                     exc_info=True,
                 )
-        logger.info("Loaded %d few-shot examples from %s.", len(examples), few_shot_dir)
+        logger.info("Loaded %d few-shot examples from %s", len(examples), few_shot_dir)
         return examples
 
     # @retry(retry=retry_if_exception_type(Exception), stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
