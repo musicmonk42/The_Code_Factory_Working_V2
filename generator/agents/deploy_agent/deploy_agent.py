@@ -546,12 +546,26 @@ class DeployAgent:
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
         # --- FIX 2: Instantiate the agent with paths based on repo_path ---
-        template_dir = str(self.repo_path / "deploy_templates")
-        few_shot_dir = str(self.repo_path / "few_shot_examples")
-        self.prompt_agent_instance = DeployPromptAgent(
-            few_shot_dir=few_shot_dir, template_dir=template_dir
-        )
-        self.prompt_agent = self.prompt_agent_instance.build_deploy_prompt
+        template_dir = self.repo_path / "deploy_templates"
+        few_shot_dir = self.repo_path / "few_shot_examples"
+        
+        # Ensure directories exist before initialization
+        template_dir.mkdir(parents=True, exist_ok=True)
+        few_shot_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            self.prompt_agent_instance = DeployPromptAgent(
+                few_shot_dir=str(few_shot_dir), 
+                template_dir=str(template_dir)
+            )
+            self.prompt_agent = self.prompt_agent_instance.build_deploy_prompt
+        except Exception as e:
+            logger.error("Failed to initialize DeployPromptAgent: %s", e, exc_info=True)
+            # Create a fallback prompt function
+            async def fallback_prompt(**kwargs):
+                return f"Generate {kwargs.get('target', 'configuration')} for files: {kwargs.get('files', [])}"
+            self.prompt_agent = fallback_prompt
+            logger.warning("Using fallback prompt function due to initialization failure")
         # ---------------------------------------------------
 
         # --- FIX: Use aiosqlite, remove sync connect ---

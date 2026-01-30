@@ -11,6 +11,7 @@ This module implements proper agent integration with:
 - Environment variable support for API keys
 """
 
+import aiofiles
 import logging
 import os
 from datetime import datetime, timezone
@@ -934,27 +935,82 @@ class OmniCoreService:
         try:
             code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
             platform = payload.get("platform", "docker")
+            include_ci_cd = payload.get("include_ci_cd", False)
             
             repo_path = Path(code_path)
             if not repo_path.exists():
-                return {
-                    "status": "error",
-                    "message": f"Code path {code_path} does not exist",
-                }
+                # Create the directory if it doesn't exist
+                repo_path.mkdir(parents=True, exist_ok=True)
+                logger.warning(f"Code path {code_path} did not exist, created directory. This may indicate an upstream issue.")
             
-            # Initialize and run deploy agent
-            logger.info(f"Running deploy agent for job {job_id} with platform: {platform}")
-            _agent = self._deploy_class(repo_path=str(repo_path))  # Agent ready for integration
+            # Initialize deploy agent
+            logger.info(f"Initializing deploy agent for job {job_id} with platform: {platform}")
+            agent = self._deploy_class(repo_path=str(repo_path))
             
-            # Deploy agent uses async generate method
-            # TODO: Integrate actual agent call when interface is finalized
-            result = {
-                "status": "completed",
-                "generated_files": ["Dockerfile", "docker-compose.yml"],
+            # Initialize the agent's database
+            await agent._init_db()
+            
+            # Prepare requirements for deployment
+            requirements = {
+                "pipeline_steps": ["generate", "validate"],
                 "platform": platform,
+                "include_ci_cd": include_ci_cd,
             }
             
-            logger.info(f"Deploy agent completed for job {job_id}")
+            # Run the deployment generation
+            logger.info(f"Running deploy agent for job {job_id}")
+            deploy_result = await agent.run_deployment(target=platform, requirements=requirements)
+            
+            # Extract generated config
+            configs = deploy_result.get("configs", {})
+            
+            if not configs:
+                logger.warning(f"Deploy agent returned no configurations for job {job_id}")
+                return {
+                    "status": "completed",
+                    "generated_files": [],
+                    "platform": platform,
+                    "run_id": deploy_result.get("run_id"),
+                    "warning": "No configuration files were generated",
+                }
+            
+            generated_files = []
+            
+            # Write generated configs to files
+            output_dir = repo_path / "deploy"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            for target, config_content in configs.items():
+                # Determine filename based on target
+                if target == "docker" or target == "dockerfile":
+                    filename = "Dockerfile"
+                elif target == "kubernetes" or target == "k8s":
+                    filename = "deployment.yaml"
+                elif target == "docker-compose":
+                    filename = "docker-compose.yml"
+                elif target == "terraform":
+                    filename = "main.tf"
+                else:
+                    filename = f"{target}.config"
+                
+                file_path = output_dir / filename
+                
+                # Write the file
+                async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+                    await f.write(config_content)
+                
+                generated_files.append(str(file_path.relative_to(repo_path)))
+                logger.info(f"Generated deployment file: {file_path}")
+            
+            result = {
+                "status": "completed",
+                "generated_files": generated_files,
+                "platform": platform,
+                "run_id": deploy_result.get("run_id"),
+                "validations": deploy_result.get("validations", {}),
+            }
+            
+            logger.info(f"Deploy agent completed for job {job_id}, generated {len(generated_files)} files")
             return result
             
         except Exception as e:
@@ -988,6 +1044,7 @@ class OmniCoreService:
             
             repo_path = Path(code_path)
             if not repo_path.exists():
+                logger.warning(f"Code path {code_path} does not exist for job {job_id}")
                 return {
                     "status": "error",
                     "message": f"Code path {code_path} does not exist",
@@ -995,18 +1052,61 @@ class OmniCoreService:
             
             logger.info(f"Running docgen agent for job {job_id} with doc_type: {doc_type}, format: {format}")
             
-            # Initialize docgen agent (ready for integration)
-            _agent = self._docgen_class(repo_path=str(repo_path))
+            # Initialize docgen agent
+            agent = self._docgen_class(repo_path=str(repo_path))
             
-            # TODO: Integrate actual agent call when interface is finalized
+            # Gather target files from code_path
+            target_files = []
+            for file_path in repo_path.rglob("*.py"):
+                if not any(part.startswith('.') for part in file_path.parts):
+                    target_files.append(str(file_path.relative_to(repo_path)))
+            
+            if not target_files:
+                logger.warning(f"No Python files found in {code_path} for documentation generation")
+                target_files = ["README.md"]  # Fallback to generating a README
+            
+            # Run documentation generation
+            result_data = await agent.generate_documentation(
+                target_files=target_files,
+                doc_type=doc_type,
+                instructions=payload.get("instructions"),
+                stream=False,
+            )
+            
+            # Extract generated documentation
+            generated_docs = []
+            docs_output = result_data.get("documentation", "")
+            
+            # Write documentation to file
+            output_dir = repo_path / "docs"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Determine filename based on doc_type
+            if doc_type.lower() in ["api", "api_reference"]:
+                doc_filename = "API.md"
+            elif doc_type.lower() in ["readme", "user"]:
+                doc_filename = "README.md"
+            elif doc_type.lower() in ["developer", "dev"]:
+                doc_filename = "DEVELOPER.md"
+            else:
+                doc_filename = f"{doc_type}.md"
+            
+            doc_path = output_dir / doc_filename
+            async with aiofiles.open(doc_path, "w", encoding="utf-8") as f:
+                await f.write(docs_output)
+            
+            generated_docs.append(str(doc_path.relative_to(repo_path)))
+            logger.info(f"Generated documentation file: {doc_path}")
+            
             result = {
                 "status": "completed",
-                "generated_docs": ["docs/API.md", "docs/README.md"],
+                "generated_docs": generated_docs,
                 "doc_type": doc_type,
                 "format": format,
+                "file_count": len(target_files),
             }
             
-            logger.info(f"Docgen agent completed for job {job_id}")
+            logger.info(f"Docgen agent completed for job {job_id}, generated {len(generated_docs)} files")
             return result
             
         except Exception as e:
@@ -1040,6 +1140,7 @@ class OmniCoreService:
             
             repo_path = Path(code_path)
             if not repo_path.exists():
+                logger.warning(f"Code path {code_path} does not exist for job {job_id}")
                 return {
                     "status": "error",
                     "message": f"Code path {code_path} does not exist",
@@ -1047,18 +1148,61 @@ class OmniCoreService:
             
             logger.info(f"Running critique agent for job {job_id} with scan_types: {scan_types}, auto_fix: {auto_fix}")
             
-            # Initialize critique agent (ready for integration)
-            _agent = self._critique_class(repo_path=str(repo_path))
+            # Initialize critique agent
+            agent = self._critique_class(repo_path=str(repo_path))
             
-            # TODO: Integrate actual agent call when interface is finalized
+            # Gather code files from code_path
+            code_files = {}
+            for file_path in repo_path.rglob("*.py"):
+                if not any(part.startswith('.') for part in file_path.parts):
+                    rel_path = str(file_path.relative_to(repo_path))
+                    try:
+                        code_files[rel_path] = file_path.read_text(encoding="utf-8")
+                    except Exception as e:
+                        logger.warning(f"Failed to read file {file_path}: {e}")
+            
+            if not code_files:
+                logger.warning(f"No Python files found in {code_path} for critique")
+                return {
+                    "status": "completed",
+                    "issues_found": 0,
+                    "issues_fixed": 0,
+                    "scan_types": scan_types,
+                    "warning": "No code files found to critique",
+                }
+            
+            # Run critique
+            critique_result = await agent.run(
+                code_files=code_files,
+                test_files={},
+                requirements={"scan_types": scan_types, "auto_fix": auto_fix},
+            )
+            
+            # Extract results
+            issues_found = len(critique_result.get("issues", []))
+            issues_fixed = len(critique_result.get("fixes_applied", []))
+            
+            # Write critique report
+            output_dir = repo_path / "reports"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            report_path = output_dir / "critique_report.json"
+            import json
+            async with aiofiles.open(report_path, "w", encoding="utf-8") as f:
+                await f.write(json.dumps(critique_result, indent=2))
+            
+            logger.info(f"Generated critique report: {report_path}")
+            
             result = {
                 "status": "completed",
-                "issues_found": 0,
-                "issues_fixed": 0,
+                "issues_found": issues_found,
+                "issues_fixed": issues_fixed,
                 "scan_types": scan_types,
+                "report_path": str(report_path.relative_to(repo_path)),
+                "file_count": len(code_files),
             }
             
-            logger.info(f"Critique agent completed for job {job_id}")
+            logger.info(f"Critique agent completed for job {job_id}, found {issues_found} issues")
             return result
             
         except Exception as e:
