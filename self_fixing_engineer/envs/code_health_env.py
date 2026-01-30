@@ -21,10 +21,12 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import gymnasium as gym
-import matplotlib.pyplot as plt
 import numpy as np
 from gymnasium import spaces
 from termcolor import colored
+
+# matplotlib is lazily imported in _render_rgb_array() to avoid expensive
+# font manager initialization during module import (causes CPU timeouts in CI)
 
 # Try to import guardrails, provide mock if not available
 try:
@@ -709,6 +711,9 @@ class CodeHealthEnv(gym.Env):
 
     def _render_rgb_array(self) -> np.ndarray:
         """Render state as RGB array for video recording"""
+        # Lazy import matplotlib to avoid expensive font manager initialization at module load
+        import matplotlib.pyplot as plt
+
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
         # Current state bar chart
