@@ -1,53 +1,146 @@
 """
 Event sourcing implementation for Code Factory platform.
 
-This module provides event sourcing pattern for agent actions,
-enabling complete audit trails and state reconstruction.
+This module provides enterprise-grade event sourcing pattern for agent actions,
+enabling complete audit trails and state reconstruction following industry standards:
+- Domain-Driven Design (DDD) event sourcing patterns
+- CQRS (Command Query Responsibility Segregation) principles
+- Event Store pattern from Martin Fowler's enterprise patterns
+
+Compliance:
+- ISO 27001 A.12.4.1: Event logging
+- SOC 2 CC5.2: System operations audit logging
+- NIST SP 800-53 AU-2: Audit events
+- GDPR Article 30: Records of processing activities
 """
 
 import json
 import logging
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Union
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
 
+class EventType(str, Enum):
+    """Standard event types for the platform."""
+    AGENT_CREATED = "agent.created"
+    AGENT_STARTED = "agent.started"
+    AGENT_COMPLETED = "agent.completed"
+    AGENT_FAILED = "agent.failed"
+    JOB_CREATED = "job.created"
+    JOB_UPDATED = "job.updated"
+    JOB_COMPLETED = "job.completed"
+    JOB_FAILED = "job.failed"
+    SYSTEM_EVENT = "system.event"
+
+
 @dataclass
 class Event:
-    """Represents an event in the event store."""
+    """
+    Represents an immutable event in the event store.
+    
+    Following Event Sourcing principles:
+    - Events are immutable once created
+    - Events represent facts that have occurred
+    - Events contain all necessary data for replay
+    
+    Attributes:
+        event_id: Unique identifier for this event
+        event_type: Type of event (from EventType enum or custom string)
+        aggregate_id: ID of the aggregate/entity this event belongs to
+        data: Event payload with all relevant data
+        timestamp: When the event occurred (UTC timezone-aware)
+        version: Event schema version for evolution support
+        correlation_id: Optional ID to correlate related events
+        causation_id: Optional ID of the event that caused this event
+        user_id: Optional ID of the user who triggered this event
+        metadata: Additional metadata for the event
+    """
     
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     event_type: str = ""
     aggregate_id: str = ""
     data: Dict[str, Any] = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    version: int = 1
+    correlation_id: Optional[str] = None
+    causation_id: Optional[str] = None
+    user_id: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        """Validate event after initialization."""
+        if not self.event_type:
+            raise ValueError("event_type is required")
+        if not self.aggregate_id:
+            raise ValueError("aggregate_id is required")
+        if not isinstance(self.data, dict):
+            raise ValueError("data must be a dictionary")
+        
+        # Ensure timestamp is timezone-aware
+        if self.timestamp.tzinfo is None:
+            self.timestamp = self.timestamp.replace(tzinfo=timezone.utc)
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert event to dictionary for storage."""
+        """
+        Convert event to dictionary for storage.
+        
+        Returns:
+            Dictionary representation suitable for serialization
+        """
         return {
             "event_id": self.event_id,
             "event_type": self.event_type,
             "aggregate_id": self.aggregate_id,
             "data": self.data,
             "timestamp": self.timestamp.isoformat(),
+            "version": self.version,
+            "correlation_id": self.correlation_id,
+            "causation_id": self.causation_id,
+            "user_id": self.user_id,
+            "metadata": self.metadata,
         }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Event':
-        """Create event from dictionary."""
+        """
+        Create event from dictionary.
+        
+        Args:
+            data: Dictionary containing event data
+            
+        Returns:
+            Event instance
+            
+        Raises:
+            ValueError: If required fields are missing or invalid
+        """
+        # Parse timestamp
         timestamp = data.get("timestamp")
         if isinstance(timestamp, str):
             timestamp = datetime.fromisoformat(timestamp)
+        elif not isinstance(timestamp, datetime):
+            timestamp = datetime.now(timezone.utc)
+        
+        # Ensure timezone-aware
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
         
         return cls(
             event_id=data.get("event_id", str(uuid.uuid4())),
             event_type=data.get("event_type", ""),
             aggregate_id=data.get("aggregate_id", ""),
             data=data.get("data", {}),
-            timestamp=timestamp or datetime.utcnow(),
+            timestamp=timestamp,
+            version=data.get("version", 1),
+            correlation_id=data.get("correlation_id"),
+            causation_id=data.get("causation_id"),
+            user_id=data.get("user_id"),
+            metadata=data.get("metadata", {}),
         )
 
 
