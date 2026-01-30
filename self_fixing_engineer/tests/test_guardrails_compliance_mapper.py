@@ -341,11 +341,13 @@ async def test_write_dummy_config_low_disk_space(tmp_path, monkeypatch):
 async def test_main_cli(mock_env, temp_config, monkeypatch, capsys):
     """Test main_cli with valid config."""
     monkeypatch.setenv("CREW_CONFIG_PATH", temp_config)
-    with pytest.raises(SystemExit) as exc:
-        main_cli()
-    assert exc.value.code == 1  # Gaps exist
-    captured = capsys.readouterr()
-    assert "WARNING: Compliance enforcement gaps detected" in captured.out
+    with patch("argparse.ArgumentParser.parse_args") as mock_parse:
+        mock_parse.return_value = argparse.Namespace(health_check=False)
+        with pytest.raises(SystemExit) as exc:
+            main_cli()
+        assert exc.value.code == 1  # Gaps exist
+        captured = capsys.readouterr()
+        assert "WARNING: Compliance enforcement gaps detected" in captured.out
 
 
 @pytest.mark.asyncio
@@ -363,10 +365,12 @@ async def test_main_cli_health_check(mock_env, monkeypatch, capsys):
 async def test_main_cli_prometheus_required(mock_env, monkeypatch):
     """Test Prometheus enforcement in production."""
     monkeypatch.setenv("APP_ENV", "production")
-    with patch("guardrails.compliance_mapper.PROMETHEUS_AVAILABLE", False):
-        with pytest.raises(SystemExit) as exc:
-            main_cli()
-        assert exc.value.code == 1
+    with patch("argparse.ArgumentParser.parse_args") as mock_parse:
+        mock_parse.return_value = argparse.Namespace(health_check=False)
+        with patch("guardrails.compliance_mapper.PROMETHEUS_AVAILABLE", False):
+            with pytest.raises(SystemExit) as exc:
+                main_cli()
+            assert exc.value.code == 1
 
 
 @pytest.mark.asyncio
@@ -376,10 +380,12 @@ async def test_main_cli_permission_error(mock_env, monkeypatch):
     def mock_generate(*args):
         raise PermissionError("Test permission error")
 
-    with patch("guardrails.compliance_mapper.generate_report", mock_generate):
-        with pytest.raises(SystemExit) as exc:
-            main_cli()
-        assert exc.value.code == 2
+    with patch("argparse.ArgumentParser.parse_args") as mock_parse:
+        mock_parse.return_value = argparse.Namespace(health_check=False)
+        with patch("guardrails.compliance_mapper.generate_report", mock_generate):
+            with pytest.raises(SystemExit) as exc:
+                main_cli()
+            assert exc.value.code == 2
 
 
 @pytest.mark.asyncio
@@ -389,10 +395,12 @@ async def test_main_cli_compliance_error(mock_env, monkeypatch):
     def mock_generate(*args):
         raise ComplianceEnforcementError("startup", "CONFIG", "Test")
 
-    with patch("guardrails.compliance_mapper.generate_report", mock_generate):
-        with pytest.raises(SystemExit) as exc:
-            main_cli()
-        assert exc.value.code == 2
+    with patch("argparse.ArgumentParser.parse_args") as mock_parse:
+        mock_parse.return_value = argparse.Namespace(health_check=False)
+        with patch("guardrails.compliance_mapper.generate_report", mock_generate):
+            with pytest.raises(SystemExit) as exc:
+                main_cli()
+            assert exc.value.code == 2
 
 
 @pytest.mark.asyncio
@@ -402,10 +410,12 @@ async def test_main_cli_unexpected_error(mock_env, monkeypatch):
     def mock_generate(*args):
         raise Exception("Test unexpected error")
 
-    with patch("guardrails.compliance_mapper.generate_report", mock_generate):
-        with pytest.raises(SystemExit) as exc:
-            main_cli()
-        assert exc.value.code == 3
+    with patch("argparse.ArgumentParser.parse_args") as mock_parse:
+        mock_parse.return_value = argparse.Namespace(health_check=False)
+        with patch("guardrails.compliance_mapper.generate_report", mock_generate):
+            with pytest.raises(SystemExit) as exc:
+                main_cli()
+            assert exc.value.code == 3
 
 
 def test_sanitize_log():

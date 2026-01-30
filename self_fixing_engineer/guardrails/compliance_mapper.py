@@ -225,7 +225,7 @@ def load_compliance_map(config_path: str) -> Dict[str, Dict[str, Any]]:
 
             # FIX: Handle None from empty YAML files
             if crew_config is None:
-                logger.warning(
+                logger.error(
                     f"Empty or invalid YAML file at {config_path}. Returning empty compliance map."
                 )
                 if PROMETHEUS_AVAILABLE:
