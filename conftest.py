@@ -36,6 +36,12 @@ os.environ.setdefault("DISABLE_TELEMETRY", "1")
 os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "True")
 os.environ.setdefault("prometheus_multiproc_dir", "")  # Disable multiprocess mode
 
+# CPU limit safety: Detect if we're in a CPU-constrained environment
+_CPU_CONSTRAINED = os.environ.get('CI') == 'true' or os.environ.get('GITHUB_ACTIONS') == 'true'
+if _CPU_CONSTRAINED:
+    # Reduce parallelism in CPU-constrained environments
+    os.environ.setdefault("PYTEST_XDIST_WORKER_COUNT", "1")
+
 # ---- Pytest hooks for collection optimization ----
 def pytest_configure(config):
     """
@@ -97,19 +103,14 @@ if os.environ.get("TESTING") == "1":
                 parts = module_name.split(".")
                 for i in range(1, len(parts)):
                     parent_name = ".".join(parts[:i])
-                    # Don't replace existing modules - this would break package imports
                     if parent_name not in sys.modules:
-                        try:
-                            # Try to import the parent module first
-                            importlib.import_module(parent_name)
-                        except ImportError:
-                            # Only create stub if parent truly doesn't exist
-                            parent_stub = types.ModuleType(parent_name)
-                            parent_stub.__file__ = f"<stub {parent_name}>"
-                            parent_stub.__path__ = []
-                            parent_stub.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
-                            parent_stub.__getattr__ = _stub_getattr
-                            sys.modules[parent_name] = parent_stub
+                        # DON'T try to import - just create stub
+                        parent_stub = types.ModuleType(parent_name)
+                        parent_stub.__file__ = f"<stub {parent_name}>"
+                        parent_stub.__path__ = []
+                        parent_stub.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
+                        parent_stub.__getattr__ = _stub_getattr
+                        sys.modules[parent_name] = parent_stub
 
 # ---- Import error handling ----
 # Provide graceful fallbacks for common missing dependencies during test collection
@@ -1583,30 +1584,20 @@ def _initialize_omnicore_mocks():
     Called from session-scoped fixture to defer expensive import attempts.
     """
     if "omnicore_engine.database" not in sys.modules:
-        try:
-            import omnicore_engine.database
-        except (ImportError, ModuleNotFoundError, OSError) as e:
-            print(f"omnicore_engine.database not found. Database functionality disabled. Error: {e}")
-            # Create a mock module if not already mocked by optional dependencies
-            if "omnicore_engine.database" not in sys.modules:
-                database_mock = _create_mock_module("omnicore_engine.database")
-                sys.modules["omnicore_engine.database"] = database_mock
-                # Ensure parent module exists and has the attribute
-                if "omnicore_engine" in sys.modules:
-                    sys.modules["omnicore_engine"].database = database_mock
+        # DON'T try to import - just create mock
+        database_mock = _create_mock_module("omnicore_engine.database")
+        sys.modules["omnicore_engine.database"] = database_mock
+        # Ensure parent module exists and has the attribute
+        if "omnicore_engine" in sys.modules:
+            sys.modules["omnicore_engine"].database = database_mock
 
     if "omnicore_engine.message_bus" not in sys.modules:
-        try:
-            import omnicore_engine.message_bus
-        except (ImportError, ModuleNotFoundError, OSError) as e:
-            print(f"omnicore_engine.message_bus not found. Message bus functionality disabled. Error: {e}")
-            # Create a mock module if not already mocked by optional dependencies
-            if "omnicore_engine.message_bus" not in sys.modules:
-                message_bus_mock = _create_mock_module("omnicore_engine.message_bus")
-                sys.modules["omnicore_engine.message_bus"] = message_bus_mock
-                # Ensure parent module exists and has the attribute
-                if "omnicore_engine" in sys.modules:
-                    sys.modules["omnicore_engine"].message_bus = message_bus_mock
+        # DON'T try to import - just create mock
+        message_bus_mock = _create_mock_module("omnicore_engine.message_bus")
+        sys.modules["omnicore_engine.message_bus"] = message_bus_mock
+        # Ensure parent module exists and has the attribute
+        if "omnicore_engine" in sys.modules:
+            sys.modules["omnicore_engine"].message_bus = message_bus_mock
 
 # ---- ChromaDB singleton cleanup ----
 # Global cleanup of ChromaDB singleton between test sessions
@@ -1868,21 +1859,14 @@ def event_loop():
 def setup_test_stubs():
     """
     Session-scoped fixture that runs ALL expensive stub/mock initialization.
-    This runs AFTER test collection is complete, keeping collection fast.
+    This runs AFTER test collection but BEFORE test execution.
     
-    Includes:
-    - Tenacity stub setup
-    - Aiohttp stub setup
-    - Botocore exceptions setup
-    - Aiohttp type protection
-    - Cryptography exception protection
-    - Prometheus client stub setup
-    - Optional dependency mocks
-    - Omnicore engine mocks
-    - Module spec fixing
+    CRITICAL: This must be the FIRST autouse session fixture to run.
     """
-    # Note: Tenacity and aiohttp stubs are created on-demand via LazyStubImporter
-    # when test modules first import them
+    # Skip if only collecting tests
+    if os.environ.get('PYTEST_COLLECTING_ONLY') == '1':
+        yield
+        return
     
     # Initialize pydantic safety (deferred from module level)
     _initialize_pydantic_safety()
