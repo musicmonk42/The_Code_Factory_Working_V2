@@ -66,9 +66,7 @@ def pytest_sessionstart(session):
         "opentelemetry.instrumentation.logging",
         "opentelemetry.exporter",
         "opentelemetry.context",
-        "prometheus_client",
-        "prometheus_client.core",
-        "prometheus_client.registry",
+        # prometheus_client removed - tests need real module, patch_prometheus_globally fixture handles conflicts
     ]
     
     for mod_name in observability_mocks:
@@ -148,7 +146,11 @@ if os.environ.get("TESTING") == "1":
     
     # Only create stubs for modules that aren't already imported
     # This is a simple O(1) check without expensive filesystem walking
-    for mod_name in ['intent_capture', 'omnicore_engine.database', 'omnicore_engine.message_bus']:
+    for mod_name in ['intent_capture', 
+                     'omnicore_engine.database', 
+                     'omnicore_engine.message_bus',
+                     'generator.clarifier',
+                     'generator.agents.docgen_agent']:
         if mod_name not in sys.modules:
             _stub_modules[mod_name] = mod_name
 
