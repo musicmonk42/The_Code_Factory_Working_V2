@@ -235,7 +235,10 @@ if os.environ.get("TESTING") == "1":
         "cryptography",  # Needed by clarifier (encryption)
         "cryptography.fernet",  # Submodule
         "prometheus_client",  # Needed by clarifier for metrics
-        # Note: aiohttp will be mocked below via simple mock (full stub comes later)
+        "tiktoken",  # Needed by testgen_agent
+        "aiokafka",  # Needed by arbiter
+        "aiokafka.errors",  # Submodule
+        # Note: aiohttp needs special handling below
     ]
     
     for mod_name in early_mocks:
@@ -255,6 +258,70 @@ if os.environ.get("TESTING") == "1":
             early_mock.__getattr__ = make_getattr()
             
             sys.modules[mod_name] = early_mock
+    
+    # Special early initialization for aiohttp (needs ClientSession and other classes)
+    if "aiohttp" not in sys.modules:
+        # Create a minimal but functional aiohttp mock for early imports
+        # This will be replaced/enhanced by _initialize_aiohttp_stubs later if needed
+        aiohttp_early = types.ModuleType("aiohttp")
+        aiohttp_early.__file__ = "<mocked aiohttp early>"
+        aiohttp_early.__path__ = []
+        aiohttp_early.__spec__ = importlib.util.spec_from_loader("aiohttp", loader=None)
+        
+        # ClientSession class
+        class EarlyClientSession:
+            def __init__(self, *args, **kwargs):
+                pass
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+            async def close(self):
+                pass
+            async def get(self, *args, **kwargs):
+                from unittest.mock import MagicMock
+                resp = MagicMock()
+                resp.status = 200
+                resp.json = MagicMock(return_value={})
+                return resp
+            async def post(self, *args, **kwargs):
+                from unittest.mock import MagicMock
+                resp = MagicMock()
+                resp.status = 200
+                resp.json = MagicMock(return_value={})
+                return resp
+        
+        # ClientResponse class
+        class EarlyClientResponse:
+            def __init__(self, *args, **kwargs):
+                self.status = 200
+                self.headers = {}
+            async def json(self):
+                return {}
+            async def text(self):
+                return ""
+            async def read(self):
+                return b""
+        
+        # Exception classes
+        class EarlyClientError(Exception):
+            pass
+        
+        class EarlyClientResponseError(EarlyClientError):
+            pass
+        
+        aiohttp_early.ClientSession = EarlyClientSession
+        aiohttp_early.ClientResponse = EarlyClientResponse
+        aiohttp_early.ClientError = EarlyClientError
+        aiohttp_early.ClientResponseError = EarlyClientResponseError
+        
+        # Add __getattr__ for other attributes
+        def _aiohttp_early_getattr(name):
+            from unittest.mock import MagicMock
+            return MagicMock()
+        aiohttp_early.__getattr__ = _aiohttp_early_getattr
+        
+        sys.modules["aiohttp"] = aiohttp_early
     
     # CPU TIMEOUT FIX: Skip expensive module existence checks during test collection.
     # Previously, _check_module_exists() used importlib.util.find_spec() which triggers
