@@ -17,7 +17,7 @@ Version: 1.0.0
 """
 
 from abc import ABC
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 import logging
 import re
 
@@ -307,7 +307,7 @@ USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Expose port
 EXPOSE 8000
@@ -338,7 +338,7 @@ USER appuser
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
-    CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1);})"
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
 CMD ["node", "index.js"]
 """
@@ -598,7 +598,7 @@ yarn-error.log*
                 "warnings": [],
             }
     
-    def _validate_dockerfile(self, dockerfile: str) -> tuple[List[str], List[str]]:
+    def _validate_dockerfile(self, dockerfile: str) -> Tuple[List[str], List[str]]:
         """
         Validate Dockerfile content.
         
@@ -637,7 +637,7 @@ yarn-error.log*
         
         return errors, warnings
     
-    def _validate_compose(self, compose: str) -> tuple[List[str], List[str]]:
+    def _validate_compose(self, compose: str) -> Tuple[List[str], List[str]]:
         """
         Validate docker-compose content.
         

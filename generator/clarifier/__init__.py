@@ -1,4 +1,3 @@
-# generator/clarifier/__init__.py
 """
 Clarifier Module for Ambiguity Detection and Resolution.
 
@@ -45,7 +44,7 @@ import logging
 # Configure module logger
 logger = logging.getLogger(__name__)
 
-# Import core components from clarifier.py
+# Import core components from the clarifier module
 # These are safe as they don't have circular dependencies
 try:
     from .clarifier import Clarifier, get_config, get_fernet, get_logger
