@@ -452,6 +452,12 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
         """Convert non-serializable objects to JSON-safe formats."""
         if isinstance(o, bytes):
             return base64.b64encode(o).decode('utf-8')
+        if isinstance(o, datetime):
+            return o.isoformat()
+        if isinstance(o, (set, frozenset)):
+            return list(o)
+        if isinstance(o, uuid.UUID):
+            return str(o)
         return f"<Not Serializable: {type(o).__name__}>"
 
     async with _AUDIT_CHAIN_LOCK:

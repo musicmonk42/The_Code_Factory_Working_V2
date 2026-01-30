@@ -320,6 +320,153 @@ async def test_log_audit_event_with_bytes(mock_safe_sign, caplog, mock_config):
     assert log_data["key_id"] == "test-key-id-from-config"
 
 
+@pytest.mark.asyncio
+@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+async def test_log_audit_event_with_datetime(mock_safe_sign, caplog, mock_config):
+    """Test that audit events containing datetime objects are successfully serialized."""
+    from datetime import datetime, timezone
+
+    configure_logging_from_config(mock_config)
+
+    audit_logger = logging.getLogger("runner.audit")
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.propagate = True
+
+    mock_safe_sign.return_value = "mock-signature-b64"
+
+    # Test data with datetime objects
+    test_datetime = datetime(2026, 1, 30, 12, 30, 45, tzinfo=timezone.utc)
+    test_data = {
+        "created_at": test_datetime,
+        "nested": {
+            "updated_at": datetime(2026, 1, 30, 14, 0, 0, tzinfo=timezone.utc)
+        }
+    }
+
+    await log_audit_event("audit_with_datetime", test_data)
+
+    assert len(caplog.records) > 0
+    audit_record = [r for r in caplog.records if r.name == "runner.audit"][0]
+
+    assert audit_record.levelname == "INFO"
+    log_data = json.loads(audit_record.message)
+    assert log_data["action"] == "audit_with_datetime"
+
+    # Verify datetime was converted to ISO format string
+    assert log_data["data"]["created_at"] == "2026-01-30T12:30:45+00:00"
+    assert log_data["data"]["nested"]["updated_at"] == "2026-01-30T14:00:00+00:00"
+
+
+@pytest.mark.asyncio
+@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+async def test_log_audit_event_with_set(mock_safe_sign, caplog, mock_config):
+    """Test that audit events containing set objects are successfully serialized."""
+    configure_logging_from_config(mock_config)
+
+    audit_logger = logging.getLogger("runner.audit")
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.propagate = True
+
+    mock_safe_sign.return_value = "mock-signature-b64"
+
+    # Test data with set objects
+    test_data = {
+        "tags": {"tag1", "tag2", "tag3"},
+        "nested": {
+            "frozen_tags": frozenset(["frozen1", "frozen2"])
+        }
+    }
+
+    await log_audit_event("audit_with_set", test_data)
+
+    assert len(caplog.records) > 0
+    audit_record = [r for r in caplog.records if r.name == "runner.audit"][0]
+
+    assert audit_record.levelname == "INFO"
+    log_data = json.loads(audit_record.message)
+    assert log_data["action"] == "audit_with_set"
+
+    # Verify sets were converted to lists (order may vary)
+    assert set(log_data["data"]["tags"]) == {"tag1", "tag2", "tag3"}
+    assert set(log_data["data"]["nested"]["frozen_tags"]) == {"frozen1", "frozen2"}
+
+
+@pytest.mark.asyncio
+@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+async def test_log_audit_event_with_uuid(mock_safe_sign, caplog, mock_config):
+    """Test that audit events containing UUID objects are successfully serialized."""
+    import uuid
+
+    configure_logging_from_config(mock_config)
+
+    audit_logger = logging.getLogger("runner.audit")
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.propagate = True
+
+    mock_safe_sign.return_value = "mock-signature-b64"
+
+    # Test data with UUID objects
+    test_uuid = uuid.UUID("12345678-1234-5678-1234-567812345678")
+    test_data = {
+        "id": test_uuid,
+        "nested": {
+            "reference_id": uuid.UUID("abcdefab-cdef-abcd-efab-cdefabcdefab")
+        }
+    }
+
+    await log_audit_event("audit_with_uuid", test_data)
+
+    assert len(caplog.records) > 0
+    audit_record = [r for r in caplog.records if r.name == "runner.audit"][0]
+
+    assert audit_record.levelname == "INFO"
+    log_data = json.loads(audit_record.message)
+    assert log_data["action"] == "audit_with_uuid"
+
+    # Verify UUIDs were converted to strings
+    assert log_data["data"]["id"] == "12345678-1234-5678-1234-567812345678"
+    assert log_data["data"]["nested"]["reference_id"] == "abcdefab-cdef-abcd-efab-cdefabcdefab"
+
+
+@pytest.mark.asyncio
+@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+async def test_log_audit_event_with_mixed_non_serializable(mock_safe_sign, caplog, mock_config):
+    """Test that audit events containing multiple non-serializable types are handled."""
+    import uuid
+    from datetime import datetime, timezone
+
+    configure_logging_from_config(mock_config)
+
+    audit_logger = logging.getLogger("runner.audit")
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.propagate = True
+
+    mock_safe_sign.return_value = "mock-signature-b64"
+
+    # Test data with multiple non-serializable types
+    test_data = {
+        "id": uuid.UUID("12345678-1234-5678-1234-567812345678"),
+        "created_at": datetime(2026, 1, 30, 12, 30, 45, tzinfo=timezone.utc),
+        "tags": {"tag1", "tag2"},
+        "binary_data": b"binary content",
+    }
+
+    await log_audit_event("audit_with_mixed", test_data)
+
+    assert len(caplog.records) > 0
+    audit_record = [r for r in caplog.records if r.name == "runner.audit"][0]
+
+    assert audit_record.levelname == "INFO"
+    log_data = json.loads(audit_record.message)
+    assert log_data["action"] == "audit_with_mixed"
+
+    # Verify all types were properly serialized
+    assert log_data["data"]["id"] == "12345678-1234-5678-1234-567812345678"
+    assert log_data["data"]["created_at"] == "2026-01-30T12:30:45+00:00"
+    assert set(log_data["data"]["tags"]) == {"tag1", "tag2"}
+    assert log_data["data"]["binary_data"] == base64.b64encode(b"binary content").decode('utf-8')
+
+
 # --------------------------------------------------------------------------- #
 # Tests for search_logs
 # --------------------------------------------------------------------------- #
