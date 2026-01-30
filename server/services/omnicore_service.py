@@ -1192,12 +1192,6 @@ class OmniCoreService:
                 "message": str(e),
                 "error_type": error_type,
             }
-
-
-# Custom exception for security violations
-class SecurityError(Exception):
-    """Raised when a security violation is detected."""
-    pass
     
     async def _run_testgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute test generation agent."""
@@ -2665,3 +2659,9 @@ class SecurityError(Exception):
         requirements["status"] = "clarified"
         
         return requirements
+
+
+# Custom exception for security violations
+class SecurityError(Exception):
+    """Raised when a security violation is detected."""
+    pass
