@@ -9,6 +9,7 @@ This module implements proper agent integration with:
 - Graceful degradation when agents unavailable
 - Proper error handling and logging
 - Environment variable support for API keys
+- Industry-standard observability (metrics, tracing, structured logging)
 """
 
 import aiofiles
@@ -21,6 +22,50 @@ from typing import Any, Dict, List, Optional, Tuple
 from server.utils.agent_loader import get_agent_loader
 
 logger = logging.getLogger(__name__)
+
+# Observability imports with graceful degradation
+try:
+    from opentelemetry import trace
+    from opentelemetry.trace import Status, StatusCode
+    TRACING_AVAILABLE = True
+    tracer = trace.get_tracer(__name__)
+except ImportError:
+    TRACING_AVAILABLE = False
+    logger.warning("OpenTelemetry not available, tracing disabled")
+    
+try:
+    from prometheus_client import Counter, Histogram, Gauge
+    METRICS_AVAILABLE = True
+    
+    # Define metrics for code generation observability
+    codegen_requests_total = Counter(
+        'codegen_requests_total',
+        'Total number of code generation requests',
+        ['job_id', 'language', 'status']
+    )
+    codegen_files_generated = Counter(
+        'codegen_files_generated_total',
+        'Total number of files generated',
+        ['job_id', 'language']
+    )
+    codegen_duration_seconds = Histogram(
+        'codegen_duration_seconds',
+        'Code generation duration in seconds',
+        ['job_id', 'language']
+    )
+    codegen_file_size_bytes = Histogram(
+        'codegen_file_size_bytes',
+        'Size of generated files in bytes',
+        ['job_id', 'file_type']
+    )
+    codegen_errors_total = Counter(
+        'codegen_errors_total',
+        'Total number of code generation errors',
+        ['job_id', 'error_type']
+    )
+except ImportError:
+    METRICS_AVAILABLE = False
+    logger.warning("Prometheus client not available, metrics disabled")
 
 # Import configuration and helper functions
 try:
@@ -795,10 +840,25 @@ class OmniCoreService:
         
         logger.info(f"Using LLM provider '{llm_provider}' for job {job_id}")
         
+        # Start timing for metrics
+        import time
+        start_time = time.time()
+        
+        # Create tracing span if available
+        span_context = tracer.start_as_current_span("codegen_execution") if TRACING_AVAILABLE else None
+        
         try:
             requirements = payload.get("requirements", "")
             language = payload.get("language", "python")
             framework = payload.get("framework")
+            
+            # Input validation - industry standard security check
+            if not requirements or not isinstance(requirements, str):
+                raise ValueError("Requirements must be a non-empty string")
+            if len(requirements) > 100000:  # 100KB limit
+                raise ValueError("Requirements exceed maximum length of 100KB")
+            if not language or not isinstance(language, str):
+                raise ValueError("Language must be a non-empty string")
             
             # Build requirements dict
             requirements_dict = {
@@ -807,10 +867,23 @@ class OmniCoreService:
                 "framework": framework,
             }
             
+            # Add span attributes for observability
+            if TRACING_AVAILABLE and span_context:
+                span_context.__enter__()
+                span_context.set_attribute("job.id", job_id)
+                span_context.set_attribute("job.language", language)
+                span_context.set_attribute("job.framework", framework or "none")
+                span_context.set_attribute("job.requirements_length", len(requirements))
+            
             # Build configuration from our LLM config
             config = self._build_llm_config()
             
             state_summary = f"Generating code for job {job_id}"
+            
+            logger.info(
+                f"Starting code generation - job_id={job_id}, language={language}, "
+                f"framework={framework or 'none'}, requirements_length={len(requirements)}"
+            )
             
             # Call the actual generator
             logger.info(f"Calling codegen agent for job {job_id}")
@@ -820,34 +893,311 @@ class OmniCoreService:
                 config_path_or_dict=config,
             )
             
-            # Create output directory
-            output_path = Path(f"./uploads/{job_id}/generated")
-            output_path.mkdir(parents=True, exist_ok=True)
+            # Validate result structure - industry standard
+            if not isinstance(result, dict):
+                raise TypeError(f"Code generation must return dict, got {type(result).__name__}")
             
-            # Save generated files
+            # Create output directory with security validation
+            # Prevent path traversal attacks - industry standard security
+            base_uploads_dir = Path("./uploads").resolve()
+            output_path = (base_uploads_dir / job_id / "generated").resolve()
+            
+            # Ensure output path is within uploads directory
+            if not str(output_path).startswith(str(base_uploads_dir)):
+                raise SecurityError(f"Invalid job_id: path traversal attempt detected")
+            
+            output_path.mkdir(parents=True, exist_ok=True)
+            logger.info(
+                f"Created output directory - job_id={job_id}, path={output_path}",
+                extra={"job_id": job_id, "output_path": str(output_path)}
+            )
+            
+            # Save generated files with comprehensive validation and observability
             generated_files = []
+            total_bytes_written = 0
+            files_failed = []
+            
             if isinstance(result, dict):
                 for filename, content in result.items():
-                    file_path = output_path / filename
-                    file_path.write_text(content)
-                    generated_files.append(str(file_path))
+                    try:
+                        # Security: Validate filename to prevent path traversal
+                        if not filename or '..' in filename or filename.startswith('/'):
+                            raise SecurityError(f"Invalid filename: {filename}")
+                        
+                        # Validate content
+                        if not isinstance(content, str):
+                            raise TypeError(f"File content must be string, got {type(content).__name__}")
+                        if len(content) > 10 * 1024 * 1024:  # 10MB per file limit
+                            raise ValueError(f"File {filename} exceeds 10MB size limit")
+                        
+                        # Resolve and validate file path
+                        file_path = (output_path / filename).resolve()
+                        if not str(file_path).startswith(str(output_path)):
+                            raise SecurityError(f"Path traversal attempt in filename: {filename}")
+                        
+                        # Create parent directories if filename contains subdirectories
+                        file_path.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        # Write file with explicit encoding
+                        file_path.write_text(content, encoding='utf-8')
+                        generated_files.append(str(file_path))
+                        total_bytes_written += len(content.encode('utf-8'))
+                        
+                        # Determine file type for metrics
+                        file_ext = file_path.suffix.lstrip('.') or 'unknown'
+                        
+                        # Record metrics
+                        if METRICS_AVAILABLE:
+                            codegen_files_generated.labels(
+                                job_id=job_id,
+                                language=language
+                            ).inc()
+                            codegen_file_size_bytes.labels(
+                                job_id=job_id,
+                                file_type=file_ext
+                            ).observe(len(content.encode('utf-8')))
+                        
+                        # Structured logging with context
+                        logger.info(
+                            f"✓ File written successfully - filename={filename}, size={len(content)} bytes, type={file_ext}",
+                            extra={
+                                "job_id": job_id,
+                                "filename": filename,
+                                "file_size": len(content),
+                                "file_type": file_ext,
+                                "status": "success"
+                            }
+                        )
+                        
+                    except SecurityError as sec_error:
+                        # Security errors are critical - log and track
+                        logger.error(
+                            f"Security violation in file write - filename={filename}, error={sec_error}",
+                            extra={
+                                "job_id": job_id,
+                                "filename": filename,
+                                "error_type": "security_violation",
+                                "status": "failed"
+                            },
+                            exc_info=True
+                        )
+                        files_failed.append({"filename": filename, "error": "security_violation"})
+                        if METRICS_AVAILABLE:
+                            codegen_errors_total.labels(
+                                job_id=job_id,
+                                error_type="security_violation"
+                            ).inc()
+                        # Don't continue on security errors - this is critical
+                        raise
+                    
+                    except TypeError as type_error:
+                        # Type errors indicate invalid data structure
+                        logger.error(
+                            f"Type error in file write - filename={filename}, error={type_error}",
+                            extra={
+                                "job_id": job_id,
+                                "filename": filename,
+                                "error_type": "type_error",
+                                "error_message": str(type_error),
+                                "status": "failed"
+                            },
+                            exc_info=True
+                        )
+                        files_failed.append({"filename": filename, "error": "type_error"})
+                        if METRICS_AVAILABLE:
+                            codegen_errors_total.labels(
+                                job_id=job_id,
+                                error_type="type_error"
+                            ).inc()
+                        # Continue with other files (graceful degradation)
+                        
+                    except Exception as write_error:
+                        # Log file write failures with full context
+                        error_type = type(write_error).__name__
+                        logger.error(
+                            f"Failed to write file - filename={filename}, error={error_type}: {write_error}",
+                            extra={
+                                "job_id": job_id,
+                                "filename": filename,
+                                "error_type": error_type,
+                                "error_message": str(write_error),
+                                "status": "failed"
+                            },
+                            exc_info=True
+                        )
+                        files_failed.append({"filename": filename, "error": error_type})
+                        if METRICS_AVAILABLE:
+                            codegen_errors_total.labels(
+                                job_id=job_id,
+                                error_type=error_type
+                            ).inc()
+                        # Continue with other files (graceful degradation)
+            else:
+                logger.warning(
+                    f"Code generation returned non-dict result - type={type(result).__name__}",
+                    extra={
+                        "job_id": job_id,
+                        "result_type": type(result).__name__,
+                        "status": "warning"
+                    }
+                )
             
-            logger.info(f"Code generation completed for job {job_id}: {len(generated_files)} files")
+            # Calculate duration and record metrics
+            duration = time.time() - start_time
+            if METRICS_AVAILABLE:
+                codegen_duration_seconds.labels(
+                    job_id=job_id,
+                    language=language
+                ).observe(duration)
+                codegen_requests_total.labels(
+                    job_id=job_id,
+                    language=language,
+                    status="success" if not files_failed else "partial_success"
+                ).inc()
             
-            return {
+            # Update tracing span
+            if TRACING_AVAILABLE and span_context:
+                span_context.set_attribute("files.generated", len(generated_files))
+                span_context.set_attribute("files.failed", len(files_failed))
+                span_context.set_attribute("bytes.written", total_bytes_written)
+                span_context.set_attribute("duration.seconds", duration)
+                span_context.set_status(Status(StatusCode.OK))
+                span_context.__exit__(None, None, None)
+            
+            # Comprehensive completion log
+            logger.info(
+                f"Code generation completed - job_id={job_id}, files_generated={len(generated_files)}, "
+                f"files_failed={len(files_failed)}, total_bytes={total_bytes_written}, "
+                f"duration={duration:.2f}s, output_path={output_path}",
+                extra={
+                    "job_id": job_id,
+                    "files_generated": len(generated_files),
+                    "files_failed": len(files_failed),
+                    "total_bytes": total_bytes_written,
+                    "duration_seconds": duration,
+                    "output_path": str(output_path),
+                    "status": "completed"
+                }
+            )
+            
+            result_dict = {
                 "status": "completed",
                 "generated_files": generated_files,
                 "output_path": str(output_path),
                 "files_count": len(generated_files),
+                "total_bytes_written": total_bytes_written,
+                "duration_seconds": round(duration, 2),
+            }
+            
+            # Include failures in response if any
+            if files_failed:
+                result_dict["files_failed"] = files_failed
+                result_dict["warning"] = f"{len(files_failed)} file(s) failed to write"
+            
+            return result_dict
+            
+        except SecurityError as sec_error:
+            # Security errors are critical - comprehensive logging
+            duration = time.time() - start_time
+            logger.critical(
+                f"Security violation in code generation - job_id={job_id}, error={sec_error}",
+                extra={
+                    "job_id": job_id,
+                    "error_type": "security_violation",
+                    "error_message": str(sec_error),
+                    "duration_seconds": duration,
+                    "status": "security_error"
+                },
+                exc_info=True
+            )
+            if METRICS_AVAILABLE:
+                codegen_requests_total.labels(
+                    job_id=job_id,
+                    language=language,
+                    status="security_error"
+                ).inc()
+            if TRACING_AVAILABLE and span_context:
+                span_context.set_status(Status(StatusCode.ERROR, str(sec_error)))
+                span_context.record_exception(sec_error)
+                span_context.__exit__(type(sec_error), sec_error, sec_error.__traceback__)
+            
+            return {
+                "status": "error",
+                "message": "Security violation detected",
+                "error_type": "SecurityError",
+                "error_details": str(sec_error),
+            }
+            
+        except ValueError as val_error:
+            # Validation errors - user input issues
+            duration = time.time() - start_time
+            logger.warning(
+                f"Validation error in code generation - job_id={job_id}, error={val_error}",
+                extra={
+                    "job_id": job_id,
+                    "error_type": "validation_error",
+                    "error_message": str(val_error),
+                    "duration_seconds": duration,
+                    "status": "validation_error"
+                }
+            )
+            if METRICS_AVAILABLE:
+                codegen_requests_total.labels(
+                    job_id=job_id,
+                    language=language if 'language' in locals() else 'unknown',
+                    status="validation_error"
+                ).inc()
+            if TRACING_AVAILABLE and span_context:
+                span_context.set_status(Status(StatusCode.ERROR, str(val_error)))
+                span_context.__exit__(type(val_error), val_error, val_error.__traceback__)
+            
+            return {
+                "status": "error",
+                "message": str(val_error),
+                "error_type": "ValidationError",
             }
             
         except Exception as e:
-            logger.error(f"Error running codegen agent: {e}", exc_info=True)
+            # Unexpected errors - comprehensive logging
+            duration = time.time() - start_time
+            error_type = type(e).__name__
+            logger.error(
+                f"Unexpected error in code generation - job_id={job_id}, error={error_type}: {e}",
+                extra={
+                    "job_id": job_id,
+                    "error_type": error_type,
+                    "error_message": str(e),
+                    "duration_seconds": duration,
+                    "status": "error"
+                },
+                exc_info=True
+            )
+            if METRICS_AVAILABLE:
+                codegen_requests_total.labels(
+                    job_id=job_id,
+                    language=language if 'language' in locals() else 'unknown',
+                    status="error"
+                ).inc()
+                codegen_errors_total.labels(
+                    job_id=job_id,
+                    error_type=error_type
+                ).inc()
+            if TRACING_AVAILABLE and span_context:
+                span_context.set_status(Status(StatusCode.ERROR, str(e)))
+                span_context.record_exception(e)
+                span_context.__exit__(type(e), e, e.__traceback__)
+            
             return {
                 "status": "error",
                 "message": str(e),
-                "error_type": type(e).__name__,
+                "error_type": error_type,
             }
+
+
+# Custom exception for security violations
+class SecurityError(Exception):
+    """Raised when a security violation is detected."""
+    pass
     
     async def _run_testgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute test generation agent."""
