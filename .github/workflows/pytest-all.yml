@@ -242,7 +242,8 @@ jobs:
           # --disable-warnings: Skip warning collection for faster performance
           # -p no:warnings: Disable warnings plugin
           # --co: Alias for --collect-only
-          timeout 180 pytest --co --quiet --disable-warnings -p no:warnings || {
+          # Explicitly specify all test directories for unified collection
+          timeout 180 pytest tests/ generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ --co --quiet --disable-warnings -p no:warnings || {
             echo "WARNING: Collection timed out or failed - will proceed with targeted test run"
             exit 0
           }
@@ -260,11 +261,18 @@ jobs:
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           ulimit -t unlimited 2>/dev/null || true
           
-          echo "=== Running ALL pytest tests together ==="
+          echo "=== Running ALL pytest tests together (unified run) ==="
+          # Explicitly specify all test directories for unified test collection and execution
+          # This ensures tests from ALL directories are discovered and run together
           # Use pytest-xdist for parallel execution to avoid CPU time limit exceeded errors
           # -n auto: Use all available CPU cores for parallel test execution
           # This distributes the load across multiple workers, preventing single-process CPU exhaustion
           pytest \
+            tests/ \
+            generator/tests/ \
+            omnicore_engine/tests/ \
+            self_fixing_engineer/tests/ \
+            server/tests/ \
             -n auto \
             --tb=short \
             --timeout=300 \
@@ -273,7 +281,7 @@ jobs:
             --junitxml=test-results.xml \
             2>&1 | tee test-output.log
           
-          echo "✓ All tests completed"
+          echo "✓ All tests completed (unified run)"
           
       - name: Profile test collection (on failure)
         if: failure()
@@ -513,7 +521,8 @@ jobs:
       - name: Collect tests (diagnostic)
         run: |
           # Optimized collection with reduced timeout
-          timeout 300 pytest --co --quiet --disable-warnings -p no:warnings || {
+          # Explicitly specify all test directories for unified collection
+          timeout 300 pytest tests/ generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ --co --quiet --disable-warnings -p no:warnings || {
             echo "WARNING: Collection timed out or failed - will proceed with test run"
             exit 0
           }
@@ -531,11 +540,18 @@ jobs:
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           ulimit -t unlimited 2>/dev/null || true
           
-          echo "=== Running ALL pytest tests together ==="
+          echo "=== Running ALL pytest tests together (unified run) ==="
+          # Explicitly specify all test directories for unified test collection and execution
+          # This ensures tests from ALL directories are discovered and run together
           # Use pytest-xdist for parallel execution to avoid CPU time limit exceeded errors
           # -n auto: Use all available CPU cores for parallel test execution
           # This distributes the load across multiple workers, preventing single-process CPU exhaustion
           pytest \
+            tests/ \
+            generator/tests/ \
+            omnicore_engine/tests/ \
+            self_fixing_engineer/tests/ \
+            server/tests/ \
             -n auto \
             --tb=short \
             --timeout=600 \
@@ -544,7 +560,7 @@ jobs:
             --junitxml=test-results-full.xml \
             2>&1 | tee test-output-full.log
           
-          echo "✓ All tests completed"
+          echo "✓ All tests completed (unified run)"
           
       - name: Profile test collection (on failure)
         if: failure()
