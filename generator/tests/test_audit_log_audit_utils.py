@@ -67,7 +67,7 @@ try:
 except Exception:
     pass
 
-module_path = Path(__file__).parent.parent / "audit_utils.py"
+module_path = Path(__file__).parent.parent / "audit_log" / "audit_utils.py"
 spec = importlib.util.spec_from_file_location(
     "generator.audit_log.audit_utils", str(module_path)
 )

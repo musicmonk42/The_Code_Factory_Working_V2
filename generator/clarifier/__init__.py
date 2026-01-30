@@ -9,6 +9,7 @@ Components are imported on-demand rather than at module load time.
 # Import core components from clarifier.py
 # These are safe as they don't have circular dependencies
 from .clarifier import Clarifier, get_config, get_fernet, get_logger
+from . import clarifier_prompt
 
 # Lazy import for get_channel to avoid circular dependency
 # clarifier_user_prompt imports from clarifier, so we can't import it at module level
@@ -28,4 +29,5 @@ __all__ = [
     'get_fernet',
     'get_logger',
     'get_channel',
+    'clarifier_prompt',
 ]
