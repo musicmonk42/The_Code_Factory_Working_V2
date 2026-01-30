@@ -266,15 +266,19 @@ jobs:
           # Explicitly specify all test directories for unified test collection and execution
           # This ensures tests from ALL directories are discovered and run together
           # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
-          # Use pytest-xdist for parallel execution to avoid CPU time limit exceeded errors
-          # -n auto: Use all available CPU cores for parallel test execution
-          # This distributes the load across multiple workers, preventing single-process CPU exhaustion
+          # Use pytest-xdist for parallel execution with limited workers
+          # -n 2: Use 2 workers to limit CPU usage during collection (each worker imports all modules)
+          # --dist=loadfile: Distribute tests by file to minimize import overhead per worker
+          # --import-mode=importlib: Use importlib for faster, more reliable imports
+          # Note: -n auto was causing CPU time limit exceeded (exit 152) during test collection
           pytest \
             generator/tests/ \
             omnicore_engine/tests/ \
             self_fixing_engineer/tests/ \
             server/tests/ \
-            -n auto \
+            -n 2 \
+            --dist=loadfile \
+            --import-mode=importlib \
             --tb=short \
             --timeout=300 \
             -p no:randomly \
@@ -547,15 +551,19 @@ jobs:
           # Explicitly specify all test directories for unified test collection and execution
           # This ensures tests from ALL directories are discovered and run together
           # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
-          # Use pytest-xdist for parallel execution to avoid CPU time limit exceeded errors
-          # -n auto: Use all available CPU cores for parallel test execution
-          # This distributes the load across multiple workers, preventing single-process CPU exhaustion
+          # Use pytest-xdist for parallel execution with limited workers
+          # -n 2: Use 2 workers to limit CPU usage during collection (each worker imports all modules)
+          # --dist=loadfile: Distribute tests by file to minimize import overhead per worker
+          # --import-mode=importlib: Use importlib for faster, more reliable imports
+          # Note: -n auto was causing CPU time limit exceeded (exit 152) during test collection
           pytest \
             generator/tests/ \
             omnicore_engine/tests/ \
             self_fixing_engineer/tests/ \
             server/tests/ \
-            -n auto \
+            -n 2 \
+            --dist=loadfile \
+            --import-mode=importlib \
             --tb=short \
             --timeout=600 \
             -p no:randomly \
