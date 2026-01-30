@@ -40,12 +40,8 @@ os.environ.setdefault("prometheus_multiproc_dir", "")  # Disable multiprocess mo
 def pytest_configure(config):
     """
     Skip expensive initialization during collection phase.
-    This prevents OOM during test discovery.
+    This prevents OOM and CPU timeout during test discovery.
     """
-    # Initialize aiohttp protection early (but after pytest starts)
-    # This is deferred from module load time to avoid CPU timeout during collection
-    _initialize_aiohttp_protection()
-    
     if config.option.collectonly:
         # Signal to modules that we're only collecting, not running tests
         os.environ['SKIP_EXPENSIVE_INIT'] = '1'
@@ -53,6 +49,12 @@ def pytest_configure(config):
         # Disable coverage during collection
         if hasattr(config, '_cov'):
             config._cov = None
+        # Skip aiohttp protection during collect-only to avoid expensive imports
+        return
+    
+    # Initialize aiohttp protection only when actually running tests (not just collecting)
+    # This is deferred from module load time to avoid CPU timeout during collection
+    _initialize_aiohttp_protection()
 
 # ---- Add minimal stubs for missing modules (TEST ENVIRONMENT ONLY) ----
 # Create stub modules with minimal functionality to prevent import errors during test collection
