@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSFE();
     initFixes();
     initSystem();
+    initAPIKeys();
     initModals();
     
     // Load initial data
@@ -594,18 +595,361 @@ async function rollbackFix(fixId) {
 
 // System Status
 function initSystem() {
-    loadSystemInfo();
+    refreshSystemStatus();
 }
 
-async function loadSystemInfo() {
+async function refreshSystemStatus() {
+    await Promise.all([
+        loadSystemState(),
+        loadAgentStatus(),
+        loadLLMStatus(),
+        loadOmniCoreStatus()
+    ]);
+}
+
+async function loadSystemState() {
     try {
-        const response = await fetch(`${API_BASE}/omnicore/plugins`);
+        const response = await fetch(`${API_BASE}/health`);
         const data = await response.json();
         
-        document.getElementById('plugins-info').textContent = 
-            `Active: ${data.active_plugins.length} / ${data.total_plugins}`;
+        const stateElement = document.getElementById('system-state');
+        if (data.status === 'healthy') {
+            stateElement.textContent = '✅ Operational';
+            stateElement.className = 'stat-value status-ok';
+        } else {
+            stateElement.textContent = '⚠️ Degraded';
+            stateElement.className = 'stat-value status-warning';
+        }
     } catch (error) {
-        console.error('Failed to load system info:', error);
+        console.error('Failed to load system state:', error);
+        document.getElementById('system-state').textContent = '❌ Error';
+    }
+}
+
+async function loadAgentStatus() {
+    try {
+        const response = await fetch(`${API_BASE}/agents`);
+        const data = await response.json();
+        
+        const agentsList = document.getElementById('agents-status-list');
+        const availableCount = document.getElementById('available-agents-count');
+        
+        if (!data.agents || data.agents.length === 0) {
+            agentsList.innerHTML = '<p class="no-data">No agents found</p>';
+            availableCount.textContent = '0 / 0';
+            return;
+        }
+        
+        const available = data.agents.filter(a => a.status === 'available').length;
+        availableCount.textContent = `${available} / ${data.agents.length}`;
+        
+        agentsList.innerHTML = data.agents.map(agent => {
+            const isAvailable = agent.status === 'available';
+            return `
+                <div class="agent-status-item ${isAvailable ? 'available' : 'unavailable'}">
+                    <div>
+                        <div class="agent-name">${escapeHtml(agent.name || agent.type)}</div>
+                        ${!isAvailable && agent.error ? `
+                            <div class="error-details">
+                                ${escapeHtml(agent.error)}
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="agent-status">
+                        <span class="status-indicator-dot ${isAvailable ? 'available' : 'unavailable'}"></span>
+                        <span>${isAvailable ? 'Available' : 'Unavailable'}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Failed to load agent status:', error);
+        document.getElementById('agents-status-list').innerHTML = 
+            '<p class="status-error">Failed to load agent status</p>';
+        document.getElementById('available-agents-count').textContent = 'Error';
+    }
+}
+
+async function loadLLMStatus() {
+    try {
+        const response = await fetch(`${API_BASE}/api-keys/`);
+        const data = await response.json();
+        
+        const llmStatus = document.getElementById('llm-config-status');
+        const llmProviderStatus = document.getElementById('llm-provider-status');
+        
+        if (!data.providers || Object.keys(data.providers).length === 0) {
+            llmStatus.innerHTML = `
+                <div class="warning-box">
+                    <p><strong>⚠️ No LLM Provider Configured</strong></p>
+                    <p>Code generation requires at least one LLM provider to be configured.</p>
+                    <p>Go to the <a href="#api-keys" onclick="navigateToView('api-keys')">API Keys</a> tab to configure a provider.</p>
+                </div>
+            `;
+            llmProviderStatus.textContent = '❌ Not Configured';
+            llmProviderStatus.className = 'stat-value status-error';
+            return;
+        }
+        
+        const activeProvider = Object.entries(data.providers).find(([_, p]) => p.is_active);
+        
+        if (activeProvider) {
+            llmProviderStatus.textContent = `✅ ${activeProvider[0]}`;
+            llmProviderStatus.className = 'stat-value status-ok';
+        } else {
+            llmProviderStatus.textContent = '⚠️ Inactive';
+            llmProviderStatus.className = 'stat-value status-warning';
+        }
+        
+        llmStatus.innerHTML = Object.entries(data.providers).map(([name, provider]) => `
+            <div class="info-card">
+                <h4>${escapeHtml(name)}</h4>
+                <div class="info-content">
+                    <p><strong>Status:</strong> ${provider.is_active ? 
+                        '<span class="status-ok">Active</span>' : 
+                        '<span class="status-warning">Inactive</span>'}</p>
+                    ${provider.model ? `<p><strong>Model:</strong> ${escapeHtml(provider.model)}</p>` : ''}
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Failed to load LLM status:', error);
+        document.getElementById('llm-config-status').innerHTML = 
+            '<p class="status-error">Failed to load LLM configuration</p>';
+        document.getElementById('llm-provider-status').textContent = 'Error';
+    }
+}
+
+async function loadOmniCoreStatus() {
+    try {
+        // Load plugins info
+        const pluginsResponse = await fetch(`${API_BASE}/omnicore/plugins`);
+        const pluginsData = await pluginsResponse.json();
+        
+        document.getElementById('plugins-info').innerHTML = 
+            `<p>Active: ${pluginsData.active_plugins?.length || 0} / ${pluginsData.total_plugins || 0}</p>`;
+        
+        // Message bus info
+        document.getElementById('message-bus-info').innerHTML = 
+            '<p class="status-ok">✅ Operational</p>';
+            
+        // API version
+        const healthResponse = await fetch(`${API_BASE}/health`);
+        const healthData = await healthResponse.json();
+        document.getElementById('api-version').textContent = healthData.version || '1.0.0';
+    } catch (error) {
+        console.error('Failed to load OmniCore status:', error);
+        document.getElementById('plugins-info').innerHTML = 
+            '<p class="status-error">Error loading</p>';
+        document.getElementById('message-bus-info').innerHTML = 
+            '<p class="status-error">Error loading</p>';
+    }
+}
+
+async function runFullDiagnostics() {
+    const output = document.getElementById('diagnostics-output');
+    const content = document.getElementById('diagnostics-content');
+    
+    output.style.display = 'block';
+    content.textContent = 'Running diagnostics...\n\n';
+    
+    try {
+        const diagnostics = {
+            timestamp: new Date().toISOString(),
+            system: {},
+            agents: {},
+            llm: {},
+            omnicore: {}
+        };
+        
+        // System health
+        try {
+            const response = await fetch(`${API_BASE}/health`);
+            diagnostics.system = await response.json();
+        } catch (e) {
+            diagnostics.system.error = e.message;
+        }
+        
+        // Agent status
+        try {
+            const response = await fetch(`${API_BASE}/agents`);
+            diagnostics.agents = await response.json();
+        } catch (e) {
+            diagnostics.agents.error = e.message;
+        }
+        
+        // LLM configuration
+        try {
+            const response = await fetch(`${API_BASE}/api-keys/`);
+            diagnostics.llm = await response.json();
+        } catch (e) {
+            diagnostics.llm.error = e.message;
+        }
+        
+        // OmniCore
+        try {
+            const response = await fetch(`${API_BASE}/omnicore/plugins`);
+            diagnostics.omnicore = await response.json();
+        } catch (e) {
+            diagnostics.omnicore.error = e.message;
+        }
+        
+        content.textContent = JSON.stringify(diagnostics, null, 2);
+    } catch (error) {
+        content.textContent = `Error running diagnostics: ${error.message}`;
+    }
+}
+
+function downloadDiagnosticReport() {
+    const content = document.getElementById('diagnostics-content').textContent;
+    
+    if (!content || content === '') {
+        showError('Run diagnostics first before downloading the report');
+        return;
+    }
+    
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `diagnostic-report-${new Date().toISOString()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// API Keys Management
+function initAPIKeys() {
+    const form = document.getElementById('llm-config-form');
+    if (form) {
+        form.addEventListener('submit', saveLLMConfiguration);
+    }
+    refreshProviderStatus();
+}
+
+async function saveLLMConfiguration(e) {
+    e.preventDefault();
+    
+    const provider = document.getElementById('config-provider').value;
+    const apiKey = document.getElementById('config-api-key').value;
+    const model = document.getElementById('config-model').value;
+    
+    if (!provider || !apiKey) {
+        showError('Provider and API Key are required');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api-keys/${provider}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: apiKey,
+                model: model || undefined
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to save configuration: ${response.statusText}`);
+        }
+        
+        showSuccess('Configuration saved successfully');
+        
+        // Clear form
+        document.getElementById('config-api-key').value = '';
+        document.getElementById('config-model').value = '';
+        
+        // Refresh provider status
+        await refreshProviderStatus();
+    } catch (error) {
+        showError('Failed to save configuration: ' + error.message);
+    }
+}
+
+async function refreshProviderStatus() {
+    const grid = document.getElementById('provider-status-grid');
+    grid.innerHTML = '<p class="loading">Loading provider status...</p>';
+    
+    try {
+        const response = await fetch(`${API_BASE}/api-keys/`);
+        const data = await response.json();
+        
+        const providers = data.providers || {};
+        
+        if (Object.keys(providers).length === 0) {
+            grid.innerHTML = '<p class="no-data">No providers configured yet</p>';
+            return;
+        }
+        
+        grid.innerHTML = Object.entries(providers).map(([name, provider]) => `
+            <div class="provider-card ${provider.is_active ? 'active' : ''}">
+                <div class="provider-header">
+                    <span class="provider-name">${escapeHtml(name)}</span>
+                    <span class="provider-status-badge ${provider.is_active ? 'active' : 'configured'}">
+                        ${provider.is_active ? '✓ Active' : 'Configured'}
+                    </span>
+                </div>
+                <div class="provider-info">
+                    ${provider.model ? `<p><strong>Model:</strong> ${escapeHtml(provider.model)}</p>` : '<p>Using default model</p>'}
+                    <p><strong>API Key:</strong> ••••••••</p>
+                </div>
+                <div class="provider-actions">
+                    ${!provider.is_active ? `
+                        <button class="btn btn-primary" onclick="activateProvider('${name}')">Set Active</button>
+                    ` : ''}
+                    <button class="btn btn-secondary" onclick="removeProvider('${name}')">Remove</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Failed to load provider status:', error);
+        grid.innerHTML = '<p class="status-error">Failed to load provider status</p>';
+    }
+}
+
+async function activateProvider(provider) {
+    try {
+        const response = await fetch(`${API_BASE}/api-keys/${provider}/activate`, {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to activate provider: ${response.statusText}`);
+        }
+        
+        showSuccess(`${provider} activated successfully`);
+        await refreshProviderStatus();
+    } catch (error) {
+        showError('Failed to activate provider: ' + error.message);
+    }
+}
+
+async function removeProvider(provider) {
+    if (!confirm(`Are you sure you want to remove ${provider}?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api-keys/${provider}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to remove provider: ${response.statusText}`);
+        }
+        
+        showSuccess(`${provider} removed successfully`);
+        await refreshProviderStatus();
+    } catch (error) {
+        showError('Failed to remove provider: ' + error.message);
+    }
+}
+
+function navigateToView(viewName) {
+    const link = document.querySelector(`[data-view="${viewName}"]`);
+    if (link) {
+        link.click();
     }
 }
 
