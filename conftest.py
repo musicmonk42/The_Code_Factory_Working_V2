@@ -47,6 +47,12 @@ def pytest_sessionstart(session):
     """Initialize mocks before any test collection to prevent __spec__ errors."""
     import importlib.util
     
+    # Define __getattr__ function once outside loops to avoid closure issues
+    def _mock_getattr(name):
+        """Return a MagicMock for any attribute access on mocked modules."""
+        from unittest.mock import MagicMock
+        return MagicMock()
+    
     # Mock observability modules that cause __spec__/__path__ errors during collection
     observability_mocks = [
         "opentelemetry",
@@ -83,9 +89,6 @@ def pytest_sessionstart(session):
                 mock_mod.__spec__.submodule_search_locations = []
             
             # Add __getattr__ for dynamic attribute access
-            def _mock_getattr(attr):
-                from unittest.mock import MagicMock
-                return MagicMock()
             mock_mod.__getattr__ = _mock_getattr
             
             sys.modules[mod_name] = mock_mod

@@ -80,7 +80,7 @@ The pytest test suite was experiencing 116 errors during test collection, preven
 
 ### Fix 4: Fix omnicore_engine/tests/conftest.py Lazy Import
 **File**: `omnicore_engine/tests/conftest.py`
-**Lines Modified**: 1-67
+**Lines Modified**: 5-20 (lazy import function), 38-39 (fixture update)
 
 **What was done**:
 - Replaced direct `from prometheus_client import REGISTRY` (line 5) with lazy import function
