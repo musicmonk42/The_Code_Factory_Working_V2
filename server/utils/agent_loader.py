@@ -1142,6 +1142,46 @@ class AgentLoader:
             f"✓ Production validation passed. All {len(required_agents)} required agents available."
         )
         return True
+    
+    async def check_agent_health(self, agent_name: str) -> bool:
+        """
+        Perform health check on an agent.
+        
+        Args:
+            agent_name: Name of the agent to check
+        
+        Returns:
+            True if agent is healthy, False otherwise
+        """
+        if not self.is_agent_available(agent_name):
+            return False
+        
+        try:
+            # Try importing the agent module
+            agent_status = self._agent_status.get(agent_name)
+            if agent_status and agent_status.available:
+                # Could add more sophisticated checks here
+                return True
+        except Exception as e:
+            logger.error(f"Health check failed for {agent_name}: {e}")
+            return False
+        
+        return False
+    
+    async def run_periodic_health_checks(self, interval: int = 60):
+        """
+        Run health checks periodically.
+        
+        Args:
+            interval: Interval in seconds between health checks
+        """
+        while True:
+            for agent_name in self._agent_status.keys():
+                health = await self.check_agent_health(agent_name)
+                if not health:
+                    logger.warning(f"Agent {agent_name} failed health check")
+            
+            await asyncio.sleep(interval)
 
 
 # Global singleton instance

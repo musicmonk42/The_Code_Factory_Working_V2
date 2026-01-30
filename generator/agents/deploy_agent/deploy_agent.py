@@ -424,7 +424,7 @@ class PluginRegistry(FileSystemEventHandler):
             self._load_plugin_file(path)
 
         logger.info(
-            "Loaded/reloaded %d plugins from %s",
+            "Loaded %d plugins from %s",
             len(self.plugins),
             self.plugin_dir,
         )
