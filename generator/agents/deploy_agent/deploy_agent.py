@@ -1322,7 +1322,7 @@ Respond in plain prose only (no JSON / no code fences).
 
                 DEPLOY_RUNS.labels(status="success").inc()
                 DEPLOY_LATENCY.observe(time.time() - start)
-                log_action(
+                await log_action(
                     "Deployment Run",
                     {
                         "run_id": self.run_id,
@@ -1660,7 +1660,7 @@ Propose corrected configurations as JSON keyed by target.
                 return False
 
             ok = await plugin.rollback(cfg)
-            log_action(
+            await log_action(
                 "Rollback",
                 {
                     "run_id": run_id,
@@ -1677,7 +1677,7 @@ Propose corrected configurations as JSON keyed by target.
                 extra={"run_id": self.run_id},
                 exc_info=True,
             )
-            log_action(
+            await log_action(
                 "Rollback",
                 {
                     "run_id": run_id,
