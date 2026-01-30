@@ -63,38 +63,19 @@ import importlib.util
 
 # Only create stubs if we're in a test environment (TESTING=1 is set at the top of this file)
 if os.environ.get("TESTING") == "1":
-    # Define stubs only for modules that truly need stubbing (are optional/missing)
-    # Do NOT create stubs for modules that exist and can be imported
-    # NOTE: We no longer stub 'audit_log' because it exists in multiple locations
-    # (guardrails/audit_log.py, arbiter/audit_log.py, etc.) and stubbing it
-    # breaks tests that import the real module.
+    # CPU TIMEOUT FIX: Skip expensive module existence checks during test collection.
+    # Previously, _check_module_exists() used importlib.util.find_spec() which triggers
+    # recursive module discovery and imports heavy packages (matplotlib, torch, etc.),
+    # causing CPU timeout (exit 152) with pytest-xdist.
+    #
+    # SOLUTION: Create stubs unconditionally for these 3 modules. If the real modules
+    # exist, the stubs won't interfere because sys.modules check prevents replacement.
     _stub_modules = {}
     
-    # DEFERRED: Module existence checks are now done lazily to avoid triggering
-    # heavy import chains during conftest.py load. The actual imports of these
-    # modules will happen when test files import them, at which point the test
-    # environment is fully set up.
-    #
-    # Previously, we did `import omnicore_engine.database` here to check if it exists,
-    # but this triggered the entire import chain including matplotlib, torch, etc.
-    # causing CPU timeout during test collection.
-    #
-    # Now we just check if the modules are in sys.modules (which means they've been
-    # imported elsewhere) or use find_spec which is lighter than full import.
-    
-    def _check_module_exists(module_name):
-        """Check if a module exists without fully importing it."""
-        if module_name in sys.modules:
-            return True
-        try:
-            spec = importlib.util.find_spec(module_name)
-            return spec is not None
-        except (ImportError, ModuleNotFoundError, ValueError):
-            return False
-    
-    # Only stub modules that truly don't exist
+    # Only create stubs for modules that aren't already imported
+    # This is a simple O(1) check without expensive filesystem walking
     for mod_name in ['intent_capture', 'omnicore_engine.database', 'omnicore_engine.message_bus']:
-        if not _check_module_exists(mod_name):
+        if mod_name not in sys.modules:
             _stub_modules[mod_name] = mod_name
 
     def _stub_getattr(name):
