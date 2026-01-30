@@ -393,6 +393,45 @@ async def stop_logging_services():
         logger.info("Dashboard streaming service stopped.")
 
 
+def _make_json_serializable(obj: Any) -> Any:
+    """
+    Recursively converts non-JSON-serializable objects to serializable formats.
+    
+    Handles:
+    - bytes: Convert to base64 string with prefix
+    - datetime: Convert to ISO format string
+    - sets: Convert to sorted lists
+    - Custom objects: Convert to string representation
+    
+    Args:
+        obj: Any Python object that needs to be JSON-serializable
+        
+    Returns:
+        A JSON-serializable version of the input object
+    """
+    if isinstance(obj, bytes):
+        # Convert bytes to base64-encoded string with a clear prefix
+        return f"base64:{base64.b64encode(obj).decode('ascii')}"
+    elif isinstance(obj, (datetime, timezone)):
+        # Convert datetime objects to ISO format
+        return obj.isoformat()
+    elif isinstance(obj, set):
+        # Convert sets to sorted lists for consistency
+        return sorted(list(obj))
+    elif isinstance(obj, dict):
+        # Recursively process dictionary values
+        return {k: _make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        # Recursively process list/tuple items
+        return [_make_json_serializable(item) for item in obj]
+    elif hasattr(obj, "__dict__"):
+        # Handle custom objects by converting to dict
+        return _make_json_serializable(obj.__dict__)
+    else:
+        # Return as-is for primitives (str, int, float, bool, None)
+        return obj
+
+
 # [NEW] Replaces add_provenance and SigningFormatter
 async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
     """
@@ -451,14 +490,20 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
         try:
             current_prev_hash = _LAST_AUDIT_HASH
 
+            # CRITICAL FIX: Sanitize all data to be JSON-serializable BEFORE constructing entry
+            sanitized_data = _make_json_serializable(data)
+            sanitized_extra_context = _make_json_serializable(
+                {k: v for k, v in kwargs.items() if k != "run_id"}
+            )
+
             # 1. Construct the entry to be signed
             entry_to_sign = {
                 "action": action,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "user": getpass.getuser() or "unknown",
                 "run_id": kwargs.get("run_id"),
-                "data": data,
-                "extra_context": {k: v for k, v in kwargs.items() if k != "run_id"},
+                "data": sanitized_data,  # ← Use sanitized data
+                "extra_context": sanitized_extra_context,  # ← Use sanitized context
             }
 
             # 2. Call the superior V0 safe_sign function
@@ -478,9 +523,34 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
 
             # 4. Log the complete, signed event to the 'runner.audit' logger
             audit_logger = logging.getLogger("runner.audit")
-            audit_logger.info(
-                json.dumps(final_audit_log)
-            )  # Log as a single JSON string
+            
+            # CRITICAL FIX: Add defensive error handling to prevent cascading failures
+            try:
+                log_message = json.dumps(final_audit_log)
+                audit_logger.info(log_message)
+            except (TypeError, ValueError) as json_error:
+                # If JSON serialization still fails, log a safe error message
+                # and attempt to log a minimal, safe version
+                logger.error(
+                    f"CRITICAL: Failed to serialize audit log for action '{action}': {json_error}. "
+                    f"This indicates non-serializable data was not properly sanitized.",
+                    exc_info=False,  # Don't include full traceback to avoid recursion
+                    extra={
+                        "action": action,
+                        "error_type": type(json_error).__name__,
+                        "data_types": {k: type(v).__name__ for k, v in final_audit_log.get("data", {}).items()},
+                    }
+                )
+                
+                # Log a minimal safe version with just the action and error
+                safe_audit_log = {
+                    "action": action,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "error": f"Serialization failed: {str(json_error)}",
+                    "key_id": _DEFAULT_AUDIT_KEY_ID,
+                }
+                audit_logger.warning(json.dumps(safe_audit_log))
+                return  # Exit early to prevent further errors
 
             # 5. Update the chain's state with the hash of the *signed content*
             entry_for_hash_calc = entry_to_sign.copy()
@@ -513,10 +583,12 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
                 type="audit_signing_failure", severity="critical"
             ).inc()
         except Exception as e:
+            # CRITICAL FIX: Simplified error logging to prevent cascading failures
+            # Use basic string formatting instead of structured data that might contain bytes
             logger.critical(
                 f"CRITICAL: Unexpected error during audit event logging for '{action}'. Error: {e}",
-                exc_info=True,
-                extra={"action": action, "error_type": "UnexpectedError"},
+                exc_info=False,  # Disable traceback to prevent recursive logging
+                extra={"action": action, "error_type": type(e).__name__},
             )
 
 
