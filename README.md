@@ -8,8 +8,8 @@ Version: 1.0.0 (August 24, 2025)License: Proprietary (© 2025 Novatrax Labs LLC)
 Table of Contents
 
 **Quick Links**
-- [QUICKSTART.md](./QUICKSTART.md) - Get started in 5 minutes
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Production deployment guide
+- [QUICKSTART.md](./docs/QUICKSTART.md) - Get started in 5 minutes
+- [DEPLOYMENT.md](./docs/DEPLOYMENT.md) - Production deployment guide
 - [Makefile Commands](#makefile-commands) - Common development commands
 
 Features
@@ -97,8 +97,8 @@ SFE analyzes, fixes, and optimizes code, storing checkpoints (CheckpointContract
 
 Getting Started
 
-⚡ **Quick Start**: See [QUICKSTART.md](./QUICKSTART.md) for a 5-minute setup guide.
-📦 **Deployment**: See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment instructions.
+⚡ **Quick Start**: See [QUICKSTART.md](./docs/QUICKSTART.md) for a 5-minute setup guide.
+📦 **Deployment**: See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for production deployment instructions.
 
 Prerequisites
 
@@ -152,7 +152,7 @@ make docker-up
 # - Prometheus: http://localhost:9090
 
 
-See [QUICKSTART.md](./QUICKSTART.md) for detailed instructions.
+See [QUICKSTART.md](./docs/QUICKSTART.md) for detailed instructions.
 Manual Installation
 For development without Docker:
 
@@ -536,7 +536,7 @@ make test              # All component tests (strict)
 
 > **Important**: All linting and testing commands now enforce strict checking. Errors will cause failures instead of being suppressed, ensuring code quality.
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment instructions.
+See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for production deployment instructions.
 
 Contribution Guidelines
 
