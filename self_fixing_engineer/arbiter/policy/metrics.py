@@ -635,9 +635,7 @@ def initialize_compliance_metrics():
         # Get max_controls from config at runtime, not module load time
         max_controls = 1000  # default
         try:
-            from .config import get_config
-
-            config = get_config()
+            config = _get_config()
             max_controls_value = getattr(config, "CIRCUIT_BREAKER_MAX_PROVIDERS", None)
             # Ensure it's an integer, not a MagicMock or other non-integer type
             if max_controls_value is not None and isinstance(max_controls_value, int):
@@ -753,10 +751,9 @@ async def refresh_compliance_metrics() -> None:
             )
 
             try:
-                from .config import get_config
-
-                refresh_interval = get_config().POLICY_REFRESH_INTERVAL_SECONDS
-            except ImportError:
+                config = _get_config()
+                refresh_interval = getattr(config, "POLICY_REFRESH_INTERVAL_SECONDS", 300)
+            except Exception:
                 refresh_interval = 300
             await asyncio.sleep(refresh_interval)
 
