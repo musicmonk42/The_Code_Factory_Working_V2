@@ -314,45 +314,98 @@ except ImportError:
     _HAS_PROMETHEUS = False
     REGISTRY = Counter = Gauge = Histogram = start_http_server = None
 
-# Import centralized OpenTelemetry configuration with fallback
-# to avoid circular import issues with arbiter
-try:
-    from arbiter.otel_config import get_tracer
+# =============================================================================
+# STARTUP OPTIMIZATION: Use lightweight no-op tracer during module initialization
+# =============================================================================
+# The arbiter.otel_config.get_tracer() function triggers heavy initialization
+# that can hang during startup (endpoint discovery, connection attempts).
+# We use a no-op tracer during module initialization and only initialize
+# the real tracer lazily when actually needed for tracing operations.
+#
+# This prevents the healthcheck failure where the build stops after
+# "Redis connection established successfully" due to OTEL initialization.
+# =============================================================================
 
-    _HAS_ARBITER_OTEL = True
-except (ImportError, ModuleNotFoundError):
-    _HAS_ARBITER_OTEL = False
+# Flag to track if we should use the real tracer (set to True after startup)
+_USE_REAL_TRACER = False
+_real_get_tracer = None
 
-    # Fallback: create a simple get_tracer function
-    def get_tracer(name: str):
-        """Fallback tracer that returns a no-op tracer."""
+
+class _NoOpSpan:
+    """Lightweight no-op span for startup optimization."""
+    __slots__ = ()
+    
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def set_attribute(self, *args, **kwargs):
+        pass
+
+    def add_event(self, *args, **kwargs):
+        pass
+
+    def record_exception(self, *args, **kwargs):
+        pass
+
+
+class _NoOpTracer:
+    """Lightweight no-op tracer for startup optimization."""
+    __slots__ = ()
+    
+    def start_as_current_span(self, name, **kwargs):
+        return _NoOpSpan()
+
+
+def get_tracer(name: str):
+    """
+    Get a tracer instance, using no-op during startup for fast initialization.
+    
+    During module initialization (APP_STARTUP=1), returns a lightweight no-op
+    tracer to prevent hanging on OTEL endpoint discovery/connection.
+    
+    After startup completes, returns the real tracer if available.
+    """
+    global _real_get_tracer
+    
+    # During startup or if explicitly disabled, use no-op tracer
+    if os.getenv("APP_STARTUP", "0") == "1" or os.getenv("SKIP_OTEL_INIT", "0") == "1":
+        return _NoOpTracer()
+    
+    # Try to use the real tracer if available
+    if _real_get_tracer is not None:
         try:
-            from opentelemetry import trace
-
-            return trace.get_tracer(name)
-        except ImportError:
-            # Return a no-op tracer
-            class _NoOpSpan:
-                def __enter__(self):
-                    return self
-
-                def __exit__(self, *args):
-                    pass
-
-                def set_attribute(self, *args, **kwargs):
-                    pass
-
-                def add_event(self, *args, **kwargs):
-                    pass
-
-                def record_exception(self, *args, **kwargs):
-                    pass
-
-            class _NoOpTracer:
-                def start_as_current_span(self, name, **kwargs):
-                    return _NoOpSpan()
-
+            return _real_get_tracer(name)
+        except Exception:
             return _NoOpTracer()
+    
+    # Lazy-load the real tracer on first use after startup
+    try:
+        from arbiter.otel_config import get_tracer as _arbiter_get_tracer
+        _real_get_tracer = _arbiter_get_tracer
+        return _arbiter_get_tracer(name)
+    except (ImportError, ModuleNotFoundError):
+        pass
+    
+    # Fallback: try basic OpenTelemetry
+    try:
+        from opentelemetry import trace
+        return trace.get_tracer(name)
+    except ImportError:
+        pass
+    
+    # Ultimate fallback: no-op tracer
+    return _NoOpTracer()
+
+
+# Import check for arbiter OTEL (but don't trigger initialization)
+try:
+    import importlib.util
+    _HAS_ARBITER_OTEL = importlib.util.find_spec("arbiter.otel_config") is not None
+except Exception:
+    _HAS_ARBITER_OTEL = False
 
 
 # Keep trace import for trace.get_current_span() usage
@@ -1276,13 +1329,41 @@ def _initialize_core_modules() -> None:
     global _core_initialized
     total_start_time = time.monotonic()
     metrics, tracer = _get_metrics(), _get_tracer()
-    if redis_client := _get_redis_client():
-        if redis_client.get("compat_core_initialized") == "true":
-            logger.info(
-                "Skipping init, already completed by another instance.",
-                extra={"data_classification": "internal"},
-            )
-            return
+    
+    # ==========================================================================
+    # STARTUP OPTIMIZATION: Add timeout protection for Redis check
+    # ==========================================================================
+    # The Redis GET operation can hang in some edge cases (network issues after
+    # initial connection, Redis server becoming unresponsive). We wrap it in a
+    # try/except with a short timeout to prevent blocking startup.
+    # ==========================================================================
+    redis_client = None
+    try:
+        redis_client = _get_redis_client()
+        if redis_client:
+            # Use a short timeout for this check (socket_timeout is already 1s)
+            try:
+                if redis_client.get("compat_core_initialized") == "true":
+                    logger.info(
+                        "Skipping init, already completed by another instance.",
+                        extra={"data_classification": "internal"},
+                    )
+                    return
+            except Exception as e:
+                # Redis operation failed - continue with initialization
+                logger.debug(
+                    "Redis check failed, proceeding with initialization: %s",
+                    type(e).__name__,
+                    extra={"data_classification": "internal"},
+                )
+    except Exception as e:
+        # Redis client creation failed - continue without Redis
+        logger.debug(
+            "Redis unavailable for init check: %s",
+            type(e).__name__,
+            extra={"data_classification": "internal"},
+        )
+    
     with tracer.start_as_current_span("compat_core.initialize") as span:
         if span:
             span.set_attribute("environment", ENVIRONMENT)
@@ -1290,12 +1371,35 @@ def _initialize_core_modules() -> None:
             if _core_initialized:
                 return
             try:
-                if _HAS_POSIX_RESOURCE:
-                    _posix_resource.setrlimit(_posix_resource.RLIMIT_CPU, (10, 15))
-                    _posix_resource.setrlimit(
-                        _posix_resource.RLIMIT_NOFILE, (1024, 4096)
-                    )
-                    _posix_resource.setrlimit(_posix_resource.RLIMIT_NPROC, (50, 100))
+                # =================================================================
+                # STARTUP OPTIMIZATION: Skip resource limits in containers
+                # =================================================================
+                # Resource limits can cause issues in containerized environments
+                # (Docker, Railway, Kubernetes) where the container runtime
+                # already manages resource constraints. Skip if running in a
+                # container or if APP_STARTUP=1 to speed up initialization.
+                # =================================================================
+                _skip_rlimit = (
+                    os.getenv("APP_STARTUP", "0") == "1"
+                    or os.path.exists("/.dockerenv")
+                    or os.getenv("KUBERNETES_SERVICE_HOST")
+                    or os.getenv("RAILWAY_ENVIRONMENT")
+                )
+                
+                if _HAS_POSIX_RESOURCE and not _skip_rlimit:
+                    try:
+                        _posix_resource.setrlimit(_posix_resource.RLIMIT_CPU, (10, 15))
+                        _posix_resource.setrlimit(
+                            _posix_resource.RLIMIT_NOFILE, (1024, 4096)
+                        )
+                        _posix_resource.setrlimit(_posix_resource.RLIMIT_NPROC, (50, 100))
+                    except (OSError, ValueError) as e:
+                        # Resource limits may fail in containers - log and continue
+                        logger.debug(
+                            "Could not set resource limits (running in container?): %s",
+                            type(e).__name__,
+                            extra={"data_classification": "internal"},
+                        )
 
                 modules = [
                     ("analyzer.core_utils", ["alert_operator", "scrub_secrets"]),
@@ -1366,7 +1470,15 @@ def _initialize_core_modules() -> None:
                     )
 
                 if redis_client:
-                    redis_client.setex("compat_core_initialized", 3600, "true")
+                    try:
+                        redis_client.setex("compat_core_initialized", 3600, "true")
+                    except Exception as e:
+                        # Redis write failed - not critical, just log
+                        logger.debug(
+                            "Could not mark init complete in Redis: %s",
+                            type(e).__name__,
+                            extra={"data_classification": "internal"},
+                        )
             except Exception as e:
                 _core_init_error = e
                 logger.critical(
