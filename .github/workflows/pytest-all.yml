@@ -277,7 +277,7 @@ jobs:
           echo "=== Running test collection with CPU profiling ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
             --co --quiet --disable-warnings -p no:warnings --import-mode=prepend --tb=short \
-            --ignore=self_fixing_engineer/simulation/tests 2>&1 || true
+            2>&1 || true
           
           if [ -f collection_profile.stats ]; then
             echo "=== Top 30 CPU-consuming functions ==="
@@ -544,7 +544,7 @@ jobs:
           echo "=== Running test collection with CPU profiling ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
             --co --quiet --disable-warnings -p no:warnings --import-mode=prepend --tb=short \
-            --ignore=self_fixing_engineer/simulation/tests 2>&1 || true
+            2>&1 || true
           
           if [ -f collection_profile.stats ]; then
             echo "=== Top 30 CPU-consuming functions ==="
