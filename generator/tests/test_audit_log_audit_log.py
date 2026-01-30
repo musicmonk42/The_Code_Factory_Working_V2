@@ -120,11 +120,18 @@ pkg_roots = [
 ]
 for name in pkg_roots:
     if name not in sys.modules:
-        sys.modules[name] = ModuleType(name)
+        mod = ModuleType(name)
+        mod.__path__ = []  # Required for packages
+        mod.__spec__ = None  # Required by Python import system
+        mod.__file__ = "<mocked>"
+        sys.modules[name] = mod
 
 # --- Stub 1: audit_backend_core (for get_backend) ---
 backend_core_name = "generator.audit_log.audit_backend.audit_backend_core"
 backend_core = ModuleType(backend_core_name)
+backend_core.__path__ = []
+backend_core.__spec__ = None
+backend_core.__file__ = "<mocked>"
 
 
 class _DummyBackend:
@@ -194,6 +201,9 @@ class _MockCryptoProvider:
 audit_crypto_factory_name = "generator.audit_log.audit_crypto.audit_crypto_factory"
 if audit_crypto_factory_name not in sys.modules:
     audit_crypto_factory = ModuleType(audit_crypto_factory_name)
+    audit_crypto_factory.__path__ = []
+    audit_crypto_factory.__spec__ = None
+    audit_crypto_factory.__file__ = "<mocked>"
     # Add the mock provider to the factory
     mock_provider = _MockCryptoProvider()
     audit_crypto_factory.crypto_provider = mock_provider
@@ -216,6 +226,9 @@ if audit_crypto_factory_name not in sys.modules:
 audit_keystore_name = "generator.audit_log.audit_crypto.audit_keystore"
 if audit_keystore_name not in sys.modules:
     audit_keystore = ModuleType(audit_keystore_name)
+    audit_keystore.__path__ = []
+    audit_keystore.__spec__ = None
+    audit_keystore.__file__ = "<mocked>"
 
     # Add mock FileSystemKeyStorageBackend
     class _MockFileSystemKeyStorageBackend:

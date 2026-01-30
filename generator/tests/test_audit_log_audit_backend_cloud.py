@@ -44,6 +44,9 @@ def stub_module(name: str) -> types.ModuleType:
         full = part if not full else f"{full}.{part}"
         if full not in sys.modules:
             m = types.ModuleType(full)
+            m.__path__ = []  # Required for packages
+            m.__spec__ = None  # Required by Python import system
+            m.__file__ = "<mocked>"
             sys.modules[full] = m
             if parent:
                 setattr(parent, part, m)
@@ -233,22 +236,26 @@ sys.modules["azure.storage.blob"].ContentSettings = _ContentSettings
 # --- end robust SDK stubs ---
 
 # 3) Package shim so relative imports work
-REPO_ROOT = Path(__file__).resolve().parents[2]  # .../generator
+REPO_ROOT = Path(__file__).resolve().parents[3]  # .../The_Code_Factory_Working_V2
 PKG_ROOT = (
-    REPO_ROOT / "audit_log" / "audit_backend"
+    REPO_ROOT / "generator" / "audit_log" / "audit_backend"
 )  # folder containing audit_backend_cloud.py
 # ensure generator root on sys.path for any absolute imports the package might do
-p = str(REPO_ROOT)
+p = str(REPO_ROOT / "generator")
 if p not in sys.path:
     sys.path.insert(0, p)
 # create pseudo packages: 'audit_log' and 'audit_log.audit_backend'
 if "audit_log" not in sys.modules:
     pkg = types.ModuleType("audit_log")
-    pkg.__path__ = [str(REPO_ROOT / "audit_log")]
+    pkg.__path__ = [str(REPO_ROOT / "generator" / "audit_log")]
+    pkg.__spec__ = None
+    pkg.__file__ = "<mocked>"
     sys.modules["audit_log"] = pkg
 if "audit_log.audit_backend" not in sys.modules:
     subpkg = types.ModuleType("audit_log.audit_backend")
     subpkg.__path__ = [str(PKG_ROOT)]
+    subpkg.__spec__ = None
+    subpkg.__file__ = "<mocked>"
     sys.modules["audit_log.audit_backend"] = subpkg
     # CRITICAL: Set the subpackage as an attribute on the parent package
     # so that patch() can resolve paths like "audit_log.audit_backend.X"
