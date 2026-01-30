@@ -89,11 +89,11 @@ def load_agent_state_module():
     """Load agent_state.py with mocked dependencies."""
     # Find the agent_state.py file
     current_dir = Path(__file__).parent
-    agent_state_path = current_dir.parent / "agent_state.py"
+    agent_state_path = current_dir.parent / "arbiter" / "agent_state.py"
 
     if not agent_state_path.exists():
         # Try alternative path
-        agent_state_path = current_dir.parent.parent / "arbiter" / "agent_state.py"
+        agent_state_path = current_dir.parent / "agent_state.py"
 
     if not agent_state_path.exists():
         raise FileNotFoundError(f"Cannot find agent_state.py at {agent_state_path}")

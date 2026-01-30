@@ -51,7 +51,7 @@ from pydantic import ValidationError
 test_dir = os.path.dirname(os.path.abspath(__file__))
 plugins_dir = os.path.dirname(test_dir)
 pagerduty_file_path = os.path.join(
-    plugins_dir, "pagerduty_plugin", "pagerduty_plugin.py"
+    plugins_dir, "plugins", "pagerduty_plugin", "pagerduty_plugin.py"
 )
 
 # Import the plugin module directly from the file

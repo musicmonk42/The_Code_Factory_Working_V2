@@ -108,7 +108,7 @@ from pydantic import ValidationError
 # Fix the SIEM plugin before importing
 test_dir = os.path.dirname(os.path.abspath(__file__))
 plugins_dir = os.path.dirname(test_dir)
-siem_file_path = os.path.join(plugins_dir, "siem_plugin", "siem_plugin.py")
+siem_file_path = os.path.join(plugins_dir, "plugins", "siem_plugin", "siem_plugin.py")
 
 # Read and fix the SIEM plugin code
 with open(siem_file_path, "r", encoding="utf-8") as f:

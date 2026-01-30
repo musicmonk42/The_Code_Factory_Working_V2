@@ -163,7 +163,7 @@ setup_mocks()
 # Import event_bus directly
 current_dir = Path(__file__).parent
 parent_dir = current_dir.parent
-event_bus_path = parent_dir / "event_bus.py"
+event_bus_path = parent_dir / "mesh" / "event_bus.py"
 
 spec = importlib.util.spec_from_file_location("event_bus", event_bus_path)
 event_bus = importlib.util.module_from_spec(spec)

@@ -43,18 +43,22 @@ import pytest_asyncio
 from prometheus_client import REGISTRY
 
 # --- Package Shim ---
-REPO_ROOT = Path(__file__).resolve().parents[2]
-PKG_ROOT = REPO_ROOT / "audit_log" / "audit_backend"
-p = str(REPO_ROOT)
+REPO_ROOT = Path(__file__).resolve().parents[2]  # .../The_Code_Factory_Working_V2
+PKG_ROOT = REPO_ROOT / "generator" / "audit_log" / "audit_backend"
+p = str(REPO_ROOT / "generator")
 if p not in sys.path:
     sys.path.insert(0, p)
 if "audit_log" not in sys.modules:
     pkg = types.ModuleType("audit_log")
-    pkg.__path__ = [str(REPO_ROOT / "audit_log")]
+    pkg.__path__ = [str(REPO_ROOT / "generator" / "audit_log")]
+    pkg.__spec__ = None
+    pkg.__file__ = "<mocked>"
     sys.modules["audit_log"] = pkg
 if "audit_log.audit_backend" not in sys.modules:
     subpkg = types.ModuleType("audit_log.audit_backend")
     subpkg.__path__ = [str(PKG_ROOT)]
+    subpkg.__spec__ = None
+    subpkg.__file__ = "<mocked>"
     sys.modules["audit_log.audit_backend"] = subpkg
     sys.modules["audit_log"].audit_backend = subpkg
 

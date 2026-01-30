@@ -64,6 +64,8 @@ except ImportError as e:
     get_fernet = None  # type: ignore
     get_logger = None  # type: ignore
 
+from .clarifier import Clarifier, get_config, get_fernet, get_logger
+from . import clarifier_prompt
 
 # Lazy import for get_channel to avoid circular dependency
 # clarifier_user_prompt imports from clarifier, so we can't import it at module level
