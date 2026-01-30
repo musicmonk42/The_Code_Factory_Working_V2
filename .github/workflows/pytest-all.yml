@@ -1,30 +1,7 @@
 name: Pytest All - Run All Tests
 
-# This workflow runs pytests in the repository:
-#
-# Job Strategy:
-# 1. fast-tests: Runs on every push/PR
-#    - Executes core tests (tests/, omnicore_engine/, server/)
-#    - Runs WITHOUT parallelization to avoid SIGXCPU on GitHub runners
-#    - Timeout: 30 minutes (job level)
-#    - Optimized for quick feedback on routine commits
-#
-# 2. full-tests: Runs on schedule (nightly 2 AM UTC) or manual trigger
-#    - Executes comprehensive test suite including ALL test directories
-#    - Timeout: 240 minutes (4 hours)
-#    - Includes integration tests - only runs on schedule or manual trigger
-#
-# Optimizations Applied:
-# - Removed -n (pytest-xdist) to avoid SIGXCPU (exit code 152) caused by worker processes
-# - Removed timeout command wrapper to prevent CPU time limits during collection
-# - Using pytest's native --timeout flag for per-test timeouts (300s fast, 600s full)
-# - Added --disable-warnings and -p no:warnings for faster collection
-# - maxfail limits for faster failure detection (10 for fast, 50 for full)
-# - Error handling for memory limits (exit code 137=SIGKILL/OOM)
-#
-# To run full tests manually:
-# - Go to Actions tab → Select this workflow → Run workflow
-# - Check "Run full test suite (slow)" option
+# Runs ALL pytest tests in the repository together in a single invocation.
+# Uses `ulimit -t unlimited` to remove CPU time limits that cause SIGXCPU (exit code 152).
 
 on:
   push:
@@ -55,11 +32,11 @@ permissions:
   contents: read
 
 jobs:
-  # Fast smoke tests - run on every push/PR
+  # All tests run together - run on every push/PR
   fast-tests:
-    name: Fast Tests (Core & Critical)
+    name: All Tests (Unified Run)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
     
@@ -271,7 +248,7 @@ jobs:
           }
         continue-on-error: true
           
-      - name: Run fast tests
+      - name: Run all tests together
         env:
           TESTING: "1"
           AWS_REGION: ""
@@ -279,98 +256,20 @@ jobs:
         run: |
           set -o pipefail
           export PYTHONPATH="$PYTHONPATH:$PWD"
-          export PYTHONDONTWRITEBYTECODE=1
           
-          echo "=== Initial memory usage ==="
-          free -h
+          # Remove CPU time limits to prevent SIGXCPU (exit code 152)
+          ulimit -t unlimited 2>/dev/null || true
           
-          python -c "import gc; gc.collect(); print('Garbage collection completed')"
-          rm -rf .pytest_cache/ .coverage 2>/dev/null || true
+          echo "=== Running ALL pytest tests together ==="
+          pytest \
+            --tb=short \
+            --timeout=300 \
+            -p no:randomly \
+            -p no:cacheprovider \
+            --junitxml=test-results.xml \
+            2>&1 | tee test-output.log
           
-          # Run tests in smaller batches to avoid CPU time limits
-          # Each batch gets its own pytest process with independent CPU budget
-          PYTEST_COMMON_ARGS="-v --tb=short --maxfail=5 --timeout=180 --disable-warnings -p no:warnings --import-mode=prepend -m 'not slow and not integration' --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py --ignore=self_fixing_engineer/simulation/tests"
-          
-          echo ""
-          echo "=== Batch 1: Core tests ==="
-          pytest $PYTEST_COMMON_ARGS tests/ --junitxml=test-results-1.xml 2>&1 | tee test-output-1.log
-          BATCH1_EXIT=${PIPESTATUS[0]}
-          
-          if [ $BATCH1_EXIT -ne 0 ]; then
-            echo "ERROR: Batch 1 (tests/) failed with exit code $BATCH1_EXIT"
-            exit $BATCH1_EXIT
-          fi
-          
-          echo ""
-          echo "=== Batch 2: Omnicore engine tests ==="
-          pytest $PYTEST_COMMON_ARGS omnicore_engine/tests/ --junitxml=test-results-2.xml 2>&1 | tee test-output-2.log
-          BATCH2_EXIT=${PIPESTATUS[0]}
-          
-          if [ $BATCH2_EXIT -ne 0 ]; then
-            echo "ERROR: Batch 2 (omnicore_engine/tests/) failed with exit code $BATCH2_EXIT"
-            exit $BATCH2_EXIT
-          fi
-          
-          echo ""
-          echo "=== Batch 3: Database tests ==="
-          pytest $PYTEST_COMMON_ARGS omnicore_engine/database/tests/ --junitxml=test-results-3.xml 2>&1 | tee test-output-3.log
-          BATCH3_EXIT=${PIPESTATUS[0]}
-          
-          if [ $BATCH3_EXIT -ne 0 ]; then
-            echo "ERROR: Batch 3 (omnicore_engine/database/tests/) failed with exit code $BATCH3_EXIT"
-            exit $BATCH3_EXIT
-          fi
-          
-          echo ""
-          echo "=== Batch 4: Server tests ==="
-          pytest $PYTEST_COMMON_ARGS server/tests/ --junitxml=test-results-4.xml 2>&1 | tee test-output-4.log
-          BATCH4_EXIT=${PIPESTATUS[0]}
-          
-          if [ $BATCH4_EXIT -ne 0 ]; then
-            echo "ERROR: Batch 4 (server/tests/) failed with exit code $BATCH4_EXIT"
-            exit $BATCH4_EXIT
-          fi
-          
-          echo ""
-          echo "=== Final memory usage ==="
-          free -h
-          
-          # Combine test results
-          TOTAL_TESTS=0
-          TOTAL_FAILURES=0
-          TOTAL_ERRORS=0
-          
-          for i in 1 2 3 4; do
-            if [ -f "test-results-$i.xml" ]; then
-              TESTS=$(grep -oP 'tests="\K[0-9]+' "test-results-$i.xml" | head -1 || echo "0")
-              FAILURES=$(grep -oP 'failures="\K[0-9]+' "test-results-$i.xml" | head -1 || echo "0")
-              ERRORS=$(grep -oP 'errors="\K[0-9]+' "test-results-$i.xml" | head -1 || echo "0")
-              TOTAL_TESTS=$((TOTAL_TESTS + TESTS))
-              TOTAL_FAILURES=$((TOTAL_FAILURES + FAILURES))
-              TOTAL_ERRORS=$((TOTAL_ERRORS + ERRORS))
-            fi
-          done
-          
-          echo ""
-          echo "=== Combined Test Results Summary ==="
-          echo "Total tests run: $TOTAL_TESTS"
-          echo "Total failures: $TOTAL_FAILURES"
-          echo "Total errors: $TOTAL_ERRORS"
-          
-          if [ "$TOTAL_TESTS" = "0" ]; then
-            echo ""
-            echo "ERROR: No tests were executed across all batches!"
-            exit 1
-          fi
-          
-          if [ $TOTAL_FAILURES -gt 0 ] || [ $TOTAL_ERRORS -gt 0 ]; then
-            echo ""
-            echo "ERROR: Tests had failures or errors"
-            exit 1
-          fi
-          
-          echo ""
-          echo "✓ All $TOTAL_TESTS tests completed successfully across 4 batches"
+          echo "✓ All tests completed"
           
       - name: Profile test collection (on failure)
         if: failure()
@@ -625,112 +524,19 @@ jobs:
           set -o pipefail
           export PYTHONPATH="$PYTHONPATH:$PWD"
           
-          echo "=== Initial memory usage ==="
-          free -h
-          
-          # Note: ulimit -t unlimited is kept for compatibility but timeout command
-          # wrapper has been removed. Using pytest's --timeout flag instead for per-test limits.
+          # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           ulimit -t unlimited 2>/dev/null || true
           
-          python -c "import gc; gc.collect(); print('Garbage collection completed')"
-          rm -rf .pytest_cache/ .coverage 2>/dev/null || true
-          
-          echo ""
-          echo "=== Running full test suite (ALL pytests) ==="
-          
-          # Run ALL tests WITHOUT parallelization to avoid SIGXCPU issues
-          # NOTE: We run WITHOUT -n (pytest-xdist) because spawning workers
-          # can hit CPU time limits on GitHub Actions runners.
-          # Includes ALL test directories - comprehensive test coverage
-          # Note: Full suite includes simulation tests and all other tests
-          # Per-test timeout: 600s (10 minutes) via pytest-timeout plugin
+          echo "=== Running ALL pytest tests together ==="
           pytest \
-            -v \
             --tb=short \
-            --maxfail=50 \
             --timeout=600 \
-            --disable-warnings \
-            -p no:warnings \
-            --import-mode=prepend \
-            --ignore=omnicore_engine/message_bus/tests/test_metrics_lru.py \
-            tests/ \
-            omnicore_engine/tests/ \
-            omnicore_engine/database/tests/ \
-            omnicore_engine/message_bus/tests/ \
-            server/tests/ \
-            self_fixing_engineer/tests/ \
-            self_fixing_engineer/arbiter/tests/ \
-            self_fixing_engineer/arbiter/arbiter_growth/tests/ \
-            self_fixing_engineer/arbiter/models/tests/ \
-            self_fixing_engineer/arbiter/meta_learning_orchestrator/tests/ \
-            self_fixing_engineer/arbiter/bug_manager/tests/ \
-            self_fixing_engineer/arbiter/knowledge_graph/tests/ \
-            self_fixing_engineer/arbiter/learner/tests/ \
-            self_fixing_engineer/arbiter/plugins/tests/ \
-            self_fixing_engineer/arbiter/policy/tests/ \
-            self_fixing_engineer/arbiter/explainable_reasoner/tests/ \
-            self_fixing_engineer/intent_capture/tests/ \
-            self_fixing_engineer/test_generation/tests/ \
-            self_fixing_engineer/mesh/tests/ \
-            self_fixing_engineer/self_healing_import_fixer/tests/ \
-            self_fixing_engineer/plugins/tests/ \
-            self_fixing_engineer/agent_orchestration/tests/ \
-            self_fixing_engineer/guardrails/tests/ \
-            self_fixing_engineer/envs/tests/ \
-            self_fixing_engineer/simulation/tests/ \
-            generator/tests/ \
-            generator/main/tests/ \
-            generator/agents/tests/ \
-            generator/audit_log/tests/ \
-            generator/clarifier/tests/ \
-            generator/intent_parser/tests/ \
-            generator/runner/tests/ \
-            generator/scripts/tests/ \
+            -p no:randomly \
+            -p no:cacheprovider \
             --junitxml=test-results-full.xml \
             2>&1 | tee test-output-full.log
           
-          PYTEST_EXIT=${PIPESTATUS[0]}
-          
-          # Handle test failures with detailed error messages
-          if [ $PYTEST_EXIT -eq 137 ]; then
-            echo "ERROR: Tests exceeded memory limit (exit code $PYTEST_EXIT)"
-            echo "Full test suite requires more resources - consider splitting further"
-            exit $PYTEST_EXIT
-          fi
-          
-          echo ""
-          echo "=== Final memory usage ==="
-          free -h
-          
-          # Validate that tests actually ran
-          if [ -f test-results-full.xml ]; then
-            TESTS_RAN=$(grep -oP 'tests="\K[0-9]+' test-results-full.xml | head -1 || echo "0")
-            FAILURES=$(grep -oP 'failures="\K[0-9]+' test-results-full.xml | head -1 || echo "0")
-            ERRORS=$(grep -oP 'errors="\K[0-9]+' test-results-full.xml | head -1 || echo "0")
-            
-            echo ""
-            echo "=== Test Results Summary ==="
-            echo "Tests run: $TESTS_RAN"
-            echo "Failures: $FAILURES"
-            echo "Errors: $ERRORS"
-            
-            if [ "$TESTS_RAN" = "0" ] || [ -z "$TESTS_RAN" ]; then
-              echo ""
-              echo "ERROR: No tests were executed!"
-              echo "Check test-output-full.log for details"
-              exit 1
-            fi
-          else
-            echo "WARNING: test-results-full.xml not found"
-          fi
-          
-          if [ $PYTEST_EXIT -ne 0 ]; then
-            echo "ERROR: Tests failed with exit code $PYTEST_EXIT"
-            exit $PYTEST_EXIT
-          fi
-          
-          echo ""
-          echo "✓ All $TESTS_RAN tests completed successfully"
+          echo "✓ All tests completed"
           
       - name: Profile test collection (on failure)
         if: failure()
