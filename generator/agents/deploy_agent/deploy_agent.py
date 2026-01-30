@@ -563,7 +563,9 @@ class DeployAgent:
             logger.error("Failed to initialize DeployPromptAgent: %s", e, exc_info=True)
             # Create a fallback prompt function
             async def fallback_prompt(**kwargs):
-                return f"Generate {kwargs.get('target', 'configuration')} for files: {kwargs.get('files', [])}"
+                files = kwargs.get('files', [])
+                files_str = ', '.join(str(f) for f in files) if files else 'none'
+                return f"Generate {kwargs.get('target', 'configuration')} for files: {files_str}"
             self.prompt_agent = fallback_prompt
             logger.warning("Using fallback prompt function due to initialization failure")
         # ---------------------------------------------------
@@ -613,6 +615,12 @@ class DeployAgent:
 
         # Track initialization state
         self._db_initialized = False
+        
+        # Log initialization warning about database
+        logger.warning(
+            "DeployAgent initialized. Use 'async with DeployAgent(...) as agent:' "
+            "or call 'await agent._init_db()' before performing operations."
+        )
 
     # --- Async Context Manager Support ---
     # This ensures _init_db() is automatically called when using 'async with'
