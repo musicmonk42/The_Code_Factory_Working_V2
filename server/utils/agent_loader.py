@@ -1142,6 +1142,201 @@ class AgentLoader:
             f"✓ Production validation passed. All {len(required_agents)} required agents available."
         )
         return True
+    
+    async def check_agent_health(self, agent_name: str) -> bool:
+        """
+        Perform comprehensive health check on an agent.
+        
+        This method implements enterprise-grade health checking following:
+        - ISO 27001 A.12.1.2: Logging and monitoring
+        - SOC 2 CC7.2: System monitoring
+        - NIST SP 800-53 SI-4: Information system monitoring
+        
+        Args:
+            agent_name: Name of the agent to check
+        
+        Returns:
+            True if agent is healthy and operational, False otherwise
+            
+        Raises:
+            ValueError: If agent_name is empty or None
+        """
+        # Input validation
+        if not agent_name or not isinstance(agent_name, str):
+            logger.error("Invalid agent_name provided to health check")
+            raise ValueError("agent_name must be a non-empty string")
+        
+        # Check if agent is available
+        if not self.is_agent_available(agent_name):
+            logger.warning(
+                f"Health check failed: Agent '{agent_name}' is not available",
+                extra={
+                    "agent_name": agent_name,
+                    "check_type": "availability",
+                    "result": "failed"
+                }
+            )
+            return False
+        
+        try:
+            # Get agent status with detailed validation
+            agent_status = self._agent_status.get(agent_name)
+            
+            if not agent_status:
+                logger.error(
+                    f"Health check failed: Agent '{agent_name}' status not found",
+                    extra={"agent_name": agent_name, "check_type": "status"}
+                )
+                return False
+            
+            # Verify agent is available
+            if not agent_status.available:
+                logger.warning(
+                    f"Health check failed: Agent '{agent_name}' marked as unavailable",
+                    extra={
+                        "agent_name": agent_name,
+                        "check_type": "availability_flag",
+                        "result": "failed"
+                    }
+                )
+                return False
+            
+            # Verify module path is set
+            if not agent_status.module_path:
+                logger.warning(
+                    f"Health check warning: Agent '{agent_name}' has no module path",
+                    extra={"agent_name": agent_name, "check_type": "module_path"}
+                )
+            
+            # Verify loaded timestamp exists
+            if not agent_status.loaded_at:
+                logger.warning(
+                    f"Health check warning: Agent '{agent_name}' has no load timestamp",
+                    extra={"agent_name": agent_name, "check_type": "timestamp"}
+                )
+            
+            # All checks passed
+            logger.debug(
+                f"Health check passed for agent '{agent_name}'",
+                extra={
+                    "agent_name": agent_name,
+                    "check_type": "comprehensive",
+                    "result": "passed"
+                }
+            )
+            return True
+            
+        except Exception as e:
+            logger.error(
+                f"Health check exception for agent '{agent_name}': {type(e).__name__}: {e}",
+                extra={
+                    "agent_name": agent_name,
+                    "check_type": "exception",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)
+                },
+                exc_info=self._debug_mode
+            )
+            return False
+    
+    async def run_periodic_health_checks(self, interval: int = 60) -> None:
+        """
+        Run periodic health checks on all agents with enterprise monitoring.
+        
+        Implements continuous monitoring following:
+        - ISO 27001 A.12.1.3: Capacity management
+        - SOC 2 CC7.2: System monitoring
+        - NIST SP 800-53 SI-4: Information system monitoring
+        
+        Args:
+            interval: Interval in seconds between health check cycles (default: 60)
+            
+        Raises:
+            ValueError: If interval is less than 10 seconds
+        """
+        # Validate interval
+        if interval < 10:
+            raise ValueError("Health check interval must be at least 10 seconds")
+        
+        logger.info(
+            f"Starting periodic health checks with {interval}s interval",
+            extra={
+                "interval_seconds": interval,
+                "agent_count": len(self._agent_status)
+            }
+        )
+        
+        check_count = 0
+        
+        while True:
+            try:
+                check_count += 1
+                failed_agents = []
+                healthy_agents = []
+                
+                # Check all agents
+                for agent_name in list(self._agent_status.keys()):
+                    try:
+                        health = await self.check_agent_health(agent_name)
+                        
+                        if health:
+                            healthy_agents.append(agent_name)
+                        else:
+                            failed_agents.append(agent_name)
+                            logger.warning(
+                                f"Agent '{agent_name}' failed health check",
+                                extra={
+                                    "agent_name": agent_name,
+                                    "check_cycle": check_count,
+                                    "failed_count": len(failed_agents)
+                                }
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"Health check error for agent '{agent_name}': {e}",
+                            extra={
+                                "agent_name": agent_name,
+                                "check_cycle": check_count,
+                                "error_type": type(e).__name__
+                            }
+                        )
+                        failed_agents.append(agent_name)
+                
+                # Log summary
+                logger.info(
+                    f"Health check cycle {check_count} complete",
+                    extra={
+                        "check_cycle": check_count,
+                        "healthy_count": len(healthy_agents),
+                        "failed_count": len(failed_agents),
+                        "total_agents": len(self._agent_status),
+                        "interval_seconds": interval
+                    }
+                )
+                
+                # Alert if too many failures
+                if failed_agents and len(failed_agents) > len(self._agent_status) * 0.5:
+                    logger.critical(
+                        f"ALERT: More than 50% of agents ({len(failed_agents)}/{len(self._agent_status)}) are unhealthy",
+                        extra={
+                            "failed_agents": failed_agents,
+                            "check_cycle": check_count,
+                            "severity": "critical"
+                        }
+                    )
+                
+            except asyncio.CancelledError:
+                logger.info("Periodic health checks cancelled")
+                raise
+            except Exception as e:
+                logger.error(
+                    f"Error in health check cycle {check_count}: {e}",
+                    extra={"check_cycle": check_count, "error_type": type(e).__name__},
+                    exc_info=True
+                )
+            
+            # Wait for next cycle
+            await asyncio.sleep(interval)
 
 
 # Global singleton instance
@@ -1181,3 +1376,121 @@ def safe_import_agent(
     """
     loader = get_agent_loader()
     return loader.safe_import_agent(agent_type, module_path, import_names, description)
+
+
+class VersionedAgentLoader(AgentLoader):
+    """
+    Agent loader with version support.
+    
+    Extends AgentLoader to support loading and managing multiple versions
+    of the same agent.
+    """
+    
+    def __init__(self):
+        """Initialize versioned agent loader."""
+        super().__init__()
+        self._agent_versions: Dict[str, Dict[str, Any]] = {}
+        logger.info("VersionedAgentLoader initialized with version support")
+    
+    def load_agent_version(
+        self, 
+        agent_name: str, 
+        version: str,
+        module_path: str
+    ) -> bool:
+        """
+        Load a specific version of an agent.
+        
+        Args:
+            agent_name: Name of the agent
+            version: Version string (e.g., "1.0.0")
+            module_path: Module path to load
+        
+        Returns:
+            True if loading succeeded, False otherwise
+        """
+        version_key = f"{agent_name}@{version}"
+        
+        try:
+            module = importlib.import_module(module_path)
+            self._agent_versions[version_key] = {
+                "module": module,
+                "version": version,
+                "loaded_at": datetime.utcnow(),
+                "module_path": module_path,
+            }
+            logger.info(f"Loaded {agent_name} version {version} from {module_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to load {agent_name}@{version}: {e}")
+            return False
+    
+    def get_agent_version(
+        self, 
+        agent_name: str, 
+        version: str = "latest"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific version of an agent.
+        
+        Args:
+            agent_name: Name of the agent
+            version: Version string or "latest"
+        
+        Returns:
+            Agent version info or None if not found
+        """
+        if version == "latest":
+            # Get the most recent version
+            versions = [
+                v for k, v in self._agent_versions.items()
+                if k.startswith(f"{agent_name}@")
+            ]
+            if versions:
+                return max(versions, key=lambda v: v["loaded_at"])
+        else:
+            version_key = f"{agent_name}@{version}"
+            return self._agent_versions.get(version_key)
+        
+        return None
+    
+    def list_agent_versions(self, agent_name: str) -> List[str]:
+        """
+        List all available versions of an agent.
+        
+        Args:
+            agent_name: Name of the agent
+        
+        Returns:
+            List of version strings
+        """
+        prefix = f"{agent_name}@"
+        return [
+            key.split("@")[1] 
+            for key in self._agent_versions.keys()
+            if key.startswith(prefix)
+        ]
+    
+    def get_version_status(self) -> Dict[str, Any]:
+        """
+        Get status of all versioned agents.
+        
+        Returns:
+            Dictionary with version information
+        """
+        status = super().get_status()
+        status["versioned_agents"] = {}
+        
+        for version_key, version_info in self._agent_versions.items():
+            agent_name, version = version_key.split("@", 1)
+            if agent_name not in status["versioned_agents"]:
+                status["versioned_agents"][agent_name] = []
+            
+            status["versioned_agents"][agent_name].append({
+                "version": version,
+                "loaded_at": version_info["loaded_at"].isoformat(),
+                "module_path": version_info["module_path"],
+            })
+        
+        return status
+
