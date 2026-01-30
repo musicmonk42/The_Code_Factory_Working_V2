@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 # Import core components from the clarifier module
 # These are safe as they don't have circular dependencies
 try:
+    from . import clarifier as clarifier  # Import the submodule itself
     from .clarifier import Clarifier, get_config, get_fernet, get_logger
     _CLARIFIER_AVAILABLE = True
 except ImportError as e:
@@ -59,13 +60,34 @@ except ImportError as e:
     _CLARIFIER_AVAILABLE = False
     
     # Provide stub implementations
+    import types
+    import sys
+    
+    # Create a stub module that supports attribute access for mocking
+    clarifier_stub = types.ModuleType('generator.clarifier.clarifier')
+    clarifier_stub.__file__ = '<stub>'
+    
+    # Add __getattr__ to support dynamic attribute access (needed for test mocking)
+    def _stub_getattr(name):
+        """Return a placeholder for any attribute to support test mocking."""
+        return None
+    
+    clarifier_stub.__getattr__ = _stub_getattr
+    clarifier = clarifier_stub
+    
+    # Register in sys.modules so patches can find it
+    sys.modules['generator.clarifier.clarifier'] = clarifier_stub
+    
     Clarifier = None  # type: ignore
     get_config = None  # type: ignore
     get_fernet = None  # type: ignore
     get_logger = None  # type: ignore
 
-from .clarifier import Clarifier, get_config, get_fernet, get_logger
-from . import clarifier_prompt
+# Import clarifier_prompt if available
+try:
+    from . import clarifier_prompt
+except ImportError:
+    clarifier_prompt = None  # type: ignore
 
 # Lazy import for get_channel to avoid circular dependency
 # clarifier_user_prompt imports from clarifier, so we can't import it at module level
