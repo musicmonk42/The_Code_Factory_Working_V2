@@ -100,6 +100,22 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    # Resource limits for production deployment
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+    # Health check for container orchestration
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     # Default command runs the unified platform API server
     # Use PORT environment variable if set, otherwise default to 8000
     command: ["python", "server/run.py"]

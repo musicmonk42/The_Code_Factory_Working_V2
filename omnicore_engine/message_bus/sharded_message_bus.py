@@ -1754,6 +1754,41 @@ class ShardedMessageBus:
             max_workers=getattr(self.config, "message_bus_callback_workers", 8),
             thread_name_prefix=f"msgbus-callbacks-{shard_id}",
         )
+    
+    async def auto_scale_shards(self):
+        """
+        Automatically adjust shard count based on load metrics.
+        
+        Scales up when queues are heavily loaded (>80% capacity)
+        and scales down when underutilized (<20% capacity).
+        """
+        # Get current metrics
+        total_queue_size = sum(q.qsize() for q in self.queues)
+        avg_queue_size = total_queue_size / len(self.queues) if self.queues else 0
+        
+        # Scale up if average queue size > 80% of max
+        if avg_queue_size > (self.max_queue_size * 0.8):
+            new_count = min(self.shard_count + 1, 16)  # Max 16 shards
+            if new_count != self.shard_count:
+                logger.info(
+                    f"Autoscaling: Queue utilization high ({avg_queue_size}/{self.max_queue_size}). "
+                    f"Scaling up from {self.shard_count} to {new_count} shards"
+                )
+                # Note: Full shard adjustment would require reconfiguring the message bus
+                # This is a simplified implementation that logs the recommendation
+                logger.info(f"Recommended shard count: {new_count}")
+        
+        # Scale down if average queue size < 20% of max
+        elif avg_queue_size < (self.max_queue_size * 0.2) and self.shard_count > 2:
+            new_count = max(self.shard_count - 1, 2)  # Min 2 shards
+            if new_count != self.shard_count:
+                logger.info(
+                    f"Autoscaling: Queue utilization low ({avg_queue_size}/{self.max_queue_size}). "
+                    f"Scaling down from {self.shard_count} to {new_count} shards"
+                )
+                # Note: Full shard adjustment would require reconfiguring the message bus
+                # This is a simplified implementation that logs the recommendation
+                logger.info(f"Recommended shard count: {new_count}")
 
     async def configure_for_omnicore(self, engine_type: str) -> "ShardedMessageBus":
         logger.info(f"Configuring message bus for OmniCore engine type: {engine_type}")

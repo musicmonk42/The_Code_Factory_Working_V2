@@ -1221,3 +1221,121 @@ def safe_import_agent(
     """
     loader = get_agent_loader()
     return loader.safe_import_agent(agent_type, module_path, import_names, description)
+
+
+class VersionedAgentLoader(AgentLoader):
+    """
+    Agent loader with version support.
+    
+    Extends AgentLoader to support loading and managing multiple versions
+    of the same agent.
+    """
+    
+    def __init__(self):
+        """Initialize versioned agent loader."""
+        super().__init__()
+        self._agent_versions: Dict[str, Dict[str, Any]] = {}
+        logger.info("VersionedAgentLoader initialized with version support")
+    
+    def load_agent_version(
+        self, 
+        agent_name: str, 
+        version: str,
+        module_path: str
+    ) -> bool:
+        """
+        Load a specific version of an agent.
+        
+        Args:
+            agent_name: Name of the agent
+            version: Version string (e.g., "1.0.0")
+            module_path: Module path to load
+        
+        Returns:
+            True if loading succeeded, False otherwise
+        """
+        version_key = f"{agent_name}@{version}"
+        
+        try:
+            module = importlib.import_module(module_path)
+            self._agent_versions[version_key] = {
+                "module": module,
+                "version": version,
+                "loaded_at": datetime.utcnow(),
+                "module_path": module_path,
+            }
+            logger.info(f"Loaded {agent_name} version {version} from {module_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to load {agent_name}@{version}: {e}")
+            return False
+    
+    def get_agent_version(
+        self, 
+        agent_name: str, 
+        version: str = "latest"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific version of an agent.
+        
+        Args:
+            agent_name: Name of the agent
+            version: Version string or "latest"
+        
+        Returns:
+            Agent version info or None if not found
+        """
+        if version == "latest":
+            # Get the most recent version
+            versions = [
+                v for k, v in self._agent_versions.items()
+                if k.startswith(f"{agent_name}@")
+            ]
+            if versions:
+                return max(versions, key=lambda v: v["loaded_at"])
+        else:
+            version_key = f"{agent_name}@{version}"
+            return self._agent_versions.get(version_key)
+        
+        return None
+    
+    def list_agent_versions(self, agent_name: str) -> List[str]:
+        """
+        List all available versions of an agent.
+        
+        Args:
+            agent_name: Name of the agent
+        
+        Returns:
+            List of version strings
+        """
+        prefix = f"{agent_name}@"
+        return [
+            key.split("@")[1] 
+            for key in self._agent_versions.keys()
+            if key.startswith(prefix)
+        ]
+    
+    def get_version_status(self) -> Dict[str, Any]:
+        """
+        Get status of all versioned agents.
+        
+        Returns:
+            Dictionary with version information
+        """
+        status = super().get_status()
+        status["versioned_agents"] = {}
+        
+        for version_key, version_info in self._agent_versions.items():
+            agent_name, version = version_key.split("@", 1)
+            if agent_name not in status["versioned_agents"]:
+                status["versioned_agents"][agent_name] = []
+            
+            status["versioned_agents"][agent_name].append({
+                "version": version,
+                "loaded_at": version_info["loaded_at"].isoformat(),
+                "module_path": version_info["module_path"],
+            })
+        
+        return status
+
