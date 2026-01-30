@@ -43,6 +43,74 @@ if _CPU_CONSTRAINED:
     os.environ.setdefault("PYTEST_XDIST_WORKER_COUNT", "1")
 
 # ---- Pytest hooks for collection optimization ----
+def pytest_sessionstart(session):
+    """Initialize mocks before any test collection to prevent __spec__ errors."""
+    import importlib.util
+    
+    # Define __getattr__ function once outside loops to avoid closure issues
+    def _mock_getattr(name):
+        """Return a MagicMock for any attribute access on mocked modules."""
+        from unittest.mock import MagicMock
+        return MagicMock()
+    
+    # Mock observability modules that cause __spec__/__path__ errors during collection
+    observability_mocks = [
+        "opentelemetry",
+        "opentelemetry.trace",
+        "opentelemetry.sdk",
+        "opentelemetry.sdk.trace",
+        "opentelemetry.sdk.resources",
+        "opentelemetry.instrumentation",
+        "opentelemetry.instrumentation.fastapi",
+        "opentelemetry.instrumentation.aiohttp",
+        "opentelemetry.instrumentation.logging",
+        "opentelemetry.exporter",
+        "opentelemetry.context",
+        "prometheus_client",
+        "prometheus_client.core",
+        "prometheus_client.registry",
+    ]
+    
+    for mod_name in observability_mocks:
+        if mod_name not in sys.modules:
+            # Create proper mock with all required import system attributes
+            mock_mod = types.ModuleType(mod_name)
+            mock_mod.__file__ = f"<mocked {mod_name}>"
+            mock_mod.__path__ = []  # Required for packages
+            mock_mod.__package__ = mod_name
+            
+            # CRITICAL: Add __spec__ with proper structure
+            mock_mod.__spec__ = importlib.util.spec_from_loader(
+                mod_name, 
+                loader=None,
+                is_package=True
+            )
+            if mock_mod.__spec__:
+                mock_mod.__spec__.submodule_search_locations = []
+            
+            # Add __getattr__ for dynamic attribute access
+            mock_mod.__getattr__ = _mock_getattr
+            
+            sys.modules[mod_name] = mock_mod
+            
+            # Create parent modules for dotted names
+            if "." in mod_name:
+                parts = mod_name.split(".")
+                for i in range(1, len(parts)):
+                    parent_name = ".".join(parts[:i])
+                    if parent_name not in sys.modules:
+                        parent_mock = types.ModuleType(parent_name)
+                        parent_mock.__file__ = f"<mocked {parent_name}>"
+                        parent_mock.__path__ = []
+                        parent_mock.__package__ = parent_name
+                        parent_mock.__spec__ = importlib.util.spec_from_loader(
+                            parent_name, loader=None, is_package=True
+                        )
+                        if parent_mock.__spec__:
+                            parent_mock.__spec__.submodule_search_locations = []
+                        parent_mock.__getattr__ = _mock_getattr
+                        sys.modules[parent_name] = parent_mock
+
 def pytest_configure(config):
     """
     Skip expensive initialization during collection phase.
@@ -327,6 +395,9 @@ _NEVER_MOCK = [
     "pydantic_core",  # Core pydantic functionality
     "fastapi",  # __spec__ errors and type annotation issues
     "starlette",  # FastAPI dependency, needs proper __spec__
+    "stable_baselines3",  # FIX: Uses typing.Optional with forward refs, breaks when mocked
+    "stable_baselines3.common",
+    "stable_baselines3.common.policies",
 ]
 
 # Only mock if genuinely missing (not if already imported)
