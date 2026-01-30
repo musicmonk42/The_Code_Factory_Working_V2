@@ -934,27 +934,73 @@ class OmniCoreService:
         try:
             code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
             platform = payload.get("platform", "docker")
+            include_ci_cd = payload.get("include_ci_cd", False)
             
             repo_path = Path(code_path)
             if not repo_path.exists():
-                return {
-                    "status": "error",
-                    "message": f"Code path {code_path} does not exist",
-                }
+                # Create the directory if it doesn't exist
+                repo_path.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Created code path directory: {code_path}")
             
-            # Initialize and run deploy agent
-            logger.info(f"Running deploy agent for job {job_id} with platform: {platform}")
-            _agent = self._deploy_class(repo_path=str(repo_path))  # Agent ready for integration
+            # Initialize deploy agent
+            logger.info(f"Initializing deploy agent for job {job_id} with platform: {platform}")
+            agent = self._deploy_class(repo_path=str(repo_path))
             
-            # Deploy agent uses async generate method
-            # TODO: Integrate actual agent call when interface is finalized
-            result = {
-                "status": "completed",
-                "generated_files": ["Dockerfile", "docker-compose.yml"],
+            # Initialize the agent's database
+            await agent._init_db()
+            
+            # Prepare requirements for deployment
+            requirements = {
+                "config": "",
+                "pipeline_steps": ["generate", "validate"],
                 "platform": platform,
+                "include_ci_cd": include_ci_cd,
             }
             
-            logger.info(f"Deploy agent completed for job {job_id}")
+            # Run the deployment generation
+            logger.info(f"Running deploy agent for job {job_id}")
+            deploy_result = await agent.run_deployment(target=platform, requirements=requirements)
+            
+            # Extract generated config
+            configs = deploy_result.get("configs", {})
+            generated_files = []
+            
+            # Write generated configs to files
+            output_dir = repo_path / "deploy"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            for target, config_content in configs.items():
+                # Determine filename based on target
+                if target == "docker" or target == "dockerfile":
+                    filename = "Dockerfile"
+                elif target == "kubernetes" or target == "k8s":
+                    filename = "deployment.yaml"
+                elif target == "docker-compose":
+                    filename = "docker-compose.yml"
+                elif target == "terraform":
+                    filename = "main.tf"
+                else:
+                    filename = f"{target}.config"
+                
+                file_path = output_dir / filename
+                
+                # Write the file
+                import aiofiles
+                async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+                    await f.write(config_content)
+                
+                generated_files.append(str(file_path.relative_to(repo_path)))
+                logger.info(f"Generated deployment file: {file_path}")
+            
+            result = {
+                "status": "completed",
+                "generated_files": generated_files,
+                "platform": platform,
+                "run_id": deploy_result.get("run_id"),
+                "validations": deploy_result.get("validations", {}),
+            }
+            
+            logger.info(f"Deploy agent completed for job {job_id}, generated {len(generated_files)} files")
             return result
             
         except Exception as e:
