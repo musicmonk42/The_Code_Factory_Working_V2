@@ -989,6 +989,27 @@ class OmniCoreService:
                             ).inc()
                         # Don't continue on security errors - this is critical
                         raise
+                    
+                    except TypeError as type_error:
+                        # Type errors indicate invalid data structure
+                        logger.error(
+                            f"Type error in file write - filename={filename}, error={type_error}",
+                            extra={
+                                "job_id": job_id,
+                                "filename": filename,
+                                "error_type": "type_error",
+                                "error_message": str(type_error),
+                                "status": "failed"
+                            },
+                            exc_info=True
+                        )
+                        files_failed.append({"filename": filename, "error": "type_error"})
+                        if METRICS_AVAILABLE:
+                            codegen_errors_total.labels(
+                                job_id=job_id,
+                                error_type="type_error"
+                            ).inc()
+                        # Continue with other files (graceful degradation)
                         
                     except Exception as write_error:
                         # Log file write failures with full context

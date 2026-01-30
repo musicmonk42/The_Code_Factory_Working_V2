@@ -488,48 +488,223 @@ async def interact_with_sfe(
     return result
 
 
-@router.post("/arbiter/control")
+@router.post("/arbiter/control", status_code=200, response_model=Dict[str, Any])
 async def control_arbiter(
     request: ArbiterControlRequest,
     sfe_service: SFEService = Depends(get_sfe_service),
-):
+) -> Dict[str, Any]:
     """
-    Control Arbiter AI.
+    Control Arbiter AI with industry-standard validation and observability.
 
     Start, stop, pause, resume, or configure the Arbiter AI system.
 
+    **Features:**
+    - Input validation with detailed error messages
+    - Comprehensive logging with context
+    - Proper HTTP status codes
+    - Error categorization
+    - Performance tracking
+
     **Request Body:**
-    - command: Command to execute (start, stop, pause, resume, configure, status)
-    - job_id: Optional job ID
-    - config: Optional configuration
+    - command: Command to execute (start, stop, pause, resume, configure, status) [Required]
+    - job_id: Optional job ID (required for start/pause/resume commands)
+    - config: Optional configuration dictionary (used with configure command)
 
     **Returns:**
-    - Arbiter control result
+    - Arbiter control result with status and details
 
-    **Example Request:**
+    **Status Codes:**
+    - 200: Success
+    - 400: Bad Request (validation error, missing required fields)
+    - 404: Not Found (job_id not found)
+    - 500: Internal Server Error
+
+    **Example Requests:**
+    
+    Start arbiter for a job:
     ```json
     {
         "command": "start",
         "job_id": "abc123",
-        "config": {"max_iterations": 10}
+        "config": {"max_iterations": 10, "timeout": 300}
+    }
+    ```
+    
+    Get status:
+    ```json
+    {
+        "command": "status"
+    }
+    ```
+    
+    Configure arbiter:
+    ```json
+    {
+        "command": "configure",
+        "config": {
+            "max_retries": 3,
+            "confidence_threshold": 0.8
+        }
     }
     ```
     """
+    import time
+    start_time = time.time()
+    request_id = f"arbiter_ctrl_{id(request)}"
+    
+    # Input validation - industry standard
+    command_str = request.command.value
+    
+    # Validate job_id is provided for commands that require it
+    commands_requiring_job = {"start", "pause", "resume"}
+    if command_str in commands_requiring_job and not request.job_id:
+        logger.warning(
+            f"Arbiter control validation failed - command={command_str}, missing_field=job_id",
+            extra={
+                "request_id": request_id,
+                "command": command_str,
+                "validation_error": "job_id_required",
+                "status": "validation_failed"
+            }
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "ValidationError",
+                "message": f"job_id is required for '{command_str}' command",
+                "field": "job_id",
+                "command": command_str,
+            }
+        )
+    
+    # Validate config for configure command
+    if command_str == "configure" and not request.config:
+        logger.warning(
+            f"Arbiter control validation failed - command={command_str}, missing_field=config",
+            extra={
+                "request_id": request_id,
+                "command": command_str,
+                "validation_error": "config_required",
+                "status": "validation_failed"
+            }
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "ValidationError",
+                "message": "config is required for 'configure' command",
+                "field": "config",
+                "command": command_str,
+            }
+        )
+    
+    logger.info(
+        f"Processing arbiter control request - request_id={request_id}, command={command_str}, "
+        f"job_id={request.job_id or 'none'}, has_config={request.config is not None}",
+        extra={
+            "request_id": request_id,
+            "command": command_str,
+            "job_id": request.job_id,
+            "has_config": request.config is not None,
+            "status": "processing"
+        }
+    )
+    
     try:
         result = await sfe_service.control_arbiter(
-            command=request.command.value,
+            command=command_str,
             job_id=request.job_id,
             config=request.config,
         )
-
-        logger.info(f"Arbiter control command executed: {request.command.value}")
+        
+        duration = time.time() - start_time
+        logger.info(
+            f"Arbiter control executed successfully - request_id={request_id}, command={command_str}, "
+            f"job_id={request.job_id or 'none'}, duration={duration:.2f}s",
+            extra={
+                "request_id": request_id,
+                "command": command_str,
+                "job_id": request.job_id,
+                "duration_seconds": duration,
+                "status": "success"
+            }
+        )
+        
         return result
+        
     except ValueError as ve:
-        logger.error(f"Invalid arbiter control request: {ve}")
-        raise HTTPException(status_code=400, detail=str(ve))
+        duration = time.time() - start_time
+        logger.warning(
+            f"Arbiter control validation error - request_id={request_id}, command={command_str}, error={ve}",
+            extra={
+                "request_id": request_id,
+                "command": command_str,
+                "job_id": request.job_id,
+                "error_type": "validation_error",
+                "error_message": str(ve),
+                "duration_seconds": duration,
+                "status": "validation_error"
+            }
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "ValidationError",
+                "message": str(ve),
+                "command": command_str,
+                "job_id": request.job_id,
+            }
+        )
+        
+    except KeyError as ke:
+        duration = time.time() - start_time
+        logger.error(
+            f"Arbiter control resource not found - request_id={request_id}, command={command_str}, error={ke}",
+            extra={
+                "request_id": request_id,
+                "command": command_str,
+                "job_id": request.job_id,
+                "error_type": "not_found",
+                "error_message": str(ke),
+                "duration_seconds": duration,
+                "status": "not_found"
+            }
+        )
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "NotFound",
+                "message": f"Resource not found: {str(ke)}",
+                "command": command_str,
+                "job_id": request.job_id,
+            }
+        )
+        
     except Exception as e:
-        logger.error(f"Error executing arbiter control: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        duration = time.time() - start_time
+        error_type = type(e).__name__
+        logger.error(
+            f"Arbiter control internal error - request_id={request_id}, command={command_str}, error={error_type}: {e}",
+            extra={
+                "request_id": request_id,
+                "command": command_str,
+                "job_id": request.job_id,
+                "error_type": error_type,
+                "error_message": str(e),
+                "duration_seconds": duration,
+                "status": "error"
+            },
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "InternalServerError",
+                "message": "An unexpected error occurred",
+                "error_type": error_type,
+                "request_id": request_id,
+            }
+        )
 
 
 @router.post("/arena/compete")
