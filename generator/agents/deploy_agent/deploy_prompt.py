@@ -635,19 +635,37 @@ class DeployPromptAgent:
         self,
         few_shot_dir: str = "few_shot_examples",
         template_dir: str = "deploy_templates",
-    ):
+    ) -> None:
+        """
+        Initialize DeployPromptAgent with few-shot examples and templates.
+        
+        Args:
+            few_shot_dir: Directory containing few-shot example JSON files
+            template_dir: Directory containing Jinja2 prompt templates
+            
+        Raises:
+            ValueError: If directories are invalid or inaccessible
+            OSError: If directory creation fails critically
+        """
+        # Input validation - industry standard
+        if not few_shot_dir or not isinstance(few_shot_dir, str):
+            raise ValueError("few_shot_dir must be a non-empty string")
+        if not template_dir or not isinstance(template_dir, str):
+            raise ValueError("template_dir must be a non-empty string")
+        
         self.embedding_model: Optional[SentenceTransformer] = None
         if SentenceTransformer and util:  # Check if import was successful
             try:
                 # SentenceTransformer is a heavy dependency, load only if necessary
                 self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+                logger.info("Successfully loaded SentenceTransformer model for few-shot retrieval")
             except Exception as e:
                 logger.warning(
                     "Could not load SentenceTransformer for few-shot retrieval: %s. Few-shot retrieval will be disabled.",
                     e,
                 )
         else:
-            logger.warning(
+            logger.info(
                 "sentence_transformers package not found. Few-shot retrieval will be disabled."
             )
 
@@ -660,19 +678,72 @@ class DeployPromptAgent:
         )  # Store feedback scores for prompt variants
         # self.llm_orchestrator = DeployLLMOrchestrator() # Removed Orchestrator instance
         # Now uses call_llm_api directly
+        
+        logger.info(
+            f"DeployPromptAgent initialized - few_shot_examples={len(self.few_shot_examples)}, "
+            f"embedding_model={'enabled' if self.embedding_model else 'disabled'}"
+        )
 
     def _load_few_shot(self, few_shot_dir: str) -> List[Dict[str, str]]:
         """
         Loads few-shot examples from JSON files in the specified directory.
+        
         Each JSON file should contain a 'query' and an 'example' key.
+        This method implements industry-standard error handling and validation.
+        
+        Args:
+            few_shot_dir: Path to directory containing JSON example files
+            
+        Returns:
+            List of dictionaries containing 'query' and 'example' keys
+            
+        Raises:
+            OSError: If directory creation fails critically
         """
-        examples = []
+        examples: List[Dict[str, str]] = []
+        
+        # Validate input
+        if not few_shot_dir or not isinstance(few_shot_dir, str):
+            logger.error("Invalid few_shot_dir provided: %s", few_shot_dir)
+            return examples
+        
         if not os.path.exists(few_shot_dir):
             try:
+                # Create directory with exist_ok to prevent race conditions
                 os.makedirs(few_shot_dir, exist_ok=True)
-                logger.info("Created few-shot examples directory: %s", few_shot_dir)
+                logger.info(
+                    "Created few-shot examples directory - path=%s",
+                    few_shot_dir,
+                    extra={"directory": few_shot_dir, "action": "created"}
+                )
+            except PermissionError as perm_error:
+                logger.error(
+                    "Permission denied creating few-shot directory %s: %s",
+                    few_shot_dir,
+                    perm_error,
+                    extra={"directory": few_shot_dir, "error_type": "permission_denied"},
+                    exc_info=True
+                )
+                # Critical error - cannot proceed without directory
+                raise
+            except OSError as os_error:
+                logger.error(
+                    "OS error creating few-shot directory %s: %s",
+                    few_shot_dir,
+                    os_error,
+                    extra={"directory": few_shot_dir, "error_type": "os_error"},
+                    exc_info=True
+                )
+                # Critical error - cannot proceed without directory
+                raise
             except Exception as dir_error:
-                logger.error("Failed to create few-shot directory %s: %s", few_shot_dir, dir_error, exc_info=True)
+                logger.error(
+                    "Unexpected error creating few-shot directory %s: %s",
+                    few_shot_dir,
+                    dir_error,
+                    extra={"directory": few_shot_dir, "error_type": type(dir_error).__name__},
+                    exc_info=True
+                )
                 return examples
             
             # Create a default example file to prevent empty directory issues
