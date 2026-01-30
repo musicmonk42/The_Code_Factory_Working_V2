@@ -278,6 +278,48 @@ async def test_log_audit_event(mock_safe_sign, caplog, mock_config):
     assert log_data["key_id"] == "test-key-id-from-config"
 
 
+@pytest.mark.asyncio
+@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+async def test_log_audit_event_with_bytes(mock_safe_sign, caplog, mock_config):
+    """Test that audit events containing bytes objects are successfully serialized."""
+    # Configure logging to set the key ID from the mock_config
+    configure_logging_from_config(mock_config)
+
+    # Set level AND propagation for 'runner.audit' so caplog can see it
+    audit_logger = logging.getLogger("runner.audit")
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.propagate = True
+
+    mock_safe_sign.return_value = "mock-signature-b64"
+
+    # Test data with bytes objects (e.g., from Presidio redaction)
+    test_data = {
+        "text": "some text",
+        "binary_data": b"binary content here",
+        "nested": {
+            "more_bytes": b"\x00\x01\x02\x03"
+        }
+    }
+
+    await log_audit_event("audit_with_bytes", test_data)
+
+    # Check caplog for the 'runner.audit' log
+    assert len(caplog.records) > 0
+    audit_record = [r for r in caplog.records if r.name == "runner.audit"][0]
+
+    assert audit_record.levelname == "INFO"
+    # The audit log message should be a valid JSON string
+    log_data = json.loads(audit_record.message)
+    assert log_data["action"] == "audit_with_bytes"
+    
+    # Verify bytes were converted to base64 strings
+    assert log_data["data"]["text"] == "some text"
+    assert log_data["data"]["binary_data"] == base64.b64encode(b"binary content here").decode('utf-8')
+    assert log_data["data"]["nested"]["more_bytes"] == base64.b64encode(b"\x00\x01\x02\x03").decode('utf-8')
+    assert log_data["signature"] == "mock-signature-b64"
+    assert log_data["key_id"] == "test-key-id-from-config"
+
+
 # --------------------------------------------------------------------------- #
 # Tests for search_logs
 # --------------------------------------------------------------------------- #

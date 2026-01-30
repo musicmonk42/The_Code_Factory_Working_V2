@@ -447,6 +447,13 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
 
     logger.debug(f"Attempting to log audit event: {action}", extra={"action": action})
 
+    # Helper function to handle non-serializable objects (particularly bytes)
+    def safe_json_default(o):
+        """Convert non-serializable objects to JSON-safe formats."""
+        if isinstance(o, bytes):
+            return base64.b64encode(o).decode('utf-8')
+        return f"<Not Serializable: {type(o).__name__}>"
+
     async with _AUDIT_CHAIN_LOCK:
         try:
             current_prev_hash = _LAST_AUDIT_HASH
@@ -479,7 +486,7 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
             # 4. Log the complete, signed event to the 'runner.audit' logger
             audit_logger = logging.getLogger("runner.audit")
             audit_logger.info(
-                json.dumps(final_audit_log)
+                json.dumps(final_audit_log, default=safe_json_default)
             )  # Log as a single JSON string
 
             # 5. Update the chain's state with the hash of the *signed content*
@@ -489,7 +496,7 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
             entry_for_hash_calc.pop("key_id", None)
 
             data_that_was_signed = json.dumps(
-                entry_for_hash_calc, sort_keys=True
+                entry_for_hash_calc, sort_keys=True, default=safe_json_default
             ).encode("utf-8")
             _LAST_AUDIT_HASH = compute_hash(data_that_was_signed)
 
