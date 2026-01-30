@@ -34,7 +34,7 @@ os.environ.setdefault("NO_MONITORING", "1")
 os.environ.setdefault("DISABLE_TELEMETRY", "1")
 # Disable prometheus_client default collectors to avoid duplication errors
 os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "True")
-os.environ.setdefault("prometheus_multiproc_dir", "")  # Disable multiprocess mode
+# PROMETHEUS_MULTIPROC_DIR is set in setup_prometheus_multiproc_dir fixture below
 
 # CPU limit safety: Detect if we're in a CPU-constrained environment
 _CPU_CONSTRAINED = os.environ.get('CI') == 'true' or os.environ.get('GITHUB_ACTIONS') == 'true'
@@ -2028,6 +2028,94 @@ def setup_test_environment():
             os.environ[key] = original_env[key]
         elif key in os.environ:
             del os.environ[key]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_prometheus_multiproc_dir():
+    """
+    Session-wide setup for Prometheus multiprocess directory.
+    
+    This is required when running with pytest-xdist workers to prevent
+    ValueError: Env var PROMETHEUS_MULTIPROC_DIR='' not a directory.
+    
+    Creates a temporary directory for Prometheus multiprocess metrics collection.
+    """
+    import tempfile
+    import shutil
+    
+    # Create Prometheus multiprocess directory
+    prometheus_dir = tempfile.mkdtemp(prefix="prometheus_multiproc_")
+    os.environ["PROMETHEUS_MULTIPROC_DIR"] = prometheus_dir
+    os.environ["prometheus_multiproc_dir"] = prometheus_dir  # lowercase version for compatibility
+    
+    # Ensure critical paths exist
+    os.makedirs(prometheus_dir, exist_ok=True)
+    
+    yield
+    
+    # Cleanup
+    shutil.rmtree(prometheus_dir, ignore_errors=True)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def patch_prometheus_globally():
+    """
+    Patch prometheus start_http_server at session scope.
+    This prevents port conflicts across all test workers.
+    """
+    from unittest.mock import patch
+    with patch("prometheus_client.start_http_server"):
+        yield
+
+
+@pytest.fixture(scope="function", autouse=True)
+def isolate_imports():
+    """
+    Function-scoped fixture to prevent mock pollution between tests.
+    
+    This addresses the AttributeError: __path__ issue by ensuring
+    mocks don't leak into Python's import machinery.
+    """
+    # Snapshot current sys.modules state
+    original_modules = sys.modules.copy()
+    
+    yield
+    
+    # Restore original module state after each test
+    # Remove any modules that were imported during the test
+    new_modules = set(sys.modules.keys()) - set(original_modules.keys())
+    for module_name in new_modules:
+        if any(module_name.startswith(prefix) for prefix in 
+               ["generator", "omnicore_engine", "self_fixing_engineer"]):
+            sys.modules.pop(module_name, None)
+
+
+@pytest.fixture(scope="function")
+def clean_registry():
+    """
+    Clean plugin registry between tests to prevent state pollution.
+    """
+    from unittest.mock import MagicMock
+    # Only import when actually needed in a test
+    try:
+        from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
+        original_plugins = PLUGIN_REGISTRY._plugins.copy()
+        yield PLUGIN_REGISTRY
+        # Restore original state
+        PLUGIN_REGISTRY._plugins = original_plugins
+    except ImportError:
+        # Registry not available, provide a mock
+        yield MagicMock()
+
+
+@pytest.fixture(scope="session")
+def event_loop_policy():
+    """
+    Provide consistent event loop policy for async tests.
+    Required for pytest-asyncio with pytest-xdist.
+    """
+    import asyncio
+    return asyncio.DefaultEventLoopPolicy()
 
 
 @pytest.fixture(scope="function", autouse=True)
