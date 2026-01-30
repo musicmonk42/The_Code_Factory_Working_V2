@@ -236,7 +236,7 @@ sys.modules["azure.storage.blob"].ContentSettings = _ContentSettings
 # --- end robust SDK stubs ---
 
 # 3) Package shim so relative imports work
-REPO_ROOT = Path(__file__).resolve().parents[3]  # .../The_Code_Factory_Working_V2
+REPO_ROOT = Path(__file__).resolve().parents[2]  # .../The_Code_Factory_Working_V2
 PKG_ROOT = (
     REPO_ROOT / "generator" / "audit_log" / "audit_backend"
 )  # folder containing audit_backend_cloud.py

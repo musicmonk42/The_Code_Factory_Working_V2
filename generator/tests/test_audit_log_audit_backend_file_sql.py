@@ -43,7 +43,7 @@ import pytest_asyncio
 from prometheus_client import REGISTRY
 
 # --- Package Shim ---
-REPO_ROOT = Path(__file__).resolve().parents[3]  # .../The_Code_Factory_Working_V2
+REPO_ROOT = Path(__file__).resolve().parents[2]  # .../The_Code_Factory_Working_V2
 PKG_ROOT = REPO_ROOT / "generator" / "audit_log" / "audit_backend"
 p = str(REPO_ROOT / "generator")
 if p not in sys.path:
