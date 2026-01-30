@@ -238,6 +238,7 @@ if os.environ.get("TESTING") == "1":
         "tiktoken",  # Needed by testgen_agent
         "aiokafka",  # Needed by arbiter
         "aiokafka.errors",  # Submodule
+        "dotenv",  # Needed by testgen_agent
         # Note: aiohttp needs special handling below
     ]
     
@@ -248,14 +249,19 @@ if os.environ.get("TESTING") == "1":
             early_mock.__path__ = []
             early_mock.__spec__ = importlib.util.spec_from_loader(mod_name, loader=None)
             
-            # Create a unique __getattr__ for each module (avoid closure issues)
-            def make_getattr():
-                def _getattr(name):
-                    from unittest.mock import MagicMock
-                    return MagicMock()
-                return _getattr
-            
-            early_mock.__getattr__ = make_getattr()
+            # Special handling for dotenv
+            if mod_name == "dotenv":
+                early_mock.load_dotenv = lambda *args, **kwargs: None
+                early_mock.find_dotenv = lambda *args, **kwargs: None
+            else:
+                # Create a unique __getattr__ for each module (avoid closure issues)
+                def make_getattr():
+                    def _getattr(name):
+                        from unittest.mock import MagicMock
+                        return MagicMock()
+                    return _getattr
+                
+                early_mock.__getattr__ = make_getattr()
             
             sys.modules[mod_name] = early_mock
     
