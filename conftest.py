@@ -66,9 +66,7 @@ def pytest_sessionstart(session):
         "opentelemetry.instrumentation.logging",
         "opentelemetry.exporter",
         "opentelemetry.context",
-        "prometheus_client",
-        "prometheus_client.core",
-        "prometheus_client.registry",
+        # prometheus_client removed - tests need real module, patch_prometheus_globally fixture handles conflicts
     ]
     
     for mod_name in observability_mocks:
@@ -142,13 +140,17 @@ if os.environ.get("TESTING") == "1":
     # recursive module discovery and imports heavy packages (matplotlib, torch, etc.),
     # causing CPU timeout (exit 152) with pytest-xdist.
     #
-    # SOLUTION: Create stubs unconditionally for these 3 modules. If the real modules
+    # SOLUTION: Create stubs unconditionally for these modules. If the real modules
     # exist, the stubs won't interfere because sys.modules check prevents replacement.
     _stub_modules = {}
     
     # Only create stubs for modules that aren't already imported
     # This is a simple O(1) check without expensive filesystem walking
-    for mod_name in ['intent_capture', 'omnicore_engine.database', 'omnicore_engine.message_bus']:
+    for mod_name in ['intent_capture', 
+                     'omnicore_engine.database', 
+                     'omnicore_engine.message_bus',
+                     'generator.clarifier',
+                     'generator.agents.docgen_agent']:
         if mod_name not in sys.modules:
             _stub_modules[mod_name] = mod_name
 
@@ -179,6 +181,19 @@ if os.environ.get("TESTING") == "1":
                         parent_stub.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
                         parent_stub.__getattr__ = _stub_getattr
                         sys.modules[parent_name] = parent_stub
+                        
+                        # Link this parent to its own parent if it has one
+                        if i > 1:
+                            grandparent_name = ".".join(parts[:i-1])
+                            child_name = parts[i-1]
+                            if grandparent_name in sys.modules:
+                                setattr(sys.modules[grandparent_name], child_name, parent_stub)
+                
+                # Set child module as attribute on its immediate parent module
+                parent_name = ".".join(parts[:-1])
+                child_name = parts[-1]
+                if parent_name in sys.modules:
+                    setattr(sys.modules[parent_name], child_name, stub)
 
 # ---- Import error handling ----
 # Provide graceful fallbacks for common missing dependencies during test collection
