@@ -140,7 +140,7 @@ if os.environ.get("TESTING") == "1":
     # recursive module discovery and imports heavy packages (matplotlib, torch, etc.),
     # causing CPU timeout (exit 152) with pytest-xdist.
     #
-    # SOLUTION: Create stubs unconditionally for these 3 modules. If the real modules
+    # SOLUTION: Create stubs unconditionally for these modules. If the real modules
     # exist, the stubs won't interfere because sys.modules check prevents replacement.
     _stub_modules = {}
     
@@ -181,8 +181,15 @@ if os.environ.get("TESTING") == "1":
                         parent_stub.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
                         parent_stub.__getattr__ = _stub_getattr
                         sys.modules[parent_name] = parent_stub
+                        
+                        # Link this parent to its own parent if it has one
+                        if i > 1:
+                            grandparent_name = ".".join(parts[:i-1])
+                            child_name = parts[i-1]
+                            if grandparent_name in sys.modules:
+                                setattr(sys.modules[grandparent_name], child_name, parent_stub)
                 
-                # Set child module as attribute on parent module
+                # Set child module as attribute on its immediate parent module
                 parent_name = ".".join(parts[:-1])
                 child_name = parts[-1]
                 if parent_name in sys.modules:
