@@ -42,6 +42,10 @@ def pytest_configure(config):
     Skip expensive initialization during collection phase.
     This prevents OOM during test discovery.
     """
+    # Initialize aiohttp protection early (but after pytest starts)
+    # This is deferred from module load time to avoid CPU timeout during collection
+    _initialize_aiohttp_protection()
+    
     if config.option.collectonly:
         # Signal to modules that we're only collecting, not running tests
         os.environ['SKIP_EXPENSIVE_INIT'] = '1'
@@ -64,23 +68,32 @@ if os.environ.get("TESTING") == "1":
     # breaks tests that import the real module.
     _stub_modules = {}
     
-    # Check if modules actually exist using simple import attempt
-    # find_spec() is expensive due to recursive module discovery
-    # Use try/except import instead
-    try:
-        import intent_capture
-    except ImportError:
-        _stub_modules['intent_capture'] = 'intent_capture'
+    # DEFERRED: Module existence checks are now done lazily to avoid triggering
+    # heavy import chains during conftest.py load. The actual imports of these
+    # modules will happen when test files import them, at which point the test
+    # environment is fully set up.
+    #
+    # Previously, we did `import omnicore_engine.database` here to check if it exists,
+    # but this triggered the entire import chain including matplotlib, torch, etc.
+    # causing CPU timeout during test collection.
+    #
+    # Now we just check if the modules are in sys.modules (which means they've been
+    # imported elsewhere) or use find_spec which is lighter than full import.
     
-    try:
-        import omnicore_engine.database
-    except ImportError:
-        _stub_modules['omnicore_engine.database'] = 'omnicore_engine.database'
+    def _check_module_exists(module_name):
+        """Check if a module exists without fully importing it."""
+        if module_name in sys.modules:
+            return True
+        try:
+            spec = importlib.util.find_spec(module_name)
+            return spec is not None
+        except (ImportError, ModuleNotFoundError, ValueError):
+            return False
     
-    try:
-        import omnicore_engine.message_bus
-    except ImportError:
-        _stub_modules['omnicore_engine.message_bus'] = 'omnicore_engine.message_bus'
+    # Only stub modules that truly don't exist
+    for mod_name in ['intent_capture', 'omnicore_engine.database', 'omnicore_engine.message_bus']:
+        if not _check_module_exists(mod_name):
+            _stub_modules[mod_name] = mod_name
 
     def _stub_getattr(name):
         """Return a no-op callable for any attribute access."""
@@ -1322,10 +1335,10 @@ def _initialize_aiohttp_protection():
         _ORIGINAL_AIOHTTP_TYPES = {}
 
 
-# ---- Initialize aiohttp http_exceptions shim IMMEDIATELY ----
-# This MUST run at module load time, before any test modules import aiohttp
-# or libraries that depend on aiohttp.http_exceptions (like aiohttp_client_cache)
-_initialize_aiohttp_protection()
+# ---- Initialize aiohttp http_exceptions shim ----
+# DEFERRED: Moved to pytest_configure hook to avoid expensive imports during collection
+# This used to run at module load time, but was causing CPU timeout during test collection
+# _initialize_aiohttp_protection()  # DEFERRED: Called in pytest_configure hook
 
 
 # ---- Protect common exception types from being mocked ----
@@ -1838,8 +1851,8 @@ def pytest_collectstart(collector):
     Ensures all modules have __spec__ to prevent collection errors.
     """
     _ensure_module_specs()
-    # Also ensure aiohttp compatibility for libraries that expect http_exceptions
-    _initialize_aiohttp_protection()
+    # Note: _initialize_aiohttp_protection() is now called in pytest_configure
+    # to avoid redundant calls for each collector
 
 
 def pytest_collection_finish(session):

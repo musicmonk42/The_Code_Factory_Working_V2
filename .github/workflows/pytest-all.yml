@@ -243,7 +243,8 @@ jobs:
           # -p no:warnings: Disable warnings plugin
           # --co: Alias for --collect-only
           # Explicitly specify all test directories for unified collection
-          timeout 180 pytest tests/ generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ --co --quiet --disable-warnings -p no:warnings || {
+          # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
+          timeout 180 pytest generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ --co --quiet --disable-warnings -p no:warnings || {
             echo "WARNING: Collection timed out or failed - will proceed with targeted test run"
             exit 0
           }
@@ -264,11 +265,11 @@ jobs:
           echo "=== Running ALL pytest tests together (unified run) ==="
           # Explicitly specify all test directories for unified test collection and execution
           # This ensures tests from ALL directories are discovered and run together
+          # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
           # Use pytest-xdist for parallel execution to avoid CPU time limit exceeded errors
           # -n auto: Use all available CPU cores for parallel test execution
           # This distributes the load across multiple workers, preventing single-process CPU exhaustion
           pytest \
-            tests/ \
             generator/tests/ \
             omnicore_engine/tests/ \
             self_fixing_engineer/tests/ \
@@ -522,7 +523,8 @@ jobs:
         run: |
           # Optimized collection with reduced timeout
           # Explicitly specify all test directories for unified collection
-          timeout 300 pytest tests/ generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ --co --quiet --disable-warnings -p no:warnings || {
+          # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
+          timeout 300 pytest generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ --co --quiet --disable-warnings -p no:warnings || {
             echo "WARNING: Collection timed out or failed - will proceed with test run"
             exit 0
           }
@@ -543,11 +545,11 @@ jobs:
           echo "=== Running ALL pytest tests together (unified run) ==="
           # Explicitly specify all test directories for unified test collection and execution
           # This ensures tests from ALL directories are discovered and run together
+          # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
           # Use pytest-xdist for parallel execution to avoid CPU time limit exceeded errors
           # -n auto: Use all available CPU cores for parallel test execution
           # This distributes the load across multiple workers, preventing single-process CPU exhaustion
           pytest \
-            tests/ \
             generator/tests/ \
             omnicore_engine/tests/ \
             self_fixing_engineer/tests/ \
