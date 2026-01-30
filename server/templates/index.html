@@ -458,36 +458,151 @@ Support multiple users.
 
         <!-- System Status View -->
         <section id="system-view" class="view">
-            <h2>System Status</h2>
+            <h2>System Status & Diagnostics</h2>
             
-            <div class="system-info">
-                <h3>OmniCore Engine</h3>
+            <!-- Overall Health -->
+            <div class="status-overview">
+                <div class="status-card">
+                    <div class="card-icon">🟢</div>
+                    <div class="card-content">
+                        <h3>System State</h3>
+                        <p class="stat-value" id="system-state">Checking...</p>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="card-icon">🤖</div>
+                    <div class="card-content">
+                        <h3>Available Agents</h3>
+                        <p class="stat-value" id="available-agents-count">-</p>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="card-icon">🔑</div>
+                    <div class="card-content">
+                        <h3>LLM Provider</h3>
+                        <p class="stat-value" id="llm-provider-status">-</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Agent Status -->
+            <div class="system-section">
+                <h3>🤖 Agent Availability</h3>
+                <p class="info-text">Agents must be available for code generation to work. If agents are unavailable, check for missing dependencies.</p>
+                <div id="agents-status-list" class="status-list">
+                    <p class="loading">Loading agent status...</p>
+                </div>
+            </div>
+            
+            <!-- LLM Configuration Status -->
+            <div class="system-section">
+                <h3>🔑 LLM Configuration Status</h3>
+                <div id="llm-config-status" class="info-grid">
+                    <p class="loading">Loading LLM status...</p>
+                </div>
+            </div>
+            
+            <!-- OmniCore Components -->
+            <div class="system-section">
+                <h3>⚙️ OmniCore Engine</h3>
                 <div class="info-grid">
+                    <div class="info-card">
+                        <h4>Message Bus</h4>
+                        <div id="message-bus-info" class="info-content">Loading...</div>
+                    </div>
                     <div class="info-card">
                         <h4>Plugins</h4>
                         <div id="plugins-info" class="info-content">Loading...</div>
                     </div>
                     <div class="info-card">
-                        <h4>Message Bus</h4>
-                        <div id="messagebus-info" class="info-content">Loading...</div>
+                        <h4>Database</h4>
+                        <div id="database-info" class="info-content">Operational</div>
                     </div>
                 </div>
             </div>
+            
+            <!-- Diagnostic Actions -->
+            <div class="system-section">
+                <h3>🔧 Diagnostic Actions</h3>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="runFullDiagnostics()">🔍 Run Full Diagnostics</button>
+                    <button class="btn btn-secondary" onclick="downloadDiagnosticReport()">📥 Download Report</button>
+                    <button class="btn btn-secondary" onclick="refreshSystemStatus()">🔄 Refresh Status</button>
+                </div>
+                <div id="diagnostics-output" class="diagnostics-output" style="display: none;">
+                    <h4>Diagnostic Results</h4>
+                    <pre id="diagnostics-content"></pre>
+                </div>
+            </div>
+            
+            <!-- API Information -->
+            <div class="system-section">
+                <h3>ℹ️ API Information</h3>
+                <div class="info-content">
+                    <p><strong>Version:</strong> <span id="api-version">Loading...</span></p>
+                    <p><strong>API Docs:</strong> <a href="/docs" target="_blank">/docs</a></p>
+                    <p><strong>Health Endpoint:</strong> <a href="/health" target="_blank">/health</a></p>
+                </div>
+            </div>
+        </section>
 
-            <div class="api-info">
-                <h3>API Information</h3>
-                <div class="info-list">
-                    <div class="info-item">
-                        <span class="label">Version:</span>
-                        <span class="value" id="api-version">Loading...</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">Documentation:</span>
-                        <span class="value">
-                            <a href="/api/docs" target="_blank">Swagger UI</a> | 
-                            <a href="/api/redoc" target="_blank">ReDoc</a>
-                        </span>
-                    </div>
+        <!-- API Keys View -->
+        <section id="api-keys-view" class="view">
+            <h2>API Key Management</h2>
+            
+            <div class="api-keys-section">
+                <h3>LLM Provider Configuration</h3>
+                <p class="info-text">Configure API keys for Large Language Model providers. At least one provider must be configured for code generation to work.</p>
+                
+                <div class="provider-status-grid" id="provider-status-grid">
+                    <p class="loading">Loading provider status...</p>
+                </div>
+                
+                <div class="config-form-section">
+                    <h4>Add/Update Provider</h4>
+                    <form id="llm-config-form" class="config-form">
+                        <div class="form-group">
+                            <label for="config-provider">Provider:</label>
+                            <select id="config-provider" required>
+                                <option value="">Select provider...</option>
+                                <option value="openai">OpenAI (GPT-4, GPT-3.5)</option>
+                                <option value="anthropic">Anthropic (Claude)</option>
+                                <option value="google">Google (Gemini)</option>
+                                <option value="xai">xAI (Grok)</option>
+                                <option value="ollama">Ollama (Local Models)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="config-api-key">API Key:</label>
+                            <input type="password" id="config-api-key" placeholder="sk-..." required>
+                            <small>Your API key is stored securely and never shown in responses</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="config-model">Model (optional):</label>
+                            <input type="text" id="config-model" placeholder="e.g., gpt-4o, claude-3-5-sonnet-20241022">
+                            <small>Leave blank to use provider default</small>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">💾 Save Configuration</button>
+                            <button type="button" class="btn btn-secondary" onclick="refreshProviderStatus()">🔄 Refresh Status</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="provider-help">
+                    <h4>Getting API Keys</h4>
+                    <ul>
+                        <li><strong>OpenAI:</strong> <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a></li>
+                        <li><strong>Anthropic:</strong> <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com/settings/keys</a></li>
+                        <li><strong>Google:</strong> <a href="https://makersuite.google.com/app/apikey" target="_blank">makersuite.google.com/app/apikey</a></li>
+                        <li><strong>xAI:</strong> <a href="https://console.x.ai/" target="_blank">console.x.ai</a></li>
+                        <li><strong>Ollama:</strong> No API key needed for local installation</li>
+                    </ul>
                 </div>
             </div>
         </section>
