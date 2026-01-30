@@ -2,7 +2,22 @@
 
 import os
 import pytest
-from prometheus_client import REGISTRY
+
+# FIX: Lazy import prometheus_client to avoid collection-time failures
+# This prevents AttributeError: __spec__ when the root conftest mocks prometheus_client
+def _get_prometheus_registry():
+    """Lazy getter for Prometheus registry."""
+    try:
+        from prometheus_client import REGISTRY
+        return REGISTRY
+    except (ImportError, AttributeError):
+        # Return a mock registry if prometheus is not available
+        class MockRegistry:
+            def __init__(self):
+                self._collector_to_names = {}
+            def unregister(self, collector):
+                pass
+        return MockRegistry()
 
 
 def pytest_configure(config):
@@ -20,6 +35,8 @@ def reset_prometheus_collectors():
     provide a way to iterate collectors for cleanup. This is wrapped in
     defensive try-except blocks to handle potential API changes gracefully.
     """
+    REGISTRY = _get_prometheus_registry()
+    
     # Store collectors to remove using a defensive approach
     try:
         collectors = list(REGISTRY._collector_to_names.keys())
