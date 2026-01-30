@@ -458,8 +458,6 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
             return list(o)
         if isinstance(o, uuid.UUID):
             return str(o)
-        if hasattr(o, '__dict__'):
-            return {k: v for k, v in o.__dict__.items() if not k.startswith('_')}
         return f"<Not Serializable: {type(o).__name__}>"
 
     async with _AUDIT_CHAIN_LOCK:
