@@ -223,6 +223,25 @@ def load_compliance_map(config_path: str) -> Dict[str, Dict[str, Any]]:
         with open(config_path, "r", encoding="utf-8") as f:
             crew_config = yaml.safe_load(f)
 
+            # FIX: Handle None from empty YAML files
+            if crew_config is None:
+                logger.warning(
+                    f"Empty or invalid YAML file at {config_path}. Returning empty compliance map."
+                )
+                if PROMETHEUS_AVAILABLE:
+                    self_healing_config_load_failures.inc()
+                return {}
+
+            # FIX: Validate that crew_config is a dictionary
+            if not isinstance(crew_config, dict):
+                logger.error(
+                    f"Invalid YAML structure in {config_path}: expected dict, got {type(crew_config).__name__}. Returning empty map."
+                )
+                if PROMETHEUS_AVAILABLE:
+                    self_healing_config_load_failures.inc()
+                return {}
+
+            # Now safe to call .get() on crew_config
             if not v.validate(
                 {"compliance_controls": crew_config.get("compliance_controls", {})}
             ):

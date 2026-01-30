@@ -11,7 +11,7 @@ import yaml
 
 # Fix import path for compliance_mapper module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from compliance_mapper import (
+from guardrails.compliance_mapper import (
     PROMETHEUS_AVAILABLE,
     ComplianceEnforcementError,
     _audit_log_gap,
@@ -166,11 +166,69 @@ async def test_load_compliance_map_no_controls(temp_config, monkeypatch, caplog)
 
 
 @pytest.mark.asyncio
+async def test_load_compliance_map_empty_yaml(temp_config, monkeypatch, caplog):
+    """Test loading empty YAML file that returns None."""
+
+    def mock_safe_load(*args):
+        return None
+
+    with monkeypatch.context() as m:
+        m.setattr(yaml, "safe_load", mock_safe_load)
+        compliance_map = load_compliance_map(temp_config)
+        assert compliance_map == {}
+        assert "Empty or invalid YAML file" in caplog.text
+        assert "Returning empty compliance map" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_load_compliance_map_yaml_with_only_comments(tmp_path, caplog):
+    """Test loading YAML file with only comments."""
+    config_path = tmp_path / "comments_only.yaml"
+    with open(config_path, "w") as f:
+        f.write("# This is a comment\n")
+        f.write("# Another comment\n")
+    
+    compliance_map = load_compliance_map(str(config_path))
+    assert compliance_map == {}
+    assert "Empty or invalid YAML file" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_load_compliance_map_non_dict_root(temp_config, monkeypatch, caplog):
+    """Test loading YAML with non-dict root structure."""
+
+    def mock_safe_load(*args):
+        return ["list", "of", "items"]
+
+    with monkeypatch.context() as m:
+        m.setattr(yaml, "safe_load", mock_safe_load)
+        compliance_map = load_compliance_map(temp_config)
+        assert compliance_map == {}
+        assert "Invalid YAML structure" in caplog.text
+        assert "expected dict, got list" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_load_compliance_map_string_root(temp_config, monkeypatch, caplog):
+    """Test loading YAML with string as root."""
+
+    def mock_safe_load(*args):
+        return "just a string"
+
+    with monkeypatch.context() as m:
+        m.setattr(yaml, "safe_load", mock_safe_load)
+        compliance_map = load_compliance_map(temp_config)
+        assert compliance_map == {}
+        assert "Invalid YAML structure" in caplog.text
+        assert "expected dict, got str" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_load_compliance_map_prometheus_inc(temp_config, monkeypatch):
     """Test Prometheus metric increment on load failure."""
     if not PROMETHEUS_AVAILABLE:
         pytest.skip("Prometheus not available")
-    with patch("compliance_mapper.self_healing_config_load_failures") as mock_counter:
+    with patch("guardrails.compliance_mapper.self_healing_config_load_failures") as mock_counter:
 
         def mock_open(*args, **kwargs):
             raise Exception("Test error")
@@ -204,7 +262,7 @@ async def test_check_coverage_prometheus_set(monkeypatch):
     if not PROMETHEUS_AVAILABLE:
         pytest.skip("Prometheus not available")
     with patch(
-        "compliance_mapper.self_healing_compliance_required_controls_not_enforced"
+        "guardrails.compliance_mapper.self_healing_compliance_required_controls_not_enforced"
     ) as mock_gauge:
         mock_gauge.labels.return_value.set = MagicMock()
         compliance_map = {"AC-2": {"status": "not_implemented", "required": True}}
@@ -229,7 +287,7 @@ async def test_generate_report_all_enforced(temp_config, monkeypatch):
     def mock_load(*args):
         return {"AC-1": {"status": "enforced", "required": True}}
 
-    with patch("compliance_mapper.load_compliance_map", mock_load):
+    with patch("guardrails.compliance_mapper.load_compliance_map", mock_load):
         gaps, all_enforced = generate_report(temp_config)
         assert all_enforced
 
@@ -305,7 +363,7 @@ async def test_main_cli_health_check(mock_env, monkeypatch, capsys):
 async def test_main_cli_prometheus_required(mock_env, monkeypatch):
     """Test Prometheus enforcement in production."""
     monkeypatch.setenv("APP_ENV", "production")
-    with patch("compliance_mapper.PROMETHEUS_AVAILABLE", False):
+    with patch("guardrails.compliance_mapper.PROMETHEUS_AVAILABLE", False):
         with pytest.raises(SystemExit) as exc:
             main_cli()
         assert exc.value.code == 1
@@ -318,7 +376,7 @@ async def test_main_cli_permission_error(mock_env, monkeypatch):
     def mock_generate(*args):
         raise PermissionError("Test permission error")
 
-    with patch("compliance_mapper.generate_report", mock_generate):
+    with patch("guardrails.compliance_mapper.generate_report", mock_generate):
         with pytest.raises(SystemExit) as exc:
             main_cli()
         assert exc.value.code == 2
@@ -331,7 +389,7 @@ async def test_main_cli_compliance_error(mock_env, monkeypatch):
     def mock_generate(*args):
         raise ComplianceEnforcementError("startup", "CONFIG", "Test")
 
-    with patch("compliance_mapper.generate_report", mock_generate):
+    with patch("guardrails.compliance_mapper.generate_report", mock_generate):
         with pytest.raises(SystemExit) as exc:
             main_cli()
         assert exc.value.code == 2
@@ -344,7 +402,7 @@ async def test_main_cli_unexpected_error(mock_env, monkeypatch):
     def mock_generate(*args):
         raise Exception("Test unexpected error")
 
-    with patch("compliance_mapper.generate_report", mock_generate):
+    with patch("guardrails.compliance_mapper.generate_report", mock_generate):
         with pytest.raises(SystemExit) as exc:
             main_cli()
         assert exc.value.code == 3
