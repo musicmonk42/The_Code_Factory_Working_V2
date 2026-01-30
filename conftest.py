@@ -2762,26 +2762,31 @@ def reset_policy_singletons():
     """Reset singleton instances between tests to ensure test isolation."""
     yield
     
-    try:
-        from arbiter.policy import core
-        if hasattr(core, "_policy_engine_instance"):
-            core._policy_engine_instance = None
-    except ImportError:
-        pass
+    # Only reset singletons if the modules are already imported
+    # This avoids expensive imports during teardown that cause CPU timeout (exit code 152)
+    if "arbiter.policy.core" in sys.modules:
+        try:
+            core = sys.modules["arbiter.policy.core"]
+            if hasattr(core, "_policy_engine_instance"):
+                core._policy_engine_instance = None
+        except Exception:
+            pass
     
-    try:
-        from arbiter.policy import config
-        if hasattr(config, "_instance"):
-            config._instance = None
-    except ImportError:
-        pass
+    if "arbiter.policy.config" in sys.modules:
+        try:
+            config = sys.modules["arbiter.policy.config"]
+            if hasattr(config, "_instance"):
+                config._instance = None
+        except Exception:
+            pass
     
-    try:
-        from arbiter.policy import circuit_breaker
-        if hasattr(circuit_breaker, "_breaker_states"):
-            circuit_breaker._breaker_states.clear()
-    except ImportError:
-        pass
+    if "arbiter.policy.circuit_breaker" in sys.modules:
+        try:
+            circuit_breaker = sys.modules["arbiter.policy.circuit_breaker"]
+            if hasattr(circuit_breaker, "_breaker_states"):
+                circuit_breaker._breaker_states.clear()
+        except Exception:
+            pass
 
 
 @pytest.fixture(autouse=True)

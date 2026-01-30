@@ -66,27 +66,33 @@ COMPLIANCE_CONFIG_PATH = os.environ.get(
     ),
 )
 
-# Assume ArbiterConfig is available for dynamic configuration
+# Define a fallback ArbiterConfig class for when the real config is not available
+# IMPORTANT: Do NOT call get_config() at import time - it triggers expensive initialization
+# that causes CPU timeout issues during test collection (exit code 152)
+class _FallbackArbiterConfig:
+    """Fallback configuration class with default values."""
+    def __init__(self):
+        self.DECISION_OPTIMIZER_SETTINGS = {
+            "llm_call_latency_buckets": (0.1, 0.5, 1, 2, 5, 10, 30, 60),
+            "feedback_processing_buckets": (0.001, 0.01, 0.1, 1, 10),
+        }
+        self.POLICY_REFRESH_INTERVAL_SECONDS = 300
+        self.CIRCUIT_BREAKER_MAX_PROVIDERS = 1000
+        self.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL = 30.0
+        self.CIRCUIT_BREAKER_VALIDATION_ERROR_INTERVAL = 300.0
+
+# Use the fallback class as the default ArbiterConfig
+# The real config will be fetched lazily via get_config() when needed
+ArbiterConfig = _FallbackArbiterConfig
+
+# Import get_config for lazy access (do NOT call it at import time)
 try:
-    from .config import get_config
-
-    ArbiterConfig = type(get_config())
+    from .config import get_config as _get_config_func
 except ImportError:
-    logger = logging.getLogger(__name__)
-    logger.warning(
-        "Warning: Could not import ArbiterConfig. Using default configuration."
+    _get_config_func = None
+    logging.getLogger(__name__).warning(
+        "Warning: Could not import get_config. Using default configuration."
     )
-
-    class ArbiterConfig:
-        def __init__(self):
-            self.DECISION_OPTIMIZER_SETTINGS = {
-                "llm_call_latency_buckets": (0.1, 0.5, 1, 2, 5, 10, 30, 60),
-                "feedback_processing_buckets": (0.001, 0.01, 0.1, 1, 10),
-            }
-            self.POLICY_REFRESH_INTERVAL_SECONDS = 300
-            self.CIRCUIT_BREAKER_MAX_PROVIDERS = 1000
-            self.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL = 30.0
-            self.CIRCUIT_BREAKER_VALIDATION_ERROR_INTERVAL = 300.0
 
 
 logger = logging.getLogger(__name__)
@@ -244,13 +250,14 @@ def _get_config():
     global _config_instance, _min_refresh_interval
     if _config_instance is None:
         try:
-            from .config import get_config
-
-            _config_instance = get_config()
-            _min_refresh_interval = getattr(
-                _config_instance, "CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL", 30.0
-            )
-        except ImportError:
+            if _get_config_func is not None:
+                _config_instance = _get_config_func()
+                _min_refresh_interval = getattr(
+                    _config_instance, "CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL", 30.0
+                )
+            else:
+                _config_instance = ArbiterConfig()
+        except Exception:
             _config_instance = ArbiterConfig()
     return _config_instance
 
@@ -270,12 +277,15 @@ policy_last_reload_timestamp = get_or_create_metric(
     "policy_last_reload_timestamp_seconds",
     "Timestamp of the last policy file reload",
 )
-# Get settings safely with defaults
-decision_optimizer_settings = getattr(
-    _config_instance, "DECISION_OPTIMIZER_SETTINGS", None
-)
-if decision_optimizer_settings is None:
-    decision_optimizer_settings = {}
+# Get settings safely with defaults using lazy initialization
+# Don't call _get_config() at import time during tests to avoid CPU timeout
+# Use default values for metrics initialization
+_default_decision_optimizer_settings = {
+    "llm_call_latency_buckets": (0.1, 0.5, 1, 2, 5, 10, 30, 60),
+    "feedback_processing_buckets": (0.001, 0.01, 0.1, 1, 10),
+}
+
+decision_optimizer_settings = _default_decision_optimizer_settings
 
 feedback_buckets = (
     decision_optimizer_settings.get(
@@ -625,9 +635,7 @@ def initialize_compliance_metrics():
         # Get max_controls from config at runtime, not module load time
         max_controls = 1000  # default
         try:
-            from .config import get_config
-
-            config = get_config()
+            config = _get_config()
             max_controls_value = getattr(config, "CIRCUIT_BREAKER_MAX_PROVIDERS", None)
             # Ensure it's an integer, not a MagicMock or other non-integer type
             if max_controls_value is not None and isinstance(max_controls_value, int):
@@ -743,10 +751,9 @@ async def refresh_compliance_metrics() -> None:
             )
 
             try:
-                from .config import get_config
-
-                refresh_interval = get_config().POLICY_REFRESH_INTERVAL_SECONDS
-            except ImportError:
+                config = _get_config()
+                refresh_interval = getattr(config, "POLICY_REFRESH_INTERVAL_SECONDS", 300)
+            except Exception:
                 refresh_interval = 300
             await asyncio.sleep(refresh_interval)
 
