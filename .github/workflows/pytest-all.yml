@@ -261,7 +261,11 @@ jobs:
           ulimit -t unlimited 2>/dev/null || true
           
           echo "=== Running ALL pytest tests together ==="
+          # Use pytest-xdist for parallel execution to avoid CPU time limit exceeded errors
+          # -n auto: Use all available CPU cores for parallel test execution
+          # This distributes the load across multiple workers, preventing single-process CPU exhaustion
           pytest \
+            -n auto \
             --tb=short \
             --timeout=300 \
             -p no:randomly \
@@ -528,7 +532,11 @@ jobs:
           ulimit -t unlimited 2>/dev/null || true
           
           echo "=== Running ALL pytest tests together ==="
+          # Use pytest-xdist for parallel execution to avoid CPU time limit exceeded errors
+          # -n auto: Use all available CPU cores for parallel test execution
+          # This distributes the load across multiple workers, preventing single-process CPU exhaustion
           pytest \
+            -n auto \
             --tb=short \
             --timeout=600 \
             -p no:randomly \
