@@ -267,10 +267,10 @@ jobs:
           # This ensures tests from ALL directories are discovered and run together
           # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
           # Use pytest-xdist for parallel execution with limited workers
-          # -n 2: Use 2 workers to limit CPU usage during collection (each worker imports all modules)
+          # -n 2: Limit to 2 workers to reduce combined CPU usage (each worker imports all test modules)
           # --dist=loadfile: Distribute tests by file to minimize import overhead per worker
           # --import-mode=importlib: Use importlib for faster, more reliable imports
-          # Note: -n auto was causing CPU time limit exceeded (exit 152) during test collection
+          # Note: -n auto was causing CPU time limit exceeded (exit 152) due to too many workers
           pytest \
             generator/tests/ \
             omnicore_engine/tests/ \
@@ -294,7 +294,7 @@ jobs:
           echo "=== Running test collection with CPU profiling ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
             generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ \
-            --co --quiet --disable-warnings -p no:warnings --import-mode=prepend --tb=short \
+            --co --quiet --disable-warnings -p no:warnings --import-mode=importlib --tb=short \
             2>&1 || true
           
           if [ -f collection_profile.stats ]; then
@@ -552,10 +552,10 @@ jobs:
           # This ensures tests from ALL directories are discovered and run together
           # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
           # Use pytest-xdist for parallel execution with limited workers
-          # -n 2: Use 2 workers to limit CPU usage during collection (each worker imports all modules)
+          # -n 2: Limit to 2 workers to reduce combined CPU usage (each worker imports all test modules)
           # --dist=loadfile: Distribute tests by file to minimize import overhead per worker
           # --import-mode=importlib: Use importlib for faster, more reliable imports
-          # Note: -n auto was causing CPU time limit exceeded (exit 152) during test collection
+          # Note: -n auto was causing CPU time limit exceeded (exit 152) due to too many workers
           pytest \
             generator/tests/ \
             omnicore_engine/tests/ \
@@ -579,7 +579,7 @@ jobs:
           echo "=== Running test collection with CPU profiling ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
             generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ \
-            --co --quiet --disable-warnings -p no:warnings --import-mode=prepend --tb=short \
+            --co --quiet --disable-warnings -p no:warnings --import-mode=importlib --tb=short \
             2>&1 || true
           
           if [ -f collection_profile.stats ]; then

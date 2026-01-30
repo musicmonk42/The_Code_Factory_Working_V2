@@ -40,7 +40,7 @@ minversion = "7.4"
 # Prevent expensive plugin loading during collection to avoid CPU timeout
 # - no:randomly: Disable pytest-randomly plugin (if installed) to reduce collection overhead
 # - no:cacheprovider: Disable pytest cache to avoid filesystem overhead during collection
-# Note: Using default 'prepend' import-mode to work with sys.path manipulation in conftest.py
+# Note: CI workflow uses --import-mode=importlib for faster imports; local testing uses default 'prepend'
 addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider"
 # REMOVED: testpaths configuration
 # Test directories should be specified on the command line to prevent pytest from
