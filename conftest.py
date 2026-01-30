@@ -86,8 +86,33 @@ def pytest_sessionstart(session):
             if mock_mod.__spec__:
                 mock_mod.__spec__.submodule_search_locations = []
             
-            # Add __getattr__ for dynamic attribute access
-            mock_mod.__getattr__ = _mock_getattr
+            # Special handling for opentelemetry.trace module
+            if mod_name == "opentelemetry.trace":
+                from unittest.mock import MagicMock
+                from contextlib import nullcontext
+                
+                class MockTracer:
+                    def start_as_current_span(self, name, **kwargs):
+                        return nullcontext()
+                    
+                    def start_span(self, name, **kwargs):
+                        class MockSpan:
+                            def __enter__(self): return self
+                            def __exit__(self, *args): pass
+                            def set_attribute(self, *args, **kwargs): pass
+                            def add_event(self, *args, **kwargs): pass
+                            def set_status(self, *args, **kwargs): pass
+                            def record_exception(self, *args, **kwargs): pass
+                        return MockSpan()
+                
+                mock_mod.get_tracer = lambda name: MockTracer()
+                mock_mod.Status = MagicMock()
+                mock_mod.StatusCode = MagicMock()
+                mock_mod.StatusCode.OK = "OK"
+                mock_mod.StatusCode.ERROR = "ERROR"
+            else:
+                # Add __getattr__ for dynamic attribute access
+                mock_mod.__getattr__ = _mock_getattr
             
             sys.modules[mod_name] = mock_mod
             
@@ -325,6 +350,9 @@ def _create_mock_module(name):
 
         mock_module.Dynaconf = MockDynaconf
         mock_module.Validator = MockValidator
+        # Add common functions that might be imported from dynaconf
+        mock_module.get_config = lambda *args, **kwargs: MockDynaconf()
+        mock_module.load_config = lambda *args, **kwargs: MockDynaconf()
     elif name == "torch":
         # torch needs __version__ as a string (not MockCallable) to prevent errors
         # in packaging.version.Version() calls (e.g., from safetensors.torch)
@@ -1178,6 +1206,119 @@ def _initialize_aiohttp_stubs():
             def add_field(self, name, value, **kwargs):
                 self._fields.append((name, value))
         
+        # ---- Server-side aiohttp.web support ----
+        
+        class WebRequest:
+            """Mock aiohttp.web.Request for server-side operations."""
+            def __init__(self, *args, **kwargs):
+                self.headers = {}
+                self.query = {}
+                self.match_info = {}
+                from unittest.mock import MagicMock
+                self.app = MagicMock()
+            
+            async def json(self):
+                return {}
+            
+            async def text(self):
+                return ""
+            
+            async def read(self):
+                return b""
+        
+        class WebResponse:
+            """Mock aiohttp.web.Response."""
+            def __init__(self, *args, text=None, status=200, **kwargs):
+                self.status = status
+                self.text = text
+                self.headers = {}
+        
+        class WebApplication:
+            """Mock aiohttp.web.Application."""
+            def __init__(self, *args, **kwargs):
+                from unittest.mock import MagicMock
+                self.router = MagicMock()
+                self._state = {}
+            
+            def get(self, key, default=None):
+                return self._state.get(key, default)
+            
+            def __setitem__(self, key, value):
+                self._state[key] = value
+            
+            def __getitem__(self, key):
+                return self._state[key]
+            
+            def add_routes(self, *args, **kwargs):
+                pass
+            
+            def on_startup(self, *args, **kwargs):
+                pass
+        
+        class RouteTableDef(list):
+            """Mock aiohttp.web.RouteTableDef."""
+            def get(self, path):
+                def decorator(handler):
+                    return handler
+                return decorator
+            
+            def post(self, path):
+                def decorator(handler):
+                    return handler
+                return decorator
+        
+        class AppRunner:
+            """Mock aiohttp.web.AppRunner."""
+            def __init__(self, app, **kwargs):
+                self.app = app
+            
+            async def setup(self):
+                pass
+            
+            async def cleanup(self):
+                pass
+        
+        class TCPSite:
+            """Mock aiohttp.web.TCPSite."""
+            def __init__(self, runner, host, port, **kwargs):
+                self.runner = runner
+                self.host = host
+                self.port = port
+            
+            async def start(self):
+                pass
+            
+            async def stop(self):
+                pass
+        
+        def json_response(data, status=200, **kwargs):
+            """Mock aiohttp.web.json_response."""
+            import json
+            response = WebResponse(status=status)
+            response.text = json.dumps(data)
+            return response
+        
+        def run_app(app, *args, **kwargs):
+            """Mock aiohttp.web.run_app."""
+            pass
+        
+        # Create web submodule
+        web_module = types.ModuleType("aiohttp.web")
+        web_module.__file__ = "<mocked aiohttp.web>"
+        web_module.__path__ = []
+        web_module.__spec__ = importlib.util.spec_from_loader("aiohttp.web", loader=None)
+        web_module.Request = WebRequest
+        web_module.Response = WebResponse
+        web_module.Application = WebApplication
+        web_module.RouteTableDef = RouteTableDef
+        web_module.AppRunner = AppRunner
+        web_module.TCPSite = TCPSite
+        web_module.json_response = json_response
+        web_module.run_app = run_app
+        
+        # Add web as attribute to main aiohttp module
+        aiohttp_module.web = web_module
+        
         # Register all classes and types on the module
         aiohttp_module.ClientTimeout = ClientTimeout
         aiohttp_module.ClientResponse = ClientResponse
@@ -1192,8 +1333,9 @@ def _initialize_aiohttp_stubs():
         aiohttp_module.BasicAuth = BasicAuth
         aiohttp_module.FormData = FormData
         
-        # Register the module
+        # Register both modules
         sys.modules["aiohttp"] = aiohttp_module
+        sys.modules["aiohttp.web"] = web_module
 
 
 # ---- Custom Import Hook REMOVED ----
