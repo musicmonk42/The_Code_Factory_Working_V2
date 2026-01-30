@@ -42,11 +42,13 @@ minversion = "7.4"
 # - no:cacheprovider: Disable pytest cache to avoid filesystem overhead during collection
 # Note: Using default 'prepend' import-mode to work with sys.path manipulation in conftest.py
 addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider"
+# Consolidated test paths - all tests are in main tests/ directories
 testpaths = [
     "tests",
-    "generator",
-    "omnicore_engine",
-    "self_fixing_engineer"
+    "generator/tests",
+    "omnicore_engine/tests",
+    "self_fixing_engineer/tests",
+    "server/tests"
 ]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
