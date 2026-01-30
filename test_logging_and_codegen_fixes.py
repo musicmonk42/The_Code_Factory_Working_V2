@@ -54,8 +54,9 @@ class TestCodegenPayloadTransformation:
         with open("server/services/omnicore_service.py", "r") as f:
             content = f.read()
         
-        # Check that payload transformation exists
+        # Check that payload transformation exists and preserves original fields
         assert 'codegen_payload = {' in content
+        assert '**payload,' in content  # Preserves all original fields
         assert '"requirements": payload.get("readme_content", payload.get("requirements", ""))' in content
         assert 'codegen_result = await self._run_codegen(job_id, codegen_payload)' in content
 
@@ -74,18 +75,19 @@ class TestCodegenPayloadTransformation:
         with open("server/services/omnicore_service.py", "r") as f:
             content = f.read()
         
-        # Check for codegen debug logging
+        # Check for codegen debug logging (without sensitive data)
         assert '[CODEGEN] Processing requirements for job' in content
+        assert 'length=' in content  # Should log length, not content
 
     def test_upload_endpoint_logging_added(self):
         """Test that upload endpoint logging was added."""
         with open("server/routers/generator.py", "r") as f:
             content = f.read()
         
-        # Check for README extraction logging
-        assert 'logger.info(f"Extracted README content for job {job_id}: {len(readme_content)} bytes")' in content
+        # Check for README extraction logging (without sensitive data)
+        assert 'logger.info(f"Extracted README for job {job_id}")' in content
         assert 'logger.warning(' in content
-        assert 'No README content found' in content
+        assert 'No README.md found' in content
 
 
 if __name__ == "__main__":

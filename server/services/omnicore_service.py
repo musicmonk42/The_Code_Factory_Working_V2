@@ -858,8 +858,8 @@ class OmniCoreService:
             language = payload.get("language", "python")
             framework = payload.get("framework")
             
-            # Debug logging
-            logger.info(f"[CODEGEN] Processing requirements for job {job_id}: {requirements[:100]}..." if len(requirements) > 100 else f"[CODEGEN] Processing requirements for job {job_id}: {requirements}")
+            # Debug logging - only log metadata, not content to avoid PII exposure
+            logger.info(f"[CODEGEN] Processing requirements for job {job_id}: length={len(requirements)} bytes")
             
             # Input validation - industry standard security check
             if not requirements or not isinstance(requirements, str):
@@ -1756,11 +1756,14 @@ class OmniCoreService:
             
             # 2. Codegen
             # Transform payload for codegen - it needs 'requirements' not 'readme_content'
+            # Preserve all original payload fields that might be needed
             codegen_payload = {
+                **payload,  # Preserve all original fields
                 "requirements": payload.get("readme_content", payload.get("requirements", "")),
-                "language": payload.get("language", "python"),
-                "framework": payload.get("framework"),
             }
+            # Remove readme_content from codegen payload as it's now in requirements
+            codegen_payload.pop("readme_content", None)
+            
             logger.info(f"[PIPELINE] Job {job_id} starting step: codegen")
             codegen_result = await self._run_codegen(job_id, codegen_payload)
             if codegen_result.get("status") == "completed":
