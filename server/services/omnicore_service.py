@@ -858,6 +858,9 @@ class OmniCoreService:
             language = payload.get("language", "python")
             framework = payload.get("framework")
             
+            # Debug logging
+            logger.info(f"[CODEGEN] Processing requirements for job {job_id}: {requirements[:100]}..." if len(requirements) > 100 else f"[CODEGEN] Processing requirements for job {job_id}: {requirements}")
+            
             # Input validation - industry standard security check
             if not requirements or not isinstance(requirements, str):
                 raise ValueError("Requirements must be a non-empty string")
@@ -1752,10 +1755,19 @@ class OmniCoreService:
                     stages_completed.append("clarify")
             
             # 2. Codegen
-            codegen_result = await self._run_codegen(job_id, payload)
+            # Transform payload for codegen - it needs 'requirements' not 'readme_content'
+            codegen_payload = {
+                "requirements": payload.get("readme_content", payload.get("requirements", "")),
+                "language": payload.get("language", "python"),
+                "framework": payload.get("framework"),
+            }
+            logger.info(f"[PIPELINE] Job {job_id} starting step: codegen")
+            codegen_result = await self._run_codegen(job_id, codegen_payload)
             if codegen_result.get("status") == "completed":
                 stages_completed.append("codegen")
+                logger.info(f"[PIPELINE] Job {job_id} completed step: codegen")
             else:
+                logger.error(f"[PIPELINE] Job {job_id} failed step: codegen - {codegen_result.get('message', 'Unknown error')}")
                 return {
                     "status": "failed",
                     "message": "Code generation failed",
