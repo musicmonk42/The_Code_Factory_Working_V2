@@ -279,6 +279,145 @@ async def test_log_audit_event(mock_safe_sign, caplog, mock_config):
 
 
 # --------------------------------------------------------------------------- #
+# Tests for _make_json_serializable
+# --------------------------------------------------------------------------- #
+def test_make_json_serializable_bytes():
+    """Test that bytes are converted to base64 strings."""
+    from runner.runner_logging import _make_json_serializable
+    
+    test_bytes = b"test data"
+    result = _make_json_serializable(test_bytes)
+    
+    assert isinstance(result, str)
+    assert result.startswith("base64:")
+    # Verify we can decode it back
+    decoded = base64.b64decode(result[7:])  # Remove "base64:" prefix
+    assert decoded == test_bytes
+
+
+def test_make_json_serializable_datetime():
+    """Test that datetime objects are converted to ISO format."""
+    from datetime import datetime, timezone
+    from runner.runner_logging import _make_json_serializable
+    
+    test_dt = datetime(2025, 1, 15, 12, 30, 45, tzinfo=timezone.utc)
+    result = _make_json_serializable(test_dt)
+    
+    assert isinstance(result, str)
+    assert "2025-01-15" in result
+    assert "12:30:45" in result
+
+
+def test_make_json_serializable_set():
+    """Test that sets are converted to sorted lists."""
+    from runner.runner_logging import _make_json_serializable
+    
+    test_set = {3, 1, 2}
+    result = _make_json_serializable(test_set)
+    
+    assert isinstance(result, list)
+    assert result == [1, 2, 3]
+
+
+def test_make_json_serializable_dict_with_bytes():
+    """Test that dictionaries with bytes values are recursively processed."""
+    from runner.runner_logging import _make_json_serializable
+    
+    test_dict = {
+        "key": "value",
+        "bytes_key": b"binary data",
+        "nested": {
+            "nested_bytes": b"more binary"
+        }
+    }
+    result = _make_json_serializable(test_dict)
+    
+    assert result["key"] == "value"
+    assert result["bytes_key"].startswith("base64:")
+    assert result["nested"]["nested_bytes"].startswith("base64:")
+
+
+def test_make_json_serializable_list_with_bytes():
+    """Test that lists with bytes are recursively processed."""
+    from runner.runner_logging import _make_json_serializable
+    
+    test_list = ["string", b"bytes", 123, [b"nested bytes"]]
+    result = _make_json_serializable(test_list)
+    
+    assert result[0] == "string"
+    assert result[1].startswith("base64:")
+    assert result[2] == 123
+    assert result[3][0].startswith("base64:")
+
+
+def test_make_json_serializable_primitives():
+    """Test that primitive types are returned as-is."""
+    from runner.runner_logging import _make_json_serializable
+    
+    assert _make_json_serializable("string") == "string"
+    assert _make_json_serializable(123) == 123
+    assert _make_json_serializable(45.67) == 45.67
+    assert _make_json_serializable(True) is True
+    assert _make_json_serializable(None) is None
+
+
+def test_make_json_serializable_custom_object():
+    """Test that custom objects with __dict__ are converted."""
+    from runner.runner_logging import _make_json_serializable
+    
+    class CustomObj:
+        def __init__(self):
+            self.name = "test"
+            self.data = b"binary"
+    
+    obj = CustomObj()
+    result = _make_json_serializable(obj)
+    
+    assert isinstance(result, dict)
+    assert result["name"] == "test"
+    assert result["data"].startswith("base64:")
+
+
+# --------------------------------------------------------------------------- #
+# Test log_audit_event with bytes data (integration test)
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+async def test_log_audit_event_with_bytes_data(mock_safe_sign, caplog, mock_config):
+    """Test that log_audit_event handles bytes data without crashing."""
+    configure_logging_from_config(mock_config)
+    
+    audit_logger = logging.getLogger("runner.audit")
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.propagate = True
+    
+    mock_safe_sign.return_value = "mock-signature-b64"
+    
+    # Test with bytes in the data
+    data_with_bytes = {
+        "message": "security event",
+        "binary_data": b"sensitive binary content",
+        "nested": {
+            "more_bytes": b"more binary"
+        }
+    }
+    
+    # This should not raise an exception
+    await log_audit_event("security_redact", data_with_bytes)
+    
+    # Verify the log was created successfully
+    assert len(caplog.records) > 0
+    audit_record = [r for r in caplog.records if r.name == "runner.audit"][0]
+    
+    assert audit_record.levelname == "INFO"
+    log_data = json.loads(audit_record.message)
+    assert log_data["action"] == "security_redact"
+    # Verify bytes were converted to base64 strings
+    assert log_data["data"]["binary_data"].startswith("base64:")
+    assert log_data["data"]["nested"]["more_bytes"].startswith("base64:")
+
+
+# --------------------------------------------------------------------------- #
 # Tests for search_logs
 # --------------------------------------------------------------------------- #
 def test_search_logs():
