@@ -255,23 +255,21 @@ jobs:
           TESTING: "1"
           AWS_REGION: ""
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PYTHONPATH:$PWD"
+          export PYTHONPATH="$PWD"
+          
+          # Create Prometheus multiprocess directory
+          mkdir -p "${{ runner.temp }}/prometheus_multiproc"
+          chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           ulimit -t unlimited 2>/dev/null || true
           
           echo "=== Running ALL pytest tests together (unified run) ==="
-          # Explicitly specify all test directories for unified test collection and execution
-          # This ensures tests from ALL directories are discovered and run together
-          # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
-          # Use pytest-xdist for parallel execution with limited workers
-          # -n 1: Limit to 1 worker to reduce CPU usage during test execution
-          # --dist=loadfile: Distribute tests by file to minimize import overhead per worker
-          # --import-mode=importlib: Use importlib for faster, more reliable imports
-          # Note: -n 2 was causing CPU time limit exceeded (exit 152) due to high CPU usage
-          pytest \
+          # Use python -m pytest to ensure proper sys.path setup
+          python -m pytest \
             generator/tests/ \
             omnicore_engine/tests/ \
             self_fixing_engineer/tests/ \
@@ -540,23 +538,21 @@ jobs:
           TESTING: "1"
           AWS_REGION: ""
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PYTHONPATH:$PWD"
+          export PYTHONPATH="$PWD"
+          
+          # Create Prometheus multiprocess directory
+          mkdir -p "${{ runner.temp }}/prometheus_multiproc"
+          chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           ulimit -t unlimited 2>/dev/null || true
           
           echo "=== Running ALL pytest tests together (unified run) ==="
-          # Explicitly specify all test directories for unified test collection and execution
-          # This ensures tests from ALL directories are discovered and run together
-          # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
-          # Use pytest-xdist for parallel execution with limited workers
-          # -n 1: Limit to 1 worker to reduce CPU usage during test execution
-          # --dist=loadfile: Distribute tests by file to minimize import overhead per worker
-          # --import-mode=importlib: Use importlib for faster, more reliable imports
-          # Note: -n 2 was causing CPU time limit exceeded (exit 152) due to high CPU usage
-          pytest \
+          # Use python -m pytest to ensure proper sys.path setup
+          python -m pytest \
             generator/tests/ \
             omnicore_engine/tests/ \
             self_fixing_engineer/tests/ \

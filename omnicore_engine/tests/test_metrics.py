@@ -5,8 +5,6 @@ Tests Prometheus metrics collection, InfluxDB fallback, and metric utilities.
 
 import json
 import os
-
-# Add the parent directory to path for imports
 import sys
 import tempfile
 from datetime import datetime
@@ -18,26 +16,24 @@ from prometheus_client.core import Counter, Gauge, Histogram
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import after mocking to prevent server startup
-# This patch at module level prevents expensive Prometheus HTTP server initialization
-with patch("omnicore_engine.metrics.start_http_server"):
-    from omnicore_engine.metrics import (  # Import specific metrics for testing
-        ACTIVE_SIMULATIONS,
-        FEATURE_FLAG_TOGGLES_TOTAL,
-        MESSAGE_BUS_QUEUE_SIZE,
-        PLUGIN_ACTIVE_COUNT,
-        PLUGIN_EXECUTION_DURATION_SECONDS,
-        PLUGIN_EXECUTIONS_TOTAL,
-        SIMULATIONS_TOTAL,
-        MockInfluxDBClient,
-        MockInfluxWriteApi,
-        MockPoint,
-        MockWritePrecision,
-        _get_or_create_metric,
-        get_all_metrics_data,
-        get_plugin_metrics,
-        get_test_metrics,
-    )
+# Import metrics module - start_http_server is already patched by root conftest.py
+from omnicore_engine.metrics import (
+    ACTIVE_SIMULATIONS,
+    FEATURE_FLAG_TOGGLES_TOTAL,
+    MESSAGE_BUS_QUEUE_SIZE,
+    PLUGIN_ACTIVE_COUNT,
+    PLUGIN_EXECUTION_DURATION_SECONDS,
+    PLUGIN_EXECUTIONS_TOTAL,
+    SIMULATIONS_TOTAL,
+    MockInfluxDBClient,
+    MockInfluxWriteApi,
+    MockPoint,
+    MockWritePrecision,
+    _get_or_create_metric,
+    get_all_metrics_data,
+    get_plugin_metrics,
+    get_test_metrics,
+)
 
 
 class TestMetricCreation:

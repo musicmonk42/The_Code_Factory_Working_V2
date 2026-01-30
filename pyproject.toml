@@ -33,15 +33,16 @@ classifiers = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["generator*", "omnicore_engine*", "self_fixing_engineer*"]
+include = ["generator*", "omnicore_engine*", "self_fixing_engineer*", "server*"]
 
 [tool.pytest.ini_options]
 minversion = "7.4"
+pythonpath = ["."]
 # Prevent expensive plugin loading during collection to avoid CPU timeout
 # - no:randomly: Disable pytest-randomly plugin (if installed) to reduce collection overhead
 # - no:cacheprovider: Disable pytest cache to avoid filesystem overhead during collection
-# Note: CI workflow uses --import-mode=importlib for faster imports; local testing uses default 'prepend'
-addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider"
+# - import-mode=importlib: Use importlib for faster, more reliable imports
+addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider --import-mode=importlib"
 # REMOVED: testpaths configuration
 # Test directories should be specified on the command line to prevent pytest from
 # automatically scanning and loading all test modules during pytest initialization.
