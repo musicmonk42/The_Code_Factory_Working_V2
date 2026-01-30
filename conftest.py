@@ -54,6 +54,7 @@ def pytest_sessionstart(session):
         return MagicMock()
     
     # Mock observability modules that cause __spec__/__path__ errors during collection
+    # Also mock dynaconf early to prevent stub overrides
     observability_mocks = [
         "opentelemetry",
         "opentelemetry.trace",
@@ -66,6 +67,7 @@ def pytest_sessionstart(session):
         "opentelemetry.instrumentation.logging",
         "opentelemetry.exporter",
         "opentelemetry.context",
+        "dynaconf",  # Mock early to prevent stub module overrides
         # prometheus_client removed - tests need real module, patch_prometheus_globally fixture handles conflicts
     ]
     
@@ -110,6 +112,30 @@ def pytest_sessionstart(session):
                 mock_mod.StatusCode = MagicMock()
                 mock_mod.StatusCode.OK = "OK"
                 mock_mod.StatusCode.ERROR = "ERROR"
+            elif mod_name == "dynaconf":
+                # Special handling for dynaconf module
+                # Mock early to prevent stub module overrides
+                class MockDynaconf:
+                    def __init__(self, *args, **kwargs):
+                        self._data = {}
+                    
+                    def get(self, key, default=None):
+                        return self._data.get(key, default)
+                    
+                    def set(self, key, value):
+                        self._data[key] = value
+                    
+                    def __getattr__(self, name):
+                        return self._data.get(name)
+                
+                class MockValidator:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                
+                mock_mod.Dynaconf = MockDynaconf
+                mock_mod.Validator = MockValidator
+                mock_mod.get_config = lambda *args, **kwargs: MockDynaconf()
+                mock_mod.load_config = lambda *args, **kwargs: MockDynaconf()
             else:
                 # Add __getattr__ for dynamic attribute access
                 mock_mod.__getattr__ = _mock_getattr
@@ -160,6 +186,76 @@ import importlib.util
 
 # Only create stubs if we're in a test environment (TESTING=1 is set at the top of this file)
 if os.environ.get("TESTING") == "1":
+    # CRITICAL: Mock dynaconf EARLY before stub modules are created
+    # This prevents stub modules from importing an incomplete dynaconf
+    if "dynaconf" not in sys.modules:
+        dynaconf_module = types.ModuleType("dynaconf")
+        dynaconf_module.__file__ = "<mocked dynaconf>"
+        dynaconf_module.__path__ = []
+        dynaconf_module.__spec__ = importlib.util.spec_from_loader("dynaconf", loader=None)
+        
+        class MockDynaconf:
+            def __init__(self, *args, **kwargs):
+                self._data = {}
+            
+            def get(self, key, default=None):
+                return self._data.get(key, default)
+            
+            def set(self, key, value):
+                self._data[key] = value
+            
+            def __getattr__(self, name):
+                return self._data.get(name)
+        
+        class MockValidator:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        dynaconf_module.Dynaconf = MockDynaconf
+        dynaconf_module.Validator = MockValidator
+        dynaconf_module.get_config = lambda *args, **kwargs: MockDynaconf()
+        dynaconf_module.load_config = lambda *args, **kwargs: MockDynaconf()
+        
+        sys.modules["dynaconf"] = dynaconf_module
+    
+    # CRITICAL: Mock other dependencies EARLY before packages that use them are imported
+    # This prevents packages from creating fallback stubs when imports fail
+    early_mocks = [
+        "aiofiles",  # Needed by generator.clarifier
+        "aiofiles.os",  # Submodule
+        "redis",  # Needed by generator
+        "redis.asyncio",  # Submodule
+        "chromadb",  # Needed by testgen_agent
+        "chromadb.utils",  # Submodule
+        "defusedxml",  # Needed by testgen_agent
+        "defusedxml.ElementTree",  # Submodule needed by testgen
+        "nest_asyncio",  # Needed by testgen
+        "zstandard",  # Needed by clarifier
+        "boto3",  # Needed by clarifier (KMS integration)
+        "cryptography",  # Needed by clarifier (encryption)
+        "cryptography.fernet",  # Submodule
+        "prometheus_client",  # Needed by clarifier for metrics
+        # Note: aiohttp will be mocked below via simple mock (full stub comes later)
+    ]
+    
+    for mod_name in early_mocks:
+        if mod_name not in sys.modules:
+            early_mock = types.ModuleType(mod_name)
+            early_mock.__file__ = f"<mocked {mod_name}>"
+            early_mock.__path__ = []
+            early_mock.__spec__ = importlib.util.spec_from_loader(mod_name, loader=None)
+            
+            # Create a unique __getattr__ for each module (avoid closure issues)
+            def make_getattr():
+                def _getattr(name):
+                    from unittest.mock import MagicMock
+                    return MagicMock()
+                return _getattr
+            
+            early_mock.__getattr__ = make_getattr()
+            
+            sys.modules[mod_name] = early_mock
+    
     # CPU TIMEOUT FIX: Skip expensive module existence checks during test collection.
     # Previously, _check_module_exists() used importlib.util.find_spec() which triggers
     # recursive module discovery and imports heavy packages (matplotlib, torch, etc.),
@@ -171,11 +267,11 @@ if os.environ.get("TESTING") == "1":
     
     # Only create stubs for modules that aren't already imported
     # This is a simple O(1) check without expensive filesystem walking
+    # NOTE: Only stub modules that truly don't exist in the codebase
+    # Real packages like generator.clarifier should NOT be stubbed
     for mod_name in ['intent_capture', 
                      'omnicore_engine.database', 
-                     'omnicore_engine.message_bus',
-                     'generator.clarifier',
-                     'generator.agents.docgen_agent']:
+                     'omnicore_engine.message_bus']:
         if mod_name not in sys.modules:
             _stub_modules[mod_name] = mod_name
 
