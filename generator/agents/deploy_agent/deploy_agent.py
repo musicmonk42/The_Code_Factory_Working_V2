@@ -424,9 +424,7 @@ class PluginRegistry(FileSystemEventHandler):
             self._load_plugin_file(path)
 
         logger.info(
-            "Loaded %d plugins from %s",
-            len(self.plugins),
-            self.plugin_dir,
+            f"Loaded {len(self.plugins)} plugins from {self.plugin_dir}"
         )
 
     def _load_plugin_file(self, plugin_file: str) -> None:

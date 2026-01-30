@@ -783,7 +783,7 @@ class DeployPromptAgent:
                     e,
                     exc_info=True,
                 )
-        logger.info("Loaded %d few-shot examples from %s", len(examples), few_shot_dir)
+        logger.info(f"Loaded {len(examples)} few-shot examples from {few_shot_dir}")
         return examples
 
     # @retry(retry=retry_if_exception_type(Exception), stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))

@@ -439,6 +439,7 @@ async def upload_files(
     
     # Auto-trigger pipeline if README content is available
     if readme_content:
+        logger.info(f"Extracted README for job {job_id}")
         logger.info(f"Auto-triggering full pipeline for job {job_id} after upload")
         background_tasks.add_task(
             _trigger_pipeline_background,
