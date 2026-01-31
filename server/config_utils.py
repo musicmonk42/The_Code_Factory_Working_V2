@@ -249,16 +249,58 @@ def get_config() -> PlatformConfig:
     
     # Feature Flags - Database & Storage
     config.enable_database = os.getenv("ENABLE_DATABASE", "0") == "1"
-    config.enable_feature_store = os.getenv("ENABLE_FEATURE_STORE", "0") == "1"
+    
+    # FIX: Enable Feature Store if explicitly enabled OR if Feast is available and user wants auto-enable
+    feature_store_env = os.getenv("ENABLE_FEATURE_STORE", "0")
+    if feature_store_env == "1":
+        config.enable_feature_store = True
+    elif feature_store_env == "auto":
+        # Auto-detect: enable if Feast is installed
+        try:
+            import feast  # noqa: F401
+            config.enable_feature_store = True
+            logger.info("Feature Store auto-enabled (Feast library detected)")
+        except ImportError:
+            config.enable_feature_store = False
+    else:
+        config.enable_feature_store = False
     
     # Feature Flags - Observability (default enabled in production)
-    config.enable_sentry = bool(os.getenv("SENTRY_DSN")) if config.is_production else False
+    # FIX: Enable Sentry if SENTRY_DSN is provided (regardless of environment)
+    config.enable_sentry = bool(os.getenv("SENTRY_DSN"))
     config.enable_prometheus = not config.is_testing  # Enabled except in test mode
     config.enable_audit_logging = config.is_production or os.getenv("ENABLE_AUDIT_LOGGING", "0") == "1"
     
     # Feature Flags - Optional Features
-    config.enable_hsm = os.getenv("ENABLE_HSM", "0") == "1"
-    config.enable_libvirt = os.getenv("ENABLE_LIBVIRT", "0") == "1"
+    # FIX: Enable HSM if explicitly enabled OR if python-pkcs11 is available and user wants auto-enable
+    hsm_env = os.getenv("ENABLE_HSM", "0")
+    if hsm_env == "1":
+        config.enable_hsm = True
+    elif hsm_env == "auto":
+        # Auto-detect: enable if python-pkcs11 is installed
+        try:
+            import pkcs11  # noqa: F401
+            config.enable_hsm = True
+            logger.info("HSM Support auto-enabled (python-pkcs11 library detected)")
+        except ImportError:
+            config.enable_hsm = False
+    else:
+        config.enable_hsm = False
+    
+    # FIX: Enable Libvirt if explicitly enabled OR if libvirt is available
+    libvirt_env = os.getenv("ENABLE_LIBVIRT", "0")
+    if libvirt_env == "1":
+        config.enable_libvirt = True
+    elif libvirt_env == "auto":
+        # Auto-detect: enable if libvirt-python is installed
+        try:
+            import libvirt  # noqa: F401
+            config.enable_libvirt = True
+            logger.info("Libvirt Support auto-enabled (libvirt-python library detected)")
+        except ImportError:
+            config.enable_libvirt = False
+    else:
+        config.enable_libvirt = False
     
     # Performance Flags
     config.parallel_agent_loading = os.getenv("PARALLEL_AGENT_LOADING", "1") == "1"

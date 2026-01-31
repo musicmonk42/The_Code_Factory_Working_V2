@@ -74,7 +74,29 @@ except ImportError:  # pragma: no cover
     class RouteTableDef(list):
         """Minimal fallback so that `routes = RouteTableDef()` doesn't crash in test envs."""
 
-        pass
+        def get(self, path):
+            """Stub decorator for GET routes."""
+            def decorator(handler):
+                return handler
+            return decorator
+
+        def post(self, path):
+            """Stub decorator for POST routes."""
+            def decorator(handler):
+                return handler
+            return decorator
+
+        def put(self, path):
+            """Stub decorator for PUT routes."""
+            def decorator(handler):
+                return handler
+            return decorator
+
+        def delete(self, path):
+            """Stub decorator for DELETE routes."""
+            def decorator(handler):
+                return handler
+            return decorator
 
     class Application:
         def add_routes(self, *args, **kwargs):
