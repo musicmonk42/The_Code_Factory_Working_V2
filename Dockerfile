@@ -118,7 +118,7 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "Upgrading pip and downloading SpaCy models..."; \
         echo "========================================"; \
         # Fix pip to ensure pip._vendor.rich is available after cleanup at line 78
-        pip install --no-cache-dir --upgrade pip setuptools wheel && \
+        python -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
         # Download small model first (required for graceful degradation)
         python -m spacy download en_core_web_sm && \
         # Download large model (required for docgen agent)
