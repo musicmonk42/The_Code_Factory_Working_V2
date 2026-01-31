@@ -304,4 +304,20 @@ __all__ = [
     "DocgenConfig",
 ]
 
+# --- Submodule Re-exports for Test Compatibility ---
+# Tests may import submodules directly (e.g., from generator.agents import docgen_agent)
+# Re-export loaded submodules to sys.modules to support this pattern
+import sys as _sys
+
+if _docgen_module:
+    _sys.modules[f"{__name__}.docgen_agent"] = _docgen_module
+if _deploy_module:
+    _sys.modules[f"{__name__}.deploy_agent"] = _deploy_module
+if _testgen_module:
+    _sys.modules[f"{__name__}.testgen_agent"] = _testgen_module
+if _critique_module:
+    _sys.modules[f"{__name__}.critique_agent"] = _critique_module
+if _codegen_module:
+    _sys.modules[f"{__name__}.codegen_agent"] = _codegen_module
+
 __version__ = "1.0.0"

@@ -145,6 +145,11 @@ if os.environ.get("TESTING") == "1":
             
             sys.modules[mod_name] = early_mock
     
+    # Special handling for zstandard to fix urllib3 compatibility
+    if "zstandard" in sys.modules and hasattr(sys.modules["zstandard"], "__getattr__"):
+        # urllib3 expects zstandard.__version__ to be a string for regex parsing
+        sys.modules["zstandard"].__version__ = "0.22.0"
+    
     # Special early initialization for aiohttp (needs ClientSession and other classes)
     if "aiohttp" not in sys.modules:
         # Create a minimal but functional aiohttp mock for early imports

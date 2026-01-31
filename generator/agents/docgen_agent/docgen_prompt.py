@@ -34,10 +34,65 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import aiofiles  # <--- ADDED FIX
 import tiktoken  # For token counting
-from aiohttp import web  # For web server routes
-from aiohttp.web_request import Request  # For web server routes
-from aiohttp.web_response import Response  # For web server routes
-from aiohttp.web_routedef import RouteTableDef  # For web server routes
+
+# Optional: light-weight stubs for aiohttp so imports don't blow up in tests
+try:
+    from aiohttp import web  # For web server routes
+    from aiohttp.web_request import Request  # For web server routes
+    from aiohttp.web_response import Response  # For web server routes
+    from aiohttp.web_routedef import RouteTableDef  # For web server routes
+except ImportError:  # pragma: no cover
+    # Define minimal fallbacks for type hinting and basic app structure
+    class Request: ...
+
+    class Response: ...
+
+    class RouteTableDef(list):
+        """Minimal fallback so that `routes = RouteTableDef()` doesn't crash in test envs."""
+
+        def post(self, path):
+            """Mock decorator for POST routes."""
+            def decorator(func):
+                self.append(("POST", path, func))
+                return func
+            return decorator
+
+        def get(self, path):
+            """Mock decorator for GET routes."""
+            def decorator(func):
+                self.append(("GET", path, func))
+                return func
+            return decorator
+
+        def route(self, method, path):
+            """Mock decorator for generic routes."""
+            def decorator(func):
+                self.append((method, path, func))
+                return func
+            return decorator
+
+    class Application:
+        def add_routes(self, *args, **kwargs):
+            pass
+
+        def on_startup(self, *args, **kwargs):
+            pass  # Add on_startup stub
+
+    # Mock 'web' module to stub out functions
+    class MockWeb:
+        Request = Request
+        Response = Response
+        RouteTableDef = RouteTableDef
+        Application = Application
+
+        def json_response(self, *args, **kwargs):
+            return Response()
+
+        def run_app(self, *args, **kwargs):
+            pass
+
+    web = MockWeb()  # type: ignore
+
 from jinja2 import (  # Jinja2 for templating
     Environment,
     FileSystemLoader,
