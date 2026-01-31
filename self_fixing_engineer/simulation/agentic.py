@@ -358,7 +358,8 @@ class AuditLogger:
         if self.backend == "file":
             async with self._audit_log_lock:
                 with open(self.AUDIT_LOG_PATH, "a") as f:
-                    f.write(json.dumps(signed_event) + "\n")
+                    # Use sort_keys=True for consistent serialization
+                    f.write(json.dumps(signed_event, sort_keys=True) + "\n")
             agentic_logger.info(
                 f"[AuditLogger] Event written to file: {event.get('event_type')}"
             )

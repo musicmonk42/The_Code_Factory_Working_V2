@@ -1151,7 +1151,8 @@ class AuditManager:
         async with self._log_lock:
             try:
                 with open(self.log_file_path, "a") as f:
-                    f.write(json.dumps(signed_event) + "\n")
+                    # Use sort_keys=True for consistent serialization
+                    f.write(json.dumps(signed_event, sort_keys=True) + "\n")
                 _base_logger.debug(f"Audit event '{event_type}' logged to file.")
             except Exception as e:
                 _base_logger.critical(

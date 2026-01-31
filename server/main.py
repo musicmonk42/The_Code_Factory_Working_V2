@@ -632,6 +632,67 @@ async def health_check() -> HealthResponse:
     )
 
 
+# Add /api/health endpoint for frontend compatibility
+# The frontend expects endpoints under /api prefix
+@app.get("/api/health", response_model=HealthResponse, tags=["Health"])
+async def api_health_check() -> HealthResponse:
+    """
+    Health check endpoint under /api prefix for frontend compatibility.
+    
+    This is an alias for /health to support frontend requests to /api/health.
+    """
+    return HealthResponse(
+        status="healthy",
+        version=__version__,
+        components={"api": "healthy"},
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+# Add /api/agents endpoint for frontend compatibility
+# The frontend expects to get agent status from /api/agents
+@app.get("/api/agents", tags=["Agents"])
+async def get_agents_status():
+    """
+    Get agent availability status.
+    
+    This endpoint provides information about which agents are available,
+    which are still loading, and which have failed to load.
+    
+    Returns:
+        Agent status information including:
+        - total_agents: Total number of agents
+        - available_agents: List of available agent names
+        - unavailable_agents: List of unavailable agent names
+        - availability_rate: Percentage of agents available
+    """
+    # Check if agent loader is available
+    if get_agent_loader is None:
+        return {
+            "total_agents": 0,
+            "available_agents": [],
+            "unavailable_agents": [],
+            "availability_rate": 0.0,
+            "status": "loading",
+            "message": "Agent loader not yet initialized",
+        }
+    
+    try:
+        loader = get_agent_loader()
+        status = loader.get_status()
+        return status
+    except Exception as e:
+        logger.error(f"Error getting agent status: {e}", exc_info=True)
+        return {
+            "total_agents": 0,
+            "available_agents": [],
+            "unavailable_agents": [],
+            "availability_rate": 0.0,
+            "status": "error",
+            "message": str(e),
+        }
+
+
 @app.get(
     "/ready",
     tags=["Health"],
