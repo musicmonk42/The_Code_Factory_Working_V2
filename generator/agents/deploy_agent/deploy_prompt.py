@@ -65,7 +65,7 @@ except (ImportError, AttributeError):
 try:
     from aiohttp import web
     from aiohttp.web import Application, Request, Response, RouteTableDef
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     # Define minimal fallbacks for type hinting and basic app structure
     class Request: ...
 

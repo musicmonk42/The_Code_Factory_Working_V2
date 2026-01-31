@@ -39,3 +39,7 @@ boto3>=1.35.0,<2.0.0
 botocore>=1.35.0,<2.0.0
 aioboto3>=15.0.0,<16.0.0
 aiobotocore>=2.20.0,<3.0.0
+
+# aiohttp - web framework for deploy_prompt API
+# Pin to 3.9.x series for stable RouteTableDef API
+aiohttp>=3.9.0,<4.0.0
