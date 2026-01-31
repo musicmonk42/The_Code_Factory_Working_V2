@@ -19,6 +19,47 @@ router = APIRouter(prefix="/api-keys", tags=["API Keys"])
 _api_keys_storage: Dict[str, Dict[str, any]] = {}
 
 
+@router.get("/", response_model=Dict)
+@router.get("", response_model=Dict)
+async def get_api_keys_status():
+    """
+    Get status of all configured API keys.
+    
+    Returns information about which providers are configured and which is active.
+    API keys are never returned for security.
+    
+    **Returns:**
+    - active_provider: Currently active LLM provider
+    - providers: Status of each provider
+    - total_configured: Number of configured providers
+    """
+    active = _api_keys_storage.get("active_provider")
+    
+    providers_status = {}
+    for provider in ["openai", "anthropic", "google", "xai", "ollama"]:
+        if provider in _api_keys_storage:
+            config = _api_keys_storage[provider]
+            providers_status[provider] = {
+                "configured": True,
+                "has_api_key": bool(config.get("api_key")),
+                "model": config.get("model"),
+                "is_active": provider == active,
+            }
+        else:
+            providers_status[provider] = {
+                "configured": False,
+                "has_api_key": False,
+                "model": None,
+                "is_active": False,
+            }
+    
+    return {
+        "active_provider": active,
+        "providers": providers_status,
+        "total_configured": sum(1 for p in providers_status.values() if p["configured"]),
+    }
+
+
 @router.post("/llm/configure", response_model=SuccessResponse)
 async def configure_llm_api_key(request: LLMConfigRequest) -> SuccessResponse:
     """
