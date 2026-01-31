@@ -282,11 +282,14 @@ class RegulatoryAuditLogger:
         }
 
         try:
+            # FIX: Use sort_keys=True for consistent serialization (matches verification)
+            # This ensures the hash chain remains valid when verifying the initial entry
+            serialized_entry = json.dumps(signed_entry, sort_keys=True) + "\n"
             with open(self.primary_log, "w") as f:
-                f.write(json.dumps(signed_entry) + "\n")
+                f.write(serialized_entry)
                 os.fsync(f.fileno())
             with open(self.backup_log, "w") as f:
-                f.write(json.dumps(signed_entry) + "\n")
+                f.write(serialized_entry)
         except IOError as e:
             alert_operator(
                 f"CRITICAL: Failed to write initial audit log entry: {e}. "
