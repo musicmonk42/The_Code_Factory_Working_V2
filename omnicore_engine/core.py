@@ -1060,15 +1060,23 @@ class OmniCoreEngine:
             Task result or None if no plugin found or error occurred
         """
         try:
-            # Try to get plugin registry
-            plugin_registry_module = sys.modules.get("omnicore_engine.plugin_registry")
-            if plugin_registry_module is None:
-                try:
-                    import omnicore_engine.plugin_registry as plugin_registry_module
-                except ImportError:
-                    self.logger.warning("Plugin registry not available")
-                    return None
-            
+            # Try to get plugin registry - use proper import pattern
+            from omnicore_engine import plugin_registry as plugin_registry_module
+        except ImportError as e:
+            self.logger.error(
+                f"Plugin registry not available: {e}. "
+                "Ensure omnicore_engine is properly installed.",
+                exc_info=True
+            )
+            return None
+        except Exception as e:
+            self.logger.error(
+                f"Unexpected error importing plugin_registry: {e}",
+                exc_info=True
+            )
+            return None
+        
+        try:
             registry = getattr(plugin_registry_module, "PLUGIN_REGISTRY", None)
             if registry is None:
                 self.logger.warning("PLUGIN_REGISTRY not found")

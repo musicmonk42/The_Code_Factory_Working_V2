@@ -33,10 +33,19 @@ def get_plugin_registry():
 
     Returns:
         The global plugin registry singleton instance.
+        
+    Raises:
+        ImportError: If plugin_registry module cannot be imported.
     """
-    from .plugin_registry import PLUGIN_REGISTRY as _PLUGIN_REGISTRY
-
-    return _PLUGIN_REGISTRY
+    try:
+        from .plugin_registry import PLUGIN_REGISTRY as _PLUGIN_REGISTRY
+        return _PLUGIN_REGISTRY
+    except ImportError as e:
+        logger.error(f"Failed to import plugin_registry: {e}", exc_info=True)
+        raise ImportError(
+            f"Could not import omnicore_engine.plugin_registry. "
+            f"Ensure the package is properly installed. Error: {e}"
+        ) from e
 
 
 def get_plugin_event_handler_class():
@@ -47,11 +56,81 @@ def get_plugin_event_handler_class():
 
     Returns:
         The PluginEventHandler class (not an instance).
+        
+    Raises:
+        ImportError: If plugin_event_handler module cannot be imported.
     """
-    from .plugin_event_handler import PluginEventHandler as _PluginEventHandler
+    try:
+        from .plugin_event_handler import PluginEventHandler as _PluginEventHandler
+        return _PluginEventHandler
+    except ImportError as e:
+        logger.error(f"Failed to import plugin_event_handler: {e}", exc_info=True)
+        raise ImportError(
+            f"Could not import omnicore_engine.plugin_event_handler. "
+            f"Ensure the package is properly installed. Error: {e}"
+        ) from e
 
-    return _PluginEventHandler
+
+# PEP 562: Module-level __getattr__ for lazy submodule imports
+# This allows "from omnicore_engine import plugin_registry" to work
+# while still deferring the actual import until accessed
+def __getattr__(name: str) -> Any:
+    """Lazy import submodules on attribute access.
+    
+    This implements PEP 562 to support both:
+    1. Direct imports: from omnicore_engine import plugin_registry
+    2. Lazy loading: only import when actually accessed
+    
+    Args:
+        name: The attribute/module name being accessed
+        
+    Returns:
+        The requested module or attribute
+        
+    Raises:
+        AttributeError: If the requested attribute doesn't exist
+    """
+    # Map of lazy-loadable modules
+    _lazy_modules = {
+        'plugin_registry': '.plugin_registry',
+        'plugin_event_handler': '.plugin_event_handler',
+        'core': '.core',
+        'meta_supervisor': '.meta_supervisor',
+        'database': '.database',
+        'message_bus': '.message_bus',
+    }
+    
+    if name in _lazy_modules:
+        import importlib
+        try:
+            module = importlib.import_module(_lazy_modules[name], package=__package__)
+            # Cache the imported module in the package namespace
+            globals()[name] = module
+            logger.debug(f"Lazy-loaded module: omnicore_engine.{name}")
+            return module
+        except ImportError as e:
+            logger.error(
+                f"Failed to lazy-load omnicore_engine.{name}: {e}",
+                exc_info=True
+            )
+            raise AttributeError(
+                f"Module 'omnicore_engine' has no attribute '{name}'. "
+                f"Import failed: {e}"
+            ) from e
+    
+    raise AttributeError(f"Module 'omnicore_engine' has no attribute '{name}'")
 
 
-# Export the accessor functions
-__all__ = ["get_plugin_registry", "get_plugin_event_handler_class"]
+# Export the accessor functions and mark modules as available for import
+__all__ = [
+    "get_plugin_registry",
+    "get_plugin_event_handler_class",
+    # Mark these as available for "from omnicore_engine import X"
+    # They will be lazy-loaded via __getattr__ when accessed
+    "plugin_registry",
+    "plugin_event_handler",
+    "core",
+    "meta_supervisor",
+    "database",
+    "message_bus",
+]
