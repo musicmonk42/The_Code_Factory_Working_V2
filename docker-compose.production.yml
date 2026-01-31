@@ -7,8 +7,6 @@
 # 3. Use proper SSL/TLS certificates
 # 4. Enable all monitoring and security features
 
-version: '3.8'
-
 services:
   # Redis for message bus and caching
   redis:
@@ -116,10 +114,33 @@ services:
       
       # ============================================
       # Feature Flags
+      # Options: "0" (disabled), "1" (enabled), "auto" (auto-detect based on library availability)
       # ============================================
-      - ENABLE_HSM=${ENABLE_HSM:-0}
+      - ENABLE_HSM=${ENABLE_HSM:-0}  # Hardware Security Module support
+      - ENABLE_FEATURE_STORE=${ENABLE_FEATURE_STORE:-0}  # Feast feature store
+      - ENABLE_LIBVIRT=${ENABLE_LIBVIRT:-0}  # Libvirt virtualization support
       - ENABLE_REDIS=1
       - ENABLE_KAFKA=${ENABLE_KAFKA:-0}
+      
+      # ============================================
+      # Performance Flags
+      # ============================================
+      - PARALLEL_AGENT_LOADING=1  # Enable parallel agent loading for faster startup
+      - LAZY_LOAD_ML=1  # Lazy load ML libraries to reduce memory usage
+      
+      # ============================================
+      # Audit Crypto Configuration
+      # Set AUDIT_CRYPTO_MODE="full" when secrets are properly configured
+      # ============================================
+      - AUDIT_CRYPTO_MODE=${AUDIT_CRYPTO_MODE:-disabled}
+      - AUDIT_CRYPTO_ALLOW_INIT_FAILURE=${AUDIT_CRYPTO_ALLOW_INIT_FAILURE:-1}
+      - AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64=${AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64:-}
+      
+      # ============================================
+      # Sentry Error Tracking (Optional)
+      # Automatically enabled when SENTRY_DSN is set
+      # ============================================
+      - SENTRY_DSN=${SENTRY_DSN:-}
       
       # ============================================
       # Logging Configuration
