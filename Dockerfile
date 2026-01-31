@@ -201,11 +201,11 @@ WORKDIR /app
 # Note: /app/logs is needed for default audit_log.jsonl path
 # Note: /app/uploads is needed for job file uploads
 RUN mkdir -p /opt/venv /app /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/uploads && \
-    chown -R appuser:appuser /opt/venv /app /var/log/analyzer_audit /app/logs /app/uploads
+    chown -R appuser:appgroup /opt/venv /app /var/log/analyzer_audit /app/logs /app/uploads
 
 # Bring in the venv and application source with proper ownership during copy
-COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
-COPY --from=builder --chown=appuser:appuser /app /app
+COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
+COPY --from=builder --chown=appuser:appgroup /app /app
 
 USER appuser
 
