@@ -72,8 +72,7 @@ RUN set -e; \
     find /opt/venv -type f -name '*.pyc' -delete 2>/dev/null || true; \
     find /opt/venv -type f -name '*.pyo' -delete 2>/dev/null || true; \
     # Enhanced cleanup to reduce size of files being copied to runtime stage
-    find /opt/venv -type d \( -name 'tests' -o -name 'test' \) -prune -exec rm -rf {} + 2>/dev/null || true; \
-    find /opt/venv -path '*/pip/_vendor/*' -prune -exec rm -rf {} + 2>/dev/null || true
+    find /opt/venv -type d \( -name 'tests' -o -name 'test' \) -prune -exec rm -rf {} + 2>/dev/null || true
 
 # Verify critical dependencies are installed and importable
 # This ensures the container will actually start successfully
@@ -109,15 +108,13 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "Skipping dependency verification for CI build"; \
     fi
 
-# Fix pip installation and pre-download SpaCy models to prevent runtime download issues
-# The earlier dependency installation step (line 78) removes pip/_vendor/* during cleanup
-# which causes pip to fail when trying to download models at runtime. This step restores pip.
+# Pre-download SpaCy models to prevent runtime download issues
 # Using both sm (small) and lg (large) for flexibility
+# Upgrade pip first to ensure we have the latest version for model downloads
 RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
         echo "Upgrading pip and downloading SpaCy models..."; \
         echo "========================================"; \
-        # Fix pip to ensure pip._vendor.rich is available after cleanup at line 78
         python -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
         # Download small model first (required for graceful degradation)
         python -m spacy download en_core_web_sm && \
@@ -129,6 +126,7 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
     fi
 
 # Pre-download NLTK data to prevent runtime download issues
+# After this step, we clean up pip vendor files since pip is no longer needed
 RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
         echo "Downloading NLTK data..."; \
@@ -140,6 +138,9 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
             nltk.download('punkt_tab', quiet=True)" || \
         (echo "WARNING: Failed to download some NLTK data"); \
         echo "✓ NLTK data downloads complete"; \
+        # Clean up pip vendor files now that all pip operations are complete
+        # This reduces image size - pip is not needed at runtime
+        find /opt/venv -path '*/pip/_vendor/*' -prune -exec rm -rf {} + 2>/dev/null || true; \
     fi
 
 # Copy the rest of the application

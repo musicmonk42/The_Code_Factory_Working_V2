@@ -5,51 +5,52 @@
 The Docker build was failing during the SpaCy model download phase with a pip traceback error:
 
 ```
-Traceback (most recent call last):
-  File "/opt/venv/bin/pip", line 8, in <module>
+ModuleNotFoundError: No module named 'pip._vendor.rich'
 ```
 
-This error occurred because pip was being upgraded multiple times in conflicting ways, leaving it in a broken state.
+This error occurred because:
+1. Previously: pip was being upgraded multiple times in conflicting ways
+2. Most recently: the cleanup step was removing `pip/_vendor/*` before all pip operations were complete
 
 ## Root Cause
 
-The Dockerfile had two separate pip upgrade commands:
+The Dockerfile cleanup step removed pip's vendor files too early:
 
-1. **Line 35** (old): `python -m ensurepip --upgrade && python -m pip install --upgrade pip`
-2. **Line 49** (old): `pip install --upgrade pip setuptools wheel`
+```dockerfile
+# In the dependency installation RUN command:
+find /opt/venv -path '*/pip/_vendor/*' -prune -exec rm -rf {} + 2>/dev/null || true
+```
 
-This double upgrade caused pip to be in a corrupted or inconsistent state when it was later needed for SpaCy model downloads.
+This cleanup happened BEFORE the SpaCy and NLTK download steps that need pip, causing:
+- `pip._vendor.rich` module to be missing
+- `python -m pip install --upgrade pip` to fail
 
 ## Solution
 
-Consolidated the pip upgrade into a single, reliable command:
+Moved the pip vendor cleanup to AFTER all pip operations are complete:
+
+1. **Removed** the `pip/_vendor/*` cleanup from the dependency installation step
+2. **Added** the cleanup to the NLTK download step (the last step that uses pip)
 
 ```dockerfile
-# Create virtual environment for dependencies
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:${PATH}"
-
-# Upgrade pip, setuptools, and wheel in one step to avoid conflicts
-# Using python -m pip for reliability in virtual environments
-RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
+# Pre-download NLTK data to prevent runtime download issues
+# After this step, we clean up pip vendor files since pip is no longer needed
+RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
+        # ... NLTK downloads ...
+        # Clean up pip vendor files now that all pip operations are complete
+        # This reduces image size - pip is not needed at runtime
+        find /opt/venv -path '*/pip/_vendor/*' -prune -exec rm -rf {} + 2>/dev/null || true; \
+    fi
 ```
 
-Additionally, updated all subsequent pip commands to use `python -m pip` instead of bare `pip` for consistency:
-
-```dockerfile
-# Before
-pip install --no-cache-dir -r requirements.txt
-
-# After  
-python -m pip install --no-cache-dir -r requirements.txt
-```
+Additionally, all pip commands use `python -m pip` for reliability in virtual environments.
 
 ## Benefits
 
-1. **Reliability**: Using `python -m pip` is the recommended way to invoke pip in virtual environments
-2. **No conflicts**: Single upgrade step prevents pip from being in an inconsistent state
-3. **Consistency**: All pip invocations now use the same pattern
-4. **Clarity**: Clear comments explain the security requirements and reasoning
+1. **Reliability**: pip vendor files are preserved until all pip operations complete
+2. **Consistency**: All pip invocations use `python -m pip` for virtual environment reliability
+3. **Size optimization**: pip vendor files are still cleaned up to reduce image size
+4. **Clear ordering**: Cleanup happens after SpaCy and NLTK downloads
 
 ## Verification
 
@@ -73,8 +74,8 @@ This fix ensures:
 ## Files Changed
 
 - `Dockerfile`: 
-  - Lines 34-38: Consolidated pip upgrade
-  - Lines 59, 63: Updated to use `python -m pip`
+  - Removed `pip/_vendor/*` cleanup from the dependency installation step
+  - Added `pip/_vendor/*` cleanup to the NLTK download step (after all pip usage)
 
 ## Testing
 
