@@ -170,7 +170,7 @@ def register_summarizer(name: str):
 # --- CRITICAL FIX: ALWAYS IMPORT SANDBOX FUNCTIONS ---
 # REMOVED THE "if not TESTING:" CONDITION THAT WAS BREAKING IMPORTS
 try:
-    from .runner_core import run_stress_tests, run_tests_in_sandbox
+    from .runner_core import run_stress_tests, run_tests_in_sandbox, run_tests
 except ImportError as e:
     import logging
 
@@ -198,6 +198,16 @@ except ImportError as e:
             "This functionality requires proper installation of the runner module."
         )
 
+    async def run_tests(*args, **kwargs):
+        _logger.warning(
+            "run_tests called but runner_core is not available - raising NotImplementedError"
+        )
+        raise NotImplementedError(
+            "run_tests is not available. "
+            "The runner_core module failed to import. "
+            "This functionality requires proper installation of the runner module."
+        )
+
 
 __all__ = [
     "TESTING",
@@ -213,6 +223,7 @@ __all__ = [
     "register_summarizer",  # Added summarizer registration function
     "run_tests_in_sandbox",  # NEW: Export for testgen_validator
     "run_stress_tests",  # NEW: Export for testgen_validator
+    "run_tests",  # NEW: Export for critique_agent
     "runner_metrics",  # NEW: Export for metrics module access
 ]
 

@@ -86,6 +86,23 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENABLE_STRUCTURED_LOGGING=${ENABLE_STRUCTURED_LOGGING:-0}
       
+      # Feature Flags
+      # Options: "0" (disabled), "1" (enabled), "auto" (auto-detect based on library availability)
+      - ENABLE_HSM=${ENABLE_HSM:-0}  # Hardware Security Module support
+      - ENABLE_FEATURE_STORE=${ENABLE_FEATURE_STORE:-0}  # Feast feature store
+      - ENABLE_LIBVIRT=${ENABLE_LIBVIRT:-0}  # Libvirt virtualization support
+      
+      # Performance Flags
+      - PARALLEL_AGENT_LOADING=${PARALLEL_AGENT_LOADING:-1}  # Enable parallel agent loading
+      - LAZY_LOAD_ML=${LAZY_LOAD_ML:-1}  # Lazy load ML libraries
+      
+      # Audit Crypto (development defaults - change in production)
+      - AUDIT_CRYPTO_MODE=${AUDIT_CRYPTO_MODE:-disabled}
+      - AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1
+      
+      # Sentry Error Tracking (Optional - auto-enabled when SENTRY_DSN is set)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      
       # Metrics
       - PROMETHEUS_PORT=9090  # Prometheus metrics HTTP server port
     ports:

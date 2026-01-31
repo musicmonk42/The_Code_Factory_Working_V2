@@ -106,6 +106,28 @@ except ImportError:  # pragma: no cover
             def decorator(func):
                 self.append((method, path, func))
                 return func
+        def get(self, path):
+            """Stub decorator for GET routes."""
+            def decorator(handler):
+                return handler
+            return decorator
+
+        def post(self, path):
+            """Stub decorator for POST routes."""
+            def decorator(handler):
+                return handler
+            return decorator
+
+        def put(self, path):
+            """Stub decorator for PUT routes."""
+            def decorator(handler):
+                return handler
+            return decorator
+
+        def delete(self, path):
+            """Stub decorator for DELETE routes."""
+            def decorator(handler):
+                return handler
             return decorator
 
     class Application:

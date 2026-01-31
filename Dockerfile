@@ -174,6 +174,10 @@ LABEL org.opencontainers.image.licenses="Proprietary"
 LABEL org.opencontainers.image.source="https://github.com/musicmonk42/The_Code_Factory_Working_V2"
 LABEL maintainer="support@novatraxlabs.com"
 
+# Environment variables for the runtime stage
+# AUDIT CRYPTO: Set AUDIT_CRYPTO_MODE to "full" when AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is configured
+# FEATURE FLAGS: Set to "1" to enable, "0" to disable, "auto" for auto-detection
+# PARALLEL AGENT LOADING: Enabled by default for faster startup
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}" \
@@ -183,7 +187,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     AWS_REGION="" \
     AUDIT_CRYPTO_MODE="disabled" \
     AUDIT_CRYPTO_ALLOW_INIT_FAILURE="1" \
-    FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
+    FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" \
+    ENABLE_FEATURE_STORE="0" \
+    ENABLE_HSM="0" \
+    ENABLE_LIBVIRT="0" \
+    PARALLEL_AGENT_LOADING="1" \
+    LAZY_LOAD_ML="1"
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support
