@@ -188,10 +188,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && apt-get install -y --no-install-recommends curl git libmagic1 graphviz libvirt-dev pkg-config \
  && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user with no login shell for security
+# Create non-root user with restricted shell for security
 # Using specific UID/GID to prevent privilege escalation attacks
+# Note: /bin/false prevents interactive login but allows direct command execution (e.g., python)
 RUN groupadd -g 10001 appgroup && \
-    useradd -m -u 10001 -g appgroup -s /usr/sbin/nologin appuser
+    useradd -m -u 10001 -g appgroup -s /bin/false appuser
 
 WORKDIR /app
 

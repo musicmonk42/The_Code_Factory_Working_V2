@@ -18,8 +18,11 @@ services:
       - postgres
     environment:
       # Development-only environment variables
-      - AGENTIC_AUDIT_HMAC_KEY=${AGENTIC_AUDIT_HMAC_KEY:-$(openssl rand -hex 32)}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      # IMPORTANT: Generate keys before running:
+      #   export AGENTIC_AUDIT_HMAC_KEY=$(openssl rand -hex 32)
+      #   export ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+      - AGENTIC_AUDIT_HMAC_KEY=${AGENTIC_AUDIT_HMAC_KEY:?AGENTIC_AUDIT_HMAC_KEY is required - run: export AGENTIC_AUDIT_HMAC_KEY=$(openssl rand -hex 32)}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-devpassword}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-devpassword}
 

@@ -160,6 +160,11 @@ services:
       - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
       - AUDIT_LOG_PATH=/app/logs/audit_trail.log
       
+      # ============================================
+      # Worker Configuration
+      # ============================================
+      - WORKER_COUNT=${WORKER_COUNT:-4}
+      
     ports:
       - "8000:8000"  # Main API endpoint
       - "9090:9090"  # Prometheus metrics
@@ -200,7 +205,8 @@ services:
       start_period: 60s
     # Command with production workers
     # Using gunicorn with secure defaults
-    command: sh -c "gunicorn server.main:app -w ${WORKER_COUNT:-4} -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 300 --graceful-timeout 30 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50 --access-logfile - --error-logfile -"
+    # Note: WORKER_COUNT must be set in environment before running docker-compose
+    command: ["sh", "-c", "gunicorn server.main:app -w $${WORKER_COUNT:-4} -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 300 --graceful-timeout 30 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50 --access-logfile - --error-logfile -"]
 
   # Prometheus for metrics collection
   prometheus:
