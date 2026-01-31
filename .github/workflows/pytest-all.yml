@@ -207,6 +207,23 @@ jobs:
           python -c "import base64; print('base64 OK')"
           python -c "import typing; print('typing OK')"
           
+          echo "=== Verifying aiohttp submodules ==="
+          python -c "import aiohttp.web_request; print('aiohttp.web_request OK')" || echo "WARN: aiohttp.web_request missing"
+          python -c "import aiohttp.helpers; print('aiohttp.helpers OK')" || echo "WARN: aiohttp.helpers missing"
+          python -c "import aiohttp.client_exceptions; print('aiohttp.client_exceptions OK')" || echo "WARN: aiohttp.client_exceptions missing"
+          
+          echo "=== Verifying boto3 submodules ==="
+          python -c "import boto3.session; print('boto3.session OK')" || echo "WARN: boto3.session missing"
+          
+          echo "=== Verifying aiokafka submodules ==="
+          python -c "import aiokafka.structs; print('aiokafka.structs OK')" || echo "WARN: aiokafka.structs missing"
+          
+          echo "=== Verifying redis submodules ==="
+          python -c "import redis.asyncio; print('redis.asyncio OK')" || echo "WARN: redis.asyncio missing"
+          
+          echo "=== Verifying opentelemetry submodules ==="
+          python -c "import opentelemetry.propagators; print('opentelemetry.propagators OK')" || echo "WARN: opentelemetry.propagators missing - may need reinstall"
+          
           echo "=== Check if test files are syntactically valid ==="
           # Only compile test files that exist to avoid false negatives
           for test_file in tests/test_*.py; do
@@ -290,6 +307,10 @@ jobs:
           
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           ulimit -t unlimited 2>/dev/null || true
+          
+          # Explicitly setup paths before pytest to ensure all modules are discoverable
+          echo "=== Setting up module paths ==="
+          python -c "import path_setup; path_setup.setup_paths(verbose=True)"
           
           echo "=== Running ALL pytest tests together (unified run) ==="
           # Use python -m pytest to ensure proper sys.path setup
@@ -529,6 +550,23 @@ jobs:
           python -c "from dotenv import dotenv_values; print('python-dotenv dotenv_values OK')"
           python -c "import base64; print('base64 OK')"
           python -c "import typing; print('typing OK')"
+          
+          echo "=== Verifying aiohttp submodules ==="
+          python -c "import aiohttp.web_request; print('aiohttp.web_request OK')" || echo "WARN: aiohttp.web_request missing"
+          python -c "import aiohttp.helpers; print('aiohttp.helpers OK')" || echo "WARN: aiohttp.helpers missing"
+          python -c "import aiohttp.client_exceptions; print('aiohttp.client_exceptions OK')" || echo "WARN: aiohttp.client_exceptions missing"
+          
+          echo "=== Verifying boto3 submodules ==="
+          python -c "import boto3.session; print('boto3.session OK')" || echo "WARN: boto3.session missing"
+          
+          echo "=== Verifying aiokafka submodules ==="
+          python -c "import aiokafka.structs; print('aiokafka.structs OK')" || echo "WARN: aiokafka.structs missing"
+          
+          echo "=== Verifying redis submodules ==="
+          python -c "import redis.asyncio; print('redis.asyncio OK')" || echo "WARN: redis.asyncio missing"
+          
+          echo "=== Verifying opentelemetry submodules ==="
+          python -c "import opentelemetry.propagators; print('opentelemetry.propagators OK')" || echo "WARN: opentelemetry.propagators missing - may need reinstall"
           
           echo "=== Check if test files are syntactically valid ==="
           for test_file in tests/test_*.py; do
