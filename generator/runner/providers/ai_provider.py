@@ -18,9 +18,9 @@ from openai import (  # <-- ADDED SDK ERRORS
     OpenAIError,
     RateLimitError,
 )
-from ..llm_provider_base import LLMProvider
-from ..runner_config import load_config  # <-- ADDED
-from ..runner_errors import ConfigurationError, LLMError  # <-- ADDED
+from generator.runner.llm_provider_base import LLMProvider
+from generator.runner.runner_config import load_config  # <-- ADDED
+from generator.runner.runner_errors import ConfigurationError, LLMError  # <-- ADDED
 from tiktoken import Encoding, get_encoding
 
 

@@ -71,9 +71,9 @@ except ImportError:
 
 
 # ---- Runner foundation imports ------------------------------------------------
-from ..llm_provider_base import LLMProvider
-from ..runner_config import load_config  # For loading API key in get_provider
-from ..runner_errors import ConfigurationError, LLMError
+from generator.runner.llm_provider_base import LLMProvider
+from generator.runner.runner_config import load_config  # For loading API key in get_provider
+from generator.runner.runner_errors import ConfigurationError, LLMError
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -90,7 +90,7 @@ logger = logging.getLogger(__name__)
 # These are plugin-specific and not managed by the central llm_client
 
 # --- FIX: Import shared metrics from runner_metrics ---
-from ..runner_metrics import stream_chunk_latency, stream_chunks_total
+from generator.runner.runner_metrics import stream_chunk_latency, stream_chunks_total
 
 # --- END FIX ---
 
