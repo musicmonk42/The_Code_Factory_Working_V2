@@ -1160,6 +1160,8 @@ class CryptoProviderFactory:
         It handles async close() methods properly by running them in the event loop
         when available, or creating a new loop if needed.
         """
+        import concurrent.futures
+        
         for name, instance in list(self._instances.items()):
             try:
                 # Ensure close is awaited if it is an async method
@@ -1171,21 +1173,20 @@ class CryptoProviderFactory:
                     try:
                         # First, try to get the running loop
                         loop = asyncio.get_running_loop()
-                        # If we're in an async context, schedule the coroutine
-                        # This shouldn't normally happen in a signal handler, but handle it
-                        if loop.is_running():
-                            # Schedule the close and don't wait (fire-and-forget in signal context)
-                            # Use run_coroutine_threadsafe for thread-safe scheduling
-                            future = asyncio.run_coroutine_threadsafe(coro, loop)
-                            try:
-                                # Wait briefly for the close to complete
-                                future.result(timeout=2.0)
-                            except Exception as wait_err:
-                                logger.warning(
-                                    f"Timeout or error waiting for {name}.close(): {wait_err}"
-                                )
-                        else:
-                            loop.run_until_complete(coro)
+                        # Schedule the close with thread-safe mechanism and wait for completion
+                        # Use run_coroutine_threadsafe for thread-safe scheduling from signal handler
+                        future = asyncio.run_coroutine_threadsafe(coro, loop)
+                        try:
+                            # Wait briefly for the close to complete (with timeout to avoid blocking)
+                            future.result(timeout=2.0)
+                        except concurrent.futures.TimeoutError:
+                            logger.warning(
+                                f"Timeout waiting for {name}.close() to complete within 2 seconds"
+                            )
+                        except Exception as wait_err:
+                            logger.warning(
+                                f"Error waiting for {name}.close(): {type(wait_err).__name__}: {wait_err}"
+                            )
                     except RuntimeError:
                         # No running loop - create a new one to run the coroutine
                         try:
@@ -1208,7 +1209,7 @@ class CryptoProviderFactory:
                 # Use synchronous logging instead of async log_action in signal handler context
                 # This avoids the complexity of running async code from a signal handler
                 logger.info(
-                    f"AUDIT: close_provider action completed for {name} with status=success",
+                    "AUDIT: close_provider action completed",
                     extra={"provider_name": name, "status": "success", "action": "close_provider"}
                 )
 
@@ -1219,7 +1220,7 @@ class CryptoProviderFactory:
                 
                 # Use synchronous logging instead of async log_action in signal handler context
                 logger.error(
-                    f"AUDIT: close_provider action failed for {name} with error: {e}",
+                    "AUDIT: close_provider action failed",
                     extra={"provider_name": name, "status": "fail", "error": str(e), "action": "close_provider"}
                 )
             finally:
