@@ -20,7 +20,6 @@ _api_keys_storage: Dict[str, Dict[str, any]] = {}
 
 
 @router.get("/", response_model=Dict)
-@router.get("", response_model=Dict)
 async def get_api_keys_status():
     """
     Get status of all configured API keys.
