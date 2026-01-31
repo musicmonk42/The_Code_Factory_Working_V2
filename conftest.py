@@ -54,7 +54,9 @@ def pytest_sessionstart(session):
         return MagicMock()
     
     # Mock observability modules that cause __spec__/__path__ errors during collection
-    # Also mock dynaconf early to prevent stub overrides
+    # WARNING: NEVER mock core Python or critical infrastructure dependencies here
+    # (e.g., cryptography, dotenv, base64, typing) - this causes "Mock Poisoning"
+    # where other modules crash before they even start due to TypeErrors
     observability_mocks = [
         "opentelemetry",
         "opentelemetry.trace",
@@ -67,7 +69,8 @@ def pytest_sessionstart(session):
         "opentelemetry.instrumentation.logging",
         "opentelemetry.exporter",
         "opentelemetry.context",
-        "dynaconf",  # Mock early to prevent stub module overrides
+        # dynaconf removed - needs real implementation for proper configuration management
+        # (mocking dynaconf breaks pydantic-settings and other config-dependent modules)
         # prometheus_client removed - tests need real module, patch_prometheus_globally fixture handles conflicts
     ]
     
@@ -220,6 +223,8 @@ if os.environ.get("TESTING") == "1":
     
     # CRITICAL: Mock other dependencies EARLY before packages that use them are imported
     # This prevents packages from creating fallback stubs when imports fail
+    # WARNING: NEVER mock core infrastructure (cryptography, dotenv, base64, typing)
+    # as this causes "Mock Poisoning" - TypeErrors when other modules use these libraries
     early_mocks = [
         "aiofiles",  # Needed by generator.clarifier
         "aiofiles.os",  # Submodule
@@ -232,13 +237,13 @@ if os.environ.get("TESTING") == "1":
         "nest_asyncio",  # Needed by testgen
         "zstandard",  # Needed by clarifier
         "boto3",  # Needed by clarifier (KMS integration)
-        "cryptography",  # Needed by clarifier (encryption)
-        "cryptography.fernet",  # Submodule
+        # cryptography removed - must use real implementation (Mock Poisoning prevention)
+        # cryptography.fernet removed - must use real implementation (Mock Poisoning prevention)
         "prometheus_client",  # Needed by clarifier for metrics
         "tiktoken",  # Needed by testgen_agent
         "aiokafka",  # Needed by arbiter
         "aiokafka.errors",  # Submodule
-        "dotenv",  # Needed by testgen_agent
+        # dotenv removed - must use real implementation (Mock Poisoning prevention)
         # Note: aiohttp needs special handling below
     ]
     
@@ -249,19 +254,14 @@ if os.environ.get("TESTING") == "1":
             early_mock.__path__ = []
             early_mock.__spec__ = importlib.util.spec_from_loader(mod_name, loader=None)
             
-            # Special handling for dotenv
-            if mod_name == "dotenv":
-                early_mock.load_dotenv = lambda *args, **kwargs: None
-                early_mock.find_dotenv = lambda *args, **kwargs: None
-            else:
-                # Create a unique __getattr__ for each module (avoid closure issues)
-                def make_getattr():
-                    def _getattr(name):
-                        from unittest.mock import MagicMock
-                        return MagicMock()
-                    return _getattr
-                
-                early_mock.__getattr__ = make_getattr()
+            # Create a unique __getattr__ for each module (avoid closure issues)
+            def make_getattr():
+                def _getattr(name):
+                    from unittest.mock import MagicMock
+                    return MagicMock()
+                return _getattr
+            
+            early_mock.__getattr__ = make_getattr()
             
             sys.modules[mod_name] = early_mock
     
