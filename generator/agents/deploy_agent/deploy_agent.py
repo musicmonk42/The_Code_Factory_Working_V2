@@ -396,7 +396,15 @@ class PluginRegistry(FileSystemEventHandler):
         super().__init__()
         self.plugins: Dict[str, TargetPlugin] = {}
         self.plugin_info: Dict[str, Dict[str, Any]] = {}
-        self.plugin_dir = plugin_dir
+        
+        # Resolve plugin_dir relative to the deploy_agent module directory
+        # This ensures plugins are found regardless of working directory
+        if not os.path.isabs(plugin_dir):
+            module_dir = Path(__file__).parent
+            self.plugin_dir = str(module_dir / plugin_dir)
+        else:
+            self.plugin_dir = plugin_dir
+        
         self.observer = Observer()
         self.load_plugins()
         self.start_watching()
@@ -531,6 +539,7 @@ class DeployAgent:
             "java",
         ]
         # --- FIX: Rename and add singleton registries ---
+        # Initialize PluginRegistry with correct path (will resolve to generator/agents/deploy_agent/plugins)
         self.plugin_registry = PluginRegistry(plugin_dir)  # Renamed
         self.validator_registry = ValidatorRegistry()
         self.handler_registry = HandlerRegistry()

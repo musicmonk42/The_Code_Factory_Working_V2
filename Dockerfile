@@ -111,18 +111,22 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "Skipping dependency verification for CI build"; \
     fi
 
-# Download SpaCy models to prevent runtime download issues
+# Fix pip installation and pre-download SpaCy models to prevent runtime download issues
+# The earlier dependency installation step (line 78) removes pip/_vendor/* during cleanup
+# which causes pip to fail when trying to download models at runtime. This step restores pip.
 # Using both sm (small) and lg (large) for flexibility
 RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
-        echo "Downloading SpaCy models..."; \
+        echo "Upgrading pip and downloading SpaCy models..."; \
         echo "========================================"; \
+        # Fix pip to ensure pip._vendor.rich is available after cleanup at line 78
+        pip install --no-cache-dir --upgrade pip setuptools wheel && \
         # Download small model first (required for graceful degradation)
-        python -m spacy download en_core_web_sm || \
-        (echo "WARNING: Failed to download en_core_web_sm model"); \
-        # Download large model (optional, for better accuracy)
-        python -m spacy download en_core_web_lg || \
-        (echo "WARNING: Failed to download en_core_web_lg model, testgen agent may not work properly"); \
+        python -m spacy download en_core_web_sm && \
+        # Download large model (required for docgen agent)
+        python -m spacy download en_core_web_lg && \
+        # Verify the large model loads successfully
+        python -c "import spacy; nlp = spacy.load('en_core_web_lg'); print('✓ SpaCy model en_core_web_lg loaded successfully')" && \
         echo "✓ SpaCy model downloads complete"; \
     fi
 
