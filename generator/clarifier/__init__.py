@@ -216,13 +216,20 @@ class _ClarifierPromptProxy:
                 f"Cannot access attribute: {name}"
             )
         
-        # Use hasattr check to prevent propagating AttributeError as infinite loop
-        if not hasattr(self._module, name):
+        # Check if module is actually a proxy (circular import), raise ImportError
+        if isinstance(self._module, _ClarifierPromptProxy):
+            raise ImportError(
+                f"clarifier_prompt module failed to load properly "
+                "(circular import or stub). Cannot access attribute: {name}"
+            )
+        
+        # Safely get the attribute from the real module
+        try:
+            return getattr(self._module, name)
+        except AttributeError:
             raise AttributeError(
                 f"module 'clarifier_prompt' has no attribute '{name}'"
             )
-        
-        return getattr(self._module, name)
 
 
 # Create lazy proxy for clarifier_prompt
