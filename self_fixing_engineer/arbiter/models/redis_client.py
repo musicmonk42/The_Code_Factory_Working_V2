@@ -19,7 +19,23 @@ from opentelemetry import trace
 # Prometheus Metrics
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
 from redis.asyncio import Redis
-from redis.asyncio.lock import Lock as RedisLock
+
+# Defensive import for redis.asyncio.lock
+# This module is available in redis>=4.2.0, but may have compatibility issues
+try:
+    from redis.asyncio.lock import Lock as RedisLock
+except ImportError as e:
+    # Provide a clear error message if redis version is incompatible
+    import warnings
+    warnings.warn(
+        f"Could not import redis.asyncio.lock: {e}. "
+        f"This typically indicates an incompatible redis version. "
+        f"Please ensure redis>=4.5.0 is installed. "
+        f"Redis locking features will be disabled."
+    )
+    # Create a placeholder to prevent NameError
+    RedisLock = None
+
 from redis.exceptions import (
     ConnectionError,
     DataError,

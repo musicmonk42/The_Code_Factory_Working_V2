@@ -16,6 +16,19 @@ _project_root = _omnicore_dir.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
+# Verify omnicore_engine package can be imported
+# This helps pytest resolve "omnicore_engine.tests" module path during collection
+try:
+    import omnicore_engine
+except ImportError:
+    # If omnicore_engine cannot be imported as a package, it may not be installed
+    # Add explicit warning and ensure the parent directory is in sys.path
+    import warnings
+    warnings.warn(
+        f"omnicore_engine package not found. Ensure 'pip install -e ./omnicore_engine' was run. "
+        f"Project root: {_project_root}"
+    )
+
 # Now we can safely import pytest and other modules
 import pytest
 
