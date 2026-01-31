@@ -183,7 +183,18 @@ class _ClarifierPromptProxy:
             AttributeError: If attribute doesn't exist
             ImportError: If module cannot be imported
         """
+        # Prevent infinite recursion on private attributes
+        if name.startswith('_'):
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
+        
         # Load module on first access
+        if not hasattr(self, '_module'):
+            # Use object.__setattr__ to bypass __setattr__ if defined
+            object.__setattr__(self, '_module', None)
+            object.__setattr__(self, '_import_attempted', False)
+        
         if self._module is None and not self._import_attempted:
             self._import_attempted = True
             try:
@@ -192,17 +203,23 @@ class _ClarifierPromptProxy:
                     "Lazy loaded clarifier_prompt module",
                     extra={"accessed_attribute": name}
                 )
-            except ImportError:
+            except ImportError as e:
                 # Re-raise with context
                 raise ImportError(
                     f"Cannot access clarifier_prompt.{name}: "
                     "clarifier_prompt module failed to import"
-                )
+                ) from e
         
         if self._module is None:
             raise ImportError(
                 f"clarifier_prompt module is not available. "
                 f"Cannot access attribute: {name}"
+            )
+        
+        # Use hasattr check to prevent propagating AttributeError as infinite loop
+        if not hasattr(self._module, name):
+            raise AttributeError(
+                f"module 'clarifier_prompt' has no attribute '{name}'"
             )
         
         return getattr(self._module, name)
