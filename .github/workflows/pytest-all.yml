@@ -629,6 +629,10 @@ jobs:
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           ulimit -t unlimited 2>/dev/null || true
           
+          # Explicitly setup paths before pytest to ensure all modules are discoverable
+          echo "=== Setting up module paths ==="
+          python -c "import path_setup; path_setup.setup_paths(verbose=True)"
+          
           echo "=== Running ALL pytest tests together (unified run) ==="
           # Use python -m pytest to ensure proper sys.path setup
           python -m pytest \
