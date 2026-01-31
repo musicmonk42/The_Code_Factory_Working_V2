@@ -189,16 +189,23 @@ class _ClarifierPromptProxy:
                 f"'{type(self).__name__}' object has no attribute '{name}'"
             )
         
-        # Load module on first access
-        if not hasattr(self, '_module'):
-            # Use object.__setattr__ to bypass __setattr__ if defined
+        # Access _module and _import_attempted safely without triggering __getattr__
+        # Use __dict__ to avoid recursion since accessing self._module would call __getattr__
+        module = self.__dict__.get('_module', None)
+        import_attempted = self.__dict__.get('_import_attempted', False)
+        
+        # Initialize if not yet set (should only happen if __init__ wasn't called)
+        if module is None and '_module' not in self.__dict__:
             object.__setattr__(self, '_module', None)
             object.__setattr__(self, '_import_attempted', False)
+            module = None
+            import_attempted = False
         
-        if self._module is None and not self._import_attempted:
-            self._import_attempted = True
+        if module is None and not import_attempted:
+            object.__setattr__(self, '_import_attempted', True)
             try:
-                self._module = _get_clarifier_prompt_module()
+                module = _get_clarifier_prompt_module()
+                object.__setattr__(self, '_module', module)
                 logger.debug(
                     "Lazy loaded clarifier_prompt module",
                     extra={"accessed_attribute": name}
@@ -210,14 +217,14 @@ class _ClarifierPromptProxy:
                     "clarifier_prompt module failed to import"
                 ) from e
         
-        if self._module is None:
+        if module is None:
             raise ImportError(
                 f"clarifier_prompt module is not available. "
                 f"Cannot access attribute: {name}"
             )
         
         # Check if module is actually a proxy (circular import), raise ImportError
-        if isinstance(self._module, _ClarifierPromptProxy):
+        if isinstance(module, _ClarifierPromptProxy):
             raise ImportError(
                 f"clarifier_prompt module failed to load properly "
                 "(circular import or stub). Cannot access attribute: {name}"
@@ -225,7 +232,7 @@ class _ClarifierPromptProxy:
         
         # Safely get the attribute from the real module
         try:
-            return getattr(self._module, name)
+            return getattr(module, name)
         except AttributeError:
             raise AttributeError(
                 f"module 'clarifier_prompt' has no attribute '{name}'"
