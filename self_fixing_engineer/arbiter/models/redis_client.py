@@ -657,7 +657,7 @@ class RedisClient:
 
         Raises:
             ValueError: If name or timeouts are invalid.
-            RuntimeError: If Redis client is not connected.
+            RuntimeError: If Redis client is not connected or RedisLock is not available.
 
         Example:
             ```python
@@ -669,6 +669,11 @@ class RedisClient:
             print("Lock released.")
             ```
         """
+        if RedisLock is None:
+            raise RuntimeError(
+                "Redis locking features are not available. "
+                "Please ensure redis>=4.5.0 is installed and redis.asyncio.lock can be imported."
+            )
         if not name or len(name) > 1024:
             raise ValueError("Lock name must be non-empty and <= 1024 characters.")
         if timeout <= 0 or blocking_timeout < 0:
