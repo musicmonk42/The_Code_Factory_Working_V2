@@ -198,6 +198,12 @@ jobs:
           python -c "import tiktoken; print('tiktoken OK')"
           python -c "import aiohttp; print('aiohttp OK')"
           
+          echo "=== Verifying critical infrastructure dependencies ==="
+          python -c "import cryptography; from cryptography.fernet import Fernet; print('cryptography OK')"
+          python -c "from dotenv import dotenv_values; print('python-dotenv OK')"
+          python -c "import base64; print('base64 OK')"
+          python -c "import typing; print('typing OK')"
+          
           echo "=== Check if test files are syntactically valid ==="
           # Only compile test files that exist to avoid false negatives
           for test_file in tests/test_*.py; do
@@ -266,7 +272,7 @@ jobs:
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/generator:$PWD/self_fixing_engineer:$PWD/omnicore_engine"
           
           # Create Prometheus multiprocess directory
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
@@ -505,6 +511,12 @@ jobs:
           python -c "import tiktoken; print('tiktoken OK')"
           python -c "import aiohttp; print('aiohttp OK')"
           
+          echo "=== Verifying critical infrastructure dependencies ==="
+          python -c "import cryptography; from cryptography.fernet import Fernet; print('cryptography OK')"
+          python -c "from dotenv import dotenv_values; print('python-dotenv OK')"
+          python -c "import base64; print('base64 OK')"
+          python -c "import typing; print('typing OK')"
+          
           echo "=== Check if test files are syntactically valid ==="
           for test_file in tests/test_*.py; do
             if [ -f "$test_file" ] && [ "$(basename "$test_file")" != "__init__.py" ]; then
@@ -557,7 +569,7 @@ jobs:
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/generator:$PWD/self_fixing_engineer:$PWD/omnicore_engine"
           
           # Create Prometheus multiprocess directory
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
