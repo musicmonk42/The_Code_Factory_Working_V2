@@ -200,7 +200,7 @@ jobs:
           
           echo "=== Verifying critical infrastructure dependencies ==="
           python -c "import cryptography; from cryptography.fernet import Fernet; print('cryptography OK')"
-          python -c "from dotenv import dotenv_values; print('python-dotenv OK')"
+          python -c "from dotenv import load_dotenv, find_dotenv, dotenv_values; print('python-dotenv OK')"
           python -c "import base64; print('base64 OK')"
           python -c "import typing; print('typing OK')"
           
@@ -513,7 +513,7 @@ jobs:
           
           echo "=== Verifying critical infrastructure dependencies ==="
           python -c "import cryptography; from cryptography.fernet import Fernet; print('cryptography OK')"
-          python -c "from dotenv import dotenv_values; print('python-dotenv OK')"
+          python -c "from dotenv import load_dotenv, find_dotenv, dotenv_values; print('python-dotenv OK')"
           python -c "import base64; print('base64 OK')"
           python -c "import typing; print('typing OK')"
           
