@@ -242,6 +242,13 @@ jobs:
             fi
           done
           
+      - name: Verify omnicore_engine package structure
+        run: |
+          echo "=== Verifying omnicore_engine package structure ==="
+          python -c "import omnicore_engine; print(f'omnicore_engine location: {omnicore_engine.__file__}')"
+          python -c "from omnicore_engine import plugin_registry; print('plugin_registry import OK')" || echo "WARNING: plugin_registry module not found"
+          python -c "from omnicore_engine import meta_supervisor; print('meta_supervisor import OK')" || echo "WARNING: meta_supervisor module not found"
+          
       - name: Free more disk space before tests
         run: |
           # Additional cleanup right before running tests
