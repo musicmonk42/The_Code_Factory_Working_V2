@@ -152,8 +152,18 @@ jobs:
             echo "ERROR: self_fixing_engineer package not found"
             exit 1
           }
-          # Install omnicore_engine package
-          python -m pip install --no-cache-dir -c .github/constraints.txt -e ./omnicore_engine
+          # Install omnicore_engine package in editable mode
+          echo "Installing omnicore_engine package..."
+          python -m pip install -v --no-cache-dir -c .github/constraints.txt -e ./omnicore_engine || {
+            echo "ERROR: Failed to install omnicore_engine package"
+            exit 1
+          }
+          # Verify package installed
+          echo "=== Verifying omnicore_engine package installation ==="
+          pip show omnicore_engine || {
+            echo "ERROR: omnicore_engine package not found"
+            exit 1
+          }
           # Install common test/runtime extras that may be missing
           pip install --no-cache-dir -c .github/constraints.txt PyYAML httpx PyJWT || true
           pip install --no-cache-dir -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
