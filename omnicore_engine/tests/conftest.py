@@ -26,7 +26,9 @@ except ImportError:
     import warnings
     warnings.warn(
         f"omnicore_engine package not found. Ensure 'pip install -e ./omnicore_engine' was run. "
-        f"Project root: {_project_root}"
+        f"Project root: {_project_root}",
+        ImportWarning,
+        stacklevel=2
     )
 
 # Now we can safely import pytest and other modules
@@ -39,7 +41,11 @@ except ImportError as e:
     # If path_setup is not available, continue without it
     # The root conftest.py should have already set up paths
     import warnings
-    warnings.warn(f"omnicore_engine/tests/conftest.py: Could not import path_setup module: {e}. Using basic path configuration.")
+    warnings.warn(
+        f"omnicore_engine/tests/conftest.py: Could not import path_setup module: {e}. Using basic path configuration.",
+        ImportWarning,
+        stacklevel=2
+    )
 
 # FIX: Lazy import prometheus_client to avoid collection-time failures
 # This prevents AttributeError: __spec__ when the root conftest mocks prometheus_client

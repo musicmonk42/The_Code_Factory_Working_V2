@@ -31,10 +31,12 @@ except ImportError as e:
         f"Could not import redis.asyncio.lock: {e}. "
         f"This typically indicates an incompatible redis version. "
         f"Please ensure redis>=4.5.0 is installed. "
-        f"Redis locking features will be disabled."
+        f"Redis locking features will be disabled.",
+        ImportWarning,
+        stacklevel=2
     )
-    # Create a placeholder to prevent NameError
-    RedisLock = None
+    # Create a type-annotated placeholder to prevent NameError
+    RedisLock: Optional[type] = None
 
 from redis.exceptions import (
     ConnectionError,
