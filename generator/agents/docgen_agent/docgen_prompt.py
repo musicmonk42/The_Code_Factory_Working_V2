@@ -72,11 +72,13 @@ except ImportError:  # pragma: no cover
             return decorator
 
     class Application:
+        def __init__(self):
+            self.on_startup = []
+            self.on_shutdown = []
+            self.on_cleanup = []
+        
         def add_routes(self, *args, **kwargs):
             pass
-
-        def on_startup(self, *args, **kwargs):
-            pass  # Add on_startup stub
 
     # Mock 'web' module to stub out functions
     class MockWeb:

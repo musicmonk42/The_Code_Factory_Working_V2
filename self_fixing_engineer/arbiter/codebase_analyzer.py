@@ -68,6 +68,7 @@ except ImportError:
 
     class PlugInKind:
         ANALYTICS = "analytics"
+        FIX = "FIX"
 
     class PIIRedactorFilter(logging.Filter):
         def filter(self, record):

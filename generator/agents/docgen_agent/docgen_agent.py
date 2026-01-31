@@ -104,6 +104,7 @@ except ImportError:
         TRANSFORM = "TRANSFORM"
         ENRICH = "ENRICH"
         VALIDATE = "VALIDATE"
+        FIX = "FIX"
 
 # --- DocGen Agent Dependencies (Refactored) ---
 from .docgen_prompt import DocGenPromptAgent

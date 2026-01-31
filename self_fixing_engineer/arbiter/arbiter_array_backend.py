@@ -144,6 +144,7 @@ except ImportError:
 
     class PlugInKind:
         CORE_SERVICE = "CORE_SERVICE"
+        FIX = "FIX"
 
     class registry:
         @staticmethod

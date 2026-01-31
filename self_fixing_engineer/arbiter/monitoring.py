@@ -64,6 +64,7 @@ except ImportError:
 
     class PlugInKind:
         CORE_SERVICE = "core_service"
+        FIX = "FIX"
 
     class PostgresClient:
         def __init__(self, db_url):

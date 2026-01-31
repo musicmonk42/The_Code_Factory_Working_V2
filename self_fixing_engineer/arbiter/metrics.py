@@ -33,6 +33,7 @@ except ImportError:
 
     class PlugInKind:
         CORE_SERVICE = "core_service"
+        FIX = "FIX"
 
     class PluginBase:
         """Placeholder base class when arbiter_plugin_registry is not available."""

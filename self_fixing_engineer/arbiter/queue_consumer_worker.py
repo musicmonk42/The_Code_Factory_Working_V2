@@ -170,6 +170,7 @@ if not SFE_CORE_AVAILABLE:
 
     class PlugInKind:
         CORE_SERVICE = "core_service"
+        FIX = "FIX"
 
     registry = MockRegistry()
 

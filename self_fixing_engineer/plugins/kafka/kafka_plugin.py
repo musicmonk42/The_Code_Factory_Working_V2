@@ -154,6 +154,7 @@ except ImportError:
     class PlugInKind:
         SINK = "sink"
         INTEGRATION = "integration"
+        FIX = "FIX"
 
 
 # ---- Optional OpenTelemetry
