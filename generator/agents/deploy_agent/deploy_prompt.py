@@ -29,8 +29,21 @@ except ImportError:  # pragma: no cover
     SentenceTransformer = None
     util = None
 
-# --- FIX: Added missing imports for Status/StatusCode and removed stray 'opent' ---
-from opentelemetry.trace import Status, StatusCode
+# --- OpenTelemetry imports with fallback ---
+try:
+    from opentelemetry.trace import Status, StatusCode
+    HAS_OPENTELEMETRY_TRACE = True
+except ImportError:
+    HAS_OPENTELEMETRY_TRACE = False
+    # Provide minimal stubs
+    class Status:
+        def __init__(self, *args, **kwargs):
+            pass
+    
+    class StatusCode:
+        OK = "OK"
+        ERROR = "ERROR"
+
 from prometheus_client import (  # Retaining local definitions for non-LLM metrics
     Counter,
     Gauge,
@@ -74,7 +87,26 @@ except ImportError:  # pragma: no cover
     class RouteTableDef(list):
         """Minimal fallback so that `routes = RouteTableDef()` doesn't crash in test envs."""
 
-        pass
+        def post(self, path):
+            """Mock decorator for POST routes."""
+            def decorator(func):
+                self.append(("POST", path, func))
+                return func
+            return decorator
+
+        def get(self, path):
+            """Mock decorator for GET routes."""
+            def decorator(func):
+                self.append(("GET", path, func))
+                return func
+            return decorator
+
+        def route(self, method, path):
+            """Mock decorator for generic routes."""
+            def decorator(func):
+                self.append((method, path, func))
+                return func
+            return decorator
 
     class Application:
         def add_routes(self, *args, **kwargs):

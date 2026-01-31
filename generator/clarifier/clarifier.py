@@ -47,7 +47,31 @@ import zstandard as zstd  # Compression (reqs: zstandard)
 from cryptography.fernet import (
     Fernet,
 )  # Encryption for data at rest (reqs: cryptography)
-from dynaconf import Dynaconf, Validator  # Configuration management (reqs: dynaconf)
+
+# Configuration management with fallback for test environments
+try:
+    from dynaconf import Dynaconf, Validator
+    from dynaconf.validator import ValidationError
+    HAS_DYNACONF = True
+except ImportError:
+    HAS_DYNACONF = False
+    # Provide minimal stubs for test environments
+    class Dynaconf:
+        def __init__(self, *args, **kwargs):
+            self._data = {}
+        def get(self, key, default=None):
+            return self._data.get(key, default)
+        def set(self, key, value):
+            self._data[key] = value
+        def __getattr__(self, name):
+            return self._data.get(name)
+    
+    class Validator:
+        def __init__(self, *args, **kwargs):
+            pass
+    
+    class ValidationError(Exception):
+        pass
 
 # Prometheus metrics need to be defined at the top level to be accessible globally
 from prometheus_client import Counter, Histogram
