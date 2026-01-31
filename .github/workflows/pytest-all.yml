@@ -293,7 +293,8 @@ jobs:
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD:$PWD/generator:$PWD/self_fixing_engineer:$PWD/omnicore_engine"
+          # conftest.py handles path setup automatically via path_setup module
+          export PYTHONPATH="$PWD"
           
           # Create Prometheus multiprocess directory
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
@@ -301,10 +302,6 @@ jobs:
           
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           ulimit -t unlimited 2>/dev/null || true
-          
-          # Explicitly setup paths before pytest to ensure all modules are discoverable
-          echo "=== Setting up module paths ==="
-          python -c "import path_setup; path_setup.setup_paths(verbose=True)"
           
           echo "=== Running ALL pytest tests together (unified run) ==="
           # Use python -m pytest to ensure proper sys.path setup
