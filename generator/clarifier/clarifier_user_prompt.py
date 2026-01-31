@@ -22,14 +22,17 @@ import aiohttp  # For Slack/web (add to reqs)
 HAS_TEXTUAL = False
 _TEXTUAL_ERROR = None
 try:
-    import textual  # GUI/TUI (textual req)
+    # FIX: Import from textual submodules directly instead of checking module attributes
+    # Textual uses lazy loading, so hasattr(textual, 'app') returns False even when installed
+    from textual.app import App as _TextualApp
+    from textual import widgets as _textual_widgets
 
-    # Verify the library is usable by checking for expected attributes
-    if hasattr(textual, "app") and hasattr(textual, "widgets"):
+    # Verify we have the essential widgets we need
+    if hasattr(_textual_widgets, "Button") and hasattr(_textual_widgets, "Input"):
         HAS_TEXTUAL = True
     else:
         _TEXTUAL_ERROR = (
-            "textual library loaded but missing expected modules (app, widgets)"
+            "textual library loaded but missing essential widgets (Button, Input)"
         )
         logging.error(
             f"Textual library version mismatch: {_TEXTUAL_ERROR}. "

@@ -41,9 +41,12 @@ os.environ.setdefault("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "1")
 
 # Set audit crypto mode to allow startup without full cryptographic secrets
 # Options: "full" (requires secrets), "dev" (uses dummy keys), "disabled" (no crypto signing)
-# CRITICAL: Use "disabled" in production to avoid security conflict with APP_ENV=production
-# Change to "full" once AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is properly configured
-os.environ.setdefault("AUDIT_CRYPTO_MODE", "disabled")
+# FIX: Enable crypto mode ("full") when secrets are properly configured
+# If AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is set, use "full" mode, otherwise "disabled"
+if os.environ.get("AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64"):
+    os.environ.setdefault("AUDIT_CRYPTO_MODE", "full")
+else:
+    os.environ.setdefault("AUDIT_CRYPTO_MODE", "disabled")
 
 # INJECT SIGNING KEY (Required for Production Audit Logging)
 # This prevents the "CRITICAL - FATAL: log_audit_event" crash
@@ -52,6 +55,18 @@ os.environ.setdefault(
     "AGENTIC_AUDIT_HMAC_KEY",
     "7f8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a"
 )
+
+# --- OPTIONAL FEATURES CONFIGURATION ---
+# Enable Feature Store if Feast is available and ENABLE_FEATURE_STORE is set
+# Default to "0" but can be enabled via environment variable
+os.environ.setdefault("ENABLE_FEATURE_STORE", os.environ.get("ENABLE_FEATURE_STORE", "0"))
+
+# Enable HSM Support if python-pkcs11 is available and ENABLE_HSM is set
+os.environ.setdefault("ENABLE_HSM", os.environ.get("ENABLE_HSM", "0"))
+
+# Enable Sentry automatically if SENTRY_DSN is provided
+if os.environ.get("SENTRY_DSN"):
+    os.environ.setdefault("ENABLE_SENTRY", "1")
 # --- PRODUCTION MODE CONFIGURATION END ---
 
 # Enterprise-grade startup configuration
