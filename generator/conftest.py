@@ -67,14 +67,18 @@ except ImportError as e:
 
 # List of modules that need to be mocked during test collection
 # to avoid expensive initialization (database connections, message bus, ML/NLP models, etc.)
+# NOTE: omnicore_engine modules removed - they were causing plugin_registry import failures
+# The plugin_registry is a core component that many tests depend on.
+# Mocking parent modules breaks child module imports via PEP 562 lazy loading.
 SIMULATION_MODULES_TO_MOCK = [
     "simulation",
     "simulation.simulation_module",
     "simulation.runners",
     "simulation.core",
-    "omnicore_engine.engines",
-    # Add plugin_registry as safety net for tests that can't properly import it
-    "omnicore_engine.plugin_registry",
+    # NOTE: omnicore_engine.engines and omnicore_engine.plugin_registry removed
+    # These were breaking plugin_registry imports via PEP 562 lazy loading.
+    # "omnicore_engine.engines",  # ❌ REMOVED - breaks plugin_registry imports
+    # "omnicore_engine.plugin_registry",  # ❌ REMOVED - tests need real plugin_registry
     # Add heavy ML/NLP dependencies that cause timeouts
     "chromadb",
     "chromadb.config",
