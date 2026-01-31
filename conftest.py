@@ -69,7 +69,8 @@ def pytest_sessionstart(session):
         "opentelemetry.instrumentation.logging",
         "opentelemetry.exporter",
         "opentelemetry.context",
-        # dynaconf removed - should use real implementation to prevent stub module overrides
+        # dynaconf removed - needs real implementation for proper configuration management
+        # (mocking dynaconf breaks pydantic-settings and other config-dependent modules)
         # prometheus_client removed - tests need real module, patch_prometheus_globally fixture handles conflicts
     ]
     
