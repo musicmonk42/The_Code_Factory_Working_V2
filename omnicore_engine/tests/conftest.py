@@ -1,7 +1,29 @@
 """Test configuration for omnicore_engine tests."""
 
 import os
+import sys
+from pathlib import Path
 import pytest
+
+# ---- Ensure paths are set up correctly ----
+# This is defensive: the root conftest.py should handle path setup,
+# but we ensure it here in case pytest is run from the omnicore_engine/tests/ directory
+_tests_dir = Path(__file__).parent.absolute()
+_omnicore_dir = _tests_dir.parent
+_project_root = _omnicore_dir.parent
+
+# Add project root to sys.path if not already present (highest priority)
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import path_setup module to ensure all component paths are configured
+try:
+    import path_setup
+except ImportError as e:
+    # If path_setup is not available, continue without it
+    # The root conftest.py should have already set up paths
+    import warnings
+    warnings.warn(f"omnicore_engine/tests/conftest.py: Could not import path_setup module: {e}. Using basic path configuration.")
 
 # FIX: Lazy import prometheus_client to avoid collection-time failures
 # This prevents AttributeError: __spec__ when the root conftest mocks prometheus_client

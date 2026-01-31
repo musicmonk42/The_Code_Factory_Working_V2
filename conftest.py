@@ -21,6 +21,16 @@ for subdir in ["self_fixing_engineer", "omnicore_engine", "generator"]:
     if subdir_path not in sys.path:
         sys.path.append(subdir_path)
 
+# ---- Import and execute path_setup early ----
+# This ensures all component paths are configured before any test collection
+# The path_setup module auto-executes setup_paths() on import (see path_setup.py line 120)
+try:
+    import path_setup
+except ImportError as e:
+    # If path_setup is not available, we'll rely on the basic path configuration above
+    import warnings
+    warnings.warn(f"Could not import path_setup module: {e}. Using basic path configuration.")
+
 # ---- Set TESTING environment variable early ----
 # This should be set before any module imports to prevent side effects
 # Set environment variables to skip expensive initialization during test collection

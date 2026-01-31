@@ -53,7 +53,27 @@ Migration Guide:
 import os
 import sys
 import types
+from pathlib import Path
 import pytest
+
+# ---- Ensure paths are set up correctly ----
+# This is defensive: the root conftest.py should handle path setup,
+# but we ensure it here in case pytest is run from the generator/ directory
+_generator_dir = Path(__file__).parent.absolute()
+_project_root = _generator_dir.parent
+
+# Add project root to sys.path if not already present (highest priority)
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import path_setup module to ensure all component paths are configured
+try:
+    import path_setup
+except ImportError as e:
+    # If path_setup is not available, continue without it
+    # The root conftest.py should have already set up paths
+    import warnings
+    warnings.warn(f"generator/conftest.py: Could not import path_setup module: {e}. Using basic path configuration.")
 
 
 # List of modules that need to be mocked during test collection
