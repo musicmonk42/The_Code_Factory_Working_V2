@@ -31,6 +31,17 @@ except ImportError as e:
     import warnings
     warnings.warn(f"Could not import path_setup module: {e}. Using basic path configuration.")
 
+# ---- Pre-initialize NLTK data paths ----
+# Ensure NLTK knows where to find pre-downloaded data in CI environments
+try:
+    import nltk
+    import os
+    nltk_data_home = os.path.expanduser('~/nltk_data')
+    if os.path.exists(nltk_data_home) and nltk_data_home not in nltk.data.path:
+        nltk.data.path.insert(0, nltk_data_home)
+except ImportError:
+    pass  # NLTK not installed, skip
+
 # ---- Set TESTING environment variable early ----
 # This should be set before any module imports to prevent side effects
 # Set environment variables to skip expensive initialization during test collection

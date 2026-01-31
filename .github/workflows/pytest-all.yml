@@ -270,6 +270,60 @@ jobs:
           find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
           df -h
       
+      - name: Download NLTK data
+        run: |
+          echo "=== Pre-downloading NLTK data packages ==="
+          python -c "
+          import nltk
+          import ssl
+          import sys
+          
+          # Handle SSL certificate issues in CI environments
+          try:
+              _create_unverified_https_context = ssl._create_unverified_context
+          except AttributeError:
+              pass
+          else:
+              ssl._create_default_https_context = _create_unverified_https_context
+          
+          # Download required NLTK data packages
+          packages = ['punkt', 'stopwords', 'vader_lexicon', 'averaged_perceptron_tagger']
+          for package in packages:
+              try:
+                  print(f'Downloading {package}...', flush=True)
+                  nltk.download(package, quiet=True)
+                  print(f'✓ {package} downloaded successfully', flush=True)
+              except Exception as e:
+                  print(f'WARNING: Failed to download {package}: {e}', file=sys.stderr, flush=True)
+          
+          print('NLTK data download complete', flush=True)
+          "
+      
+      - name: Verify NLTK data installation
+        run: |
+          echo "=== Verifying NLTK data installation ==="
+          python -c "
+          import nltk
+          import os
+          print(f'NLTK data paths: {nltk.data.path}')
+          
+          packages = ['punkt', 'stopwords', 'vader_lexicon']
+          for package in packages:
+              try:
+                  nltk.data.find(f'tokenizers/{package}')
+                  print(f'✓ {package} found')
+              except LookupError:
+                  try:
+                      nltk.data.find(f'corpora/{package}')
+                      print(f'✓ {package} found')
+                  except LookupError:
+                      try:
+                          nltk.data.find(f'sentiment/{package}')
+                          print(f'✓ {package} found')
+                      except LookupError:
+                          print(f'✗ {package} NOT FOUND')
+          "
+      
       - name: Collect tests (diagnostic)
         if: false  # Disable for fast-tests to save time
         run: |
@@ -291,10 +345,12 @@ jobs:
           AWS_REGION: ""
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          NLTK_DATA: "$HOME/nltk_data"
         run: |
           set -o pipefail
           # conftest.py handles path setup automatically via path_setup module
           export PYTHONPATH="$PWD"
+          export NLTK_DATA="$HOME/nltk_data"
           
           # Create Prometheus multiprocess directory
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
@@ -304,6 +360,8 @@ jobs:
           ulimit -t unlimited 2>/dev/null || true
           
           echo "=== Running ALL pytest tests together (unified run) ==="
+          echo "NLTK_DATA: $NLTK_DATA"
+          
           # Use python -m pytest to ensure proper sys.path setup
           python -m pytest \
             generator/tests/ \
@@ -315,10 +373,28 @@ jobs:
             --import-mode=prepend \
             --tb=short \
             --timeout=300 \
+            --continue-on-collection-errors \
             -p no:randomly \
             -p no:cacheprovider \
             --junitxml=test-results.xml \
-            2>&1 | tee test-output.log
+            2>&1 | tee test-output.log || {
+              EXIT_CODE=$?
+              echo "======================================"
+              echo "Pytest exited with code $EXIT_CODE"
+              echo "======================================"
+              if [ $EXIT_CODE -eq 4 ]; then
+                echo "ERROR: Pytest internal error (exit code 4) detected"
+                echo "This typically indicates:"
+                echo "  - Collection failure due to import errors"
+                echo "  - Module initialization issues"
+                echo "  - Syntax errors in test files"
+                echo ""
+                echo "Check the logs above for import errors or initialization failures"
+              elif [ $EXIT_CODE -eq 152 ]; then
+                echo "ERROR: CPU time limit exceeded (SIGXCPU)"
+              fi
+              exit $EXIT_CODE
+            }
           
           echo "✓ All tests completed (unified run)"
           
