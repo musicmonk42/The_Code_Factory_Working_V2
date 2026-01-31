@@ -3,18 +3,21 @@
 import os
 import sys
 from pathlib import Path
-import pytest
 
-# ---- Ensure paths are set up correctly ----
-# This is defensive: the root conftest.py should handle path setup,
-# but we ensure it here in case pytest is run from the omnicore_engine/tests/ directory
+# ---- CRITICAL: Ensure project root is in sys.path FIRST ----
+# This MUST be done before any imports to avoid ModuleNotFoundError during pytest collection
+# Calculate project root: omnicore_engine/tests/conftest.py -> project root is 2 levels up
 _tests_dir = Path(__file__).parent.absolute()
 _omnicore_dir = _tests_dir.parent
 _project_root = _omnicore_dir.parent
 
 # Add project root to sys.path if not already present (highest priority)
+# This ensures that "import omnicore_engine" and "import path_setup" work correctly
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
+
+# Now we can safely import pytest and other modules
+import pytest
 
 # Import path_setup module to ensure all component paths are configured
 try:
