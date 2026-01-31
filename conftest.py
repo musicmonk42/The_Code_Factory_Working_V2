@@ -26,10 +26,6 @@ for subdir in ["self_fixing_engineer", "omnicore_engine", "generator"]:
 # The path_setup module auto-executes setup_paths() on import (see path_setup.py line 120)
 try:
     import path_setup
-    # Verify that path setup was successful
-    if hasattr(path_setup, 'PROJECT_ROOT'):
-        # Path setup successful - component paths are now configured
-        pass
 except ImportError as e:
     # If path_setup is not available, we'll rely on the basic path configuration above
     import warnings

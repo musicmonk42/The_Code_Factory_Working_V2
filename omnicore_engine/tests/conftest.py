@@ -19,10 +19,11 @@ if str(_project_root) not in sys.path:
 # Import path_setup module to ensure all component paths are configured
 try:
     import path_setup
-except ImportError:
+except ImportError as e:
     # If path_setup is not available, continue without it
     # The root conftest.py should have already set up paths
-    pass
+    import warnings
+    warnings.warn(f"omnicore_engine/tests/conftest.py: Could not import path_setup module: {e}. Using basic path configuration.")
 
 # FIX: Lazy import prometheus_client to avoid collection-time failures
 # This prevents AttributeError: __spec__ when the root conftest mocks prometheus_client
