@@ -19,7 +19,25 @@ from opentelemetry import trace
 # Prometheus Metrics
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
 from redis.asyncio import Redis
-from redis.asyncio.lock import Lock as RedisLock
+
+# Defensive import for redis.asyncio.lock
+# This module is available in redis>=4.2.0, but may have compatibility issues
+try:
+    from redis.asyncio.lock import Lock as RedisLock
+except ImportError as e:
+    # Provide a clear error message if redis version is incompatible
+    import warnings
+    warnings.warn(
+        f"Could not import redis.asyncio.lock: {e}. "
+        f"This typically indicates an incompatible redis version. "
+        f"Please ensure redis>=4.5.0 is installed. "
+        f"Redis locking features will be disabled.",
+        ImportWarning,
+        stacklevel=2
+    )
+    # Create a type-annotated placeholder to prevent NameError
+    RedisLock: Optional[type] = None
+
 from redis.exceptions import (
     ConnectionError,
     DataError,
@@ -641,7 +659,7 @@ class RedisClient:
 
         Raises:
             ValueError: If name or timeouts are invalid.
-            RuntimeError: If Redis client is not connected.
+            RuntimeError: If Redis client is not connected or RedisLock is not available.
 
         Example:
             ```python
@@ -653,6 +671,11 @@ class RedisClient:
             print("Lock released.")
             ```
         """
+        if RedisLock is None:
+            raise RuntimeError(
+                "Redis locking features are not available. "
+                "Please ensure redis>=4.5.0 is installed and redis.asyncio.lock can be imported."
+            )
         if not name or len(name) > 1024:
             raise ValueError("Lock name must be non-empty and <= 1024 characters.")
         if timeout <= 0 or blocking_timeout < 0:
