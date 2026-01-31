@@ -9,14 +9,8 @@ on:
   pull_request:
     branches: [ main, develop ]
   workflow_dispatch:
-    inputs:
-      run_full_tests:
-        description: 'Run full test suite (slow)'
-        required: false
-        type: boolean
-        default: false
   schedule:
-    # Run full test suite nightly at 2 AM UTC
+    # Run tests nightly at 2 AM UTC
     - cron: '0 2 * * *'
 
 env:
@@ -207,6 +201,23 @@ jobs:
           python -c "import base64; print('base64 OK')"
           python -c "import typing; print('typing OK')"
           
+          echo "=== Verifying aiohttp submodules ==="
+          python -c "import aiohttp.web_request; print('aiohttp.web_request OK')" || echo "WARN: aiohttp.web_request missing"
+          python -c "import aiohttp.helpers; print('aiohttp.helpers OK')" || echo "WARN: aiohttp.helpers missing"
+          python -c "import aiohttp.client_exceptions; print('aiohttp.client_exceptions OK')" || echo "WARN: aiohttp.client_exceptions missing"
+          
+          echo "=== Verifying boto3 submodules ==="
+          python -c "import boto3.session; print('boto3.session OK')" || echo "WARN: boto3.session missing"
+          
+          echo "=== Verifying aiokafka submodules ==="
+          python -c "import aiokafka.structs; print('aiokafka.structs OK')" || echo "WARN: aiokafka.structs missing"
+          
+          echo "=== Verifying redis submodules ==="
+          python -c "import redis.asyncio; print('redis.asyncio OK')" || echo "WARN: redis.asyncio missing"
+          
+          echo "=== Verifying opentelemetry submodules ==="
+          python -c "import opentelemetry.propagators; print('opentelemetry.propagators OK')" || echo "WARN: opentelemetry.propagators missing - may need reinstall"
+          
           echo "=== Check if test files are syntactically valid ==="
           # Only compile test files that exist to avoid false negatives
           for test_file in tests/test_*.py; do
@@ -291,6 +302,10 @@ jobs:
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           ulimit -t unlimited 2>/dev/null || true
           
+          # Explicitly setup paths before pytest to ensure all modules are discoverable
+          echo "=== Setting up module paths ==="
+          python -c "import path_setup; path_setup.setup_paths(verbose=True)"
+          
           echo "=== Running ALL pytest tests together (unified run) ==="
           # Use python -m pytest to ensure proper sys.path setup
           python -m pytest \
@@ -367,302 +382,3 @@ jobs:
           path: test-results-*.xml
           retention-days: 30
 
-  # Full comprehensive test suite - run manually or on schedule
-  full-tests:
-    name: Full Test Suite (All Tests)
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
-    # Only run full tests:
-    # 1. On manual workflow_dispatch with run_full_tests=true
-    # 2. On scheduled runs (nightly)
-    # 3. Never on regular push/PR (too slow)
-    if: |
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_full_tests == 'true')
-    permissions:
-      contents: read
-    
-    services:
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
-    env:
-      TESTING: '1'
-      CI: '1'
-      SKIP_AUDIT_INIT: '1'
-      OTEL_SDK_DISABLED: '1'
-      PYTEST_CURRENT_TEST: 'true'
-      REDIS_URL: redis://localhost:6379
-      ENCRYPTION_KEY: "0mRtqFHlMkj0xTZO14sBFr1H6jkmmI0LWyK97sGyGew="
-      APP_ENV: test
-      SKIP_IMPORT_TIME_VALIDATION: '1'
-      SKIP_BACKGROUND_TASKS: '1'
-      NO_MONITORING: '1'
-      DISABLE_TELEMETRY: '1'
-      MPLBACKEND: 'Agg'
-      OPENBLAS_NUM_THREADS: '1'
-      MKL_NUM_THREADS: '1'
-      OMP_NUM_THREADS: '1'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: |
-            requirements.txt
-            .github/constraints.txt
-          
-      - name: Free disk space
-        run: |
-          sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
-          rm -rf /home/runner/.cache/pip/* || true
-          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
-          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
-          df -h
-          
-      - name: Enable memory overcommit for Redis
-        run: |
-          sudo sysctl -w vm.overcommit_memory=1
-          
-      - name: Install redis-cli on runner
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y redis-tools
-          redis-cli --version
-          
-      - name: Install system dependencies for Python packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libvirt-dev pkg-config
-          
-      - name: Wait for Redis to be ready
-        run: |
-          for i in $(seq 1 30); do
-            if redis-cli -h localhost --raw incr ping_test >/dev/null 2>&1; then
-              echo "Redis is up and responding"
-              break
-            fi
-            echo "Waiting for Redis... attempt $i/30"
-            sleep 1
-          done
-          redis-cli -h localhost ping || (echo "ERROR: Redis is not available" && exit 1)
-          
-      - name: Install dependencies
-        env:
-          PIP_NO_CACHE_DIR: "1"
-          PIP_DISABLE_PIP_VERSION_CHECK: "1"
-        run: |
-          python -m pip install --upgrade pip
-          pip install --no-cache-dir -c .github/constraints.txt protobuf
-          
-          # Install critical dependencies first to prevent import errors
-          pip install --no-cache-dir -c .github/constraints.txt \
-            cryptography \
-            python-dotenv \
-            presidio-analyzer \
-            presidio-anonymizer
-          
-          if [ -f requirements.txt ]; then
-            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
-          fi
-          echo "Installing self_fixing_engineer package (contains arbiter)..."
-          python -m pip install -v --no-cache-dir -c .github/constraints.txt -e ./self_fixing_engineer || {
-            echo "ERROR: Failed to install self_fixing_engineer package"
-            exit 1
-          }
-          echo "=== Verifying self_fixing_engineer package installation ==="
-          pip show self_fixing_engineer || {
-            echo "ERROR: self_fixing_engineer package not found"
-            exit 1
-          }
-          python -m pip install --no-cache-dir -c .github/constraints.txt -e ./omnicore_engine
-          pip install --no-cache-dir -c .github/constraints.txt PyYAML httpx PyJWT || true
-          pip install --no-cache-dir -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
-          pip install --no-cache-dir -c .github/constraints.txt deap hiredis || echo "WARNING: Some optional deps failed"
-          pip install --no-cache-dir -c .github/constraints.txt \
-            pytest-cov \
-            pytest-xdist \
-            pytest-asyncio \
-            pytest-html \
-            pytest-json-report \
-            pytest-timeout \
-            tomli_w \
-            typing-extensions \
-            hypothesis
-          pip install --force-reinstall -c .github/constraints.txt \
-            opentelemetry-semantic-conventions==${{ env.OTEL_SEMANTIC_CONVENTIONS_VERSION }} \
-            opentelemetry-instrumentation-fastapi==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
-            opentelemetry-instrumentation==${{ env.OTEL_INSTRUMENTATION_VERSION }} \
-            opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
-            opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
-            opentelemetry-api==${{ env.OTEL_API_VERSION }}
-          pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
-          
-      - name: Verify critical test dependencies
-        run: |
-          echo "=== Verifying test dependencies can be imported ==="
-          python -c "import pytest; print(f'pytest {pytest.__version__}')"
-          python -c "import pytest_cov; print('pytest-cov OK')"
-          python -c "import pytest_asyncio; print('pytest-asyncio OK')"
-          python -c "import xdist; print('pytest-xdist OK')"
-          python -c "import aiofiles; print('aiofiles OK')"
-          python -c "import tiktoken; print('tiktoken OK')"
-          python -c "import aiohttp; print('aiohttp OK')"
-          
-          echo "=== Verifying critical infrastructure dependencies ==="
-          python -c "import cryptography; print('cryptography OK')"
-          python -c "from cryptography.fernet import Fernet; print('cryptography.fernet OK')"
-          python -c "from dotenv import load_dotenv; print('python-dotenv load_dotenv OK')"
-          python -c "from dotenv import find_dotenv; print('python-dotenv find_dotenv OK')"
-          python -c "from dotenv import dotenv_values; print('python-dotenv dotenv_values OK')"
-          python -c "import base64; print('base64 OK')"
-          python -c "import typing; print('typing OK')"
-          
-          echo "=== Check if test files are syntactically valid ==="
-          for test_file in tests/test_*.py; do
-            if [ -f "$test_file" ] && [ "$(basename "$test_file")" != "__init__.py" ]; then
-              python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
-            fi
-          done
-          
-          if [ -d "generator/main/tests" ]; then
-            for test_file in generator/main/tests/test_*.py; do
-              [ -f "$test_file" ] && python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
-            done
-          fi
-          
-          if [ -d "omnicore_engine/tests" ]; then
-            for test_file in omnicore_engine/tests/test_*.py; do
-              [ -f "$test_file" ] && python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
-            done
-          fi
-          
-          echo "=== Verify conftest files syntax ==="
-          python -m py_compile conftest.py
-          [ -f generator/conftest.py ] && python -m py_compile generator/conftest.py
-          [ -f self_fixing_engineer/conftest.py ] && python -m py_compile self_fixing_engineer/conftest.py
-          echo "✓ All conftest files are syntactically valid"
-          
-      - name: Free more disk space before tests
-        run: |
-          sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
-          rm -rf /home/runner/.cache/pip/* || true
-          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
-          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
-          df -h
-      
-      - name: Collect tests (diagnostic)
-        run: |
-          # Optimized collection with reduced timeout
-          # Explicitly specify all test directories for unified collection
-          # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
-          timeout 300 pytest generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ --co --quiet --disable-warnings -p no:warnings || {
-            echo "WARNING: Collection timed out or failed - will proceed with test run"
-            exit 0
-          }
-        continue-on-error: true
-          
-      - name: Run full test suite
-        env:
-          TESTING: "1"
-          AWS_REGION: ""
-          FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
-          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
-        run: |
-          set -o pipefail
-          export PYTHONPATH="$PWD:$PWD/generator:$PWD/self_fixing_engineer:$PWD/omnicore_engine"
-          
-          # Create Prometheus multiprocess directory
-          mkdir -p "${{ runner.temp }}/prometheus_multiproc"
-          chmod 777 "${{ runner.temp }}/prometheus_multiproc"
-          
-          # Remove CPU time limits to prevent SIGXCPU (exit code 152)
-          ulimit -t unlimited 2>/dev/null || true
-          
-          echo "=== Running ALL pytest tests together (unified run) ==="
-          # Use python -m pytest to ensure proper sys.path setup
-          python -m pytest \
-            generator/tests/ \
-            omnicore_engine/tests/ \
-            self_fixing_engineer/tests/ \
-            server/tests/ \
-            -n 1 \
-            --dist=loadfile \
-            --import-mode=importlib \
-            --tb=short \
-            --timeout=600 \
-            -p no:randomly \
-            -p no:cacheprovider \
-            --junitxml=test-results-full.xml \
-            2>&1 | tee test-output-full.log
-          
-          echo "✓ All tests completed (unified run)"
-          
-      - name: Profile test collection (on failure)
-        if: failure()
-        run: |
-          echo "=== Running test collection with CPU profiling ==="
-          timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
-            generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ \
-            --co --quiet --disable-warnings -p no:warnings --import-mode=importlib --tb=short \
-            2>&1 || true
-          
-          if [ -f collection_profile.stats ]; then
-            echo "=== Top 30 CPU-consuming functions ==="
-            python -c "import pstats; p = pstats.Stats('collection_profile.stats'); p.sort_stats('cumulative').print_stats(30)"
-          fi
-        continue-on-error: true
-          
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        if: always() && hashFiles('./coverage.xml') != ''
-        with:
-          files: ./coverage.xml
-          flags: pytest-full
-          fail_ci_if_error: false
-          
-      - name: Upload HTML test report
-        uses: actions/upload-artifact@v4
-        if: always() && hashFiles('./test-report.html') != ''
-        with:
-          name: test-report-html-full
-          path: test-report.html
-          retention-days: 30
-        continue-on-error: true
-          
-      - name: Upload JSON test report
-        uses: actions/upload-artifact@v4
-        if: always() && hashFiles('./test-report.json') != ''
-        with:
-          name: test-report-json-full
-          path: test-report.json
-          retention-days: 30
-        continue-on-error: true
-          
-      - name: Upload test output log
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-output-log-full
-          path: test-output-full.log
-          retention-days: 7
-          
-      - name: Upload JUnit test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results-xml-full
-          path: test-results-full.xml
-          retention-days: 30
