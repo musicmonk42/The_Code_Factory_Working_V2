@@ -56,11 +56,30 @@ def pytest_configure(config):
         if hasattr(config, '_cov'):
             config._cov = None
         # Skip aiohttp protection during collect-only to avoid expensive imports
+        # DON'T apply heavy mocks during collection
         return
     
     # Initialize aiohttp protection only when actually running tests (not just collecting)
     # This is deferred from module load time to avoid CPU timeout during collection
     _initialize_aiohttp_protection()
+    
+    # Apply runtime mocks only after collection
+    _apply_runtime_mocks()
+
+
+def _apply_runtime_mocks():
+    """Apply mocks only during test execution, not collection.
+    
+    This prevents mock modules from interfering with pytest's import machinery
+    during the collection phase.
+    """
+    # Only mock prometheus_client if it's not already imported properly
+    if 'prometheus_client' not in sys.modules or not hasattr(sys.modules.get('prometheus_client'), '__spec__'):
+        sys.modules['prometheus_client'] = _create_stub_module('prometheus_client')
+        sys.modules['prometheus_client.core'] = _create_stub_module('prometheus_client.core')
+    
+    # Add other runtime-only mocks here as needed
+    pass
 
 # ---- Add minimal stubs for missing modules (TEST ENVIRONMENT ONLY) ----
 # Create stub modules with minimal functionality to prevent import errors during test collection
@@ -277,6 +296,41 @@ if os.environ.get("TESTING") == "1":
 # ---- Import error handling ----
 # Provide graceful fallbacks for common missing dependencies during test collection
 # This allows pytest to collect tests even when optional dependencies are missing
+
+
+def _create_stub_module(name: str) -> types.ModuleType:
+    """Create a complete stub module with all required attributes for pytest compatibility.
+    
+    This ensures mocked modules have __spec__, __path__, and other attributes
+    that pytest's import system expects during collection.
+    
+    Args:
+        name: The module name to create a stub for
+        
+    Returns:
+        A stub module with all required attributes
+    """
+    import importlib.util
+    
+    stub = types.ModuleType(name)
+    stub.__file__ = f"<stub:{name}>"
+    stub.__path__ = []  # Make it a package
+    
+    # CRITICAL: Add __spec__ to prevent AttributeError during pytest collection
+    stub.__spec__ = importlib.util.spec_from_loader(
+        name, 
+        loader=None,
+        origin=f"<stub:{name}>"
+    )
+    
+    # Add safe __getattr__ that returns None instead of raising
+    def _safe_getattr(attr_name):
+        if attr_name.startswith('_'):
+            raise AttributeError(f"module '{name}' has no attribute '{attr_name}'")
+        return None
+    
+    stub.__getattr__ = _safe_getattr
+    return stub
 
 
 def _create_mock_module(name):

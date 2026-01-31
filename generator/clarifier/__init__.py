@@ -59,25 +59,9 @@ except ImportError as e:
     )
     _CLARIFIER_AVAILABLE = False
     
-    # Provide stub implementations
-    import types
-    import sys
-    
-    # Create a stub module that supports attribute access for mocking
-    clarifier_stub = types.ModuleType('generator.clarifier.clarifier')
-    clarifier_stub.__file__ = '<stub>'
-    
-    # Add __getattr__ to support dynamic attribute access (needed for test mocking)
-    def _stub_getattr(name):
-        """Return a placeholder for any attribute to support test mocking."""
-        return None
-    
-    clarifier_stub.__getattr__ = _stub_getattr
-    clarifier = clarifier_stub
-    
-    # Register in sys.modules so patches can find it
-    sys.modules['generator.clarifier.clarifier'] = clarifier_stub
-    
+    # Use simple None stubs instead of creating magic modules
+    # This prevents circular dependency issues during test collection
+    clarifier = None  # type: ignore
     Clarifier = None  # type: ignore
     get_config = None  # type: ignore
     get_fernet = None  # type: ignore
