@@ -183,29 +183,60 @@ class _ClarifierPromptProxy:
             AttributeError: If attribute doesn't exist
             ImportError: If module cannot be imported
         """
-        # Load module on first access
-        if self._module is None and not self._import_attempted:
-            self._import_attempted = True
+        # Prevent infinite recursion on private attributes
+        if name.startswith('_'):
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
+        
+        # Access _module and _import_attempted safely without triggering __getattr__
+        # Use __dict__ to avoid recursion since accessing self._module would call __getattr__
+        module = self.__dict__.get('_module', None)
+        import_attempted = self.__dict__.get('_import_attempted', False)
+        
+        # Initialize if not yet set (should only happen if __init__ wasn't called)
+        if module is None and '_module' not in self.__dict__:
+            object.__setattr__(self, '_module', None)
+            object.__setattr__(self, '_import_attempted', False)
+            module = None
+            import_attempted = False
+        
+        if module is None and not import_attempted:
+            object.__setattr__(self, '_import_attempted', True)
             try:
-                self._module = _get_clarifier_prompt_module()
+                module = _get_clarifier_prompt_module()
+                object.__setattr__(self, '_module', module)
                 logger.debug(
                     "Lazy loaded clarifier_prompt module",
                     extra={"accessed_attribute": name}
                 )
-            except ImportError:
+            except ImportError as e:
                 # Re-raise with context
                 raise ImportError(
                     f"Cannot access clarifier_prompt.{name}: "
                     "clarifier_prompt module failed to import"
-                )
+                ) from e
         
-        if self._module is None:
+        if module is None:
             raise ImportError(
                 f"clarifier_prompt module is not available. "
                 f"Cannot access attribute: {name}"
             )
         
-        return getattr(self._module, name)
+        # Check if module is actually a proxy (circular import), raise ImportError
+        if isinstance(module, _ClarifierPromptProxy):
+            raise ImportError(
+                f"clarifier_prompt module failed to load properly "
+                "(circular import or stub). Cannot access attribute: {name}"
+            )
+        
+        # Safely get the attribute from the real module
+        try:
+            return getattr(module, name)
+        except AttributeError:
+            raise AttributeError(
+                f"module 'clarifier_prompt' has no attribute '{name}'"
+            )
 
 
 # Create lazy proxy for clarifier_prompt

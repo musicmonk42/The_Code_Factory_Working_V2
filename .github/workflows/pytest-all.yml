@@ -134,6 +134,14 @@ jobs:
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           pip install --no-cache-dir -c .github/constraints.txt protobuf
+          
+          # Install critical dependencies first to prevent import errors
+          pip install --no-cache-dir -c .github/constraints.txt \
+            cryptography \
+            python-dotenv \
+            presidio-analyzer \
+            presidio-anonymizer
+          
           # Install unified platform requirements first
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
@@ -442,6 +450,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --no-cache-dir -c .github/constraints.txt protobuf
+          
+          # Install critical dependencies first to prevent import errors
+          pip install --no-cache-dir -c .github/constraints.txt \
+            cryptography \
+            python-dotenv \
+            presidio-analyzer \
+            presidio-anonymizer
+          
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
           fi
