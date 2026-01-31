@@ -24,20 +24,11 @@ _TEXTUAL_ERROR = None
 try:
     # FIX: Import from textual submodules directly instead of checking module attributes
     # Textual uses lazy loading, so hasattr(textual, 'app') returns False even when installed
-    from textual.app import App as _TextualApp
-    from textual import widgets as _textual_widgets
+    from textual.app import App  # noqa: F401 - imported for availability check
+    from textual.widgets import Button, Input  # noqa: F401 - imported for availability check
 
-    # Verify we have the essential widgets we need
-    if hasattr(_textual_widgets, "Button") and hasattr(_textual_widgets, "Input"):
-        HAS_TEXTUAL = True
-    else:
-        _TEXTUAL_ERROR = (
-            "textual library loaded but missing essential widgets (Button, Input)"
-        )
-        logging.error(
-            f"Textual library version mismatch: {_TEXTUAL_ERROR}. "
-            "GUIPrompt will be unavailable. Please check your textual installation."
-        )
+    # If we got here without ImportError, Textual is properly installed
+    HAS_TEXTUAL = True
 except ImportError as e:
     _TEXTUAL_ERROR = str(e)
     logging.warning(f"Textual (TUI/GUI) not found: {e}. GUIPrompt will be unavailable.")

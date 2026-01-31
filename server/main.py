@@ -59,10 +59,10 @@ os.environ.setdefault(
 # --- OPTIONAL FEATURES CONFIGURATION ---
 # Enable Feature Store if Feast is available and ENABLE_FEATURE_STORE is set
 # Default to "0" but can be enabled via environment variable
-os.environ.setdefault("ENABLE_FEATURE_STORE", os.environ.get("ENABLE_FEATURE_STORE", "0"))
+os.environ.setdefault("ENABLE_FEATURE_STORE", "0")
 
 # Enable HSM Support if python-pkcs11 is available and ENABLE_HSM is set
-os.environ.setdefault("ENABLE_HSM", os.environ.get("ENABLE_HSM", "0"))
+os.environ.setdefault("ENABLE_HSM", "0")
 
 # Enable Sentry automatically if SENTRY_DSN is provided
 if os.environ.get("SENTRY_DSN"):
