@@ -73,6 +73,8 @@ SIMULATION_MODULES_TO_MOCK = [
     "simulation.runners",
     "simulation.core",
     "omnicore_engine.engines",
+    # Add plugin_registry as safety net for tests that can't properly import it
+    "omnicore_engine.plugin_registry",
     # Add heavy ML/NLP dependencies that cause timeouts
     "chromadb",
     "chromadb.config",

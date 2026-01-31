@@ -267,8 +267,17 @@ jobs:
         run: |
           echo "=== Verifying omnicore_engine package structure ==="
           python -c "import omnicore_engine; print(f'omnicore_engine location: {omnicore_engine.__file__}')"
-          python -c "from omnicore_engine import plugin_registry; print('plugin_registry import OK')" || echo "WARNING: plugin_registry module not found"
-          python -c "from omnicore_engine import meta_supervisor; print('meta_supervisor import OK')" || echo "WARNING: meta_supervisor module not found"
+          
+          # CRITICAL: Fail workflow if plugin_registry cannot be imported
+          echo "=== Verifying plugin_registry import ==="
+          python -c "from omnicore_engine import plugin_registry; print('✓ plugin_registry import OK')"
+          
+          # Verify other critical modules (warnings only for optional modules)
+          echo "=== Verifying meta_supervisor import ==="
+          python -c "from omnicore_engine import meta_supervisor; print('✓ meta_supervisor import OK')" || echo "WARNING: meta_supervisor module not found (may be optional)"
+          
+          echo "=== Verifying core module import ==="
+          python -c "from omnicore_engine import core; print('✓ core module import OK')" || echo "WARNING: core module not found (may be optional)"
           
       - name: Free more disk space before tests
         run: |
@@ -349,6 +358,38 @@ jobs:
           }
         continue-on-error: true
           
+      - name: Debug pytest collection (if previous steps passed)
+        if: success()
+        run: |
+          echo "=== Testing pytest collection with verbose output ==="
+          # Try to collect tests with maximum verbosity to reveal any import errors
+          python -m pytest \
+            generator/tests/ \
+            omnicore_engine/tests/ \
+            self_fixing_engineer/tests/ \
+            server/tests/ \
+            --collect-only \
+            -v \
+            --tb=long \
+            --import-mode=prepend \
+            --maxfail=1 \
+            2>&1 | tee pytest-collection-debug.log || {
+              EXIT_CODE=$?
+              echo "=========================================="
+              echo "ERROR: Pytest collection failed with exit code $EXIT_CODE"
+              echo "=========================================="
+              echo ""
+              echo "Last 200 lines of collection output:"
+              tail -200 pytest-collection-debug.log
+              echo ""
+              echo "Searching for import errors:"
+              grep -i "importerror\|modulenotfounderror\|attributeerror" pytest-collection-debug.log || echo "No obvious import errors found in logs"
+              echo ""
+              # Don't fail the workflow here - let the main test step handle it
+              # This is just for debugging visibility
+            }
+        continue-on-error: true
+      
       - name: Run all tests together
         env:
           TESTING: "1"

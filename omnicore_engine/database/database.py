@@ -273,9 +273,17 @@ from contextlib import asynccontextmanager
 # Import plugin_registry to avoid circular dependency in Database class
 try:
     from omnicore_engine import plugin_registry
-except ImportError:
-    logger.warning(
-        "Plugin registry not available. Database will operate without plugin-related features."
+except ImportError as e:
+    logger.error(
+        f"Plugin registry not available: {e}. "
+        "Database will operate without plugin-related features.",
+        exc_info=True
+    )
+    plugin_registry = None
+except Exception as e:
+    logger.error(
+        f"Unexpected error importing plugin_registry: {e}",
+        exc_info=True
     )
     plugin_registry = None
 
