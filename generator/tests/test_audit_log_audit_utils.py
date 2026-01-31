@@ -77,6 +77,9 @@ if spec is None:
 
 # Load the module dynamically
 audit_utils_module = importlib.util.module_from_spec(spec)
+# Set required module attributes before exec_module
+audit_utils_module.__path__ = [str(module_path.parent)]  # type: ignore[attr-defined]
+audit_utils_module.__file__ = str(module_path)  # type: ignore[attr-defined]
 sys.modules[spec.name] = audit_utils_module
 # Execute the module code, which populates the module object with functions/globals
 spec.loader.exec_module(audit_utils_module)
