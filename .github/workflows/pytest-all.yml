@@ -312,7 +312,7 @@ jobs:
             server/tests/ \
             -n 1 \
             --dist=loadfile \
-            --import-mode=importlib \
+            --import-mode=prepend \
             --tb=short \
             --timeout=300 \
             -p no:randomly \
@@ -328,7 +328,7 @@ jobs:
           echo "=== Running test collection with CPU profiling ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
             generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ \
-            --co --quiet --disable-warnings -p no:warnings --import-mode=importlib --tb=short \
+            --co --quiet --disable-warnings -p no:warnings --import-mode=prepend --tb=short \
             2>&1 || true
           
           if [ -f collection_profile.stats ]; then
