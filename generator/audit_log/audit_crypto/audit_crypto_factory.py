@@ -1155,55 +1155,73 @@ class CryptoProviderFactory:
         """
         Closes all initialized crypto provider instances.
         This should be called during application shutdown to release resources.
+        
+        Note: This method is designed to be called from synchronous signal handlers.
+        It handles async close() methods properly by running them in the event loop
+        when available, or creating a new loop if needed.
         """
         for name, instance in list(self._instances.items()):
             try:
                 # Ensure close is awaited if it is an async method
                 if asyncio.iscoroutinefunction(instance.close):
-                    # Since this is called from a sync signal handler, we must use asyncio.run
-                    # on the async close method.
+                    # Get the coroutine object
+                    coro = instance.close()
+                    
+                    # Try to run the coroutine properly
                     try:
-                        asyncio.run(instance.close())
+                        # First, try to get the running loop
+                        loop = asyncio.get_running_loop()
+                        # If we're in an async context, schedule the coroutine
+                        # This shouldn't normally happen in a signal handler, but handle it
+                        if loop.is_running():
+                            # Schedule the close and don't wait (fire-and-forget in signal context)
+                            # Use run_coroutine_threadsafe for thread-safe scheduling
+                            future = asyncio.run_coroutine_threadsafe(coro, loop)
+                            try:
+                                # Wait briefly for the close to complete
+                                future.result(timeout=2.0)
+                            except Exception as wait_err:
+                                logger.warning(
+                                    f"Timeout or error waiting for {name}.close(): {wait_err}"
+                                )
+                        else:
+                            loop.run_until_complete(coro)
                     except RuntimeError:
-                        # If called while a loop is running (e.g., in a thread), this might fail.
-                        # We'll just run it as-is, accepting the risk in a signal handler.
-                        instance.close()  # Fallback to sync call if it exists
+                        # No running loop - create a new one to run the coroutine
+                        try:
+                            asyncio.run(coro)
+                        except RuntimeError as inner_err:
+                            # Last resort: if asyncio.run also fails (e.g., nested event loop),
+                            # log the issue but don't leave the coroutine dangling
+                            logger.warning(
+                                f"Could not await {name}.close() in signal handler context: {inner_err}. "
+                                "Resource may not be fully released."
+                            )
+                            # Close the coroutine to prevent "coroutine was never awaited" warning
+                            coro.close()
                 else:
+                    # Synchronous close method
                     instance.close()
 
                 logger.info(f"Successfully closed crypto provider: {name}")
-
-                try:
-                    # Log action is async, must run in a loop
-                    # Using asyncio.run inside the signal handler context
-                    asyncio.run(
-                        log_action(
-                            "close_provider", provider_name=name, status="success"
-                        )
-                    )
-                except Exception:
-                    logging.warning(
-                        "Failed to log provider closure (could not run async log action)."
-                    )
+                
+                # Use synchronous logging instead of async log_action in signal handler context
+                # This avoids the complexity of running async code from a signal handler
+                logger.info(
+                    f"AUDIT: close_provider action completed for {name} with status=success",
+                    extra={"provider_name": name, "status": "success", "action": "close_provider"}
+                )
 
             except Exception as e:
                 logger.error(
                     f"Error closing crypto provider {name}: {e}", exc_info=True
                 )
-
-                try:
-                    asyncio.run(
-                        log_action(
-                            "close_provider",
-                            provider_name=name,
-                            status="fail",
-                            error=str(e),
-                        )
-                    )
-                except Exception:
-                    logging.warning(
-                        "Failed to log provider closure failure (could not run async log action)."
-                    )
+                
+                # Use synchronous logging instead of async log_action in signal handler context
+                logger.error(
+                    f"AUDIT: close_provider action failed for {name} with error: {e}",
+                    extra={"provider_name": name, "status": "fail", "error": str(e), "action": "close_provider"}
+                )
             finally:
                 # This should be safe as we are iterating over a copy of keys (list(self._instances.items()))
                 if name in self._instances:
