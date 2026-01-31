@@ -449,6 +449,11 @@ class PluginRegistry(FileSystemEventHandler):
 
         module = importlib.util.module_from_spec(spec)
         sys.modules[unique_name] = module
+        
+        # Inject TargetPlugin into the module's namespace to ensure plugins
+        # can reference it even if their relative import fails
+        module.TargetPlugin = TargetPlugin  # type: ignore[attr-defined]
+        
         try:
             spec.loader.exec_module(module)  # type: ignore[union-attr]
             found = False
