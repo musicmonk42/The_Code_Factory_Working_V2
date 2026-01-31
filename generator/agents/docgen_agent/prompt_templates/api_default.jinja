@@ -1,0 +1,109 @@
+{# 
+  API Documentation Template
+  Generates comprehensive API documentation for REST/GraphQL/RPC endpoints.
+  
+  Features:
+    - Endpoint documentation structure
+    - Parameter documentation with types
+    - Response format documentation
+    - Example usage sections
+    - Authentication and authorization
+    - Error handling documentation
+#}
+
+# API Documentation
+
+## Overview
+Generate comprehensive API documentation for the {{ doc_type | default('API') }} project.
+
+## Endpoints
+
+{% if target_files is defined and target_files %}
+### Files to Document:
+{% for file in target_files %}
+- {{ file }}
+{% endfor %}
+{% endif %}
+
+### Endpoint Structure
+
+For each endpoint, please provide:
+
+1. **Endpoint Path**: The URL path for the endpoint
+2. **HTTP Method**: GET, POST, PUT, DELETE, PATCH, etc.
+3. **Description**: Brief description of what the endpoint does
+4. **Authentication**: Required authentication method (if any)
+5. **Parameters**:
+   - Path parameters
+   - Query parameters
+   - Request body (with schema)
+6. **Response Format**:
+   - Success response (with schema)
+   - Error responses
+7. **Example Usage**:
+   - Sample request
+   - Sample response
+
+## Request Parameters
+
+Document all parameters with:
+- **Name**: Parameter name
+- **Type**: Data type (string, integer, boolean, object, array, etc.)
+- **Required**: Yes/No
+- **Description**: What the parameter is for
+- **Default**: Default value (if applicable)
+- **Example**: Example value
+
+## Response Format
+
+Document response structure:
+- **Status Code**: HTTP status code
+- **Body**: Response body structure
+- **Headers**: Relevant response headers
+- **Content-Type**: Response content type
+
+## Example Usage
+
+Provide practical examples:
+
+```bash
+# Example cURL request
+curl -X POST https://api.example.com/endpoint \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{"key": "value"}'
+```
+
+```json
+// Example response
+{
+  "status": "success",
+  "data": {
+    "id": "123",
+    "result": "example"
+  }
+}
+```
+
+## Error Handling
+
+Document common error responses:
+- **400 Bad Request**: Invalid parameters
+- **401 Unauthorized**: Authentication required
+- **403 Forbidden**: Insufficient permissions
+- **404 Not Found**: Resource not found
+- **500 Internal Server Error**: Server error
+
+{% if instructions is defined and instructions %}
+## Additional Instructions
+{{ instructions }}
+{% endif %}
+
+{% if context is defined and context.files_content is defined %}
+## Context
+Based on the following code context:
+{{ context.files_content | tojson }}
+{% endif %}
+
+---
+**Output Format**: Well-structured Markdown with clear sections and examples.

@@ -109,6 +109,7 @@ from opentelemetry.trace.status import (
 # Presidio: REQUIRED for scrubbing.
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine  # FIX: Corrected typo 'presonymizer'
+from presidio_anonymizer.entities import OperatorConfig
 
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner import tracer
@@ -198,7 +199,7 @@ def scrub_text(text: str) -> str:
         scrubbed_content = anonymizer.anonymize(
             text=text,
             analyzer_results=results,
-            anonymizers={"DEFAULT": {"type": "replace", "new_value": "[REDACTED]"}},
+            operators={"DEFAULT": OperatorConfig("replace", {"new_value": "[REDACTED]"})},
         ).text
 
         return scrubbed_content
