@@ -55,6 +55,7 @@ from opentelemetry.trace.status import (
 # --- External Dependencies (Strictly Required) ---
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
+from presidio_anonymizer.entities import OperatorConfig
 
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner import tracer
@@ -182,7 +183,7 @@ def scrub_text(text: str) -> str:
         anonymized_text = anonymizer.anonymize(
             text=text,
             analyzer_results=results,
-            anonymizers={"DEFAULT": {"type": "replace", "new_value": "[REDACTED]"}},
+            operators={"DEFAULT": OperatorConfig("replace", {"new_value": "[REDACTED]"})},
         ).text
         return anonymized_text
     except Exception as e:

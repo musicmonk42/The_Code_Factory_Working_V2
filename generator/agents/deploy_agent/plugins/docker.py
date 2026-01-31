@@ -25,50 +25,54 @@ import re
 logger = logging.getLogger(__name__)
 
 # Import TargetPlugin base class with graceful fallback
-try:
-    from ..deploy_agent import TargetPlugin
-except ImportError as e:
-    logger.warning(
-        "Failed to import TargetPlugin from deploy_agent. "
-        "Using fallback interface. Error: %s", 
-        str(e)
-    )
-    
-    # Fallback interface definition matching the expected contract
-    class TargetPlugin(ABC):
-        """
-        Fallback TargetPlugin interface for plugin development.
+# First check if TargetPlugin was injected by the plugin loader
+TargetPlugin = globals().get('TargetPlugin')
+
+if TargetPlugin is None:
+    try:
+        from ..deploy_agent import TargetPlugin
+    except ImportError as e:
+        logger.warning(
+            "Failed to import TargetPlugin from deploy_agent. "
+            "Using fallback interface. Error: %s", 
+            str(e)
+        )
         
-        This fallback is provided for development and testing scenarios
-        where the main deploy_agent module is not available.
-        """
-        __version__ = "1.0"
-        
-        async def generate_config(
-            self,
-            target_files: List[str],
-            instructions: Optional[str],
-            context: Dict[str, Any],
-            previous_configs: Dict[str, Any],
-        ) -> Dict[str, Any]:
-            """Generate deployment configuration."""
-            raise NotImplementedError("Subclass must implement generate_config")
-        
-        async def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-            """Validate deployment configuration."""
-            raise NotImplementedError("Subclass must implement validate_config")
-        
-        async def simulate_deployment(self, config: Dict[str, Any]) -> Dict[str, Any]:
-            """Simulate deployment execution."""
-            raise NotImplementedError("Subclass must implement simulate_deployment")
-        
-        async def rollback(self, config: Dict[str, Any]) -> bool:
-            """Rollback deployment to previous state."""
-            raise NotImplementedError("Subclass must implement rollback")
-        
-        def health_check(self) -> bool:
-            """Check plugin health and availability."""
-            return True
+        # Fallback interface definition matching the expected contract
+        class TargetPlugin(ABC):
+            """
+            Fallback TargetPlugin interface for plugin development.
+            
+            This fallback is provided for development and testing scenarios
+            where the main deploy_agent module is not available.
+            """
+            __version__ = "1.0"
+            
+            async def generate_config(
+                self,
+                target_files: List[str],
+                instructions: Optional[str],
+                context: Dict[str, Any],
+                previous_configs: Dict[str, Any],
+            ) -> Dict[str, Any]:
+                """Generate deployment configuration."""
+                raise NotImplementedError("Subclass must implement generate_config")
+            
+            async def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+                """Validate deployment configuration."""
+                raise NotImplementedError("Subclass must implement validate_config")
+            
+            async def simulate_deployment(self, config: Dict[str, Any]) -> Dict[str, Any]:
+                """Simulate deployment execution."""
+                raise NotImplementedError("Subclass must implement simulate_deployment")
+            
+            async def rollback(self, config: Dict[str, Any]) -> bool:
+                """Rollback deployment to previous state."""
+                raise NotImplementedError("Subclass must implement rollback")
+            
+            def health_check(self) -> bool:
+                """Check plugin health and availability."""
+                return True
 
 
 class DockerPlugin(TargetPlugin):
