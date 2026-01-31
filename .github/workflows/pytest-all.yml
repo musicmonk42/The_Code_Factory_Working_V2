@@ -346,6 +346,7 @@ jobs:
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
           NLTK_DATA: "$HOME/nltk_data"
+          PYTHONPATH: "${{ github.workspace }}"
         run: |
           set -o pipefail
           # conftest.py handles path setup automatically via path_setup module
