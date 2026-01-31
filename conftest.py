@@ -65,6 +65,9 @@ def pytest_configure(config):
     
     # Apply runtime mocks only after collection
     _apply_runtime_mocks()
+    
+    # Ensure all modules have proper __spec__ before test collection
+    _ensure_module_specs()
 
 
 def _apply_runtime_mocks():
@@ -163,6 +166,19 @@ if os.environ.get("TESTING") == "1":
             early_mock.__getattr__ = make_getattr()
             
             sys.modules[mod_name] = early_mock
+            
+            # Create parent modules for dotted names
+            if "." in mod_name:
+                parts = mod_name.split(".")
+                for i in range(1, len(parts)):
+                    parent_name = ".".join(parts[:i])
+                    if parent_name not in sys.modules:
+                        parent_mock = types.ModuleType(parent_name)
+                        parent_mock.__file__ = f"<mocked {parent_name}>"
+                        parent_mock.__path__ = []
+                        parent_mock.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
+                        parent_mock.__getattr__ = make_getattr()
+                        sys.modules[parent_name] = parent_mock
     
     # Special handling for zstandard to fix urllib3 compatibility
     if "zstandard" in sys.modules and hasattr(sys.modules["zstandard"], "__getattr__"):
@@ -549,6 +565,9 @@ _NEVER_MOCK = [
     "stable_baselines3",  # FIX: Uses typing.Optional with forward refs, breaks when mocked
     "stable_baselines3.common",
     "stable_baselines3.common.policies",
+    "portalocker",  # Uses forward references in type annotations
+    "typing",  # Core typing module should never be mocked
+    "typing_extensions",  # Typing extensions should never be mocked
 ]
 
 # Only mock if genuinely missing (not if already imported)
