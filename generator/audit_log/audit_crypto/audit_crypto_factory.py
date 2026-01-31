@@ -887,6 +887,11 @@ class CryptoProviderFactory:
     _shutdown_lock: Optional[threading.Lock] = None
     _shutdown_initiated: bool = False
     _shutdown_timeout_seconds: float = float(os.getenv("AUDIT_CRYPTO_SHUTDOWN_TIMEOUT_SECONDS", "5.0"))
+    
+    # Maximum timeout for run_coroutine_threadsafe fallback strategy
+    # This is capped lower than the main timeout because this approach is less reliable
+    # during shutdown when the event loop may not be processing tasks properly
+    _MAX_THREADSAFE_TIMEOUT_SECONDS: float = 2.0
 
     def __init__(self):
         # Register default providers
@@ -1486,16 +1491,29 @@ class CryptoProviderFactory:
                 # Create a new event loop specifically for this close operation
                 # This avoids issues with the main loop being in a closing state
                 new_loop = asyncio.new_event_loop()
+                original_loop = None
                 try:
+                    # Save the original event loop (if any) to restore later
+                    try:
+                        original_loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        original_loop = None
                     asyncio.set_event_loop(new_loop)
                     new_loop.run_until_complete(instance.close())
                     return True
                 finally:
                     new_loop.close()
-                    asyncio.set_event_loop(None)
-            except Exception as e:
+                    # Restore original event loop instead of setting to None
+                    # to avoid affecting other code running in the same thread
+                    if original_loop is not None and not original_loop.is_closed():
+                        asyncio.set_event_loop(original_loop)
+                    else:
+                        asyncio.set_event_loop(None)
+            except (RuntimeError, asyncio.CancelledError) as e:
+                # For trivial providers with no-op close(), these exceptions are expected
+                # and acceptable during shutdown. Other exceptions should still be logged.
                 logger.debug(
-                    f"Fast-path closure completed with note for: {name} ({e})",
+                    f"Fast-path closure completed with expected exception for: {name} ({type(e).__name__}: {e})",
                     extra={
                         "correlation_id": correlation_id,
                         "provider_name": name,
@@ -1503,8 +1521,21 @@ class CryptoProviderFactory:
                         "note": str(e)
                     }
                 )
-                # For trivial providers, we consider this a success even if there
-                # was a minor exception, as the close() method is a no-op
+                # For trivial providers, we consider this a success because the close() method is a no-op
+                return True
+            except Exception as e:
+                # Log unexpected exceptions but still return True for trivial providers
+                # since their close() is a no-op anyway
+                logger.warning(
+                    f"Fast-path closure encountered unexpected exception for: {name} ({type(e).__name__}: {e})",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "provider_name": name,
+                        "close_strategy": "fast_path_trivial",
+                        "error_type": type(e).__name__,
+                        "error_details": str(e)
+                    }
+                )
                 return True
         
         # For non-trivial providers, use the full async handling logic
@@ -1550,9 +1581,9 @@ class CryptoProviderFactory:
                 future = asyncio.run_coroutine_threadsafe(coro, loop)
                 
                 try:
-                    # Use a shorter timeout for the threadsafe approach
-                    # as it's less reliable during shutdown
-                    effective_timeout = min(timeout_seconds, 2.0)
+                    # Use the class constant for maximum threadsafe timeout
+                    # This approach is less reliable during shutdown
+                    effective_timeout = min(timeout_seconds, self._MAX_THREADSAFE_TIMEOUT_SECONDS)
                     future.result(timeout=effective_timeout)
                     return True
                     
@@ -1567,7 +1598,10 @@ class CryptoProviderFactory:
                             "outcome": "timeout"
                         }
                     )
-                    # Cancel the future to prevent it from completing later
+                    # Cancel the future as a best-effort cleanup.
+                    # Note: Cancellation may not immediately stop the coroutine if it's
+                    # already executing, but it prevents the result from being retrieved
+                    # and signals that we've given up waiting.
                     future.cancel()
                     return False
                     
