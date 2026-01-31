@@ -23,15 +23,15 @@ from omnicore_engine.plugin_registry import PlugInKind, plugin
 
 # Import shared metrics from clarifier.py
 # Import shared utilities and the core Clarifier class from clarifier.py
+# Import shared utilities from parent package to break circular dependency
+from generator.clarifier import get_config, get_fernet, get_logger
+# Import clarifier-specific items from the module
 from .clarifier import (
     CLARIFIER_CYCLES,
     CLARIFIER_ERRORS,
     CLARIFIER_LATENCY,
     Clarifier,
     get_circuit_breaker,
-    get_config,
-    get_fernet,
-    get_logger,
     get_tracer,
 )
 
