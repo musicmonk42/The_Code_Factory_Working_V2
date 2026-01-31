@@ -23,8 +23,8 @@ python-pkcs11>=0.7.0
 # =============================================================================
 # System dependencies required FIRST:
 #   apt-get install -y libvirt-dev pkg-config
-# Then uncomment to enable libvirt support:
-# libvirt-python>=12.0.0
+# Now enabled by default (system dependencies are installed in Dockerfile):
+libvirt-python>=10.0.0
 
 # =============================================================================
 # Avro Serialization

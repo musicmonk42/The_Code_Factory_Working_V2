@@ -199,17 +199,17 @@ def get_config_defaults() -> Dict[str, str]:
         "TESTING": "0",
         # Database
         "DATABASE_URL": "sqlite:///./dev.db",
-        "ENABLE_DATABASE": "0",
+        "ENABLE_DATABASE": "1",
         # Redis
         "REDIS_URL": "redis://localhost:6379",
         "REDIS_DB": "0",
         # Message Bus
         "MESSAGE_BUS_TYPE": "memory",
         "KAFKA_BOOTSTRAP_SERVERS": "localhost:9092",
-        # Feature flags
-        "ENABLE_FEATURE_STORE": "0",
-        "ENABLE_HSM": "0",
-        "ENABLE_LIBVIRT": "0",
+        # Feature flags (auto-detection enabled for production features)
+        "ENABLE_FEATURE_STORE": "auto",
+        "ENABLE_HSM": "auto",
+        "ENABLE_LIBVIRT": "auto",
         "ENABLE_AUDIT_LOGGING": "0",
         "PARALLEL_AGENT_LOADING": "1",
         "LAZY_LOAD_ML": "1",

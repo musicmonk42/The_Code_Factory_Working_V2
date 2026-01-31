@@ -57,12 +57,17 @@ os.environ.setdefault(
 )
 
 # --- OPTIONAL FEATURES CONFIGURATION ---
-# Enable Feature Store if Feast is available and ENABLE_FEATURE_STORE is set
-# Default to "0" but can be enabled via environment variable
-os.environ.setdefault("ENABLE_FEATURE_STORE", "0")
+# Enable Database support by default
+os.environ.setdefault("ENABLE_DATABASE", "1")
 
-# Enable HSM Support if python-pkcs11 is available and ENABLE_HSM is set
-os.environ.setdefault("ENABLE_HSM", "0")
+# Enable Feature Store with auto-detection (enable if Feast is available)
+os.environ.setdefault("ENABLE_FEATURE_STORE", "auto")
+
+# Enable HSM Support with auto-detection (enable if python-pkcs11 is available)
+os.environ.setdefault("ENABLE_HSM", "auto")
+
+# Enable Libvirt Support with auto-detection (enable if libvirt-python is available)
+os.environ.setdefault("ENABLE_LIBVIRT", "auto")
 
 # Enable Sentry automatically if SENTRY_DSN is provided
 if os.environ.get("SENTRY_DSN"):

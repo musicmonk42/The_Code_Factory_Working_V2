@@ -88,9 +88,10 @@ services:
       
       # Feature Flags
       # Options: "0" (disabled), "1" (enabled), "auto" (auto-detect based on library availability)
-      - ENABLE_HSM=${ENABLE_HSM:-0}  # Hardware Security Module support
-      - ENABLE_FEATURE_STORE=${ENABLE_FEATURE_STORE:-0}  # Feast feature store
-      - ENABLE_LIBVIRT=${ENABLE_LIBVIRT:-0}  # Libvirt virtualization support
+      - ENABLE_DATABASE=${ENABLE_DATABASE:-1}  # Database support enabled by default
+      - ENABLE_HSM=${ENABLE_HSM:-auto}  # Hardware Security Module support with auto-detection
+      - ENABLE_FEATURE_STORE=${ENABLE_FEATURE_STORE:-auto}  # Feast feature store with auto-detection
+      - ENABLE_LIBVIRT=${ENABLE_LIBVIRT:-auto}  # Libvirt virtualization support with auto-detection
       
       # Performance Flags
       - PARALLEL_AGENT_LOADING=${PARALLEL_AGENT_LOADING:-1}  # Enable parallel agent loading

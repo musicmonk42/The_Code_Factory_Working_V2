@@ -188,19 +188,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     AUDIT_CRYPTO_MODE="disabled" \
     AUDIT_CRYPTO_ALLOW_INIT_FAILURE="1" \
     FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" \
-    ENABLE_FEATURE_STORE="0" \
-    ENABLE_HSM="0" \
-    ENABLE_LIBVIRT="0" \
+    ENABLE_DATABASE="1" \
+    ENABLE_FEATURE_STORE="auto" \
+    ENABLE_HSM="auto" \
+    ENABLE_LIBVIRT="auto" \
     PARALLEL_AGENT_LOADING="1" \
     LAZY_LOAD_ML="1"
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support
 # Add graphviz for PlantUML diagram generation support
+# Add libvirt-dev and pkg-config for virtualization support (optional)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
- && apt-get install -y --no-install-recommends curl git libmagic1 graphviz \
+ && apt-get install -y --no-install-recommends curl git libmagic1 graphviz libvirt-dev pkg-config \
  && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
