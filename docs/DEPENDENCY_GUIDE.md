@@ -81,6 +81,18 @@ except ImportError:
 Control which features are enabled via environment variables:
 
 ```bash
+# Auto-detection (recommended for production)
+ENABLE_DATABASE=1        # Database support enabled by default
+ENABLE_FEATURE_STORE=auto  # Auto-detect: enable if Feast is installed
+ENABLE_HSM=auto           # Auto-detect: enable if python-pkcs11 is installed
+ENABLE_LIBVIRT=auto       # Auto-detect: enable if libvirt-python is installed
+
+# Manual control
+ENABLE_FEATURE_STORE=1  # Force enable (requires Feast)
+ENABLE_HSM=1           # Force enable (requires python-pkcs11)
+ENABLE_LIBVIRT=1       # Force enable (requires libvirt-python)
+
+# Disable even if installed
 ENABLE_FEATURE_STORE=0  # Disable even if installed
 ENABLE_HSM=0           # Disable even if installed
 ENABLE_LIBVIRT=0       # Disable even if installed

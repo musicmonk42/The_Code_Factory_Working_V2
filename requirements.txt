@@ -418,9 +418,7 @@ ujson>=5.0.0
 nest-asyncio==1.6.0
 xattr==1.1.0
 python-pkcs11==0.7.0
-# libvirt-python==12.0.0  # COMMENTED OUT: Requires system packages (libvirt-dev, pkg-config)
-                          # Install system deps first: apt-get install -y libvirt-dev pkg-config
-                          # Then uncomment this line if libvirt functionality is needed
+libvirt-python>=10.0.0  # Requires system packages (libvirt-dev, pkg-config) - now installed in Dockerfile
 paramiko==3.5.0
 fastavro==1.11.1
 faiss-cpu==1.9.0.post1

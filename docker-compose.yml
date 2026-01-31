@@ -1,5 +1,6 @@
 services:
   # Redis for message bus and caching
+  # SECURITY: Password authentication enabled even for development
   redis:
     image: redis:7.4-alpine
     container_name: codefactory-redis
@@ -7,8 +8,9 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-devpassword}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD:-devpassword}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,7 +23,7 @@ services:
   #   environment:
   #     POSTGRES_DB: codefactory
   #     POSTGRES_USER: codefactory
-  #     POSTGRES_PASSWORD: changeme
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}  # REQUIRED: Set via environment
   #   ports:
   #     - "5432:5432"
   #   volumes:
@@ -52,10 +54,14 @@ services:
       - SKIP_IMPORT_TIME_VALIDATION=1
       - SPACY_WARNING_IGNORE=W007
       
-      # Security - CRITICAL: Set proper values in production!
-      # Use strong random keys, NOT these development defaults
-      - AGENTIC_AUDIT_HMAC_KEY=dev_key_change_in_production_7f8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-dGVzdC1rZXktZm9yLWRldmVsb3BtZW50LW9ubHktMzJieXRlcw==}
+      # ============================================
+      # SECURITY: Required keys - must be set via environment variables
+      # Generate keys with:
+      #   openssl rand -hex 32  (for AGENTIC_AUDIT_HMAC_KEY)
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  (for ENCRYPTION_KEY)
+      # ============================================
+      - AGENTIC_AUDIT_HMAC_KEY=${AGENTIC_AUDIT_HMAC_KEY:?AGENTIC_AUDIT_HMAC_KEY is required}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       
       # LLM Provider Configuration
       - XAI_API_KEY=${XAI_API_KEY:-}
@@ -70,7 +76,7 @@ services:
       - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
       
       # Infrastructure
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379
       - DB_PATH=${DB_PATH:-sqlite+aiosqlite:///./codefactory.db}
       
       # Message Bus Configuration
@@ -88,9 +94,10 @@ services:
       
       # Feature Flags
       # Options: "0" (disabled), "1" (enabled), "auto" (auto-detect based on library availability)
-      - ENABLE_HSM=${ENABLE_HSM:-0}  # Hardware Security Module support
-      - ENABLE_FEATURE_STORE=${ENABLE_FEATURE_STORE:-0}  # Feast feature store
-      - ENABLE_LIBVIRT=${ENABLE_LIBVIRT:-0}  # Libvirt virtualization support
+      - ENABLE_DATABASE=${ENABLE_DATABASE:-1}  # Database support enabled by default
+      - ENABLE_HSM=${ENABLE_HSM:-auto}  # Hardware Security Module support with auto-detection
+      - ENABLE_FEATURE_STORE=${ENABLE_FEATURE_STORE:-auto}  # Feast feature store with auto-detection
+      - ENABLE_LIBVIRT=${ENABLE_LIBVIRT:-auto}  # Libvirt virtualization support with auto-detection
       
       # Performance Flags
       - PARALLEL_AGENT_LOADING=${PARALLEL_AGENT_LOADING:-1}  # Enable parallel agent loading

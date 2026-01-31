@@ -430,6 +430,7 @@ def log_configuration_summary(config: Optional[PlatformConfig] = None):
     logger.info(f"  Prometheus:      {'ENABLED' if config.enable_prometheus else 'DISABLED'}")
     logger.info(f"  Audit Logging:   {'ENABLED' if config.enable_audit_logging else 'DISABLED'}")
     logger.info(f"  HSM Support:     {'ENABLED' if config.enable_hsm else 'DISABLED'}")
+    logger.info(f"  Libvirt Support: {'ENABLED' if config.enable_libvirt else 'DISABLED'}")
     
     # Performance
     logger.info("\nPerformance Settings:")

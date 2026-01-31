@@ -43,43 +43,26 @@ COPY requirements.txt* master_requirements.txt* ./
 # of a single unified platform. Dependencies are installed from the root requirements.txt
 # which includes all necessary packages for the entire platform.
 
-# Upgrade packaging tools and install dependencies if found
-# Try with SSL verification first; if it fails due to proxy/MITM, retry with trusted hosts
-# Note: The || fallback catches any pip failure including SSL errors. This is intentional
-# to handle corporate proxies and development environments with SSL inspection.
-RUN pip install --upgrade pip setuptools wheel || \
-    (echo "WARNING: pip upgrade failed with SSL verification, retrying with --trusted-host" && \
-     pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip setuptools wheel) || \
-    (echo "ERROR: Failed to upgrade pip, setuptools, and wheel" && exit 1)
+# Upgrade packaging tools and install dependencies
+# SECURITY: SSL verification is mandatory - no fallback to --trusted-host
+# If builds fail due to SSL issues, fix the underlying CA certificate configuration
+RUN pip install --upgrade pip setuptools wheel
 
 # Install unified platform dependencies
 # Note: All three modules (generator, omnicore_engine, self_fixing_engineer) share
 # the same requirements.txt as part of a unified platform.
-# Note: --trusted-host bypasses SSL verification as a fallback for environments with
-# SSL inspection/MITM proxies. Production builds with proper SSL should use the primary path.
+# SECURITY: SSL verification is enforced - builds will fail if certificates are invalid
 ARG SKIP_HEAVY_DEPS=0
 RUN set -e; \
     if [ "$SKIP_HEAVY_DEPS" = "1" ]; then \
         echo "Skipping heavy dependencies for CI build"; \
     elif [ -f requirements.txt ]; then \
         echo "Installing dependencies from requirements.txt..."; \
-        if ! pip install --no-cache-dir -r requirements.txt; then \
-            echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host"; \
-            if ! pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org --trusted-host github.com -r requirements.txt; then \
-                echo "ERROR: Failed to install dependencies from requirements.txt"; \
-                exit 1; \
-            fi; \
-        fi; \
+        pip install --no-cache-dir -r requirements.txt; \
         echo "Dependencies installed successfully"; \
     elif [ -f pyproject.toml ]; then \
         echo "Installing dependencies from pyproject.toml..."; \
-        if ! pip install --no-cache-dir .; then \
-            echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host"; \
-            if ! pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org --trusted-host github.com .; then \
-                echo "ERROR: Failed to install dependencies from pyproject.toml"; \
-                exit 1; \
-            fi; \
-        fi; \
+        pip install --no-cache-dir .; \
         echo "Dependencies installed successfully"; \
     else \
         echo "WARNING: No requirements.txt or pyproject.toml found. Skipping dependency install."; \
@@ -175,6 +158,7 @@ LABEL org.opencontainers.image.source="https://github.com/musicmonk42/The_Code_F
 LABEL maintainer="support@novatraxlabs.com"
 
 # Environment variables for the runtime stage
+# SECURITY: No hardcoded encryption keys - must be provided at runtime
 # AUDIT CRYPTO: Set AUDIT_CRYPTO_MODE to "full" when AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is configured
 # FEATURE FLAGS: Set to "1" to enable, "0" to disable, "auto" for auto-detection
 # PARALLEL AGENT LOADING: Enabled by default for faster startup
@@ -187,24 +171,28 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     AWS_REGION="" \
     AUDIT_CRYPTO_MODE="disabled" \
     AUDIT_CRYPTO_ALLOW_INIT_FAILURE="1" \
-    FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" \
-    ENABLE_FEATURE_STORE="0" \
-    ENABLE_HSM="0" \
-    ENABLE_LIBVIRT="0" \
+    ENABLE_DATABASE="1" \
+    ENABLE_FEATURE_STORE="auto" \
+    ENABLE_HSM="auto" \
+    ENABLE_LIBVIRT="auto" \
     PARALLEL_AGENT_LOADING="1" \
     LAZY_LOAD_ML="1"
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support
 # Add graphviz for PlantUML diagram generation support
+# Add libvirt-dev and pkg-config for virtualization support (optional)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
- && apt-get install -y --no-install-recommends curl git libmagic1 graphviz \
+ && apt-get install -y --no-install-recommends curl git libmagic1 graphviz libvirt-dev pkg-config \
  && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd -m -u 10001 appuser
+# Create non-root user with restricted shell for security
+# Using specific UID/GID to prevent privilege escalation attacks
+# Note: /bin/false prevents interactive login but allows direct command execution (e.g., python)
+RUN groupadd -g 10001 appgroup && \
+    useradd -m -u 10001 -g appgroup -s /bin/false appuser
 
 WORKDIR /app
 

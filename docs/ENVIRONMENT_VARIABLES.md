@@ -225,23 +225,32 @@ This document provides a comprehensive reference for all environment variables u
 
 ## Feature Flags
 
-### ENABLE_HSM
-- **Purpose:** Enables Hardware Security Module support
+### ENABLE_DATABASE
+- **Purpose:** Enables database support (PostgreSQL/SQLite)
 - **Type:** Integer (0 or 1)
 - **Values:** `0` (disabled), `1` (enabled)
-- **Default:** `0`
-- **Production:** `1` if HSM available
-- **Example:** `ENABLE_HSM=1`
+- **Default:** `1` (enabled by default)
+- **Production:** `1` 
+- **Example:** `ENABLE_DATABASE=1`
+- **Impact:** Enables database connectivity and ORM functionality
+
+### ENABLE_HSM
+- **Purpose:** Enables Hardware Security Module support
+- **Type:** String
+- **Values:** `0` (disabled), `1` (enabled), `auto` (auto-detect)
+- **Default:** `auto`
+- **Production:** `auto` (auto-enables if python-pkcs11 is available)
+- **Example:** `ENABLE_HSM=auto`
 - **Impact:** Requires python-pkcs11 and HSM hardware
 - **Dependencies:** `pip install python-pkcs11`
 
 ### ENABLE_LIBVIRT
 - **Purpose:** Enables libvirt virtualization support
-- **Type:** Integer (0 or 1)
-- **Values:** `0` (disabled), `1` (enabled)
-- **Default:** `0`
-- **Production:** `1` if virtualization needed
-- **Example:** `ENABLE_LIBVIRT=1`
+- **Type:** String
+- **Values:** `0` (disabled), `1` (enabled), `auto` (auto-detect)
+- **Default:** `auto`
+- **Production:** `auto` (auto-enables if libvirt-python is available)
+- **Example:** `ENABLE_LIBVIRT=auto`
 - **Impact:** Requires libvirt-python and system packages
 - **Dependencies:** `apt-get install libvirt-dev pkg-config && pip install libvirt-python`
 
