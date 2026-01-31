@@ -95,6 +95,7 @@ except ImportError:
 
     class PlugInKind:
         CHECK = "CHECK"
+        FIX = "FIX"
 
 
 load_dotenv()

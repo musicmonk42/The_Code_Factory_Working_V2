@@ -24,6 +24,7 @@ except ImportError:
 
     class PlugInKind:
         CORE_SERVICE = "core_service"
+        FIX = "FIX"
 
     class PIIRedactorFilter(logging.Filter):
         def filter(self, record):

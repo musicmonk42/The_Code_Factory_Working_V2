@@ -71,6 +71,9 @@ spec = importlib.util.spec_from_file_location("audit_backend_core", CORE_PATH)
 if spec is None or spec.loader is None:
     raise ImportError(f"Could not load spec for {CORE_PATH}")
 core = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+# Set required module attributes before exec_module
+core.__path__ = []  # type: ignore[attr-defined]
+core.__file__ = str(CORE_PATH)  # type: ignore[attr-defined]
 spec.loader.exec_module(core)  # type: ignore[call-arg]
 
 # Ensure the directory containing the module is importable for its relative imports

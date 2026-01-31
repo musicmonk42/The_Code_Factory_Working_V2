@@ -70,6 +70,9 @@ core_spec = importlib.util.spec_from_file_location(
     "audit_log.audit_backend.audit_backend_core", str(CORE_PATH)
 )
 core = importlib.util.module_from_spec(core_spec)
+# Set required module attributes before exec_module
+core.__path__ = []  # type: ignore[attr-defined]
+core.__file__ = str(CORE_PATH)  # type: ignore[attr-defined]
 sys.modules["audit_log.audit_backend.audit_backend_core"] = core
 sys.modules["audit_log.audit_backend"].audit_backend_core = core
 core_spec.loader.exec_module(core)
@@ -80,6 +83,9 @@ spec = importlib.util.spec_from_file_location(
     "audit_log.audit_backend.audit_backend_file_sql", str(FILE_SQL_PATH)
 )
 file_sql = importlib.util.module_from_spec(spec)
+# Set required module attributes before exec_module
+file_sql.__path__ = []  # type: ignore[attr-defined]
+file_sql.__file__ = str(FILE_SQL_PATH)  # type: ignore[attr-defined]
 sys.modules["audit_log.audit_backend.audit_backend_file_sql"] = file_sql
 sys.modules["audit_log.audit_backend"].audit_backend_file_sql = file_sql
 spec.loader.exec_module(file_sql)

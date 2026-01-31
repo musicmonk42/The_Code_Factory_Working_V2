@@ -2120,6 +2120,7 @@ def plugin(kind, name, description, version):
 
 class PlugInKind:
     AI_ASSISTANT = "AI_ASSISTANT"
+    FIX = "FIX"
 
 
 class ExecuteInput(BaseModel):
