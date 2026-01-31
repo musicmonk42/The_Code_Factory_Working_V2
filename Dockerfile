@@ -31,8 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
-# Fix pip to ensure pip._vendor.packaging is available
-RUN python -m ensurepip --upgrade && python -m pip install --upgrade pip
+# Upgrade pip, setuptools, and wheel in one step to avoid conflicts
+# Using python -m pip for reliability in virtual environments
+# SECURITY: SSL verification is mandatory - no fallback to --trusted-host
+# If builds fail due to SSL issues, fix the underlying CA certificate configuration
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
 WORKDIR /app
 
@@ -42,11 +45,6 @@ COPY requirements.txt* master_requirements.txt* ./
 # Note: All three modules (generator, omnicore_engine, self_fixing_engineer) are part
 # of a single unified platform. Dependencies are installed from the root requirements.txt
 # which includes all necessary packages for the entire platform.
-
-# Upgrade packaging tools and install dependencies
-# SECURITY: SSL verification is mandatory - no fallback to --trusted-host
-# If builds fail due to SSL issues, fix the underlying CA certificate configuration
-RUN pip install --upgrade pip setuptools wheel
 
 # Install unified platform dependencies
 # Note: All three modules (generator, omnicore_engine, self_fixing_engineer) share
@@ -58,11 +56,11 @@ RUN set -e; \
         echo "Skipping heavy dependencies for CI build"; \
     elif [ -f requirements.txt ]; then \
         echo "Installing dependencies from requirements.txt..."; \
-        pip install --no-cache-dir -r requirements.txt; \
+        python -m pip install --no-cache-dir -r requirements.txt; \
         echo "Dependencies installed successfully"; \
     elif [ -f pyproject.toml ]; then \
         echo "Installing dependencies from pyproject.toml..."; \
-        pip install --no-cache-dir .; \
+        python -m pip install --no-cache-dir .; \
         echo "Dependencies installed successfully"; \
     else \
         echo "WARNING: No requirements.txt or pyproject.toml found. Skipping dependency install."; \

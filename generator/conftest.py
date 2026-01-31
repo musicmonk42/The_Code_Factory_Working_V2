@@ -27,27 +27,16 @@ Tests that genuinely need these dependencies should use real implementations
 with appropriate fixtures, or skip tests with @pytest.mark.skipif decorators.
 
 ================================================================================
-BREAKING CHANGE NOTICE
+FIXTURE BEHAVIOR
 ================================================================================
-The _test_setup fixture has been renamed to _ensure_mocks and is no longer
-autouse. Tests that previously relied on automatic mock setup must now
-explicitly request the fixture.
+The _ensure_mocks fixture is autouse, meaning expensive dependencies are
+automatically mocked for all tests to prevent timeouts during test collection.
 
-Migration Guide:
-    Old (deprecated):
-        def test_something():
-            # mocks were automatically applied
-            ...
-    
-    New (recommended):
-        def test_something(_ensure_mocks):
-            # explicitly request mock fixture
-            ...
-    
-    Or use the legacy alias:
-        def test_something(_test_setup):
-            # still works for backward compatibility
-            ...
+To disable mocking for debugging or specific test scenarios:
+    - Set environment variable: PYTEST_NO_MOCK=1
+    - Or use @pytest.mark.skipif decorators for tests needing real implementations
+
+Tests do NOT need to explicitly request this fixture - it applies automatically.
 ================================================================================
 """
 import os
@@ -170,20 +159,19 @@ def pytest_configure(config):
         os.environ['PYTEST_COLLECTING_ONLY'] = '1'
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
 def _ensure_mocks():
     """Ensure expensive dependencies are mocked to avoid timeouts.
     
     This fixture mocks heavy modules (simulation, ML/NLP dependencies) that would
-    otherwise cause timeouts during test collection. It is NOT autouse to give
-    tests explicit control over mock setup.
+    otherwise cause timeouts during test collection. It is autouse to ensure
+    mocks are applied before any test collection happens.
     
     Set PYTEST_NO_MOCK=1 to disable mocking for debugging.
     
-    Usage:
-        def test_my_generator_feature(_ensure_mocks):
-            # Test code here - expensive modules are mocked
-            ...
+    The fixture runs automatically for all tests. Tests that need real
+    implementations should set PYTEST_NO_MOCK=1 environment variable or
+    use appropriate skip decorators.
     """
     # Allow disabling mocks for debugging
     if os.environ.get('PYTEST_NO_MOCK') == '1':
