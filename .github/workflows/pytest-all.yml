@@ -146,24 +146,74 @@ jobs:
             echo "ERROR: Failed to install self_fixing_engineer package"
             exit 1
           }
-          # Verify package installed (but don't import - initialization is expensive)
+          
+          # Verify package installed AND importable (CRITICAL: test import, not just pip show)
           echo "=== Verifying self_fixing_engineer package installation ==="
           pip show self_fixing_engineer || {
-            echo "ERROR: self_fixing_engineer package not found"
+            echo "ERROR: self_fixing_engineer package not found in pip"
             exit 1
           }
+          
+          # CRITICAL: Test actual import
+          python -c "import self_fixing_engineer" || {
+            echo "ERROR: self_fixing_engineer package installed but cannot be imported"
+            echo "This usually indicates:"
+            echo "  - Missing __init__.py files"
+            echo "  - Broken package structure"
+            echo "  - Import-time initialization errors"
+            echo ""
+            echo "Package location:"
+            pip show self_fixing_engineer | grep Location
+            echo ""
+            echo "Package contents:"
+            ls -la self_fixing_engineer/ || true
+            exit 1
+          }
+          
+          echo "✓ self_fixing_engineer package verified (installed and importable)"
           # Install omnicore_engine package in editable mode
           echo "Installing omnicore_engine package..."
           python -m pip install -v --no-cache-dir -c .github/constraints.txt -e ./omnicore_engine || {
             echo "ERROR: Failed to install omnicore_engine package"
             exit 1
           }
-          # Verify package installed
+          
+          # Verify package installed AND importable
           echo "=== Verifying omnicore_engine package installation ==="
           pip show omnicore_engine || {
-            echo "ERROR: omnicore_engine package not found"
+            echo "ERROR: omnicore_engine package not found in pip"
             exit 1
           }
+          
+          # CRITICAL: Test actual import
+          python -c "import omnicore_engine" || {
+            echo "ERROR: omnicore_engine package installed but cannot be imported"
+            echo "This usually indicates:"
+            echo "  - Missing __init__.py files"
+            echo "  - Broken package structure"
+            echo "  - Circular import dependencies"
+            echo "  - Import-time initialization errors"
+            echo ""
+            echo "Package location:"
+            pip show omnicore_engine | grep Location
+            echo ""
+            echo "Package contents:"
+            ls -la omnicore_engine/ || true
+            echo ""
+            echo "Testing syntax of __init__.py:"
+            python -m py_compile omnicore_engine/__init__.py 2>&1 || echo "Syntax error in __init__.py"
+            exit 1
+          }
+          
+          # Test plugin_registry specifically (it's causing the failures)
+          python -c "from omnicore_engine import plugin_registry" || {
+            echo "ERROR: plugin_registry cannot be imported"
+            echo "Testing plugin_registry.py syntax:"
+            python -m py_compile omnicore_engine/plugin_registry.py 2>&1 || echo "Syntax error detected"
+            exit 1
+          }
+          
+          echo "✓ omnicore_engine package verified (installed and importable)"
           # Install common test/runtime extras that may be missing
           pip install --no-cache-dir -c .github/constraints.txt PyYAML httpx PyJWT || true
           pip install --no-cache-dir -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
@@ -228,6 +278,26 @@ jobs:
           echo "=== Verifying opentelemetry submodules ==="
           python -c "import opentelemetry.propagators; print('opentelemetry.propagators OK')" || echo "WARN: opentelemetry.propagators missing - may need reinstall"
           
+          echo "=== Validate syntax of critical Python files ==="
+          # Check omnicore_engine files
+          python -m py_compile omnicore_engine/__init__.py || {
+            echo "ERROR: Syntax error in omnicore_engine/__init__.py"
+            cat omnicore_engine/__init__.py | head -50
+            exit 1
+          }
+          
+          python -m py_compile omnicore_engine/plugin_registry.py || {
+            echo "ERROR: Syntax error in omnicore_engine/plugin_registry.py"
+            exit 1
+          }
+          
+          python -m py_compile omnicore_engine/core.py || {
+            echo "ERROR: Syntax error in omnicore_engine/core.py"
+            exit 1
+          }
+          
+          echo "✓ Syntax validation passed for critical files"
+          
           echo "=== Check if test files are syntactically valid ==="
           # Only compile test files that exist to avoid false negatives
           for test_file in tests/test_*.py; do
@@ -266,11 +336,43 @@ jobs:
       - name: Verify omnicore_engine package structure
         run: |
           echo "=== Verifying omnicore_engine package structure ==="
-          python -c "import omnicore_engine; print(f'omnicore_engine location: {omnicore_engine.__file__}')"
           
-          # CRITICAL: Fail workflow if plugin_registry cannot be imported
-          echo "=== Verifying plugin_registry import ==="
-          python -c "from omnicore_engine import plugin_registry; print('✓ plugin_registry import OK')"
+          # Test 1: Can we import the package?
+          echo "Test 1: Importing omnicore_engine package..."
+          python -c "import omnicore_engine; print(f'✓ omnicore_engine location: {omnicore_engine.__file__}')" || {
+            echo "❌ FAILED: Cannot import omnicore_engine package"
+            echo "This indicates the package is not properly installed or has import-time errors"
+            pip show omnicore_engine
+            ls -la omnicore_engine/ || true
+            exit 1
+          }
+          
+          # Test 2: Can we import plugin_registry directly?
+          echo "Test 2: Importing plugin_registry module..."
+          python -c "from omnicore_engine import plugin_registry; print('✓ plugin_registry import OK')" || {
+            echo "❌ FAILED: Cannot import plugin_registry from omnicore_engine"
+            echo "This indicates PEP 562 lazy loading is broken or plugin_registry.py has errors"
+            python -c "import sys; import omnicore_engine; print('omnicore_engine.__dict__:', dir(omnicore_engine))"
+            exit 1
+          }
+          
+          # Test 3: Can we access PLUGIN_REGISTRY singleton?
+          echo "Test 3: Accessing PLUGIN_REGISTRY singleton..."
+          python -c "from omnicore_engine.plugin_registry import PLUGIN_REGISTRY; print(f'✓ PLUGIN_REGISTRY type: {type(PLUGIN_REGISTRY).__name__}')" || {
+            echo "❌ FAILED: Cannot import PLUGIN_REGISTRY from plugin_registry module"
+            echo "This indicates plugin_registry.py has initialization errors"
+            python -m py_compile omnicore_engine/plugin_registry.py 2>&1 || echo "Syntax error detected"
+            exit 1
+          }
+          
+          # Test 4: Can we use the lazy accessor function?
+          echo "Test 4: Testing lazy accessor function..."
+          python -c "from omnicore_engine import get_plugin_registry; reg = get_plugin_registry(); print(f'✓ get_plugin_registry returns: {type(reg).__name__}')" || {
+            echo "❌ FAILED: get_plugin_registry() function is broken"
+            exit 1
+          }
+          
+          echo "✅ All import patterns verified successfully"
           
           # Verify other critical modules (warnings only for optional modules)
           echo "=== Verifying meta_supervisor import ==="
@@ -389,6 +491,56 @@ jobs:
               # This is just for debugging visibility
             }
         continue-on-error: true
+      
+      - name: Diagnose import health before tests
+        if: always()
+        run: |
+          echo "=== Pre-Test Import Health Check ==="
+          
+          python -c "
+          import sys
+          import traceback
+          
+          failed_imports = []
+          test_imports = [
+              'omnicore_engine',
+              'omnicore_engine.plugin_registry',
+              'omnicore_engine.core',
+              'omnicore_engine.database',
+              'omnicore_engine.message_bus',
+              'self_fixing_engineer',
+              'generator',
+              'generator.agents.codegen_agent',
+              'generator.agents.testgen_agent',
+          ]
+          
+          print('Testing critical imports...')
+          for module in test_imports:
+              try:
+                  __import__(module)
+                  print(f'  ✓ {module}')
+              except Exception as e:
+                  print(f'  ✗ {module}')
+                  print(f'    Error: {e}')
+                  traceback.print_exc()
+                  failed_imports.append((module, str(e)))
+          
+          if failed_imports:
+              print()
+              print('=' * 60)
+              print('❌ IMPORT FAILURES DETECTED')
+              print('=' * 60)
+              for module, error in failed_imports:
+                  print(f'Module: {module}')
+                  print(f'Error:  {error}')
+                  print()
+              print('These import failures will cause pytest exit code 4')
+              print('Fix the imports before running tests')
+              sys.exit(1)
+          else:
+              print()
+              print('✅ All critical imports successful')
+          "
       
       - name: Run all tests together
         env:
