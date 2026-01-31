@@ -54,6 +54,7 @@ def pytest_sessionstart(session):
         return MagicMock()
     
     # Mock observability modules that cause __spec__/__path__ errors during collection
+    # Also mock dynaconf early to prevent stub overrides
     observability_mocks = [
         "opentelemetry",
         "opentelemetry.trace",
@@ -66,6 +67,7 @@ def pytest_sessionstart(session):
         "opentelemetry.instrumentation.logging",
         "opentelemetry.exporter",
         "opentelemetry.context",
+        "dynaconf",  # Mock early to prevent stub module overrides
         # prometheus_client removed - tests need real module, patch_prometheus_globally fixture handles conflicts
     ]
     
@@ -86,8 +88,57 @@ def pytest_sessionstart(session):
             if mock_mod.__spec__:
                 mock_mod.__spec__.submodule_search_locations = []
             
-            # Add __getattr__ for dynamic attribute access
-            mock_mod.__getattr__ = _mock_getattr
+            # Special handling for opentelemetry.trace module
+            if mod_name == "opentelemetry.trace":
+                from unittest.mock import MagicMock
+                from contextlib import nullcontext
+                
+                class MockTracer:
+                    def start_as_current_span(self, name, **kwargs):
+                        return nullcontext()
+                    
+                    def start_span(self, name, **kwargs):
+                        class MockSpan:
+                            def __enter__(self): return self
+                            def __exit__(self, *args): pass
+                            def set_attribute(self, *args, **kwargs): pass
+                            def add_event(self, *args, **kwargs): pass
+                            def set_status(self, *args, **kwargs): pass
+                            def record_exception(self, *args, **kwargs): pass
+                        return MockSpan()
+                
+                mock_mod.get_tracer = lambda name: MockTracer()
+                mock_mod.Status = MagicMock()
+                mock_mod.StatusCode = MagicMock()
+                mock_mod.StatusCode.OK = "OK"
+                mock_mod.StatusCode.ERROR = "ERROR"
+            elif mod_name == "dynaconf":
+                # Special handling for dynaconf module
+                # Mock early to prevent stub module overrides
+                class MockDynaconf:
+                    def __init__(self, *args, **kwargs):
+                        self._data = {}
+                    
+                    def get(self, key, default=None):
+                        return self._data.get(key, default)
+                    
+                    def set(self, key, value):
+                        self._data[key] = value
+                    
+                    def __getattr__(self, name):
+                        return self._data.get(name)
+                
+                class MockValidator:
+                    def __init__(self, *args, **kwargs):
+                        pass
+                
+                mock_mod.Dynaconf = MockDynaconf
+                mock_mod.Validator = MockValidator
+                mock_mod.get_config = lambda *args, **kwargs: MockDynaconf()
+                mock_mod.load_config = lambda *args, **kwargs: MockDynaconf()
+            else:
+                # Add __getattr__ for dynamic attribute access
+                mock_mod.__getattr__ = _mock_getattr
             
             sys.modules[mod_name] = mock_mod
             
@@ -135,6 +186,149 @@ import importlib.util
 
 # Only create stubs if we're in a test environment (TESTING=1 is set at the top of this file)
 if os.environ.get("TESTING") == "1":
+    # CRITICAL: Mock dynaconf EARLY before stub modules are created
+    # This prevents stub modules from importing an incomplete dynaconf
+    if "dynaconf" not in sys.modules:
+        dynaconf_module = types.ModuleType("dynaconf")
+        dynaconf_module.__file__ = "<mocked dynaconf>"
+        dynaconf_module.__path__ = []
+        dynaconf_module.__spec__ = importlib.util.spec_from_loader("dynaconf", loader=None)
+        
+        class MockDynaconf:
+            def __init__(self, *args, **kwargs):
+                self._data = {}
+            
+            def get(self, key, default=None):
+                return self._data.get(key, default)
+            
+            def set(self, key, value):
+                self._data[key] = value
+            
+            def __getattr__(self, name):
+                return self._data.get(name)
+        
+        class MockValidator:
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        dynaconf_module.Dynaconf = MockDynaconf
+        dynaconf_module.Validator = MockValidator
+        dynaconf_module.get_config = lambda *args, **kwargs: MockDynaconf()
+        dynaconf_module.load_config = lambda *args, **kwargs: MockDynaconf()
+        
+        sys.modules["dynaconf"] = dynaconf_module
+    
+    # CRITICAL: Mock other dependencies EARLY before packages that use them are imported
+    # This prevents packages from creating fallback stubs when imports fail
+    early_mocks = [
+        "aiofiles",  # Needed by generator.clarifier
+        "aiofiles.os",  # Submodule
+        "redis",  # Needed by generator
+        "redis.asyncio",  # Submodule
+        "chromadb",  # Needed by testgen_agent
+        "chromadb.utils",  # Submodule
+        "defusedxml",  # Needed by testgen_agent
+        "defusedxml.ElementTree",  # Submodule needed by testgen
+        "nest_asyncio",  # Needed by testgen
+        "zstandard",  # Needed by clarifier
+        "boto3",  # Needed by clarifier (KMS integration)
+        "cryptography",  # Needed by clarifier (encryption)
+        "cryptography.fernet",  # Submodule
+        "prometheus_client",  # Needed by clarifier for metrics
+        "tiktoken",  # Needed by testgen_agent
+        "aiokafka",  # Needed by arbiter
+        "aiokafka.errors",  # Submodule
+        "dotenv",  # Needed by testgen_agent
+        # Note: aiohttp needs special handling below
+    ]
+    
+    for mod_name in early_mocks:
+        if mod_name not in sys.modules:
+            early_mock = types.ModuleType(mod_name)
+            early_mock.__file__ = f"<mocked {mod_name}>"
+            early_mock.__path__ = []
+            early_mock.__spec__ = importlib.util.spec_from_loader(mod_name, loader=None)
+            
+            # Special handling for dotenv
+            if mod_name == "dotenv":
+                early_mock.load_dotenv = lambda *args, **kwargs: None
+                early_mock.find_dotenv = lambda *args, **kwargs: None
+            else:
+                # Create a unique __getattr__ for each module (avoid closure issues)
+                def make_getattr():
+                    def _getattr(name):
+                        from unittest.mock import MagicMock
+                        return MagicMock()
+                    return _getattr
+                
+                early_mock.__getattr__ = make_getattr()
+            
+            sys.modules[mod_name] = early_mock
+    
+    # Special early initialization for aiohttp (needs ClientSession and other classes)
+    if "aiohttp" not in sys.modules:
+        # Create a minimal but functional aiohttp mock for early imports
+        # This will be replaced/enhanced by _initialize_aiohttp_stubs later if needed
+        aiohttp_early = types.ModuleType("aiohttp")
+        aiohttp_early.__file__ = "<mocked aiohttp early>"
+        aiohttp_early.__path__ = []
+        aiohttp_early.__spec__ = importlib.util.spec_from_loader("aiohttp", loader=None)
+        
+        # ClientSession class
+        class EarlyClientSession:
+            def __init__(self, *args, **kwargs):
+                pass
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+            async def close(self):
+                pass
+            async def get(self, *args, **kwargs):
+                from unittest.mock import MagicMock
+                resp = MagicMock()
+                resp.status = 200
+                resp.json = MagicMock(return_value={})
+                return resp
+            async def post(self, *args, **kwargs):
+                from unittest.mock import MagicMock
+                resp = MagicMock()
+                resp.status = 200
+                resp.json = MagicMock(return_value={})
+                return resp
+        
+        # ClientResponse class
+        class EarlyClientResponse:
+            def __init__(self, *args, **kwargs):
+                self.status = 200
+                self.headers = {}
+            async def json(self):
+                return {}
+            async def text(self):
+                return ""
+            async def read(self):
+                return b""
+        
+        # Exception classes
+        class EarlyClientError(Exception):
+            pass
+        
+        class EarlyClientResponseError(EarlyClientError):
+            pass
+        
+        aiohttp_early.ClientSession = EarlyClientSession
+        aiohttp_early.ClientResponse = EarlyClientResponse
+        aiohttp_early.ClientError = EarlyClientError
+        aiohttp_early.ClientResponseError = EarlyClientResponseError
+        
+        # Add __getattr__ for other attributes
+        def _aiohttp_early_getattr(name):
+            from unittest.mock import MagicMock
+            return MagicMock()
+        aiohttp_early.__getattr__ = _aiohttp_early_getattr
+        
+        sys.modules["aiohttp"] = aiohttp_early
+    
     # CPU TIMEOUT FIX: Skip expensive module existence checks during test collection.
     # Previously, _check_module_exists() used importlib.util.find_spec() which triggers
     # recursive module discovery and imports heavy packages (matplotlib, torch, etc.),
@@ -146,11 +340,11 @@ if os.environ.get("TESTING") == "1":
     
     # Only create stubs for modules that aren't already imported
     # This is a simple O(1) check without expensive filesystem walking
+    # NOTE: Only stub modules that truly don't exist in the codebase
+    # Real packages like generator.clarifier should NOT be stubbed
     for mod_name in ['intent_capture', 
                      'omnicore_engine.database', 
-                     'omnicore_engine.message_bus',
-                     'generator.clarifier',
-                     'generator.agents.docgen_agent']:
+                     'omnicore_engine.message_bus']:
         if mod_name not in sys.modules:
             _stub_modules[mod_name] = mod_name
 
@@ -325,6 +519,9 @@ def _create_mock_module(name):
 
         mock_module.Dynaconf = MockDynaconf
         mock_module.Validator = MockValidator
+        # Add common functions that might be imported from dynaconf
+        mock_module.get_config = lambda *args, **kwargs: MockDynaconf()
+        mock_module.load_config = lambda *args, **kwargs: MockDynaconf()
     elif name == "torch":
         # torch needs __version__ as a string (not MockCallable) to prevent errors
         # in packaging.version.Version() calls (e.g., from safetensors.torch)
@@ -1178,6 +1375,119 @@ def _initialize_aiohttp_stubs():
             def add_field(self, name, value, **kwargs):
                 self._fields.append((name, value))
         
+        # ---- Server-side aiohttp.web support ----
+        
+        class WebRequest:
+            """Mock aiohttp.web.Request for server-side operations."""
+            def __init__(self, *args, **kwargs):
+                self.headers = {}
+                self.query = {}
+                self.match_info = {}
+                from unittest.mock import MagicMock
+                self.app = MagicMock()
+            
+            async def json(self):
+                return {}
+            
+            async def text(self):
+                return ""
+            
+            async def read(self):
+                return b""
+        
+        class WebResponse:
+            """Mock aiohttp.web.Response."""
+            def __init__(self, *args, text=None, status=200, **kwargs):
+                self.status = status
+                self.text = text
+                self.headers = {}
+        
+        class WebApplication:
+            """Mock aiohttp.web.Application."""
+            def __init__(self, *args, **kwargs):
+                from unittest.mock import MagicMock
+                self.router = MagicMock()
+                self._state = {}
+            
+            def get(self, key, default=None):
+                return self._state.get(key, default)
+            
+            def __setitem__(self, key, value):
+                self._state[key] = value
+            
+            def __getitem__(self, key):
+                return self._state[key]
+            
+            def add_routes(self, *args, **kwargs):
+                pass
+            
+            def on_startup(self, *args, **kwargs):
+                pass
+        
+        class RouteTableDef(list):
+            """Mock aiohttp.web.RouteTableDef."""
+            def get(self, path):
+                def decorator(handler):
+                    return handler
+                return decorator
+            
+            def post(self, path):
+                def decorator(handler):
+                    return handler
+                return decorator
+        
+        class AppRunner:
+            """Mock aiohttp.web.AppRunner."""
+            def __init__(self, app, **kwargs):
+                self.app = app
+            
+            async def setup(self):
+                pass
+            
+            async def cleanup(self):
+                pass
+        
+        class TCPSite:
+            """Mock aiohttp.web.TCPSite."""
+            def __init__(self, runner, host, port, **kwargs):
+                self.runner = runner
+                self.host = host
+                self.port = port
+            
+            async def start(self):
+                pass
+            
+            async def stop(self):
+                pass
+        
+        def json_response(data, status=200, **kwargs):
+            """Mock aiohttp.web.json_response."""
+            import json
+            response = WebResponse(status=status)
+            response.text = json.dumps(data)
+            return response
+        
+        def run_app(app, *args, **kwargs):
+            """Mock aiohttp.web.run_app."""
+            pass
+        
+        # Create web submodule
+        web_module = types.ModuleType("aiohttp.web")
+        web_module.__file__ = "<mocked aiohttp.web>"
+        web_module.__path__ = []
+        web_module.__spec__ = importlib.util.spec_from_loader("aiohttp.web", loader=None)
+        web_module.Request = WebRequest
+        web_module.Response = WebResponse
+        web_module.Application = WebApplication
+        web_module.RouteTableDef = RouteTableDef
+        web_module.AppRunner = AppRunner
+        web_module.TCPSite = TCPSite
+        web_module.json_response = json_response
+        web_module.run_app = run_app
+        
+        # Add web as attribute to main aiohttp module
+        aiohttp_module.web = web_module
+        
         # Register all classes and types on the module
         aiohttp_module.ClientTimeout = ClientTimeout
         aiohttp_module.ClientResponse = ClientResponse
@@ -1192,8 +1502,9 @@ def _initialize_aiohttp_stubs():
         aiohttp_module.BasicAuth = BasicAuth
         aiohttp_module.FormData = FormData
         
-        # Register the module
+        # Register both modules
         sys.modules["aiohttp"] = aiohttp_module
+        sys.modules["aiohttp.web"] = web_module
 
 
 # ---- Custom Import Hook REMOVED ----
