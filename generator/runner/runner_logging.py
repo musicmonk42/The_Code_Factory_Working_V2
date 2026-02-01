@@ -169,14 +169,102 @@ if TYPE_CHECKING:
 # FIX: Corrected 'runner.errors' to 'runner.runner_errors'
 # from runner.runner_errors import RunnerError, ConfigurationError, PersistenceError, error_codes # Import relevant error types
 
-# --- FIX: Import utility metrics from runner_metrics.py ---
-from runner.runner_metrics import (
-    ANOMALY_DETECTED_TOTAL,
-    DASHBOARD_QUEUE_SIZE,
-    UTIL_ERRORS,
-    UTIL_LATENCY,
-    UTIL_SELF_HEAL,
-)
+# --- FIX: Lazy import of metrics to break circular import ---
+# The metrics are now loaded lazily via _get_metrics() to avoid circular import issues.
+# When runner_logging is imported by runner_core (which is imported by runner/__init__),
+# importing from runner_metrics at module level can cause circular import errors
+# if runner_metrics directly or indirectly imports from runner_logging.
+
+# Module-level cache for metrics (populated on first use)
+_METRICS_CACHE: Dict[str, Any] = {}
+
+
+def _get_metrics():
+    """
+    Lazily import and cache metrics from runner_metrics to break circular import.
+    
+    This function provides access to metrics objects without causing circular imports
+    during module initialization. The metrics are cached after first successful import.
+    
+    Returns:
+        dict: A dictionary containing the metric objects, or fallback dummy metrics
+              if the import fails.
+    """
+    global _METRICS_CACHE
+    
+    if not _METRICS_CACHE:
+        try:
+            from runner.runner_metrics import (
+                ANOMALY_DETECTED_TOTAL,
+                DASHBOARD_QUEUE_SIZE,
+                UTIL_ERRORS,
+                UTIL_LATENCY,
+                UTIL_SELF_HEAL,
+            )
+            _METRICS_CACHE = {
+                "ANOMALY_DETECTED_TOTAL": ANOMALY_DETECTED_TOTAL,
+                "DASHBOARD_QUEUE_SIZE": DASHBOARD_QUEUE_SIZE,
+                "UTIL_ERRORS": UTIL_ERRORS,
+                "UTIL_LATENCY": UTIL_LATENCY,
+                "UTIL_SELF_HEAL": UTIL_SELF_HEAL,
+            }
+        except ImportError:
+            # Fallback dummy metrics for when runner_metrics is not available
+            class _DummyMetric:
+                """Dummy metric that silently ignores all operations."""
+                def labels(self, *args, **kwargs):
+                    return self
+                def inc(self, *args, **kwargs):
+                    pass
+                def set(self, *args, **kwargs):
+                    pass
+                def observe(self, *args, **kwargs):
+                    pass
+                def time(self):
+                    class _DummyTimer:
+                        def __enter__(self): return self
+                        def __exit__(self, *args): pass
+                    return _DummyTimer()
+            
+            _dummy = _DummyMetric()
+            _METRICS_CACHE = {
+                "ANOMALY_DETECTED_TOTAL": _dummy,
+                "DASHBOARD_QUEUE_SIZE": _dummy,
+                "UTIL_ERRORS": _dummy,
+                "UTIL_LATENCY": _dummy,
+                "UTIL_SELF_HEAL": _dummy,
+            }
+    
+    return _METRICS_CACHE
+
+
+# Create module-level references that lazily resolve to the actual metrics
+# These are defined as properties on a helper class to enable lazy loading
+class _LazyMetrics:
+    """Lazy metric accessor that loads metrics on first access."""
+    
+    @property
+    def ANOMALY_DETECTED_TOTAL(self):
+        return _get_metrics()["ANOMALY_DETECTED_TOTAL"]
+    
+    @property
+    def DASHBOARD_QUEUE_SIZE(self):
+        return _get_metrics()["DASHBOARD_QUEUE_SIZE"]
+    
+    @property
+    def UTIL_ERRORS(self):
+        return _get_metrics()["UTIL_ERRORS"]
+    
+    @property
+    def UTIL_LATENCY(self):
+        return _get_metrics()["UTIL_LATENCY"]
+    
+    @property
+    def UTIL_SELF_HEAL(self):
+        return _get_metrics()["UTIL_SELF_HEAL"]
+
+
+_lazy_metrics = _LazyMetrics()
 
 # --- END FIX ---
 
@@ -269,7 +357,7 @@ class AsyncAlertQueue:
             )
         except asyncio.QueueFull:
             logger.error(f"Alert queue is full. Dropping alert: {subject}")
-            UTIL_ERRORS.labels(func="alert_queue", type="full").inc()
+            _lazy_metrics.UTIL_ERRORS.labels(func="alert_queue", type="full").inc()
 
 
 async def send_alert(
@@ -313,12 +401,12 @@ async def send_alert(
                 f"Failed to send alert via webhook to {alert_webhook_url}: {e}",
                 exc_info=True,
             )
-            UTIL_ERRORS.labels(func="send_alert", type="webhook_fail").inc()
+            _lazy_metrics.UTIL_ERRORS.labels(func="send_alert", type="webhook_fail").inc()
         except Exception as e:
             logger.error(
                 f"Unexpected error sending alert via webhook: {e}", exc_info=True
             )
-            UTIL_ERRORS.labels(func="send_alert", type="unexpected_webhook_error").inc()
+            _lazy_metrics.UTIL_ERRORS.labels(func="send_alert", type="unexpected_webhook_error").inc()
 
     if recipients:
         logger.warning(
@@ -327,12 +415,12 @@ async def send_alert(
         logger.warning(
             f"Email sending not implemented. Alert for '{subject}' not sent to {recipients}."
         )
-        UTIL_ERRORS.labels(func="send_alert", type="email_fail").inc()
+        _lazy_metrics.UTIL_ERRORS.labels(func="send_alert", type="email_fail").inc()
     else:
         logger.warning(
             f"No alert recipients or webhook. Alert for '{subject}' not dispatched."
         )
-        UTIL_ERRORS.labels(func="send_alert", type="no_recipient").inc()
+        _lazy_metrics.UTIL_ERRORS.labels(func="send_alert", type="no_recipient").inc()
 
 
 # [NEW] Replaces _start_alert_worker
@@ -706,7 +794,7 @@ def detect_anomaly(
         )
         
         # Update Prometheus metrics
-        ANOMALY_DETECTED_TOTAL.labels(type=anomaly_type, severity=severity).inc()
+        _lazy_metrics.ANOMALY_DETECTED_TOTAL.labels(type=anomaly_type, severity=severity).inc()
         
         # Send alert asynchronously with industry-standard error handling
         _safe_create_async_task(
@@ -762,7 +850,7 @@ def self_healing(
             Exception,
             max_tries=max_tries,
             logger=logger,
-            on_backoff=lambda details: UTIL_SELF_HEAL.labels(func=func.__name__).inc(),
+            on_backoff=lambda details: _lazy_metrics.UTIL_SELF_HEAL.labels(func=func.__name__).inc(),
         )
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -795,7 +883,7 @@ def self_healing(
                         },
                         fail_silently=False,  # Critical alerts should warn if skipped
                     )
-                    ANOMALY_DETECTED_TOTAL.labels(
+                    _lazy_metrics.ANOMALY_DETECTED_TOTAL.labels(
                         type="function_failure", severity="critical"
                     ).inc()
                 raise
@@ -833,7 +921,7 @@ async def _stream_to_dashboard(url: str):
                 async with session.ws_connect(url, heartbeat=30) as ws:
                     safe_log("info", f"Connected to dashboard WebSocket at {url}")
                     while True:
-                        DASHBOARD_QUEUE_SIZE.set(DASHBOARD_QUEUE.qsize())
+                        _lazy_metrics.DASHBOARD_QUEUE_SIZE.set(DASHBOARD_QUEUE.qsize())
                         try:
                             log_record_dict = await asyncio.wait_for(
                                 asyncio.to_thread(DASHBOARD_QUEUE.get), timeout=5
@@ -855,7 +943,7 @@ async def _stream_to_dashboard(url: str):
                                 f"Error sending log to dashboard: {e}",
                                 exc_info=True,
                             )
-                            UTIL_ERRORS.labels(
+                            _lazy_metrics.UTIL_ERRORS.labels(
                                 func="dashboard_stream_send", type=type(e).__name__
                             ).inc()
                         finally:
@@ -863,14 +951,14 @@ async def _stream_to_dashboard(url: str):
                 safe_log(
                     "info", "Dashboard WebSocket disconnected. Retrying in 5 seconds..."
                 )
-                UTIL_ERRORS.labels(func="dashboard_stream", type="disconnected").inc()
+                _lazy_metrics.UTIL_ERRORS.labels(func="dashboard_stream", type="disconnected").inc()
         except aiohttp.ClientConnectorError as e:
             safe_log(
                 "error",
                 f"Could not connect to dashboard WebSocket at {url}: {e}. Retrying in 10 seconds...",
                 exc_info=False,
             )
-            UTIL_ERRORS.labels(func="dashboard_stream", type="connection_error").inc()
+            _lazy_metrics.UTIL_ERRORS.labels(func="dashboard_stream", type="connection_error").inc()
             await asyncio.sleep(10)
         except asyncio.CancelledError:
             safe_log("info", "Dashboard streaming task cancelled.")
@@ -881,10 +969,10 @@ async def _stream_to_dashboard(url: str):
                 f"Unexpected error in dashboard streaming: {e}. Retrying in 5 seconds...",
                 exc_info=True,
             )
-            UTIL_ERRORS.labels(func="dashboard_stream", type="unexpected_error").inc()
+            _lazy_metrics.UTIL_ERRORS.labels(func="dashboard_stream", type="unexpected_error").inc()
             await asyncio.sleep(5)
         finally:
-            DASHBOARD_QUEUE_SIZE.set(DASHBOARD_QUEUE.qsize())
+            _lazy_metrics.DASHBOARD_QUEUE_SIZE.set(DASHBOARD_QUEUE.qsize())
 
 
 # [REMOVED] start_dashboard_streaming (logic moved to start_logging_services)
@@ -934,14 +1022,14 @@ def stream_log_record_to_dashboard_queue(record: logging.LogRecord):
         except (queue.Full, RuntimeError, ValueError):
             # Queue is full or not available, skip this log entry
             pass
-        UTIL_ERRORS.labels(func="dashboard_queue", type="full").inc()
+        _lazy_metrics.UTIL_ERRORS.labels(func="dashboard_queue", type="full").inc()
     except Exception as e:
         try:
             sys.stderr.write(f"Error in stream_log_record_to_dashboard_queue: {e}\n")
         except (IOError, OSError):
             # Silently ignore if stderr is not available
             pass
-        UTIL_ERRORS.labels(func="logging_hook_fail", type=type(e).__name__).inc()
+        _lazy_metrics.UTIL_ERRORS.labels(func="logging_hook_fail", type=type(e).__name__).inc()
 
 
 # [REMOVED] register_logging_hook(stream_log_record_to_dashboard_queue) - will be added by start_logging_services
@@ -990,7 +1078,7 @@ def util_decorator(func: Callable):
                 result = await func(*args, **kwargs)
                 duration = time.time() - start_time
 
-                UTIL_LATENCY.labels(func=func_name, status="success").observe(duration)
+                _lazy_metrics.UTIL_LATENCY.labels(func=func_name, status="success").observe(duration)
                 span.set_attribute("duration_seconds", duration)
 
                 if _SC:
@@ -1045,8 +1133,8 @@ def util_decorator(func: Callable):
                 return result
             except Exception as e:
                 duration = time.time() - start_time
-                UTIL_LATENCY.labels(func=func_name, status="failure").observe(duration)
-                UTIL_ERRORS.labels(func=func_name, type=type(e).__name__).inc()
+                _lazy_metrics.UTIL_LATENCY.labels(func=func_name, status="failure").observe(duration)
+                _lazy_metrics.UTIL_ERRORS.labels(func=func_name, type=type(e).__name__).inc()
                 span.set_attribute("error.message", str(e))
 
                 if _SC:

@@ -472,6 +472,14 @@ class Database:
             db_path = db_path.replace("sqlite:///", "sqlite+aiosqlite:///")
             logger.info("Converted SQLite URL to use aiosqlite async driver")
 
+        # Ensure async driver is used for PostgreSQL
+        # SQLAlchemy's asyncio extension requires an async driver (asyncpg) not psycopg2
+        if db_path.startswith("postgresql://") and not db_path.startswith(
+            "postgresql+asyncpg://"
+        ):
+            db_path = db_path.replace("postgresql://", "postgresql+asyncpg://")
+            logger.info("Converted PostgreSQL URL to use asyncpg async driver")
+
         self.db_path = db_path
 
         db_echo = settings.LOG_LEVEL.upper() == "DEBUG"
@@ -484,17 +492,22 @@ class Database:
         }
 
         # Set connect_args conditionally per database type (Issue #7 fix)
-        if self.db_path.startswith("postgresql://") or self.db_path.startswith("postgresql+asyncpg://"):
+        # Note: After URL conversion above, all PostgreSQL URLs will use asyncpg driver
+        if self.db_path.startswith("postgresql+asyncpg://"):
+            # asyncpg uses server_settings for PostgreSQL configuration
+            # and command_timeout for connection-level timeout
             engine_params["connect_args"] = {
-                "timeout": 30,
-                "options": "-c statement_timeout=30000",
+                "command_timeout": 30,  # Connection-level timeout in seconds
+                "server_settings": {
+                    "statement_timeout": "30000",  # Query timeout in milliseconds
+                },
             }
             self.engine: AsyncEngine = create_async_engine(
                 self.db_path, **engine_params
             )
             self.is_postgres = True
             logger.info(
-                f"Database initialized with PostgreSQL engine: {self.db_path.split('@')[-1]}"
+                f"Database initialized with PostgreSQL (asyncpg) engine: {self.db_path.split('@')[-1]}"
             )
         elif self.db_path.startswith("sqlite+aiosqlite://"):
             sqlite_db_file = self.db_path.replace("sqlite+aiosqlite:///", "")
