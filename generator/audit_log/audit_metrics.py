@@ -77,6 +77,8 @@ except (ImportError, AttributeError):
     # Fallback mock implementations for testing/when prometheus is not available
     class MockRegistry:
         def __init__(self):
+            # _names_to_collectors is used by safe_counter() function (line 133)
+            # to check if a metric is already registered
             self._names_to_collectors = {}
         
         def collect(self):
@@ -123,7 +125,10 @@ logger = logging.getLogger(__name__)
 
 # Log prometheus availability status
 if not PROMETHEUS_AVAILABLE:
-    logger.warning("prometheus_client not available, using mock implementations")
+    logger.warning(
+        "prometheus_client not available, using mock implementations. "
+        "Metrics will not be collected or exported to monitoring systems."
+    )
 
 
 # --- START: ADDED SAFE_COUNTER HELPER ---
