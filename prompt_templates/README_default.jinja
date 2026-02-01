@@ -1,0 +1,147 @@
+{# 
+  README Documentation Template
+  Generates comprehensive README.md documentation.
+  
+  Features:
+    - Project overview
+    - Installation instructions
+    - Usage examples
+    - API reference
+    - Contributing guidelines
+#}
+
+# README Documentation Generation
+
+Generate a comprehensive README.md for the project.
+
+{% if files %}
+## Project Files:
+{% for file in files %}
+- {{ file }}
+{% endfor %}
+{% endif %}
+
+{% if context is defined %}
+## Project Context
+{% if context.language is defined %}
+- Language: {{ context.language }}
+{% endif %}
+{% if context.framework is defined %}
+- Framework: {{ context.framework }}
+{% endif %}
+{% if context.dependencies is defined and context.dependencies %}
+- Dependencies: {{ context.dependencies | join(', ') }}
+{% endif %}
+{% if context.files_content is defined %}
+### Code Context:
+```
+{{ context.files_content | tojson }}
+```
+{% endif %}
+{% endif %}
+
+## README Requirements
+
+Generate a complete README.md that includes:
+
+### 1. **Project Title and Description**
+   - Clear project name
+   - One-line description
+   - Detailed overview of what the project does
+   - Key features and benefits
+   - Use cases
+
+### 2. **Badges** (if applicable)
+   - Build status
+   - Test coverage
+   - Version
+   - License
+   - Downloads/stars
+
+### 3. **Table of Contents**
+   - Links to all major sections
+
+### 4. **Installation**
+   - Prerequisites
+   - Step-by-step installation instructions
+   - Platform-specific notes
+   - Common installation issues
+
+### 5. **Quick Start / Usage**
+   - Minimal example to get started
+   - Basic usage examples
+   - Code snippets with explanations
+   - Configuration basics
+
+### 6. **Documentation**
+   - Link to full documentation
+   - API reference overview
+   - Key concepts explained
+   - Architecture overview
+
+### 7. **Examples**
+   - Real-world usage examples
+   - Code samples
+   - Screenshots or output examples (described)
+   - Links to example projects
+
+### 8. **Configuration**
+   - Configuration options
+   - Environment variables
+   - Config file examples
+   - Best practices
+
+### 9. **Development**
+   - Setting up development environment
+   - Running tests
+   - Code style and linting
+   - Building from source
+
+### 10. **Contributing**
+   - How to contribute
+   - Code of conduct
+   - Pull request process
+   - Issue reporting guidelines
+
+### 11. **Testing**
+   - How to run tests
+   - Test coverage
+   - Testing guidelines
+
+### 12. **Deployment**
+   - Deployment options
+   - Production considerations
+   - CI/CD setup
+
+### 13. **Troubleshooting**
+   - Common issues and solutions
+   - FAQ
+   - Support channels
+
+### 14. **License**
+   - License type
+   - Copyright information
+
+### 15. **Authors / Credits**
+   - Main contributors
+   - Acknowledgments
+   - Links to profiles
+
+### 16. **Support / Contact**
+   - How to get help
+   - Community channels
+   - Commercial support options
+
+{% if instructions is defined and instructions %}
+## Additional Instructions
+{{ instructions }}
+{% endif %}
+
+{% if few_shot_examples is defined and few_shot_examples %}
+## Example READMEs
+
+{{ few_shot_examples }}
+{% endif %}
+
+---
+**Output Format**: Generate a well-structured README.md in Markdown format with clear sections, proper headings, code blocks, and helpful examples. Make it engaging and professional.
