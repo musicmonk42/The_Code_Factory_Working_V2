@@ -104,6 +104,8 @@ def main():
     logger.info("=" * 70)
 
     # Run the server
+    # FIX: Add proper timeout configuration to prevent HTTP2 protocol errors
+    # These errors occur when long-running requests (pipeline, codegen) exceed default timeouts
     uvicorn.run(
         "server.main:app",
         host=args.host,
@@ -112,6 +114,9 @@ def main():
         workers=args.workers if not args.reload else 1,
         log_level=args.log_level,
         access_log=True,
+        timeout_keep_alive=300,  # 5 minutes for long-running operations (pipeline, codegen)
+        timeout_graceful_shutdown=30,  # 30 seconds for graceful shutdown
+        h11_max_incomplete_event_size=16 * 1024 * 1024,  # 16MB for large responses
     )
 
 

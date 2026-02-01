@@ -1078,11 +1078,16 @@ if __name__ == "__main__":
     
     logger.info(f"Starting server on {host}:{port}")
     
-    # Run the FastAPI application
+    # Run the FastAPI application with production-grade timeout settings
+    # FIX: Add proper timeout configuration to prevent HTTP2 protocol errors
+    # These errors occur when long-running requests (pipeline, codegen) exceed default timeouts
     uvicorn.run(
         app,
         host=host,
         port=port,
         log_level=log_level,
         access_log=True,
+        timeout_keep_alive=300,  # 5 minutes for long-running operations
+        timeout_graceful_shutdown=30,  # 30 seconds for graceful shutdown
+        h11_max_incomplete_event_size=16 * 1024 * 1024,  # 16MB for large responses
     )

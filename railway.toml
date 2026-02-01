@@ -13,6 +13,14 @@ healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
+# HTTP/2 timeout configuration for long-running operations
+# Prevents ERR_HTTP2_PROTOCOL_ERROR on pipeline and codegen endpoints
+# Railway will keep connections alive for up to 600 seconds (10 minutes)
+# This allows pipeline and codegen operations to complete without timing out
+[deploy.http]
+connectionTimeout = 600  # 10 minutes for long-running requests
+idleTimeout = 300  # 5 minutes idle timeout
+
 # =============================================================================
 # CRITICAL ENVIRONMENT VARIABLES - REQUIRED FOR ALL FIXES
 # =============================================================================
