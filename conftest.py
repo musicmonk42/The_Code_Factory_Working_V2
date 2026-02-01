@@ -65,12 +65,52 @@ if _CPU_CONSTRAINED:
     # Reduce parallelism in CPU-constrained environments
     os.environ.setdefault("PYTEST_XDIST_WORKER_COUNT", "1")
 
+
+def _validate_real_modules():
+    """
+    Ensure that installed dependencies are using real modules, not mocks.
+    This prevents AttributeError issues during pytest collection.
+    
+    Checks for modules that should be real (installed via requirements.txt)
+    and removes any broken mocks or stubs that might interfere with imports.
+    """
+    required_real_modules = [
+        "prometheus_client",
+        "opentelemetry",
+    ]
+    
+    for mod_name in required_real_modules:
+        if mod_name in sys.modules:
+            mod = sys.modules[mod_name]
+            # Check if it's a MagicMock or has broken __spec__
+            if not hasattr(mod, '__spec__') or mod.__spec__ is None:
+                # Remove the broken mock
+                del sys.modules[mod_name]
+                # Remove submodules
+                for key in list(sys.modules.keys()):
+                    if key.startswith(f"{mod_name}."):
+                        del sys.modules[key]
+            elif hasattr(mod.__spec__, '__class__'):
+                # Check if __spec__ itself is a mock (not a real ModuleSpec)
+                spec_class_name = mod.__spec__.__class__.__name__
+                if 'Mock' in spec_class_name:
+                    # It's a mock spec, remove it
+                    del sys.modules[mod_name]
+                    # Remove submodules
+                    for key in list(sys.modules.keys()):
+                        if key.startswith(f"{mod_name}."):
+                            del sys.modules[key]
+
+
 # ---- Pytest hooks for collection optimization ----
 def pytest_configure(config):
     """
     Skip expensive initialization during collection phase.
     This prevents OOM and CPU timeout during test discovery.
     """
+    # Validate that required modules aren't mocked (do this FIRST, before collection check)
+    _validate_real_modules()
+    
     if config.option.collectonly:
         # Signal to modules that we're only collecting, not running tests
         os.environ['SKIP_EXPENSIVE_INIT'] = '1'
@@ -1799,10 +1839,22 @@ def _initialize_prometheus_stubs():
     This function now only creates stubs if the real package is not available.
     
     FIX: Uses proper ModuleSpec to prevent AttributeError: __spec__
+    FIX: Detects and replaces mock modules with real imports
     """
-    # Check if already loaded
+    # Check if already loaded WITH A REAL MODULE (not a mock)
     if "prometheus_client" in sys.modules:
-        return
+        existing_mod = sys.modules["prometheus_client"]
+        # Check if it's a real module with __spec__
+        if hasattr(existing_mod, '__spec__') and existing_mod.__spec__ is not None:
+            # Check if __spec__ is a real ModuleSpec (not a MagicMock)
+            if hasattr(existing_mod.__spec__, 'name'):
+                return  # Real module already loaded
+        # If we get here, it's a mock or broken stub - remove it
+        del sys.modules["prometheus_client"]
+        # Also remove any submodules that might be mocked
+        for key in list(sys.modules.keys()):
+            if key.startswith("prometheus_client."):
+                del sys.modules[key]
     
     # Try to import the real prometheus_client
     try:
