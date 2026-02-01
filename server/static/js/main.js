@@ -1833,9 +1833,17 @@ async function startArbiter() {
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({action: 'start', config: {}})
+            body: JSON.stringify({command: 'start', config: {}})
         });
-        showSuccess('Arbiter started');
+        
+        if (!response.ok) {
+            const error = await response.json();
+            showError('Failed to start Arbiter: ' + (error.detail?.message || error.detail || 'Unknown error'));
+            return;
+        }
+        
+        const data = await response.json();
+        showSuccess('Arbiter started: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Failed to start Arbiter: ' + error.message);
     }
@@ -1846,9 +1854,17 @@ async function stopArbiter() {
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({action: 'stop'})
+            body: JSON.stringify({command: 'stop'})
         });
-        showSuccess('Arbiter stopped');
+        
+        if (!response.ok) {
+            const error = await response.json();
+            showError('Failed to stop Arbiter: ' + (error.detail?.message || error.detail || 'Unknown error'));
+            return;
+        }
+        
+        const data = await response.json();
+        showSuccess('Arbiter stopped: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Failed to stop Arbiter: ' + error.message);
     }
@@ -1871,9 +1887,17 @@ async function configureArbiter() {
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({action: 'configure', config: parsedConfig})
+            body: JSON.stringify({command: 'configure', config: parsedConfig})
         });
-        showSuccess('Arbiter configured');
+        
+        if (!response.ok) {
+            const error = await response.json();
+            showError('Configuration failed: ' + (error.detail?.message || error.detail || 'Unknown error'));
+            return;
+        }
+        
+        const data = await response.json();
+        showSuccess('Arbiter configured: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Configuration request failed: ' + error.message);
     }
@@ -1884,10 +1908,17 @@ async function getArbiterStatus() {
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({action: 'status'})
+            body: JSON.stringify({command: 'status'})
         });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            showError('Failed to get status: ' + (error.detail?.message || error.detail || 'Unknown error'));
+            return;
+        }
+        
         const data = await response.json();
-        alert(`Arbiter Status:\nState: ${data.status}\nActive Agents: ${data.active_agents}`);
+        alert(`Arbiter Status:\nState: ${data.status || 'Unknown'}\nActive Agents: ${data.active_agents || 0}`);
     } catch (error) {
         showError('Failed to get status: ' + error.message);
     }
