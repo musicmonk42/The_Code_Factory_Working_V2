@@ -201,8 +201,8 @@ jobs:
           
           # Test generator package
           echo "Testing generator..."
-          python -c "import sys; sys.path.insert(0, 'generator'); import main" || {
-            echo "WARNING: generator.main cannot be imported (may be expected)"
+          python -c "import generator" || {
+            echo "WARNING: generator cannot be imported (may be expected)"
           }
           
           # Test server package
