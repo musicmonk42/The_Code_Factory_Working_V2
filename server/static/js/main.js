@@ -649,10 +649,11 @@ async function loadAgentStatus() {
         availableCount.textContent = `${availableAgentsCount} / ${totalAgents}`;
         
         // Convert agents dictionary to array for rendering
+        // API returns: {agentName: {available: bool, module_path: str, error: {type, message, ...}|null}}
         const agentsArray = Object.entries(agentsDict).map(([name, info]) => ({
             name: name,
             available: info.available,
-            error: info.error ? (info.error.message || JSON.stringify(info.error)) : null
+            error: info.error ? (info.error.message || info.error.type || 'Unknown error') : null
         }));
         
         agentsList.innerHTML = agentsArray.map(agent => {
