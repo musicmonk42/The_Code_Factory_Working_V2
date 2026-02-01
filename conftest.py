@@ -1973,6 +1973,9 @@ def _initialize_omnicore_mocks():
             # If successful, the lazy loading has properly loaded the module
         except (AttributeError, ImportError) as e:
             # Only create mock if lazy loading failed
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Lazy loading omnicore_engine.database failed: {e}. Creating stub module.")
             database_mock = _create_mock_module("omnicore_engine.database")
             sys.modules["omnicore_engine.database"] = database_mock
             if "omnicore_engine" in sys.modules:
@@ -1987,6 +1990,9 @@ def _initialize_omnicore_mocks():
             # If successful, the lazy loading has properly loaded the module
         except (AttributeError, ImportError) as e:
             # Only create mock if lazy loading failed
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Lazy loading omnicore_engine.message_bus failed: {e}. Creating stub module.")
             message_bus_mock = _create_mock_module("omnicore_engine.message_bus")
             sys.modules["omnicore_engine.message_bus"] = message_bus_mock
             if "omnicore_engine" in sys.modules:

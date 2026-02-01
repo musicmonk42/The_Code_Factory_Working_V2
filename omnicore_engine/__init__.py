@@ -96,10 +96,6 @@ def __getattr__(name: str) -> Any:
     Raises:
         AttributeError: If the requested attribute doesn't exist
     """
-    # Check cache first
-    if name in _module_cache:
-        return _module_cache[name]
-    
     # Map of lazy-loadable modules
     _lazy_modules = {
         'plugin_registry': '.plugin_registry',
@@ -111,6 +107,10 @@ def __getattr__(name: str) -> Any:
     }
     
     if name in _lazy_modules:
+        # Check cache first (only for valid lazy-loadable modules)
+        if name in _module_cache:
+            return _module_cache[name]
+        
         import importlib
         import sys
         try:
