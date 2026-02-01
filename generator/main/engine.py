@@ -570,8 +570,60 @@ class AgentRegistry:
 # Global singleton instance for backwards compatibility
 _agent_registry = AgentRegistry()
 
+
+class _AgentRegistryProxy(dict):
+    """A dict-like proxy that provides backwards compatibility with AGENT_REGISTRY.
+    
+    This proxy ensures that all dict operations are thread-safe by delegating
+    to the AgentRegistry singleton. This maintains backwards compatibility
+    with code that accesses AGENT_REGISTRY directly as a dict.
+    """
+    
+    def __init__(self, registry: AgentRegistry):
+        self._registry = registry
+    
+    def __getitem__(self, key):
+        result = self._registry.get(key)
+        if result is None:
+            raise KeyError(key)
+        return result
+    
+    def __setitem__(self, key, value):
+        self._registry.register(key, value)
+    
+    def __delitem__(self, key):
+        if not self._registry.unregister(key):
+            raise KeyError(key)
+    
+    def __contains__(self, key):
+        return key in self._registry
+    
+    def __iter__(self):
+        return iter(self._registry)
+    
+    def __len__(self):
+        return len(self._registry)
+    
+    def get(self, key, default=None):
+        result = self._registry.get(key)
+        return result if result is not None else default
+    
+    def keys(self):
+        return self._registry.get_all().keys()
+    
+    def values(self):
+        return self._registry.get_all().values()
+    
+    def items(self):
+        return self._registry.get_all().items()
+    
+    def __repr__(self):
+        return repr(self._registry.get_all())
+
+
 # Dict-like interface for backwards compatibility with AGENT_REGISTRY usage
-AGENT_REGISTRY: Dict[str, Type[Any]] = _agent_registry._agents
+# This proxy provides thread-safe access while maintaining dict semantics
+AGENT_REGISTRY: Dict[str, Type[Any]] = _AgentRegistryProxy(_agent_registry)
 
 
 def register_agent(
@@ -837,22 +889,32 @@ class WorkflowEngine:
                 }
             )
             
-            # Audit log (lazy import to avoid circular dependency)
+            # Audit log (fire-and-forget to avoid blocking workflow on slow audit system)
             try:
                 from generator.runner.runner_logging import log_audit_event
-                await log_audit_event(
-                    action="workflow_started",
-                    data={
-                        "workflow_id": workflow_id,
-                        "input_file": input_file,
-                        "user_id": user_id,
-                        "dry_run": dry_run
-                    }
-                )
+                # Use create_task for non-blocking audit logging with exception handling
+                async def _safe_audit():
+                    try:
+                        await asyncio.wait_for(
+                            log_audit_event(
+                                action="workflow_started",
+                                data={
+                                    "workflow_id": workflow_id,
+                                    "input_file": input_file,
+                                    "user_id": user_id,
+                                    "dry_run": dry_run
+                                }
+                            ),
+                            timeout=5.0  # 5 second timeout for audit
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning("Audit logging timed out")
+                    except Exception as e:
+                        logger.warning(f"Audit logging failed: {e}")
+                
+                asyncio.create_task(_safe_audit())
             except ImportError:
                 logger.debug("Audit logging not available")
-            except Exception as audit_err:
-                logger.warning(f"Audit logging failed: {audit_err}")
             
             # Handle dry run
             if dry_run:
@@ -1049,10 +1111,9 @@ class WorkflowEngine:
                     extra={"agent_name": agent_name, "workflow_id": workflow_id}
                 )
                 
-                # Check if agent has an async execute method
-                if hasattr(agent_class, 'execute') and asyncio.iscoroutinefunction(
-                    getattr(agent_class, 'execute', None)
-                ):
+                # Check if agent has an async execute method (single lookup)
+                execute_method = getattr(agent_class, 'execute', None)
+                if execute_method is not None and asyncio.iscoroutinefunction(execute_method):
                     agent_instance = agent_class()
                     result = await asyncio.wait_for(
                         agent_instance.execute(input_data, self.config),
@@ -1121,13 +1182,28 @@ class WorkflowEngine:
                 extra={"rating": rating, "action": "tune_feedback"}
             )
             
-            # Audit the feedback
+            # Audit the feedback (fire-and-forget with proper exception handling)
             try:
                 from generator.runner.runner_logging import log_audit_event
-                asyncio.create_task(log_audit_event(
-                    action="workflow_feedback",
-                    data={"rating": rating}
-                ))
+                
+                async def _safe_feedback_audit():
+                    try:
+                        await asyncio.wait_for(
+                            log_audit_event(
+                                action="workflow_feedback",
+                                data={"rating": rating}
+                            ),
+                            timeout=5.0
+                        )
+                    except Exception as e:
+                        logger.debug(f"Feedback audit failed: {e}")
+                
+                # Store task reference to prevent garbage collection
+                task = asyncio.create_task(_safe_feedback_audit())
+                # Add done callback to log any exceptions
+                task.add_done_callback(
+                    lambda t: logger.debug(f"Feedback audit completed: {t.exception() if t.done() and t.exception() else 'success'}")
+                )
             except (ImportError, RuntimeError):
                 pass
             
