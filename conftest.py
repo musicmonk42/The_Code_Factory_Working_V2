@@ -4,6 +4,7 @@ import types
 import importlib.machinery
 import importlib.util
 from pathlib import Path
+from unittest.mock import MagicMock, Mock
 
 # REMOVED: matplotlib import causes expensive font cache initialization during import
 # Let individual tests import matplotlib if they need it
@@ -65,7 +66,8 @@ if _CPU_CONSTRAINED:
     # Reduce parallelism in CPU-constrained environments
     os.environ.setdefault("PYTEST_XDIST_WORKER_COUNT", "1")
 
-# Modules that must use real implementations (not mocks)
+# Modules that require real implementations to provide __spec__ and __path__ 
+# attributes for pytest collection (must not be mocked)
 REQUIRED_REAL_MODULES = [
     "prometheus_client",
     "opentelemetry",
@@ -98,8 +100,6 @@ def _is_valid_real_module(mod):
     Returns:
         bool: True if the module is valid and real, False if it's a mock or invalid
     """
-    from unittest.mock import MagicMock, Mock
-    
     # Check if it's a Mock instance
     if isinstance(mod, (MagicMock, Mock)):
         return False
@@ -135,7 +135,7 @@ def pytest_configure(config):
     Skip expensive initialization during collection phase.
     This prevents OOM and CPU timeout during test discovery.
     """
-    # Validate that required modules aren't mocked (do this FIRST, before collection check)
+    # Validate that required modules are not mocked (do this FIRST, before collection check)
     _validate_real_modules()
     
     if config.option.collectonly:
