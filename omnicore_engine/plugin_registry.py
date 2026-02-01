@@ -637,7 +637,7 @@ class PluginRegistry:
         self._plugins = defaultdict(dict)
         self._entrypoints = {}
         self._is_initialized = False
-        self._init_lock = asyncio.Lock()  # Lock for atomic initialization
+        self._init_lock = None  # Lazy initialization to avoid event loop requirement at import time
         self._register_lock = threading.Lock()  # Lock for plugin registration
         self._pending_metadata_lock = threading.Lock()  # Lock for pending metadata queue
         self.db: Optional[Database] = None
@@ -761,8 +761,59 @@ class PluginRegistry:
                     )
 
     async def initialize(self):
+        # Lazy initialization of async lock
+        if self._init_lock is None:
+            try:
+                self._init_lock = asyncio.Lock()
+            except RuntimeError:
+                # No event loop - use thread lock as fallback
+                self.logger.warning("No event loop available, initialization may not be thread-safe in async contexts")
+                self._init_lock = None
+        
         # Atomic initialization check with lock to prevent race conditions
-        async with self._init_lock:
+        if self._init_lock is not None:
+            async with self._init_lock:
+                if self._is_initialized:
+                    return
+
+                self.logger.info("Initializing PluginRegistry...")
+                self._loop = asyncio.get_running_loop()
+
+                if self.db:
+                    self.performance_tracker = PluginPerformanceTracker(
+                        db=self.db, audit_client=self.audit_client
+                    )
+                    # Persist any pending plugin metadata that was queued before DB initialization
+                    await self._persist_pending_metadata()
+
+                await self.load_arbiter_plugins()
+                await self.load_from_directory(settings.PLUGIN_DIR)
+                self.load_ai_assistant_plugins()
+
+                # CodeHealthEnv
+                if CodeHealthEnv is not None:
+                    try:
+                        plugin_meta = PluginMeta(
+                            name="code_health_env",
+                            kind=PlugInKind.CORE_SERVICE.value,
+                            description="Reinforcement learning environment for code health.",
+                        )
+                        self.register(
+                            PlugInKind.CORE_SERVICE.value,
+                            "code_health_env",
+                            Plugin(
+                                plugin_meta,
+                                CodeHealthEnv,
+                                performance_tracker=self.performance_tracker,
+                            ),
+                        )
+                        self.logger.info("Registered CodeHealthEnv plugin.")
+                    except Exception as e:
+                        self.logger.error(f"Failed to register CodeHealthEnv: {e}")
+                else:
+                    self.logger.info("CodeHealthEnv not available; skipping.")
+        else:
+            # Fallback path without async lock (should rarely happen)
             if self._is_initialized:
                 return
 

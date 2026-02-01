@@ -772,7 +772,8 @@ class Database:
         self._serializers: Dict[type, Callable[[Any], Any]] = {}
 
         # Lock for key rotation to prevent race conditions (Issue #8 fix)
-        self._rotation_lock = asyncio.Lock()
+        # Lazy initialization to avoid event loop requirement at import time
+        self._rotation_lock = None
 
     async def initialize(self) -> None:
         """
@@ -2701,6 +2702,10 @@ class Database:
         # Issue #16 fix: Validate the new key
         if not validate_fernet_key(new_key):
             raise ValueError("Invalid Fernet key format")
+
+        # Lazy initialize the lock if needed
+        if self._rotation_lock is None:
+            self._rotation_lock = asyncio.Lock()
 
         # Issue #8 fix: Use lock to prevent race conditions
         async with self._rotation_lock:
