@@ -39,18 +39,18 @@ from typing import (
 import aiofiles
 
 # --- REFACTOR: Import subprocess_wrapper from process_utils ---
-from runner.process_utils import subprocess_wrapper
+from .process_utils import subprocess_wrapper
 
 # Assume runner.config and runner.logging are correctly imported and configured
-from runner.runner_config import RunnerConfig
+from .runner_config import RunnerConfig
 
 # --- ADDED IMPORT ---
-from runner.runner_contracts import TaskPayload, TaskResult
+from .runner_contracts import TaskPayload, TaskResult
 
 # Import structured errors for consistent error handling across backends
 # FIX: Corrected module typo from 'runner.errors' to 'runner.runner_errors'
 # --- FIX: Changed 'TestExecutionError' to 'ExecutionError' ---
-from runner.runner_errors import (  # Explicitly import used error types
+from .runner_errors import (  # Explicitly import used error types
     BackendError,
     ConfigurationError,
     ExecutionError,
@@ -62,8 +62,8 @@ from runner.runner_errors import (  # Explicitly import used error types
 # --- REFACTOR FIX: Corrected imports to point to runner foundation ---
 # FIX: Import only logger at module level to break circular import
 # add_provenance is imported lazily via _get_add_provenance() when needed
-from runner.runner_logging import logger
-from runner.runner_metrics import (  # BACKEND_LATENCY, ERRORS, RECOVERIES, CIRCUIT_BREAKERS,; and get_circuit_breaker are no longer used here.; This logic is encapsulated in the imported subprocess_wrapper.
+from .runner_logging import logger
+from .runner_metrics import (  # BACKEND_LATENCY, ERRORS, RECOVERIES, CIRCUIT_BREAKERS,; and get_circuit_breaker are no longer used here.; This logic is encapsulated in the imported subprocess_wrapper.
     HEALTH_STATUS,
 )
 
@@ -71,7 +71,7 @@ from runner.runner_metrics import (  # BACKEND_LATENCY, ERRORS, RECOVERIES, CIRC
 # FIX: Lazy import helper for add_provenance to break circular import
 def _get_add_provenance():
     """Lazily import add_provenance to avoid circular import at module load time."""
-    from runner.runner_logging import add_provenance
+    from .runner_logging import add_provenance
     return add_provenance
 
 # --- END REFACTOR MERGE ---

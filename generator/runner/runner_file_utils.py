@@ -93,12 +93,12 @@ except ImportError:
 
 # --- END REFACTOR FIX ---
 
-from runner.runner_logging import add_provenance, logger
+from .runner_logging import add_provenance, logger
 
 # Metrics + decorator for utility functions (latency / errors)
 try:
     # Preferred: use shared metrics + decorator if available
-    from runner.runner_metrics import UTIL_ERRORS, UTIL_LATENCY, util_decorator
+    from .runner_metrics import UTIL_ERRORS, UTIL_LATENCY, util_decorator
 except ImportError:
     # Fallbacks so this module is still importable even if runner_metrics
     # doesn't define these yet in this environment.

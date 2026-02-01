@@ -20,7 +20,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from runner.runner_errors import ConfigurationError  # ensure this import exists at top
+from .runner_errors import ConfigurationError  # ensure this import exists at top
 
 # --- TESTING Guard ---
 # Guard to prevent watchers from running during test collection/execution

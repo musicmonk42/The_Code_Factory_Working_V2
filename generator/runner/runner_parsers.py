@@ -30,20 +30,9 @@ from pydantic import (
     model_validator,
 )  # Import model_validator
 
-# Assume logger from runner.logging is configured
-# If not, a basic logger fallback is standard practice
-try:
-    from runner.runner_logging import logger
-except ImportError:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-    logger = logging.getLogger(__name__)
-    # FIX: Updated warning message
-    logger.warning(
-        "runner.runner_logging not found. Using basic logging setup in parsers.py."
-    )
+# FIX: Use standard library logging to break circular dependency
+# Import logger directly from logging module instead of runner_logging
+logger = logging.getLogger(__name__)
 
 
 class RunnerError(Exception):

@@ -9,7 +9,8 @@ import logging
 from typing import Any, Dict, Optional
 
 # --- FIX: Add imports for redaction and logging ---
-from runner.runner_security_utils import redact_secrets
+# Use relative import to avoid circular dependency
+from .runner_security_utils import redact_secrets
 
 logger = logging.getLogger(__name__)
 

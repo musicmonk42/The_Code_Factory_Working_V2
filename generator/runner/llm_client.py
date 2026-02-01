@@ -31,19 +31,19 @@ from typing import Any, AsyncGenerator, Dict, List, Literal, Optional
 import redis.asyncio as aioredis
 
 # FIX: Import metrics module, not individual components to avoid import cycle issues
-import runner.runner_metrics as metrics
+from . import runner_metrics as metrics
 from dotenv import load_dotenv
-from runner.llm_plugin_manager import LLMPluginManager
+from .llm_plugin_manager import LLMPluginManager
 
 # Runner Foundation
-from runner.runner_config import RunnerConfig
-from runner.runner_errors import ConfigurationError, LLMError
+from .runner_config import RunnerConfig
+from .runner_errors import ConfigurationError, LLMError
 
 # [FIX] Import log_audit_event instead of add_provenance
-from runner.runner_logging import log_audit_event, logger
+from .runner_logging import log_audit_event, logger
 
 # FIX: Import only redact_secrets
-from runner.runner_security_utils import redact_secrets
+from .runner_security_utils import redact_secrets
 
 # Conditional SDKs
 try:

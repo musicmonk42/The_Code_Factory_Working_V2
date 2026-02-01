@@ -33,20 +33,20 @@ from opentelemetry.trace import (
     Status,
     StatusCode,
 )  # Explicitly import Status and StatusCode
-from runner.runner_backends import BACKEND_REGISTRY as ALL_BACKENDS
+from .runner_backends import BACKEND_REGISTRY as ALL_BACKENDS
 
 # Import project-specific modules
-from runner.runner_config import RunnerConfig, load_config
-from runner.runner_contracts import (
+from .runner_config import RunnerConfig, load_config
+from .runner_contracts import (
     BatchTaskPayload,
     TaskPayload,
     TaskResult,
 )  # NEW: Contracts
 
 # --- FIX: Import 'ExecutionError' and alias it to 'TestExecutionError' ---
-from runner.runner_errors import BackendError, DistributedError
-from runner.runner_errors import ExecutionError as TestExecutionError
-from runner.runner_errors import (
+from .runner_errors import BackendError, DistributedError
+from .runner_errors import ExecutionError as TestExecutionError
+from .runner_errors import (
     FrameworkError,
     ParsingError,
     RunnerError,
@@ -56,19 +56,19 @@ from runner.runner_errors import (
 )
 # FIX: Import only logger at module level to break circular import
 # log_audit_event is imported lazily via _get_log_audit_event() when needed
-from runner.runner_logging import logger
-from runner.runner_metrics import *  # Ensure all metrics are imported explicitly
+from .runner_logging import logger
+from .runner_metrics import *  # Ensure all metrics are imported explicitly
 
 
 # FIX: Lazy import helper for log_audit_event to break circular import
 def _get_log_audit_event():
     """Lazily import log_audit_event to avoid circular import at module load time."""
-    from runner.runner_logging import log_audit_event
+    from .runner_logging import log_audit_event
     return log_audit_event
 
 
 # Gold Standard: Import parser output schemas for strong typing
-from runner.runner_parsers import (
+from .runner_parsers import (
     CoverageReportSchema,
     TestReportSchema,
     parse_behave_junit,
@@ -83,7 +83,7 @@ from runner.runner_parsers import (
     parse_surefire_xml,
     parse_unittest_output,
 )
-from runner.runner_security_utils import redact_secrets
+from .runner_security_utils import redact_secrets
 
 # --- REFACTOR FIX: Import subprocess_wrapper from process_utils ---
 
@@ -92,9 +92,9 @@ from runner.runner_security_utils import redact_secrets
 
 # Optional imports for mutation/fuzzing
 try:
-    from runner.runner_mutation import detect_language as _detect_mutation_lang
-    from runner.runner_mutation import fuzz_test as _fuzz_test_func
-    from runner.runner_mutation import mutation_test as _mutation_test_func
+    from .runner_mutation import detect_language as _detect_mutation_lang
+    from .runner_mutation import fuzz_test as _fuzz_test_func
+    from .runner_mutation import mutation_test as _mutation_test_func
 
     HAS_MUTATION_MODULE = True
 except ImportError:
