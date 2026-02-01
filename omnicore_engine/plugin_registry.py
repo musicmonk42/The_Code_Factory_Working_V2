@@ -202,10 +202,21 @@ def _lazy_load_optional_dependencies():
         SIM_REGISTRY = None
         print("simulation.registry not found.")
 
-# New imports for security utils
-from .security_utils import get_security_utils
+# Lazy import for security utils to avoid import-time overhead
+def get_security_utils():
+    """Lazy import security utils to avoid import-time overhead."""
+    from .security_utils import get_security_utils as _get_security_utils
+    return _get_security_utils()
 
-settings = ArbiterConfig()
+# Lazy initialization of settings to avoid import-time overhead
+_settings = None
+
+def get_settings():
+    """Lazy initialization of ArbiterConfig to avoid import-time overhead."""
+    global _settings
+    if _settings is None:
+        _settings = ArbiterConfig()
+    return _settings
 
 try:
     import networkx as nx
@@ -219,20 +230,25 @@ except ImportError:
     )
 
 logger = logging.getLogger(__name__)
-logger.setLevel(getattr(settings, "log_level", "INFO").upper())
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
 
-if os.name == "nt":
-    try:
-        mp.set_start_method("spawn")
-    except RuntimeError:
-        pass  # already set
+def _configure_logger():
+    """Configure logger with settings - called lazily on first use."""
+    if not logger.handlers:
+        logger.setLevel(getattr(get_settings(), "log_level", "INFO").upper())
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+
+def _ensure_multiprocessing_configured():
+    """Configure multiprocessing method if needed (Windows compatibility)."""
+    if os.name == "nt":
+        try:
+            mp.set_start_method("spawn")
+        except RuntimeError:
+            pass  # already set
 
 
 class PlugInKind(str, Enum):
@@ -274,7 +290,7 @@ def execute_with_limits(func, *args, **kwargs):
     """
     # SECURITY: SIGALRM is not available on Windows
     # Use signal-based timeout only on Unix-like systems
-    timeout_seconds = getattr(settings, "PLUGIN_EXECUTION_TIMEOUT", 30)
+    timeout_seconds = getattr(get_settings(), "PLUGIN_EXECUTION_TIMEOUT", 30)
 
     if platform.system() != "Windows" and hasattr(signal, "SIGALRM"):
         signal.signal(signal.SIGALRM, timeout_handler)
@@ -424,11 +440,12 @@ def safe_execute_plugin(fn: Callable, *args, **kwargs):
     This provides a basic sandboxing mechanism to prevent malicious or buggy code from
     affecting the main process.
     """
+    _ensure_multiprocessing_configured()
     q = mp.Queue()
     p = mp.Process(target=_plugin_wrapper, args=(q, fn, args, kwargs))
     try:
         p.start()
-        p.join(timeout=getattr(settings, "PLUGIN_EXECUTION_TIMEOUT", 30))
+        p.join(timeout=getattr(get_settings(), "PLUGIN_EXECUTION_TIMEOUT", 30))
 
         if p.is_alive():
             p.terminate()
@@ -454,7 +471,7 @@ def safe_execute_plugin(fn: Callable, *args, **kwargs):
 def verify_plugin_signature(plugin_code: bytes, signature: str) -> bool:
     """Verifies the HMAC signature of plugin code."""
     signing_key = getattr(
-        settings, "PLUGIN_SIGNING_KEY", "insecure_default_key"
+        get_settings(), "PLUGIN_SIGNING_KEY", "insecure_default_key"
     ).encode()
     expected_sig = hmac.new(signing_key, plugin_code, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected_sig, signature)
@@ -591,7 +608,7 @@ class Plugin:
         error_occurred = False
         error_type = "none"
 
-        timeout = getattr(settings, "PLUGIN_EXECUTION_TIMEOUT", 30)
+        timeout = getattr(get_settings(), "PLUGIN_EXECUTION_TIMEOUT", 30)
 
         try:
             self.logger.info(
@@ -681,6 +698,7 @@ class PluginRegistry:
     """
     
     def __init__(self):
+        _configure_logger()  # Configure logger on first use
         self._plugins = defaultdict(dict)
         self._entrypoints = {}
         self._is_initialized = False
@@ -832,7 +850,7 @@ class PluginRegistry:
                 await self._persist_pending_metadata()
 
             await self.load_arbiter_plugins()
-            await self.load_from_directory(settings.PLUGIN_DIR)
+            await self.load_from_directory(get_settings().PLUGIN_DIR)
             self.load_ai_assistant_plugins()
 
             # CodeHealthEnv
@@ -1094,7 +1112,7 @@ class PluginRegistry:
         author: str = "unknown",
         entrypoints: Dict[str, Callable] = None,
     ):
-        config = ArbiterConfig()
+        config = get_settings()
         # DEFENSIVE CHECK: Handle missing PLUGINS_ENABLED attribute
         plugins_enabled = getattr(
             config, "PLUGINS_ENABLED", True
@@ -1136,7 +1154,7 @@ class PluginRegistry:
             self.logger.info("Arbiter not installed; skipping arbiter plugin load.")
             return
 
-        config = ArbiterConfig()
+        config = get_settings()
         for kind, plugins in config.PLUGIN_REGISTRY.items():
             for name, plugin_info in plugins.items():
                 self.register(
@@ -1567,7 +1585,7 @@ class PluginVersionManager:
 
                 loaded_fn = None
                 if "code" in plugin_data and isinstance(plugin_data["code"], str):
-                    temp_dir = Path(settings.PLUGIN_DIR) / ".temp"
+                    temp_dir = Path(get_settings().PLUGIN_DIR) / ".temp"
                     temp_dir.mkdir(parents=True, exist_ok=True)
 
                     temp_module_name = f"dynamic_plugin_{uuid.uuid4().hex}"
@@ -1576,7 +1594,7 @@ class PluginVersionManager:
                     try:
                         # Path traversal prevention for dynamic load
                         validated_path = validate_plugin_path(
-                            temp_file_path, Path(settings.PLUGIN_DIR)
+                            temp_file_path, Path(get_settings().PLUGIN_DIR)
                         )
 
                         with open(validated_path, "w") as f:
@@ -1762,7 +1780,7 @@ class PluginSelfOptimizer:
                         agent_id="PluginSelfOptimizer",
                     )
                 return
-            optimization_threshold = getattr(settings, "LOW_CONFIDENCE_THRESHOLD", 0.5)
+            optimization_threshold = getattr(get_settings(), "LOW_CONFIDENCE_THRESHOLD", 0.5)
             if metrics.get("error_rate", 0) > optimization_threshold:
                 self.logger.info(
                     f"Plugin {kind}:{name}:{version} underperforming (error rate {metrics.get('error_rate', 0):.2f}). Proposing code change..."

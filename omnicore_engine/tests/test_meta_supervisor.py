@@ -28,13 +28,8 @@ except (ImportError, OSError):
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from omnicore_engine.meta_supervisor import (
-    MetaSupervisor,
-    _create_fallback_settings,
-    _is_anomalous,
-    validate_model_input,
-    validate_training_data,
-)
+# Imports from omnicore_engine.meta_supervisor are deferred to each test method to avoid
+# slow module-level imports and improve test collection performance
 
 
 class TestInputValidation:
@@ -42,6 +37,8 @@ class TestInputValidation:
 
     def test_validate_model_input_valid(self):
         """Test validation of valid model inputs"""
+        from omnicore_engine.meta_supervisor import validate_model_input
+        
         features = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         result = validate_model_input(features)
 
@@ -52,6 +49,8 @@ class TestInputValidation:
 
     def test_validate_model_input_with_nan(self):
         """Test validation rejects NaN values"""
+        from omnicore_engine.meta_supervisor import validate_model_input
+        
         features = np.array([1.0, np.nan, 3.0])
 
         with pytest.raises(ValueError, match="contains NaN"):
@@ -59,6 +58,8 @@ class TestInputValidation:
 
     def test_validate_model_input_with_inf(self):
         """Test validation rejects Inf values"""
+        from omnicore_engine.meta_supervisor import validate_model_input
+        
         features = np.array([1.0, np.inf, 3.0])
 
         with pytest.raises(ValueError, match="contains.*Inf"):
@@ -66,6 +67,8 @@ class TestInputValidation:
 
     def test_validate_model_input_clipping(self):
         """Test that extreme values are clipped"""
+        from omnicore_engine.meta_supervisor import validate_model_input
+        
         features = np.array([1e7, -1e7, 1.0])
         result = validate_model_input(features)
 
@@ -74,6 +77,8 @@ class TestInputValidation:
 
     def test_validate_training_data(self):
         """Test training data validation"""
+        from omnicore_engine.meta_supervisor import validate_training_data
+        
         audit_records = [
             {"uuid": "1", "kind": "test"},
             {"uuid": "2", "kind": "test"},
@@ -88,6 +93,8 @@ class TestInputValidation:
 
     def test_is_anomalous_placeholder(self):
         """Test anomaly detection placeholder"""
+        from omnicore_engine.meta_supervisor import _is_anomalous
+        
         record = {"uuid": "test", "error_rate": 0.99}
         assert _is_anomalous(record) == False  # Always returns False in placeholder
 
@@ -123,6 +130,8 @@ class TestMetaSupervisorInitialization:
     @patch("omnicore_engine.meta_supervisor.settings")
     def test_initialization(self, mock_global_settings):
         """Test basic initialization"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         mock_global_settings.PLUGIN_ERROR_THRESHOLD = 0.1
         mock_global_settings.TEST_FAILURE_THRESHOLD = 0.2
         mock_global_settings.ETHICS_DRIFT_THRESHOLD = 0.05
@@ -141,6 +150,8 @@ class TestMetaSupervisorInitialization:
     @pytest.mark.skipif(not TORCH_AVAILABLE, reason="torch not available")
     def test_initialization_with_torch_backend(self, mock_global_settings):
         """Test initialization with PyTorch backend"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         mock_global_settings.PLUGIN_ERROR_THRESHOLD = 0.1
         mock_global_settings.TEST_FAILURE_THRESHOLD = 0.2
         mock_global_settings.ETHICS_DRIFT_THRESHOLD = 0.05
@@ -168,6 +179,8 @@ class TestMetaSupervisorInitialization:
     @patch("omnicore_engine.meta_supervisor.Database")
     async def test_async_initialization(self, mock_db_class, mock_settings):
         """Test async initialization"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         mock_db = Mock()
         mock_db.create_tables = AsyncMock()
         mock_db.get_preferences = AsyncMock(return_value={})
@@ -187,6 +200,8 @@ class TestPluginInspection:
     @pytest.fixture
     def supervisor(self):
         """Create supervisor instance with mocked dependencies"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             # Set ALL required numerical settings as real values
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
@@ -272,6 +287,8 @@ class TestTestInspection:
     @pytest.fixture
     def supervisor(self):
         """Create supervisor instance"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 10
@@ -330,6 +347,8 @@ class TestConfigInspection:
     @pytest.fixture
     def supervisor(self):
         """Create supervisor instance"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -413,6 +432,8 @@ class TestThresholdOptimization:
     @pytest.fixture
     def supervisor_torch(self):
         """Create supervisor with torch backend"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -455,6 +476,8 @@ class TestThresholdOptimization:
     @pytest.mark.asyncio
     async def test_optimize_thresholds_no_rl_model(self):
         """Test threshold optimization without RL model"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -478,6 +501,8 @@ class TestModelManagement:
     @pytest.fixture
     def supervisor_torch(self):
         """Create supervisor with torch backend"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -544,6 +569,8 @@ class TestSupervisorLifecycle:
     @pytest.mark.asyncio
     async def test_self_reload(self):
         """Test self-reload functionality"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -572,6 +599,8 @@ class TestSupervisorLifecycle:
     @pytest.mark.asyncio
     async def test_spawn_supervisor(self):
         """Test spawning sub-supervisor"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -605,6 +634,8 @@ class TestSupervisorLifecycle:
     @pytest.mark.asyncio
     async def test_stop(self):
         """Test graceful stop"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -647,6 +678,8 @@ class TestReportGeneration:
     @pytest.mark.asyncio
     async def test_generate_mentor_report(self):
         """Test mentor report generation"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -690,6 +723,8 @@ class TestMainLoop:
     @pytest.mark.slow
     async def test_run_loop_max_iterations(self):
         """Test run loop stops at max iterations"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -723,6 +758,8 @@ class TestMainLoop:
     @pytest.mark.slow
     async def test_run_loop_with_focus(self):
         """Test run loop with specific focus"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -762,6 +799,8 @@ class TestMetaPolicies:
     @pytest.mark.asyncio
     async def test_set_meta_policy_allowed(self):
         """Test setting meta-policy when allowed"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -797,6 +836,8 @@ class TestMetaPolicies:
     @pytest.mark.asyncio
     async def test_set_meta_policy_denied(self):
         """Test setting meta-policy when denied"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         with patch("omnicore_engine.meta_supervisor.settings") as mock_settings:
             mock_settings.PLUGIN_ERROR_THRESHOLD = 0.1
             mock_settings.TEST_FAILURE_THRESHOLD = 0.2
@@ -828,6 +869,8 @@ class TestAsyncLambdaFixes:
     @pytest.mark.asyncio
     async def test_rate_limited_operation_with_async_method(self):
         """Test _rate_limited_operation properly awaits async methods passed directly"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         supervisor = MetaSupervisor(interval=60)
 
         # Mock the database to avoid initialization issues
@@ -849,6 +892,8 @@ class TestAsyncLambdaFixes:
     @pytest.mark.asyncio
     async def test_db_get_preferences_without_lambda(self):
         """Test that db.get_preferences works when called without lambda wrapper"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         supervisor = MetaSupervisor(interval=60)
 
         # Mock the database
@@ -866,6 +911,8 @@ class TestAsyncLambdaFixes:
     @pytest.mark.asyncio
     async def test_record_audit_event_without_lambda(self):
         """Test that _record_audit_event works when called without lambda wrapper"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         supervisor = MetaSupervisor(interval=60)
 
         # Mock dependencies
@@ -888,6 +935,8 @@ class TestAsyncLambdaFixes:
     @pytest.mark.asyncio
     async def test_policy_engine_should_auto_learn_without_lambda(self):
         """Test that policy_engine.should_auto_learn works without lambda wrapper"""
+        from omnicore_engine.meta_supervisor import MetaSupervisor
+        
         supervisor = MetaSupervisor(interval=60)
 
         # Mock policy engine with async method
@@ -913,6 +962,8 @@ class TestAsyncLambdaFixes:
 
     def test_fallback_settings_include_db_retry_config(self):
         """Test that fallback settings include DB_RETRY_ATTEMPTS and DB_RETRY_DELAY"""
+        from omnicore_engine.meta_supervisor import _create_fallback_settings
+        
         settings = _create_fallback_settings()
 
         assert hasattr(settings, "DB_RETRY_ATTEMPTS")

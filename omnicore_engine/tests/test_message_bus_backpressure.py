@@ -9,8 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from omnicore_engine.message_bus.backpressure import BackpressureManager
-
+# Defer heavy imports to test methods to reduce time during collection
 
 class TestBackpressureManager(unittest.TestCase):
     """Test suite for BackpressureManager class."""
@@ -43,7 +42,8 @@ class TestBackpressureManager(unittest.TestCase):
         self.mock_message_bus.resume_publishes = AsyncMock()
         self.mock_message_bus.publish = AsyncMock(return_value=True)
 
-        # Create BackpressureManager instance
+        # Create BackpressureManager instance (import here for lazy loading)
+        from omnicore_engine.message_bus.backpressure import BackpressureManager
         self.manager = BackpressureManager(self.mock_message_bus, threshold=0.8)
 
     def test_initialization(self):
