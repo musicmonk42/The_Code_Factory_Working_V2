@@ -65,6 +65,27 @@ if _CPU_CONSTRAINED:
     # Reduce parallelism in CPU-constrained environments
     os.environ.setdefault("PYTEST_XDIST_WORKER_COUNT", "1")
 
+# Modules that must use real implementations (not mocks)
+REQUIRED_REAL_MODULES = [
+    "prometheus_client",
+    "opentelemetry",
+]
+
+
+def _remove_module_and_submodules(mod_name):
+    """
+    Helper function to remove a module and all its submodules from sys.modules.
+    
+    Args:
+        mod_name: The module name to remove (e.g., "prometheus_client")
+    """
+    if mod_name in sys.modules:
+        del sys.modules[mod_name]
+    # Remove submodules
+    for key in list(sys.modules.keys()):
+        if key.startswith(f"{mod_name}."):
+            del sys.modules[key]
+
 
 def _validate_real_modules():
     """
@@ -74,32 +95,22 @@ def _validate_real_modules():
     Checks for modules that should be real (installed via requirements.txt)
     and removes any broken mocks or stubs that might interfere with imports.
     """
-    required_real_modules = [
-        "prometheus_client",
-        "opentelemetry",
-    ]
+    from unittest.mock import MagicMock, Mock
     
-    for mod_name in required_real_modules:
+    for mod_name in REQUIRED_REAL_MODULES:
         if mod_name in sys.modules:
             mod = sys.modules[mod_name]
-            # Check if it's a MagicMock or has broken __spec__
+            # Check if it's a MagicMock/Mock instance
+            if isinstance(mod, (MagicMock, Mock)):
+                _remove_module_and_submodules(mod_name)
+                continue
+            # Check if it has broken __spec__
             if not hasattr(mod, '__spec__') or mod.__spec__ is None:
-                # Remove the broken mock
-                del sys.modules[mod_name]
-                # Remove submodules
-                for key in list(sys.modules.keys()):
-                    if key.startswith(f"{mod_name}."):
-                        del sys.modules[key]
-            elif hasattr(mod.__spec__, '__class__'):
-                # Check if __spec__ itself is a mock (not a real ModuleSpec)
-                spec_class_name = mod.__spec__.__class__.__name__
-                if 'Mock' in spec_class_name:
-                    # It's a mock spec, remove it
-                    del sys.modules[mod_name]
-                    # Remove submodules
-                    for key in list(sys.modules.keys()):
-                        if key.startswith(f"{mod_name}."):
-                            del sys.modules[key]
+                _remove_module_and_submodules(mod_name)
+                continue
+            # Check if __spec__ is a real ModuleSpec (not a mock)
+            if not isinstance(mod.__spec__, importlib.machinery.ModuleSpec):
+                _remove_module_and_submodules(mod_name)
 
 
 # ---- Pytest hooks for collection optimization ----
@@ -1841,20 +1852,25 @@ def _initialize_prometheus_stubs():
     FIX: Uses proper ModuleSpec to prevent AttributeError: __spec__
     FIX: Detects and replaces mock modules with real imports
     """
+    from unittest.mock import MagicMock, Mock
+    
     # Check if already loaded WITH A REAL MODULE (not a mock)
     if "prometheus_client" in sys.modules:
         existing_mod = sys.modules["prometheus_client"]
-        # Check if it's a real module with __spec__
-        if hasattr(existing_mod, '__spec__') and existing_mod.__spec__ is not None:
-            # Check if __spec__ is a real ModuleSpec (not a MagicMock)
-            if hasattr(existing_mod.__spec__, 'name'):
+        # Check if it's a Mock instance
+        if isinstance(existing_mod, (MagicMock, Mock)):
+            _remove_module_and_submodules("prometheus_client")
+        # Check if it's a real module with proper __spec__
+        elif hasattr(existing_mod, '__spec__') and existing_mod.__spec__ is not None:
+            # Check if __spec__ is a real ModuleSpec (not a mock)
+            if isinstance(existing_mod.__spec__, importlib.machinery.ModuleSpec):
                 return  # Real module already loaded
-        # If we get here, it's a mock or broken stub - remove it
-        del sys.modules["prometheus_client"]
-        # Also remove any submodules that might be mocked
-        for key in list(sys.modules.keys()):
-            if key.startswith("prometheus_client."):
-                del sys.modules[key]
+            else:
+                # __spec__ exists but is not a real ModuleSpec, remove it
+                _remove_module_and_submodules("prometheus_client")
+        else:
+            # No __spec__ or __spec__ is None, remove it
+            _remove_module_and_submodules("prometheus_client")
     
     # Try to import the real prometheus_client
     try:
