@@ -260,6 +260,14 @@ jobs:
           python -c "import typing; print('typing OK')"
           
           echo "=== Verifying aiohttp submodules ==="
+          python -c "import aiohttp; print(f'aiohttp {aiohttp.__version__}')"
+          python -c "from aiohttp import web; print('aiohttp.web OK')" || {
+            echo "ERROR: aiohttp.web cannot be imported - reinstalling aiohttp"
+            pip uninstall -y aiohttp
+            pip install --no-cache-dir aiohttp==3.12.15
+            python -c "from aiohttp import web; print('aiohttp.web OK after reinstall')" || exit 1
+          }
+          python -c "from aiohttp.web import Request, Response, RouteTableDef; print('aiohttp.web components OK')"
           python -c "import aiohttp.web_request; print('aiohttp.web_request OK')" || echo "WARN: aiohttp.web_request missing"
           python -c "import aiohttp.helpers; print('aiohttp.helpers OK')" || echo "WARN: aiohttp.helpers missing"
           python -c "import aiohttp.client_exceptions; print('aiohttp.client_exceptions OK')" || echo "WARN: aiohttp.client_exceptions missing"
