@@ -45,7 +45,8 @@ async def _wrap_log_audit_event(action: str, **kwargs) -> None:
     Wrapper that converts legacy log_action calls to log_audit_event format.
     """
     try:
-        from runner.runner_logging import log_audit_event
+        # FIX: Import from runner_audit to avoid circular dependency
+        from runner.runner_audit import log_audit_event
 
         await log_audit_event(action=action, data=kwargs)
     except ImportError:
@@ -59,7 +60,9 @@ async def _wrap_log_audit_event(action: str, **kwargs) -> None:
 # The fallback is only for development/testing scenarios.
 _USING_DUMMY_LOG_ACTION = False
 try:
-    from runner.runner_logging import log_audit_event as _log_audit_event, send_alert
+    # FIX: Import from runner_audit to avoid circular dependency
+    from runner.runner_audit import log_audit_event as _log_audit_event
+    from runner.runner_logging import send_alert
 
     # Use the wrapper to maintain backwards compatibility
     log_action = _wrap_log_audit_event

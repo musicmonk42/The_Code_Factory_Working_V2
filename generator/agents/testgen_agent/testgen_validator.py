@@ -56,8 +56,8 @@ from watchdog.observers import Observer
 
 # FIX: Lazy import helper for add_provenance to break circular import
 def _get_add_provenance():
-    """Lazily import add_provenance to avoid circular import at module load time."""
-    from runner.runner_logging import add_provenance
+    """Lazily import add_provenance from runner_audit to avoid circular import at module load time."""
+    from runner.runner_audit import log_audit_event as add_provenance
     return add_provenance
 
 # -----------------------------------

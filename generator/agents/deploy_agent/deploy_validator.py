@@ -82,10 +82,9 @@ from runner.llm_client import (
     call_ensemble_api,
 )  # Central LLM Client for auto-correction
 from runner.runner_errors import LLMError
-from runner.runner_logging import (
-    add_provenance,
-    logger,
-)  # Use central logging and provenance
+# FIX: Import add_provenance from runner_audit to avoid circular dependency
+from runner.runner_audit import log_audit_event as add_provenance
+from runner.runner_logging import logger  # Use central logging and provenance
 from runner.runner_metrics import LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
 from runner.runner_metrics import (
     LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,

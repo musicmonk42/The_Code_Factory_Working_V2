@@ -118,7 +118,9 @@ from runner.runner_errors import LLMError
 from runner.runner_file_utils import (
     get_commits as runner_get_commits,
 )  # Alias to avoid name clash
-from runner.runner_logging import add_provenance, logger
+# FIX: Import add_provenance from runner_audit to avoid circular dependency
+from runner.runner_audit import log_audit_event as add_provenance
+from runner.runner_logging import logger
 from runner.runner_metrics import LLM_CALLS_TOTAL, LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
 from sentence_transformers import (
     SentenceTransformer,

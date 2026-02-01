@@ -789,6 +789,29 @@ class Database:
         # Lazy initialization to avoid event loop requirement at import time
         self._rotation_lock = None
 
+    @retry(tries=10, delay=2, backoff=2, exceptions=(sqlalchemy.exc.OperationalError, ConnectionError, TimeoutError))
+    async def test_connection(self) -> bool:
+        """
+        Test database connection with retry logic.
+        
+        Returns:
+            True if connection is successful, False otherwise.
+            
+        Raises:
+            OperationalError: If connection fails after all retries.
+            ConnectionError: If connection cannot be established.
+            TimeoutError: If connection times out after all retries.
+        """
+        try:
+            async with self.engine.connect() as conn:
+                # Test a simple query
+                await conn.execute(text("SELECT 1"))
+                logger.info("Database connection test successful")
+                return True
+        except (sqlalchemy.exc.OperationalError, ConnectionError, TimeoutError) as e:
+            logger.error(f"Database connection test failed: {e}", exc_info=True)
+            raise
+
     async def initialize(self) -> None:
         """
         Initialize the database by creating tables and running migrations.
@@ -797,6 +820,13 @@ class Database:
         """
         try:
             logger.info("Database component: Starting async initialization...")
+
+            # Test database connection first with retry logic
+            try:
+                await self.test_connection()
+            except Exception as e:
+                logger.error(f"Database connection failed after retries: {e}")
+                raise
 
             if not self.is_postgres:
                 await self._initialize_legacy_tables_async()
@@ -849,7 +879,15 @@ class Database:
 
         return MockPolicyEngine()
 
+    @circuit(failure_threshold=5, recovery_timeout=60)
+    @retry(tries=10, delay=2, backoff=2, exceptions=(sqlalchemy.exc.OperationalError, ConnectionError, TimeoutError))
     async def create_tables(self):
+        # NOTE: Circuit breaker and retry patterns work together here:
+        # - Retry handles transient failures (e.g., temporary connection issues, database not ready)
+        # - Only retries specific database-related exceptions (OperationalError, ConnectionError, TimeoutError)
+        # - Circuit breaker prevents cascading failures by stopping retries after 5 consecutive failures
+        # - After circuit opens, it will recover after 60 seconds
+        # This combination ensures resilience while preventing system overload
         DB_OPERATIONS.labels(operation="create_tables").inc()
         try:
             # WORKAROUND: pytest's conftest.py has an autouse fixture that clears Base.metadata

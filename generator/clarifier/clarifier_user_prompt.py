@@ -113,7 +113,8 @@ _is_testing = (
 _RUNNER_IMPORTS_AVAILABLE = True
 
 try:
-    from runner.runner_logging import add_provenance as log_action
+    # FIX: Import from runner_audit to avoid circular dependency
+    from runner.runner_audit import log_audit_event as log_action
 except ImportError as e:
     _RUNNER_IMPORTS_AVAILABLE = False
     if _is_production and not _is_testing:

@@ -77,7 +77,9 @@ except (ImportError, OSError, RuntimeError, Exception) as e:
 try:
     from runner.llm_client import count_tokens
     from runner.runner_backends import rag_retrieve as _rag_retrieve_context
-    from runner.runner_logging import log_action, log_audit_event
+    # FIX: Import from runner_audit to avoid circular dependency
+    from runner.runner_audit import log_audit_event
+    from runner.runner_audit import log_audit_event as log_action
     from runner.runner_metrics import CRITIQUE_PROMPT_BUILDS, CRITIQUE_PROMPT_LATENCY
     from runner.runner_parsers import detect_language, translate_text
     from runner.runner_security_utils import redact_secrets, scrub_pii_and_secrets

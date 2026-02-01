@@ -28,9 +28,11 @@ from runner.llm_client import call_ensemble_api, call_llm_api
 from runner.runner_errors import LLMError, RunnerError
 from runner.runner_file_utils import get_commits
 
-# --- FIX: Import log_audit_event and alias it to log_action ---
-from runner.runner_logging import add_provenance
-from runner.runner_logging import log_audit_event as log_action
+# --- FIX: Import log_audit_event from runner_audit to avoid circular dependency ---
+from runner.runner_audit import log_audit_event
+from runner.runner_audit import log_audit_event as log_action
+# Note: add_provenance is an alias for log_audit_event
+add_provenance = log_audit_event
 from runner.runner_logging import logger
 from runner.runner_metrics import LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
 from runner.runner_metrics import (
