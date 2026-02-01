@@ -340,6 +340,35 @@ jobs:
             fi
           done
           
+      - name: Critical aiohttp.web verification and repair
+        run: |
+          echo "=== Comprehensive aiohttp.web verification ==="
+          python -c "
+          from aiohttp import web
+          from aiohttp.web import Request, Response, RouteTableDef
+          import aiohttp.web_request
+          import aiohttp.helpers
+          print('✓ All aiohttp.web components verified')
+          " || {
+            echo "ERROR: aiohttp.web components broken - performing clean reinstall"
+            # Uninstall aiohttp and its core dependencies to ensure clean reinstall
+            # These packages are tightly coupled and reinstalling them together prevents version conflicts
+            pip uninstall -y aiohttp aiohttp-client-cache aiosignal frozenlist yarl multidict
+            pip install --no-cache-dir --force-reinstall aiohttp==3.12.15
+            python -c "
+            from aiohttp import web
+            from aiohttp.web import Request, Response, RouteTableDef
+            import aiohttp.web_request
+            import aiohttp.helpers
+            print('✓ aiohttp.web OK after clean reinstall')
+            " || {
+              echo "CRITICAL: aiohttp.web still broken after reinstall"
+              pip show aiohttp
+              python -c "import aiohttp; print(aiohttp.__file__); import sys; print(sys.path)"
+              exit 1
+            }
+          }
+          
       - name: Verify omnicore_engine package structure
         run: |
           echo "=== Verifying omnicore_engine package structure ==="
@@ -478,7 +507,7 @@ jobs:
             --collect-only \
             -v \
             --tb=long \
-            --import-mode=prepend \
+            --import-mode=importlib \
             --maxfail=1 \
             2>&1 | tee pytest-collection-debug.log || {
               EXIT_CODE=$?
@@ -547,7 +576,7 @@ jobs:
             --junitxml=junit-${{ matrix.module }}.xml \
             -p no:randomly \
             -p no:cacheprovider \
-            --import-mode=prepend \
+            --import-mode=importlib \
             2>&1 | tee test-output-${{ matrix.module }}.log || {
               EXIT_CODE=$?
               echo "======================================"
@@ -575,7 +604,7 @@ jobs:
           echo "=== Running test collection with CPU profiling for ${{ matrix.module }} ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
             ${{ matrix.module }}/tests/ \
-            --co --quiet --disable-warnings -p no:warnings --import-mode=prepend --tb=short \
+            --co --quiet --disable-warnings -p no:warnings --import-mode=importlib --tb=short \
             2>&1 || true
           
           if [ -f collection_profile.stats ]; then
