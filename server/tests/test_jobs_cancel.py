@@ -13,6 +13,13 @@ from server.storage import jobs_db
 @pytest.fixture
 def client():
     """Create a test client."""
+    from server.main import _load_routers, _include_routers
+    
+    # Manually load and include routers for test environment
+    # TestClient doesn't automatically trigger lifespan, so we do it manually
+    if _load_routers():
+        _include_routers(app)
+    
     return TestClient(app)
 
 

@@ -19,7 +19,13 @@ def client():
     """Create a test client for the FastAPI app.
     Import deferred to fixture to avoid expensive initialization during collection.
     """
-    from server.main import app
+    from server.main import app, _load_routers, _include_routers
+    
+    # Manually load and include routers for test environment
+    # TestClient doesn't automatically trigger lifespan, so we do it manually
+    if _load_routers():
+        _include_routers(app)
+    
     return TestClient(app)
 
 
