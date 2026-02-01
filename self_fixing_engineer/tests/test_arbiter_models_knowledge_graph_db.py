@@ -19,8 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Now import the knowledge_graph_db module directly
-import knowledge_graph_db
-from knowledge_graph_db import (
+from self_fixing_engineer.arbiter.models import knowledge_graph_db
+from self_fixing_engineer.arbiter.models.knowledge_graph_db import (
     KG_CONNECTIONS,
     KG_ERRORS,
     KG_OPS_TOTAL,

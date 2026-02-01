@@ -221,6 +221,12 @@ if os.environ.get("TESTING") == "1":
         # urllib3 expects zstandard.__version__ to be a string for regex parsing
         sys.modules["zstandard"].__version__ = "0.22.0"
     
+    # REMOVED: Early aiohttp mocking - now using real aiohttp installation
+    # This was causing issues with aiohttp submodules (helpers, client_exceptions)
+    # not being importable. With aiohttp properly installed in requirements.txt,
+    # we don't need to mock it during collection.
+    # 
+    # The real aiohttp module will be imported naturally when tests need it.
     # Special early initialization for aiohttp (needs ClientSession and other classes)
     if "aiohttp" not in sys.modules:
         # Create a minimal but functional aiohttp mock for early imports
