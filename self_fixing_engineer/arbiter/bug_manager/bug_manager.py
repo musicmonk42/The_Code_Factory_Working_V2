@@ -7,6 +7,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import time
 import traceback
 from collections import defaultdict
@@ -554,6 +555,7 @@ class BugManager:
     ) -> str:
         message_part = ""
         exception_type = "unknown"
+        error_code_prefix = ""
 
         if isinstance(error_data, Exception):
             exception_type = type(error_data).__name__
@@ -564,13 +566,39 @@ class BugManager:
         elif isinstance(error_data, dict):
             exception_type = error_data.get("exception_type", "dict_error")
             message_part = error_data.get("message", "").split("\n")[0]
+            # Check for HTTP status code in error data (only 5xx server errors)
+            status_code = error_data.get("status_code") or error_data.get("http_status")
+            if status_code and isinstance(status_code, int) and 500 <= status_code < 600:
+                error_code_prefix = f"{status_code}_error_"
         else:
             exception_type = "unrecognized_type"
             message_part = f"unrecognized_data_{type(error_data).__name__}"
 
+        # Check custom_details for HTTP status codes (only 5xx server errors)
+        if custom_details and not error_code_prefix:
+            status_code = custom_details.get("status_code") or custom_details.get("http_status")
+            if status_code and isinstance(status_code, int) and 500 <= status_code < 600:
+                error_code_prefix = f"{status_code}_error_"
+
+        # If no explicit status code, check for 500/5xx patterns in message
+        # Use word boundary matching to avoid false positives (e.g., "5000 records")
+        if not error_code_prefix:
+            if re.search(r'\b500\b', message_part) or "Internal Server Error" in message_part:
+                error_code_prefix = "500_error_"
+            elif re.search(r'\b502\b', message_part) or "Bad Gateway" in message_part:
+                error_code_prefix = "502_error_"
+            elif re.search(r'\b503\b', message_part) or "Service Unavailable" in message_part:
+                error_code_prefix = "503_error_"
+            elif re.search(r'\b504\b', message_part) or "Gateway Timeout" in message_part:
+                error_code_prefix = "504_error_"
+
         sanitized_details = validate_input_details(custom_details)
         signature_base = f"{location or 'global'}|{exception_type}|{message_part[:100]}|{str(sanitized_details)[:200]}"
-        return hashlib.sha256(signature_base.encode("utf-8")).hexdigest()
+        signature_hash = hashlib.sha256(signature_base.encode("utf-8")).hexdigest()
+
+        # Return a readable prefix followed by hash for uniqueness
+        # This allows playbook matching while maintaining deduplication
+        return f"{error_code_prefix}{signature_hash}"
 
     async def _dispatch_notifications(self, error_details: Dict[str, Any]) -> None:
         severity_value = error_details.get("severity", Severity.MEDIUM.value).lower()
