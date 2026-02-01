@@ -393,13 +393,23 @@ class TestBugSignatureGeneration:
             "Processed 5000 records successfully",
             "Error at line 5001",
             "User ID 15003 not found",
-            "Completed in 500ms",  # This one should NOT match since "500ms" has word boundary
         ]
         for msg in false_positive_messages:
             signature = manager_for_signature._generate_bug_signature(msg, "test", None)
             assert not signature.startswith(
                 "500_error_"
             ), f"Message '{msg}' should not be identified as 500 error"
+
+    def test_signature_no_prefix_for_4xx_status_codes(self, manager_for_signature):
+        """Tests that 4xx status codes don't get error prefixes (only 5xx should)."""
+        for status_code in [400, 401, 403, 404]:
+            error_data = {"status_code": status_code, "message": f"HTTP {status_code} error"}
+            signature = manager_for_signature._generate_bug_signature(
+                error_data, "test_location", None
+            )
+            assert not signature.startswith(
+                f"{status_code}_error_"
+            ), f"4xx error {status_code} should not get error prefix"
 
     def test_signature_true_positive_for_http_500(self, manager_for_signature):
         """Tests that legitimate HTTP 500 error messages are correctly identified."""

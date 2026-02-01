@@ -566,18 +566,18 @@ class BugManager:
         elif isinstance(error_data, dict):
             exception_type = error_data.get("exception_type", "dict_error")
             message_part = error_data.get("message", "").split("\n")[0]
-            # Check for HTTP status code in error data
+            # Check for HTTP status code in error data (only 5xx server errors)
             status_code = error_data.get("status_code") or error_data.get("http_status")
-            if status_code:
+            if status_code and isinstance(status_code, int) and 500 <= status_code < 600:
                 error_code_prefix = f"{status_code}_error_"
         else:
             exception_type = "unrecognized_type"
             message_part = f"unrecognized_data_{type(error_data).__name__}"
 
-        # Check custom_details for HTTP status codes
+        # Check custom_details for HTTP status codes (only 5xx server errors)
         if custom_details and not error_code_prefix:
             status_code = custom_details.get("status_code") or custom_details.get("http_status")
-            if status_code:
+            if status_code and isinstance(status_code, int) and 500 <= status_code < 600:
                 error_code_prefix = f"{status_code}_error_"
 
         # If no explicit status code, check for 500/5xx patterns in message
