@@ -276,3 +276,5 @@ pytest_report.xml
 # Uploads directory - temporary job files
 uploads/
 test_collection_fixes.py
+test_runtime_fixes.py
+validate_runtime_fixes.py
