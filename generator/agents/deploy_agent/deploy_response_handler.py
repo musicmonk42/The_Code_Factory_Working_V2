@@ -38,7 +38,7 @@ from typing import Any, Callable, Dict, List, Optional, Type
 
 import aiofiles  # Explicitly imported for async file operations
 import hcl2  # For HCL (Terraform) parsing
-from aiohttp import web
+import aiohttp.web as web
 from aiohttp.web import Request, Response, RouteTableDef
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
