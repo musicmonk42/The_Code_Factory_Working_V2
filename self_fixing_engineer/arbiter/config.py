@@ -24,7 +24,7 @@ import pydantic
 import yaml
 from cryptography.fernet import Fernet, InvalidToken
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
-from pydantic import Field, HttpUrl, SecretStr, field_validator
+from pydantic import AliasChoices, Field, HttpUrl, SecretStr, field_validator
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Add compatibility layer
@@ -153,8 +153,7 @@ def get_or_create_histogram(
     name: str,
     documentation: str,
     labelnames: Tuple[str, ...] = (),
-    buckets: Tuple[float, ...] = (0.001, 0.01, 0.1, 0.5, 1, 2, 5, 10),
-):
+    buckets: Tuple[float, ...] = (0.001, 0.01, 0.1, 0.5, 1, 2, 5, 10)):
     with _metrics_lock:
         try:
             return Histogram(
@@ -184,31 +183,79 @@ class ConfigError(Exception):
 
 # --- Nested Pydantic Model for LLM Settings ---
 class LLMSettings(BaseSettings):
-    default_provider: str = Field("openai", env="LLM_DEFAULT_PROVIDER")
-    retry_providers: List[str] = Field(
-        ["anthropic", "google"], env="LLM_RETRY_PROVIDERS"
+    """
+    LLM configuration settings with explicit environment variable mapping.
+    
+    Environment variables are mapped using the LLM_ prefix by default.
+    For example: LLM_DEFAULT_PROVIDER, LLM_TEMPERATURE, etc.
+    
+    Special case: api_key supports both OPENAI_API_KEY (legacy) and LLM_API_KEY.
+    """
+    default_provider: str = Field(
+        default="openai",
+        description="Default LLM provider (openai, anthropic, google)"
     )
-    timeout_seconds: float = Field(30.0, env="LLM_TIMEOUT_SECONDS")
+    retry_providers: List[str] = Field(
+        default=["anthropic", "google"],
+        description="Fallback providers for retry logic"
+    )
+    timeout_seconds: float = Field(
+        default=30.0,
+        description="Request timeout in seconds"
+    )
     api_url: HttpUrl = Field(
-        default="https://api.openai.com/v1/completions", env="LLM_API_URL"
+        default="https://api.openai.com/v1/completions",
+        description="LLM API endpoint URL"
     )
     api_key: Optional[SecretStr] = Field(
-        default=SecretStr("sk-dummy-llm-key-for-tests"), env="OPENAI_API_KEY"
+        default=SecretStr("sk-dummy-llm-key-for-tests"),
+        validation_alias=AliasChoices("OPENAI_API_KEY", "LLM_API_KEY"),
+        description="API key for LLM provider (supports OPENAI_API_KEY for backwards compatibility)"
     )
-    model_name: str = Field(default="gpt-4o-mini", env="LLM_MODEL_NAME")
-    temperature: float = Field(default=0.7, env="LLM_TEMPERATURE")
-    max_tokens: int = Field(default=500, env="LLM_MAX_TOKENS")
-    top_p: float = Field(default=1.0, env="LLM_TOP_P")
-    frequency_penalty: float = Field(default=0.0, env="LLM_FREQUENCY_PENALTY")
-    presence_penalty: float = Field(default=0.0, env="LLM_PRESENCE_PENALTY")
-    system_prompt: Optional[str] = Field(default="", env="LLM_SYSTEM_PROMPT")
+    model_name: str = Field(
+        default="gpt-4o-mini",
+        description="Model identifier to use"
+    )
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature (0.0-2.0)"
+    )
+    max_tokens: int = Field(
+        default=500,
+        gt=0,
+        description="Maximum tokens in response"
+    )
+    top_p: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Nucleus sampling parameter"
+    )
+    frequency_penalty: float = Field(
+        default=0.0,
+        ge=-2.0,
+        le=2.0,
+        description="Frequency penalty for token repetition"
+    )
+    presence_penalty: float = Field(
+        default=0.0,
+        ge=-2.0,
+        le=2.0,
+        description="Presence penalty for topic repetition"
+    )
+    system_prompt: Optional[str] = Field(
+        default="",
+        description="System prompt for the LLM"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
-        case_sensitive=True,
-        env_prefix="LLM_",
+        case_sensitive=False,  # Case-insensitive matching allows LLM_DEFAULT_PROVIDER to match field 'default_provider' when combined with env_prefix
+        env_prefix="LLM_"
     )
 
 
@@ -225,296 +272,292 @@ class ArbiterConfig(BaseSettings):
         extra="ignore",
         case_sensitive=True,
         env_nested_delimiter="__",
-        validate_default=True,
-    )
+        validate_default=True)
 
     # --- Core System Settings ---
-    REDIS_URL: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
-    REDIS_POOL_SIZE: int = Field(default=10, env="REDIS_POOL_SIZE")
+    REDIS_URL: str = Field(default="redis://localhost:6379/0")
+    REDIS_POOL_SIZE: int = Field(default=10)
     KAFKA_BOOTSTRAP_SERVERS: str = Field(
-        default="localhost:9092", env="KAFKA_BOOTSTRAP_SERVERS"
+        default="localhost:9092"
     )
 
-    DB_PATH: str = Field(default="sqlite:///./omnicore.db", env="DATABASE_URL")
-    DB_POOL_SIZE: int = Field(default=50, env="DB_POOL_SIZE")
-    DB_POOL_MAX_OVERFLOW: int = Field(default=20, env="DB_POOL_MAX_OVERFLOW")
-    DB_RETRY_ATTEMPTS: int = Field(default=3, env="DB_RETRY_ATTEMPTS")
-    DB_RETRY_DELAY: float = Field(default=1.0, env="DB_RETRY_DELAY")
-    DB_CIRCUIT_THRESHOLD: int = Field(default=3, env="DB_CIRCUIT_THRESHOLD")
-    DB_CIRCUIT_TIMEOUT: int = Field(default=60, env="DB_CIRCUIT_TIMEOUT")
-    DB_BATCH_SIZE: int = Field(default=100, env="DB_BATCH_SIZE")
+    DB_PATH: str = Field(
+        default="sqlite:///./omnicore.db",
+        validation_alias=AliasChoices("DATABASE_URL", "DB_PATH"),
+        description="Database connection URL (supports DATABASE_URL for 12-factor app compatibility)"
+    )
+    DB_POOL_SIZE: int = Field(default=50)
+    DB_POOL_MAX_OVERFLOW: int = Field(default=20)
+    DB_RETRY_ATTEMPTS: int = Field(default=3)
+    DB_RETRY_DELAY: float = Field(default=1.0)
+    DB_CIRCUIT_THRESHOLD: int = Field(default=3)
+    DB_CIRCUIT_TIMEOUT: int = Field(default=60)
+    DB_BATCH_SIZE: int = Field(default=100)
 
-    NEO4J_URI: str = Field(default="neo4j://localhost:7687", env="NEO4J_URI")
-    NEO4J_USER: str = Field(default="neo4j", env="NEO4J_USER")
+    NEO4J_URI: str = Field(default="neo4j://localhost:7687")
+    NEO4J_USER: str = Field(default="neo4j")
     NEO4J_PASSWORD: SecretStr = Field(
-        default=SecretStr("password"), env="NEO4J_PASSWORD"
+        default=SecretStr("password"),
+        description="Neo4j database password"
     )
 
-    REPORTS_DIRECTORY: str = Field(default="reports", env="REPORTS_DIRECTORY")
+    REPORTS_DIRECTORY: str = Field(default="reports")
     CODEBASE_PATHS: List[str] = Field(
-        default_factory=lambda: ["."], env="CODEBASE_PATHS"
+        default_factory=lambda: ["."]
     )
 
-    TF_ENABLE_ONEDNN_OPTS: str = Field(default="1", env="TF_ENABLE_ONEDNN_OPTS")
+    TF_ENABLE_ONEDNN_OPTS: str = Field(default="1")
 
     ENCRYPTION_PASSWORD: str = Field(
         default="darshan",
-        env="ENCRYPTION_PASSWORD",
-        description="Password for API encryption (default: 'darshan')",
-    )
+        description="Password for API encryption (default: 'darshan')")
     # Default Fernet key for development/testing. MUST be overridden in production via ENCRYPTION_KEY env var.
     ENCRYPTION_KEY: Optional[SecretStr] = Field(
         default=SecretStr("0mRtqFHlMkj0xTZO14sBFr1H6jkmmI0LWyK97sGyGew="),
-        env="ENCRYPTION_KEY",
+        description="Fernet encryption key for sensitive data"
     )
     ENCRYPTION_KEY_BYTES: bytes = b""
 
-    MAX_LEARN_RETRIES: int = Field(default=3, env="MAX_LEARN_RETRIES")
+    MAX_LEARN_RETRIES: int = Field(default=3)
     VALID_DOMAIN_PATTERN: str = Field(
-        default=r"^[a-zA-Z0-9_.-]+$", env="VALID_DOMAIN_PATTERN"
+        default=r"^[a-zA-Z0-9_.-]+$"
     )
     ML_MODEL_PATH: str = Field(
-        default="models/relevance_classifier.pth", env="ML_MODEL_PATH"
+        default="models/relevance_classifier.pth"
     )
-    QUANTUM_ENABLED: bool = Field(default=False, env="ENABLE_QUANTUM")
+    QUANTUM_ENABLED: bool = Field(
+        default=False, 
+        validation_alias=AliasChoices("ENABLE_QUANTUM", "QUANTUM_ENABLED"),
+        description="Enable quantum computing features"
+    )
     KNOWLEDGE_REFRESH_INTERVAL: int = Field(
-        default=86400, env="KNOWLEDGE_REFRESH_INTERVAL"
+        default=86400
     )
-    LOW_CONFIDENCE_THRESHOLD: float = Field(default=0.2, env="LOW_CONFIDENCE_THRESHOLD")
-    SIMILARITY_THRESHOLD: float = Field(default=0.8, env="SIMILARITY_THRESHOLD")
-    POLICY_CONFIG_FILE: str = Field(default="./policies.json", env="POLICY_CONFIG_FILE")
+    LOW_CONFIDENCE_THRESHOLD: float = Field(default=0.2)
+    SIMILARITY_THRESHOLD: float = Field(default=0.8)
+    POLICY_CONFIG_FILE: str = Field(default="./policies.json")
 
     # --- PolicyEngine Required Settings ---
     # These are required by PolicyEngine for initialization
     POLICY_REFRESH_INTERVAL_SECONDS: float = Field(
-        default=300.0, env="POLICY_REFRESH_INTERVAL_SECONDS"
+        default=300.0
     )
-    LLM_PROVIDER: str = Field(default="openai", env="LLM_PROVIDER")
-    LLM_MODEL: str = Field(default="gpt-4", env="LLM_MODEL")
+    LLM_PROVIDER: str = Field(default="openai")
+    LLM_MODEL: str = Field(default="gpt-4")
     DECISION_OPTIMIZER_SETTINGS: Dict[str, Any] = Field(
         default_factory=lambda: {
             "max_iterations": 100,
             "convergence_threshold": 0.01,
             "learning_rate": 0.1
-        },
-        env="DECISION_OPTIMIZER_SETTINGS"
+        }
     )
     CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL: float = Field(
-        default=0.1, env="CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL"
+        default=0.1
     )
     VALID_DOMAIN_PATTERN: str = Field(
-        default=r"^[a-zA-Z0-9_.-]+$", env="VALID_DOMAIN_PATTERN"
+        default=r"^[a-zA-Z0-9_.-]+$"
     )
     POLICY_CONFIG_FILE_PATH: str = Field(
-        default="./policies.json", env="POLICY_CONFIG_FILE_PATH"
+        default="./policies.json"
     )
     POLICY_PAUSE_POLLING_INTERVAL: float = Field(
-        default=5.0, env="POLICY_PAUSE_POLLING_INTERVAL"
+        default=5.0
     )
 
     # --- Audit Settings ---
-    AUDIT_BUFFER_SIZE: int = Field(default=100, env="AUDIT_BUFFER_SIZE")
-    AUDIT_FLUSH_INTERVAL: float = Field(default=1.0, env="AUDIT_FLUSH_INTERVAL")
+    AUDIT_BUFFER_SIZE: int = Field(default=100)
+    AUDIT_FLUSH_INTERVAL: float = Field(default=1.0)
     AUDIT_BLOCKCHAIN_ENABLED: bool = Field(
-        default=False, env="AUDIT_BLOCKCHAIN_ENABLED"
+        default=False
     )
-    WEB3_PROVIDER_URL: Optional[HttpUrl] = Field(default=None, env="WEB3_PROVIDER_URL")
+    WEB3_PROVIDER_URL: Optional[HttpUrl] = Field(default=None)
 
     # --- Agent State Settings ---
-    AGENT_STATE_BATCH_SIZE: int = Field(default=100, env="AGENT_STATE_BATCH_SIZE")
-    AGENT_STATE_QUERY_LIMIT: int = Field(default=1000, env="AGENT_STATE_QUERY_LIMIT")
+    AGENT_STATE_BATCH_SIZE: int = Field(default=100)
+    AGENT_STATE_QUERY_LIMIT: int = Field(default=1000)
 
     # --- Message Bus Settings ---
-    ARBITER_SHARDS: int = Field(default=4, env="ARBITER_SHARDS")
-    MESSAGE_BUS_SHARD_COUNT: int = Field(default=4, env="MESSAGE_BUS_SHARD_COUNT")
+    ARBITER_SHARDS: int = Field(default=4)
+    MESSAGE_BUS_SHARD_COUNT: int = Field(default=4)
     MESSAGE_BUS_MAX_QUEUE_SIZE: int = Field(
-        default=10000, env="MESSAGE_BUS_MAX_QUEUE_SIZE"
+        default=10000
     )
     MESSAGE_BUS_WORKERS_PER_SHARD: int = Field(
-        default=2, env="MESSAGE_BUS_WORKERS_PER_SHARD"
+        default=2
     )
 
     # --- LLM Integration Settings (now nested) ---
     llm: LLMSettings = Field(default_factory=LLMSettings)
 
     # --- External Integrations ---
-    ZMQ_BUG_ADDRESS: str = Field(default="tcp://localhost:5555", env="ZMQ_BUG_ADDRESS")
-    JIRA_ENABLED: bool = Field(default=False, env="JIRA_ENABLED")
-    JIRA_API_URL: Optional[HttpUrl] = Field(default=None, env="JIRA_API_URL")
-    JIRA_API_TOKEN: Optional[SecretStr] = Field(default=None, env="JIRA_API_TOKEN")
-    JIRA_PROJECT_KEY: str = Field(default="", env="JIRA_PROJECT_KEY")
-    JIRA_ISSUE_TYPE: str = Field(default="", env="JIRA_ISSUE_TYPE")
-    SLACK_WEBHOOK_URL: Optional[HttpUrl] = Field(default=None, env="SLACK_WEBHOOK_URL")
-    SLACK_CHANNEL: str = Field(default="", env="SLACK_CHANNEL")
-    EMAIL_ENABLED: bool = Field(default=False, env="EMAIL_ENABLED")
-    EMAIL_SENDER: str = Field(default="", env="EMAIL_SENDER")
-    EMAIL_RECIPIENTS: str = Field(default="", env="EMAIL_RECIPIENTS")
+    ZMQ_BUG_ADDRESS: str = Field(default="tcp://localhost:5555")
+    JIRA_ENABLED: bool = Field(default=False)
+    JIRA_API_URL: Optional[HttpUrl] = Field(default=None)
+    JIRA_API_TOKEN: Optional[SecretStr] = Field(default=None)
+    JIRA_PROJECT_KEY: str = Field(default="")
+    JIRA_ISSUE_TYPE: str = Field(default="")
+    SLACK_WEBHOOK_URL: Optional[HttpUrl] = Field(default=None)
+    SLACK_CHANNEL: str = Field(default="")
+    EMAIL_ENABLED: bool = Field(default=False)
+    EMAIL_SENDER: str = Field(default="")
+    EMAIL_RECIPIENTS: str = Field(default="")
     EMAIL_RECIPIENTS_LIST: List[str] = Field(default_factory=list)
 
-    EMAIL_SMTP_SERVER: str = Field(default="", env="EMAIL_SMTP_SERVER")
-    EMAIL_SMTP_PORT: int = Field(default=587, env="EMAIL_SMTP_PORT")
-    EMAIL_SMTP_USERNAME: Optional[str] = Field(default=None, env="EMAIL_SMTP_USERNAME")
+    EMAIL_SMTP_SERVER: str = Field(default="")
+    EMAIL_SMTP_PORT: int = Field(default=587)
+    EMAIL_SMTP_USERNAME: Optional[str] = Field(default=None)
     EMAIL_SMTP_PASSWORD: Optional[SecretStr] = Field(
-        default=None, env="EMAIL_SMTP_PASSWORD"
+        default=None
     )
-    EMAIL_USE_TLS: bool = Field(default=True, env="EMAIL_USE_TLS")
-    EMAIL_TIMEOUT_SECONDS: float = Field(default=10.0, env="EMAIL_TIMEOUT_SECONDS")
-    PAGERDUTY_ENABLED: bool = Field(default=False, env="PAGERDUTY_ENABLED")
+    EMAIL_USE_TLS: bool = Field(default=True)
+    EMAIL_TIMEOUT_SECONDS: float = Field(default=10.0)
+    PAGERDUTY_ENABLED: bool = Field(default=False)
     PAGERDUTY_ROUTING_KEY: Optional[SecretStr] = Field(
-        default=None, env="PAGERDUTY_ROUTING_KEY"
+        default=None
     )
     PAGERDUTY_API_TIMEOUT_SECONDS: float = Field(
-        default=10.0, env="PAGERDUTY_API_TIMEOUT_SECONDS"
+        default=10.0
     )
 
     # --- API Keys and Secrets (Mapped from .env directly) ---
     ADMIN_API_KEY: Optional[SecretStr] = Field(
-        default=SecretStr("dummy-admin-key-for-tests"), env="ADMIN_API_KEY"
+        default=SecretStr("dummy-admin-key-for-tests"),
+        description="Admin API key for authenticated operations"
     )
     ANTHROPIC_API_KEY: Optional[SecretStr] = Field(
-        default=None, env="ANTHROPIC_API_KEY"
+        default=None
     )
-    GOOGLE_API_KEY: Optional[SecretStr] = Field(default=None, env="GOOGLE_API_KEY")
-    CDP_API_KEY: SecretStr = Field(default=SecretStr(""), env="CDP_API_KEY")
-    GLASSDOOR_API_KEY: SecretStr = Field(default=SecretStr(""), env="GLASSDOOR_API_KEY")
-    EPA_API_KEY: SecretStr = Field(default=SecretStr(""), env="EPA_API_KEY")
-    OSHA_API_KEY: SecretStr = Field(default=SecretStr(""), env="OSHA_API_KEY")
-    DOL_API_KEY: SecretStr = Field(default=SecretStr(""), env="DOL_API_KEY")
-    FEC_API_KEY: SecretStr = Field(default=SecretStr(""), env="FEC_API_KEY")
-    SEC_EDGAR_USER_AGENT: str = Field(default="", env="SEC_EDGAR_USER_AGENT")
-    SEC_EDGAR_CIK: str = Field(default="", env="SEC_EDGAR_CIK")
-    CENSUS_API_KEY: SecretStr = Field(default=SecretStr(""), env="CENSUS_API_KEY")
-    BLS_API_KEY: SecretStr = Field(default=SecretStr(""), env="BLS_API_KEY")
-    USDA_API_KEY: SecretStr = Field(default=SecretStr(""), env="USDA_API_KEY")
-    ALPHAVANTAGE_API_KEY: SecretStr = Field(
-        default=SecretStr(""), env="ALPHAVANTAGE_API_KEY"
-    )
-    BRANDFETCH_API_KEY: SecretStr = Field(
-        default=SecretStr(""), env="BRANDFETCH_API_KEY"
-    )
-    FINNHUB_API_KEY: SecretStr = Field(default=SecretStr(""), env="FINNHUB_API_KEY")
-    POLYGON_API_KEY: SecretStr = Field(default=SecretStr(""), env="POLYGON_API_KEY")
-    NEWSAPI_KEY: SecretStr = Field(default=SecretStr(""), env="NEWSAPI_KEY")
-    AWS_ACCESS_KEY_ID: SecretStr = Field(default=SecretStr(""), env="AWS_ACCESS_KEY_ID")
-    AWS_SECRET_ACCESS_KEY: SecretStr = Field(
-        default=SecretStr(""), env="AWS_SECRET_ACCESS_KEY"
-    )
-    AWS_REGION: str = Field(default="us-east-1", env="AWS_REGION")
-    EXPLORER_MOCK_MODE: bool = Field(default=False, env="EXPLORER_MOCK_MODE")
+    GOOGLE_API_KEY: Optional[SecretStr] = Field(default=None)
+    CDP_API_KEY: SecretStr = Field(default=SecretStr(""))
+    GLASSDOOR_API_KEY: SecretStr = Field(default=SecretStr(""))
+    EPA_API_KEY: SecretStr = Field(default=SecretStr(""))
+    OSHA_API_KEY: SecretStr = Field(default=SecretStr(""))
+    DOL_API_KEY: SecretStr = Field(default=SecretStr(""))
+    FEC_API_KEY: SecretStr = Field(default=SecretStr(""))
+    SEC_EDGAR_USER_AGENT: str = Field(default="")
+    SEC_EDGAR_CIK: str = Field(default="")
+    CENSUS_API_KEY: SecretStr = Field(default=SecretStr(""))
+    BLS_API_KEY: SecretStr = Field(default=SecretStr(""))
+    USDA_API_KEY: SecretStr = Field(default=SecretStr(""))
+    ALPHAVANTAGE_API_KEY: SecretStr = Field(default=SecretStr(""))
+    BRANDFETCH_API_KEY: SecretStr = Field(default=SecretStr(""))
+    FINNHUB_API_KEY: SecretStr = Field(default=SecretStr(""))
+    POLYGON_API_KEY: SecretStr = Field(default=SecretStr(""))
+    NEWSAPI_KEY: SecretStr = Field(default=SecretStr(""))
+    AWS_ACCESS_KEY_ID: SecretStr = Field(default=SecretStr(""))
+    AWS_SECRET_ACCESS_KEY: SecretStr = Field(default=SecretStr(""))
+    AWS_REGION: str = Field(default="us-east-1")
+    EXPLORER_MOCK_MODE: bool = Field(default=False)
 
-    SECRET_KEY: SecretStr = Field(default=SecretStr(""), env="SECRET_KEY")
-    JWT_SECRET_KEY: SecretStr = Field(default=SecretStr(""), env="JWT_SECRET_KEY")
-    ARENA_JWT_SECRET: SecretStr = Field(
-        default=SecretStr("default-arena-jwt-secret"), env="ARENA_JWT_SECRET"
-    )
+    SECRET_KEY: SecretStr = Field(default=SecretStr(""))
+    JWT_SECRET_KEY: SecretStr = Field(default=SecretStr(""))
+    ARENA_JWT_SECRET: SecretStr = Field(default=SecretStr("default-arena-jwt-secret"))
 
-    STRIPE_SECRET_KEY: SecretStr = Field(default=SecretStr(""), env="STRIPE_SECRET_KEY")
-    STRIPE_PUBLISHABLE_KEY: str = Field(default="", env="STRIPE_PUBLISHABLE_KEY")
-    STRIPE_WEBHOOK_SECRET: SecretStr = Field(
-        default=SecretStr(""), env="STRIPE_WEBHOOK_SECRET"
-    )
-    CAPTCHA_API_KEY: SecretStr = Field(default=SecretStr(""), env="CAPTCHA_API_KEY")
+    STRIPE_SECRET_KEY: SecretStr = Field(default=SecretStr(""))
+    STRIPE_PUBLISHABLE_KEY: str = Field(default="")
+    STRIPE_WEBHOOK_SECRET: SecretStr = Field(default=SecretStr(""))
+    CAPTCHA_API_KEY: SecretStr = Field(default=SecretStr(""))
 
     # --- System Operational Parameters ---
-    LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")
-    HEALTH_CHECK_ENDPOINT: str = Field(default="/health", env="HEALTH_CHECK_ENDPOINT")
-    HEALTH_CHECK_PORT: int = Field(default=8080, env="HEALTH_CHECK_PORT")
+    LOG_LEVEL: str = Field(default="INFO")
+    HEALTH_CHECK_ENDPOINT: str = Field(default="/health")
+    HEALTH_CHECK_PORT: int = Field(default=8080)
     # Security: Default to localhost; use environment variable to bind to all interfaces if needed
-    API_HOST: str = Field(default="127.0.0.1", env="API_HOST")
-    API_PORT: int = Field(default=8000, env="API_PORT")
-    RELOAD_VALIDATE_FILES: bool = Field(default=False, env="RELOAD_VALIDATE_FILES")
+    API_HOST: str = Field(default="127.0.0.1")
+    API_PORT: int = Field(default=8000)
+    RELOAD_VALIDATE_FILES: bool = Field(default=False)
 
     # --- Advanced Features ---
     EXPERIMENTAL_FEATURES_ENABLED: bool = Field(
-        default=False, env="EXPERIMENTAL_FEATURES_ENABLED"
+        default=False
     )
-    PLUGIN_DIR: str = Field(default="./plugins", env="PLUGIN_DIR")
-    DREAM_MODE_ENABLED: bool = Field(default=False, env="DREAM_MODE_ENABLED")
-    PLUGIN_CONFIG: str = Field(default="{}", env="PLUGIN_CONFIG")
+    PLUGIN_DIR: str = Field(default="./plugins")
+    DREAM_MODE_ENABLED: bool = Field(default=False)
+    PLUGIN_CONFIG: str = Field(default="{}")
 
     # AI Model Specific Settings (from .env)
-    DREAM_MODE_MODEL: str = Field(default="gpt2", env="DREAM_MODE_MODEL")
-    REASONER_MODEL: str = Field(default="gpt2-large", env="REASONER_MODEL")
-    DREAM_MODE_DEVICE: str = Field(default="-1", env="DREAM_MODE_DEVICE")
-    REASONER_DEVICE: str = Field(default="-1", env="REASONER_DEVICE")
-    TRANSFORMERS_OFFLINE: bool = Field(default=False, env="TRANSFORMERS_OFFLINE")
+    DREAM_MODE_MODEL: str = Field(default="gpt2")
+    REASONER_MODEL: str = Field(default="gpt2-large")
+    DREAM_MODE_DEVICE: str = Field(default="-1")
+    REASONER_DEVICE: str = Field(default="-1")
+    TRANSFORMERS_OFFLINE: bool = Field(default=False)
 
     # Merkle Tree settings (related to audit, but global for persistence)
     MERKLE_TREE_PRIVATE_KEY: Optional[SecretStr] = Field(
-        default=None, env="MERKLE_TREE_PRIVATE_KEY"
+        default=None
     )
     MERKLE_TREE_BRANCHING_FACTOR: int = Field(
-        default=2, env="MERKLE_TREE_BRANCHING_FACTOR"
+        default=2
     )
 
     # -------- Dream Mode --------
-    DREAM_MODE_MAX_WORKERS: int = Field(default=2, env="DREAM_MODE_MAX_WORKERS")
-    DREAM_MODE_TIMEOUT: int = Field(default=120, env="DREAM_MODE_TIMEOUT")
-    DREAM_MODE_TEMP_POSITIVE: float = Field(default=0.8, env="DREAM_MODE_TEMP_POSITIVE")
-    DREAM_MODE_TEMP_NEUTRAL: float = Field(default=0.5, env="DREAM_MODE_TEMP_NEUTRAL")
-    DREAM_MODE_TEMP_NEGATIVE: float = Field(default=0.3, env="DREAM_MODE_TEMP_NEGATIVE")
+    DREAM_MODE_MAX_WORKERS: int = Field(default=2)
+    DREAM_MODE_TIMEOUT: int = Field(default=120)
+    DREAM_MODE_TEMP_POSITIVE: float = Field(default=0.8)
+    DREAM_MODE_TEMP_NEUTRAL: float = Field(default=0.5)
+    DREAM_MODE_TEMP_NEGATIVE: float = Field(default=0.3)
     DREAM_MODE_HISTORY_DB: str = Field(
-        default="sqlite:///./dream_history.db", env="DREAM_MODE_HISTORY_DB"
+        default="sqlite:///./dream_history.db"
     )
-    DREAM_MODE_MAX_HISTORY: int = Field(default=100, env="DREAM_MODE_MAX_HISTORY")
-    DREAM_MODE_STRICT_MODE: bool = Field(default=False, env="DREAM_MODE_STRICT_MODE")
-    DREAM_MODE_MOCK_MODE: bool = Field(default=False, env="DREAM_MODE_MOCK_MODE")
+    DREAM_MODE_MAX_HISTORY: int = Field(default=100)
+    DREAM_MODE_STRICT_MODE: bool = Field(default=False)
+    DREAM_MODE_MOCK_MODE: bool = Field(default=False)
 
     # -------- Reasoner --------
-    REASONER_MAX_WORKERS: int = Field(default=2, env="REASONER_MAX_WORKERS")
-    REASONER_TIMEOUT: int = Field(default=60, env="REASONER_TIMEOUT")
-    REASONER_MAX_TOKENS: int = Field(default=500, env="REASONER_MAX_TOKENS")
-    REASONER_TEMP: float = Field(default=0.7, env="REASONER_TEMP")
-    REASONER_TEMP_EXPLAIN: float = Field(default=0.5, env="REASONER_TEMP_EXPLAIN")
-    REASONER_TEMP_REASON: float = Field(default=0.6, env="REASONER_TEMP_REASON")
-    REASONER_TEMP_NEUTRAL: float = Field(default=0.5, env="REASONER_TEMP_NEUTRAL")
-    REASONER_TEMP_POSITIVE: float = Field(default=0.8, env="REASONER_TEMP_POSITIVE")
-    REASONER_TEMP_NEGATIVE: float = Field(default=0.3, env="REASONER_TEMP_NEGATIVE")
+    REASONER_MAX_WORKERS: int = Field(default=2)
+    REASONER_TIMEOUT: int = Field(default=60)
+    REASONER_MAX_TOKENS: int = Field(default=500)
+    REASONER_TEMP: float = Field(default=0.7)
+    REASONER_TEMP_EXPLAIN: float = Field(default=0.5)
+    REASONER_TEMP_REASON: float = Field(default=0.6)
+    REASONER_TEMP_NEUTRAL: float = Field(default=0.5)
+    REASONER_TEMP_POSITIVE: float = Field(default=0.8)
+    REASONER_TEMP_NEGATIVE: float = Field(default=0.3)
     REASONER_HISTORY_DB: str = Field(
-        default="sqlite:///./reasoner_history.db", env="REASONER_HISTORY_DB"
+        default="sqlite:///./reasoner_history.db"
     )
-    REASONER_MAX_HISTORY: int = Field(default=100, env="REASONER_MAX_HISTORY")
-    REASONER_STRICT_MODE: bool = Field(default=False, env="REASONER_STRICT_MODE")
-    REASONER_MOCK_MODE: bool = Field(default=False, env="REASONER_MOCK_MODE")
-    REASONER_LOG_PROMPTS: bool = Field(default=False, env="REASONER_LOG_PROMPTS")
+    REASONER_MAX_HISTORY: int = Field(default=100)
+    REASONER_STRICT_MODE: bool = Field(default=False)
+    REASONER_MOCK_MODE: bool = Field(default=False)
+    REASONER_LOG_PROMPTS: bool = Field(default=False)
 
     # --- Feature Toggles (from .env) ---
     ENABLE_LIVE_COMPANY_LOOKUP: bool = Field(
-        default=True, env="ENABLE_LIVE_COMPANY_LOOKUP"
+        default=True
     )
-    ENABLE_LIVE_TICKERS: bool = Field(default=True, env="ENABLE_LIVE_TICKERS")
-    ENABLE_YAHOO_FINANCE: bool = Field(default=True, env="ENABLE_YAHOO_FINANCE")
-    ENABLE_EPA: bool = Field(default=True, env="ENABLE_EPA")
-    ENABLE_OSHA: bool = Field(default=True, env="ENABLE_OSHA")
-    ENABLE_DOL: bool = Field(default=True, env="ENABLE_DOL")
-    ENABLE_FEC: bool = Field(default=True, env="ENABLE_FEC")
-    ENABLE_SEC_EDGAR: bool = Field(default=True, env="ENABLE_SEC_EDGAR")
-    ENABLE_GD: bool = Field(default=True, env="ENABLE_GD")
-    ENABLE_CDP: bool = Field(default=True, env="ENABLE_CDP")
-    ENABLE_SUS: bool = Field(default=True, env="ENABLE_SUS")
-    DEV_WEBHOOK_BYPASS: bool = Field(default=True, env="DEV_WEBHOOK_BYPASS")
-    ENABLE_BINANCE: bool = Field(default=False, env="ENABLE_BINANCE")
-    ENABLE_FINNHUB: bool = Field(default=True, env="ENABLE_FINNHUB")
-    ENABLE_POLYGON: bool = Field(default=True, env="ENABLE_POLYGON")
+    ENABLE_LIVE_TICKERS: bool = Field(default=True)
+    ENABLE_YAHOO_FINANCE: bool = Field(default=True)
+    ENABLE_EPA: bool = Field(default=True)
+    ENABLE_OSHA: bool = Field(default=True)
+    ENABLE_DOL: bool = Field(default=True)
+    ENABLE_FEC: bool = Field(default=True)
+    ENABLE_SEC_EDGAR: bool = Field(default=True)
+    ENABLE_GD: bool = Field(default=True)
+    ENABLE_CDP: bool = Field(default=True)
+    ENABLE_SUS: bool = Field(default=True)
+    DEV_WEBHOOK_BYPASS: bool = Field(default=True)
+    ENABLE_BINANCE: bool = Field(default=False)
+    ENABLE_FINNHUB: bool = Field(default=True)
+    ENABLE_POLYGON: bool = Field(default=True)
 
     # --- Internal state (managed by class methods, not from env) ---
     _is_initialized: bool = False
     _loaded_at: Optional[str] = None
 
     DEFAULT_API_TIMEOUT_SECONDS: float = Field(
-        default=30.0, env="DEFAULT_API_TIMEOUT_SECONDS"
+        default=30.0
     )
-    FRONTEND_URL: HttpUrl = Field(default="http://localhost:8000", env="FRONTEND_URL")
-    ARENA_PORT: int = Field(default=9001, env="ARENA_PORT")
+    FRONTEND_URL: HttpUrl = Field(default="http://localhost:8000")
+    ARENA_PORT: int = Field(default=9001)
 
     # --- Missing fields to complete the class ---
     REDIS_MAX_CONNECTIONS: int = Field(10, description="Maximum Redis connections")
     CONFIG_REFRESH_INTERVAL_SECONDS: int = Field(
         300, description="Interval for config refresh"
     )
-    ZOOKEEPER_URL: Optional[str] = Field(default=None, env="ZOOKEEPER_URL")
+    ZOOKEEPER_URL: Optional[str] = Field(default=None)
     KAFKA_SCHEMA_REGISTRY_URL: Optional[HttpUrl] = Field(
-        default=None, env="KAFKA_SCHEMA_REGISTRY_URL"
+        default=None
     )
     GROWTH_MAX_OPERATIONS: int = Field(
         1000, description="Max pending operations for growth manager"
@@ -534,7 +577,7 @@ class ArbiterConfig(BaseSettings):
         4, description="Max workers for codebase analyzer"
     )
     ENABLE_CRITICAL_FAILURES: bool = Field(
-        default=False, env="ENABLE_CRITICAL_FAILURES"
+        default=False
     )
     AI_API_TIMEOUT: int = Field(30, description="Default timeout for AI API calls")
     MEMORY_LIMIT: int = Field(40, description="Memory limit in GB")
@@ -544,15 +587,15 @@ class ArbiterConfig(BaseSettings):
     ROLE_MAP: Dict[str, int] = Field(
         default_factory=lambda: {"guest": 0, "user": 1, "explorer_user": 2, "admin": 3}
     )
-    ALERT_WEBHOOK_URL: Optional[HttpUrl] = Field(default=None, env="ALERT_WEBHOOK_URL")
-    SENTRY_DSN: Optional[str] = Field(default=None, env="SENTRY_DSN")
+    ALERT_WEBHOOK_URL: Optional[HttpUrl] = Field(default=None)
+    SENTRY_DSN: Optional[str] = Field(default=None)
     PROMETHEUS_GATEWAY: Optional[HttpUrl] = Field(
-        default=None, env="PROMETHEUS_GATEWAY"
+        default=None
     )
     RL_MODEL_PATH: str = Field(
         default="./models/ppo_model.zip", description="Path to save/load RL model"
     )
-    SLACK_AUTH_TOKEN: Optional[SecretStr] = Field(default=None, env="SLACK_AUTH_TOKEN")
+    SLACK_AUTH_TOKEN: Optional[SecretStr] = Field(default=None)
 
     # --- MetaSupervisor Threshold Settings ---
     PLUGIN_ERROR_THRESHOLD: float = Field(
@@ -598,8 +641,7 @@ class ArbiterConfig(BaseSettings):
         "ALERT_WEBHOOK_URL",
         "PROMETHEUS_GATEWAY",
         "KAFKA_SCHEMA_REGISTRY_URL",
-        mode="before",
-    )
+        mode="before")
     def ensure_https_in_prod(cls, v):
         if (
             v
@@ -737,8 +779,7 @@ class ArbiterConfig(BaseSettings):
                     except json.JSONDecodeError as e:
                         logger.error(
                             f"Invalid JSON in config file {file_path}: {e}",
-                            exc_info=True,
-                        )
+                            exc_info=True)
                         raise ValueError(f"Invalid JSON in config file: {e}")
                 else:
                     try:
@@ -746,8 +787,7 @@ class ArbiterConfig(BaseSettings):
                     except yaml.YAMLError as e:
                         logger.error(
                             f"Invalid YAML in config file {file_path}: {e}",
-                            exc_info=True,
-                        )
+                            exc_info=True)
                         raise ValueError(f"Invalid YAML in config file: {e}")
 
             # Create instance with loaded data
@@ -984,8 +1024,7 @@ class ArbiterConfig(BaseSettings):
                             "value": safe_value,
                             "timestamp": datetime.utcnow().isoformat(),
                         }
-                    ),
-                )
+                    ))
         except Exception as e:
             logger.error(f"Failed to stream config change to Redis: {e}")
             CONFIG_ERRORS.labels(error_type="stream_redis_fail").inc()
@@ -1109,8 +1148,7 @@ def load_persona_dict() -> Dict[str, str]:
         except (json.JSONDecodeError, IOError) as e:
             logger.error(
                 f"Failed to load personas from {persona_file_path}: {e}. Using empty dict.",
-                exc_info=True,
-            )
+                exc_info=True)
             CONFIG_ERRORS.labels(error_type="load_persona_fail").inc()
             raise  # Re-raise for tenacity
     else:
