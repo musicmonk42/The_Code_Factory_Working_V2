@@ -254,6 +254,22 @@ class TamperEvidentLogger:
         self.app_instance_id = secrets.token_hex(16)
         self._hmac_key = None  # For future HMAC support
 
+    @classmethod
+    def get_instance(cls, config: Optional[AuditLoggerConfig] = None) -> "TamperEvidentLogger":
+        """
+        Get the singleton instance of TamperEvidentLogger.
+        
+        Args:
+            config: Optional configuration. If provided and instance doesn't exist,
+                   creates instance with this config. If instance exists, config is ignored.
+                   
+        Returns:
+            TamperEvidentLogger: The singleton instance
+        """
+        if cls._instance is None:
+            cls._instance = cls(config)
+        return cls._instance
+
     def _setup_file_logger(self) -> logging.Logger:
         """Configure and return the file-based logger with rotation.
 

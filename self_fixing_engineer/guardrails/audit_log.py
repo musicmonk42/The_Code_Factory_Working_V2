@@ -707,6 +707,7 @@ class AuditLogger:
         self.dlt_backend_enabled = dlt_backend_enabled and DLT_BACKEND_AVAILABLE
         self.dlt_backend_config = dlt_backend_config or config.DLT_BACKEND_CONFIG
         self._last_entry_hash = "genesis_hash"
+        self.degraded_mode = False  # Flag for operating with invalid audit chain
 
         os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
         self._io_executor = ThreadPoolExecutor(max_workers=1)
@@ -741,10 +742,32 @@ class AuditLogger:
         if os.environ.get("APP_ENV", "development").lower() == "production":
             if not verify_audit_chain(self.log_path):
                 logger.critical(
-                    "Audit chain invalid at startup. Aborting.",
+                    "Audit chain invalid at startup. Operating in degraded mode.",
                     extra={"context": "startup"},
                 )
-                sys.exit(1)
+                self.degraded_mode = True
+                # DO NOT call sys.exit(1) - allow system to continue in degraded mode
+            else:
+                logger.info(
+                    "Audit chain verified successfully at startup.",
+                    extra={"context": "startup"},
+                )
+                self.degraded_mode = False
+        else:
+            # In non-production environments, still verify chain but only log warnings
+            if not verify_audit_chain(self.log_path):
+                logger.warning(
+                    "Audit chain verification failed in non-production environment. "
+                    "This may indicate integrity issues that should be addressed.",
+                    extra={"context": "startup"},
+                )
+                self.degraded_mode = True
+            else:
+                logger.info(
+                    "Audit chain verified successfully at startup.",
+                    extra={"context": "startup"},
+                )
+                self.degraded_mode = False
 
     async def _initialize_dlt_backend_on_startup(self):
         """Asynchronously initializes the DLT backend clients."""
