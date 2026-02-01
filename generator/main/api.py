@@ -3,6 +3,7 @@ import asyncio
 import logging
 import os
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Callable, Dict, List, Optional, Union
@@ -968,6 +969,46 @@ def require_scopes(required_scopes: List[str]):
     return scopes_checker
 
 
+# --- Lifespan Context Manager ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for FastAPI application.
+    Replaces deprecated @app.on_event("startup") and @app.on_event("shutdown").
+    """
+    # Startup
+    logger.info("Application startup event triggered.")
+    try:
+        create_db_tables()  # Create database tables on startup
+        logger.info("Database tables created successfully.")
+    except Exception as e:
+        logger.critical(f"Startup failed due to DB error: {e}", exc_info=True)
+        # Allow startup to continue with degraded functionality
+        # Health checks will report the issue
+    
+    try:
+        get_runner_instance()  # Initialize Runner
+        logger.info("Runner instance initialized.")
+    except Exception as e:
+        logger.error(f"Failed to initialize Runner: {e}", exc_info=True)
+    
+    try:
+        get_parser_instance()  # Initialize Parser
+        logger.info("Parser instance initialized.")
+    except Exception as e:
+        logger.error(f"Failed to initialize Parser: {e}", exc_info=True)
+    
+    logger.info("Application startup complete. Singletons initialized.")
+    
+    yield  # Application runs
+    
+    # Shutdown
+    logger.info("Application shutdown event triggered.")
+    # No explicit session close needed for SessionLocal, it's handled by get_db's finally block.
+    # For engine disposal, if needed: engine.dispose()
+    logger.info("Application shutdown complete.")
+
+
 # --- App Initialization ---
 limiter = Limiter(key_func=get_remote_address)  # Rate limiter instance
 api = FastAPI(
@@ -976,6 +1017,7 @@ api = FastAPI(
     version="1.0.0",  # API Versioning
     docs_url="/api/v1/docs",  # Versioned docs
     redoc_url="/api/v1/redoc",  # Versioned redoc
+    lifespan=lifespan,  # Use lifespan context manager instead of deprecated on_event
 )
 api.state.limiter = limiter
 api.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -1074,29 +1116,12 @@ def get_parser_instance() -> IntentParser:
     return _global_parser_instance
 
 
-@api.on_event("startup")
-async def startup_event():
-    """Startup event handler: creates DB tables and initializes singletons."""
-    logger.info("Application startup event triggered.")
-    # MODIFIED as per Step 2
-    try:
-        create_db_tables()  # Create database tables on startup
-    except Exception as e:
-        logger.critical(f"Startup failed due to DB error: {e}", exc_info=True)
-        # Optionally raise to prevent startup, or set a flag for health check
-    # End MODIFIED
-    get_runner_instance()  # Initialize Runner
-    get_parser_instance()  # Initialize Parser
-    logger.info("Application startup complete. Singletons initialized.")
-
-
-@api.on_event("shutdown")
-async def shutdown_event():
-    """Shutdown event handler: closes DB session."""
-    logger.info("Application shutdown event triggered.")
-    # No explicit session close needed for SessionLocal, it's handled by get_db's finally block.
-    # For engine disposal, if needed: engine.dispose()
-    logger.info("Application shutdown complete.")
+# =============================================================================
+# API Routes and Endpoints
+# =============================================================================
+# Note: The deprecated @api.on_event("startup") and @api.on_event("shutdown")
+# decorators have been replaced with the lifespan context manager above.
+# =============================================================================
 
 
 # --- Endpoint Registration Decorator ---

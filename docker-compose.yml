@@ -16,24 +16,27 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # PostgreSQL database (optional - uncomment if needed)
-  # postgres:
-  #   image: postgres:15-alpine
-  #   container_name: codefactory-postgres
-  #   environment:
-  #     POSTGRES_DB: codefactory
-  #     POSTGRES_USER: codefactory
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}  # REQUIRED: Set via environment
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - postgres-data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U codefactory"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   restart: unless-stopped
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: codefactory-postgres
+    environment:
+      POSTGRES_DB: codefactory
+      POSTGRES_USER: codefactory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}  # Default for development
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codefactory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - default
 
   # Unified Code Factory Platform
   # Note: All three modules (generator, omnicore_engine, self_fixing_engineer)
@@ -77,7 +80,7 @@ services:
       
       # Infrastructure
       - REDIS_URL=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379
-      - DB_PATH=${DB_PATH:-sqlite+aiosqlite:///./codefactory.db}
+      - DB_PATH=${DB_PATH:-postgresql+asyncpg://codefactory:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/codefactory}
       
       # Message Bus Configuration
       - MESSAGE_BUS_SHARD_COUNT=${MESSAGE_BUS_SHARD_COUNT:-4}
@@ -122,6 +125,8 @@ services:
       - platform-uploads:/app/uploads  # Persist uploaded files across restarts
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     restart: unless-stopped
     # Resource limits for production deployment

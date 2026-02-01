@@ -789,6 +789,27 @@ class Database:
         # Lazy initialization to avoid event loop requirement at import time
         self._rotation_lock = None
 
+    @retry(tries=10, delay=2, backoff=2, exceptions=(Exception,))
+    async def test_connection(self) -> bool:
+        """
+        Test database connection with retry logic.
+        
+        Returns:
+            True if connection is successful, False otherwise.
+            
+        Raises:
+            Exception: If connection fails after all retries.
+        """
+        try:
+            async with self.engine.connect() as conn:
+                # Test a simple query
+                await conn.execute(text("SELECT 1"))
+                logger.info("Database connection test successful")
+                return True
+        except Exception as e:
+            logger.error(f"Database connection test failed: {e}", exc_info=True)
+            raise
+
     async def initialize(self) -> None:
         """
         Initialize the database by creating tables and running migrations.
@@ -797,6 +818,13 @@ class Database:
         """
         try:
             logger.info("Database component: Starting async initialization...")
+
+            # Test database connection first with retry logic
+            try:
+                await self.test_connection()
+            except Exception as e:
+                logger.error(f"Database connection failed after retries: {e}")
+                raise
 
             if not self.is_postgres:
                 await self._initialize_legacy_tables_async()
@@ -849,6 +877,8 @@ class Database:
 
         return MockPolicyEngine()
 
+    @circuit(failure_threshold=5, recovery_timeout=60)
+    @retry(tries=10, delay=2, backoff=2, exceptions=(Exception,))
     async def create_tables(self):
         DB_OPERATIONS.labels(operation="create_tables").inc()
         try:
