@@ -507,6 +507,7 @@ jobs:
           pip uninstall -y aiohttp aiohttp-client-cache aiosignal frozenlist yarl multidict aioresponses || true
           
           # Install core dependencies in correct dependency order
+          # Version constraints come from .github/constraints.txt
           pip install --no-cache-dir -c .github/constraints.txt \
             multidict \
             yarl \
@@ -514,6 +515,7 @@ jobs:
             aiosignal
           
           # Install aiohttp with the version from requirements.txt
+          # Explicitly pinned to ensure consistency with requirements.txt
           pip install --no-cache-dir -c .github/constraints.txt aiohttp==3.13.3
           
           # Install aiohttp extensions
