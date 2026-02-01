@@ -71,6 +71,7 @@ if _CPU_CONSTRAINED:
 REQUIRED_REAL_MODULES = [
     "prometheus_client",
     "opentelemetry",
+    "aiohttp",  # Required by deploy_agent and other modules
 ]
 
 
@@ -135,6 +136,17 @@ def pytest_configure(config):
     Skip expensive initialization during collection phase.
     This prevents OOM and CPU timeout during test discovery.
     """
+    # CRITICAL FIX: Delete any mocked versions of required dependencies BEFORE collection starts
+    # These packages are installed in requirements.txt and must use real implementations
+    import sys
+    for mod in ["opentelemetry", "prometheus_client", "aiohttp"]:
+        if mod in sys.modules:
+            del sys.modules[mod]
+        # Delete all submodules too
+        for key in list(sys.modules.keys()):
+            if key.startswith(f"{mod}."):
+                del sys.modules[key]
+    
     # CRITICAL: Remove any mocked versions of required dependencies FIRST
     # This must happen before ANY imports attempt to use these modules
     for mod_name in REQUIRED_REAL_MODULES:
@@ -187,265 +199,10 @@ def _apply_runtime_mocks():
 # IMPORTANT: Only create stubs during testing to avoid interfering with production imports
 import importlib.util
 
-# Only create stubs if we're in a test environment (TESTING=1 is set at the top of this file)
-if os.environ.get("TESTING") == "1":
-    # CRITICAL: Mock dynaconf EARLY before stub modules are created
-    # This prevents stub modules from importing an incomplete dynaconf
-    if "dynaconf" not in sys.modules:
-        import importlib.machinery
-        dynaconf_spec = importlib.machinery.ModuleSpec(
-            name="dynaconf",
-            loader=None,
-            is_package=True
-        )
-        dynaconf_module = importlib.util.module_from_spec(dynaconf_spec)
-        dynaconf_module.__file__ = "<mocked dynaconf>"
-        dynaconf_module.__path__ = []
-        
-        class MockDynaconf:
-            def __init__(self, *args, **kwargs):
-                self._data = {}
-            
-            def get(self, key, default=None):
-                return self._data.get(key, default)
-            
-            def set(self, key, value):
-                self._data[key] = value
-            
-            def __getattr__(self, name):
-                return self._data.get(name)
-        
-        class MockValidator:
-            def __init__(self, *args, **kwargs):
-                pass
-        
-        dynaconf_module.Dynaconf = MockDynaconf
-        dynaconf_module.Validator = MockValidator
-        dynaconf_module.get_config = lambda *args, **kwargs: MockDynaconf()
-        dynaconf_module.load_config = lambda *args, **kwargs: MockDynaconf()
-        
-        sys.modules["dynaconf"] = dynaconf_module
-    
-    # CRITICAL: Mock other dependencies EARLY before packages that use them are imported
-    # This prevents packages from creating fallback stubs when imports fail
-    # WARNING: NEVER mock core infrastructure (cryptography, dotenv, base64, typing)
-    # as this causes "Mock Poisoning" - TypeErrors when other modules use these libraries
-    early_mocks = [
-        "aiofiles",  # Needed by generator.clarifier
-        "aiofiles.os",  # Submodule
-        # "redis",  # REMOVED - portalocker needs real redis types for type annotations
-        # "redis.asyncio",  # REMOVED - causes forward ref issues in portalocker
-        "chromadb",  # Needed by testgen_agent
-        "chromadb.utils",  # Submodule
-        "defusedxml",  # Needed by testgen_agent
-        "defusedxml.ElementTree",  # Submodule needed by testgen
-        "nest_asyncio",  # Needed by testgen
-        "zstandard",  # Needed by clarifier
-        "boto3",  # Needed by clarifier (KMS integration)
-        # cryptography removed - must use real implementation (Mock Poisoning prevention)
-        # cryptography.fernet removed - must use real implementation (Mock Poisoning prevention)
-        # prometheus_client removed - use real installation from requirements.txt
-        "tiktoken",  # Needed by testgen_agent
-        "aiokafka",  # Needed by arbiter
-        "aiokafka.errors",  # Submodule
-        # dotenv removed - must use real implementation (Mock Poisoning prevention)
-        # Note: aiohttp needs special handling below
-    ]
-    
-    for mod_name in early_mocks:
-        if mod_name not in sys.modules:
-            # Use proper ModuleSpec to prevent AttributeError: __spec__
-            import importlib.machinery
-            early_spec = importlib.machinery.ModuleSpec(
-                name=mod_name,
-                loader=None,
-                is_package=True
-            )
-            early_mock = importlib.util.module_from_spec(early_spec)
-            early_mock.__file__ = f"<mocked {mod_name}>"
-            early_mock.__path__ = []
-            
-            # Create a unique __getattr__ for each module (avoid closure issues)
-            def make_getattr():
-                def _getattr(name):
-                    from unittest.mock import MagicMock
-                    return MagicMock()
-                return _getattr
-            
-            early_mock.__getattr__ = make_getattr()
-            
-            sys.modules[mod_name] = early_mock
-            
-            # Create parent modules for dotted names
-            if "." in mod_name:
-                parts = mod_name.split(".")
-                for i in range(1, len(parts)):
-                    parent_name = ".".join(parts[:i])
-                    if parent_name not in sys.modules:
-                        parent_spec = importlib.machinery.ModuleSpec(
-                            name=parent_name,
-                            loader=None,
-                            is_package=True
-                        )
-                        parent_mock = importlib.util.module_from_spec(parent_spec)
-                        parent_mock.__file__ = f"<mocked {parent_name}>"
-                        parent_mock.__path__ = []
-                        parent_mock.__getattr__ = make_getattr()
-                        sys.modules[parent_name] = parent_mock
-    
-    # Special handling for zstandard to fix urllib3 compatibility
-    if "zstandard" in sys.modules and hasattr(sys.modules["zstandard"], "__getattr__"):
-        # urllib3 expects zstandard.__version__ to be a string for regex parsing
-        sys.modules["zstandard"].__version__ = "0.22.0"
-    
-    # REMOVED: Early aiohttp mocking - now using real aiohttp installation
-    # This was causing issues with aiohttp submodules (helpers, client_exceptions)
-    # not being importable. With aiohttp properly installed in requirements.txt,
-    # we don't need to mock it during collection.
-    # 
-    # The real aiohttp module will be imported naturally when tests need it.
-    # Special early initialization for aiohttp (needs ClientSession and other classes)
-    if "aiohttp" not in sys.modules:
-        # Create a minimal but functional aiohttp mock for early imports
-        # This will be replaced/enhanced by _initialize_aiohttp_stubs later if needed
-        import importlib.machinery
-        aiohttp_early_spec = importlib.machinery.ModuleSpec(
-            name="aiohttp",
-            loader=None,
-            is_package=True
-        )
-        aiohttp_early = importlib.util.module_from_spec(aiohttp_early_spec)
-        aiohttp_early.__file__ = "<mocked aiohttp early>"
-        aiohttp_early.__path__ = []
-        
-        # ClientSession class
-        class EarlyClientSession:
-            def __init__(self, *args, **kwargs):
-                pass
-            async def __aenter__(self):
-                return self
-            async def __aexit__(self, *args):
-                pass
-            async def close(self):
-                pass
-            async def get(self, *args, **kwargs):
-                from unittest.mock import MagicMock
-                resp = MagicMock()
-                resp.status = 200
-                resp.json = MagicMock(return_value={})
-                return resp
-            async def post(self, *args, **kwargs):
-                from unittest.mock import MagicMock
-                resp = MagicMock()
-                resp.status = 200
-                resp.json = MagicMock(return_value={})
-                return resp
-        
-        # ClientResponse class
-        class EarlyClientResponse:
-            def __init__(self, *args, **kwargs):
-                self.status = 200
-                self.headers = {}
-            async def json(self):
-                return {}
-            async def text(self):
-                return ""
-            async def read(self):
-                return b""
-        
-        # Exception classes
-        class EarlyClientError(Exception):
-            pass
-        
-        class EarlyClientResponseError(EarlyClientError):
-            pass
-        
-        aiohttp_early.ClientSession = EarlyClientSession
-        aiohttp_early.ClientResponse = EarlyClientResponse
-        aiohttp_early.ClientError = EarlyClientError
-        aiohttp_early.ClientResponseError = EarlyClientResponseError
-        
-        # Add __getattr__ for other attributes
-        def _aiohttp_early_getattr(name):
-            from unittest.mock import MagicMock
-            return MagicMock()
-        aiohttp_early.__getattr__ = _aiohttp_early_getattr
-        
-        sys.modules["aiohttp"] = aiohttp_early
-    
-    # CPU TIMEOUT FIX: Skip expensive module existence checks during test collection.
-    # Previously, _check_module_exists() used importlib.util.find_spec() which triggers
-    # recursive module discovery and imports heavy packages (matplotlib, torch, etc.),
-    # causing CPU timeout (exit 152) with pytest-xdist.
-    #
-    # SOLUTION: Create stubs unconditionally for these modules. If the real modules
-    # exist, the stubs won't interfere because sys.modules check prevents replacement.
-    _stub_modules = {}
-    
-    # Only create stubs for modules that aren't already imported
-    # This is a simple O(1) check without expensive filesystem walking
-    # NOTE: Only stub modules that truly don't exist in the codebase
-    # Real packages like generator.clarifier should NOT be stubbed
-    # REMOVED: omnicore_engine.database and omnicore_engine.message_bus
-    # These modules are now handled by the lazy loading mechanism in omnicore_engine/__init__.py
-    # via PEP 562 __getattr__, so they don't need stub modules here.
-    for mod_name in ['intent_capture']:
-        if mod_name not in sys.modules:
-            _stub_modules[mod_name] = mod_name
-
-    def _stub_getattr(name):
-        """Raise AttributeError for unknown attributes to avoid confusing pytest.
-        
-        Previously returned a lambda, but this confused pytest when checking for
-        pytest_plugins attribute, causing "Got: <function ...>" errors.
-        """
-        raise AttributeError(f"Stub module has no attribute '{name}'")
-
-    for module_name in _stub_modules.keys():
-        if module_name not in sys.modules:
-            # Create a minimal stub module with proper ModuleSpec
-            import importlib.machinery
-            stub_spec = importlib.machinery.ModuleSpec(
-                name=module_name,
-                loader=None,
-                is_package=True
-            )
-            stub = importlib.util.module_from_spec(stub_spec)
-            stub.__file__ = f"<stub {module_name}>"
-            stub.__path__ = []
-            stub.__getattr__ = _stub_getattr
-            sys.modules[module_name] = stub
-            
-            # Create parent modules for dotted packages ONLY if they don't already exist
-            if "." in module_name:
-                parts = module_name.split(".")
-                for i in range(1, len(parts)):
-                    parent_name = ".".join(parts[:i])
-                    if parent_name not in sys.modules:
-                        # DON'T try to import - just create stub
-                        parent_spec = importlib.machinery.ModuleSpec(
-                            name=parent_name,
-                            loader=None,
-                            is_package=True
-                        )
-                        parent_stub = importlib.util.module_from_spec(parent_spec)
-                        parent_stub.__file__ = f"<stub {parent_name}>"
-                        parent_stub.__path__ = []
-                        parent_stub.__getattr__ = _stub_getattr
-                        sys.modules[parent_name] = parent_stub
-                        
-                        # Link this parent to its own parent if it has one
-                        if i > 1:
-                            grandparent_name = ".".join(parts[:i-1])
-                            child_name = parts[i-1]
-                            if grandparent_name in sys.modules:
-                                setattr(sys.modules[grandparent_name], child_name, parent_stub)
-                
-                # Set child module as attribute on its immediate parent module
-                parent_name = ".".join(parts[:-1])
-                child_name = parts[-1]
-                if parent_name in sys.modules:
-                    setattr(sys.modules[parent_name], child_name, stub)
+# REMOVED: Early mocking block (lines 203-460)
+# This was creating incomplete stub modules that broke pytest imports.
+# All required dependencies (opentelemetry, prometheus_client, aiohttp, etc.)
+# are installed via requirements.txt and should use real implementations.
 
 # ---- Import error handling ----
 # Provide graceful fallbacks for common missing dependencies during test collection
@@ -720,7 +477,7 @@ _NEVER_MOCK = [
 
 # Only mock if genuinely missing (not if already imported)
 _OPTIONAL_DEPENDENCIES = [
-    "aiohttp",  # HTTP client - required by many modules, needs comprehensive stub
+    # "aiohttp",  # ❌ REMOVED - required dependency, must not be mocked
     "tiktoken",  # Often missing, used by LLM clients
     "aiofiles",  # Required by generator.main.api
     "aiofiles.os",  # Required by test_generation modules
@@ -773,8 +530,7 @@ _OPTIONAL_DEPENDENCIES = [
     "PIL",  # Pillow - image processing
     "pillow",  # Pillow alternative import name
     "aiosqlite",  # Async SQLite - required by feedback module and omnicore_engine.database
-    # opentelemetry packages removed - use real installation from requirements.txt
-    # opentelemetry is a required dependency and should not be mocked
+    # opentelemetry packages - ❌ REMOVED - required dependencies, must not be mocked
     "google",  # Google Cloud - base package
     "google.cloud",  # Google Cloud client library
     "google.cloud.storage",  # Google Cloud Storage
@@ -803,7 +559,7 @@ _OPTIONAL_DEPENDENCIES = [
     "langchain_core",  # LangChain core library
     "matplotlib",  # Plotting library
     "numpy",  # Numerical computing
-    # prometheus_client removed - use real installation from requirements.txt
+    # prometheus_client - ❌ REMOVED - required dependency, must not be mocked
     # Omnicore engine submodules removed - handled by lazy loading in omnicore_engine/__init__.py
     # "omnicore_engine.database",  # REMOVED - lazy loaded via PEP 562 __getattr__
     # "omnicore_engine.message_bus",  # REMOVED - lazy loaded via PEP 562 __getattr__
