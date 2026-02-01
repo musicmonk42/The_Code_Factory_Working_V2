@@ -20,9 +20,6 @@ import pytest
 
 matplotlib.use("Agg")  # Use non-interactive backend for testing
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from self_fixing_engineer.envs.code_health_env import ActionType, CodeHealthEnv, EnvironmentConfig, SystemMetrics
 
 

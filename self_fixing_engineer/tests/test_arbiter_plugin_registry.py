@@ -5,15 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Add the parent directory to path if needed
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Add self_healing_import_fixer to sys.path
-self_healing_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "self_healing_import_fixer")
-)
-sys.path.insert(0, self_healing_path)
-
 from self_fixing_engineer.arbiter.arbiter_plugin_registry import (
     PLUGIN_REGISTRY,
     PluginBase,
