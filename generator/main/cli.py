@@ -39,9 +39,14 @@ from rich.syntax import Syntax  # For displaying code/config with highlighting
 from rich.traceback import install as rich_traceback_install  # For better error traces
 
 # --- Custom Module Imports (conceptual, as they would be separate files) ---
-# Assuming 'engine' provides WorkflowEngine, AGENT_REGISTRY, etc.
+# Import workflow engine from generator.main.engine module
 try:
-    from engine import AGENT_REGISTRY, WorkflowEngine, hot_swap_agent, register_agent
+    from generator.main.engine import (
+        AGENT_REGISTRY,
+        WorkflowEngine,
+        hot_swap_agent,
+        register_agent,
+    )
     from generator.runner.alerting import send_alert  # FIX: Standardized import
     from generator.runner.runner_config import ConfigWatcher, load_config
     from generator.runner.runner_logging import (
