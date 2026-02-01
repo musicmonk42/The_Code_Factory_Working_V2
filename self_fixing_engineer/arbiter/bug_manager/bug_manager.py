@@ -7,6 +7,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import time
 import traceback
 from collections import defaultdict
@@ -580,20 +581,21 @@ class BugManager:
                 error_code_prefix = f"{status_code}_error_"
 
         # If no explicit status code, check for 500/5xx patterns in message
+        # Use word boundary matching to avoid false positives (e.g., "5000 records")
         if not error_code_prefix:
-            if "500" in message_part or "Internal Server Error" in message_part:
+            if re.search(r'\b500\b', message_part) or "Internal Server Error" in message_part:
                 error_code_prefix = "500_error_"
-            elif "502" in message_part or "Bad Gateway" in message_part:
+            elif re.search(r'\b502\b', message_part) or "Bad Gateway" in message_part:
                 error_code_prefix = "502_error_"
-            elif "503" in message_part or "Service Unavailable" in message_part:
+            elif re.search(r'\b503\b', message_part) or "Service Unavailable" in message_part:
                 error_code_prefix = "503_error_"
-            elif "504" in message_part or "Gateway Timeout" in message_part:
+            elif re.search(r'\b504\b', message_part) or "Gateway Timeout" in message_part:
                 error_code_prefix = "504_error_"
 
         sanitized_details = validate_input_details(custom_details)
         signature_base = f"{location or 'global'}|{exception_type}|{message_part[:100]}|{str(sanitized_details)[:200]}"
         signature_hash = hashlib.sha256(signature_base.encode("utf-8")).hexdigest()
-        
+
         # Return a readable prefix followed by hash for uniqueness
         # This allows playbook matching while maintaining deduplication
         return f"{error_code_prefix}{signature_hash}"

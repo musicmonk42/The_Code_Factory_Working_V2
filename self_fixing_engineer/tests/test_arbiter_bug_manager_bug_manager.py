@@ -385,3 +385,32 @@ class TestBugSignatureGeneration:
         assert sig1.startswith("500_error_")
         assert sig2.startswith("500_error_")
         assert sig1 != sig2, "Different errors should produce different signatures"
+
+    def test_signature_no_false_positive_for_similar_numbers(self, manager_for_signature):
+        """Tests that messages containing '5000' or '5001' don't incorrectly match 500 errors."""
+        # Messages with numbers that contain "500" but aren't HTTP 500 errors
+        false_positive_messages = [
+            "Processed 5000 records successfully",
+            "Error at line 5001",
+            "User ID 15003 not found",
+            "Completed in 500ms",  # This one should NOT match since "500ms" has word boundary
+        ]
+        for msg in false_positive_messages:
+            signature = manager_for_signature._generate_bug_signature(msg, "test", None)
+            assert not signature.startswith(
+                "500_error_"
+            ), f"Message '{msg}' should not be identified as 500 error"
+
+    def test_signature_true_positive_for_http_500(self, manager_for_signature):
+        """Tests that legitimate HTTP 500 error messages are correctly identified."""
+        true_positive_messages = [
+            "HTTP 500 error occurred",
+            "Server returned 500",
+            "Status: 500 Internal Server Error",
+            "Error 500: Internal Server Error",
+        ]
+        for msg in true_positive_messages:
+            signature = manager_for_signature._generate_bug_signature(msg, "test", None)
+            assert signature.startswith(
+                "500_error_"
+            ), f"Message '{msg}' should be identified as 500 error"
