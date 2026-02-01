@@ -77,8 +77,8 @@ async def get_file(job_id: str, filename: str):
     # Security: ensure resolved path stays within OUTPUT_DIR
     try:
         file_path = file_path.resolve()
-        OUTPUT_DIR.resolve()
-        if not str(file_path).startswith(str(OUTPUT_DIR.resolve())):
+        output_dir_resolved = OUTPUT_DIR.resolve()
+        if not str(file_path).startswith(str(output_dir_resolved)):
             raise HTTPException(status_code=400, detail="Invalid path: outside output directory")
     except (OSError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=f"Invalid path: {str(e)}")
@@ -141,8 +141,10 @@ async def list_files(job_id: str) -> FileListResponse:
     if ".." in job_id:
         raise HTTPException(status_code=400, detail="Invalid job ID")
     
-    # Validate job_id is reasonable (alphanumeric, hyphens, underscores)
-    if not job_id.replace("-", "").replace("_", "").isalnum():
+    # Validate job_id format: alphanumeric with optional hyphens/underscores
+    # Must contain at least one alphanumeric character and only valid characters
+    import re
+    if not re.match(r'^[a-zA-Z0-9_-]+$', job_id) or not any(c.isalnum() for c in job_id):
         raise HTTPException(status_code=400, detail="Invalid job ID format")
     
     job_dir = OUTPUT_DIR / job_id
