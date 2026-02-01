@@ -129,16 +129,10 @@ Base = declarative_base()
 
 tracer = get_tracer(__name__)
 
-# Configure logging for real-time visibility with PII redaction
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() or add handlers at module level to avoid duplicate logs.
+# The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-    handler.addFilter(PIIRedactorFilter())
-    logger.addHandler(handler)
 
 # Prometheus Metrics
 explorer_ops_total = Counter(

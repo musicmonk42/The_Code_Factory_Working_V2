@@ -34,13 +34,9 @@ class ContextVarFormatter(logging.Formatter):
         return super().format(record)
 
 
-logging.basicConfig(level=logging.INFO, handlers=[])
-handler = logging.StreamHandler(sys.stdout)
-formatter = ContextVarFormatter(
-    "%(asctime)s - [%(levelname)s] - [%(trace_id)s] - %(message)s"
-)
-handler.setFormatter(formatter)
-logging.getLogger().addHandler(handler)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() or add handlers at module level to avoid duplicate logs.
+# The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
 
 

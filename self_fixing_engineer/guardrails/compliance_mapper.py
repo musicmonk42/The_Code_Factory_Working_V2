@@ -157,9 +157,8 @@ class ComplianceEnforcementError(Exception):
 # APP_ENV: 'development' or 'production'. Controls fail-closed behavior and error output.
 # CREW_CONFIG_PATH: Path to the crew_config.yaml file.
 #
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() at module level to avoid duplicate logs.
 logger = logging.getLogger(__name__)
 
 DEFAULT_CREW_CONFIG_PATH = os.path.join(

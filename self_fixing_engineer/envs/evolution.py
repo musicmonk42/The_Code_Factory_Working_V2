@@ -20,10 +20,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
-# Configure module logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() at module level to avoid duplicate logs.
 logger = logging.getLogger(__name__)
 
 # Try to import DEAP

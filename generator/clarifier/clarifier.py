@@ -412,17 +412,35 @@ class SensitiveDataFilter(logging.Filter):
 
 
 def setup_logging() -> logging.Logger:
-    """Configures and returns a logger with a sensitive data filter."""
+    """
+    Returns a module logger following Python logging best practices.
+    
+    Industry Standard: Library/module code should NOT add handlers to loggers.
+    Handlers should only be configured by the application entry point on the root
+    logger. This prevents duplicate log messages when modules are imported by
+    applications that have already configured logging.
+    
+    The logger will:
+    - Use the module's __name__ for proper hierarchy
+    - Apply the SensitiveDataFilter for PII protection (on logger, not handler,
+      to ensure PII is redacted before reaching ANY handler including propagated ones)
+    - Propagate to the root logger (which should have handlers configured by the app)
+    - NOT add any handlers (following Python logging best practices)
+    
+    See: https://docs.python.org/3/howto/logging.html#configuring-logging-for-a-library
+    """
     log = logging.getLogger(__name__)
-    if not log.handlers:  # Avoid adding handlers multiple times
+    # Add SensitiveDataFilter to the logger (not handler) to ensure PII is
+    # redacted before the log record reaches any handler, including those on
+    # parent loggers through propagation. This is the correct approach for
+    # security-critical filters. The check ensures idempotent behavior.
+    if not any(isinstance(f, SensitiveDataFilter) for f in log.filters):
         log.addFilter(SensitiveDataFilter())
-        log.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        handler.setFormatter(formatter)
-        log.addHandler(handler)
+    # Set level based on environment, but let root logger's level take precedence
+    # if this logger's level is not explicitly set
+    log.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
+    # Do NOT add handlers - let log messages propagate to root logger
+    # which should be configured by the application entry point
     return log
 
 

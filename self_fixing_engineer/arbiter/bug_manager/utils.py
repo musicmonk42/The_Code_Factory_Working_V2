@@ -10,10 +10,9 @@ from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 
 from prometheus_client import REGISTRY, Counter
 
-# Configure logging for metric debugging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Get logger for this module - follows Python best practices by not configuring
+# the root logger at module level, allowing the application entry point to control
+# logging configuration and avoiding duplicate log messages
 logger = logging.getLogger(__name__)
 
 

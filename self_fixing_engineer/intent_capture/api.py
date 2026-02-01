@@ -155,7 +155,8 @@ class AppConfig(BaseSettings):
 
 config = AppConfig()
 limiter = Limiter(key_func=get_remote_address)
-logging.basicConfig(level=config.LOG_LEVEL.upper())
+# Get module logger - follows Python best practices by not calling basicConfig()
+# at module level. The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
 try:
     tracer = trace.get_tracer(__name__)

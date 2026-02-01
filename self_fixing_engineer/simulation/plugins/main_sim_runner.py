@@ -63,11 +63,9 @@ from .. import core, utils
 from ..audit_log import append_distributed_log
 from ..dashboard import STREAMLIT_AVAILABLE, display_simulation_dashboard
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s"
-)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() at module level to avoid duplicate logs.
 main_runner_logger = logging.getLogger("main_sim_runner")
-main_runner_logger.setLevel(logging.INFO)
 
 # Prometheus metrics (extended)
 if prometheus_available:

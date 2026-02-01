@@ -500,9 +500,9 @@ except ImportError:
 
 
 # --- Logging Configuration ---
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() at module level to avoid duplicate logs.
+# The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
 
 # --- OpenTelemetry Tracer Configuration ---

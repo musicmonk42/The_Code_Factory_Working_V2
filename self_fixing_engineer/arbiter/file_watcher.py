@@ -82,15 +82,9 @@ except ImportError:
 # Load environment variables
 load_dotenv()
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(os.getenv("LOG_FILE", "file_watcher.log")),
-    ],
-)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() at module level to avoid duplicate logs.
+# The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
 
 

@@ -136,13 +136,10 @@ for d in [CONFIG_DIR, LOG_DIR, RESULTS_DIR]:
 
 # --- Logging Setup ---
 LOG_FILE = os.path.join(LOG_DIR, "simulation_core.log")
-log_handler = RotatingFileHandler(LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=5)
-formatter = logging.Formatter(
-    "%(asctime)s - %(levelname)s - %(correlation_id)s - %(message)s"
-)
-log_handler.setFormatter(formatter)
 
-logging.basicConfig(level=logging.INFO, handlers=[log_handler])
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() at module level to avoid duplicate logs.
+# The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
 
 

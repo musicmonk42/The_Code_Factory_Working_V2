@@ -111,18 +111,10 @@ except ImportError:
             return True
 
 
-# Configure logging for this specific config module
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger("ArbiterConfig")
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
-    handler.addFilter(PIIRedactorFilter())
-    logger.addHandler(handler)
+# Get logger for this module - follows Python best practices by not configuring
+# the root logger at module level, allowing the application entry point to control
+# logging configuration and avoiding duplicate log messages
+logger = logging.getLogger(__name__)
 
 # Lock for thread-safe metric registration
 _metrics_lock = threading.Lock()
