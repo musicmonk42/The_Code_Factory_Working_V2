@@ -534,7 +534,7 @@ async def get_generator_logs(
 @router.post("/{job_id}/clarify")
 async def clarify_requirements(
     job_id: str,
-    request: Optional[ClarifyRequest] = None,
+    request: ClarifyRequest = None,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -566,14 +566,15 @@ async def clarify_requirements(
 
     job = jobs_db[job_id]
     
-    # First, try to get README content from request body
-    readme_content = ""
-    if request and request.readme_content:
-        readme_content = request.readme_content
+    # Extract request parameters (with defaults for missing request)
+    readme_content = (request.readme_content or "").strip() if request else ""
+    ambiguities = request.ambiguities if request else None
+    
+    if readme_content:
         logger.info(f"Using README content from request body for job {job_id} (length={len(readme_content)})")
     
     # If no content in request body, try to read from uploaded files
-    if not readme_content or not readme_content.strip():
+    if not readme_content:
         upload_base_path = Path("./uploads")
         job_upload_path = upload_base_path / job_id
         
@@ -675,7 +676,6 @@ async def clarify_requirements(
 
     # Process clarification request
     try:
-        ambiguities = request.ambiguities if request else None
         result = await generator_service.clarify_requirements(
             job_id=job_id,
             readme_content=readme_content,
