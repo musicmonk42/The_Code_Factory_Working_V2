@@ -1103,9 +1103,17 @@ def initialize_codebase_for_rag(repo_path: str):
         # Try to get the running loop
         loop = asyncio.get_running_loop()
         # If we get here, we're in an async context
-        # Use nest_asyncio to allow nested event loops
-        nest_asyncio.apply()
-        # Now asyncio.run() will work even in a running loop
+        # Use nest_asyncio to allow nested event loops (but only if not using uvloop)
+        try:
+            # Check if the loop is uvloop (which can't be patched)
+            if 'uvloop' not in str(type(loop)):
+                nest_asyncio.apply()
+            else:
+                logger.warning("uvloop detected, skipping nest_asyncio patch (not compatible)")
+        except (ValueError, RuntimeError) as e:
+            # Skip patching if it fails
+            logger.warning(f"Could not apply nest_asyncio patch: {e}")
+        # Now asyncio.run() will work even in a running loop (if patched)
         asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
     except RuntimeError:
         # No running loop - safe to use asyncio.run() directly
