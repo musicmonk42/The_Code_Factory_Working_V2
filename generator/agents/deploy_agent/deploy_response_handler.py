@@ -38,8 +38,20 @@ from typing import Any, Callable, Dict, List, Optional, Type
 
 import aiofiles  # Explicitly imported for async file operations
 import hcl2  # For HCL (Terraform) parsing
-import aiohttp.web as web
-from aiohttp.web import Request, Response, RouteTableDef
+
+# Conditional aiohttp import for test environment compatibility
+try:
+    import aiohttp.web as web
+    from aiohttp.web import Request, Response, RouteTableDef
+    HAS_AIOHTTP = True
+except ImportError:
+    HAS_AIOHTTP = False
+    # Provide type stubs for testing
+    web = None
+    Request = object
+    Response = object
+    RouteTableDef = None
+
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
 from ruamel.yaml import (  # For YAML preservation (ruamel.yaml is generally better than pyyaml for round-tripping)
@@ -1719,12 +1731,14 @@ async def handle_deploy_response(
 
 
 # --- API with aiohttp ---
-routes = RouteTableDef()
-api_semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent API requests
+# Conditionally create API routes only if aiohttp is available
+if HAS_AIOHTTP:
+    routes = RouteTableDef()
+    api_semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent API requests
 
 
-@routes.post("/handle_response")
-async def api_handle_response(request: Request) -> Response:
+    @routes.post("/handle_response")
+    async def api_handle_response(request: Request) -> Response:
     """
     API endpoint to handle an LLM-generated raw response.
     Expects JSON payload with 'raw_response', 'output_format', 'to_format' (optional), 'run_id' (optional), 'repo_path' (optional).
@@ -1761,20 +1775,31 @@ async def api_handle_response(request: Request) -> Response:
         return web.json_response({"status": "error", "message": str(e)}, status=500)
 
 
-app = web.Application()
-app.add_routes(routes)
+    app = web.Application()
+    app.add_routes(routes)
 
 
-# --- FIX: Add startup event to create singleton registry ---
-async def start_background_tasks(app: web.Application):
-    """
-    On server startup, create the singleton HandlerRegistry.
-    This starts the watchdog observer *once*.
-    """
-    logger.info("Server starting up... Initializing HandlerRegistry singleton.")
-    app["handler_registry"] = HandlerRegistry()
-    logger.info("HandlerRegistry singleton initialized.")
+    # --- FIX: Add startup event to create singleton registry ---
+    async def start_background_tasks(app: web.Application):
+        """
+        On server startup, create the singleton HandlerRegistry.
+        This starts the watchdog observer *once*.
+        """
+        logger.info("Server starting up... Initializing HandlerRegistry singleton.")
+        app["handler_registry"] = HandlerRegistry()
+        logger.info("HandlerRegistry singleton initialized.")
 
 
-app.on_startup.append(start_background_tasks)
-# ------------------------------------------------------
+    app.on_startup.append(start_background_tasks)
+    # ------------------------------------------------------
+else:
+    # If aiohttp is not available, provide stub objects for import compatibility
+    routes = None
+    app = None
+    api_semaphore = None
+    
+    def api_handle_response(*args, **kwargs):
+        raise ImportError("aiohttp is not installed. API endpoints are not available.")
+    
+    def start_background_tasks(*args, **kwargs):
+        raise ImportError("aiohttp is not installed. API endpoints are not available.")

@@ -67,6 +67,7 @@ except ImportError as e:
 # The plugin_registry is a core component that many tests depend on.
 # Mocking parent modules breaks child module imports via PEP 562 lazy loading.
 # NOTE: ChromaDB modules REMOVED - they are used by source code and already installed
+# NOTE: aiohttp is NOT mocked - it's required by deploy_agent modules and is installed
 SIMULATION_MODULES_TO_MOCK = [
     "simulation",
     "simulation.simulation_module",

@@ -29,8 +29,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Type
 
 import aiofiles  # For asynchronous file operations
-from aiohttp import web
-from aiohttp.web import Request, Response, RouteTableDef
+
+# Conditional aiohttp import for test environment compatibility
+try:
+    from aiohttp import web
+    from aiohttp.web import Request, Response, RouteTableDef
+    HAS_AIOHTTP = True
+except ImportError:
+    HAS_AIOHTTP = False
+    # Provide type stubs for testing
+    web = None
+    Request = object
+    Response = object
+    RouteTableDef = None
+
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
 from ruamel.yaml import (
@@ -969,12 +981,14 @@ class ValidatorRegistry:
 
 
 # --- API with aiohttp ---
-routes = RouteTableDef()
-api_semaphore = asyncio.Semaphore(5)
+# Conditionally create API routes only if aiohttp is available
+if HAS_AIOHTTP:
+    routes = RouteTableDef()
+    api_semaphore = asyncio.Semaphore(5)
 
 
-@routes.post("/validate")
-async def api_validate(request: Request) -> Response:
+    @routes.post("/validate")
+    async def api_validate(request: Request) -> Response:
     """
     API endpoint to validate a configuration file.
     """
@@ -1080,22 +1094,33 @@ async def api_fix(request: Request) -> Response:
             return web.json_response({"status": "error", "message": str(e)}, status=500)
 
 
-app = web.Application()
-app.add_routes(routes)
+    app = web.Application()
+    app.add_routes(routes)
 
 
-# --- FIX: Add startup event to create singleton registry ---
-async def start_background_tasks(app: web.Application):
-    """
-    On server startup, create the singleton ValidatorRegistry.
-    This starts the watchdog observer *once*.
-    """
-    logger.info("Server starting up... Initializing ValidatorRegistry singleton.")
-    # Ensure plugin directory exists for registry startup
-    Path("validator_plugins").mkdir(exist_ok=True)
-    app["validator_registry"] = ValidatorRegistry()
-    logger.info("ValidatorRegistry singleton initialized.")
+    # --- FIX: Add startup event to create singleton registry ---
+    async def start_background_tasks(app: web.Application):
+        """
+        On server startup, create the singleton ValidatorRegistry.
+        This starts the watchdog observer *once*.
+        """
+        logger.info("Server starting up... Initializing ValidatorRegistry singleton.")
+        # Ensure plugin directory exists for registry startup
+        Path("validator_plugins").mkdir(exist_ok=True)
+        app["validator_registry"] = ValidatorRegistry()
+        logger.info("ValidatorRegistry singleton initialized.")
 
 
-app.on_startup.append(start_background_tasks)
-# ------------------------------------------------------
+    app.on_startup.append(start_background_tasks)
+    # ------------------------------------------------------
+else:
+    # If aiohttp is not available, provide stub objects for import compatibility
+    routes = None
+    app = None
+    api_semaphore = None
+    
+    def api_validate(*args, **kwargs):
+        raise ImportError("aiohttp is not installed. API endpoints are not available.")
+    
+    def start_background_tasks(*args, **kwargs):
+        raise ImportError("aiohttp is not installed. API endpoints are not available.")
