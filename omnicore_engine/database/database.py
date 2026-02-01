@@ -880,10 +880,11 @@ class Database:
         return MockPolicyEngine()
 
     @circuit(failure_threshold=5, recovery_timeout=60)
-    @retry(tries=10, delay=2, backoff=2, exceptions=(Exception,))
+    @retry(tries=10, delay=2, backoff=2, exceptions=(sqlalchemy.exc.OperationalError, ConnectionError, TimeoutError))
     async def create_tables(self):
         # NOTE: Circuit breaker and retry patterns work together here:
-        # - Retry handles transient failures (e.g., temporary connection issues)
+        # - Retry handles transient failures (e.g., temporary connection issues, database not ready)
+        # - Only retries specific database-related exceptions (OperationalError, ConnectionError, TimeoutError)
         # - Circuit breaker prevents cascading failures by stopping retries after 5 consecutive failures
         # - After circuit opens, it will recover after 60 seconds
         # This combination ensures resilience while preventing system overload

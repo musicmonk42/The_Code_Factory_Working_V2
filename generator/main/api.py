@@ -984,6 +984,11 @@ async def lifespan(app: FastAPI):
     Replaces deprecated @app.on_event("startup") and @app.on_event("shutdown").
     
     Tracks component initialization status in _startup_state for health check reporting.
+    
+    NOTE: Application startup continues even if database initialization fails to allow
+    graceful degradation. Endpoints that require database access should check
+    _startup_state["database_available"] and return HTTP 503 (Service Unavailable)
+    if False. The /ready endpoint will report the degraded state.
     """
     # Startup
     logger.info("Application startup event triggered.")
@@ -995,7 +1000,8 @@ async def lifespan(app: FastAPI):
         logger.critical(f"Startup failed due to DB error: {e}", exc_info=True)
         _startup_state["database_available"] = False
         # Allow startup to continue with degraded functionality
-        # Health checks will report the issue via _startup_state
+        # Endpoints requiring database must check _startup_state["database_available"]
+        # and return HTTP 503 if False
     
     try:
         get_runner_instance()  # Initialize Runner
