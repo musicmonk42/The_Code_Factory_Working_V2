@@ -60,17 +60,75 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple, Union
 import numpy as np
 import requests
 import yaml
-from prometheus_client import (
-    REGISTRY,
-    CollectorRegistry,
-    Counter,
-    Gauge,
-    Histogram,
-    push_to_gateway,
-)
-from prometheus_client.core import HistogramMetricFamily
+
+# Make prometheus_client optional with proper fallback mocks
+try:
+    from prometheus_client import (
+        REGISTRY,
+        CollectorRegistry,
+        Counter,
+        Gauge,
+        Histogram,
+        push_to_gateway,
+    )
+    from prometheus_client.core import HistogramMetricFamily
+    PROMETHEUS_AVAILABLE = True
+except (ImportError, AttributeError):
+    # Fallback mock implementations for testing/when prometheus is not available
+    class MockRegistry:
+        def __init__(self):
+            # _names_to_collectors is used by safe_counter() function (line 133)
+            # to check if a metric is already registered
+            self._names_to_collectors = {}
+        
+        def collect(self):
+            return []
+    
+    class MockCollectorRegistry(MockRegistry):
+        pass
+    
+    class MockMetric:
+        def __init__(self, *args, **kwargs):
+            pass
+        
+        def labels(self, **kwargs):
+            return self
+        
+        def inc(self, amount=1):
+            pass
+        
+        def dec(self, amount=1):
+            pass
+        
+        def set(self, value):
+            pass
+        
+        def observe(self, value):
+            pass
+        
+        def collect(self):
+            return []
+    
+    Counter = MockMetric
+    Gauge = MockMetric
+    Histogram = MockMetric
+    HistogramMetricFamily = MockMetric
+    REGISTRY = MockRegistry()
+    CollectorRegistry = MockCollectorRegistry
+    
+    def push_to_gateway(*args, **kwargs):
+        pass
+    
+    PROMETHEUS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+# Log prometheus availability status
+if not PROMETHEUS_AVAILABLE:
+    logger.warning(
+        "prometheus_client not available, using mock implementations. "
+        "Metrics will not be collected or exported to monitoring systems."
+    )
 
 
 # --- START: ADDED SAFE_COUNTER HELPER ---
