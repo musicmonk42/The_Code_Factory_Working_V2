@@ -1,11 +1,32 @@
 # Production Docker Compose Configuration
 # This file provides production-ready settings with security best practices
 # 
-# IMPORTANT: 
-# 1. Store secrets in Docker secrets or external secrets manager
-# 2. Replace all placeholder values before deploying
-# 3. Use proper SSL/TLS certificates
-# 4. Enable all monitoring and security features
+# ============================================================================
+# CRITICAL SECURITY WARNING
+# ============================================================================
+# 1. NEVER use default passwords in production
+# 2. Store ALL secrets in external secrets manager (AWS Secrets Manager, Vault, etc.)
+# 3. Generate strong random passwords (see instructions below)
+# 4. Rotate secrets regularly (every 90 days minimum)
+# 5. Use proper SSL/TLS certificates
+# 6. Enable all monitoring and security features
+# 7. Review and follow DOCKER_SECURITY.md guidelines
+#
+# Generate Strong Secrets:
+#   REDIS_PASSWORD: openssl rand -base64 32
+#   POSTGRES_PASSWORD: openssl rand -base64 32  
+#   AGENTIC_AUDIT_HMAC_KEY: openssl rand -hex 32
+#   ENCRYPTION_KEY: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#
+# Security Checklist:
+#   [ ] All secrets generated and stored in secrets manager
+#   [ ] Different passwords per environment (dev/staging/prod)
+#   [ ] SSL/TLS certificates obtained and configured
+#   [ ] Firewall rules applied
+#   [ ] Monitoring and alerting enabled
+#   [ ] Regular security scans scheduled
+#   [ ] Backup and disaster recovery tested
+# ============================================================================
 
 services:
   # Redis for message bus and caching
