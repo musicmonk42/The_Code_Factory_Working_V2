@@ -14,6 +14,7 @@ from typing import List, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 
 from server.schemas import (
+    ClarifyRequest,
     CodegenRequest,
     CritiqueRequest,
     DeployRequest,
@@ -533,6 +534,7 @@ async def get_generator_logs(
 @router.post("/{job_id}/clarify")
 async def clarify_requirements(
     job_id: str,
+    request: ClarifyRequest = None,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -545,6 +547,11 @@ async def clarify_requirements(
 
     **Path Parameters:**
     - job_id: Unique job identifier
+
+    **Request Body (optional):**
+    - readme_content: README/requirements content (if not provided, reads from uploaded files)
+    - ambiguities: Specific ambiguities to clarify
+    - metadata: Additional metadata
 
     **Returns:**
     - Clarification initiation status and detected ambiguities
@@ -559,114 +566,102 @@ async def clarify_requirements(
 
     job = jobs_db[job_id]
     
-    # Get README content from uploaded files with comprehensive error handling
-    readme_content = ""
-    upload_base_path = Path("./uploads")
-    job_upload_path = upload_base_path / job_id
+    # Extract request parameters (with defaults for missing request)
+    readme_content = (request.readme_content or "").strip() if request else ""
+    ambiguities = request.ambiguities if request else None
     
-    # Validate upload directory exists
-    if not job_upload_path.exists():
-        logger.error(
-            f"Upload directory does not exist for job {job_id}: {job_upload_path.absolute()}"
-        )
-        raise HTTPException(
-            status_code=400,
-            detail=f"Upload directory not found for job {job_id}. Please upload files first."
-        )
+    if readme_content:
+        logger.info(f"Using README content from request body for job {job_id} (length={len(readme_content)})")
     
-    # Search for README files with detailed logging
-    readme_candidates = []
-    for filename in job.input_files:
-        if filename.lower().endswith('.md'):
-            readme_candidates.append(filename)
-            file_path = job_upload_path / filename
-            
-            logger.debug(
-                "Checking README candidate: %s (file_path=%s, exists=%s, is_file=%s)",
-                filename,
-                str(file_path.absolute()),
-                file_path.exists(),
-                file_path.is_file() if file_path.exists() else False
-            )
-            
-            try:
-                # Validate file exists and is readable
-                if not file_path.exists():
-                    logger.warning(f"README file does not exist: {file_path.absolute()}")
-                    continue
+    # If no content in request body, try to read from uploaded files
+    if not readme_content:
+        upload_base_path = Path("./uploads")
+        job_upload_path = upload_base_path / job_id
+        
+        # Check if upload directory exists
+        if job_upload_path.exists():
+            # Search for README files with detailed logging
+            readme_candidates = []
+            for filename in job.input_files:
+                if filename.lower().endswith('.md'):
+                    readme_candidates.append(filename)
+                    file_path = job_upload_path / filename
                     
-                if not file_path.is_file():
-                    logger.warning(f"README path is not a file: {file_path.absolute()}")
-                    continue
-                
-                # Read file with proper encoding handling
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    readme_content = f.read()
-                    
-                if readme_content.strip():
-                    logger.info(
-                        "Successfully read README for job %s: %s (content_length=%d, file_path=%s)",
-                        job_id,
+                    logger.debug(
+                        "Checking README candidate: %s (file_path=%s, exists=%s, is_file=%s)",
                         filename,
-                        len(readme_content),
-                        str(file_path.absolute())
+                        str(file_path.absolute()),
+                        file_path.exists(),
+                        file_path.is_file() if file_path.exists() else False
                     )
-                    break
-                else:
-                    logger.warning(f"README file is empty: {filename}")
                     
-            except UnicodeDecodeError as e:
-                logger.error(
-                    "Encoding error reading file %s for job %s: %s (file_path=%s)",
-                    filename,
-                    job_id,
-                    str(e),
-                    str(file_path.absolute())
-                )
-                # Try with different encoding
-                try:
-                    with open(file_path, 'r', encoding='latin-1') as f:
-                        readme_content = f.read()
-                    logger.info(f"Successfully read {filename} with latin-1 encoding")
-                    if readme_content.strip():
-                        break
-                except Exception as e2:
-                    logger.error(f"Failed to read {filename} with fallback encoding: {e2}")
-            except PermissionError as e:
-                logger.error(
-                    "Permission denied reading file %s for job %s: %s (file_path=%s)",
-                    filename,
-                    job_id,
-                    str(e),
-                    str(file_path.absolute())
-                )
-            except Exception as e:
-                logger.error(
-                    "Unexpected error reading file %s for job %s: %s (file_path=%s)",
-                    filename,
-                    job_id,
-                    str(e),
-                    str(file_path.absolute()),
-                    exc_info=True
-                )
+                    try:
+                        # Validate file exists and is readable
+                        if not file_path.exists():
+                            logger.warning(f"README file does not exist: {file_path.absolute()}")
+                            continue
+                            
+                        if not file_path.is_file():
+                            logger.warning(f"README path is not a file: {file_path.absolute()}")
+                            continue
+                        
+                        # Read file with proper encoding handling
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            readme_content = f.read()
+                            
+                        if readme_content.strip():
+                            logger.info(
+                                "Successfully read README for job %s: %s (content_length=%d, file_path=%s)",
+                                job_id,
+                                filename,
+                                len(readme_content),
+                                str(file_path.absolute())
+                            )
+                            break
+                        else:
+                            logger.warning(f"README file is empty: {filename}")
+                            
+                    except UnicodeDecodeError as e:
+                        logger.error(
+                            "Encoding error reading file %s for job %s: %s (file_path=%s)",
+                            filename,
+                            job_id,
+                            str(e),
+                            str(file_path.absolute())
+                        )
+                        # Try with different encoding
+                        try:
+                            with open(file_path, 'r', encoding='latin-1') as f:
+                                readme_content = f.read()
+                            logger.info(f"Successfully read {filename} with latin-1 encoding")
+                            if readme_content.strip():
+                                break
+                        except Exception as e2:
+                            logger.error(f"Failed to read {filename} with fallback encoding: {e2}")
+                    except PermissionError as e:
+                        logger.error(
+                            "Permission denied reading file %s for job %s: %s (file_path=%s)",
+                            filename,
+                            job_id,
+                            str(e),
+                            str(file_path.absolute())
+                        )
+                    except Exception as e:
+                        logger.error(
+                            "Unexpected error reading file %s for job %s: %s (file_path=%s)",
+                            filename,
+                            job_id,
+                            str(e),
+                            str(file_path.absolute()),
+                            exc_info=True
+                        )
 
     # Validate README content was found
     if not readme_content or not readme_content.strip():
         error_detail = {
-            "message": "No README content found for clarification",
+            "message": "No README content found for clarification. Please provide readme_content in request body or upload .md files first.",
             "job_id": job_id,
-            "upload_path": str(job_upload_path.absolute()),
-            "input_files": job.input_files,
-            "readme_candidates": readme_candidates,
-            "troubleshooting": {
-                "check_upload_directory": str(job_upload_path.absolute()),
-                "expected_files": [f for f in job.input_files if f.lower().endswith('.md')],
-                "suggestions": [
-                    "Ensure .md files were uploaded",
-                    "Check file permissions",
-                    "Verify files are not empty"
-                ]
-            }
+            "hint": "Include 'readme_content' in the request body with your requirements text",
         }
         logger.error(
             "No valid README content found for job %s: %s",
@@ -684,6 +679,7 @@ async def clarify_requirements(
         result = await generator_service.clarify_requirements(
             job_id=job_id,
             readme_content=readme_content,
+            ambiguities=ambiguities,
         )
         logger.info(
             f"Clarification initiated successfully for job {job_id}",

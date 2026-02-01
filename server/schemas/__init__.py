@@ -21,6 +21,7 @@ from .fixes import (
     RollbackRequest,
 )
 from .generator_schemas import (
+    ClarifyRequest,
     CodegenRequest,
     CritiqueRequest,
     DeployRequest,
@@ -119,6 +120,7 @@ __all__ = [
     "FixStatus",
     "RollbackRequest",
     # Generator
+    "ClarifyRequest",
     "CodegenRequest",
     "CritiqueRequest",
     "DeployRequest",

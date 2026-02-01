@@ -84,6 +84,13 @@ class PipelineRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
+class ClarifyRequest(BaseModel):
+    """Request for requirements clarification."""
+    readme_content: Optional[str] = Field(None, description="README/requirements content (optional if files uploaded)")
+    ambiguities: Optional[List[str]] = Field(None, description="Specific ambiguities to clarify")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
 class LLMConfigRequest(BaseModel):
     """Request to configure LLM provider."""
     provider: LLMProvider = Field(..., description="LLM provider to configure")
