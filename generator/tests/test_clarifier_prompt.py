@@ -4,6 +4,7 @@ import base64
 import os
 import sys
 import unittest
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add parent directory to path for imports
@@ -11,7 +12,16 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 )
 
-# --- Mock Configuration and Core Utilities (MUST RUN BEFORE IMPORTS) ---
+# Mock omnicore_engine module before importing clarifier_prompt
+if 'omnicore_engine' not in sys.modules:
+    sys.modules['omnicore_engine'] = MagicMock()
+if 'omnicore_engine.plugin_registry' not in sys.modules:
+    mock_plugin_registry = MagicMock()
+    mock_plugin_registry.PlugInKind = MagicMock()
+    mock_plugin_registry.plugin = MagicMock()
+    sys.modules['omnicore_engine.plugin_registry'] = mock_plugin_registry
+
+# --- Mock Configuration and Core Utilities ---
 
 
 class MockConfigObject:
@@ -72,81 +82,43 @@ MockStatusCode = MagicMock()
 MockStatusCode.OK = "OK"
 MockStatusCode.ERROR = "ERROR"
 
-# Start patches before importing
-patcher_get_config = patch(
-    "generator.clarifier.clarifier_prompt.get_config", return_value=mock_config_instance
-)
-patcher_get_fernet = patch(
-    "generator.clarifier.clarifier_prompt.get_fernet", return_value=mock_fernet_instance
-)
-patcher_get_logger = patch(
-    "generator.clarifier.clarifier_prompt.get_logger", return_value=mock_logger
-)
-patcher_get_tracer = patch(
-    "generator.clarifier.clarifier_prompt.get_tracer",
-    return_value=(mock_tracer, MockStatus, MockStatusCode),
-)
-patcher_get_circuit_breaker = patch(
-    "generator.clarifier.clarifier_prompt.get_circuit_breaker",
-    return_value=mock_circuit_breaker,
-)
-patcher_log_action = patch(
-    "generator.clarifier.clarifier_prompt.log_action", return_value=None
-)
-patcher_send_alert = patch(
-    "generator.clarifier.clarifier_prompt.send_alert", new_callable=AsyncMock
-)
-# FIX: Handle missing googletrans module gracefully
-try:
-    patcher_translator = patch("googletrans.Translator")
-except ImportError:
-    # googletrans not available, patch the one in clarifier_user_prompt
-    patcher_translator = patch("generator.clarifier.clarifier_user_prompt.Translator")
-
-patcher_get_config.start()
-patcher_get_fernet.start()
-patcher_get_logger.start()
-patcher_get_tracer.start()
-patcher_get_circuit_breaker.start()
-MockLogAction = patcher_log_action.start()
-MockSendAlert = patcher_send_alert.start()
-# FIX: Handle case where Translator might not exist
-try:
-    MockTranslatorCls = patcher_translator.start()
-    MockTranslatorInstance = MockTranslatorCls.return_value
-    MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(
-        text=text
-    )
-except (ImportError, AttributeError):
-    # Translator not available, create a mock directly
-    MockTranslatorCls = MagicMock()
-    MockTranslatorInstance = MagicMock()
-    MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(
-        text=text
-    )
-
-
-# Mock the core Clarifier class
-patcher_clarifier_class = patch("generator.clarifier.clarifier_prompt.Clarifier")
-MockClarifierClass = patcher_clarifier_class.start()
+# Mock instances for use in tests
+MockLogAction = MagicMock()
+MockSendAlert = AsyncMock()
+MockTranslatorCls = MagicMock()
+MockTranslatorInstance = MagicMock()
+MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(text=text)
+MockTranslatorCls.return_value = MockTranslatorInstance
 
 mock_core_clarifier = MagicMock()
 mock_core_clarifier.get_clarifications = AsyncMock(
     return_value={"features": ["updated"], "clarifications": {}}
 )
 mock_core_clarifier.graceful_shutdown = AsyncMock()
-MockClarifierClass.return_value = mock_core_clarifier
-
-# Mock get_channel
-patcher_get_channel = patch("generator.clarifier.clarifier_prompt.get_channel")
-MockGetChannel = patcher_get_channel.start()
+MockClarifierClass = MagicMock(return_value=mock_core_clarifier)
 
 mock_channel = MagicMock()
 mock_channel.prompt = AsyncMock(return_value=["Markdown, PDF"])
 mock_channel.ask_compliance_questions = AsyncMock()
-MockGetChannel.return_value = mock_channel
+MockGetChannel = MagicMock(return_value=mock_channel)
 
-# Import after mocking
+
+@pytest.fixture(autouse=True)
+def mock_dependencies():
+    """Fixture to mock all dependencies for clarifier_prompt tests."""
+    with patch("generator.clarifier.clarifier_prompt.get_config", return_value=mock_config_instance), \
+         patch("generator.clarifier.clarifier_prompt.get_fernet", return_value=mock_fernet_instance), \
+         patch("generator.clarifier.clarifier_prompt.get_logger", return_value=mock_logger), \
+         patch("generator.clarifier.clarifier_prompt.get_tracer", return_value=(mock_tracer, MockStatus, MockStatusCode)), \
+         patch("generator.clarifier.clarifier_prompt.get_circuit_breaker", return_value=mock_circuit_breaker), \
+         patch("generator.clarifier.clarifier_prompt.log_action", return_value=None), \
+         patch("generator.clarifier.clarifier_prompt.send_alert", new_callable=AsyncMock), \
+         patch("generator.clarifier.clarifier_prompt.Clarifier", MockClarifierClass), \
+         patch("generator.clarifier.clarifier_prompt.get_channel", MockGetChannel):
+        yield
+
+
+# Import after fixture definition
 from generator.clarifier.clarifier_prompt import (
     CLARIFIER_CYCLES,
     CLARIFIER_ERRORS,
