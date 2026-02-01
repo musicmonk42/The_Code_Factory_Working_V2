@@ -26,8 +26,18 @@ from jinja2 import Environment, FileSystemLoader, Template, select_autoescape, C
 try:
     from path_setup import PROJECT_ROOT
 except ImportError:
-    # Fallback to computing project root if path_setup is not available
-    PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.absolute()
+    # Fallback: search upward for pyproject.toml to find project root
+    def _find_project_root() -> Path:
+        current = Path(__file__).resolve().parent
+        for _ in range(10):  # Limit search depth
+            if (current / "pyproject.toml").exists() or (current / "setup.py").exists():
+                return current
+            if current.parent == current:
+                break
+            current = current.parent
+        # Last resort fallback
+        return Path(__file__).resolve().parent.parent.parent.parent
+    PROJECT_ROOT = _find_project_root()
 
 # Make sentence_transformers optional
 try:
@@ -598,7 +608,10 @@ class PromptTemplateRegistry:
         
         # Add project root deploy_templates as fallback
         project_root_templates = PROJECT_ROOT / "deploy_templates"
-        if project_root_templates.exists() and str(project_root_templates) != self.template_dir:
+        # Use Path.resolve() for reliable path comparison
+        template_dir_resolved = Path(self.template_dir).resolve()
+        project_templates_resolved = project_root_templates.resolve()
+        if project_root_templates.exists() and template_dir_resolved != project_templates_resolved:
             loaders.append(FileSystemLoader(str(project_root_templates)))
             logger.info(f"Added fallback template directory: {project_root_templates}")
         
