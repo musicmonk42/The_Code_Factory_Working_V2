@@ -45,10 +45,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Import core components from the clarifier module
-# These are safe as they don't have circular dependencies
+# Only import Clarifier class to avoid circular dependencies
+# Utility functions will be wrapped to avoid circular imports
 try:
     from . import clarifier as clarifier  # Import the submodule itself
-    from .clarifier import Clarifier, get_config, get_fernet, get_logger
+    from .clarifier import Clarifier
     _CLARIFIER_AVAILABLE = True
 except ImportError as e:
     logger.warning(
@@ -63,9 +64,77 @@ except ImportError as e:
     # This prevents circular dependency issues during test collection
     clarifier = None  # type: ignore
     Clarifier = None  # type: ignore
-    get_config = None  # type: ignore
-    get_fernet = None  # type: ignore
-    get_logger = None  # type: ignore
+
+# Wrapper functions for utility functions from clarifier.py
+# These avoid circular imports by lazily importing from the clarifier module
+# Cache the imported functions to avoid repeated imports
+_cached_get_logger = None
+_cached_get_config = None
+_cached_get_fernet = None
+
+
+def get_logger(*args: Any, **kwargs: Any) -> Any:
+    """
+    Get logger instance with lazy import.
+    
+    This function delays the import of get_logger from clarifier until it's
+    actually called, avoiding circular import issues during module initialization.
+    
+    Returns:
+        Logger instance
+    """
+    global _cached_get_logger
+    
+    if _CLARIFIER_AVAILABLE and clarifier is not None:
+        if _cached_get_logger is None:
+            from .clarifier import get_logger as _get_logger
+            _cached_get_logger = _get_logger
+        return _cached_get_logger(*args, **kwargs)
+    else:
+        # Fallback to module logger if clarifier not available
+        return logger
+
+
+def get_config(*args: Any, **kwargs: Any) -> Any:
+    """
+    Get config instance with lazy import.
+    
+    This function delays the import of get_config from clarifier until it's
+    actually called, avoiding circular import issues during module initialization.
+    
+    Returns:
+        Config instance (Dynaconf)
+    """
+    global _cached_get_config
+    
+    if _CLARIFIER_AVAILABLE and clarifier is not None:
+        if _cached_get_config is None:
+            from .clarifier import get_config as _get_config
+            _cached_get_config = _get_config
+        return _cached_get_config(*args, **kwargs)
+    else:
+        raise ImportError("Clarifier module not available, cannot get config")
+
+
+def get_fernet(*args: Any, **kwargs: Any) -> Any:
+    """
+    Get Fernet instance with lazy import.
+    
+    This function delays the import of get_fernet from clarifier until it's
+    actually called, avoiding circular import issues during module initialization.
+    
+    Returns:
+        Fernet instance for encryption
+    """
+    global _cached_get_fernet
+    
+    if _CLARIFIER_AVAILABLE and clarifier is not None:
+        if _cached_get_fernet is None:
+            from .clarifier import get_fernet as _get_fernet
+            _cached_get_fernet = _get_fernet
+        return _cached_get_fernet(*args, **kwargs)
+    else:
+        raise ImportError("Clarifier module not available, cannot get fernet")
 
 # Import clarifier_prompt if available
 try:
