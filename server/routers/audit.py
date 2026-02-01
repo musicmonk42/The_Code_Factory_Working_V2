@@ -233,13 +233,20 @@ async def _query_arbiter_audit_logs(
     """Query Arbiter audit logs from file-based storage."""
     try:
         # Import Arbiter audit logger
-        from self_fixing_engineer.arbiter.audit_log import TamperEvidentLogger
+        from self_fixing_engineer.arbiter.audit_log import TamperEvidentLogger, AuditLoggerConfig
         
-        # Get singleton instance
+        # Get singleton instance (will create with default config if needed)
         audit_logger = TamperEvidentLogger.get_instance()
         
-        # Read audit log file
-        log_path = audit_logger.log_path if hasattr(audit_logger, 'log_path') else "arbiter_audit.log"
+        # Get log path from config (default: ./logs/audit_log.jsonl)
+        if hasattr(audit_logger, 'config') and hasattr(audit_logger.config, 'log_path'):
+            log_path = audit_logger.config.log_path
+        elif hasattr(audit_logger, 'log_path'):
+            log_path = audit_logger.log_path
+        else:
+            # Use default from AuditLoggerConfig
+            default_config = AuditLoggerConfig()
+            log_path = default_config.log_path
         
         if not Path(log_path).exists():
             logger.warning(f"Arbiter audit log file not found: {log_path}")
@@ -301,8 +308,18 @@ async def _query_testgen_audit_logs(
 ) -> List[Dict[str, Any]]:
     """Query Test Generation audit logs."""
     try:
-        # Default log path
-        log_path = Path("atco_artifacts/atco_audit.log")
+        # Try to get log path from test generation config
+        try:
+            from self_fixing_engineer.test_generation.orchestrator.audit import _get_audit_log_file
+            log_path_str = _get_audit_log_file()
+            if log_path_str:
+                log_path = Path(log_path_str)
+            else:
+                # Fallback to default
+                log_path = Path("atco_artifacts/atco_audit.log")
+        except (ImportError, AttributeError):
+            # Fallback to default location
+            log_path = Path("atco_artifacts/atco_audit.log")
         
         if not log_path.exists():
             logger.warning(f"Test generation audit log not found: {log_path}")
@@ -359,11 +376,20 @@ async def _query_simulation_audit_logs(
 ) -> List[Dict[str, Any]]:
     """Query Simulation/Agentic audit logs."""
     try:
-        # Default log path from agentic.py
-        log_path = Path("agentic_audit.log")
+        # Simulation uses guardrails audit logger, try both locations
+        log_paths = [
+            Path("agentic_audit.log"),  # Old/direct location
+            Path("simulation/results/audit_trail.log"),  # From guardrails default
+        ]
         
-        if not log_path.exists():
-            logger.warning(f"Simulation audit log not found: {log_path}")
+        log_path = None
+        for path in log_paths:
+            if path.exists():
+                log_path = path
+                break
+        
+        if not log_path:
+            logger.warning(f"Simulation audit log not found in: {[str(p) for p in log_paths]}")
             return []
         
         logs = []
@@ -420,9 +446,16 @@ async def _query_guardrails_audit_logs(
     try:
         from self_fixing_engineer.guardrails.audit_log import AuditLogger
         
-        # Get audit logger instance
+        # Get audit logger instance  
         audit_logger = AuditLogger.from_environment()
-        log_path = audit_logger.log_path if hasattr(audit_logger, 'log_path') else "guardrails_audit.log"
+        
+        # Get log path (default: simulation/results/audit_trail.log)
+        if hasattr(audit_logger, 'log_path'):
+            log_path = audit_logger.log_path
+        else:
+            # Fallback to default from MockConfig
+            import os
+            log_path = os.environ.get("AUDIT_LOG_PATH", "simulation/results/audit_trail.log")
         
         if not Path(log_path).exists():
             logger.warning(f"Guardrails audit log not found: {log_path}")

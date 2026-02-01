@@ -2708,6 +2708,11 @@ function clearAuditFilters() {
 async function loadEventTypes() {
     try {
         const response = await fetch(`${API_BASE}/audit/logs/event-types`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const data = await response.json();
         
         const eventTypeSelect = document.getElementById('audit-event-type');
