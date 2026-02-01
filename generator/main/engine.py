@@ -181,20 +181,30 @@ class WorkflowEngine:
 
 # Auto-register available agents from the generator.agents package
 def _auto_register_agents() -> None:
-    """Automatically register agents from the generator.agents package."""
+    """Automatically register agents from the generator.agents package.
+    
+    Note: Some agent modules export Config classes (CodeGenConfig, CritiqueConfig)
+    while others export Agent classes (TestgenAgent, DeployAgent, DocgenAgent).
+    We register what's available from each module.
+    """
     try:
         from generator.agents import (
             _AVAILABLE_AGENTS,
             CodeGenConfig,
             CritiqueConfig,
             DeployAgent,
-            DeployConfig,
             DocgenAgent,
-            DocgenConfig,
             TestgenAgent,
         )
 
-        # Register available agents
+        # Register available agents/configs based on what the package exports
+        # The agents package exports different types for different agents:
+        # - codegen exports CodeGenConfig (config class)
+        # - critique exports CritiqueConfig (config class)
+        # - testgen exports TestgenAgent (agent class)
+        # - deploy exports DeployAgent (agent class)
+        # - docgen exports DocgenAgent (agent class)
+        
         if _AVAILABLE_AGENTS.get("codegen") and CodeGenConfig:
             AGENT_REGISTRY["codegen"] = CodeGenConfig
 
