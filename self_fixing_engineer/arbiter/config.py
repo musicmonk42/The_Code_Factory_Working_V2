@@ -183,24 +183,72 @@ class ConfigError(Exception):
 
 # --- Nested Pydantic Model for LLM Settings ---
 class LLMSettings(BaseSettings):
-    default_provider: str = Field("openai")
-    retry_providers: List[str] = Field(
-        ["anthropic", "google"]
+    """
+    LLM configuration settings with explicit environment variable mapping.
+    
+    Environment variables are mapped using the LLM_ prefix by default.
+    For example: LLM_DEFAULT_PROVIDER, LLM_TEMPERATURE, etc.
+    
+    Special case: api_key supports both OPENAI_API_KEY (legacy) and LLM_API_KEY.
+    """
+    default_provider: str = Field(
+        default="openai",
+        description="Default LLM provider (openai, anthropic, google)"
     )
-    timeout_seconds: float = Field(30.0)
+    retry_providers: List[str] = Field(
+        default=["anthropic", "google"],
+        description="Fallback providers for retry logic"
+    )
+    timeout_seconds: float = Field(
+        default=30.0,
+        description="Request timeout in seconds"
+    )
     api_url: HttpUrl = Field(
-        default="https://api.openai.com/v1/completions"
+        default="https://api.openai.com/v1/completions",
+        description="LLM API endpoint URL"
     )
     api_key: Optional[SecretStr] = Field(
-        default=SecretStr("sk-dummy-llm-key-for-tests"), validation_alias=AliasChoices("OPENAI_API_KEY")
+        default=SecretStr("sk-dummy-llm-key-for-tests"),
+        validation_alias=AliasChoices("OPENAI_API_KEY", "LLM_API_KEY"),
+        description="API key for LLM provider (supports OPENAI_API_KEY for backwards compatibility)"
     )
-    model_name: str = Field(default="gpt-4o-mini")
-    temperature: float = Field(default=0.7)
-    max_tokens: int = Field(default=500)
-    top_p: float = Field(default=1.0)
-    frequency_penalty: float = Field(default=0.0)
-    presence_penalty: float = Field(default=0.0)
-    system_prompt: Optional[str] = Field(default="")
+    model_name: str = Field(
+        default="gpt-4o-mini",
+        description="Model identifier to use"
+    )
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature (0.0-2.0)"
+    )
+    max_tokens: int = Field(
+        default=500,
+        gt=0,
+        description="Maximum tokens in response"
+    )
+    top_p: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Nucleus sampling parameter"
+    )
+    frequency_penalty: float = Field(
+        default=0.0,
+        ge=-2.0,
+        le=2.0,
+        description="Frequency penalty for token repetition"
+    )
+    presence_penalty: float = Field(
+        default=0.0,
+        ge=-2.0,
+        le=2.0,
+        description="Presence penalty for topic repetition"
+    )
+    system_prompt: Optional[str] = Field(
+        default="",
+        description="System prompt for the LLM"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -233,7 +281,11 @@ class ArbiterConfig(BaseSettings):
         default="localhost:9092"
     )
 
-    DB_PATH: str = Field(default="sqlite:///./omnicore.db", validation_alias=AliasChoices("DATABASE_URL"))
+    DB_PATH: str = Field(
+        default="sqlite:///./omnicore.db",
+        validation_alias=AliasChoices("DATABASE_URL", "DB_PATH"),
+        description="Database connection URL (supports DATABASE_URL for 12-factor app compatibility)"
+    )
     DB_POOL_SIZE: int = Field(default=50)
     DB_POOL_MAX_OVERFLOW: int = Field(default=20)
     DB_RETRY_ATTEMPTS: int = Field(default=3)
@@ -245,7 +297,8 @@ class ArbiterConfig(BaseSettings):
     NEO4J_URI: str = Field(default="neo4j://localhost:7687")
     NEO4J_USER: str = Field(default="neo4j")
     NEO4J_PASSWORD: SecretStr = Field(
-        default=SecretStr("password"), validation_alias=AliasChoices("NEO4J_PASSWORD")
+        default=SecretStr("password"),
+        description="Neo4j database password"
     )
 
     REPORTS_DIRECTORY: str = Field(default="reports")
@@ -261,7 +314,8 @@ class ArbiterConfig(BaseSettings):
     # Default Fernet key for development/testing. MUST be overridden in production via ENCRYPTION_KEY env var.
     ENCRYPTION_KEY: Optional[SecretStr] = Field(
         default=SecretStr("0mRtqFHlMkj0xTZO14sBFr1H6jkmmI0LWyK97sGyGew="),
-        validation_alias=AliasChoices("ENCRYPTION_KEY"))
+        description="Fernet encryption key for sensitive data"
+    )
     ENCRYPTION_KEY_BYTES: bytes = b""
 
     MAX_LEARN_RETRIES: int = Field(default=3)
@@ -363,7 +417,8 @@ class ArbiterConfig(BaseSettings):
 
     # --- API Keys and Secrets (Mapped from .env directly) ---
     ADMIN_API_KEY: Optional[SecretStr] = Field(
-        default=SecretStr("dummy-admin-key-for-tests"), validation_alias=AliasChoices("ADMIN_API_KEY")
+        default=SecretStr("dummy-admin-key-for-tests"),
+        description="Admin API key for authenticated operations"
     )
     ANTHROPIC_API_KEY: Optional[SecretStr] = Field(
         default=None
@@ -380,33 +435,23 @@ class ArbiterConfig(BaseSettings):
     CENSUS_API_KEY: SecretStr = Field(default=SecretStr(""))
     BLS_API_KEY: SecretStr = Field(default=SecretStr(""))
     USDA_API_KEY: SecretStr = Field(default=SecretStr(""))
-    ALPHAVANTAGE_API_KEY: SecretStr = Field(
-        default=SecretStr(""), validation_alias=AliasChoices("ALPHAVANTAGE_API_KEY")
-    )
-    BRANDFETCH_API_KEY: SecretStr = Field(
-        default=SecretStr(""), validation_alias=AliasChoices("BRANDFETCH_API_KEY")
-    )
+    ALPHAVANTAGE_API_KEY: SecretStr = Field(default=SecretStr(""))
+    BRANDFETCH_API_KEY: SecretStr = Field(default=SecretStr(""))
     FINNHUB_API_KEY: SecretStr = Field(default=SecretStr(""))
     POLYGON_API_KEY: SecretStr = Field(default=SecretStr(""))
     NEWSAPI_KEY: SecretStr = Field(default=SecretStr(""))
     AWS_ACCESS_KEY_ID: SecretStr = Field(default=SecretStr(""))
-    AWS_SECRET_ACCESS_KEY: SecretStr = Field(
-        default=SecretStr(""), validation_alias=AliasChoices("AWS_SECRET_ACCESS_KEY")
-    )
+    AWS_SECRET_ACCESS_KEY: SecretStr = Field(default=SecretStr(""))
     AWS_REGION: str = Field(default="us-east-1")
     EXPLORER_MOCK_MODE: bool = Field(default=False)
 
     SECRET_KEY: SecretStr = Field(default=SecretStr(""))
     JWT_SECRET_KEY: SecretStr = Field(default=SecretStr(""))
-    ARENA_JWT_SECRET: SecretStr = Field(
-        default=SecretStr("default-arena-jwt-secret"), validation_alias=AliasChoices("ARENA_JWT_SECRET")
-    )
+    ARENA_JWT_SECRET: SecretStr = Field(default=SecretStr("default-arena-jwt-secret"))
 
     STRIPE_SECRET_KEY: SecretStr = Field(default=SecretStr(""))
     STRIPE_PUBLISHABLE_KEY: str = Field(default="")
-    STRIPE_WEBHOOK_SECRET: SecretStr = Field(
-        default=SecretStr(""), validation_alias=AliasChoices("STRIPE_WEBHOOK_SECRET")
-    )
+    STRIPE_WEBHOOK_SECRET: SecretStr = Field(default=SecretStr(""))
     CAPTCHA_API_KEY: SecretStr = Field(default=SecretStr(""))
 
     # --- System Operational Parameters ---
