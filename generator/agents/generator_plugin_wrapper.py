@@ -107,9 +107,11 @@ except (ImportError, AttributeError) as e:
             return f
         
         # Handle both @plugin and @plugin(...) syntax
-        if callable(kind):
-            # Called as @plugin without arguments
-            return kind
+        if kind is not None and callable(kind):
+            # Called as @plugin without arguments (kind is actually the function)
+            func = kind
+            logger.debug(f"Fallback plugin decorator applied to {func.__name__} (no args)")
+            return func
         return decorator
     
     # Fallback PLUGIN_REGISTRY

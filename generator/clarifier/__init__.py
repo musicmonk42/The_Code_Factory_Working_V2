@@ -67,6 +67,12 @@ except ImportError as e:
 
 # Wrapper functions for utility functions from clarifier.py
 # These avoid circular imports by lazily importing from the clarifier module
+# Cache the imported functions to avoid repeated imports
+_cached_get_logger = None
+_cached_get_config = None
+_cached_get_fernet = None
+
+
 def get_logger(*args: Any, **kwargs: Any) -> Any:
     """
     Get logger instance with lazy import.
@@ -77,9 +83,13 @@ def get_logger(*args: Any, **kwargs: Any) -> Any:
     Returns:
         Logger instance
     """
+    global _cached_get_logger
+    
     if _CLARIFIER_AVAILABLE and clarifier is not None:
-        from .clarifier import get_logger as _get_logger
-        return _get_logger(*args, **kwargs)
+        if _cached_get_logger is None:
+            from .clarifier import get_logger as _get_logger
+            _cached_get_logger = _get_logger
+        return _cached_get_logger(*args, **kwargs)
     else:
         # Fallback to module logger if clarifier not available
         return logger
@@ -95,9 +105,13 @@ def get_config(*args: Any, **kwargs: Any) -> Any:
     Returns:
         Config instance (Dynaconf)
     """
+    global _cached_get_config
+    
     if _CLARIFIER_AVAILABLE and clarifier is not None:
-        from .clarifier import get_config as _get_config
-        return _get_config(*args, **kwargs)
+        if _cached_get_config is None:
+            from .clarifier import get_config as _get_config
+            _cached_get_config = _get_config
+        return _cached_get_config(*args, **kwargs)
     else:
         raise ImportError("Clarifier module not available, cannot get config")
 
@@ -112,9 +126,13 @@ def get_fernet(*args: Any, **kwargs: Any) -> Any:
     Returns:
         Fernet instance for encryption
     """
+    global _cached_get_fernet
+    
     if _CLARIFIER_AVAILABLE and clarifier is not None:
-        from .clarifier import get_fernet as _get_fernet
-        return _get_fernet(*args, **kwargs)
+        if _cached_get_fernet is None:
+            from .clarifier import get_fernet as _get_fernet
+            _cached_get_fernet = _get_fernet
+        return _cached_get_fernet(*args, **kwargs)
     else:
         raise ImportError("Clarifier module not available, cannot get fernet")
 
