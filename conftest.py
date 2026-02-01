@@ -97,10 +97,8 @@ def _apply_runtime_mocks():
     This prevents mock modules from interfering with pytest's import machinery
     during the collection phase.
     """
-    # Only mock prometheus_client if it's not already imported properly
-    if 'prometheus_client' not in sys.modules or not hasattr(sys.modules.get('prometheus_client'), '__spec__'):
-        sys.modules['prometheus_client'] = _create_stub_module('prometheus_client')
-        sys.modules['prometheus_client.core'] = _create_stub_module('prometheus_client.core')
+    # REMOVED: prometheus_client mocking - use real installation from requirements.txt
+    # prometheus_client is a required dependency and should not be mocked
     
     # Add other runtime-only mocks here as needed
     pass
@@ -162,7 +160,7 @@ if os.environ.get("TESTING") == "1":
         "boto3",  # Needed by clarifier (KMS integration)
         # cryptography removed - must use real implementation (Mock Poisoning prevention)
         # cryptography.fernet removed - must use real implementation (Mock Poisoning prevention)
-        "prometheus_client",  # Needed by clarifier for metrics
+        # prometheus_client removed - use real installation from requirements.txt
         "tiktoken",  # Needed by testgen_agent
         "aiokafka",  # Needed by arbiter
         "aiokafka.errors",  # Submodule
@@ -646,12 +644,8 @@ _OPTIONAL_DEPENDENCIES = [
     "PIL",  # Pillow - image processing
     "pillow",  # Pillow alternative import name
     "aiosqlite",  # Async SQLite - required by feedback module and omnicore_engine.database
-    "opentelemetry",  # OpenTelemetry - telemetry framework
-    "opentelemetry.trace",  # OpenTelemetry tracing
-    "opentelemetry.sdk",  # OpenTelemetry SDK
-    "opentelemetry.propagators",  # OpenTelemetry propagators (not propagate)
-    "opentelemetry.exporter",  # OpenTelemetry exporters
-    "opentelemetry.context",  # OpenTelemetry context
+    # opentelemetry packages removed - use real installation from requirements.txt
+    # opentelemetry is a required dependency and should not be mocked
     "google",  # Google Cloud - base package
     "google.cloud",  # Google Cloud client library
     "google.cloud.storage",  # Google Cloud Storage
@@ -680,8 +674,7 @@ _OPTIONAL_DEPENDENCIES = [
     "langchain_core",  # LangChain core library
     "matplotlib",  # Plotting library
     "numpy",  # Numerical computing
-    # Note: prometheus_client should be installed and NOT be mocked during normal test runs
-    # However, during collection it's stubbed to avoid registry duplication
+    # prometheus_client removed - use real installation from requirements.txt
     # Omnicore engine submodules that may have missing dependencies
     "omnicore_engine.database",  # May be missing aiosqlite or other dependencies
     "omnicore_engine.message_bus",  # May be missing structlog or other dependencies
@@ -1731,222 +1724,225 @@ def _initialize_crypto_protection():
 
 def _initialize_prometheus_stubs():
     """
-    Initialize prometheus_client stub modules.
+    Initialize prometheus_client stub modules only if not installed.
+    
+    UPDATED: prometheus_client is now a required dependency in requirements.txt.
+    This function now only creates stubs if the real package is not available.
+    
+    Unusual circumstances where stubs might be needed:
+    - During initial test collection before dependencies are fully loaded
+    - In minimal test environments where only subset of dependencies are available
+    - During CI/CD pipeline bootstrapping phases
     
     This function can be called from the setup_test_stubs session fixture
     or at module level (when not in collection mode). It's safe to call multiple
     times - it will only create stubs if prometheus_client is not already available.
-    
-    If not called, tests that import prometheus_client will fail with ImportError,
-    and any code using Prometheus metrics will fail at runtime.
-    
-    This is deferred during test collection (PYTEST_COLLECTING=1) to avoid import-time
-    overhead, which was causing timeout issues.
     """
-    # prometheus_client needs special handling for its .core submodule
-    if "prometheus_client" not in sys.modules:
-        # During test collection, always create stubs to avoid registry duplication issues
-        # Don't try to import the real prometheus_client during collection
-        if os.environ.get('PYTEST_COLLECTING') == '1':
-            # Skip trying to import, go straight to creating stub
+    # First check if prometheus_client is already loaded to avoid unnecessary import attempts
+    # This is faster than trying an import every time
+    if "prometheus_client" in sys.modules:
+        # Already loaded, don't replace it with a stub
+        return
+    
+    # Try to import the real prometheus_client
+    # If successful, this will add it to sys.modules
+    try:
+        import prometheus_client
+        # Successfully imported, don't need stub
+        return
+    except ImportError:
+        # Not available, create stub below
+        pass
+    
+    # Create prometheus_client package stub
+    prom_module = types.ModuleType("prometheus_client")
+    prom_module.__file__ = "<mocked prometheus_client>"
+    prom_module.__path__ = []  # Make it a package
+    prom_module.__spec__ = importlib.util.spec_from_loader(
+        "prometheus_client", loader=None
+    )
+
+    # Create core submodule
+    prom_core = types.ModuleType("prometheus_client.core")
+    prom_core.__file__ = "<mocked prometheus_client.core>"
+    prom_core.__path__ = []  # Make it a package
+    prom_core.__spec__ = importlib.util.spec_from_loader(
+        "prometheus_client.core", loader=None
+    )
+    prom_module.core = prom_core
+
+    # Create registry submodule
+    prom_registry = types.ModuleType("prometheus_client.registry")
+    prom_registry.__file__ = "<mocked prometheus_client.registry>"
+    prom_registry.__path__ = []  # Make it a package
+    prom_registry.__spec__ = importlib.util.spec_from_loader(
+        "prometheus_client.registry", loader=None
+    )
+    prom_module.registry = prom_registry
+
+    # Add common classes/functions to core
+    class _MockHistogramMetricFamily:
+        def __init__(self, *args, **kwargs):
             pass
-        else:
-            try:
-                import prometheus_client
-                # Successfully imported, don't need stub
-                return
-            except ImportError:
-                pass  # Create stub below
-        
-        # Create prometheus_client package stub
-        prom_module = types.ModuleType("prometheus_client")
-        prom_module.__file__ = "<mocked prometheus_client>"
-        prom_module.__path__ = []  # Make it a package
-        prom_module.__spec__ = importlib.util.spec_from_loader(
-            "prometheus_client", loader=None
+
+    prom_core.HistogramMetricFamily = _MockHistogramMetricFamily
+    
+    # Also add metric types to core (some tests import from prometheus_client.core)
+    # These will be defined below along with the main module classes
+
+    # Add common classes/functions to main module
+    class _MockCollectorRegistry:
+        def __init__(self, *args, **kwargs):
+            self._names_to_collectors = {}
+            self._collector_to_names = {}
+
+        def register(self, collector):
+            pass
+
+        def unregister(self, collector):
+            pass
+
+        def get_sample_value(self, *args, **kwargs):
+            return None
+
+    class _MockCounter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def labels(self, *args, **kwargs):
+            return self
+
+        def inc(self, *args, **kwargs):
+            pass
+
+    class _MockHistogram:
+        DEFAULT_BUCKETS = (
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.075,
+            0.1,
+            0.25,
+            0.5,
+            0.75,
+            1.0,
+            2.5,
+            5.0,
+            7.5,
+            10.0,
+            float("inf"),
         )
 
-        # Create core submodule
-        prom_core = types.ModuleType("prometheus_client.core")
-        prom_core.__file__ = "<mocked prometheus_client.core>"
-        prom_core.__path__ = []  # Make it a package
-        prom_core.__spec__ = importlib.util.spec_from_loader(
-            "prometheus_client.core", loader=None
-        )
-        prom_module.core = prom_core
+        def __init__(self, *args, **kwargs):
+            pass
 
-        # Create registry submodule
-        prom_registry = types.ModuleType("prometheus_client.registry")
-        prom_registry.__file__ = "<mocked prometheus_client.registry>"
-        prom_registry.__path__ = []  # Make it a package
-        prom_registry.__spec__ = importlib.util.spec_from_loader(
-            "prometheus_client.registry", loader=None
-        )
-        prom_module.registry = prom_registry
+        def labels(self, *args, **kwargs):
+            return self
 
-        # Add common classes/functions to core
-        class _MockHistogramMetricFamily:
-            def __init__(self, *args, **kwargs):
-                pass
+        def observe(self, *args, **kwargs):
+            pass
 
-        prom_core.HistogramMetricFamily = _MockHistogramMetricFamily
-        
-        # Also add metric types to core (some tests import from prometheus_client.core)
-        # These will be defined below along with the main module classes
+        def time(self, *args, **kwargs):
+            # Return a decorator/context manager that works for both @decorator and with statement
+            from contextlib import nullcontext
 
-        # Add common classes/functions to main module
-        class _MockCollectorRegistry:
-            def __init__(self, *args, **kwargs):
-                self._names_to_collectors = {}
-                self._collector_to_names = {}
+            def decorator(func):
+                return func
 
-            def register(self, collector):
-                pass
+            # Make the decorator also work as a context manager
+            decorator.__enter__ = lambda: None
+            decorator.__exit__ = lambda *args: None
+            return decorator
 
-            def unregister(self, collector):
-                pass
+    class _MockGauge:
+        def __init__(self, *args, **kwargs):
+            pass
 
-            def get_sample_value(self, *args, **kwargs):
-                return None
+        def labels(self, *args, **kwargs):
+            return self
 
-        class _MockCounter:
-            def __init__(self, *args, **kwargs):
-                pass
+        def set(self, *args, **kwargs):
+            pass
 
-            def labels(self, *args, **kwargs):
-                return self
+        def inc(self, *args, **kwargs):
+            pass
 
-            def inc(self, *args, **kwargs):
-                pass
+        def dec(self, *args, **kwargs):
+            pass
 
-        class _MockHistogram:
-            DEFAULT_BUCKETS = (
-                0.005,
-                0.01,
-                0.025,
-                0.05,
-                0.075,
-                0.1,
-                0.25,
-                0.5,
-                0.75,
-                1.0,
-                2.5,
-                5.0,
-                7.5,
-                10.0,
-                float("inf"),
-            )
+    class _MockInfo:
+        def __init__(self, *args, **kwargs):
+            pass
 
-            def __init__(self, *args, **kwargs):
-                pass
+        def labels(self, *args, **kwargs):
+            return self
 
-            def labels(self, *args, **kwargs):
-                return self
+        def info(self, *args, **kwargs):
+            pass
 
-            def observe(self, *args, **kwargs):
-                pass
+    prom_module.CollectorRegistry = _MockCollectorRegistry
+    prom_module.Counter = _MockCounter
+    prom_module.Histogram = _MockHistogram
+    prom_module.Gauge = _MockGauge
+    prom_module.Info = _MockInfo
+    prom_module.Summary = _MockHistogram  # Summary is similar to Histogram
+    prom_module.ProcessCollector = lambda *args, **kwargs: None
+    prom_module.PROCESS_COLLECTOR = None  # Process collector singleton
+    prom_module.PLATFORM_COLLECTOR = lambda *args, **kwargs: None
+    prom_module.GC_COLLECTOR = None  # GC collector singleton
+    prom_module.generate_latest = lambda *args, **kwargs: b""
+    prom_module.start_http_server = lambda *args, **kwargs: None
+    
+    # Create the shared REGISTRY instance
+    _shared_registry = _MockCollectorRegistry()
+    prom_module.REGISTRY = _shared_registry
+    # Also expose REGISTRY on registry submodule (imported by some modules)
+    prom_registry.REGISTRY = _shared_registry
+    prom_registry.CollectorRegistry = _MockCollectorRegistry
+    
+    # Also expose metric types on core submodule (some tests import from there)
+    prom_core.Counter = _MockCounter
+    prom_core.Histogram = _MockHistogram
+    prom_core.Gauge = _MockGauge
+    prom_core.Info = _MockInfo
+    prom_core.Summary = _MockHistogram
+    prom_core.REGISTRY = _shared_registry
+    
+    prom_module.CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
 
-            def time(self, *args, **kwargs):
-                # Return a decorator/context manager that works for both @decorator and with statement
-                from contextlib import nullcontext
+    # Create multiprocess submodule
+    prom_multiprocess = types.ModuleType("prometheus_client.multiprocess")
+    prom_multiprocess.__file__ = "<mocked prometheus_client.multiprocess>"
+    prom_multiprocess.__path__ = []
+    prom_multiprocess.__spec__ = importlib.util.spec_from_loader(
+        "prometheus_client.multiprocess", loader=None
+    )
+    prom_multiprocess.MultiProcessCollector = lambda *args, **kwargs: None
+    prom_module.multiprocess = prom_multiprocess
 
-                def decorator(func):
-                    return func
+    # Create metrics submodule
+    prom_metrics = types.ModuleType("prometheus_client.metrics")
+    prom_metrics.__file__ = "<mocked prometheus_client.metrics>"
+    prom_metrics.__path__ = []  # Make it a package
+    prom_metrics.__spec__ = importlib.util.spec_from_loader(
+        "prometheus_client.metrics", loader=None
+    )
 
-                # Make the decorator also work as a context manager
-                decorator.__enter__ = lambda: None
-                decorator.__exit__ = lambda *args: None
-                return decorator
+    # Create a base class for metric wrappers
+    class MetricWrapperBase:
+        def __init__(self, *args, **kwargs):
+            pass
 
-        class _MockGauge:
-            def __init__(self, *args, **kwargs):
-                pass
+    prom_metrics.MetricWrapperBase = MetricWrapperBase
+    prom_module.metrics = prom_metrics
 
-            def labels(self, *args, **kwargs):
-                return self
-
-            def set(self, *args, **kwargs):
-                pass
-
-            def inc(self, *args, **kwargs):
-                pass
-
-            def dec(self, *args, **kwargs):
-                pass
-
-        class _MockInfo:
-            def __init__(self, *args, **kwargs):
-                pass
-
-            def labels(self, *args, **kwargs):
-                return self
-
-            def info(self, *args, **kwargs):
-                pass
-
-        prom_module.CollectorRegistry = _MockCollectorRegistry
-        prom_module.Counter = _MockCounter
-        prom_module.Histogram = _MockHistogram
-        prom_module.Gauge = _MockGauge
-        prom_module.Info = _MockInfo
-        prom_module.Summary = _MockHistogram  # Summary is similar to Histogram
-        prom_module.ProcessCollector = lambda *args, **kwargs: None
-        prom_module.PROCESS_COLLECTOR = None  # Process collector singleton
-        prom_module.PLATFORM_COLLECTOR = lambda *args, **kwargs: None
-        prom_module.GC_COLLECTOR = None  # GC collector singleton
-        prom_module.generate_latest = lambda *args, **kwargs: b""
-        prom_module.start_http_server = lambda *args, **kwargs: None
-        
-        # Create the shared REGISTRY instance
-        _shared_registry = _MockCollectorRegistry()
-        prom_module.REGISTRY = _shared_registry
-        # Also expose REGISTRY on registry submodule (imported by some modules)
-        prom_registry.REGISTRY = _shared_registry
-        prom_registry.CollectorRegistry = _MockCollectorRegistry
-        
-        # Also expose metric types on core submodule (some tests import from there)
-        prom_core.Counter = _MockCounter
-        prom_core.Histogram = _MockHistogram
-        prom_core.Gauge = _MockGauge
-        prom_core.Info = _MockInfo
-        prom_core.Summary = _MockHistogram
-        prom_core.REGISTRY = _shared_registry
-        
-        prom_module.CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
-
-        # Create multiprocess submodule
-        prom_multiprocess = types.ModuleType("prometheus_client.multiprocess")
-        prom_multiprocess.__file__ = "<mocked prometheus_client.multiprocess>"
-        prom_multiprocess.__path__ = []
-        prom_multiprocess.__spec__ = importlib.util.spec_from_loader(
-            "prometheus_client.multiprocess", loader=None
-        )
-        prom_multiprocess.MultiProcessCollector = lambda *args, **kwargs: None
-        prom_module.multiprocess = prom_multiprocess
-
-        # Create metrics submodule
-        prom_metrics = types.ModuleType("prometheus_client.metrics")
-        prom_metrics.__file__ = "<mocked prometheus_client.metrics>"
-        prom_metrics.__path__ = []  # Make it a package
-        prom_metrics.__spec__ = importlib.util.spec_from_loader(
-            "prometheus_client.metrics", loader=None
-        )
-
-        # Create a base class for metric wrappers
-        class MetricWrapperBase:
-            def __init__(self, *args, **kwargs):
-                pass
-
-        prom_metrics.MetricWrapperBase = MetricWrapperBase
-        prom_module.metrics = prom_metrics
-
-        # Register modules
-        sys.modules["prometheus_client"] = prom_module
-        sys.modules["prometheus_client.core"] = prom_core
-        sys.modules["prometheus_client.registry"] = prom_registry
-        sys.modules["prometheus_client.metrics"] = prom_metrics
-        sys.modules["prometheus_client.multiprocess"] = prom_multiprocess
+    # Register modules
+    sys.modules["prometheus_client"] = prom_module
+    sys.modules["prometheus_client.core"] = prom_core
+    sys.modules["prometheus_client.registry"] = prom_registry
+    sys.modules["prometheus_client.metrics"] = prom_metrics
+    sys.modules["prometheus_client.multiprocess"] = prom_multiprocess
 
 
 # ---- Omnicore Engine submodule import protection ----
