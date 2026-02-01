@@ -351,6 +351,8 @@ jobs:
           print('✓ All aiohttp.web components verified')
           " || {
             echo "ERROR: aiohttp.web components broken - performing clean reinstall"
+            # Uninstall aiohttp and its core dependencies to ensure clean reinstall
+            # These packages are tightly coupled and reinstalling them together prevents version conflicts
             pip uninstall -y aiohttp aiohttp-client-cache aiosignal frozenlist yarl multidict
             pip install --no-cache-dir --force-reinstall aiohttp==3.12.15
             python -c "
