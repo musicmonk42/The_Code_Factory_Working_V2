@@ -10,6 +10,7 @@ import os
 import sys
 import tempfile
 import unittest
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add parent directory to path for imports
@@ -17,7 +18,16 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 )
 
-# --- Mock Configuration (MUST RUN BEFORE IMPORTS) ---
+# Mock omnicore_engine module before importing clarifier modules
+if 'omnicore_engine' not in sys.modules:
+    sys.modules['omnicore_engine'] = MagicMock()
+if 'omnicore_engine.plugin_registry' not in sys.modules:
+    mock_plugin_registry = MagicMock()
+    mock_plugin_registry.PlugInKind = MagicMock()
+    mock_plugin_registry.plugin = MagicMock()
+    sys.modules['omnicore_engine.plugin_registry'] = mock_plugin_registry
+
+# --- Mock Configuration ---
 
 
 class MockConfigObject:
@@ -85,142 +95,61 @@ MockStatusCode = MagicMock()
 MockStatusCode.OK = "OK"
 MockStatusCode.ERROR = "ERROR"
 
-# Start global patches
-patcher_dynaconf = patch(
-    "generator.clarifier.clarifier.Dynaconf", return_value=mock_config_instance
-)
-patcher_boto3 = patch(
-    "generator.clarifier.clarifier.boto3.client", return_value=MagicMock()
-)
-patcher_fernet_class = patch(
-    "generator.clarifier.clarifier.Fernet", return_value=mock_fernet_instance
-)
-patcher_sys_exit = patch("generator.clarifier.clarifier.sys.exit")
-
-patcher_dynaconf.start()
-patcher_boto3.start()
-patcher_fernet_class.start()
-patcher_sys_exit.start()
-
-# Patch for clarifier module
-patcher_get_config_clarifier = patch(
-    "generator.clarifier.clarifier.get_config", return_value=mock_config_instance
-)
-patcher_get_fernet_clarifier = patch(
-    "generator.clarifier.clarifier.get_fernet", return_value=mock_fernet_instance
-)
-patcher_get_logger_clarifier = patch(
-    "generator.clarifier.clarifier.get_logger", return_value=mock_logger
-)
-patcher_get_tracer_clarifier = patch(
-    "generator.clarifier.clarifier.get_tracer",
-    return_value=(mock_tracer, MockStatus, MockStatusCode),
-)
-patcher_get_cb_clarifier = patch(
-    "generator.clarifier.clarifier.get_circuit_breaker",
-    return_value=mock_circuit_breaker,
-)
-
-patcher_get_config_clarifier.start()
-patcher_get_fernet_clarifier.start()
-patcher_get_logger_clarifier.start()
-patcher_get_tracer_clarifier.start()
-patcher_get_cb_clarifier.start()
-
-# Patch for prompt module
-patcher_get_config_prompt = patch(
-    "generator.clarifier.clarifier_prompt.get_config", return_value=mock_config_instance
-)
-patcher_get_fernet_prompt = patch(
-    "generator.clarifier.clarifier_prompt.get_fernet", return_value=mock_fernet_instance
-)
-patcher_get_logger_prompt = patch(
-    "generator.clarifier.clarifier_prompt.get_logger", return_value=mock_logger
-)
-patcher_get_tracer_prompt = patch(
-    "generator.clarifier.clarifier_prompt.get_tracer",
-    return_value=(mock_tracer, MockStatus, MockStatusCode),
-)
-patcher_get_cb_prompt = patch(
-    "generator.clarifier.clarifier_prompt.get_circuit_breaker",
-    return_value=mock_circuit_breaker,
-)
-
-patcher_get_config_prompt.start()
-patcher_get_fernet_prompt.start()
-patcher_get_logger_prompt.start()
-patcher_get_tracer_prompt.start()
-patcher_get_cb_prompt.start()
-
-# Patch for updater module
-patcher_get_config_updater = patch(
-    "generator.clarifier.clarifier_updater.get_config",
-    return_value=mock_config_instance,
-)
-patcher_get_fernet_updater = patch(
-    "generator.clarifier.clarifier_updater.get_fernet",
-    return_value=mock_fernet_instance,
-)
-patcher_get_logger_updater = patch(
-    "generator.clarifier.clarifier_updater.get_logger", return_value=mock_logger
-)
-
-patcher_get_config_updater.start()
-patcher_get_fernet_updater.start()
-patcher_get_logger_updater.start()
-
-# Patch for user_prompt module
-patcher_get_config_user = patch(
-    "generator.clarifier.clarifier_user_prompt.get_config",
-    return_value=mock_config_instance,
-)
-patcher_get_fernet_user = patch(
-    "generator.clarifier.clarifier_user_prompt.get_fernet",
-    return_value=mock_fernet_instance,
-)
-patcher_get_logger_user = patch(
-    "generator.clarifier.clarifier_user_prompt.get_logger", return_value=mock_logger
-)
-patcher_translator = patch("generator.clarifier.clarifier_user_prompt.Translator")
-patcher_detect_language = patch(
-    "generator.clarifier.clarifier_user_prompt.detect_language", return_value="en"
-)
-patcher_redact_sensitive_user = patch(
-    "generator.clarifier.clarifier_user_prompt.redact_sensitive",
-    side_effect=lambda x: x,
-)
-patcher_log_action_user = patch(
-    "generator.clarifier.clarifier_user_prompt.log_action", return_value=None
-)
-
-patcher_get_config_user.start()
-patcher_get_fernet_user.start()
-patcher_get_logger_user.start()
-MockTranslatorCls = patcher_translator.start()
-patcher_detect_language.start()
-patcher_redact_sensitive_user.start()
-patcher_log_action_user.start()
-
-MockTranslatorInstance = MockTranslatorCls.return_value
+# Mock instances for use in tests
+MockTranslatorCls = MagicMock()
+MockTranslatorInstance = MagicMock()
 MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(text=text)
+MockTranslatorCls.return_value = MockTranslatorInstance
 
-# Patch utility functions
-patcher_log_action = patch(
-    "generator.clarifier.clarifier_updater.log_action", new_callable=AsyncMock
-)
-patcher_send_alert = patch(
-    "generator.clarifier.clarifier_updater.send_alert", new_callable=AsyncMock
-)
-patcher_redact_sensitive = patch(
-    "generator.clarifier.clarifier_updater.redact_sensitive",
-    side_effect=lambda x: x.replace("SECRET", "[REDACTED]").replace(
-        "@", "[REDACTED_EMAIL]"
-    ),
+MockLogAction = AsyncMock()
+MockSendAlert = AsyncMock()
+MockRedactSensitive = MagicMock(
+    side_effect=lambda x: x.replace("SECRET", "[REDACTED]").replace("@", "[REDACTED_EMAIL]")
 )
 
-MockLogAction = patcher_log_action.start()
-MockSendAlert = patcher_send_alert.start()
-MockRedactSensitive = patcher_redact_sensitive.start()
+
+@pytest.fixture(autouse=True)
+def mock_dependencies():
+    """Fixture to mock all dependencies for clarifier integration tests."""
+    patches = [
+        patch("generator.clarifier.clarifier.Dynaconf", return_value=mock_config_instance),
+        patch("generator.clarifier.clarifier.boto3.client", return_value=MagicMock()),
+        patch("generator.clarifier.clarifier.Fernet", return_value=mock_fernet_instance),
+        patch("generator.clarifier.clarifier.sys.exit"),
+        patch("generator.clarifier.clarifier.get_config", return_value=mock_config_instance),
+        patch("generator.clarifier.clarifier.get_fernet", return_value=mock_fernet_instance),
+        patch("generator.clarifier.clarifier.get_logger", return_value=mock_logger),
+        patch("generator.clarifier.clarifier.get_tracer", return_value=(mock_tracer, MockStatus, MockStatusCode)),
+        patch("generator.clarifier.clarifier.get_circuit_breaker", return_value=mock_circuit_breaker),
+        patch("generator.clarifier.clarifier_prompt.get_config", return_value=mock_config_instance),
+        patch("generator.clarifier.clarifier_prompt.get_fernet", return_value=mock_fernet_instance),
+        patch("generator.clarifier.clarifier_prompt.get_logger", return_value=mock_logger),
+        patch("generator.clarifier.clarifier_prompt.get_tracer", return_value=(mock_tracer, MockStatus, MockStatusCode)),
+        patch("generator.clarifier.clarifier_prompt.get_circuit_breaker", return_value=mock_circuit_breaker),
+        patch("generator.clarifier.clarifier_updater.get_config", return_value=mock_config_instance),
+        patch("generator.clarifier.clarifier_updater.get_fernet", return_value=mock_fernet_instance),
+        patch("generator.clarifier.clarifier_updater.get_logger", return_value=mock_logger),
+        patch("generator.clarifier.clarifier_user_prompt.get_config", return_value=mock_config_instance),
+        patch("generator.clarifier.clarifier_user_prompt.get_fernet", return_value=mock_fernet_instance),
+        patch("generator.clarifier.clarifier_user_prompt.get_logger", return_value=mock_logger),
+        patch("generator.clarifier.clarifier_user_prompt.Translator", MockTranslatorCls),
+        patch("generator.clarifier.clarifier_user_prompt.detect_language", return_value="en"),
+        patch("generator.clarifier.clarifier_user_prompt.redact_sensitive", side_effect=lambda x: x),
+        patch("generator.clarifier.clarifier_user_prompt.log_action", return_value=None),
+        patch("generator.clarifier.clarifier_updater.log_action", new_callable=AsyncMock),
+        patch("generator.clarifier.clarifier_updater.send_alert", new_callable=AsyncMock),
+        patch("generator.clarifier.clarifier_updater.redact_sensitive", side_effect=MockRedactSensitive),
+    ]
+    
+    # Start all patches
+    for p in patches:
+        p.start()
+    
+    yield
+    
+    # Stop all patches
+    for p in patches:
+        p.stop()
 
 
 class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):

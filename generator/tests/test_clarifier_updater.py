@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+import pytest
 from pathlib import Path
 
 # FIX: Added Callable to this line
@@ -24,7 +25,16 @@ PROJECT_ROOT = GENERATOR_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# --- Mock Configuration and Core Utilities (MUST RUN BEFORE IMPORTS) ---
+# Mock omnicore_engine module before importing clarifier modules
+if 'omnicore_engine' not in sys.modules:
+    sys.modules['omnicore_engine'] = MagicMock()
+if 'omnicore_engine.plugin_registry' not in sys.modules:
+    mock_plugin_registry = MagicMock()
+    mock_plugin_registry.PlugInKind = MagicMock()
+    mock_plugin_registry.plugin = MagicMock()
+    sys.modules['omnicore_engine.plugin_registry'] = mock_plugin_registry
+
+# --- Mock Configuration and Core Utilities ---
 
 
 class MockConfigObject:
@@ -51,6 +61,7 @@ class MockConfigObject:
     HISTORY_LOOKBACK_LIMIT = 10
     CIRCUIT_BREAKER_THRESHOLD = 5
     CIRCUIT_BREAKER_TIMEOUT = 30
+    is_production_env = False
 
 
 mock_config_instance = MagicMock(spec=MockConfigObject)
@@ -85,33 +96,77 @@ mock_always_on = MagicMock()
 mock_trace_provider = MagicMock()
 mock_span_processor = MagicMock()
 
-# Start OpenTelemetry patches BEFORE any imports
-patcher_otel_trace = patch("opentelemetry.trace.get_tracer", return_value=mock_tracer)
-patcher_otel_sampling = patch(
-    "opentelemetry.sdk.trace.sampling.ALWAYS_ON", mock_always_on
+# Mock instances for use in tests
+MockLogAction = MagicMock(side_effect=lambda *args, **kwargs: None)
+MockSendAlert = AsyncMock()
+MockRedactSensitive = MagicMock(
+    side_effect=lambda x: str(x)
+    .replace("SECRET123", "[REDACTED_API_KEY]")
+    .replace("admin@example.com", "[REDACTED_EMAIL]")
+    .replace("user@example.com", "[REDACTED_EMAIL]")
 )
-patcher_otel_tracer_provider = patch(
-    "opentelemetry.sdk.trace.TracerProvider", return_value=mock_trace_provider
-)
-patcher_otel_batch_processor = patch(
-    "opentelemetry.sdk.trace.export.BatchSpanProcessor",
-    return_value=mock_span_processor,
-)
-patcher_otel_set_tracer = patch("opentelemetry.trace.set_tracer_provider")
-patcher_otel_exporter = patch(
-    "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter",
-    return_value=MagicMock(),
-)
+MockDetectPII = MagicMock(return_value=False)
 
-patcher_otel_trace.start()
-patcher_otel_sampling.start()
-patcher_otel_tracer_provider.start()
-patcher_otel_batch_processor.start()
-patcher_otel_set_tracer.start()
-patcher_otel_exporter.start()
+
+# FIX: Define the redaction logic that the _recursive_transform mock will use
+def mock_redaction_logic(
+    data: Any, detect_func: Callable, redact_func: Callable
+) -> Any:
+    if isinstance(data, str):
+        return redact_func(data)
+    elif isinstance(data, dict):
+        return {
+            k: mock_redaction_logic(v, detect_func, redact_func)
+            for k, v in data.items()
+        }
+    elif isinstance(data, list):
+        return [mock_redaction_logic(item, detect_func, redact_func) for item in data]
+    return data
+
+
+MockRecursiveTransform = MagicMock(side_effect=mock_redaction_logic)
+
+
+@pytest.fixture(autouse=True)
+def mock_dependencies():
+    """Fixture to mock all dependencies for clarifier_updater tests.
+    
+    Note: This fixture runs during test execution, not during test collection.
+    Module-level imports happen at collection time, which is why module-level
+    patches (see below after fixture definition) are still required.
+    """
+    patches = [
+        patch("opentelemetry.trace.get_tracer", return_value=mock_tracer),
+        patch("opentelemetry.sdk.trace.sampling.ALWAYS_ON", mock_always_on),
+        patch("opentelemetry.sdk.trace.TracerProvider", return_value=mock_trace_provider),
+        patch("opentelemetry.sdk.trace.export.BatchSpanProcessor", return_value=mock_span_processor),
+        patch("opentelemetry.trace.set_tracer_provider"),
+        patch("opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter", return_value=MagicMock()),
+        patch("generator.clarifier.clarifier.get_config", return_value=mock_config_instance),
+        patch("generator.clarifier.clarifier.get_fernet", return_value=mock_fernet_instance),
+        patch("generator.clarifier.clarifier.get_logger", return_value=mock_logger),
+        patch("generator.clarifier.clarifier_updater.get_config", return_value=mock_config_instance),
+        patch("generator.clarifier.clarifier_updater.get_fernet", return_value=mock_fernet_instance),
+        patch("generator.clarifier.clarifier_updater.get_logger", return_value=mock_logger),
+        patch("generator.clarifier.clarifier_updater.log_action", side_effect=MockLogAction),
+        patch("generator.clarifier.clarifier_updater.send_alert", new_callable=AsyncMock),
+        patch("generator.clarifier.clarifier_updater.redact_sensitive", side_effect=MockRedactSensitive),
+        patch("generator.clarifier.clarifier_updater.detect_pii", return_value=False),
+        patch("generator.clarifier.clarifier_updater._recursive_transform", side_effect=mock_redaction_logic),
+    ]
+    
+    # Start all patches
+    for p in patches:
+        p.start()
+    
+    yield
+    
+    # Stop all patches
+    for p in patches:
+        p.stop()
+
 
 # Import the clarifier module first so it exists in sys.modules before patching
-# This is necessary because patch() requires the module path to be valid
 try:
     import generator.clarifier.clarifier as _clarifier_module
 except ImportError:
@@ -134,93 +189,22 @@ except ImportError:
         _clarifier_module.get_logger = MagicMock(return_value=mock_logger)
         sys.modules["generator.clarifier.clarifier"] = _clarifier_module
 
-# CRITICAL: Patch at the clarifier module level BEFORE clarifier_updater imports it
-# This prevents the module-level get_config() call from failing
-patcher_clarifier_get_config = patch(
-    "generator.clarifier.clarifier.get_config", return_value=mock_config_instance
-)
-patcher_clarifier_get_fernet = patch(
-    "generator.clarifier.clarifier.get_fernet", return_value=mock_fernet_instance
-)
-patcher_clarifier_get_logger = patch(
-    "generator.clarifier.clarifier.get_logger", return_value=mock_logger
-)
+# Module-level patches for collection-time imports
+# These are required because module imports happen at collection time (before fixtures run).
+# The patches are started but not stopped because:
+# 1. They only affect this test module's scope
+# 2. Test isolation is handled by the fixture above during test execution
+# 3. pytest cleans up the test module after all tests complete
+_module_level_patches = [
+    patch("generator.clarifier.clarifier.get_config", return_value=mock_config_instance),
+    patch("generator.clarifier.clarifier_updater.get_config", return_value=mock_config_instance),
+]
+for p in _module_level_patches:
+    p.start()
 
-# Start the patches at the clarifier level first
-patcher_clarifier_get_config.start()
-patcher_clarifier_get_fernet.start()
-patcher_clarifier_get_logger.start()
-
-# Import clarifier_updater module now (with clarifier patches in place)
-# This makes the module path valid for subsequent patchers
 import generator.clarifier.clarifier_updater as clarifier_updater_module
 
-
-# Now also patch in clarifier_updater for when it's imported
-# FIX 1: log_action should be synchronous (not async)
-def dummy_log_action(*args, **kwargs):
-    pass
-
-
-# FIX: Define the redaction logic that the _recursive_transform mock will use
-def mock_redaction_logic(
-    data: Any, detect_func: Callable, redact_func: Callable
-) -> Any:
-    if isinstance(data, str):
-        return redact_func(data)
-    elif isinstance(data, dict):
-        return {
-            k: mock_redaction_logic(v, detect_func, redact_func)
-            for k, v in data.items()
-        }
-    elif isinstance(data, list):
-        return [mock_redaction_logic(item, detect_func, redact_func) for item in data]
-    return data
-
-
-patcher_get_config = patch(
-    "generator.clarifier.clarifier_updater.get_config",
-    return_value=mock_config_instance,
-)
-patcher_get_fernet = patch(
-    "generator.clarifier.clarifier_updater.get_fernet",
-    return_value=mock_fernet_instance,
-)
-patcher_get_logger = patch(
-    "generator.clarifier.clarifier_updater.get_logger", return_value=mock_logger
-)
-patcher_log_action = patch(
-    "generator.clarifier.clarifier_updater.log_action", side_effect=dummy_log_action
-)
-patcher_send_alert = patch(
-    "generator.clarifier.clarifier_updater.send_alert", new_callable=AsyncMock
-)
-# FIX 1 (Redaction): Updated mock to match sensitive data in tests
-patcher_redact_sensitive = patch(
-    "generator.clarifier.clarifier_updater.redact_sensitive",
-    side_effect=lambda x: str(x)
-    .replace("SECRET123", "[REDACTED_API_KEY]")
-    .replace("admin@example.com", "[REDACTED_EMAIL]")
-    .replace("user@example.com", "[REDACTED_EMAIL]"),
-)
-patcher_detect_pii = patch(
-    "generator.clarifier.clarifier_updater.detect_pii", return_value=False
-)
-patcher_recursive_transform = patch(
-    "generator.clarifier.clarifier_updater._recursive_transform",
-    side_effect=mock_redaction_logic,
-)
-
-patcher_get_config.start()
-patcher_get_fernet.start()
-patcher_get_logger.start()
-MockLogAction = patcher_log_action.start()
-MockSendAlert = patcher_send_alert.start()
-MockRedactSensitive = patcher_redact_sensitive.start()
-MockDetectPII = patcher_detect_pii.start()
-MockRecursiveTransform = patcher_recursive_transform.start()
-
-# NOW we can safely import after all patches are in place
+# Import the classes we need
 from generator.clarifier.clarifier_updater import (
     UPDATE_ERRORS,
     HistoryStore,
