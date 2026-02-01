@@ -60,6 +60,8 @@ def get_plugin_registry():
     
     try:
         from .plugin_registry import PLUGIN_REGISTRY as _PLUGIN_REGISTRY
+        if _PLUGIN_REGISTRY is None:
+            raise ImportError("PLUGIN_REGISTRY is None after import")
         return _PLUGIN_REGISTRY
     except ImportError as e:
         logger.error(f"Failed to import plugin_registry: {e}", exc_info=True)
