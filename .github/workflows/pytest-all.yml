@@ -225,6 +225,7 @@ jobs:
             pytest-html \
             pytest-json-report \
             pytest-timeout \
+            pytest-forked \
             tomli_w \
             typing-extensions \
             hypothesis
@@ -467,6 +468,8 @@ jobs:
           
       - name: Debug pytest collection (if previous steps passed)
         if: success()
+        env:
+          PYTEST_COLLECTING_ONLY: '1'
         run: |
           echo "=== Testing pytest collection with verbose output for ${{ matrix.module }} ==="
           # Try to collect tests with maximum verbosity to reveal any import errors
@@ -533,6 +536,8 @@ jobs:
           # Use python -m pytest to ensure proper sys.path setup
           python -m pytest \
             ${{ matrix.module }}/ \
+            --forked \
+            --maxprocesses=2 \
             -v \
             --tb=short \
             --maxfail=5 \
