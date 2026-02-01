@@ -19,9 +19,11 @@ from server.storage import jobs_db
 def client():
     """Create a test client for the FastAPI app.
     Import deferred to fixture to avoid expensive initialization during collection.
+    Uses context manager to properly trigger lifespan events.
     """
     from server.main import app
-    return TestClient(app)
+    with TestClient(app) as client:
+        yield client
 
 
 @pytest.fixture
