@@ -20,16 +20,52 @@ if str(_project_root) not in sys.path:
 # This helps pytest resolve "omnicore_engine.tests" module path during collection
 try:
     import omnicore_engine
-except ImportError:
+except ImportError as e:
     # If omnicore_engine cannot be imported as a package, it may not be installed
-    # Add explicit warning and ensure the parent directory is in sys.path
+    # This is a CRITICAL error that will cause pytest collection to fail
     import warnings
-    warnings.warn(
-        f"omnicore_engine package not found. Ensure 'pip install -e ./omnicore_engine' was run. "
-        f"Project root: {_project_root}",
-        ImportWarning,
-        stacklevel=2
+    error_msg = (
+        f"\n{'='*80}\n"
+        f"CRITICAL: omnicore_engine package not found!\n"
+        f"{'='*80}\n"
+        f"Error: {e}\n\n"
+        f"The omnicore_engine package must be installed for pytest to collect tests.\n\n"
+        f"SOLUTION:\n"
+        f"  1. Install from project root (RECOMMENDED):\n"
+        f"     pip install -e .\n\n"
+        f"  2. OR install from omnicore_engine subdirectory:\n"
+        f"     pip install -e ./omnicore_engine\n\n"
+        f"Project root: {_project_root}\n"
+        f"Current sys.path:\n{chr(10).join(f'  - {p}' for p in sys.path[:5])}\n"
+        f"{'='*80}\n"
     )
+    warnings.warn(error_msg, ImportWarning, stacklevel=2)
+    # Also print to stderr for visibility
+    print(error_msg, file=sys.stderr)
+
+# Verify that omnicore_engine.tests can be imported
+# This is critical for pytest collection to work properly
+try:
+    import omnicore_engine.tests
+except ImportError as e:
+    import warnings
+    error_msg = (
+        f"\n{'='*80}\n"
+        f"CRITICAL: omnicore_engine.tests module cannot be imported!\n"
+        f"{'='*80}\n"
+        f"Error: {e}\n\n"
+        f"This usually means the package was installed from the wrong location.\n\n"
+        f"SOLUTION:\n"
+        f"  Install the unified platform from project root:\n"
+        f"     pip install -e .\n\n"
+        f"  NOT from subdirectories like:\n"
+        f"     pip install -e ./omnicore_engine  # WRONG - causes this error\n\n"
+        f"Project root: {_project_root}\n"
+        f"Tests directory: {_tests_dir}\n"
+        f"{'='*80}\n"
+    )
+    warnings.warn(error_msg, ImportWarning, stacklevel=2)
+    print(error_msg, file=sys.stderr)
 
 # Now we can safely import pytest and other modules
 import pytest
