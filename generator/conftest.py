@@ -101,6 +101,7 @@ def _create_mock_module(name: str) -> types.ModuleType:
     - Returns mock objects for all attribute accesses
     - Can be called as a function
     - Supports nested attribute access (e.g., module.submodule.Class())
+    - Has proper __spec__ attributes to prevent AttributeError during import
     
     Args:
         name: The module name to mock.
@@ -108,13 +109,24 @@ def _create_mock_module(name: str) -> types.ModuleType:
     Returns:
         A mock module object that behaves like the real module for testing.
     """
+    import importlib.machinery
     import importlib.util
     
     mock_module = types.ModuleType(name)
     mock_module.__file__ = f"<mocked {name}>"
     mock_module.__path__ = []
-    # Add __spec__ for compatibility with Python's import system
-    mock_module.__spec__ = importlib.util.spec_from_loader(name, loader=None)
+    
+    # Create a proper ModuleSpec with all required attributes
+    # This prevents AttributeError: __spec__ and AttributeError: __path__
+    spec = importlib.machinery.ModuleSpec(
+        name=name,
+        loader=None,
+        origin=f"<mocked {name}>",
+        is_package=True
+    )
+    # Note: parent, cached, and has_location are read-only properties
+    # They are automatically computed from the spec's name and loader
+    mock_module.__spec__ = spec
     
     class MockCallable:
         """A mock object that can be called or accessed as an attribute.
@@ -133,6 +145,9 @@ def _create_mock_module(name: str) -> types.ModuleType:
             return MockCallable(f"{self._mock_name}()")
             
         def __getattr__(self, attr):
+            # Prevent issues with special attributes
+            if attr in ('__spec__', '__path__', '__file__', '__name__'):
+                raise AttributeError(f"MockCallable has no attribute '{attr}'")
             return MockCallable(f"{self._mock_name}.{attr}")
             
         def __enter__(self):
@@ -152,6 +167,15 @@ def _create_mock_module(name: str) -> types.ModuleType:
     
     # Make the module itself callable and attribute-accessible
     def module_getattr(attr):
+        # Handle special module attributes explicitly to prevent AttributeError
+        if attr == '__spec__':
+            return mock_module.__spec__
+        elif attr == '__path__':
+            return mock_module.__path__
+        elif attr == '__file__':
+            return mock_module.__file__
+        elif attr == '__name__':
+            return name
         return MockCallable(f"{name}.{attr}")
     
     mock_module.__getattr__ = module_getattr
