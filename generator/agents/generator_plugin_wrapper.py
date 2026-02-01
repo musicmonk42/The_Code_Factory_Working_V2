@@ -42,14 +42,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from omnicore_engine.plugin_registry import PLUGIN_REGISTRY, PlugInKind, plugin
-
-# Removed direct agent imports to rely on the PLUGIN_REGISTRY for decoupling
-# from .codegen_agent.codegen_agent import generate_code
-# from .testgen_agent.testgen_agent import generate_tests
-# ... etc.
-
-# Logger setup
+# Logger setup - needs to be early for use in defensive imports
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 if not logger.handlers:
@@ -58,6 +51,75 @@ if not logger.handlers:
         logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
     )
     logger.addHandler(handler)
+
+# Defensive import for omnicore_engine.plugin_registry with fallbacks
+try:
+    from omnicore_engine.plugin_registry import PLUGIN_REGISTRY, PlugInKind, plugin
+    _PLUGIN_REGISTRY_AVAILABLE = True
+except (ImportError, AttributeError) as e:
+    # Provide fallback for test environments where omnicore_engine may not be fully initialized
+    logger.warning(
+        f"Failed to import from omnicore_engine.plugin_registry: {e}. "
+        "Using fallback implementations for testing."
+    )
+    _PLUGIN_REGISTRY_AVAILABLE = False
+    
+    # Fallback PlugInKind enum
+    from enum import Enum
+    
+    class PlugInKind(str, Enum):
+        """Fallback PlugInKind enum for when omnicore_engine is unavailable."""
+        FIX = "fix"
+        CHECK = "check"
+        VALIDATION = "validation"
+        EXECUTION = "execution"
+        CORE_SERVICE = "core_service"
+        SCENARIO = "scenario"
+        CUSTOM = "custom"
+        AGGREGATOR = "aggregator"
+        AI_ASSISTANT = "ai_assistant"
+        OPTIMIZATION = "optimization"
+        MONITORING = "monitoring"
+        GROWTH_MANAGER = "growth_manager"
+        SIMULATION_RUNNER = "simulation_runner"
+        EVOLUTION = "evolution"
+        RL_ENVIRONMENT = "rl_environment"
+    
+    # Fallback plugin decorator
+    def plugin(
+        kind=None,
+        name=None,
+        description="",
+        version="0.1.0",
+        safe=True,
+        source="code",
+        params_schema=None,
+        signature=None,
+        subscriptions=None,
+    ):
+        """Fallback no-op decorator for when omnicore_engine is unavailable."""
+        def decorator(f):
+            # Just return the function unmodified in test mode
+            logger.debug(
+                f"Fallback plugin decorator applied to {f.__name__} "
+                f"(kind={kind}, name={name})"
+            )
+            return f
+        
+        # Handle both @plugin and @plugin(...) syntax
+        if callable(kind):
+            # Called as @plugin without arguments
+            return kind
+        return decorator
+    
+    # Fallback PLUGIN_REGISTRY
+    PLUGIN_REGISTRY = None
+
+# Removed direct agent imports to rely on the PLUGIN_REGISTRY for decoupling
+# from .codegen_agent.codegen_agent import generate_code
+# from .testgen_agent.testgen_agent import generate_tests
+# ... etc.
+
 
 # OpenTelemetry setup
 # Use the default/configured tracer provider instead of manually creating one
