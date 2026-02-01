@@ -36,6 +36,7 @@
             <li><a href="#arbiter" data-view="arbiter">Arbiter & Arena</a></li>
             <li><a href="#fixes" data-view="fixes">Fixes</a></li>
             <li><a href="#system" data-view="system">System Status</a></li>
+            <li><a href="#audit-logs" data-view="audit-logs">📋 Audit Logs</a></li>
             <li><a href="#api-keys" data-view="api-keys">API Keys</a></li>
         </ul>
     </nav>
@@ -544,6 +545,147 @@ Support multiple users.
                     <p><strong>Version:</strong> <span id="api-version">Loading...</span></p>
                     <p><strong>API Docs:</strong> <a href="/docs" target="_blank">/docs</a></p>
                     <p><strong>Health Endpoint:</strong> <a href="/health" target="_blank">/health</a></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Audit Logs View -->
+        <section id="audit-logs-view" class="view">
+            <h2>📋 Audit Logs</h2>
+            
+            <!-- Filter Controls -->
+            <div class="audit-controls">
+                <div class="filter-group">
+                    <div class="form-group">
+                        <label for="audit-module-filter">Module:</label>
+                        <select id="audit-module-filter">
+                            <option value="">All Modules</option>
+                            <option value="generator">Generator</option>
+                            <option value="arbiter">Arbiter</option>
+                            <option value="testgen">Test Generation</option>
+                            <option value="simulation">Simulation</option>
+                            <option value="omnicore">OmniCore</option>
+                            <option value="guardrails">Guardrails</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="audit-event-type">Event Type:</label>
+                        <select id="audit-event-type">
+                            <option value="">All Events</option>
+                            <option value="code_generated">Code Generated</option>
+                            <option value="test_generated">Test Generated</option>
+                            <option value="doc_generated">Doc Generated</option>
+                            <option value="deployment">Deployment</option>
+                            <option value="error">Error</option>
+                            <option value="crypto_operation">Crypto Operation</option>
+                            <option value="plugin_invocation">Plugin Invocation</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="audit-job-id">Job ID:</label>
+                        <input type="text" id="audit-job-id" placeholder="Filter by job ID">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="audit-start-time">Start Time:</label>
+                        <input type="datetime-local" id="audit-start-time">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="audit-end-time">End Time:</label>
+                        <input type="datetime-local" id="audit-end-time">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="audit-limit">Limit:</label>
+                        <select id="audit-limit">
+                            <option value="50">50</option>
+                            <option value="100" selected>100</option>
+                            <option value="250">250</option>
+                            <option value="500">500</option>
+                            <option value="1000">1000</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadAuditLogs()">
+                        🔍 Search Logs
+                    </button>
+                    <button class="btn btn-secondary" onclick="refreshAuditLogs()">
+                        🔄 Refresh
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportAuditLogs()">
+                        📥 Export CSV
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearAuditFilters()">
+                        ✖️ Clear Filters
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Stats Summary -->
+            <div class="audit-stats">
+                <div class="stat-card">
+                    <div class="stat-label">Total Logs</div>
+                    <div class="stat-value" id="audit-total-count">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Errors</div>
+                    <div class="stat-value error" id="audit-error-count">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Time Range</div>
+                    <div class="stat-value" id="audit-time-range">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Modules Queried</div>
+                    <div class="stat-value" style="font-size: 1.2rem;" id="audit-modules-queried">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Last Updated</div>
+                    <div class="stat-value" id="audit-last-updated">Never</div>
+                </div>
+            </div>
+            
+            <!-- Logs Table -->
+            <div class="audit-table-container">
+                <table class="data-table" id="audit-logs-table">
+                    <thead>
+                        <tr>
+                            <th>Module</th>
+                            <th>Timestamp</th>
+                            <th>Event Type</th>
+                            <th>Job ID</th>
+                            <th>Action</th>
+                            <th>User</th>
+                            <th>Status</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="audit-logs-tbody">
+                        <tr>
+                            <td colspan="8" class="no-data">Click "Search Logs" to load audit trail</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Details Modal -->
+            <div id="audit-detail-modal" class="modal">
+                <div class="modal-content large">
+                    <div class="modal-header">
+                        <h3>Audit Log Details</h3>
+                        <button class="modal-close" onclick="closeAuditDetailModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <pre id="audit-detail-json"></pre>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary modal-cancel" onclick="closeAuditDetailModal()">Close</button>
+                    </div>
                 </div>
             </div>
         </section>

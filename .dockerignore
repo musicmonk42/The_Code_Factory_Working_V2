@@ -61,8 +61,18 @@ patent_doc.md
 Makefile
 run_integration_tests.py
 docker-compose.dev.yml
-.env.example
 .devcontainer/
+
+# SECURITY: Environment files with secrets
+# Exclude ALL .env files to prevent credential leakage
+.env
+.env.*
+*.env
+.env.example
+.env.local
+.env.production
+.env.development
+.env.test
 
 # Monitoring and health check scripts (not needed in runtime)
 monitoring/

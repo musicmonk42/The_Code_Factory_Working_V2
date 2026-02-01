@@ -296,6 +296,7 @@ def _load_routers():
         try:
             from server.routers import (
                 api_keys_router as _api_keys_router,
+                audit as _audit_router,
                 diagnostics_router as _diagnostics_router,
                 events_router as _events_router,
                 fixes_router as _fixes_router,
@@ -308,6 +309,7 @@ def _load_routers():
             
             # Assign all values atomically (within the lock)
             api_keys_router = _api_keys_router
+            audit_router = _audit_router
             diagnostics_router = _diagnostics_router
             events_router = _events_router
             fixes_router = _fixes_router
@@ -421,6 +423,7 @@ async def _background_initialization(app_instance: FastAPI):
         # Include routers with /api prefix
         try:
             app_instance.include_router(api_keys_router, prefix="/api")
+            app_instance.include_router(audit_router.router, prefix="/api")
             app_instance.include_router(diagnostics_router, prefix="/api")
             app_instance.include_router(jobs_router, prefix="/api")
             app_instance.include_router(generator_router, prefix="/api")
@@ -1075,11 +1078,16 @@ if __name__ == "__main__":
     
     logger.info(f"Starting server on {host}:{port}")
     
-    # Run the FastAPI application
+    # Run the FastAPI application with production-grade timeout settings
+    # FIX: Add proper timeout configuration to prevent HTTP2 protocol errors
+    # These errors occur when long-running requests (pipeline, codegen) exceed default timeouts
     uvicorn.run(
         app,
         host=host,
         port=port,
         log_level=log_level,
         access_log=True,
+        timeout_keep_alive=300,  # 5 minutes for long-running operations
+        timeout_graceful_shutdown=30,  # 30 seconds for graceful shutdown
+        h11_max_incomplete_event_size=16 * 1024 * 1024,  # 16MB for large responses
     )

@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initFixes();
     initSystem();
     initAPIKeys();
+    initAuditLogs();
     initModals();
     
     // Load initial data
@@ -1832,9 +1833,17 @@ async function startArbiter() {
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({action: 'start', config: {}})
+            body: JSON.stringify({command: 'start', config: {}})
         });
-        showSuccess('Arbiter started');
+        
+        if (!response.ok) {
+            const error = await response.json();
+            showError('Failed to start Arbiter: ' + (error.detail?.message || error.detail || 'Unknown error'));
+            return;
+        }
+        
+        const data = await response.json();
+        showSuccess('Arbiter started: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Failed to start Arbiter: ' + error.message);
     }
@@ -1845,9 +1854,17 @@ async function stopArbiter() {
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({action: 'stop'})
+            body: JSON.stringify({command: 'stop'})
         });
-        showSuccess('Arbiter stopped');
+        
+        if (!response.ok) {
+            const error = await response.json();
+            showError('Failed to stop Arbiter: ' + (error.detail?.message || error.detail || 'Unknown error'));
+            return;
+        }
+        
+        const data = await response.json();
+        showSuccess('Arbiter stopped: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Failed to stop Arbiter: ' + error.message);
     }
@@ -1870,9 +1887,17 @@ async function configureArbiter() {
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({action: 'configure', config: parsedConfig})
+            body: JSON.stringify({command: 'configure', config: parsedConfig})
         });
-        showSuccess('Arbiter configured');
+        
+        if (!response.ok) {
+            const error = await response.json();
+            showError('Configuration failed: ' + (error.detail?.message || error.detail || 'Unknown error'));
+            return;
+        }
+        
+        const data = await response.json();
+        showSuccess('Arbiter configured: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Configuration request failed: ' + error.message);
     }
@@ -1883,10 +1908,17 @@ async function getArbiterStatus() {
         const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({action: 'status'})
+            body: JSON.stringify({command: 'status'})
         });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            showError('Failed to get status: ' + (error.detail?.message || error.detail || 'Unknown error'));
+            return;
+        }
+        
         const data = await response.json();
-        alert(`Arbiter Status:\nState: ${data.status}\nActive Agents: ${data.active_agents}`);
+        alert(`Arbiter Status:\nState: ${data.status || 'Unknown'}\nActive Agents: ${data.active_agents || 0}`);
     } catch (error) {
         showError('Failed to get status: ' + error.message);
     }
@@ -2514,3 +2546,274 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// ==================== Audit Logs ====================
+
+// Global storage for current audit logs
+window.currentAuditLogs = [];
+
+/**
+ * Initialize audit logs functionality
+ */
+function initAuditLogs() {
+    // Auto-refresh functionality can be enabled here
+    window.auditAutoRefresh = null;
+    
+    // Load event types dynamically
+    loadEventTypes();
+}
+
+/**
+ * Load and display audit logs based on current filters
+ */
+async function loadAuditLogs() {
+    try {
+        const module = document.getElementById('audit-module-filter')?.value || '';
+        const eventType = document.getElementById('audit-event-type').value;
+        const jobId = document.getElementById('audit-job-id').value;
+        const startTime = document.getElementById('audit-start-time').value;
+        const endTime = document.getElementById('audit-end-time').value;
+        const limit = document.getElementById('audit-limit').value;
+        
+        // Build query params
+        const params = new URLSearchParams();
+        if (module) params.append('module', module);
+        if (eventType) params.append('event_type', eventType);
+        if (jobId) params.append('job_id', jobId);
+        if (startTime) params.append('start_time', new Date(startTime).toISOString());
+        if (endTime) params.append('end_time', new Date(endTime).toISOString());
+        params.append('limit', limit);
+        
+        // Call unified endpoint
+        const response = await fetch(`${API_BASE}/audit/logs/all?${params}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Convert to expected format
+        displayAuditLogs({ logs: data.aggregated_logs });
+        updateAuditStats({ logs: data.aggregated_logs });
+        
+        // Show modules queried
+        const modulesEl = document.getElementById('audit-modules-queried');
+        if (modulesEl) {
+            modulesEl.textContent = data.modules_queried.join(', ');
+        }
+        
+        // Show warning if there were errors
+        if (data.errors && Object.keys(data.errors).length > 0) {
+            showWarning(`Some modules had errors: ${Object.keys(data.errors).join(', ')}`);
+        }
+        
+        document.getElementById('audit-last-updated').textContent = new Date().toLocaleTimeString();
+    } catch (error) {
+        console.error('Failed to load audit logs:', error);
+        showError('Failed to load audit logs: ' + error.message);
+    }
+}
+
+/**
+ * Display audit logs in the table
+ */
+function displayAuditLogs(data) {
+    const tbody = document.getElementById('audit-logs-tbody');
+    
+    if (!data.logs || data.logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="no-data">No audit logs found</td></tr>';
+        window.currentAuditLogs = [];
+        return;
+    }
+    
+    // Store logs globally for detail view
+    window.currentAuditLogs = data.logs;
+    
+    tbody.innerHTML = data.logs.map((log, index) => `
+        <tr onclick="showAuditDetailByIndex(${index})">
+            <td><span class="badge module-${escapeHtml(log.module || 'unknown')}">${escapeHtml(log.module || 'N/A')}</span></td>
+            <td>${escapeHtml(formatTimestamp(log.timestamp))}</td>
+            <td><span class="badge event-${escapeHtml(log.event_type || 'unknown')}">${escapeHtml(log.event_type || 'N/A')}</span></td>
+            <td>${escapeHtml(log.job_id || 'N/A')}</td>
+            <td>${escapeHtml(log.action || log.name || 'N/A')}</td>
+            <td>${escapeHtml(log.user || log.actor || 'system')}</td>
+            <td><span class="status-badge ${escapeHtml(log.status || 'unknown')}">${escapeHtml(log.status || 'N/A')}</span></td>
+            <td><button class="btn-link" onclick="event.stopPropagation(); showAuditDetailByIndex(${index})">View</button></td>
+        </tr>
+    `).join('');
+}
+
+/**
+ * Update audit statistics summary
+ */
+function updateAuditStats(data) {
+    const logs = data.logs || [];
+    
+    document.getElementById('audit-total-count').textContent = logs.length;
+    
+    const errorCount = logs.filter(log => 
+        log.event_type === 'error' || 
+        log.action?.includes('error') || 
+        log.status === 'failed'
+    ).length;
+    document.getElementById('audit-error-count').textContent = errorCount;
+    
+    if (logs.length > 0) {
+        const timestamps = logs.map(l => new Date(l.timestamp)).filter(d => !isNaN(d));
+        if (timestamps.length > 0) {
+            const minTime = new Date(Math.min(...timestamps));
+            const maxTime = new Date(Math.max(...timestamps));
+            const range = `${minTime.toLocaleDateString()} - ${maxTime.toLocaleDateString()}`;
+            document.getElementById('audit-time-range').textContent = range;
+        }
+    } else {
+        document.getElementById('audit-time-range').textContent = '--';
+    }
+}
+
+/**
+ * Show audit log details in modal by index
+ */
+function showAuditDetailByIndex(index) {
+    const modal = document.getElementById('audit-detail-modal');
+    const jsonPre = document.getElementById('audit-detail-json');
+    
+    if (window.currentAuditLogs && window.currentAuditLogs[index]) {
+        const log = window.currentAuditLogs[index];
+        jsonPre.textContent = JSON.stringify(log, null, 2);
+        modal.classList.add('active');
+    } else {
+        console.error('Log not found at index:', index);
+    }
+}
+
+/**
+ * Show audit log details in modal (legacy support)
+ */
+function showAuditDetail(logJson) {
+    const modal = document.getElementById('audit-detail-modal');
+    const jsonPre = document.getElementById('audit-detail-json');
+    
+    let log;
+    if (typeof logJson === 'string') {
+        log = JSON.parse(logJson);
+    } else {
+        log = logJson;
+    }
+    
+    jsonPre.textContent = JSON.stringify(log, null, 2);
+    modal.classList.add('active');
+}
+
+/**
+ * Close audit detail modal
+ */
+function closeAuditDetailModal() {
+    const modal = document.getElementById('audit-detail-modal');
+    modal.classList.remove('active');
+}
+
+/**
+ * Refresh audit logs with current filters
+ */
+function refreshAuditLogs() {
+    loadAuditLogs();
+}
+
+/**
+ * Clear all audit log filters
+ */
+function clearAuditFilters() {
+    document.getElementById('audit-module-filter').value = '';
+    document.getElementById('audit-event-type').value = '';
+    document.getElementById('audit-job-id').value = '';
+    document.getElementById('audit-start-time').value = '';
+    document.getElementById('audit-end-time').value = '';
+    document.getElementById('audit-limit').value = '100';
+}
+
+/**
+ * Load event types dynamically from API
+ */
+async function loadEventTypes() {
+    try {
+        const response = await fetch(`${API_BASE}/audit/logs/event-types`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        const eventTypeSelect = document.getElementById('audit-event-type');
+        if (!eventTypeSelect) return;
+        
+        eventTypeSelect.innerHTML = '<option value="">All Events</option>';
+        
+        // Populate with all event types
+        data.all_event_types_sorted.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            eventTypeSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Failed to load event types:', error);
+        // Keep default event types if API call fails
+    }
+}
+
+/**
+ * Export audit logs to CSV
+ */
+async function exportAuditLogs() {
+    try {
+        const tbody = document.getElementById('audit-logs-tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        if (rows.length === 0 || rows[0].querySelector('.no-data')) {
+            showError('No logs to export');
+            return;
+        }
+        
+        // Build CSV
+        const headers = ['Timestamp', 'Event Type', 'Job ID', 'Action', 'User', 'Status'];
+        let csv = headers.join(',') + '\n';
+        
+        rows.forEach(row => {
+            const cells = Array.from(row.querySelectorAll('td'));
+            const values = cells.slice(0, -1).map(cell => {
+                const text = cell.textContent.trim();
+                return `"${text.replace(/"/g, '""')}"`;
+            });
+            csv += values.join(',') + '\n';
+        });
+        
+        // Download
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `audit-logs-${new Date().toISOString()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showSuccess('Audit logs exported successfully');
+    } catch (error) {
+        console.error('Failed to export logs:', error);
+        showError('Failed to export logs: ' + error.message);
+    }
+}
+
+/**
+ * Format timestamp for display
+ */
+function formatTimestamp(ts) {
+    if (!ts) return 'N/A';
+    const date = new Date(ts);
+    return isNaN(date) ? ts : date.toLocaleString();
+}
+
