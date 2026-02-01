@@ -1,6 +1,8 @@
 import os
 import sys
 import types
+import importlib.machinery
+import importlib.util
 from pathlib import Path
 
 # REMOVED: matplotlib import causes expensive font cache initialization during import
