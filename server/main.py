@@ -22,16 +22,31 @@ coordination layer for centralized control and monitoring.
 # CRITICAL: Set environment variables BEFORE any imports that might trigger plugin loading
 # This prevents circular imports, SystemExit crashes, and reduces startup time
 import os
+import sys
 
 # --- PRODUCTION MODE CONFIGURATION START ---
-# Force Production Mode
-os.environ["APP_ENV"] = "production"
-os.environ["DEV_MODE"] = "0"
+# Detect if we're running in a test environment BEFORE setting production defaults
+# This allows tests to run with proper test configuration
+_is_test_environment = (
+    "pytest" in sys.modules or 
+    os.getenv("TESTING") == "1" or 
+    os.getenv("CI") == "true" or
+    os.getenv("APP_ENV") == "test"
+)
 
-# FIX: Unset AUDIT_LOG_DEV_MODE in production to prevent conflicting configuration
-# This prevents the security error: "Production environment variables are set but dev mode is also enabled"
-if "AUDIT_LOG_DEV_MODE" in os.environ:
-    del os.environ["AUDIT_LOG_DEV_MODE"]
+# Only force production mode if NOT in a test environment
+if not _is_test_environment:
+    # Force Production Mode
+    os.environ["APP_ENV"] = "production"
+    os.environ["DEV_MODE"] = "0"
+    
+    # FIX: Unset AUDIT_LOG_DEV_MODE in production to prevent conflicting configuration
+    # This prevents the security error: "Production environment variables are set but dev mode is also enabled"
+    if "AUDIT_LOG_DEV_MODE" in os.environ:
+        del os.environ["AUDIT_LOG_DEV_MODE"]
+else:
+    # In test mode, ensure APP_ENV is set to test if not already set
+    os.environ.setdefault("APP_ENV", "test")
 
 # AUDIT CRYPTO CONFIGURATION
 # Allow audit crypto initialization to fail gracefully if secrets are not configured
@@ -240,6 +255,7 @@ from server.logging_config import configure_logging
 configure_logging()
 
 from server import __version__
+from server.environment import is_test
 
 # =============================================================================
 # CRITICAL: Defer router imports to allow /health to work even if imports fail
@@ -258,6 +274,7 @@ _router_load_error: Optional[str] = None
 
 # Placeholders for lazy-loaded modules
 api_keys_router = None
+audit_router = None
 diagnostics_router = None
 events_router = None
 fixes_router = None
@@ -279,7 +296,7 @@ def _load_routers():
     Thread-safe: uses a lock to prevent race conditions.
     """
     global _routers_loaded, _router_load_error
-    global api_keys_router, diagnostics_router, events_router, fixes_router
+    global api_keys_router, audit_router, diagnostics_router, events_router, fixes_router
     global generator_router, jobs_router, omnicore_router, sfe_router
     global AgentType, get_agent_loader
     
@@ -498,18 +515,44 @@ async def lifespan(app: FastAPI):
     
     All initialization happens in background tasks so the HTTP server can accept
     connections immediately for Railway healthchecks.
+    
+    In test mode, routers are loaded synchronously to ensure they are available
+    immediately for test requests.
     """
-    # Startup - DO NOT BLOCK HERE
+    # Startup - DO NOT BLOCK HERE (except in test mode)
     logger.info("Starting Code Factory API Server")
     logger.info(f"Version: {__version__}")
     logger.info("=" * 80)
     logger.info("HTTP SERVER STARTING - Minimal pre-initialization")
     logger.info("=" * 80)
     
-    # Start background initialization WITHOUT awaiting
-    # Pass the app instance so routers can be added
-    background_task = asyncio.create_task(_background_initialization(app))
-    logger.info("Background initialization task created - HTTP server starting now")
+    background_task = None
+    
+    # In test mode, load routers synchronously to ensure they're available immediately
+    if is_test():
+        logger.info("Test mode detected - loading routers synchronously")
+        routers_ok = _load_routers()
+        if routers_ok:
+            try:
+                app.include_router(api_keys_router, prefix="/api")
+                app.include_router(audit_router.router, prefix="/api")
+                app.include_router(diagnostics_router, prefix="/api")
+                app.include_router(jobs_router, prefix="/api")
+                app.include_router(generator_router, prefix="/api")
+                app.include_router(omnicore_router, prefix="/api")
+                app.include_router(sfe_router, prefix="/api")
+                app.include_router(fixes_router, prefix="/api")
+                app.include_router(events_router, prefix="/api")
+                logger.info("✓ All routers loaded synchronously for testing")
+            except Exception as e:
+                logger.error(f"Failed to include routers: {e}", exc_info=True)
+        else:
+            logger.error(f"Router loading failed: {_router_load_error}")
+    else:
+        # Start background initialization WITHOUT awaiting
+        # Pass the app instance so routers can be added
+        background_task = asyncio.create_task(_background_initialization(app))
+        logger.info("Background initialization task created - HTTP server starting now")
     
     # IMMEDIATELY yield so FastAPI routes become available
     yield
@@ -518,7 +561,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Code Factory API Server")
     
     # Cancel background task if still running
-    if not background_task.done():
+    if background_task is not None and not background_task.done():
         background_task.cancel()
         try:
             await background_task
