@@ -26,13 +26,21 @@ permissions:
   contents: read
 
 jobs:
-  # All tests run together - run on every push/PR
-  all-tests:
-    name: All Tests (Unified Run)
+  # Tests run in parallel per module - run on every push/PR
+  test-matrix:
+    name: Tests - ${{ matrix.module }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - omnicore_engine
+          - generator
+          - self_fixing_engineer
+          - server
     
     services:
       redis:
@@ -452,9 +460,8 @@ jobs:
           # --disable-warnings: Skip warning collection for faster performance
           # -p no:warnings: Disable warnings plugin
           # --co: Alias for --collect-only
-          # Explicitly specify all test directories for unified collection
-          # Note: Root tests/ folder is excluded - those are fix-specific tests not part of the main suite
-          timeout 180 pytest generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ --co --quiet --disable-warnings -p no:warnings || {
+          # Collect tests for specific module only
+          timeout 180 pytest ${{ matrix.module }}/tests/ --co --quiet --disable-warnings -p no:warnings || {
             echo "WARNING: Collection timed out or failed - will proceed with targeted test run"
             exit 0
           }
@@ -463,13 +470,10 @@ jobs:
       - name: Debug pytest collection (if previous steps passed)
         if: success()
         run: |
-          echo "=== Testing pytest collection with verbose output ==="
+          echo "=== Testing pytest collection with verbose output for ${{ matrix.module }} ==="
           # Try to collect tests with maximum verbosity to reveal any import errors
           python -m pytest \
-            generator/tests/ \
-            omnicore_engine/tests/ \
-            self_fixing_engineer/tests/ \
-            server/tests/ \
+            ${{ matrix.module }}/tests/ \
             --collect-only \
             -v \
             --tb=long \
@@ -542,7 +546,7 @@ jobs:
               print('✅ All critical imports successful')
           "
       
-      - name: Run all tests together
+      - name: Run tests for ${{ matrix.module }}
         env:
           TESTING: "1"
           AWS_REGION: ""
@@ -563,25 +567,23 @@ jobs:
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           ulimit -t unlimited 2>/dev/null || true
           
-          echo "=== Running ALL pytest tests together (unified run) ==="
+          echo "=== Running pytest tests for ${{ matrix.module }} ==="
           echo "NLTK_DATA: $NLTK_DATA"
           
           # Use python -m pytest to ensure proper sys.path setup
           python -m pytest \
-            generator/tests/ \
-            omnicore_engine/tests/ \
-            self_fixing_engineer/tests/ \
-            server/tests/ \
-            -n 1 \
-            --dist=loadfile \
-            --import-mode=prepend \
+            ${{ matrix.module }}/ \
+            -v \
             --tb=short \
+            --maxfail=5 \
             --timeout=300 \
-            --continue-on-collection-errors \
+            --cov=${{ matrix.module }} \
+            --cov-report=xml:coverage-${{ matrix.module }}.xml \
+            --junitxml=junit-${{ matrix.module }}.xml \
             -p no:randomly \
             -p no:cacheprovider \
-            --junitxml=test-results.xml \
-            2>&1 | tee test-output.log || {
+            --import-mode=prepend \
+            2>&1 | tee test-output-${{ matrix.module }}.log || {
               EXIT_CODE=$?
               echo "======================================"
               echo "Pytest exited with code $EXIT_CODE"
@@ -600,14 +602,14 @@ jobs:
               exit $EXIT_CODE
             }
           
-          echo "✓ All tests completed (unified run)"
+          echo "✓ Tests completed for ${{ matrix.module }}"
           
       - name: Profile test collection (on failure)
         if: failure()
         run: |
-          echo "=== Running test collection with CPU profiling ==="
+          echo "=== Running test collection with CPU profiling for ${{ matrix.module }} ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
-            generator/tests/ omnicore_engine/tests/ self_fixing_engineer/tests/ server/tests/ \
+            ${{ matrix.module }}/tests/ \
             --co --quiet --disable-warnings -p no:warnings --import-mode=prepend --tb=short \
             2>&1 || true
           
@@ -617,45 +619,133 @@ jobs:
           fi
         continue-on-error: true
           
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        if: always() && hashFiles('./coverage.xml') != ''
-        with:
-          files: ./coverage.xml
-          flags: pytest-fast
-          fail_ci_if_error: false
-          
-      - name: Upload HTML test report
-        uses: actions/upload-artifact@v4
-        if: always() && hashFiles('./test-report.html') != ''
-        with:
-          name: test-report-html-fast
-          path: test-report.html
-          retention-days: 30
-        continue-on-error: true
-          
-      - name: Upload JSON test report
-        uses: actions/upload-artifact@v4
-        if: always() && hashFiles('./test-report.json') != ''
-        with:
-          name: test-report-json-fast
-          path: test-report.json
-          retention-days: 30
-        continue-on-error: true
-          
-      - name: Upload test output logs
+      - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-output-logs-fast
-          path: test-output-*.log
+          name: coverage-${{ matrix.module }}
+          path: coverage-${{ matrix.module }}.xml
           retention-days: 7
           
-      - name: Upload JUnit test results
+      - name: Upload test results artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results-xml-fast
-          path: test-results-*.xml
+          name: junit-${{ matrix.module }}
+          path: junit-${{ matrix.module }}.xml
+          retention-days: 7
+
+  combine-coverage:
+    name: Combine Coverage Reports
+    runs-on: ubuntu-latest
+    needs: test-matrix
+    if: always()
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install coverage tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install coverage
+          
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-artifacts/
+          
+      - name: Combine coverage reports
+        run: |
+          echo "=== Combining coverage reports ==="
+          
+          # Find all coverage XML files
+          find coverage-artifacts/ -name "coverage-*.xml" -type f
+          
+          # Use coverage combine to merge the reports
+          # First, we need to convert XML back to .coverage format, combine, then generate XML
+          # Since we have XML files, we'll use a simpler approach with coverage.py
+          
+          # Create a combined coverage file by merging all XML reports
+          # We'll use coverage xml --omit to combine them
+          python << 'EOF'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          
+          # Find all coverage XML files
+          coverage_dir = Path("coverage-artifacts")
+          coverage_files = list(coverage_dir.rglob("coverage-*.xml"))
+          
+          if not coverage_files:
+              print("No coverage files found!")
+              exit(1)
+          
+          print(f"Found {len(coverage_files)} coverage files:")
+          for f in coverage_files:
+              print(f"  - {f}")
+          
+          # For simplicity, we'll just copy the first file and note that proper merging
+          # requires coverage combine with .coverage files, not XML
+          # This is a basic implementation that concatenates coverage data
+          
+          # Parse all coverage files and merge them
+          combined_root = None
+          packages = {}
+          
+          for cov_file in coverage_files:
+              tree = ET.parse(cov_file)
+              root = tree.getroot()
+              
+              if combined_root is None:
+                  combined_root = ET.Element("coverage")
+                  for attr in root.attrib:
+                      combined_root.set(attr, root.get(attr))
+              
+              # Merge packages
+              for package in root.findall(".//package"):
+                  pkg_name = package.get("name")
+                  if pkg_name not in packages:
+                      packages[pkg_name] = package
+              
+          # Create combined XML
+          if combined_root is not None:
+              # Add all packages to combined root
+              packages_elem = ET.SubElement(combined_root, "packages")
+              for pkg in packages.values():
+                  packages_elem.append(pkg)
+              
+              # Write combined coverage
+              tree = ET.ElementTree(combined_root)
+              tree.write("coverage-combined.xml", encoding="utf-8", xml_declaration=True)
+              print("\n✓ Combined coverage written to coverage-combined.xml")
+          else:
+              print("ERROR: Failed to create combined coverage")
+              exit(1)
+          EOF
+          
+          # Verify the combined file was created
+          if [ -f coverage-combined.xml ]; then
+            echo "✓ Combined coverage file created successfully"
+            ls -lh coverage-combined.xml
+          else
+            echo "ERROR: Failed to create combined coverage file"
+            exit 1
+          fi
+          
+      - name: Upload combined coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-combined
+          path: coverage-combined.xml
           retention-days: 30
+
 
