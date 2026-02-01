@@ -336,7 +336,7 @@ async def optimize_deployment_prompt_text(prompt_text: str) -> str:
 
     except Exception as e:
         LLM_ERRORS_TOTAL.labels(
-            provider="deploy_prompt", model=SUMMARY_MODEL, error_type=type(e).__name__
+            provider="deploy_prompt", model=SUMMARY_MODEL
         ).inc()
         logger.error(
             "Prompt content optimization failed (LLM call): %s. Returning original prompt text.",
@@ -1228,11 +1228,9 @@ class DeployPromptAgent:
 
             except Exception as e:
                 # Log prompt generation error with context
-                error_type = str(type(e).__name__)
                 LLM_ERRORS_TOTAL.labels(
                     provider="deploy_prompt",
                     model=PROMPT_GEN_MODEL,
-                    error_type=error_type,
                 ).inc()
                 span.set_status(
                     Status(StatusCode.ERROR, f"Prompt generation failed: {e}")

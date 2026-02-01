@@ -666,7 +666,7 @@ class PythonCritiquePlugin(LanguageCritiquePlugin):
         return await run_all_lints_and_checks(
             code_files,
             str(temp_dir),
-            lang="python",
+            language="python",
         )
 
     async def run_unit_tests(

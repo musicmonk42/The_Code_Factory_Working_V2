@@ -417,7 +417,7 @@ class LLMClient:
         # Ensure initialization has started (lazy initialization for backward compatibility)
         self._ensure_initialization()
         await self._is_initialized.wait()
-        provider = provider or self.config.llm_provider or "openai"
+        provider = provider or getattr(self.config, 'llm_provider', 'openai') or "openai"
         # FIX: Ensure default_llm_model exists on the mock object (or provide a safe fallback)
         model = model or getattr(self.config, "default_llm_model", "gpt-4")
 
