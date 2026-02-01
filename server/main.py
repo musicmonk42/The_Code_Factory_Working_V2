@@ -595,11 +595,6 @@ async def lifespan(app: FastAPI):
             _include_routers(app)
         else:
             logger.error(f"Router loading failed: {_router_load_error}")
-    else:
-        # Start background initialization WITHOUT awaiting
-        # Pass the app instance so routers can be added
-        background_task = asyncio.create_task(_background_initialization(app))
-        logger.info("Background initialization task created - HTTP server starting now")
     # CRITICAL: Register routers SYNCHRONOUSLY before yielding
     # This ensures API endpoints are available when the server starts
     routers_ok = _register_routers_sync(app)
