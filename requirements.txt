@@ -1,5 +1,5 @@
 aioboto3==15.2.0
-aiobotocore==2.20.3
+aiobotocore==2.24.2
 aiobreaker==1.2.0
 pybreaker==1.2.0
 aiofiles==24.1.0
