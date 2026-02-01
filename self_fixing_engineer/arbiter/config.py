@@ -254,7 +254,7 @@ class LLMSettings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
-        case_sensitive=False,  # Allow case-insensitive env var matching (LLM_DEFAULT_PROVIDER -> default_provider)
+        case_sensitive=False,  # Case-insensitive matching allows LLM_DEFAULT_PROVIDER to match field 'default_provider' when combined with env_prefix
         env_prefix="LLM_"
     )
 
@@ -325,7 +325,11 @@ class ArbiterConfig(BaseSettings):
     ML_MODEL_PATH: str = Field(
         default="models/relevance_classifier.pth"
     )
-    QUANTUM_ENABLED: bool = Field(default=False, validation_alias=AliasChoices("ENABLE_QUANTUM"))
+    QUANTUM_ENABLED: bool = Field(
+        default=False, 
+        validation_alias=AliasChoices("ENABLE_QUANTUM", "QUANTUM_ENABLED"),
+        description="Enable quantum computing features"
+    )
     KNOWLEDGE_REFRESH_INTERVAL: int = Field(
         default=86400
     )
