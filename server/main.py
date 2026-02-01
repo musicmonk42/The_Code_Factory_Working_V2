@@ -450,7 +450,6 @@ def _include_routers(app_instance: FastAPI) -> bool:
         return False
 
 
-async def _background_initialization(app_instance: FastAPI):
 def _register_routers_sync(app_instance: FastAPI) -> bool:
     """
     Load and register routers SYNCHRONOUSLY during startup.
@@ -575,10 +574,9 @@ async def lifespan(app: FastAPI):
     immediately for test requests.
     """
     # Startup - DO NOT BLOCK HERE (except in test mode)
-    Routers are registered SYNCHRONOUSLY before yield to ensure API endpoints
-    are available immediately when the server starts accepting requests.
-    Heavy initialization (config, agents) happens in background tasks.
-    """
+    # Routers are registered SYNCHRONOUSLY before yield to ensure API endpoints
+    # are available immediately when the server starts accepting requests.
+    # Heavy initialization (config, agents) happens in background tasks.
     # Startup
     logger.info("Starting Code Factory API Server")
     logger.info(f"Version: {__version__}")
