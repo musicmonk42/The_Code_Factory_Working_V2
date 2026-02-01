@@ -137,11 +137,11 @@ def pytest_configure(config):
     """
     # CRITICAL: Remove any mocked versions of required dependencies FIRST
     # This must happen before ANY imports attempt to use these modules
-    for mod_name in ["prometheus_client", "opentelemetry"]:
+    for mod_name in REQUIRED_REAL_MODULES:
         if mod_name in sys.modules:
             mod = sys.modules[mod_name]
-            # Check if it's a Mock/MagicMock without proper __spec__
-            if isinstance(mod, (MagicMock, Mock)) or not hasattr(mod, '__spec__') or mod.__spec__ is None:
+            # Use existing helper to check if module is valid
+            if not _is_valid_real_module(mod):
                 # Remove the broken mock
                 _remove_module_and_submodules(mod_name)
     
