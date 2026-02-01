@@ -35,30 +35,68 @@ except ImportError:
     
 try:
     from prometheus_client import Counter, Histogram, Gauge
+    from prometheus_client.registry import REGISTRY
     METRICS_AVAILABLE = True
     
-    # Define metrics for code generation observability
-    codegen_requests_total = Counter(
+    # Helper functions for safe metric registration (idempotent pattern)
+    def _get_or_create_counter(name: str, description: str, labelnames: list = None):
+        """Create a Counter or return existing one with same name."""
+        labelnames = labelnames or []
+        try:
+            collector = REGISTRY._names_to_collectors.get(name)
+            if collector is not None:
+                return collector
+        except (AttributeError, KeyError):
+            pass
+        try:
+            return Counter(name, description, labelnames)
+        except ValueError as e:
+            if "Duplicated timeseries" in str(e):
+                existing = REGISTRY._names_to_collectors.get(name)
+                if existing is not None:
+                    return existing
+            raise
+    
+    def _get_or_create_histogram(name: str, description: str, labelnames: list = None):
+        """Create a Histogram or return existing one with same name."""
+        labelnames = labelnames or []
+        try:
+            collector = REGISTRY._names_to_collectors.get(name)
+            if collector is not None:
+                return collector
+        except (AttributeError, KeyError):
+            pass
+        try:
+            return Histogram(name, description, labelnames)
+        except ValueError as e:
+            if "Duplicated timeseries" in str(e):
+                existing = REGISTRY._names_to_collectors.get(name)
+                if existing is not None:
+                    return existing
+            raise
+    
+    # Define metrics for code generation observability using safe registration
+    codegen_requests_total = _get_or_create_counter(
         'codegen_requests_total',
         'Total number of code generation requests',
         ['job_id', 'language', 'status']
     )
-    codegen_files_generated = Counter(
+    codegen_files_generated = _get_or_create_counter(
         'codegen_files_generated_total',
         'Total number of files generated',
         ['job_id', 'language']
     )
-    codegen_duration_seconds = Histogram(
+    codegen_duration_seconds = _get_or_create_histogram(
         'codegen_duration_seconds',
         'Code generation duration in seconds',
         ['job_id', 'language']
     )
-    codegen_file_size_bytes = Histogram(
+    codegen_file_size_bytes = _get_or_create_histogram(
         'codegen_file_size_bytes',
         'Size of generated files in bytes',
         ['job_id', 'file_type']
     )
-    codegen_errors_total = Counter(
+    codegen_errors_total = _get_or_create_counter(
         'codegen_errors_total',
         'Total number of code generation errors',
         ['job_id', 'error_type']
