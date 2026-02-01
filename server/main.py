@@ -420,6 +420,36 @@ except Exception as e:
 static_dir = BASE_DIR / "static"
 
 
+def _include_routers(app_instance: FastAPI) -> bool:
+    """
+    Include all API routers in the FastAPI application.
+    
+    This function is called by both the synchronous (test mode) and asynchronous
+    (production mode) initialization paths to ensure consistent router registration.
+    
+    Args:
+        app_instance: The FastAPI application instance to add routers to
+        
+    Returns:
+        True if routers were successfully included, False otherwise
+    """
+    try:
+        app_instance.include_router(api_keys_router, prefix="/api")
+        app_instance.include_router(audit_router.router, prefix="/api")
+        app_instance.include_router(diagnostics_router, prefix="/api")
+        app_instance.include_router(jobs_router, prefix="/api")
+        app_instance.include_router(generator_router, prefix="/api")
+        app_instance.include_router(omnicore_router, prefix="/api")
+        app_instance.include_router(sfe_router, prefix="/api")
+        app_instance.include_router(fixes_router, prefix="/api")
+        app_instance.include_router(events_router, prefix="/api")
+        logger.info("✓ All routers included in application")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to include routers: {e}", exc_info=True)
+        return False
+
+
 async def _background_initialization(app_instance: FastAPI):
     """
     Background initialization task that runs AFTER the HTTP server is ready.
@@ -437,20 +467,8 @@ async def _background_initialization(app_instance: FastAPI):
     routers_ok = _load_routers()
     
     if routers_ok:
-        # Include routers with /api prefix
-        try:
-            app_instance.include_router(api_keys_router, prefix="/api")
-            app_instance.include_router(audit_router.router, prefix="/api")
-            app_instance.include_router(diagnostics_router, prefix="/api")
-            app_instance.include_router(jobs_router, prefix="/api")
-            app_instance.include_router(generator_router, prefix="/api")
-            app_instance.include_router(omnicore_router, prefix="/api")
-            app_instance.include_router(sfe_router, prefix="/api")
-            app_instance.include_router(fixes_router, prefix="/api")
-            app_instance.include_router(events_router, prefix="/api")
-            logger.info("✓ All routers included in application")
-        except Exception as e:
-            logger.error(f"Failed to include routers: {e}", exc_info=True)
+        # Include routers with /api prefix using shared helper
+        _include_routers(app_instance)
     else:
         logger.error(f"Router loading failed: {_router_load_error}")
         logger.warning("API endpoints will not be available")
@@ -533,19 +551,8 @@ async def lifespan(app: FastAPI):
         logger.info("Test mode detected - loading routers synchronously")
         routers_ok = _load_routers()
         if routers_ok:
-            try:
-                app.include_router(api_keys_router, prefix="/api")
-                app.include_router(audit_router.router, prefix="/api")
-                app.include_router(diagnostics_router, prefix="/api")
-                app.include_router(jobs_router, prefix="/api")
-                app.include_router(generator_router, prefix="/api")
-                app.include_router(omnicore_router, prefix="/api")
-                app.include_router(sfe_router, prefix="/api")
-                app.include_router(fixes_router, prefix="/api")
-                app.include_router(events_router, prefix="/api")
-                logger.info("✓ All routers loaded synchronously for testing")
-            except Exception as e:
-                logger.error(f"Failed to include routers: {e}", exc_info=True)
+            # Use shared helper to include routers
+            _include_routers(app)
         else:
             logger.error(f"Router loading failed: {_router_load_error}")
     else:
