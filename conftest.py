@@ -149,8 +149,8 @@ if os.environ.get("TESTING") == "1":
     early_mocks = [
         "aiofiles",  # Needed by generator.clarifier
         "aiofiles.os",  # Submodule
-        "redis",  # Needed by generator
-        "redis.asyncio",  # Submodule
+        # "redis",  # REMOVED - portalocker needs real redis types for type annotations
+        # "redis.asyncio",  # REMOVED - causes forward ref issues in portalocker
         "chromadb",  # Needed by testgen_agent
         "chromadb.utils",  # Submodule
         "defusedxml",  # Needed by testgen_agent
@@ -580,6 +580,9 @@ def _create_mock_module(name):
 # Packages that should NEVER be mocked, even if missing
 # These packages cause type annotation errors or decorator issues when mocked
 _NEVER_MOCK = [
+    "redis",  # FIX: portalocker imports redis.client types for annotations
+    "redis.asyncio",  # FIX: needed by portalocker type annotations
+    "redis.client",  # FIX: PubSubWorkerThread source for portalocker
     "aiohttp_client_cache",  # Uses aiohttp.ClientResponse in type hints
     "pydantic",  # Decorators like field_validator must be real
     "pydantic_settings",  # Must work with real pydantic
@@ -604,8 +607,8 @@ _OPTIONAL_DEPENDENCIES = [
     "uvicorn",  # Required by generator.main
     "jwt",  # Required by generator.main.api
     "sqlalchemy",  # Required by many modules
-    "redis",  # Required by various modules
-    "redis.asyncio",  # Required by generator.main.api
+    # "redis",  # REMOVED - must use real implementation (type annotation dependency)
+    # "redis.asyncio",  # REMOVED - must use real implementation (type annotation dependency)
     "dotenv",  # Required by many modules
     "dynaconf",  # Required by runner modules
     "anthropic",  # Required by arbiter.plugins
