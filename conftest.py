@@ -73,11 +73,13 @@ REQUIRED_REAL_MODULES = [
 
 
 def _remove_module_and_submodules(mod_name):
-    """
-    Helper function to remove a module and all its submodules from sys.modules.
+    """Helper function to remove a module and all its submodules from sys.modules.
     
     Args:
-        mod_name: The module name to remove (e.g., "prometheus_client")
+        mod_name (str): The module name to remove (e.g., "prometheus_client")
+    
+    Side Effects:
+        Modifies sys.modules by deleting the specified module and its submodules
     """
     if mod_name in sys.modules:
         del sys.modules[mod_name]
@@ -87,29 +89,43 @@ def _remove_module_and_submodules(mod_name):
             del sys.modules[key]
 
 
-def _validate_real_modules():
-    """
-    Ensure that installed dependencies are using real modules, not mocks.
-    This prevents AttributeError issues during pytest collection.
+def _is_valid_real_module(mod):
+    """Check if a module is a valid real module (not a mock).
     
-    Checks for modules that should be real (installed via requirements.txt)
-    and removes any broken mocks or stubs that might interfere with imports.
+    Args:
+        mod: The module object to validate
+    
+    Returns:
+        bool: True if the module is valid and real, False if it's a mock or invalid
     """
     from unittest.mock import MagicMock, Mock
     
+    # Check if it's a Mock instance
+    if isinstance(mod, (MagicMock, Mock)):
+        return False
+    # Check if it has broken __spec__
+    if not hasattr(mod, '__spec__') or mod.__spec__ is None:
+        return False
+    # Check if __spec__ is a real ModuleSpec (not a mock)
+    if not isinstance(mod.__spec__, importlib.machinery.ModuleSpec):
+        return False
+    return True
+
+
+def _validate_real_modules():
+    """Ensure that installed dependencies are using real modules, not mocks.
+    
+    This prevents AttributeError issues during pytest collection.
+    Checks for modules that should be real (installed via requirements.txt)
+    and removes any broken mocks or stubs that might interfere with imports.
+    
+    Side Effects:
+        Modifies sys.modules by removing invalid module entries
+    """
     for mod_name in REQUIRED_REAL_MODULES:
         if mod_name in sys.modules:
             mod = sys.modules[mod_name]
-            # Check if it's a MagicMock/Mock instance
-            if isinstance(mod, (MagicMock, Mock)):
-                _remove_module_and_submodules(mod_name)
-                continue
-            # Check if it has broken __spec__
-            if not hasattr(mod, '__spec__') or mod.__spec__ is None:
-                _remove_module_and_submodules(mod_name)
-                continue
-            # Check if __spec__ is a real ModuleSpec (not a mock)
-            if not isinstance(mod.__spec__, importlib.machinery.ModuleSpec):
+            if not _is_valid_real_module(mod):
                 _remove_module_and_submodules(mod_name)
 
 
@@ -1852,25 +1868,15 @@ def _initialize_prometheus_stubs():
     FIX: Uses proper ModuleSpec to prevent AttributeError: __spec__
     FIX: Detects and replaces mock modules with real imports
     """
-    from unittest.mock import MagicMock, Mock
-    
     # Check if already loaded WITH A REAL MODULE (not a mock)
     if "prometheus_client" in sys.modules:
         existing_mod = sys.modules["prometheus_client"]
-        # Check if it's a Mock instance
-        if isinstance(existing_mod, (MagicMock, Mock)):
+        if not _is_valid_real_module(existing_mod):
+            # It's a mock or broken stub - remove it
             _remove_module_and_submodules("prometheus_client")
-        # Check if it's a real module with proper __spec__
-        elif hasattr(existing_mod, '__spec__') and existing_mod.__spec__ is not None:
-            # Check if __spec__ is a real ModuleSpec (not a mock)
-            if isinstance(existing_mod.__spec__, importlib.machinery.ModuleSpec):
-                return  # Real module already loaded
-            else:
-                # __spec__ exists but is not a real ModuleSpec, remove it
-                _remove_module_and_submodules("prometheus_client")
         else:
-            # No __spec__ or __spec__ is None, remove it
-            _remove_module_and_submodules("prometheus_client")
+            # Real module already loaded
+            return
     
     # Try to import the real prometheus_client
     try:
