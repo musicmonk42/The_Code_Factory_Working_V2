@@ -141,9 +141,9 @@ def _lazy_load_optional_dependencies():
     
     # intent_capture - collaborative agent functionality
     try:
-        from intent_capture.agent_core import AgentTeam, CollaborativeAgent as _CollaborativeAgent
+        from intent_capture.agent_core import AgentTeam as _AgentTeam, CollaborativeAgent as _CollaborativeAgent
         CollaborativeAgent = _CollaborativeAgent
-        AgentTeam = AgentTeam
+        AgentTeam = _AgentTeam
     except ImportError:
         CollaborativeAgent = None
         AgentTeam = None
@@ -175,7 +175,7 @@ def _lazy_load_optional_dependencies():
     
     # simulation.runners - simulation runner functionality
     try:
-        from self_fixing_engineer.simulation.runners import MyBetterRunner as _MyBetterRunner, MyCustomRunner as _MyCustomRunner
+        from self_fixing_engineer.simulation.runners import MyCustomRunner as _MyCustomRunner, MyBetterRunner as _MyBetterRunner
         MyCustomRunner = _MyCustomRunner
         MyBetterRunner = _MyBetterRunner
     except Exception as e:
