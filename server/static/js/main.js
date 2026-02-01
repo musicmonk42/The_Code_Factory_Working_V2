@@ -634,21 +634,33 @@ async function loadAgentStatus() {
         const agentsList = document.getElementById('agents-status-list');
         const availableCount = document.getElementById('available-agents-count');
         
-        if (!data.agents || data.agents.length === 0) {
+        // The API returns agents as a dictionary {agentName: {available: bool, ...}}
+        // and also provides available_agents/unavailable_agents as arrays
+        const agentsDict = data.agents || {};
+        const totalAgents = data.total_agents || Object.keys(agentsDict).length;
+        const availableAgentsCount = data.available_agents ? data.available_agents.length : 0;
+        
+        if (totalAgents === 0) {
             agentsList.innerHTML = '<p class="no-data">No agents found</p>';
             availableCount.textContent = '0 / 0';
             return;
         }
         
-        const available = data.agents.filter(a => a.status === 'available').length;
-        availableCount.textContent = `${available} / ${data.agents.length}`;
+        availableCount.textContent = `${availableAgentsCount} / ${totalAgents}`;
         
-        agentsList.innerHTML = data.agents.map(agent => {
-            const isAvailable = agent.status === 'available';
+        // Convert agents dictionary to array for rendering
+        const agentsArray = Object.entries(agentsDict).map(([name, info]) => ({
+            name: name,
+            available: info.available,
+            error: info.error ? (info.error.message || JSON.stringify(info.error)) : null
+        }));
+        
+        agentsList.innerHTML = agentsArray.map(agent => {
+            const isAvailable = agent.available;
             return `
                 <div class="agent-status-item ${isAvailable ? 'available' : 'unavailable'}">
                     <div>
-                        <div class="agent-name">${escapeHtml(agent.name || agent.type)}</div>
+                        <div class="agent-name">${escapeHtml(agent.name)}</div>
                         ${!isAvailable && agent.error ? `
                             <div class="error-details">
                                 ${escapeHtml(agent.error)}
