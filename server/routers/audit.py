@@ -198,8 +198,9 @@ async def query_all_audit_logs(
             errors["guardrails"] = str(e)
     
     # Sort all logs by timestamp (newest first)
+    # Use "or" to handle None values in addition to missing keys
     aggregated_logs.sort(
-        key=lambda x: x.get("timestamp", "1970-01-01T00:00:00Z"),
+        key=lambda x: x.get("timestamp") or "1970-01-01T00:00:00Z",
         reverse=True
     )
     
@@ -266,9 +267,9 @@ async def _query_arbiter_audit_logs(
                     
                     # Parse timestamp for range filtering
                     entry_time = entry.get("timestamp")
-                    if start_time and entry_time < start_time:
+                    if start_time and entry_time and entry_time < start_time:
                         continue
-                    if end_time and entry_time > end_time:
+                    if end_time and entry_time and entry_time > end_time:
                         continue
                     
                     logs.append({
@@ -406,9 +407,9 @@ async def _query_simulation_audit_logs(
                         continue
                     
                     entry_time = entry.get("timestamp")
-                    if start_time and entry_time < start_time:
+                    if start_time and entry_time and entry_time < start_time:
                         continue
-                    if end_time and entry_time > end_time:
+                    if end_time and entry_time and entry_time > end_time:
                         continue
                     
                     logs.append({
@@ -472,9 +473,9 @@ async def _query_guardrails_audit_logs(
                         continue
                     
                     entry_time = entry.get("timestamp")
-                    if start_time and entry_time < start_time:
+                    if start_time and entry_time and entry_time < start_time:
                         continue
-                    if end_time and entry_time > end_time:
+                    if end_time and entry_time and entry_time > end_time:
                         continue
                     
                     logs.append({
