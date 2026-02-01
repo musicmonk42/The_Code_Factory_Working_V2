@@ -25,6 +25,13 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-devpassword}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-devpassword}
+      # Database connection - uses asyncpg driver for SQLAlchemy async support
+      - DB_PATH=postgresql+asyncpg://codefactory:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/codefactory_dev
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379
+      # Development mode settings
+      - DEV_MODE=1
+      - APP_ENV=development
+      - LOG_LEVEL=DEBUG
 
   redis:
     image: redis:7.4-alpine
