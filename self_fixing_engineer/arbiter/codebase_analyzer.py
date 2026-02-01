@@ -311,15 +311,39 @@ def _get_or_create_metric(metric_class, name, description, labelnames=None, **kw
     except ValueError as e:
         if "Duplicated timeseries" in str(e):
             # Metric already exists in registry, retrieve it
-            for collector in list(REGISTRY._collector_to_names.keys()):
-                if hasattr(collector, "_name") and collector._name == name:
+            # First, try the _names_to_collectors mapping (available in prometheus_client)
+            if hasattr(REGISTRY, "_names_to_collectors"):
+                collector = REGISTRY._names_to_collectors.get(name)
+                if collector is not None:
                     logger.debug(
                         f"Metric '{name}' already registered, reusing existing instance"
                     )
                     return collector
-            # If we can't find the metric in registry, log and return dummy
-            logger.warning(
-                f"Metric '{name}' registered but couldn't retrieve, using dummy"
+            
+            # Fallback: iterate through collectors to find the one with matching name
+            for collector in list(REGISTRY._collector_to_names.keys()):
+                # Check various attributes that might hold the metric name
+                collector_name = getattr(collector, "_name", None) or getattr(collector, "describe", lambda: [])
+                if collector_name == name:
+                    logger.debug(
+                        f"Metric '{name}' already registered, reusing existing instance"
+                    )
+                    return collector
+                # Check if this collector's describe() returns a metric with matching name
+                try:
+                    for metric_family in collector.describe():
+                        if metric_family.name == name:
+                            logger.debug(
+                                f"Metric '{name}' already registered, reusing existing instance"
+                            )
+                            return collector
+                except Exception:
+                    pass
+            
+            # If we still can't find the metric, log at debug level (not warning) 
+            # and return a dummy - this is expected in some testing scenarios
+            logger.debug(
+                f"Metric '{name}' appears registered but couldn't retrieve collector, using dummy"
             )
             return _create_dummy_metric()
         else:
