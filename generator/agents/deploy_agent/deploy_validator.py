@@ -989,109 +989,109 @@ if HAS_AIOHTTP:
 
     @routes.post("/validate")
     async def api_validate(request: Request) -> Response:
-    """
-    API endpoint to validate a configuration file.
-    """
-    with tracer.start_as_current_span("api_validate") as span:
-        time.time()
-        target = "unknown"  # Set initial target for error logging
-        try:
-            data = await request.json()
-            config_content = data.get("config_content")
-            target = data.get("target", "docker")
+        """
+        API endpoint to validate a configuration file.
+        """
+        with tracer.start_as_current_span("api_validate") as span:
+            time.time()
+            target = "unknown"  # Set initial target for error logging
+            try:
+                data = await request.json()
+                config_content = data.get("config_content")
+                target = data.get("target", "docker")
 
-            span.set_attribute("target", target)
+                span.set_attribute("target", target)
 
-            if not config_content:
-                raise web.HTTPBadRequest(reason="'config_content' is required.")
+                if not config_content:
+                    raise web.HTTPBadRequest(reason="'config_content' is required.")
 
-            # --- FIX: Use singleton registry from app context ---
-            validator_registry: ValidatorRegistry = request.app["validator_registry"]
-            validator = validator_registry.get_validator(target)
-            # --------------------------------------------------
+                # --- FIX: Use singleton registry from app context ---
+                validator_registry: ValidatorRegistry = request.app["validator_registry"]
+                validator = validator_registry.get_validator(target)
+                # --------------------------------------------------
 
-            result = await validator.validate(config_content, target)
+                result = await validator.validate(config_content, target)
 
-            # Scrub the output report to ensure no secrets/PII are returned
-            scrubbed_result = json.loads(scrub_text(json.dumps(result)))
+                # Scrub the output report to ensure no secrets/PII are returned
+                scrubbed_result = json.loads(scrub_text(json.dumps(result)))
 
-            span.set_status(Status(StatusCode.OK))
-            return web.json_response(scrubbed_result)
-        except web.HTTPError as e:
-            span.set_status(Status(StatusCode.ERROR, str(e)))
-            raise
-        except ValueError as e:
-            span.set_status(Status(StatusCode.ERROR, str(e)))
-            return web.json_response(
-                {"status": "error", "message": f"Validation setup error: {str(e)}"},
-                status=400,
-            )
-        except Exception as e:
-            logger.error(
-                "API /validate encountered an error for target %s: %s",
-                target,
-                e,
-                exc_info=True,
-            )
-            span.set_status(Status(StatusCode.ERROR, str(e)))
-            return web.json_response({"status": "error", "message": str(e)}, status=500)
-
-
-@routes.post("/fix")
-async def api_fix(request: Request) -> Response:
-    """
-    API endpoint to fix a configuration file using LLM auto-correction.
-    """
-    with tracer.start_as_current_span("api_fix") as span:
-        time.time()
-        target = "unknown"  # Set initial target for error logging
-        try:
-            data = await request.json()
-            config_content = data.get("config_content")
-            issues = data.get("issues", [])
-            target = data.get("target", "docker")
-
-            span.set_attribute("target", target)
-
-            if not config_content or not issues:
-                raise web.HTTPBadRequest(
-                    reason="'config_content' and 'issues' are required."
+                span.set_status(Status(StatusCode.OK))
+                return web.json_response(scrubbed_result)
+            except web.HTTPError as e:
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
+            except ValueError as e:
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                return web.json_response(
+                    {"status": "error", "message": f"Validation setup error: {str(e)}"},
+                    status=400,
                 )
+            except Exception as e:
+                logger.error(
+                    "API /validate encountered an error for target %s: %s",
+                    target,
+                    e,
+                    exc_info=True,
+                )
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                return web.json_response({"status": "error", "message": str(e)}, status=500)
 
-            # --- FIX: Use singleton registry from app context ---
-            validator_registry: ValidatorRegistry = request.app["validator_registry"]
-            validator = validator_registry.get_validator(target)
-            # --------------------------------------------------
 
-            fixed_content = await validator.fix(config_content, issues, target)
+    @routes.post("/fix")
+    async def api_fix(request: Request) -> Response:
+        """
+        API endpoint to fix a configuration file using LLM auto-correction.
+        """
+        with tracer.start_as_current_span("api_fix") as span:
+            time.time()
+            target = "unknown"  # Set initial target for error logging
+            try:
+                data = await request.json()
+                config_content = data.get("config_content")
+                issues = data.get("issues", [])
+                target = data.get("target", "docker")
 
-            span.set_status(Status(StatusCode.OK))
-            return web.json_response(
-                {"status": "success", "fixed_content": fixed_content}
-            )
-        except web.HTTPError as e:
-            span.set_status(Status(StatusCode.ERROR, str(e)))
-            raise
-        except (ValueError, RuntimeError) as e:
-            logger.error(
-                "API /fix failed to fix config for target %s: %s",
-                target,
-                e,
-                exc_info=True,
-            )
-            span.set_status(Status(StatusCode.ERROR, str(e)))
-            return web.json_response(
-                {"status": "error", "message": f"Auto-fix failed: {str(e)}"}, status=424
-            )  # Failed Dependency
-        except Exception as e:
-            logger.error(
-                "API /fix encountered an error for target %s: %s",
-                target,
-                e,
-                exc_info=True,
-            )
-            span.set_status(Status(StatusCode.ERROR, str(e)))
-            return web.json_response({"status": "error", "message": str(e)}, status=500)
+                span.set_attribute("target", target)
+
+                if not config_content or not issues:
+                    raise web.HTTPBadRequest(
+                        reason="'config_content' and 'issues' are required."
+                    )
+
+                # --- FIX: Use singleton registry from app context ---
+                validator_registry: ValidatorRegistry = request.app["validator_registry"]
+                validator = validator_registry.get_validator(target)
+                # --------------------------------------------------
+
+                fixed_content = await validator.fix(config_content, issues, target)
+
+                span.set_status(Status(StatusCode.OK))
+                return web.json_response(
+                    {"status": "success", "fixed_content": fixed_content}
+                )
+            except web.HTTPError as e:
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
+            except (ValueError, RuntimeError) as e:
+                logger.error(
+                    "API /fix failed to fix config for target %s: %s",
+                    target,
+                    e,
+                    exc_info=True,
+                )
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                return web.json_response(
+                    {"status": "error", "message": f"Auto-fix failed: {str(e)}"}, status=424
+                )  # Failed Dependency
+            except Exception as e:
+                logger.error(
+                    "API /fix encountered an error for target %s: %s",
+                    target,
+                    e,
+                    exc_info=True,
+                )
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                return web.json_response({"status": "error", "message": str(e)}, status=500)
 
 
     app = web.Application()

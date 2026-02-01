@@ -1739,40 +1739,40 @@ if HAS_AIOHTTP:
 
     @routes.post("/handle_response")
     async def api_handle_response(request: Request) -> Response:
-    """
-    API endpoint to handle an LLM-generated raw response.
-    Expects JSON payload with 'raw_response', 'output_format', 'to_format' (optional), 'run_id' (optional), 'repo_path' (optional).
-    """
-    try:
-        data = await request.json()
-        raw_response = data.get("raw_response")
-        output_format = data.get("output_format", "dockerfile")
-        to_format = data.get("to_format")
-        run_id = data.get("run_id", str(uuid.uuid4()))
-        repo_path = data.get("repo_path", ".")  # Get repo_path for context/enrichment
+        """
+        API endpoint to handle an LLM-generated raw response.
+        Expects JSON payload with 'raw_response', 'output_format', 'to_format' (optional), 'run_id' (optional), 'repo_path' (optional).
+        """
+        try:
+            data = await request.json()
+            raw_response = data.get("raw_response")
+            output_format = data.get("output_format", "dockerfile")
+            to_format = data.get("to_format")
+            run_id = data.get("run_id", str(uuid.uuid4()))
+            repo_path = data.get("repo_path", ".")  # Get repo_path for context/enrichment
 
-        if not raw_response:
-            raise web.HTTPBadRequest(reason="'raw_response' is required.")
+            if not raw_response:
+                raise web.HTTPBadRequest(reason="'raw_response' is required.")
 
-        # --- FIX: Get singleton registry from app context ---
-        handler_registry: HandlerRegistry = request.app["handler_registry"]
+            # --- FIX: Get singleton registry from app context ---
+            handler_registry: HandlerRegistry = request.app["handler_registry"]
 
-        result = await handle_deploy_response(
-            raw_response,
-            handler_registry,  # <-- PASS THE REGISTRY
-            output_format,
-            to_format,
-            run_id,
-            repo_path,
-        )
-        # ----------------------------------------------------
+            result = await handle_deploy_response(
+                raw_response,
+                handler_registry,  # <-- PASS THE REGISTRY
+                output_format,
+                to_format,
+                run_id,
+                repo_path,
+            )
+            # ----------------------------------------------------
 
-        return web.json_response(result)
-    except web.HTTPError:
-        raise  # Re-raise aiohttp HTTP exceptions
-    except Exception as e:
-        logger.error(f"API handle_response encountered an error: {e}", exc_info=True)
-        return web.json_response({"status": "error", "message": str(e)}, status=500)
+            return web.json_response(result)
+        except web.HTTPError:
+            raise  # Re-raise aiohttp HTTP exceptions
+        except Exception as e:
+            logger.error(f"API handle_response encountered an error: {e}", exc_info=True)
+            return web.json_response({"status": "error", "message": str(e)}, status=500)
 
 
     app = web.Application()
