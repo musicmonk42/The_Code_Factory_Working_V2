@@ -25,8 +25,8 @@ try:
 
     MERKLELIB_AVAILABLE = True
 except ImportError:
-    logging.getLogger(__name__).critical(
-        "merklelib library not found. MerkleTree functionality will not be available."
+    logging.getLogger(__name__).info(
+        "merklelib library not found. MerkleTree will operate in mock mode."
     )
     MERKLELIB_AVAILABLE = False
 

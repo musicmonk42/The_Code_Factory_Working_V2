@@ -62,8 +62,8 @@ try:
 
     FEAST_AVAILABLE = True
 except ImportError:
-    logging.getLogger(__name__).critical(
-        "Feast library not found. FeatureStoreClient cannot operate in real mode."
+    logging.getLogger(__name__).info(
+        "Feast library not found. FeatureStoreClient will operate in mock mode."
     )
     FEAST_AVAILABLE = False
 

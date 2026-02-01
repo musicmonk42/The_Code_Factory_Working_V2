@@ -64,8 +64,8 @@ try:
     ETHEREUM_AVAILABLE: Final[bool] = True
     Account.enable_unaudited_hdwallet_features()
 except ImportError:
-    logging.getLogger(__name__).critical(
-        "web3.py library not found. Ethereum DLT integration will not function."
+    logging.getLogger(__name__).info(
+        "web3.py library not found. Ethereum DLT integration will operate in mock mode."
     )
     ETHEREUM_AVAILABLE: Final[bool] = False
 
