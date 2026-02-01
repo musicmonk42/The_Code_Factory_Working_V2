@@ -1020,6 +1020,12 @@ class CryptoProviderFactory:
             )
             return noop_instance
         
+        # Add null check for provider_type
+        if provider_type is None:
+            # Use default from environment or fall back to 'software'
+            provider_type = os.getenv("AUDIT_CRYPTO_PROVIDER_TYPE", "software")
+            logger.info(f"No provider_type specified, using default: {provider_type}")
+        
         provider_type_lower = provider_type.lower()
 
         # Check if real provider is forced in test environment
