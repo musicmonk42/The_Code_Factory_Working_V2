@@ -23,7 +23,9 @@ services:
     environment:
       POSTGRES_DB: codefactory
       POSTGRES_USER: codefactory
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}  # Default for development
+      # SECURITY WARNING: Default password is for DEVELOPMENT ONLY
+      # In production, ALWAYS set POSTGRES_PASSWORD via environment variable or secrets manager
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
     ports:
       - "5432:5432"
     volumes:

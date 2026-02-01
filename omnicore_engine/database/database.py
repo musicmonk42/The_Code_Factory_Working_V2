@@ -789,7 +789,7 @@ class Database:
         # Lazy initialization to avoid event loop requirement at import time
         self._rotation_lock = None
 
-    @retry(tries=10, delay=2, backoff=2, exceptions=(Exception,))
+    @retry(tries=10, delay=2, backoff=2, exceptions=(sqlalchemy.exc.OperationalError, ConnectionError, TimeoutError))
     async def test_connection(self) -> bool:
         """
         Test database connection with retry logic.
@@ -798,7 +798,9 @@ class Database:
             True if connection is successful, False otherwise.
             
         Raises:
-            Exception: If connection fails after all retries.
+            OperationalError: If connection fails after all retries.
+            ConnectionError: If connection cannot be established.
+            TimeoutError: If connection times out after all retries.
         """
         try:
             async with self.engine.connect() as conn:
@@ -806,7 +808,7 @@ class Database:
                 await conn.execute(text("SELECT 1"))
                 logger.info("Database connection test successful")
                 return True
-        except Exception as e:
+        except (sqlalchemy.exc.OperationalError, ConnectionError, TimeoutError) as e:
             logger.error(f"Database connection test failed: {e}", exc_info=True)
             raise
 
@@ -880,6 +882,11 @@ class Database:
     @circuit(failure_threshold=5, recovery_timeout=60)
     @retry(tries=10, delay=2, backoff=2, exceptions=(Exception,))
     async def create_tables(self):
+        # NOTE: Circuit breaker and retry patterns work together here:
+        # - Retry handles transient failures (e.g., temporary connection issues)
+        # - Circuit breaker prevents cascading failures by stopping retries after 5 consecutive failures
+        # - After circuit opens, it will recover after 60 seconds
+        # This combination ensures resilience while preventing system overload
         DB_OPERATIONS.labels(operation="create_tables").inc()
         try:
             # WORKAROUND: pytest's conftest.py has an autouse fixture that clears Base.metadata

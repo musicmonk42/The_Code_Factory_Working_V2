@@ -970,33 +970,48 @@ def require_scopes(required_scopes: List[str]):
 
 
 # --- Lifespan Context Manager ---
+# Global state for tracking startup component health
+_startup_state = {
+    "database_available": False,
+    "runner_available": False,
+    "parser_available": False,
+}
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Lifespan context manager for FastAPI application.
     Replaces deprecated @app.on_event("startup") and @app.on_event("shutdown").
+    
+    Tracks component initialization status in _startup_state for health check reporting.
     """
     # Startup
     logger.info("Application startup event triggered.")
     try:
         create_db_tables()  # Create database tables on startup
         logger.info("Database tables created successfully.")
+        _startup_state["database_available"] = True
     except Exception as e:
         logger.critical(f"Startup failed due to DB error: {e}", exc_info=True)
+        _startup_state["database_available"] = False
         # Allow startup to continue with degraded functionality
-        # Health checks will report the issue
+        # Health checks will report the issue via _startup_state
     
     try:
         get_runner_instance()  # Initialize Runner
         logger.info("Runner instance initialized.")
+        _startup_state["runner_available"] = True
     except Exception as e:
         logger.error(f"Failed to initialize Runner: {e}", exc_info=True)
+        _startup_state["runner_available"] = False
     
     try:
         get_parser_instance()  # Initialize Parser
         logger.info("Parser instance initialized.")
+        _startup_state["parser_available"] = True
     except Exception as e:
         logger.error(f"Failed to initialize Parser: {e}", exc_info=True)
+        _startup_state["parser_available"] = False
     
     logger.info("Application startup complete. Singletons initialized.")
     
