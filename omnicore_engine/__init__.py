@@ -8,6 +8,7 @@ heavy initialization during pytest collection or package import.
 """
 
 import logging
+import os
 import sys
 from typing import Any
 
@@ -22,13 +23,10 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 # Detect pytest collection phase to skip expensive imports
-import os
-
 PYTEST_COLLECTING = (
     os.getenv('PYTEST_COLLECTING_ONLY') == '1' or
     os.getenv('PYTEST_CURRENT_TEST') is not None or
-    '--collect-only' in sys.argv or
-    '--co' in sys.argv or
+    any(arg in sys.argv for arg in ['--collect-only', '--co']) or
     any('--collect' in arg for arg in sys.argv)
 )
 
