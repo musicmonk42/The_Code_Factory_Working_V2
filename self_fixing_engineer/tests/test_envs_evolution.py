@@ -26,7 +26,7 @@ try:
 except ImportError:
     DEAP_AVAILABLE = False
 
-from evolution import (
+from envs.evolution import (
     ConfigurationSpace,
     EvolutionConfig,
     FitnessEvaluator,

@@ -11,11 +11,10 @@ import pytest
 
 # Dynamically import the plugin to be tested
 try:
-    import demo_python_plugin
+    from plugins import demo_python_plugin
 except ImportError:
-    # Handle the case where the demo_python_plugin.py file might be in a parent directory
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    import demo_python_plugin
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+    from plugins import demo_python_plugin
 
 # Import components from the plugin
 from plugins.demo_python_plugin import (
