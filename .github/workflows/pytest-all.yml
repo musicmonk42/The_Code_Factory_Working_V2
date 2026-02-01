@@ -524,12 +524,12 @@ jobs:
           echo "=== Comprehensive aiohttp verification ==="
           # Critical verification - fail fast if any component is broken
           python -c "
-from aiohttp import web
-from aiohttp.web import Request, Response, RouteTableDef
-import aiohttp.web_request
-import aiohttp.helpers
-import aiohttp.client_exceptions
-print('✓ All aiohttp components verified successfully')
+          from aiohttp import web
+          from aiohttp.web import Request, Response, RouteTableDef
+          import aiohttp.web_request
+          import aiohttp.helpers
+          import aiohttp.client_exceptions
+          print('✓ All aiohttp components verified successfully')
           " || {
             echo "CRITICAL: aiohttp installation failed after clean install"
             echo "Diagnostic information:"
