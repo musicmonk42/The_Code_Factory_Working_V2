@@ -282,37 +282,51 @@ _runner_metrics = None
 _runner_providers = None
 
 try:
-    # Import order: alphabetical by module name for consistency
+    # FIX: Import order is critical to avoid circular imports
+    # runner_logging MUST be imported before runner_core because runner_core
+    # imports from runner_logging and needs it to be fully initialized.
+    # Similarly, modules are ordered by their dependencies.
+
+    # Level 1: No internal runner dependencies (safe to import first)
     from . import alerting as _runner_alerting
-
     _ensure_submodule_alias("alerting")
-    from . import feedback_handlers as _runner_feedback_handlers
 
-    _ensure_submodule_alias("feedback_handlers")
     from . import providers as _runner_providers
-
     _ensure_submodule_alias("providers")
-    from . import runner_config as _runner_config
 
-    _ensure_submodule_alias("runner_config")
     from . import runner_contracts as _runner_contracts
-
     _ensure_submodule_alias("runner_contracts")
-    from . import runner_core as _runner_core
 
-    _ensure_submodule_alias("runner_core")
+    # Level 2: runner_errors depends on runner_security_utils
+    # but runner_security_utils has fallbacks for circular imports
     from . import runner_errors as _runner_errors
-
     _ensure_submodule_alias("runner_errors")
+
+    # Level 3: runner_config depends on runner_errors
+    from . import runner_config as _runner_config
+    _ensure_submodule_alias("runner_config")
+
+    # Level 4: runner_logging depends on pydantic (external) only now
     from . import runner_logging as _runner_logging
-
     _ensure_submodule_alias("runner_logging")
+
+    # Level 5: runner_metrics can be imported after runner_logging
     from . import runner_metrics as _runner_metrics
-
     _ensure_submodule_alias("runner_metrics")
-    from . import runner_security_utils as _runner_security_utils
 
+    # Level 6: feedback_handlers may depend on runner_logging
+    from . import feedback_handlers as _runner_feedback_handlers
+    _ensure_submodule_alias("feedback_handlers")
+
+    # Level 7: runner_security_utils has function-level imports from runner_logging
+    from . import runner_security_utils as _runner_security_utils
     _ensure_submodule_alias("runner_security_utils")
+
+    # Level 8: runner_core depends on most other modules
+    # Import it last to ensure all dependencies are available
+    from . import runner_core as _runner_core
+    _ensure_submodule_alias("runner_core")
+
 except ImportError:
     # Circular import during initial load - modules will be available later
     # when accessed directly (e.g., from runner.alerting import send_alert)

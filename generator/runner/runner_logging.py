@@ -40,6 +40,20 @@ except TypeError:
     # Fallback for older OpenTelemetry versions
     tracer = None
 
+# --- FIX: Define logger early to prevent circular import issues ---
+# This must be defined before any imports that might trigger circular dependencies
+# (e.g., runner_config, runner_errors, etc.)
+logger = logging.getLogger("runner")
+if not logger.handlers:
+    _initial_handler = logging.StreamHandler(sys.stdout)
+    _initial_formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    _initial_handler.setFormatter(_initial_formatter)
+    logger.addHandler(_initial_handler)
+    logger.setLevel(logging.INFO)
+# --- END FIX ---
+
 SIGNING_ENABLED = (
     os.getenv("DEV_MODE", "0") != "1"
     and os.getenv("TESTING") != "1"
@@ -155,7 +169,9 @@ except Exception:
 # from runner.runner_feedback_handlers import collect_feedback
 
 # --- FIX: SPLIT CIRCULAR IMPORT ---
-from runner.runner_config import SecretStr  # Import SecretStr for runtime checks
+# FIX: Import SecretStr directly from pydantic instead of runner.runner_config
+# to break circular import chain: runner_logging -> runner_config -> runner_errors -> runner_security_utils -> runner
+from pydantic import SecretStr  # Import SecretStr for runtime checks
 
 if TYPE_CHECKING:
     from runner.runner_config import (
@@ -2221,17 +2237,8 @@ def search_logs(
     return results
 
 
-# Initial basic logging setup (before configure_logging_from_config is called by main.py)
-logger = logging.getLogger("runner")
-if not logger.handlers:
-    initial_handler = logging.StreamHandler(sys.stdout)
-    initial_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    initial_handler.setFormatter(initial_formatter)
-    logger.addHandler(initial_handler)
-    logger.setLevel(logging.INFO)
-
+# FIX: Logger is now defined early in the module (after tracer initialization)
+# to prevent circular import issues. The following setup configures the audit logger.
 logging.getLogger("runner.audit").propagate = False
 
 
