@@ -2527,6 +2527,9 @@ window.currentAuditLogs = [];
 function initAuditLogs() {
     // Auto-refresh functionality can be enabled here
     window.auditAutoRefresh = null;
+    
+    // Load event types dynamically
+    loadEventTypes();
 }
 
 /**
@@ -2534,6 +2537,7 @@ function initAuditLogs() {
  */
 async function loadAuditLogs() {
     try {
+        const module = document.getElementById('audit-module-filter')?.value || '';
         const eventType = document.getElementById('audit-event-type').value;
         const jobId = document.getElementById('audit-job-id').value;
         const startTime = document.getElementById('audit-start-time').value;
@@ -2542,17 +2546,36 @@ async function loadAuditLogs() {
         
         // Build query params
         const params = new URLSearchParams();
+        if (module) params.append('module', module);
         if (eventType) params.append('event_type', eventType);
         if (jobId) params.append('job_id', jobId);
         if (startTime) params.append('start_time', new Date(startTime).toISOString());
         if (endTime) params.append('end_time', new Date(endTime).toISOString());
         params.append('limit', limit);
         
-        const response = await fetch(`${API_BASE}/generator/audit/logs?${params}`);
+        // Call unified endpoint
+        const response = await fetch(`${API_BASE}/audit/logs/all?${params}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const data = await response.json();
         
-        displayAuditLogs(data);
-        updateAuditStats(data);
+        // Convert to expected format
+        displayAuditLogs({ logs: data.aggregated_logs });
+        updateAuditStats({ logs: data.aggregated_logs });
+        
+        // Show modules queried
+        const modulesEl = document.getElementById('audit-modules-queried');
+        if (modulesEl) {
+            modulesEl.textContent = data.modules_queried.join(', ');
+        }
+        
+        // Show warning if there were errors
+        if (data.errors && Object.keys(data.errors).length > 0) {
+            showWarning(`Some modules had errors: ${Object.keys(data.errors).join(', ')}`);
+        }
         
         document.getElementById('audit-last-updated').textContent = new Date().toLocaleTimeString();
     } catch (error) {
@@ -2568,7 +2591,7 @@ function displayAuditLogs(data) {
     const tbody = document.getElementById('audit-logs-tbody');
     
     if (!data.logs || data.logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="no-data">No audit logs found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="no-data">No audit logs found</td></tr>';
         window.currentAuditLogs = [];
         return;
     }
@@ -2578,12 +2601,13 @@ function displayAuditLogs(data) {
     
     tbody.innerHTML = data.logs.map((log, index) => `
         <tr onclick="showAuditDetailByIndex(${index})">
-            <td>${formatTimestamp(log.timestamp)}</td>
-            <td><span class="badge event-${log.event_type || 'unknown'}">${log.event_type || 'N/A'}</span></td>
-            <td>${log.job_id || 'N/A'}</td>
-            <td>${log.action || log.name || 'N/A'}</td>
-            <td>${log.user || log.actor || 'system'}</td>
-            <td><span class="status-badge ${log.status || 'unknown'}">${log.status || 'N/A'}</span></td>
+            <td><span class="badge module-${escapeHtml(log.module || 'unknown')}">${escapeHtml(log.module || 'N/A')}</span></td>
+            <td>${escapeHtml(formatTimestamp(log.timestamp))}</td>
+            <td><span class="badge event-${escapeHtml(log.event_type || 'unknown')}">${escapeHtml(log.event_type || 'N/A')}</span></td>
+            <td>${escapeHtml(log.job_id || 'N/A')}</td>
+            <td>${escapeHtml(log.action || log.name || 'N/A')}</td>
+            <td>${escapeHtml(log.user || log.actor || 'system')}</td>
+            <td><span class="status-badge ${escapeHtml(log.status || 'unknown')}">${escapeHtml(log.status || 'N/A')}</span></td>
             <td><button class="btn-link" onclick="event.stopPropagation(); showAuditDetailByIndex(${index})">View</button></td>
         </tr>
     `).join('');
@@ -2670,11 +2694,38 @@ function refreshAuditLogs() {
  * Clear all audit log filters
  */
 function clearAuditFilters() {
+    document.getElementById('audit-module-filter').value = '';
     document.getElementById('audit-event-type').value = '';
     document.getElementById('audit-job-id').value = '';
     document.getElementById('audit-start-time').value = '';
     document.getElementById('audit-end-time').value = '';
     document.getElementById('audit-limit').value = '100';
+}
+
+/**
+ * Load event types dynamically from API
+ */
+async function loadEventTypes() {
+    try {
+        const response = await fetch(`${API_BASE}/audit/logs/event-types`);
+        const data = await response.json();
+        
+        const eventTypeSelect = document.getElementById('audit-event-type');
+        if (!eventTypeSelect) return;
+        
+        eventTypeSelect.innerHTML = '<option value="">All Events</option>';
+        
+        // Populate with all event types
+        data.all_event_types_sorted.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            eventTypeSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Failed to load event types:', error);
+        // Keep default event types if API call fails
+    }
 }
 
 /**

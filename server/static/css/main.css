@@ -1466,6 +1466,42 @@ h3 {
     color: var(--text-secondary);
 }
 
+/* Module badges */
+.badge.module-generator {
+    background: #3498db;
+    color: #fff;
+}
+
+.badge.module-arbiter {
+    background: #9b59b6;
+    color: #fff;
+}
+
+.badge.module-testgen {
+    background: #2ecc71;
+    color: #000;
+}
+
+.badge.module-simulation {
+    background: #e74c3c;
+    color: #fff;
+}
+
+.badge.module-omnicore {
+    background: #f39c12;
+    color: #000;
+}
+
+.badge.module-guardrails {
+    background: #1abc9c;
+    color: #fff;
+}
+
+.badge.module-unknown {
+    background: var(--surface-light);
+    color: var(--text-secondary);
+}
+
 .status-badge {
     display: inline-block;
     padding: var(--spacing-xs) var(--spacing-sm);
