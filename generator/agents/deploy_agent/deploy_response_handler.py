@@ -39,9 +39,7 @@ from typing import Any, Callable, Dict, List, Optional, Type
 import aiofiles  # Explicitly imported for async file operations
 import hcl2  # For HCL (Terraform) parsing
 from aiohttp import web
-from aiohttp.web_request import Request
-from aiohttp.web_response import Response
-from aiohttp.web_routedef import RouteTableDef
+from aiohttp.web import Request, Response, RouteTableDef
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
 from ruamel.yaml import (  # For YAML preservation (ruamel.yaml is generally better than pyyaml for round-tripping)

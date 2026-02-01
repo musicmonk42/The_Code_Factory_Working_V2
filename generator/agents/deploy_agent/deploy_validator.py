@@ -30,9 +30,7 @@ from typing import Any, Dict, List, Type
 
 import aiofiles  # For asynchronous file operations
 from aiohttp import web
-from aiohttp.web_request import Request
-from aiohttp.web_response import Response
-from aiohttp.web_routedef import RouteTableDef
+from aiohttp.web import Request, Response, RouteTableDef
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
 from ruamel.yaml import (
