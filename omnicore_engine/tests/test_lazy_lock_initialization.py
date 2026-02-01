@@ -17,6 +17,9 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 
+# Constants
+MAX_IMPORT_TIME_SECONDS = 5.0
+
 
 def test_import_speed():
     """Test that imports complete quickly (< 5 seconds)."""
@@ -32,8 +35,8 @@ def test_import_speed():
         elapsed = time.time() - start
         print(f"  ✅ Imported in {elapsed:.2f} seconds")
         
-        if elapsed > 5.0:
-            print(f"  ⚠️  WARNING: Import took longer than expected (>{5}s)")
+        if elapsed > MAX_IMPORT_TIME_SECONDS:
+            print(f"  ⚠️  WARNING: Import took longer than expected (>{MAX_IMPORT_TIME_SECONDS}s)")
             return False
         
         # Verify lock is None at import time
@@ -57,8 +60,8 @@ def test_import_speed():
         elapsed = time.time() - start
         print(f"  ✅ Imported in {elapsed:.2f} seconds")
         
-        if elapsed > 5.0:
-            print(f"  ⚠️  WARNING: Import took longer than expected (>{5}s)")
+        if elapsed > MAX_IMPORT_TIME_SECONDS:
+            print(f"  ⚠️  WARNING: Import took longer than expected (>{MAX_IMPORT_TIME_SECONDS}s)")
     except Exception as e:
         print(f"  ⚠️  Import failed (may be due to missing dependencies): {e.__class__.__name__}")
     
