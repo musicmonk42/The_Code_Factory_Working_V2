@@ -49,15 +49,15 @@ except ImportError:
 
 # Assume RunnerConfig and metrics are available
 # FIX: Correct imports to use the canonical runner.runner_* names
-from runner.runner_config import RunnerConfig
+from .runner_config import RunnerConfig
 
 # FIX: Removed TestExecutionError as it's not in the user's runner_errors.py
-from runner.runner_errors import (
+from .runner_errors import (
     ERROR_CODE_REGISTRY as error_codes,
 )  # Import error codes
-from runner.runner_errors import RunnerError, TimeoutError  # Import specific errors
-from runner.runner_logging import logger
-from runner.runner_metrics import prom
+from .runner_errors import RunnerError, TimeoutError  # Import specific errors
+from .runner_logging import logger
+from .runner_metrics import prom
 
 # Gold Standard: Import contracts and structured errors
 
@@ -113,7 +113,7 @@ except ImportError:
 
 # FIX: Correctly import metrics from runner.runner_metrics if available
 # Assuming the metrics module itself is safe to import, and 'prom' is the prometheus_client
-from runner.runner_metrics import (
+from .runner_metrics import (
     COVERAGE_GAPS,
     MUTATION_ERROR,
     MUTATION_KILLED,
@@ -121,10 +121,10 @@ from runner.runner_metrics import (
     MUTATION_TIMEOUT,
     MUTATION_TOTAL,
 )
-from runner.runner_metrics import (
+from .runner_metrics import (
     RUN_FUZZ_DISCOVERIES as FUZZ_DISCOVERIES,
 )  # Use 'as' to alias
-from runner.runner_metrics import (
+from .runner_metrics import (
     RUN_MUTATION_SURVIVAL as MUTATION_SURVIVAL_RATE,  # Use 'as' to alias
 )
 

@@ -104,12 +104,12 @@ except Exception:
 
 
 # Import necessary components using the corrected module names
-from runner.runner_config import ConfigWatcher, RunnerConfig, load_config
-from runner.runner_contracts import TaskPayload
-from runner.runner_core import Runner  # FIX
-from runner.runner_logging import LOG_HISTORY, logger  # FIX (added LOG_HISTORY)
-from runner.runner_metrics import MetricsExporter  # Import MetricsExporter
-from runner.runner_metrics import (
+from .runner_config import ConfigWatcher, RunnerConfig, load_config
+from .runner_contracts import TaskPayload
+from .runner_core import Runner  # FIX
+from .runner_logging import LOG_HISTORY, logger  # FIX (added LOG_HISTORY)
+from .runner_metrics import MetricsExporter  # Import MetricsExporter
+from .runner_metrics import (
     HEALTH_STATUS,
     RUN_PASS_RATE,
     RUN_QUEUE,

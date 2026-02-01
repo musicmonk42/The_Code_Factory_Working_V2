@@ -60,8 +60,8 @@ from watchdog.observers import Observer
 # ============================================================================
 
 try:
-    # FIX: Use absolute import to match runner's package structure
-    from runner.runner_logging import logger
+    # FIX: Use relative import to match runner's package structure
+    from .runner_logging import logger
 except ImportError:
     logger = logging.getLogger(__name__)
     logger.warning("Failed to import runner.runner_logging, using standard logger.")

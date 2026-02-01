@@ -463,8 +463,8 @@ def redact_secrets(
         return data
 
     try:
-        # FIX: Lazy import to break circular dependency
-        from runner.runner_logging import log_audit_event
+        # FIX: Lazy import to break circular dependency - use relative import
+        from .runner_logging import log_audit_event
     except ImportError:
         # If logging not available, continue without it
         log_audit_event = None
@@ -571,8 +571,8 @@ async def encrypt_data(
     Encrypts data using the specified symmetric algorithm.
     Returns encrypted bytes.
     """
-    # FIX: Lazy import to break circular dependency
-    from runner.runner_logging import log_audit_event
+    # FIX: Lazy import to break circular dependency - use relative import
+    from .runner_logging import log_audit_event
 
     # --- FIX: REMOVED METRICS IMPORT ---
 
@@ -599,8 +599,8 @@ async def decrypt_data(data: bytes, key: bytes, algorithm: str = "fernet") -> st
     Decrypts data using the specified symmetric algorithm.
     Returns decrypted string (assumes utf-8).
     """
-    # FIX: Lazy import to break circular dependency
-    from runner.runner_logging import log_audit_event
+    # FIX: Lazy import to break circular dependency - use relative import
+    from .runner_logging import log_audit_event
 
     # --- FIX: REMOVED METRICS IMPORT ---
 
@@ -652,8 +652,8 @@ async def fetch_secret(
     Fetches a secret from a configured source (env, vault, aws_sm, hsm_pin).
     Caches secrets in memory with a TTL.
     """
-    # FIX: Lazy import to break circular dependency
-    from runner.runner_logging import send_alert
+    # FIX: Lazy import to break circular dependency - use relative import
+    from .runner_logging import send_alert
 
     # --- FIX: REMOVED METRICS IMPORT ---
 
@@ -826,8 +826,8 @@ async def monitor_for_leaks(text: str) -> List[Dict[str, Any]]:
     """
     Monitors text for potential leaks using Presidio (if available) and regex.
     """
-    # FIX: Lazy import to break circular dependency
-    from runner.runner_logging import log_audit_event, send_alert
+    # FIX: Lazy import to break circular dependency - use relative import
+    from .runner_logging import log_audit_event, send_alert
 
     # --- FIX: REMOVED METRICS IMPORT ---
 
@@ -918,7 +918,7 @@ async def scan_for_vulnerabilities(
 
     # Audit logging with robust error handling
     try:
-        from runner.runner_logging import log_audit_event
+        from .runner_logging import log_audit_event
         import inspect
         
         # Handle both sync and async implementations gracefully

@@ -17,16 +17,16 @@ TESTING: bool = (
 )
 # --- END FIX ---
 
-from runner.feedback_handlers import collect_feedback
+from .feedback_handlers import collect_feedback
 
 # --- REFACTOR FIX: Imports changed from V1 'utils' to V2 'runner' foundation ---
 # This file no longer imports from llm_utils. It imports the *real* LLM client.
-from runner.llm_client import call_llm_api
+from .llm_client import call_llm_api
 
 # [FIX] Corrected imports
-from runner.runner_logging import log_audit_event, logger, send_alert
-from runner.runner_metrics import UTIL_ERRORS
-from runner.runner_security_utils import redact_secrets
+from .runner_logging import log_audit_event, logger, send_alert
+from .runner_metrics import UTIL_ERRORS
+from .runner_security_utils import redact_secrets
 
 # Import SUMMARIZERS registry from the runner's __init__.py
 try:
