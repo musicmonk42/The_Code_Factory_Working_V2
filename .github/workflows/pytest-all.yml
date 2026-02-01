@@ -238,22 +238,30 @@ jobs:
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
           
-          # Force-reinstall aiohttp to ensure all submodules are properly available
+          # Force-reinstall aiohttp with dependencies in correct order
           # This prevents "ModuleNotFoundError: No module named 'aiohttp.web'" errors
-          echo "=== Force-reinstalling aiohttp to ensure proper installation ==="
-          pip uninstall -y aiohttp aiosignal frozenlist yarl multidict aiohttp-client-cache || true
-          pip install --no-cache-dir --force-reinstall -c .github/constraints.txt \
-            aiosignal \
-            frozenlist \
-            yarl \
-            multidict \
-            aiohttp==3.12.15
+          echo "=== Installing aiohttp and dependencies in correct order ==="
           
-          # Verify aiohttp.web is importable immediately
-          python -c "from aiohttp import web; from aiohttp.web import Request, Response, RouteTableDef; print('✓ aiohttp.web verified after force-reinstall')" || {
+          # Uninstall any existing broken installations
+          pip uninstall -y aiohttp aiosignal frozenlist yarl multidict aiohttp-client-cache || true
+          
+          # Install core dependencies first in correct order
+          pip install --no-cache-dir --force-reinstall -c .github/constraints.txt \
+            multidict \
+            yarl \
+            aiosignal \
+            frozenlist
+          
+          # Then install aiohttp itself
+          pip install --no-cache-dir --force-reinstall -c .github/constraints.txt aiohttp==3.12.15
+          
+          # Immediate verification - fail fast if broken
+          python -c "from aiohttp import web; from aiohttp.web import Request, Response, RouteTableDef; print('✓ aiohttp.web verified after installation')" || {
             echo "CRITICAL ERROR: aiohttp.web still cannot be imported after force-reinstall"
+            echo "Diagnostic information:"
             pip show aiohttp
             python -c "import aiohttp; print('aiohttp location:', aiohttp.__file__)"
+            python -c "import sys; print('Python sys.path:', sys.path[:3])"
             exit 1
           }
           
