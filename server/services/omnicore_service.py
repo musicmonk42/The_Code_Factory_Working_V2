@@ -966,7 +966,7 @@ class OmniCoreService:
                                 f"✓ File written successfully - filename={filename}, size={len(content)} bytes, type={file_ext}",
                                 extra={
                                     "job_id": job_id,
-                                    "filename": filename,
+                                    "file_name": filename,
                                     "file_size": len(content),
                                     "file_type": file_ext,
                                     "status": "success"
@@ -979,7 +979,7 @@ class OmniCoreService:
                                 f"Security violation in file write - filename={filename}, error={sec_error}",
                                 extra={
                                     "job_id": job_id,
-                                    "filename": filename,
+                                    "file_name": filename,
                                     "error_type": "security_violation",
                                     "status": "failed"
                                 },
@@ -1000,7 +1000,7 @@ class OmniCoreService:
                                 f"Type error in file write - filename={filename}, error={type_error}",
                                 extra={
                                     "job_id": job_id,
-                                    "filename": filename,
+                                    "file_name": filename,
                                     "error_type": "type_error",
                                     "error_message": str(type_error),
                                     "status": "failed"
@@ -1022,7 +1022,7 @@ class OmniCoreService:
                                 f"Failed to write file - filename={filename}, error={error_type}: {write_error}",
                                 extra={
                                     "job_id": job_id,
-                                    "filename": filename,
+                                    "file_name": filename,
                                     "error_type": error_type,
                                     "error_message": str(write_error),
                                     "status": "failed"
