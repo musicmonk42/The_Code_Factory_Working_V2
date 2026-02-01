@@ -24,7 +24,8 @@ from .feedback_handlers import collect_feedback
 from .llm_client import call_llm_api
 
 # [FIX] Corrected imports
-from .runner_logging import log_audit_event, logger, send_alert
+from .runner_audit import log_audit_event
+from .runner_logging import logger, send_alert
 from .runner_metrics import UTIL_ERRORS
 from .runner_security_utils import redact_secrets
 

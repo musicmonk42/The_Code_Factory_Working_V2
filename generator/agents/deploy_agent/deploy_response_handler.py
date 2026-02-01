@@ -134,7 +134,7 @@ except ImportError:  # Fallback for environments without LLM_SUMMARY_CALLS_TOTAL
 # -----------------------------------------------------------------------------
 from runner.runner_errors import LLMError
 from runner.runner_file_utils import get_commits  # Needed for enrichment
-from runner.runner_logging import log_audit_event
+from runner.runner_audit import log_audit_event_sync as log_audit_event
 
 # ADDED: Centralized security and audit utilities as requested
 from runner.runner_security_utils import redact_secrets, scan_for_secrets
