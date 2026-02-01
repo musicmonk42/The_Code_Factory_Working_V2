@@ -1727,19 +1727,25 @@ def _initialize_prometheus_stubs():
     Initialize prometheus_client stub modules only if not installed.
     
     UPDATED: prometheus_client is now a required dependency in requirements.txt.
-    This function now only creates stubs if the real package is not available,
-    which should only happen in unusual circumstances.
+    This function now only creates stubs if the real package is not available.
+    
+    Unusual circumstances where stubs might be needed:
+    - During initial test collection before dependencies are fully loaded
+    - In minimal test environments where only subset of dependencies are available
+    - During CI/CD pipeline bootstrapping phases
     
     This function can be called from the setup_test_stubs session fixture
     or at module level (when not in collection mode). It's safe to call multiple
     times - it will only create stubs if prometheus_client is not already available.
     """
-    # Check if prometheus_client is already in sys.modules
+    # First check if prometheus_client is already loaded to avoid unnecessary import attempts
+    # This is faster than trying an import every time
     if "prometheus_client" in sys.modules:
         # Already loaded, don't replace it with a stub
         return
     
-    # Try to import the real prometheus_client first
+    # Try to import the real prometheus_client
+    # If successful, this will add it to sys.modules
     try:
         import prometheus_client
         # Successfully imported, don't need stub
