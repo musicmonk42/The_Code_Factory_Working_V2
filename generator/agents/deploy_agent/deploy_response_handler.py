@@ -48,8 +48,8 @@ except ImportError:
     HAS_AIOHTTP = False
     # Provide type stubs for testing
     web = None
-    Request = object
-    Response = object
+    Request = None
+    Response = None
     RouteTableDef = None
 
 from opentelemetry.trace import Status, StatusCode
@@ -1798,8 +1798,8 @@ else:
     app = None
     api_semaphore = None
     
-    def api_handle_response(*args, **kwargs):
+    async def api_handle_response(*args, **kwargs):
         raise ImportError("aiohttp is not installed. API endpoints are not available.")
     
-    def start_background_tasks(*args, **kwargs):
+    async def start_background_tasks(*args, **kwargs):
         raise ImportError("aiohttp is not installed. API endpoints are not available.")
