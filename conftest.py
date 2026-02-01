@@ -2079,114 +2079,13 @@ def _ensure_module_specs():
 
 
 # ---- Initialize critical collection-time stubs ----
-# These modules are commonly imported at module-level in test files and need
-# to be stubbed BEFORE test collection starts (fixture-based initialization is too late)
-def _initialize_critical_collection_stubs():
-    """
-    Initialize stubs for modules commonly imported at module-level in test files.
-    This must run at conftest.py import time, before pytest collects test files.
-    
-    Only includes modules that:
-    1. Are imported at module-level in test files or their dependencies
-    2. May not be installed in all environments
-    3. Cause collection failures if not stubbed
-    """
-    # Critical modules that test files import at module level
-    _CRITICAL_COLLECTION_STUBS = [
-        # Google Cloud - imported by audit_backend_cloud.py
-        "google",
-        "google.cloud", 
-        "google.cloud.storage",
-        # Azure - imported by audit_backend_cloud.py
-        "azure",
-        "azure.core",
-        "azure.core.exceptions",
-        "azure.storage",
-        "azure.storage.blob",
-        "azure.storage.blob.aio",
-        # OpenTelemetry - imported by arbiter modules
-        "opentelemetry",
-        "opentelemetry.trace",
-        "opentelemetry.sdk",
-        "opentelemetry.sdk.trace",
-        "opentelemetry.context",
-        "opentelemetry.propagate",
-        "opentelemetry.propagators",
-        # Circuit breaker libraries - imported by arbiter modules  
-        "pybreaker",
-        "circuitbreaker",
-        # Boto3/Botocore - imported by audit_backend_cloud.py
-        "boto3",
-        "botocore",
-        "botocore.exceptions",
-        # Streaming backends - imported by audit_backend
-        "aiokafka",
-        "aiokafka.errors",
-        "aiormq",
-        "aio_pika",
-        # Backoff - imported by runner modules
-        "backoff",
-        # Testing utilities - imported by test files
-        "faker",
-        "freezegun",
-        # gRPC - imported by audit_log tests
-        "grpc",
-        "grpc.aio",
-        # CLI utilities
-        "typer",
-        "click",
-        # Other common dependencies
-        "uvicorn",
-        "redis",
-        "redis.asyncio",
-        # SQLAlchemy - imported by many tests
-        "sqlalchemy",
-        "sqlalchemy.orm",
-        "sqlalchemy.ext",
-        "sqlalchemy.ext.asyncio",
-        # Hypothesis - imported by tests
-        "hypothesis",
-        # OpenTelemetry instrumentation
-        "opentelemetry.instrumentation",
-        "opentelemetry.instrumentation.fastapi",
-        # Scientific computing - imported by arbiter tests
-        "numpy",
-        "scipy",
-        "scipy.stats",
-        "pandas",
-        # NetworkX - imported by arbiter tests
-        "networkx",
-        # Retry library - imported by arbiter
-        "tenacity",
-        "tenacity.wait",
-        "tenacity.stop",
-        # Pydantic settings - imported by arbiter config
-        "pydantic_settings",
-    ]
-    
-    for dep in _CRITICAL_COLLECTION_STUBS:
-        if dep not in sys.modules:
-            try:
-                __import__(dep)
-            except (ImportError, ModuleNotFoundError):
-                # Create stub for missing module
-                mock_module = _create_mock_module(dep)
-                sys.modules[dep] = mock_module
-                
-                # Also create parent modules for dotted names
-                if "." in dep:
-                    parts = dep.split(".")
-                    for i in range(1, len(parts)):
-                        parent_name = ".".join(parts[:i])
-                        if parent_name not in sys.modules:
-                            parent_mock = _create_mock_module(parent_name)
-                            sys.modules[parent_name] = parent_mock
-                        # Set child as attribute on parent
-                        parent = sys.modules[parent_name]
-                        child_name = parts[i]
-                        if not hasattr(parent, child_name):
-                            if ".".join(parts[:i+1]) in sys.modules:
-                                setattr(parent, child_name, sys.modules[".".join(parts[:i+1])])
+# REMOVED: _initialize_critical_collection_stubs() function
+# This function was never called (see line below) and created incomplete mock modules
+# that interfered with real module imports. The environment variables already set
+# (OTEL_SDK_DISABLED=1, NO_MONITORING=1, DISABLE_TELEMETRY=1) are sufficient to 
+# prevent expensive initialization.
+#
+# Previously defined at lines 2084-2189, removed to clean up dead code.
 
 # Initialize critical stubs at module load time
 # DEFERRED: Too expensive during import - causes CPU timeout
