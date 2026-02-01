@@ -713,7 +713,8 @@ class DockerfileHandler(FormatHandler):
             ru_yaml = YAML()
             ru_yaml.dump(yaml_data, string_stream)
             return string_stream.getvalue()
-        elif to_format == "dockerfile":
+        elif to_format in ("dockerfile", "docker"):
+            # Support both 'dockerfile' and 'docker' format names
             return "\n".join(data)
         raise ValueError(
             f"DockerfileHandler does not support conversion to '{to_format}'."

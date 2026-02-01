@@ -319,8 +319,8 @@ async def optimize_deployment_prompt_text(prompt_text: str) -> str:
             provider="deploy_prompt", model=SUMMARY_MODEL
         ).observe(time.time() - start_time_summary)
         add_provenance(
+            "summarize_context",
             {
-                "action": "summarize_context",
                 "model": SUMMARY_MODEL,
                 "run_id": str(uuid.uuid4()),
             }

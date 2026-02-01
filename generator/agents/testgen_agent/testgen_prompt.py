@@ -1059,10 +1059,10 @@ async def _add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_file
     await vdb.add_files("historical_failures", failure_logs)
 
 
-def initialize_codebase_for_rag(repo_path: str):
+async def initialize_codebase_for_rag(repo_path: str):
     """
     Initializes the vector database with codebase contents.
-    REFACTORED: Uses central runner logging.
+    REFACTORED: Now async to properly work within FastAPI/Uvicorn event loop.
     """
     code_files = {}
     test_files = {}
@@ -1097,34 +1097,15 @@ def initialize_codebase_for_rag(repo_path: str):
     # Get the multi_vdb instance using the lazy getter
     vdb = _get_multi_vdb()
     
-    # FIX: Use proper async handling to avoid "asyncio.run() cannot be called from a running event loop"
-    # This function may be called from both sync and async contexts, so we need to handle both
-    try:
-        # Try to get the running loop
-        loop = asyncio.get_running_loop()
-        # If we get here, we're in an async context
-        # Use nest_asyncio to allow nested event loops (but only if not using uvloop)
-        try:
-            # Check if the loop is uvloop (which can't be patched)
-            if 'uvloop' not in str(type(loop)):
-                nest_asyncio.apply()
-            else:
-                logger.warning("uvloop detected, skipping nest_asyncio patch (not compatible)")
-        except (ValueError, RuntimeError) as e:
-            # Skip patching if it fails
-            logger.warning(f"Could not apply nest_asyncio patch: {e}")
-        # Now asyncio.run() will work even in a running loop (if patched)
-        asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
-    except RuntimeError:
-        # No running loop - safe to use asyncio.run() directly
-        asyncio.run(_add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs))
+    # FIX: Now properly async - just await the async function
+    await _add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs)
     
     logger.info("Multi-RAG initialization complete. Indexed files across collections.")
 
-    # REFACTORED: Use add_provenance
-    add_provenance(
+    # REFACTORED: Use add_provenance with correct signature
+    await add_provenance(
+        "RAGInitialized",
         {
-            "action": "RAGInitialized",
             "repo_path": repo_path,
             "file_counts": {
                 "codebase": len(code_files),
@@ -1144,8 +1125,9 @@ async def startup():
     logger.info("Initializing TestGen Prompt service components...")
     asyncio.create_task(start_health_server())
     logger.info("TestGen Prompt service components initialized.")
-    add_provenance(
-        {"action": "Startup", "timestamp": datetime.now(timezone.utc).isoformat()}
+    await add_provenance(
+        "Startup", 
+        {"timestamp": datetime.now(timezone.utc).isoformat()}
     )
 
 
@@ -1156,8 +1138,9 @@ async def shutdown():
     director_instance = _get_director()
     await director_instance.close()
     logger.info("TestGen Prompt service components shut down.")
-    add_provenance(
-        {"action": "Shutdown", "timestamp": datetime.now(timezone.utc).isoformat()}
+    await add_provenance(
+        "Shutdown", 
+        {"timestamp": datetime.now(timezone.utc).isoformat()}
     )
 
 

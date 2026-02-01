@@ -371,16 +371,31 @@ class TestgenAgent:
         # REFACTORED: Removed self.llm_orchestrator
         logger.info(f"Initializing TestgenAgent for repository: {self.repo_path}")
 
+        # FIX: Schedule async initialization as a background task instead of blocking
+        # This prevents "asyncio.run() cannot be called from a running event loop" error
+        self._init_task = None  # Track initialization task
         try:
-            initialize_codebase_for_rag(str(self.repo_path))
+            # Try to get the running loop and create a background task
+            loop = asyncio.get_running_loop()
+            # We're in an async context, schedule initialization as a background task
+            self._init_task = asyncio.create_task(self._async_init())
+            logger.info("Scheduled codebase initialization for RAG as background task.")
+        except RuntimeError:
+            # No running loop, we're in a sync context
+            # Run the async initialization synchronously
+            asyncio.run(self._async_init())
+    
+    async def _async_init(self):
+        """Asynchronously initialize the codebase for RAG."""
+        try:
+            await initialize_codebase_for_rag(str(self.repo_path))
             logger.info("Codebase initialized for RAG.")
         except Exception as e:
             logger.error(f"Failed to initialize codebase for RAG: {e}", exc_info=True)
             if sentry_sdk:
                 sentry_sdk.capture_exception(e)
-            raise RuntimeError(
-                f"Codebase initialization for RAG failed critically: {e}"
-            )
+            # Don't raise in async context to avoid unhandled exceptions
+            # The error is already logged and captured
 
     async def _load_code_files(self, target_files: List[str]) -> Dict[str, str]:
         """
