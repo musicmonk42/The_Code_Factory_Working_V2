@@ -281,9 +281,10 @@ if os.environ.get("TESTING") == "1":
     # This is a simple O(1) check without expensive filesystem walking
     # NOTE: Only stub modules that truly don't exist in the codebase
     # Real packages like generator.clarifier should NOT be stubbed
-    for mod_name in ['intent_capture', 
-                     'omnicore_engine.database', 
-                     'omnicore_engine.message_bus']:
+    # REMOVED: omnicore_engine.database and omnicore_engine.message_bus
+    # These modules are now handled by the lazy loading mechanism in omnicore_engine/__init__.py
+    # via PEP 562 __getattr__, so they don't need stub modules here.
+    for mod_name in ['intent_capture']:
         if mod_name not in sys.modules:
             _stub_modules[mod_name] = mod_name
 
@@ -679,9 +680,9 @@ _OPTIONAL_DEPENDENCIES = [
     "matplotlib",  # Plotting library
     "numpy",  # Numerical computing
     # prometheus_client removed - use real installation from requirements.txt
-    # Omnicore engine submodules that may have missing dependencies
-    "omnicore_engine.database",  # May be missing aiosqlite or other dependencies
-    "omnicore_engine.message_bus",  # May be missing structlog or other dependencies
+    # Omnicore engine submodules removed - handled by lazy loading in omnicore_engine/__init__.py
+    # "omnicore_engine.database",  # REMOVED - lazy loaded via PEP 562 __getattr__
+    # "omnicore_engine.message_bus",  # REMOVED - lazy loaded via PEP 562 __getattr__
     "analyzer",  # Self-healing import fixer analyzer package
     "analyzer.core_utils",  # Analyzer core utilities
     "analyzer.core_audit",  # Analyzer audit logging
@@ -1958,22 +1959,38 @@ def _initialize_omnicore_mocks():
     """
     Initialize mocks for omnicore_engine submodules.
     Called from session-scoped fixture to defer expensive import attempts.
+    
+    NOTE: With the fixed lazy loading mechanism in omnicore_engine/__init__.py,
+    these submodules should load properly via PEP 562 __getattr__.
+    Only create mocks if the real modules fail to import.
     """
+    # Try to import omnicore_engine.database via lazy loading
     if "omnicore_engine.database" not in sys.modules:
-        # DON'T try to import - just create mock
-        database_mock = _create_mock_module("omnicore_engine.database")
-        sys.modules["omnicore_engine.database"] = database_mock
-        # Ensure parent module exists and has the attribute
-        if "omnicore_engine" in sys.modules:
-            sys.modules["omnicore_engine"].database = database_mock
+        try:
+            # Trigger lazy loading by accessing the attribute
+            import omnicore_engine
+            _ = omnicore_engine.database
+            # If successful, the lazy loading has properly loaded the module
+        except (AttributeError, ImportError) as e:
+            # Only create mock if lazy loading failed
+            database_mock = _create_mock_module("omnicore_engine.database")
+            sys.modules["omnicore_engine.database"] = database_mock
+            if "omnicore_engine" in sys.modules:
+                sys.modules["omnicore_engine"].database = database_mock
 
+    # Try to import omnicore_engine.message_bus via lazy loading
     if "omnicore_engine.message_bus" not in sys.modules:
-        # DON'T try to import - just create mock
-        message_bus_mock = _create_mock_module("omnicore_engine.message_bus")
-        sys.modules["omnicore_engine.message_bus"] = message_bus_mock
-        # Ensure parent module exists and has the attribute
-        if "omnicore_engine" in sys.modules:
-            sys.modules["omnicore_engine"].message_bus = message_bus_mock
+        try:
+            # Trigger lazy loading by accessing the attribute
+            import omnicore_engine
+            _ = omnicore_engine.message_bus
+            # If successful, the lazy loading has properly loaded the module
+        except (AttributeError, ImportError) as e:
+            # Only create mock if lazy loading failed
+            message_bus_mock = _create_mock_module("omnicore_engine.message_bus")
+            sys.modules["omnicore_engine.message_bus"] = message_bus_mock
+            if "omnicore_engine" in sys.modules:
+                sys.modules["omnicore_engine"].message_bus = message_bus_mock
 
 # ---- ChromaDB singleton cleanup ----
 # Global cleanup of ChromaDB singleton between test sessions

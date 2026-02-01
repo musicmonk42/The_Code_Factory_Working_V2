@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Path setup is handled by conftest.py - no need to manipulate sys.path here
 
 from omnicore_engine.database.metrics_helpers import (
     get_or_create_counter_local,
