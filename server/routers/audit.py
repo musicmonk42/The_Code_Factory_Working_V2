@@ -506,13 +506,14 @@ async def _query_guardrails_audit_logs(
 
 
 @router.get("/logs/event-types")
-async def get_all_event_types() -> Dict[str, List[str]]:
+async def get_all_event_types() -> Dict[str, Any]:
     """
     Get a list of all available audit event types across all modules.
     
     **Returns:**
     - event_types_by_module: Dictionary mapping module names to their event types
     - total_event_types: Total count of unique event types
+    - all_event_types_sorted: Sorted list of all unique event types
     """
     event_types = {
         "generator": [
