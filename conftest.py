@@ -288,8 +288,12 @@ if os.environ.get("TESTING") == "1":
             _stub_modules[mod_name] = mod_name
 
     def _stub_getattr(name):
-        """Return a no-op callable for any attribute access."""
-        return lambda *args, **kwargs: None
+        """Raise AttributeError for unknown attributes to avoid confusing pytest.
+        
+        Previously returned a lambda, but this confused pytest when checking for
+        pytest_plugins attribute, causing "Got: <function ...>" errors.
+        """
+        raise AttributeError(f"Stub module has no attribute '{name}'")
 
     for module_name in _stub_modules.keys():
         if module_name not in sys.modules:
