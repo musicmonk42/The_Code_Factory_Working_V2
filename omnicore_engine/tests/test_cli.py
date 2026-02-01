@@ -17,12 +17,7 @@ import yaml
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from omnicore_engine.cli import (
-    main,
-    safe_command,
-    sanitize_env_vars,
-    validate_file_path,
-)
+# Imports from omnicore_engine.cli are deferred to individual test methods to support lazy loading
 
 
 class TestUtilityFunctions:
@@ -30,6 +25,8 @@ class TestUtilityFunctions:
 
     def test_sanitize_env_vars(self):
         """Test environment variable sanitization"""
+        from omnicore_engine.cli import sanitize_env_vars
+        
         # Set some test env vars
         os.environ["TEST_PASSWORD"] = "secret123"
         os.environ["API_KEY"] = "key456"
@@ -50,6 +47,8 @@ class TestUtilityFunctions:
 
     def test_safe_command(self):
         """Test safe command parsing"""
+        from omnicore_engine.cli import safe_command
+        
         # Simple command
         result = safe_command("ls -la")
         assert result == ["ls", "-la"]
@@ -64,6 +63,8 @@ class TestUtilityFunctions:
 
     def test_validate_file_path_valid(self):
         """Test validation of valid file paths"""
+        from omnicore_engine.cli import validate_file_path
+        
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("test")
@@ -74,6 +75,8 @@ class TestUtilityFunctions:
 
     def test_validate_file_path_invalid(self):
         """Test validation rejects path traversal"""
+        from omnicore_engine.cli import validate_file_path
+        
         with pytest.raises(ValueError, match="Access denied"):
             validate_file_path("/etc/passwd")
 
@@ -122,6 +125,8 @@ class TestSimulateCommand:
 
     def test_simulate_command_parsing(self):
         """Test simulate command argument parsing"""
+        from omnicore_engine.cli import main
+        
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump({"simulation": "test"}, f)
             f.flush()
@@ -340,6 +345,8 @@ class TestErrorHandling:
     @patch("sys.argv", ["cli.py", "simulate", "--request_file", "nonexistent.json"])
     def test_file_not_found_error(self):
         """Test handling of file not found error"""
+        from omnicore_engine.cli import main
+        
         with pytest.raises(SystemExit) as exc_info:
             main()
 
@@ -353,6 +360,8 @@ class TestErrorHandling:
             f.flush()
 
             with patch("sys.argv", ["cli.py", "simulate", "--request_file", f.name]):
+                from omnicore_engine.cli import main
+                
                 with pytest.raises(SystemExit) as exc_info:
                     main()
 
@@ -491,6 +500,8 @@ class TestMainEntryPoint:
     @patch("sys.argv", ["cli.py"])
     def test_no_command_shows_help(self):
         """Test that no command shows help"""
+        from omnicore_engine.cli import main
+        
         # parser is defined inside main() function, so we test the behavior instead
         with pytest.raises(SystemExit):
             main()
@@ -498,6 +509,8 @@ class TestMainEntryPoint:
     @patch("sys.argv", ["cli.py", "--version"])
     def test_version_flag(self):
         """Test --version flag"""
+        from omnicore_engine.cli import main
+        
         with pytest.raises(SystemExit) as exc_info:
             main()
 
@@ -506,6 +519,8 @@ class TestMainEntryPoint:
     @patch("sys.argv", ["cli.py", "unknown-command"])
     def test_unknown_command(self):
         """Test unknown command handling"""
+        from omnicore_engine.cli import main
+        
         with pytest.raises(SystemExit):
             main()
 
@@ -517,6 +532,8 @@ class TestServeCommand:
     @patch("omnicore_engine.cli.uvicorn.run")
     def test_serve_default_settings(self, mock_uvicorn):
         """Test serve command with default settings"""
+        from omnicore_engine.cli import main
+        
         main()
 
         mock_uvicorn.assert_called_once()
@@ -530,6 +547,8 @@ class TestServeCommand:
     @patch("omnicore_engine.cli.uvicorn.run")
     def test_serve_custom_settings(self, mock_uvicorn):
         """Test serve command with custom settings"""
+        from omnicore_engine.cli import main
+        
         main()
 
         mock_uvicorn.assert_called_once()
