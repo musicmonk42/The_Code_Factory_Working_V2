@@ -117,7 +117,6 @@ def _is_valid_real_module(mod):
 # This MUST run at module import time, before pytest scans/imports test files
 # Pytest with --import-mode=importlib imports test files before executing conftest fixtures
 # Test files may import prometheus_client at module level, so stubs must exist NOW
-print("DEBUG: Initializing prometheus_client stubs at conftest import time")
 
 # Check if already loaded WITH A REAL MODULE (not a mock)
 if "prometheus_client" in sys.modules:
@@ -125,18 +124,12 @@ if "prometheus_client" in sys.modules:
     if not _is_valid_real_module(existing_mod):
         # It's a mock or broken stub - remove it
         _remove_module_and_submodules("prometheus_client")
-        print("DEBUG: Removed broken prometheus_client stub")
-    else:
-        # Real module already loaded
-        print("DEBUG: Real prometheus_client already loaded")
 
 # Try to import the real prometheus_client
 try:
     import prometheus_client as _test_import
-    print("DEBUG: Real prometheus_client imported successfully")
 except ImportError:
     # Not available, create stub NOW
-    print("DEBUG: prometheus_client not installed, creating stub modules")
     
     # Create prometheus_client package stub WITH proper ModuleSpec
     prom_spec = importlib.machinery.ModuleSpec(
@@ -293,8 +286,6 @@ except ImportError:
     prom_metrics.MetricWrapperBase = MetricWrapperBase
     sys.modules["prometheus_client.metrics"] = prom_metrics
     prom_module.metrics = prom_metrics
-    
-    print("DEBUG: prometheus_client stub modules created and registered")
 
 
 def _validate_real_modules():
@@ -1829,16 +1820,13 @@ def _initialize_prometheus_stubs():
             _remove_module_and_submodules("prometheus_client")
         else:
             # Real module already loaded
-            print("DEBUG: Real prometheus_client module already loaded, skipping stub creation")
             return
     
     # Try to import the real prometheus_client
     try:
         import prometheus_client
-        print("DEBUG: Successfully imported real prometheus_client")
         return  # Successfully imported, don't need stub
     except ImportError:
-        print("DEBUG: prometheus_client not available, creating stub")
         pass  # Not available, create stub below
     
     import importlib.machinery

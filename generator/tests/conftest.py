@@ -10,18 +10,12 @@ import os
 import importlib.machinery
 import importlib.util
 
-print("DEBUG: generator/tests/conftest.py being loaded FIRST")
-
 # Initialize prometheus_client stubs inline BEFORE importing root conftest
 # This ensures stubs exist before test files are imported
 if "prometheus_client" not in sys.modules:
-    print("DEBUG: Creating prometheus_client stubs in local conftest")
     try:
         import prometheus_client as _test
-        print("DEBUG: Real prometheus_client found")
     except ImportError:
-        print("DEBUG: Creating stub modules inline")
-        
         # Create prometheus_client package stub
         prom_spec = importlib.machinery.ModuleSpec(name="prometheus_client", loader=None, is_package=True)
         prom_module = importlib.util.module_from_spec(prom_spec)
@@ -93,17 +87,11 @@ if "prometheus_client" not in sys.modules:
         prom_core.Histogram = _MockHistogram
         prom_core.Gauge = _MockGauge
         prom_core.REGISTRY = _shared_registry
-        
-        print("DEBUG: Stub modules created in local conftest")
-else:
-    print("DEBUG: prometheus_client already in sys.modules")
 
 # Add root directory to path if not already there
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-print("DEBUG: About to import root conftest")
 # This will trigger other initialization in the root conftest
 import conftest as root_conftest
-print("DEBUG: Root conftest imported")
