@@ -356,6 +356,8 @@ jobs:
             python -c "
             from aiohttp import web
             from aiohttp.web import Request, Response, RouteTableDef
+            import aiohttp.web_request
+            import aiohttp.helpers
             print('✓ aiohttp.web OK after clean reinstall')
             " || {
               echo "CRITICAL: aiohttp.web still broken after reinstall"
