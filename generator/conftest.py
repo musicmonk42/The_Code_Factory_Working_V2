@@ -124,10 +124,8 @@ def _create_mock_module(name: str) -> types.ModuleType:
         origin=f"<mocked {name}>",
         is_package=True
     )
-    # Add additional spec attributes that may be accessed
-    spec.cached = None
-    spec.parent = name.rpartition('.')[0] if '.' in name else ''
-    spec.has_location = False
+    # Note: parent, cached, and has_location are read-only properties
+    # They are automatically computed from the spec's name and loader
     mock_module.__spec__ = spec
     
     class MockCallable:
