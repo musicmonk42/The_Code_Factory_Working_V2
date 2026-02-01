@@ -20,7 +20,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import aiofiles  # needed for async file IO used below
 import tiktoken  # For token counting
-from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
+from jinja2 import Environment, FileSystemLoader, Template, select_autoescape, ChoiceLoader
+
+# Import PROJECT_ROOT for fallback template resolution
+try:
+    from path_setup import PROJECT_ROOT
+except ImportError:
+    # Fallback to computing project root if path_setup is not available
+    PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.absolute()
 
 # Make sentence_transformers optional
 try:
@@ -577,11 +584,26 @@ class PromptTemplateRegistry:
         self._setup_hot_reload()  # Setup file system watcher
 
     def _create_environment(self) -> Environment:
-        """Creates and configures the Jinja2 environment with custom filters."""
+        """Creates and configures the Jinja2 environment with custom filters.
+        
+        Uses a ChoiceLoader to search for templates in multiple locations:
+        1. The specified template_dir (repo-specific)
+        2. The project root deploy_templates directory (fallback)
+        """
         if not os.path.exists(self.template_dir):
             os.makedirs(self.template_dir, exist_ok=True)
+        
+        # Build list of template loaders with fallback to project root
+        loaders = [FileSystemLoader(self.template_dir)]
+        
+        # Add project root deploy_templates as fallback
+        project_root_templates = PROJECT_ROOT / "deploy_templates"
+        if project_root_templates.exists() and str(project_root_templates) != self.template_dir:
+            loaders.append(FileSystemLoader(str(project_root_templates)))
+            logger.info(f"Added fallback template directory: {project_root_templates}")
+        
         env = Environment(
-            loader=FileSystemLoader(self.template_dir),
+            loader=ChoiceLoader(loaders),
             autoescape=select_autoescape(["html", "xml", "htm", "j2", "jinja2"]),
             enable_async=True,
         )  # Enable async rendering with selective autoescape for XSS protection

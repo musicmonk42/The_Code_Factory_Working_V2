@@ -96,6 +96,7 @@ except ImportError:  # pragma: no cover
     web = MockWeb()  # type: ignore
 
 from jinja2 import (  # Jinja2 for templating
+    ChoiceLoader,
     Environment,
     FileSystemLoader,
     Template,
@@ -105,6 +106,13 @@ from opentelemetry.trace.status import (
     Status,
     StatusCode,
 )  # *** FIX: Added missing import ***
+
+# Import PROJECT_ROOT for fallback template resolution
+try:
+    from path_setup import PROJECT_ROOT
+except ImportError:
+    # Fallback to computing project root if path_setup is not available
+    PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.absolute()
 
 # Presidio: REQUIRED for scrubbing.
 from presidio_analyzer import AnalyzerEngine
@@ -531,11 +539,26 @@ class PromptTemplateRegistry:
         self._setup_hot_reload()  # Setup file system watcher
 
     def _create_environment(self) -> Environment:
-        """Creates and configures the Jinja2 environment with custom filters."""
+        """Creates and configures the Jinja2 environment with custom filters.
+        
+        Uses a ChoiceLoader to search for templates in multiple locations:
+        1. The specified plugin_dir (repo-specific)
+        2. The project root prompt_templates directory (fallback)
+        """
         if not os.path.exists(self.plugin_dir):
             os.makedirs(self.plugin_dir, exist_ok=True)
+        
+        # Build list of template loaders with fallback to project root
+        loaders = [FileSystemLoader(self.plugin_dir)]
+        
+        # Add project root prompt_templates as fallback
+        project_root_templates = PROJECT_ROOT / "prompt_templates"
+        if project_root_templates.exists() and str(project_root_templates) != self.plugin_dir:
+            loaders.append(FileSystemLoader(str(project_root_templates)))
+            logger.info(f"Added fallback template directory: {project_root_templates}")
+        
         env = Environment(
-            loader=FileSystemLoader(self.plugin_dir),
+            loader=ChoiceLoader(loaders),
             autoescape=select_autoescape(["html", "xml", "htm", "j2", "jinja2"]),
             enable_async=True,
         )  # Enable async rendering with selective autoescape for XSS protection
