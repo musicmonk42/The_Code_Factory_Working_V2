@@ -140,7 +140,7 @@ async def test_e2e_bug_report_with_failed_fix_and_notifications(tmp_path):
             pass
 
     # 1. Setup - Mock the apply_settings_validation to bypass the type check
-    with patch("arbiter.bug_manager.bug_manager.apply_settings_validation"):
+    with patch("self_fixing_engineer.arbiter.bug_manager.bug_manager.apply_settings_validation"):
         settings = Settings(
             AUDIT_LOG_FILE_PATH=str(tmp_path / "audit.log"),
             AUDIT_DEAD_LETTER_FILE_PATH=str(tmp_path / "dead_letter.log"),
@@ -236,7 +236,7 @@ async def test_e2e_rate_limiting(tmp_path):
     )
 
     # Initialize the global rate limiter with test settings
-    from arbiter.bug_manager import bug_manager
+    from self_fixing_engineer.arbiter.bug_manager import bug_manager
 
     bug_manager.rate_limiter = bug_manager.RateLimiter(settings)
     await bug_manager.rate_limiter.initialize()

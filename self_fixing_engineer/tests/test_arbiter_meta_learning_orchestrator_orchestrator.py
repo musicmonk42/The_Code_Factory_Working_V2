@@ -9,23 +9,23 @@ import pytest
 import pytest_asyncio
 import redis.asyncio as aioredis
 from aiokafka import AIOKafkaProducer
-from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
-from arbiter.meta_learning_orchestrator.clients import (
+from self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
+from self_fixing_engineer.arbiter.meta_learning_orchestrator.clients import (
     AgentConfigurationService,
     MLPlatformClient,
 )
-from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
+from self_fixing_engineer.arbiter.meta_learning_orchestrator.config import MetaLearningConfig
 
 # Import metrics
-from arbiter.meta_learning_orchestrator.metrics import (
+from self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics import (
     ML_INGESTION_COUNT,
     ML_LEADER_STATUS,
 )
-from arbiter.meta_learning_orchestrator.models import DataIngestionError, ModelVersion
+from self_fixing_engineer.arbiter.meta_learning_orchestrator.models import DataIngestionError, ModelVersion
 
 # Import the orchestrator and related components
-from arbiter.meta_learning_orchestrator.orchestrator import MetaLearningOrchestrator
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.meta_learning_orchestrator.orchestrator import MetaLearningOrchestrator
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import CollectorRegistry
 from pytest_mock import MockerFixture
 

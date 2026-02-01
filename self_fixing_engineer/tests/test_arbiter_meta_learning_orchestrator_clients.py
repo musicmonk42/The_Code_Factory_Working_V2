@@ -10,20 +10,20 @@ from aiohttp import ClientError, ClientResponse
 from aiohttp.client_exceptions import ClientResponseError
 
 # Import the clients and related components
-from arbiter.meta_learning_orchestrator.clients import (
+from self_fixing_engineer.arbiter.meta_learning_orchestrator.clients import (
     AgentConfigurationService,
     MLPlatformClient,
 )
 
 # Use centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import CollectorRegistry, Counter, Histogram
 from pytest_mock import MockerFixture
 from tenacity import RetryError  # Import RetryError here
 
 # Import or mock PIIRedactorFilter if logging_utils is available
 try:
-    from arbiter.meta_learning_orchestrator.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.logging_utils import PIIRedactorFilter
 except ImportError:
 
     class PIIRedactorFilter:
@@ -151,7 +151,7 @@ async def clear_metrics_and_traces():
     )
 
     # Patch the metrics in the clients module
-    import arbiter.meta_learning_orchestrator.clients as clients_module
+    import self_fixing_engineer.arbiter.meta_learning_orchestrator.clients as clients_module
 
     original_calls_total = getattr(clients_module, "HTTP_CALLS_TOTAL", None)
     original_latency_seconds = getattr(
@@ -349,7 +349,7 @@ async def test_pii_redaction(ml_client, mocker: MockerFixture):
         },
     }
     mocker.patch(
-        "arbiter.meta_learning_orchestrator.clients.PIIRedactorFilter",
+        "self_fixing_engineer.arbiter.meta_learning_orchestrator.clients.PIIRedactorFilter",
         return_value=mock_redactor_instance,
     )
 

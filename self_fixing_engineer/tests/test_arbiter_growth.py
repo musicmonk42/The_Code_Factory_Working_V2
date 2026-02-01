@@ -143,7 +143,7 @@ import importlib.util
 import pytest
 
 current_dir = Path(__file__).resolve().parent  # tests/
-arbiter_dir = current_dir.parent  # arbiter/
+arbiter_dir = current_dir.parent / "arbiter"  # tests/ -> arbiter/
 
 # Look for arbiter_growth.py file directly
 arbiter_growth_file = arbiter_dir / "arbiter_growth.py"
