@@ -129,7 +129,12 @@ MockRecursiveTransform = MagicMock(side_effect=mock_redaction_logic)
 
 @pytest.fixture(autouse=True)
 def mock_dependencies():
-    """Fixture to mock all dependencies for clarifier_updater tests."""
+    """Fixture to mock all dependencies for clarifier_updater tests.
+    
+    Note: This fixture runs during test execution, not during test collection.
+    Module-level imports happen at collection time, which is why module-level
+    patches (see below after fixture definition) are still required.
+    """
     patches = [
         patch("opentelemetry.trace.get_tracer", return_value=mock_tracer),
         patch("opentelemetry.sdk.trace.sampling.ALWAYS_ON", mock_always_on),
@@ -151,7 +156,8 @@ def mock_dependencies():
     ]
     
     # Start all patches
-    mocks = [p.start() for p in patches]
+    for p in patches:
+        p.start()
     
     yield
     
@@ -160,8 +166,6 @@ def mock_dependencies():
         p.stop()
 
 
-# Import after fixture definition (imports will happen during test collection, with fixtures active during test execution)
-# Note: The imports here are at module level, so we need to handle them carefully
 # Import the clarifier module first so it exists in sys.modules before patching
 try:
     import generator.clarifier.clarifier as _clarifier_module
@@ -185,16 +189,12 @@ except ImportError:
         _clarifier_module.get_logger = MagicMock(return_value=mock_logger)
         sys.modules["generator.clarifier.clarifier"] = _clarifier_module
 
-# Import clarifier_updater module now (with patches active from fixture during test execution)
-# But we need module-level patches for the initial import to work
-# First ensure generator.clarifier.clarifier is in sys.modules
-if "generator.clarifier.clarifier" not in sys.modules:
-    try:
-        import generator.clarifier.clarifier
-    except ImportError:
-        pass  # The stub creation code above should have handled this
-
-# Now start patches
+# Module-level patches for collection-time imports
+# These are required because module imports happen at collection time (before fixtures run).
+# The patches are started but not stopped because:
+# 1. They only affect this test module's scope
+# 2. Test isolation is handled by the fixture above during test execution
+# 3. pytest cleans up the test module after all tests complete
 _module_level_patches = [
     patch("generator.clarifier.clarifier.get_config", return_value=mock_config_instance),
     patch("generator.clarifier.clarifier_updater.get_config", return_value=mock_config_instance),

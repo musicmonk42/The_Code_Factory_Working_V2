@@ -142,7 +142,8 @@ def mock_dependencies():
     ]
     
     # Start all patches
-    mocks = [p.start() for p in patches]
+    for p in patches:
+        p.start()
     
     yield
     
