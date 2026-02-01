@@ -12,38 +12,66 @@ Security Features:
 Compliance:
 - OWASP API Security Top 10: Prevents path traversal attacks
 - SOC 2 Type II: Secure file access controls
+
+Industry Standards:
+- FastAPI async best practices
+- Pydantic data validation
+- Comprehensive logging for audit trail
+- OpenAPI documentation
 """
 
+import logging
 import os
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 
-router = APIRouter(prefix="/api/files", tags=["files"])
+router = APIRouter(
+    prefix="/api/files",
+    tags=["files"],
+    responses={
+        404: {"description": "File or job not found"},
+        400: {"description": "Invalid request or path"},
+    }
+)
 
 # Configure output directory from environment
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "/app/output"))
+logger.info(f"File router initialized with OUTPUT_DIR: {OUTPUT_DIR}")
 
 
 class FileInfo(BaseModel):
     """Information about a generated file."""
-    filename: str
-    path: str
-    size: int
-    url: str
+    filename: str = Field(..., description="Base filename")
+    path: str = Field(..., description="Relative path from job directory")
+    size: int = Field(..., ge=0, description="File size in bytes")
+    url: str = Field(..., description="Download URL for the file")
 
 
 class FileListResponse(BaseModel):
     """Response containing list of files for a job."""
-    job_id: str
-    files: List[FileInfo]
+    job_id: str = Field(..., description="Job identifier")
+    files: List[FileInfo] = Field(..., description="List of files in the job")
 
 
-@router.get("/{job_id}/{filename:path}")
+@router.get(
+    "/{job_id}/{filename:path}",
+    response_class=FileResponse,
+    summary="Download a generated file",
+    description="Retrieve a specific file from a completed job",
+    responses={
+        200: {"description": "File downloaded successfully"},
+        400: {"description": "Invalid path or directory traversal attempt"},
+        404: {"description": "File not found"},
+    }
+)
 async def get_file(job_id: str, filename: str):
     """
     Retrieve a generated file by job ID and filename.
@@ -67,9 +95,15 @@ async def get_file(job_id: str, filename: str):
         - Validates paths stay within job directory
         - Only returns regular files (no directories, symlinks)
     """
+    logger.info(f"File download request: job_id={job_id}, filename={filename}")
+    
     # Security: prevent directory traversal
     if ".." in job_id or ".." in filename:
-        raise HTTPException(status_code=400, detail="Invalid path: directory traversal not allowed")
+        logger.warning(f"Directory traversal attempt blocked: job_id={job_id}, filename={filename}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid path: directory traversal not allowed"
+        )
     
     # Construct and validate file path
     file_path = OUTPUT_DIR / job_id / filename
@@ -79,16 +113,33 @@ async def get_file(job_id: str, filename: str):
         file_path = file_path.resolve()
         output_dir_resolved = OUTPUT_DIR.resolve()
         if not str(file_path).startswith(str(output_dir_resolved)):
-            raise HTTPException(status_code=400, detail="Invalid path: outside output directory")
+            logger.warning(f"Path outside output directory blocked: {file_path}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid path: outside output directory"
+            )
     except (OSError, RuntimeError) as e:
-        raise HTTPException(status_code=400, detail=f"Invalid path: {str(e)}")
+        logger.error(f"Path resolution error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid path: {str(e)}"
+        )
     
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+        logger.warning(f"File not found: {file_path}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
     
     if not file_path.is_file():
-        raise HTTPException(status_code=400, detail="Not a file")
+        logger.warning(f"Path is not a file: {file_path}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Not a file"
+        )
     
+    logger.info(f"File download successful: {file_path}")
     return FileResponse(
         path=str(file_path),
         filename=filename.split('/')[-1],  # Use base filename for download
@@ -96,7 +147,17 @@ async def get_file(job_id: str, filename: str):
     )
 
 
-@router.get("/{job_id}/list", response_model=FileListResponse)
+@router.get(
+    "/{job_id}/list",
+    response_model=FileListResponse,
+    summary="List files for a job",
+    description="Get a list of all files generated for a specific job",
+    responses={
+        200: {"description": "List of files retrieved successfully"},
+        400: {"description": "Invalid job ID format"},
+        404: {"description": "Job directory not found"},
+    }
+)
 async def list_files(job_id: str) -> FileListResponse:
     """
     List all files generated for a job.
@@ -137,23 +198,41 @@ async def list_files(job_id: str) -> FileListResponse:
         - Only lists files within job directory
         - Validates job_id format
     """
+    logger.info(f"File list request: job_id={job_id}")
+    
     # Security: prevent directory traversal
     if ".." in job_id:
-        raise HTTPException(status_code=400, detail="Invalid job ID")
+        logger.warning(f"Directory traversal attempt in job_id: {job_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid job ID"
+        )
     
     # Validate job_id format: alphanumeric with optional hyphens/underscores
     # Must contain at least one alphanumeric character and only valid characters
     import re
     if not re.match(r'^[a-zA-Z0-9_-]+$', job_id) or not any(c.isalnum() for c in job_id):
-        raise HTTPException(status_code=400, detail="Invalid job ID format")
+        logger.warning(f"Invalid job_id format: {job_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid job ID format"
+        )
     
     job_dir = OUTPUT_DIR / job_id
     
     if not job_dir.exists():
-        raise HTTPException(status_code=404, detail="Job directory not found")
+        logger.warning(f"Job directory not found: {job_dir}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job directory not found"
+        )
     
     if not job_dir.is_dir():
-        raise HTTPException(status_code=400, detail="Job ID does not correspond to a directory")
+        logger.warning(f"Job path is not a directory: {job_dir}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job ID does not correspond to a directory"
+        )
     
     files: List[FileInfo] = []
     
@@ -170,6 +249,8 @@ async def list_files(job_id: str) -> FileListResponse:
                 ))
             except (OSError, ValueError) as e:
                 # Skip files that cause errors (permissions, invalid paths, etc.)
+                logger.debug(f"Skipping file due to error: {file_path}, error: {e}")
                 continue
     
+    logger.info(f"Found {len(files)} files for job {job_id}")
     return FileListResponse(job_id=job_id, files=files)
