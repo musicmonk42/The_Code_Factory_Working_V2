@@ -4,6 +4,7 @@ import types
 import importlib.machinery
 import importlib.util
 from pathlib import Path
+from unittest.mock import MagicMock, Mock
 
 # REMOVED: matplotlib import causes expensive font cache initialization during import
 # Let individual tests import matplotlib if they need it
@@ -65,12 +66,78 @@ if _CPU_CONSTRAINED:
     # Reduce parallelism in CPU-constrained environments
     os.environ.setdefault("PYTEST_XDIST_WORKER_COUNT", "1")
 
+# Modules that require real implementations to provide __spec__ and __path__ 
+# attributes for pytest collection (must not be mocked)
+REQUIRED_REAL_MODULES = [
+    "prometheus_client",
+    "opentelemetry",
+]
+
+
+def _remove_module_and_submodules(mod_name):
+    """Helper function to remove a module and all its submodules from sys.modules.
+    
+    Args:
+        mod_name (str): The module name to remove (e.g., "prometheus_client")
+    
+    Side Effects:
+        Modifies sys.modules by deleting the specified module and its submodules
+    """
+    if mod_name in sys.modules:
+        del sys.modules[mod_name]
+    # Remove submodules
+    for key in list(sys.modules.keys()):
+        if key.startswith(f"{mod_name}."):
+            del sys.modules[key]
+
+
+def _is_valid_real_module(mod):
+    """Check if a module is a valid real module (not a mock).
+    
+    Args:
+        mod: The module object to validate
+    
+    Returns:
+        bool: True if the module is valid and real, False if it's a mock or invalid
+    """
+    # Check if it's a Mock instance
+    if isinstance(mod, (MagicMock, Mock)):
+        return False
+    # Check if it has broken __spec__
+    if not hasattr(mod, '__spec__') or mod.__spec__ is None:
+        return False
+    # Check if __spec__ is a real ModuleSpec (not a mock)
+    if not isinstance(mod.__spec__, importlib.machinery.ModuleSpec):
+        return False
+    return True
+
+
+def _validate_real_modules():
+    """Ensure that installed dependencies are using real modules, not mocks.
+    
+    This prevents AttributeError issues during pytest collection.
+    Checks for modules that should be real (installed via requirements.txt)
+    and removes any broken mocks or stubs that might interfere with imports.
+    
+    Side Effects:
+        Modifies sys.modules by removing invalid module entries
+    """
+    for mod_name in REQUIRED_REAL_MODULES:
+        if mod_name in sys.modules:
+            mod = sys.modules[mod_name]
+            if not _is_valid_real_module(mod):
+                _remove_module_and_submodules(mod_name)
+
+
 # ---- Pytest hooks for collection optimization ----
 def pytest_configure(config):
     """
     Skip expensive initialization during collection phase.
     This prevents OOM and CPU timeout during test discovery.
     """
+    # Validate that required modules are not mocked (do this FIRST, before collection check)
+    _validate_real_modules()
+    
     if config.option.collectonly:
         # Signal to modules that we're only collecting, not running tests
         os.environ['SKIP_EXPENSIVE_INIT'] = '1'
@@ -1799,10 +1866,17 @@ def _initialize_prometheus_stubs():
     This function now only creates stubs if the real package is not available.
     
     FIX: Uses proper ModuleSpec to prevent AttributeError: __spec__
+    FIX: Detects and replaces mock modules with real imports
     """
-    # Check if already loaded
+    # Check if already loaded WITH A REAL MODULE (not a mock)
     if "prometheus_client" in sys.modules:
-        return
+        existing_mod = sys.modules["prometheus_client"]
+        if not _is_valid_real_module(existing_mod):
+            # It's a mock or broken stub - remove it
+            _remove_module_and_submodules("prometheus_client")
+        else:
+            # Real module already loaded
+            return
     
     # Try to import the real prometheus_client
     try:
