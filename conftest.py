@@ -97,10 +97,8 @@ def _apply_runtime_mocks():
     This prevents mock modules from interfering with pytest's import machinery
     during the collection phase.
     """
-    # Only mock prometheus_client if it's not already imported properly
-    if 'prometheus_client' not in sys.modules or not hasattr(sys.modules.get('prometheus_client'), '__spec__'):
-        sys.modules['prometheus_client'] = _create_stub_module('prometheus_client')
-        sys.modules['prometheus_client.core'] = _create_stub_module('prometheus_client.core')
+    # REMOVED: prometheus_client mocking - use real installation from requirements.txt
+    # prometheus_client is a required dependency and should not be mocked
     
     # Add other runtime-only mocks here as needed
     pass
@@ -162,7 +160,7 @@ if os.environ.get("TESTING") == "1":
         "boto3",  # Needed by clarifier (KMS integration)
         # cryptography removed - must use real implementation (Mock Poisoning prevention)
         # cryptography.fernet removed - must use real implementation (Mock Poisoning prevention)
-        "prometheus_client",  # Needed by clarifier for metrics
+        # prometheus_client removed - use real installation from requirements.txt
         "tiktoken",  # Needed by testgen_agent
         "aiokafka",  # Needed by arbiter
         "aiokafka.errors",  # Submodule
@@ -646,12 +644,8 @@ _OPTIONAL_DEPENDENCIES = [
     "PIL",  # Pillow - image processing
     "pillow",  # Pillow alternative import name
     "aiosqlite",  # Async SQLite - required by feedback module and omnicore_engine.database
-    "opentelemetry",  # OpenTelemetry - telemetry framework
-    "opentelemetry.trace",  # OpenTelemetry tracing
-    "opentelemetry.sdk",  # OpenTelemetry SDK
-    "opentelemetry.propagators",  # OpenTelemetry propagators (not propagate)
-    "opentelemetry.exporter",  # OpenTelemetry exporters
-    "opentelemetry.context",  # OpenTelemetry context
+    # opentelemetry packages removed - use real installation from requirements.txt
+    # opentelemetry is a required dependency and should not be mocked
     "google",  # Google Cloud - base package
     "google.cloud",  # Google Cloud client library
     "google.cloud.storage",  # Google Cloud Storage
@@ -680,8 +674,7 @@ _OPTIONAL_DEPENDENCIES = [
     "langchain_core",  # LangChain core library
     "matplotlib",  # Plotting library
     "numpy",  # Numerical computing
-    # Note: prometheus_client should be installed and NOT be mocked during normal test runs
-    # However, during collection it's stubbed to avoid registry duplication
+    # prometheus_client removed - use real installation from requirements.txt
     # Omnicore engine submodules that may have missing dependencies
     "omnicore_engine.database",  # May be missing aiosqlite or other dependencies
     "omnicore_engine.message_bus",  # May be missing structlog or other dependencies
@@ -1731,32 +1724,32 @@ def _initialize_crypto_protection():
 
 def _initialize_prometheus_stubs():
     """
-    Initialize prometheus_client stub modules.
+    Initialize prometheus_client stub modules only if not installed.
+    
+    UPDATED: prometheus_client is now a required dependency in requirements.txt.
+    This function now only creates stubs if the real package is not available,
+    which should only happen in unusual circumstances.
     
     This function can be called from the setup_test_stubs session fixture
     or at module level (when not in collection mode). It's safe to call multiple
     times - it will only create stubs if prometheus_client is not already available.
-    
-    If not called, tests that import prometheus_client will fail with ImportError,
-    and any code using Prometheus metrics will fail at runtime.
-    
-    This is deferred during test collection (PYTEST_COLLECTING=1) to avoid import-time
-    overhead, which was causing timeout issues.
     """
+    # Check if prometheus_client is already in sys.modules
+    if "prometheus_client" in sys.modules:
+        # Already loaded, don't replace it with a stub
+        return
+    
+    # Try to import the real prometheus_client first
+    try:
+        import prometheus_client
+        # Successfully imported, don't need stub
+        return
+    except ImportError:
+        # Not available, create stub below
+        pass
+    
     # prometheus_client needs special handling for its .core submodule
     if "prometheus_client" not in sys.modules:
-        # During test collection, always create stubs to avoid registry duplication issues
-        # Don't try to import the real prometheus_client during collection
-        if os.environ.get('PYTEST_COLLECTING') == '1':
-            # Skip trying to import, go straight to creating stub
-            pass
-        else:
-            try:
-                import prometheus_client
-                # Successfully imported, don't need stub
-                return
-            except ImportError:
-                pass  # Create stub below
         
         # Create prometheus_client package stub
         prom_module = types.ModuleType("prometheus_client")
