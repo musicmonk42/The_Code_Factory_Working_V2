@@ -451,16 +451,21 @@ def _include_routers(app_instance: FastAPI) -> bool:
 
 
 async def _background_initialization(app_instance: FastAPI):
+def _register_routers_sync(app_instance: FastAPI) -> bool:
     """
-    Background initialization task that runs AFTER the HTTP server is ready.
+    Load and register routers SYNCHRONOUSLY during startup.
     
-    This allows /health to respond immediately while initialization continues.
+    This MUST complete before the lifespan yields to ensure API endpoints
+    are available when the server starts accepting requests.
     
     Args:
         app_instance: The FastAPI application instance to add routers to
+        
+    Returns:
+        True if routers were registered successfully, False otherwise
     """
     logger.info("=" * 80)
-    logger.info("LOADING ROUTERS (Background)")
+    logger.info("LOADING ROUTERS (Synchronous - Before HTTP Server)")
     logger.info("=" * 80)
     
     # Load routers first - this is critical for the API to function
@@ -469,10 +474,39 @@ async def _background_initialization(app_instance: FastAPI):
     if routers_ok:
         # Include routers with /api prefix using shared helper
         _include_routers(app_instance)
+        # Include routers with /api prefix
+        try:
+            app_instance.include_router(api_keys_router, prefix="/api")
+            app_instance.include_router(audit_router.router, prefix="/api")
+            app_instance.include_router(diagnostics_router, prefix="/api")
+            app_instance.include_router(jobs_router, prefix="/api")
+            app_instance.include_router(generator_router, prefix="/api")
+            app_instance.include_router(omnicore_router, prefix="/api")
+            app_instance.include_router(sfe_router, prefix="/api")
+            app_instance.include_router(fixes_router, prefix="/api")
+            app_instance.include_router(events_router, prefix="/api")
+            logger.info("✓ All routers included in application")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to include routers: {e}", exc_info=True)
+            return False
     else:
         logger.error(f"Router loading failed: {_router_load_error}")
         logger.warning("API endpoints will not be available")
+        return False
+
+
+async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
+    """
+    Background initialization task that runs AFTER the HTTP server is ready.
     
+    This handles heavy initialization (config, agents) while the server is
+    already accepting requests. Routers are already registered synchronously.
+    
+    Args:
+        app_instance: The FastAPI application instance
+        routers_ok: Whether routers were successfully registered
+    """
     logger.info("=" * 80)
     logger.info("INITIALIZING PLATFORM CONFIGURATION (Background)")
     logger.info("=" * 80)
@@ -519,7 +553,10 @@ async def _background_initialization(app_instance: FastAPI):
             logger.error(f"Error starting background agent loading: {e}", exc_info=True)
             logger.warning("Continuing startup despite agent loading error")
     else:
-        logger.warning("Skipping agent loading due to router loading failure")
+        if not routers_ok:
+            logger.warning("Skipping agent loading due to router loading failure")
+        elif get_agent_loader is None:
+            logger.warning("Agent loader not available - skipping agent loading")
     
     logger.info("=" * 80)
     logger.info("Platform initialization complete")
@@ -529,7 +566,7 @@ async def _background_initialization(app_instance: FastAPI):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Application lifespan manager - MUST complete immediately to allow health checks.
+    Application lifespan manager.
     
     All initialization happens in background tasks so the HTTP server can accept
     connections immediately for Railway healthchecks.
@@ -538,10 +575,15 @@ async def lifespan(app: FastAPI):
     immediately for test requests.
     """
     # Startup - DO NOT BLOCK HERE (except in test mode)
+    Routers are registered SYNCHRONOUSLY before yield to ensure API endpoints
+    are available immediately when the server starts accepting requests.
+    Heavy initialization (config, agents) happens in background tasks.
+    """
+    # Startup
     logger.info("Starting Code Factory API Server")
     logger.info(f"Version: {__version__}")
     logger.info("=" * 80)
-    logger.info("HTTP SERVER STARTING - Minimal pre-initialization")
+    logger.info("HTTP SERVER STARTING - Registering routers synchronously")
     logger.info("=" * 80)
     
     background_task = None
@@ -560,8 +602,17 @@ async def lifespan(app: FastAPI):
         # Pass the app instance so routers can be added
         background_task = asyncio.create_task(_background_initialization(app))
         logger.info("Background initialization task created - HTTP server starting now")
+    # CRITICAL: Register routers SYNCHRONOUSLY before yielding
+    # This ensures API endpoints are available when the server starts
+    routers_ok = _register_routers_sync(app)
     
-    # IMMEDIATELY yield so FastAPI routes become available
+    # Start HEAVY initialization in background (config, agents)
+    # Pass routers_ok so background task knows if agents should be loaded
+    background_task = asyncio.create_task(_background_initialization(app, routers_ok))
+    logger.info("Background initialization task created for config and agents")
+    logger.info("✓ API endpoints are now available")
+    
+    # Yield - server now accepts requests with routers already registered
     yield
     
     # Shutdown
