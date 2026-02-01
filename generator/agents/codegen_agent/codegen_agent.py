@@ -52,7 +52,8 @@ try:
         call_ensemble_api,
         call_llm_api,
     )
-    from generator.runner.runner_logging import log_audit_event
+    # FIX: Import from runner_audit to avoid circular dependency
+    from generator.runner.runner_audit import log_audit_event
     from generator.runner.runner_metrics import (
         LLM_CIRCUIT_STATE,
         LLM_RATE_LIMIT_EXCEEDED,
