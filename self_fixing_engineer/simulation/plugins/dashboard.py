@@ -18,10 +18,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 DASHBOARD_CORE_VERSION = "1.2.0"  # Introduce a core version constant
 
-# Ensure logging is always initialized at the very top.
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
-)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() at module level to avoid duplicate logs.
+# The application entry point should configure the root logger.
+logger = logging.getLogger(__name__)
 
 # Apply nest_asyncio for handling nested event loops in Streamlit
 

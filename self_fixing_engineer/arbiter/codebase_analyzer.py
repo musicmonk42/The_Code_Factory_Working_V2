@@ -208,18 +208,10 @@ except ImportError as e:
 
 tracer = get_tracer(__name__)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
-logger = logging.getLogger("arbiter.codebase_analyzer")
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-    )
-    handler.addFilter(PIIRedactorFilter())
-    logger.addHandler(handler)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() or add handlers at module level to avoid duplicate logs.
+# The application entry point should configure the root logger.
+logger = logging.getLogger(__name__)
 
 # Prometheus Metrics - Idempotent Registration
 

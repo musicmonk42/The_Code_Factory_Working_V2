@@ -29,10 +29,10 @@ REGISTRY_PLUGINS_PATH = os.getenv(
 DEFAULT_ALLOWLIST: Dict[str, Dict[str, Any]] = {}  # Empty by default for security
 
 # --- Logging Setup ---
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() at module level - that causes duplicate logs
+# when the module is imported by an application that has already configured logging.
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s"
-)
 
 
 # --- Audit Logging Setup ---

@@ -44,10 +44,8 @@ except ImportError:
             logger.info(f"[Audit] {event_type}: {details}")
 
 
-# Configure module logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() at module level to avoid duplicate logs.
 logger = logging.getLogger(__name__)
 
 

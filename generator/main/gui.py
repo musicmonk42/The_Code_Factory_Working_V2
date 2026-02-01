@@ -421,10 +421,9 @@ except ImportError:
     runner_logger_instance = logging.getLogger("dummy_runner")
 
 
-# Configure logging for the GUI application
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Get module logger - follows Python logging best practices.
+# Do NOT call basicConfig() at module level to avoid duplicate logs.
+# The application entry point should configure the root logger.
 app_logger = logging.getLogger(__name__)  # Logger for the GUI itself
 
 gettext.bindtextdomain("runner", "locale")
