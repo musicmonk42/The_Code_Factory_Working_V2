@@ -1,0 +1,167 @@
+{# 
+  API Documentation Template
+  Generates comprehensive API documentation for REST/GraphQL/RPC endpoints.
+  
+  Features:
+    - Endpoint documentation structure
+    - Parameter documentation with types
+    - Response format documentation
+    - Example usage sections
+    - Authentication and authorization
+    - Error handling documentation
+#}
+
+# API Documentation Generation
+
+## Overview
+Generate comprehensive API documentation for the {{ doc_type | default('API') }} project.
+
+{% if files %}
+## Files to Document:
+{% for file in files %}
+- {{ file }}
+{% endfor %}
+{% endif %}
+
+{% if context is defined %}
+## Context Information
+{% if context.language is defined %}
+- Language: {{ context.language }}
+{% endif %}
+{% if context.framework is defined %}
+- Framework: {{ context.framework }}
+{% endif %}
+{% if context.dependencies is defined and context.dependencies %}
+- Dependencies: {{ context.dependencies | join(', ') }}
+{% endif %}
+{% if context.files_content is defined %}
+### Code Context:
+```
+{{ context.files_content | tojson }}
+```
+{% endif %}
+{% endif %}
+
+## Documentation Requirements
+
+### For Each Endpoint:
+
+1. **Endpoint Path**: The URL path for the endpoint (e.g., `/api/v1/users`)
+2. **HTTP Method**: GET, POST, PUT, DELETE, PATCH, etc.
+3. **Description**: Brief description of what the endpoint does
+4. **Authentication**: Required authentication method (Bearer token, API key, OAuth, etc.)
+5. **Request Parameters**:
+   - **Path parameters**: Variables in the URL path
+   - **Query parameters**: Optional or required query string parameters
+   - **Request headers**: Required or optional headers
+   - **Request body**: Schema/structure of the request body (if applicable)
+
+6. **Response Format**:
+   - **Success response**: HTTP status code and response body schema
+   - **Error responses**: Common error scenarios with status codes
+   - **Response headers**: Relevant response headers
+
+7. **Example Usage**:
+   - Sample request (cURL, HTTP, or code example)
+   - Sample successful response
+   - Sample error response
+
+### Parameter Documentation
+
+For each parameter, include:
+- **Name**: Parameter name
+- **Type**: Data type (string, integer, boolean, object, array, etc.)
+- **Required**: Yes/No
+- **Description**: What the parameter is for
+- **Default**: Default value (if applicable)
+- **Example**: Example value
+- **Constraints**: Validation rules, min/max, enum values
+
+### Response Documentation
+
+Document response structure:
+- **Status Code**: HTTP status code
+- **Body**: Response body structure with field descriptions
+- **Headers**: Relevant response headers (Content-Type, etc.)
+- **Content-Type**: Response content type (application/json, text/xml, etc.)
+
+### Authentication & Authorization
+
+Document:
+- Authentication method (API key, OAuth 2.0, JWT, etc.)
+- How to obtain credentials
+- How to include auth in requests
+- Required scopes or permissions
+- Token expiration and refresh
+
+### Error Handling
+
+Document common error responses:
+- **400 Bad Request**: Invalid parameters or request format
+- **401 Unauthorized**: Authentication required or invalid credentials
+- **403 Forbidden**: Insufficient permissions
+- **404 Not Found**: Resource not found
+- **422 Unprocessable Entity**: Validation errors
+- **429 Too Many Requests**: Rate limit exceeded
+- **500 Internal Server Error**: Server error
+- **503 Service Unavailable**: Service temporarily unavailable
+
+Include error response format and codes.
+
+### Example Format
+
+```bash
+# Example cURL request
+curl -X POST https://api.example.com/v1/endpoint \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "param1": "value1",
+    "param2": 123
+  }'
+```
+
+```json
+// Example successful response
+{
+  "status": "success",
+  "data": {
+    "id": "123",
+    "result": "example"
+  },
+  "meta": {
+    "timestamp": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+```json
+// Example error response
+{
+  "status": "error",
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid parameter value",
+    "details": [
+      {
+        "field": "param1",
+        "message": "Must be a valid email address"
+      }
+    ]
+  }
+}
+```
+
+{% if instructions is defined and instructions %}
+## Additional Instructions
+{{ instructions }}
+{% endif %}
+
+{% if few_shot_examples is defined and few_shot_examples %}
+## Example Patterns
+
+{{ few_shot_examples }}
+{% endif %}
+
+---
+**Output Format**: Well-structured Markdown documentation with clear sections, code examples, and comprehensive details. Use tables where appropriate for parameter listings.

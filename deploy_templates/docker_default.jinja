@@ -1,0 +1,87 @@
+{# 
+  Docker Deployment Template
+  Generates production-grade Dockerfile for containerized deployment.
+  
+  Features:
+    - Security best practices (non-root user, minimal base images)
+    - Efficient layer caching and multi-stage builds
+    - Health checks and proper signal handling
+    - Environment configuration
+    - CI/CD optimization
+#}
+
+# Production-Ready Dockerfile Generation
+
+Generate a production-grade Dockerfile for these files:
+{% if files %}
+{% for file in files %}
+- {{ file }}
+{% endfor %}
+{% else %}
+- (no specific files provided)
+{% endif %}
+
+{% if context is defined %}
+## Context Information
+{% if context.language is defined %}
+- Language: {{ context.language }}
+{% endif %}
+{% if context.framework is defined %}
+- Framework: {{ context.framework }}
+{% endif %}
+{% if context.dependencies is defined and context.dependencies %}
+- Dependencies: {{ context.dependencies | join(', ') }}
+{% endif %}
+{% endif %}
+
+## Requirements
+
+The Dockerfile must include:
+
+1. **Base Image Selection**
+   - Use official, minimal base images (alpine or slim variants where possible)
+   - Pin specific versions for reproducibility
+   - Use multi-stage builds to reduce final image size
+
+2. **Security Best Practices**
+   - Run as non-root user
+   - Minimize attack surface by removing unnecessary packages
+   - Use COPY instead of ADD when possible
+   - Don't store secrets in the image
+
+3. **Build Optimization**
+   - Order layers from least to most frequently changing
+   - Leverage build cache effectively
+   - Combine RUN commands to minimize layers
+   - Clean up package manager caches
+
+4. **Runtime Configuration**
+   - Set appropriate WORKDIR
+   - Define necessary environment variables
+   - Configure proper HEALTHCHECK
+   - Use ENTRYPOINT and CMD appropriately
+   - Expose required ports
+
+5. **CI/CD Ready**
+   - Include labels for metadata
+   - Support build arguments for flexibility
+   - Enable proper signal handling for graceful shutdown
+
+{% if repo_path is defined %}
+## Repository Path
+{{ repo_path }}
+{% endif %}
+
+{% if instructions is defined and instructions %}
+## Additional Instructions
+{{ instructions }}
+{% endif %}
+
+{% if few_shot_examples is defined and few_shot_examples %}
+## Example Patterns
+
+{{ few_shot_examples }}
+{% endif %}
+
+---
+**Output Format**: Generate ONLY the Dockerfile content. No explanations, comments outside the Dockerfile, or markdown formatting. The output should be ready to save as a `Dockerfile`.

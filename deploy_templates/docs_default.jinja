@@ -1,0 +1,106 @@
+{# 
+  Documentation Generation Template (for deployment documentation)
+  Generates comprehensive deployment documentation.
+  
+  Features:
+    - Architecture documentation
+    - Deployment procedures
+    - Configuration guide
+    - Troubleshooting section
+#}
+
+# Deployment Documentation Generation
+
+Generate comprehensive deployment documentation for the project.
+
+{% if files %}
+## Files to Document:
+{% for file in files %}
+- {{ file }}
+{% endfor %}
+{% endif %}
+
+{% if context is defined %}
+## Project Context
+{% if context.language is defined %}
+- Language: {{ context.language }}
+{% endif %}
+{% if context.framework is defined %}
+- Framework: {{ context.framework }}
+{% endif %}
+{% if context.dependencies is defined and context.dependencies %}
+- Dependencies: {{ context.dependencies | join(', ') }}
+{% endif %}
+{% endif %}
+
+## Documentation Requirements
+
+The deployment documentation should include:
+
+### 1. **Architecture Overview**
+   - System architecture diagram (described in text/markdown)
+   - Component relationships
+   - Data flow
+   - Technology stack
+
+### 2. **Prerequisites**
+   - Required software and tools
+   - System requirements (OS, memory, CPU)
+   - Access requirements (accounts, permissions)
+   - Network requirements
+
+### 3. **Installation Guide**
+   - Step-by-step installation instructions
+   - Configuration file setup
+   - Environment variable configuration
+   - Database setup (if applicable)
+
+### 4. **Deployment Procedures**
+   - Development environment setup
+   - Staging deployment steps
+   - Production deployment steps
+   - Rollback procedures
+   - Blue-green/canary deployment strategies
+
+### 5. **Configuration**
+   - All configuration options explained
+   - Example configurations
+   - Best practices
+   - Security considerations
+
+### 6. **Monitoring & Logging**
+   - How to monitor the application
+   - Log locations and formats
+   - Key metrics to watch
+   - Alerting setup
+
+### 7. **Troubleshooting**
+   - Common issues and solutions
+   - Debug procedures
+   - Log analysis tips
+   - Support contacts
+
+### 8. **Maintenance**
+   - Backup procedures
+   - Update procedures
+   - Scaling guidelines
+   - Performance tuning
+
+{% if repo_path is defined %}
+## Repository Path
+{{ repo_path }}
+{% endif %}
+
+{% if instructions is defined and instructions %}
+## Additional Instructions
+{{ instructions }}
+{% endif %}
+
+{% if few_shot_examples is defined and few_shot_examples %}
+## Example Patterns
+
+{{ few_shot_examples }}
+{% endif %}
+
+---
+**Output Format**: Generate well-structured Markdown documentation with clear sections, code blocks for commands/configurations, and helpful examples. Include a table of contents at the beginning.
