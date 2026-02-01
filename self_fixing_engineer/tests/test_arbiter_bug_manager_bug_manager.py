@@ -304,3 +304,84 @@ class TestBugManagerArena:
                     arena.report(ValueError("test"))
                     # Just check that run was called, not the exact arguments
                     mock_asyncio_run.assert_called_once()
+
+
+class TestBugSignatureGeneration:
+    """Tests for the bug signature generation with HTTP status code prefixes."""
+
+    @pytest.fixture
+    async def manager_for_signature(self, mock_dependencies):
+        """Provides a BugManager instance for signature testing."""
+        settings = Settings(
+            RATE_LIMIT_ENABLED=False,
+            AUDIT_LOG_ENABLED=False,
+            AUTO_FIX_ENABLED=False,
+            ENABLED_NOTIFICATION_CHANNELS=(),
+        )
+        bm = BugManager(settings=settings)
+        yield bm
+        await bm.shutdown()
+
+    def test_signature_with_500_status_code_in_error_data(self, manager_for_signature):
+        """Tests that errors with status_code=500 generate signatures with 500_error prefix."""
+        error_data = {"status_code": 500, "message": "Internal Server Error"}
+        signature = manager_for_signature._generate_bug_signature(
+            error_data, "test_location", None
+        )
+        assert signature.startswith(
+            "500_error_"
+        ), f"Signature should start with '500_error_', got: {signature[:20]}"
+
+    def test_signature_with_500_in_message(self, manager_for_signature):
+        """Tests that errors with '500' in message generate signatures with 500_error prefix."""
+        signature = manager_for_signature._generate_bug_signature(
+            "HTTP 500 Internal Server Error occurred", "test_location", None
+        )
+        assert signature.startswith(
+            "500_error_"
+        ), f"Signature should start with '500_error_', got: {signature[:20]}"
+
+    def test_signature_with_http_status_in_custom_details(self, manager_for_signature):
+        """Tests that errors with http_status in custom_details generate correct prefix."""
+        signature = manager_for_signature._generate_bug_signature(
+            "Some error", "test_location", {"http_status": 500}
+        )
+        assert signature.startswith(
+            "500_error_"
+        ), f"Signature should start with '500_error_', got: {signature[:20]}"
+
+    def test_signature_with_502_status_code(self, manager_for_signature):
+        """Tests that errors with status_code=502 generate signatures with 502_error prefix."""
+        error_data = {"status_code": 502, "message": "Bad Gateway"}
+        signature = manager_for_signature._generate_bug_signature(
+            error_data, "test_location", None
+        )
+        assert signature.startswith(
+            "502_error_"
+        ), f"Signature should start with '502_error_', got: {signature[:20]}"
+
+    def test_signature_without_http_error_has_no_prefix(self, manager_for_signature):
+        """Tests that regular errors without HTTP status codes don't have error prefix."""
+        signature = manager_for_signature._generate_bug_signature(
+            ValueError("invalid value"), "test_location", None
+        )
+        # Should NOT start with any error code prefix
+        assert not signature.startswith(
+            "500_error_"
+        ), "Signature should not start with '500_error_'"
+        assert not signature.startswith(
+            "502_error_"
+        ), "Signature should not start with '502_error_'"
+
+    def test_signature_uniqueness_preserved(self, manager_for_signature):
+        """Tests that different errors produce different signatures even with same prefix."""
+        sig1 = manager_for_signature._generate_bug_signature(
+            {"status_code": 500, "message": "Error A"}, "loc1", None
+        )
+        sig2 = manager_for_signature._generate_bug_signature(
+            {"status_code": 500, "message": "Error B"}, "loc1", None
+        )
+        # Both should have the same prefix but different hash suffixes
+        assert sig1.startswith("500_error_")
+        assert sig2.startswith("500_error_")
+        assert sig1 != sig2, "Different errors should produce different signatures"
