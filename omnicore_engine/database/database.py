@@ -495,11 +495,12 @@ class Database:
         # Note: After URL conversion above, all PostgreSQL URLs will use asyncpg driver
         if self.db_path.startswith("postgresql+asyncpg://"):
             # asyncpg uses server_settings for PostgreSQL configuration
-            # and command_timeout for connection-level timeout
+            # - command_timeout: Maximum time (seconds) for individual query execution
+            # - statement_timeout: PostgreSQL server-side query timeout (milliseconds)
             engine_params["connect_args"] = {
-                "command_timeout": 30,  # Connection-level timeout in seconds
+                "command_timeout": 30,  # Per-query timeout in seconds
                 "server_settings": {
-                    "statement_timeout": "30000",  # Query timeout in milliseconds
+                    "statement_timeout": "30000",  # Server-side query timeout in milliseconds
                 },
             }
             self.engine: AsyncEngine = create_async_engine(

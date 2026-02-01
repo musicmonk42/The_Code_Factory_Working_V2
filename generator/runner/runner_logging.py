@@ -210,6 +210,11 @@ def _get_metrics():
             }
         except ImportError:
             # Fallback dummy metrics for when runner_metrics is not available
+            class _DummyTimer:
+                """Dummy timer context manager for metrics."""
+                def __enter__(self): return self
+                def __exit__(self, *args): pass
+            
             class _DummyMetric:
                 """Dummy metric that silently ignores all operations."""
                 def labels(self, *args, **kwargs):
@@ -221,9 +226,6 @@ def _get_metrics():
                 def observe(self, *args, **kwargs):
                     pass
                 def time(self):
-                    class _DummyTimer:
-                        def __enter__(self): return self
-                        def __exit__(self, *args): pass
                     return _DummyTimer()
             
             _dummy = _DummyMetric()
