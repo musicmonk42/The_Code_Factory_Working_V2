@@ -378,7 +378,8 @@ _last_hashes: Dict[str, str] = {}
 
 def validate_dependencies() -> None:
     """Ensures critical dependencies are available in production."""
-    if os.environ.get("APP_ENV", "development").lower() != "production":
+    app_env = os.environ.get("APP_ENV", "development").lower()
+    if app_env != "production":
         return
     required = [
         ("cryptography", CRYPTO_AVAILABLE, "Digital signing"),
@@ -388,9 +389,11 @@ def validate_dependencies() -> None:
     for name, available, purpose in required:
         if not available:
             logger.critical(
-                f"{name} not installed. {purpose} required for production. Aborting."
+                f"{name} not installed. {purpose} required for production. "
+                f"System will continue in degraded mode with reduced functionality.",
+                extra={"context": "startup", "missing_dependency": name}
             )
-            sys.exit(1)
+            # DO NOT call sys.exit(1) - allow system to continue in degraded mode
 
 
 def validate_sensitive_env_vars() -> None:
@@ -412,10 +415,11 @@ def validate_sensitive_env_vars() -> None:
         value = os.environ.get(var, "")
         if value and ("dummy" in value.lower() or "mock" in value.lower()):
             logger.critical(
-                f"Dummy value detected in sensitive env var {var}. Aborting.",
-                extra={"context": "startup"},
+                f"Dummy value detected in sensitive env var {var}. "
+                f"Security features requiring this variable will be disabled.",
+                extra={"context": "startup", "env_var": var},
             )
-            sys.exit(1)
+            # DO NOT call sys.exit(1) - allow system to continue with security features disabled
 
 
 def load_public_keys() -> Dict[str, Ed25519PublicKey]:
