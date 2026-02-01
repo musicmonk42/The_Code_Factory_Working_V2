@@ -374,7 +374,7 @@ jobs:
           echo "=== Reinstalling aiohttp with all submodules ==="
           pip uninstall -y aiohttp aiosignal frozenlist yarl multidict aiohttp-client-cache
           pip install --no-cache-dir --force-reinstall \
-            aiohttp==3.10.11 \
+            aiohttp==3.13.3 \
             yarl>=1.9.0 \
             multidict>=6.0.0 \
             frozenlist>=1.4.0 \
