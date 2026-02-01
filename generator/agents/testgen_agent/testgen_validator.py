@@ -43,13 +43,22 @@ from runner import (  # Removed tracer - doesn't exist in runner
     run_stress_tests,
     run_tests_in_sandbox,
 )
-from runner.runner_logging import add_provenance, logger
+# FIX: Import only logger at module level to break circular import
+# add_provenance is imported lazily via _get_add_provenance() when needed
+from runner.runner_logging import logger
 from runner.runner_mutation import (  # FIX 2: Added Mutation Runner Imports
     mutation_test,
     property_based_test,
 )
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+
+
+# FIX: Lazy import helper for add_provenance to break circular import
+def _get_add_provenance():
+    """Lazily import add_provenance to avoid circular import at module load time."""
+    from runner.runner_logging import add_provenance
+    return add_provenance
 
 # -----------------------------------
 
@@ -117,7 +126,7 @@ async def start_health_server():
     # REFACTORED: Use add_provenance (fire and forget)
     try:
         asyncio.create_task(
-            add_provenance(
+            _get_add_provenance()(
                 "HealthServerStarted",
                 {"port": 8082, "timestamp": datetime.now(timezone.utc).isoformat()},
             )
@@ -157,7 +166,7 @@ class ValidatorRegistry:
         # REFACTORED: Use add_provenance (fire and forget in sync context)
         try:
             asyncio.create_task(
-                add_provenance(
+                _get_add_provenance()(
                     "ValidatorRegistered",
                     {"name": name, "timestamp": datetime.now(timezone.utc).isoformat()},
                 )
@@ -240,7 +249,7 @@ class ValidatorRegistry:
 
         # REFACTORED: Use add_provenance
         try:
-            await add_provenance(
+            await _get_add_provenance()(
                 "ValidatorPluginsReloaded",
                 {
                     "count": len(VALIDATORS),
@@ -791,7 +800,7 @@ async def validate_test_quality(
 
     # REFACTORED: Use add_provenance
     try:
-        await add_provenance(
+        await _get_add_provenance()(
             "TestQualityValidated",
             {
                 "validation_type": validation_type,
@@ -816,7 +825,7 @@ async def startup():
     asyncio.create_task(start_health_server())
     # REFACTORED: Use add_provenance
     try:
-        await add_provenance(
+        await _get_add_provenance()(
             "Startup", {"timestamp": datetime.now(timezone.utc).isoformat()}
         )
     except Exception:
@@ -828,7 +837,7 @@ async def shutdown():
     await validator_registry.close()
     # REFACTORED: Use add_provenance
     try:
-        await add_provenance(
+        await _get_add_provenance()(
             "Shutdown", {"timestamp": datetime.now(timezone.utc).isoformat()}
         )
     except Exception:

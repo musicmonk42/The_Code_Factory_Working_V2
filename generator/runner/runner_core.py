@@ -54,8 +54,18 @@ from runner.runner_errors import (
     TimeoutError,
     error_codes,
 )
-from runner.runner_logging import log_audit_event, logger
+# FIX: Import only logger at module level to break circular import
+# log_audit_event is imported lazily via _get_log_audit_event() when needed
+from runner.runner_logging import logger
 from runner.runner_metrics import *  # Ensure all metrics are imported explicitly
+
+
+# FIX: Lazy import helper for log_audit_event to break circular import
+def _get_log_audit_event():
+    """Lazily import log_audit_event to avoid circular import at module load time."""
+    from runner.runner_logging import log_audit_event
+    return log_audit_event
+
 
 # Gold Standard: Import parser output schemas for strong typing
 from runner.runner_parsers import (
@@ -1269,7 +1279,7 @@ class Runner(ABC):
 
             # Call the V2 centralized audit logger
             # This function (from runner_logging) handles its own hashing, signing, and chaining
-            await log_audit_event(
+            await _get_log_audit_event()(
                 action="TestRunCompleted",
                 data=audit_data_payload,
                 task_id=task_id,  # Pass task_id as extra kwarg for context

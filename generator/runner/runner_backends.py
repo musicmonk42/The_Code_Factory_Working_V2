@@ -60,10 +60,19 @@ from runner.runner_errors import (  # Explicitly import used error types
 )
 
 # --- REFACTOR FIX: Corrected imports to point to runner foundation ---
-from runner.runner_logging import add_provenance, logger
+# FIX: Import only logger at module level to break circular import
+# add_provenance is imported lazily via _get_add_provenance() when needed
+from runner.runner_logging import logger
 from runner.runner_metrics import (  # BACKEND_LATENCY, ERRORS, RECOVERIES, CIRCUIT_BREAKERS,; and get_circuit_breaker are no longer used here.; This logic is encapsulated in the imported subprocess_wrapper.
     HEALTH_STATUS,
 )
+
+
+# FIX: Lazy import helper for add_provenance to break circular import
+def _get_add_provenance():
+    """Lazily import add_provenance to avoid circular import at module load time."""
+    from runner.runner_logging import add_provenance
+    return add_provenance
 
 # --- END REFACTOR MERGE ---
 
@@ -608,7 +617,7 @@ class NodeJSBackend(Backend):
             )
 
             # Simplified provenance logging for the execution
-            add_provenance(
+            _get_add_provenance()(
                 {
                     "action": "nodejs_execute",
                     "command": " ".join(run_cmd),
@@ -838,7 +847,7 @@ class GoBackend(Backend):
             run_result = await subprocess_wrapper(
                 run_cmd, timeout=timeout, cwd=work_dir
             )
-            add_provenance(
+            _get_add_provenance()(
                 {
                     "action": "go_execute",
                     "command": " ".join(run_cmd),
@@ -1086,7 +1095,7 @@ class JavaBackend(Backend):
             run_result = await subprocess_wrapper(
                 run_cmd, timeout=timeout, cwd=work_dir
             )
-            add_provenance(
+            _get_add_provenance()(
                 {
                     "action": "java_execute",
                     "command": " ".join(run_cmd),
