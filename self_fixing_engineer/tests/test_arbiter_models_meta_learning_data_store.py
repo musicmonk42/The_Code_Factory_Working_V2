@@ -9,7 +9,7 @@ import pytest_asyncio
 from arbiter.otel_config import get_tracer
 
 # Import from the correct module
-from meta_learning_data_store import (
+from self_fixing_engineer.arbiter.models.meta_learning_data_store import (
     MLDS_DATA_SIZE,
     MLDS_OPS_TOTAL,
     MetaLearningBackendError,

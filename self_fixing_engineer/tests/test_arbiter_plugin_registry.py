@@ -5,16 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Add the parent directory to path if needed
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Add self_healing_import_fixer to sys.path
-self_healing_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "self_healing_import_fixer")
-)
-sys.path.insert(0, self_healing_path)
-
-from arbiter_plugin_registry import (
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import (
     PLUGIN_REGISTRY,
     PluginBase,
     PluginDependencyError,
@@ -549,10 +540,10 @@ async def test_reload(reset_registry):
         # The module is imported as arbiter_plugin_registry due to sys.path manipulation
         with (
             patch(
-                "arbiter_plugin_registry.importlib.import_module",
+                "self_fixing_engineer.arbiter.arbiter_plugin_registry.importlib.import_module",
                 return_value=mock_module,
             ),
-            patch("arbiter_plugin_registry.importlib.reload", return_value=mock_module),
+            patch("self_fixing_engineer.arbiter.arbiter_plugin_registry.importlib.reload", return_value=mock_module),
         ):
             result = await reg.reload(kind, name)
             assert result is True
