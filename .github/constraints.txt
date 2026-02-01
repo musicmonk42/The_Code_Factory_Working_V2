@@ -32,13 +32,13 @@ pytest-asyncio>=0.21.0,<2.0.0
 pytest-html>=3.2.0,<5.0.0
 pytest-json-report>=1.5.0,<2.0.0
 
-# AWS SDK - pin to versions that don't have vendored requests issues
-# Using botocore 1.35.0+ which properly handles the external requests library
-# and avoids AttributeError with vendored.requests module
+# AWS SDK - pin to versions compatible with aioboto3 13.3.0
+# aioboto3 13.3.0 with aiobotocore 2.16.0 is required for boto3 1.35.76
+# These versions are tightly coupled and must match
 boto3>=1.35.0,<2.0.0
 botocore>=1.35.0,<2.0.0
-aioboto3>=15.0.0,<16.0.0
-aiobotocore>=2.20.0,<3.0.0
+aioboto3>=13.0.0,<14.0.0
+aiobotocore>=2.15.0,<2.17.0
 
 # aiohttp - web framework for deploy_prompt API
 # Pin to 3.9.x series for stable RouteTableDef API
