@@ -1265,16 +1265,14 @@ class ExplainAudit:
             AUDIT_RECORDS_PROCESSED_TOTAL.labels(status="success").inc(
                 len(records_to_flush)
             )
-            AUDIT_RECORDS.labels(operation="flush_buffer_success").observe(
-                time.time() - start_time
-            )
+            # Fix: AUDIT_RECORDS is a Counter, should use .inc() not .observe()
+            AUDIT_RECORDS.labels(operation="flush_buffer_success").inc()
         except Exception as e:
             AUDIT_RECORDS_PROCESSED_TOTAL.labels(status="failed").inc(
                 len(records_to_flush)
             )
-            AUDIT_ERRORS.labels(operation="flush_buffer").observe(
-                time.time() - start_time
-            )
+            # Fix: AUDIT_ERRORS is a Counter, should use .inc() not .observe()
+            AUDIT_ERRORS.labels(operation="flush_buffer").inc()
             logger.error(
                 f"Audit buffer flush failed: {self.security_guard.sanitize_data([r.model_dump() for r in records_to_flush])}: {e}",
                 exc_info=True,
