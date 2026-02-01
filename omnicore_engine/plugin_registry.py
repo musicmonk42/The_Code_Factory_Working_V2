@@ -637,7 +637,7 @@ class PluginRegistry:
         self._plugins = defaultdict(dict)
         self._entrypoints = {}
         self._is_initialized = False
-        self._init_lock = asyncio.Lock()  # Lock for atomic initialization
+        self._init_lock = None  # Lazy initialization to avoid event loop requirement at import time
         self._register_lock = threading.Lock()  # Lock for plugin registration
         self._pending_metadata_lock = threading.Lock()  # Lock for pending metadata queue
         self.db: Optional[Database] = None
@@ -761,6 +761,10 @@ class PluginRegistry:
                     )
 
     async def initialize(self):
+        # Lazy initialization of async lock
+        if self._init_lock is None:
+            self._init_lock = asyncio.Lock()
+        
         # Atomic initialization check with lock to prevent race conditions
         async with self._init_lock:
             if self._is_initialized:
