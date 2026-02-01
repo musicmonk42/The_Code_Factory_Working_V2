@@ -754,11 +754,20 @@ class AuditLogger:
                 )
                 self.degraded_mode = False
         else:
-            # In non-production environments, skip strict chain verification
-            logger.info(
-                "Audit chain verification skipped in non-production environment.",
-                extra={"context": "startup"},
-            )
+            # In non-production environments, still verify chain but only log warnings
+            if not verify_audit_chain(self.log_path):
+                logger.warning(
+                    "Audit chain verification failed in non-production environment. "
+                    "This may indicate integrity issues that should be addressed.",
+                    extra={"context": "startup"},
+                )
+                self.degraded_mode = True
+            else:
+                logger.info(
+                    "Audit chain verified successfully at startup.",
+                    extra={"context": "startup"},
+                )
+                self.degraded_mode = False
 
     async def _initialize_dlt_backend_on_startup(self):
         """Asynchronously initializes the DLT backend clients."""
