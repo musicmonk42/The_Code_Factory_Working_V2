@@ -107,53 +107,100 @@ except ImportError:
     Message = None
     print("omnicore_engine.message_bus not found. Message bus functionality disabled.")
 
-try:
-    from intent_capture.agent_core import AgentTeam, CollaborativeAgent
-except ImportError:
-    CollaborativeAgent = None
-    AgentTeam = None
-    print("intent_capture not found. Intent capture functionality disabled.")
+# Module-level: Set to None initially to avoid heavy imports during module load
+# These will be lazy-loaded when PluginRegistry.initialize() is called
+CollaborativeAgent = None
+AgentTeam = None
+AIManager = None
+create_import_fixer_engine = None
+ImportFixerEngine = None
+MyBackend = None
+MyCustomRunner = None
+MyBetterRunner = None
+CodeHealthEnv = None
+evolve_configs = None
+SIM_REGISTRY = None
 
-try:
-    from self_healing_import_fixer.import_fixer.fixer_ai import AIManager
-    from self_healing_import_fixer.import_fixer.import_fixer_engine import (
-        ImportFixerEngine,
-        create_import_fixer_engine,
-    )
-except ImportError:
-    AIManager = None
-    create_import_fixer_engine = None
-    ImportFixerEngine = None
-    print("self_healing_import_fixer not found. Import fixer functionality disabled.")
-
-# --- FIX: Broaden exception handling for heavy, optional dependencies ---
-try:
-    from test_generation.backends import MyBackend
-except Exception as e:
-    MyBackend = None
-    print(f"test_generation.backends not available ({e}); skipping.")
-
-try:
-    from self_fixing_engineer.simulation.runners import MyBetterRunner, MyCustomRunner
-except Exception as e:
-    MyCustomRunner = None
-    MyBetterRunner = None
-    print(f"simulation.runners not available ({e}); skipping.")
-# --- END FIX ---
-
-try:
-    from envs.code_health_env import CodeHealthEnv
-    from envs.evolution import evolve_configs
-except ImportError:
-    CodeHealthEnv = None
-    evolve_configs = None
-    print("envs module not found.")
-
-try:
-    from self_fixing_engineer.simulation.registry import SIM_REGISTRY
-except ImportError:
-    SIM_REGISTRY = None
-    print("simulation.registry not found.")
+def _lazy_load_optional_dependencies():
+    """Lazy-load all optional heavy dependencies only when needed.
+    
+    This prevents expensive imports during module initialization, which
+    causes CPU timeouts in CI environments (exit code 152).
+    
+    These imports cascade through dozens of dependencies and can take 15+ seconds.
+    By deferring them until PluginRegistry.initialize() is called, we reduce
+    module import time from 15+ seconds to <1 second.
+    """
+    global CollaborativeAgent, AgentTeam, AIManager, create_import_fixer_engine
+    global ImportFixerEngine, MyBackend, MyCustomRunner, MyBetterRunner
+    global CodeHealthEnv, evolve_configs, SIM_REGISTRY
+    
+    # Only load once - if already loaded, return immediately
+    if CollaborativeAgent is not None:
+        return
+    
+    # intent_capture - collaborative agent functionality
+    try:
+        from intent_capture.agent_core import AgentTeam, CollaborativeAgent as _CollaborativeAgent
+        CollaborativeAgent = _CollaborativeAgent
+        AgentTeam = AgentTeam
+    except ImportError:
+        CollaborativeAgent = None
+        AgentTeam = None
+        print("intent_capture not found. Intent capture functionality disabled.")
+    
+    # self_healing_import_fixer - import fixing functionality
+    try:
+        from self_healing_import_fixer.import_fixer.fixer_ai import AIManager as _AIManager
+        from self_healing_import_fixer.import_fixer.import_fixer_engine import (
+            ImportFixerEngine as _ImportFixerEngine,
+            create_import_fixer_engine as _create_import_fixer_engine,
+        )
+        AIManager = _AIManager
+        create_import_fixer_engine = _create_import_fixer_engine
+        ImportFixerEngine = _ImportFixerEngine
+    except ImportError:
+        AIManager = None
+        create_import_fixer_engine = None
+        ImportFixerEngine = None
+        print("self_healing_import_fixer not found. Import fixer functionality disabled.")
+    
+    # test_generation.backends - test generation functionality
+    try:
+        from test_generation.backends import MyBackend as _MyBackend
+        MyBackend = _MyBackend
+    except Exception as e:
+        MyBackend = None
+        print(f"test_generation.backends not available ({e}); skipping.")
+    
+    # simulation.runners - simulation runner functionality
+    try:
+        from self_fixing_engineer.simulation.runners import MyBetterRunner as _MyBetterRunner, MyCustomRunner as _MyCustomRunner
+        MyCustomRunner = _MyCustomRunner
+        MyBetterRunner = _MyBetterRunner
+    except Exception as e:
+        MyCustomRunner = None
+        MyBetterRunner = None
+        print(f"simulation.runners not available ({e}); skipping.")
+    
+    # envs - environment and evolution functionality
+    try:
+        from envs.code_health_env import CodeHealthEnv as _CodeHealthEnv
+        from envs.evolution import evolve_configs as _evolve_configs
+        CodeHealthEnv = _CodeHealthEnv
+        evolve_configs = _evolve_configs
+    except ImportError:
+        CodeHealthEnv = None
+        evolve_configs = None
+        print("envs module not found.")
+    
+    # simulation.registry - simulation registry functionality
+    try:
+        from self_fixing_engineer.simulation.registry import SIM_REGISTRY as _SIM_REGISTRY
+        SIM_REGISTRY = _SIM_REGISTRY
+    except ImportError:
+        SIM_REGISTRY = None
+        print("simulation.registry not found.")
 
 # New imports for security utils
 from .security_utils import get_security_utils
@@ -772,6 +819,10 @@ class PluginRegistry:
 
             self.logger.info("Initializing PluginRegistry...")
             self._loop = asyncio.get_running_loop()
+            
+            # Lazy-load optional dependencies NOW (not at module import time)
+            # This prevents CPU timeout (exit code 152) during pytest collection
+            _lazy_load_optional_dependencies()
 
             if self.db:
                 self.performance_tracker = PluginPerformanceTracker(
