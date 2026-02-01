@@ -277,6 +277,7 @@ api_keys_router = None
 audit_router = None
 diagnostics_router = None
 events_router = None
+files_router = None
 fixes_router = None
 generator_router = None
 jobs_router = None
@@ -297,7 +298,7 @@ def _load_routers():
     """
     global _routers_loaded, _router_load_error
     global api_keys_router, audit_router, diagnostics_router, events_router, fixes_router
-    global generator_router, jobs_router, omnicore_router, sfe_router
+    global files_router, generator_router, jobs_router, omnicore_router, sfe_router
     global AgentType, get_agent_loader
     
     # Fast path: already loaded
@@ -322,6 +323,7 @@ def _load_routers():
                 omnicore_router as _omnicore_router,
                 sfe_router as _sfe_router,
             )
+            from server.routers.files import router as _files_router
             from server.utils.agent_loader import AgentType as _AgentType, get_agent_loader as _get_agent_loader
             
             # Assign all values atomically (within the lock)
@@ -329,6 +331,7 @@ def _load_routers():
             audit_router = _audit_router
             diagnostics_router = _diagnostics_router
             events_router = _events_router
+            files_router = _files_router
             fixes_router = _fixes_router
             generator_router = _generator_router
             jobs_router = _jobs_router
@@ -437,12 +440,13 @@ def _include_routers(app_instance: FastAPI) -> bool:
         app_instance.include_router(api_keys_router, prefix="/api")
         app_instance.include_router(audit_router.router, prefix="/api")
         app_instance.include_router(diagnostics_router, prefix="/api")
-        app_instance.include_router(jobs_router, prefix="/api")
+        app_instance.include_router(events_router, prefix="/api")
+        app_instance.include_router(files_router)
+        app_instance.include_router(fixes_router, prefix="/api")
         app_instance.include_router(generator_router, prefix="/api")
+        app_instance.include_router(jobs_router, prefix="/api")
         app_instance.include_router(omnicore_router, prefix="/api")
         app_instance.include_router(sfe_router, prefix="/api")
-        app_instance.include_router(fixes_router, prefix="/api")
-        app_instance.include_router(events_router, prefix="/api")
         logger.info("✓ All routers included in application")
         return True
     except Exception as e:
@@ -472,23 +476,7 @@ def _register_routers_sync(app_instance: FastAPI) -> bool:
     
     if routers_ok:
         # Include routers with /api prefix using shared helper
-        _include_routers(app_instance)
-        # Include routers with /api prefix
-        try:
-            app_instance.include_router(api_keys_router, prefix="/api")
-            app_instance.include_router(audit_router.router, prefix="/api")
-            app_instance.include_router(diagnostics_router, prefix="/api")
-            app_instance.include_router(jobs_router, prefix="/api")
-            app_instance.include_router(generator_router, prefix="/api")
-            app_instance.include_router(omnicore_router, prefix="/api")
-            app_instance.include_router(sfe_router, prefix="/api")
-            app_instance.include_router(fixes_router, prefix="/api")
-            app_instance.include_router(events_router, prefix="/api")
-            logger.info("✓ All routers included in application")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to include routers: {e}", exc_info=True)
-            return False
+        return _include_routers(app_instance)
     else:
         logger.error(f"Router loading failed: {_router_load_error}")
         logger.warning("API endpoints will not be available")
