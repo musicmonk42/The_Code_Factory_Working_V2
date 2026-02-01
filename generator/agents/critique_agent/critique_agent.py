@@ -30,7 +30,8 @@ try:
     from runner.runner_file_utils import (
         save_files_to_output,
     )  # Use canonical file saver
-    from runner.runner_logging import log_audit_event
+    # FIX: Import from runner_audit to avoid circular dependency
+    from runner.runner_audit import log_audit_event
     from runner.runner_security_utils import (  # Central security scan utility
         scan_for_vulnerabilities,
     )

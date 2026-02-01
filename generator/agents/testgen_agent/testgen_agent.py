@@ -126,11 +126,9 @@ from runner.llm_client import call_ensemble_api
 from runner.runner_errors import LLMError
 
 # --- CENTRAL RUNNER FOUNDATION ---
-from runner.runner_logging import (  # FIX: Corrected import path to runner.runner_logging
-    add_provenance,
-    logger,
-    tracer,
-)
+# FIX: Import add_provenance from runner_audit to avoid circular dependency
+from runner.runner_audit import log_audit_event as add_provenance
+from runner.runner_logging import logger, tracer
 
 # --- FIX: Import AsyncRetrying ---
 from tenacity import (  # For robust retries

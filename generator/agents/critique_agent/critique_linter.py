@@ -39,9 +39,10 @@ except ModuleNotFoundError:
 
         tomllib = _TomlShim()  # type: ignore
 
-# --- FIX: Replace local audit_log with runner.runner_logging utility alias ---
+# --- FIX: Replace local audit_log with runner.runner_audit utility alias ---
 # Use the clearer alias as requested for global audit/telemetry logging.
-from runner.runner_logging import log_audit_event as log_action
+# Import from runner_audit to avoid circular dependency with runner_logging
+from runner.runner_audit import log_audit_event as log_action
 
 # --- END FIX ---
 

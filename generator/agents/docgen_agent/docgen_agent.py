@@ -61,7 +61,9 @@ from presidio_anonymizer.entities import OperatorConfig
 from runner import tracer
 from runner.llm_client import call_llm_api
 from runner.runner_errors import LLMError
-from runner.runner_logging import add_provenance, logger, send_alert
+# FIX: Import add_provenance from runner_audit to avoid circular dependency
+from runner.runner_audit import log_audit_event as add_provenance
+from runner.runner_logging import logger, send_alert
 from runner.runner_metrics import (
     LLM_CALLS_TOTAL,
     LLM_LATENCY_SECONDS,

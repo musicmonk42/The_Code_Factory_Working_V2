@@ -82,10 +82,9 @@ except (ImportError, AttributeError):
 
         tracer = _NoopTracer()
 from runner.llm_client import call_ensemble_api, call_llm_api  # Use central LLM clients
-from runner.runner_logging import (
-    add_provenance,
-    logger,
-)  # Use central logging and provenance
+# FIX: Import add_provenance from runner_audit to avoid circular dependency
+from runner.runner_audit import log_audit_event as add_provenance
+from runner.runner_logging import logger  # Use central logging and provenance
 
 # --- Central LLM Metrics Integration -----------------------------------------
 # We want to:
