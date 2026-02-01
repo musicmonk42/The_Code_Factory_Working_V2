@@ -59,14 +59,19 @@ def test_opentelemetry_not_mocked():
 
 def test_prometheus_client_functional():
     """Verify prometheus_client can be used functionally."""
-    from prometheus_client import Counter, Histogram
+    from prometheus_client import Counter, Histogram, CollectorRegistry
+    import uuid
     
-    # Create a counter
-    counter = Counter('test_counter', 'A test counter')
+    # Use a custom registry to avoid conflicts with global metrics
+    registry = CollectorRegistry()
+    
+    # Create a counter with unique name
+    unique_id = str(uuid.uuid4()).replace('-', '_')
+    counter = Counter(f'test_counter_{unique_id}', 'A test counter', registry=registry)
     counter.inc()
     
-    # Create a histogram
-    histogram = Histogram('test_histogram', 'A test histogram')
+    # Create a histogram with unique name
+    histogram = Histogram(f'test_histogram_{unique_id}', 'A test histogram', registry=registry)
     histogram.observe(1.5)
     
     # Verify these are real objects, not mocks
