@@ -422,14 +422,18 @@ def setup_logging() -> logging.Logger:
     
     The logger will:
     - Use the module's __name__ for proper hierarchy
-    - Apply the SensitiveDataFilter for PII protection
+    - Apply the SensitiveDataFilter for PII protection (on logger, not handler,
+      to ensure PII is redacted before reaching ANY handler including propagated ones)
     - Propagate to the root logger (which should have handlers configured by the app)
     - NOT add any handlers (following Python logging best practices)
     
     See: https://docs.python.org/3/howto/logging.html#configuring-logging-for-a-library
     """
     log = logging.getLogger(__name__)
-    # Only add filter if not already present (idempotent)
+    # Add SensitiveDataFilter to the logger (not handler) to ensure PII is
+    # redacted before the log record reaches any handler, including those on
+    # parent loggers through propagation. This is the correct approach for
+    # security-critical filters. The check ensures idempotent behavior.
     if not any(isinstance(f, SensitiveDataFilter) for f in log.filters):
         log.addFilter(SensitiveDataFilter())
     # Set level based on environment, but let root logger's level take precedence
