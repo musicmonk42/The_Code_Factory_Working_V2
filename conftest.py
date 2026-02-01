@@ -135,7 +135,17 @@ def pytest_configure(config):
     Skip expensive initialization during collection phase.
     This prevents OOM and CPU timeout during test discovery.
     """
-    # Validate that required modules are not mocked (do this FIRST, before collection check)
+    # CRITICAL: Remove any mocked versions of required dependencies FIRST
+    # This must happen before ANY imports attempt to use these modules
+    for mod_name in ["prometheus_client", "opentelemetry"]:
+        if mod_name in sys.modules:
+            mod = sys.modules[mod_name]
+            # Check if it's a Mock/MagicMock without proper __spec__
+            if isinstance(mod, (MagicMock, Mock)) or not hasattr(mod, '__spec__') or mod.__spec__ is None:
+                # Remove the broken mock
+                _remove_module_and_submodules(mod_name)
+    
+    # Now validate that required modules are not mocked (existing code)
     _validate_real_modules()
     
     if config.option.collectonly:
