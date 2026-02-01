@@ -1810,7 +1810,6 @@ def _initialize_prometheus_stubs():
     FIX: Detects and replaces mock modules with real imports
     """
     import sys
-    print(f"DEBUG: _initialize_prometheus_stubs() called. prometheus_client in sys.modules: {'prometheus_client' in sys.modules}")
     
     # Check if already loaded WITH A REAL MODULE (not a mock)
     if "prometheus_client" in sys.modules:
