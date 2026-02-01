@@ -20,7 +20,24 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import aiofiles  # needed for async file IO used below
 import tiktoken  # For token counting
-from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
+from jinja2 import Environment, FileSystemLoader, Template, select_autoescape, ChoiceLoader
+
+# Import PROJECT_ROOT for fallback template resolution
+try:
+    from path_setup import PROJECT_ROOT
+except ImportError:
+    # Fallback: search upward for pyproject.toml to find project root
+    def _find_project_root() -> Path:
+        current = Path(__file__).resolve().parent
+        for _ in range(10):  # Limit search depth
+            if (current / "pyproject.toml").exists() or (current / "setup.py").exists():
+                return current
+            if current.parent == current:
+                break
+            current = current.parent
+        # Last resort fallback
+        return Path(__file__).resolve().parent.parent.parent.parent
+    PROJECT_ROOT = _find_project_root()
 
 # Make sentence_transformers optional
 try:
@@ -577,11 +594,29 @@ class PromptTemplateRegistry:
         self._setup_hot_reload()  # Setup file system watcher
 
     def _create_environment(self) -> Environment:
-        """Creates and configures the Jinja2 environment with custom filters."""
+        """Creates and configures the Jinja2 environment with custom filters.
+        
+        Uses a ChoiceLoader to search for templates in multiple locations:
+        1. The specified template_dir (repo-specific)
+        2. The project root deploy_templates directory (fallback)
+        """
         if not os.path.exists(self.template_dir):
             os.makedirs(self.template_dir, exist_ok=True)
+        
+        # Build list of template loaders with fallback to project root
+        loaders = [FileSystemLoader(self.template_dir)]
+        
+        # Add project root deploy_templates as fallback
+        project_root_templates = PROJECT_ROOT / "deploy_templates"
+        # Use Path.resolve() for reliable path comparison
+        template_dir_resolved = Path(self.template_dir).resolve()
+        project_templates_resolved = project_root_templates.resolve()
+        if project_root_templates.exists() and template_dir_resolved != project_templates_resolved:
+            loaders.append(FileSystemLoader(str(project_root_templates)))
+            logger.info(f"Added fallback template directory: {project_root_templates}")
+        
         env = Environment(
-            loader=FileSystemLoader(self.template_dir),
+            loader=ChoiceLoader(loaders),
             autoescape=select_autoescape(["html", "xml", "htm", "j2", "jinja2"]),
             enable_async=True,
         )  # Enable async rendering with selective autoescape for XSS protection

@@ -96,6 +96,7 @@ except ImportError:  # pragma: no cover
     web = MockWeb()  # type: ignore
 
 from jinja2 import (  # Jinja2 for templating
+    ChoiceLoader,
     Environment,
     FileSystemLoader,
     Template,
@@ -105,6 +106,23 @@ from opentelemetry.trace.status import (
     Status,
     StatusCode,
 )  # *** FIX: Added missing import ***
+
+# Import PROJECT_ROOT for fallback template resolution
+try:
+    from path_setup import PROJECT_ROOT
+except ImportError:
+    # Fallback: search upward for pyproject.toml to find project root
+    def _find_project_root() -> Path:
+        current = Path(__file__).resolve().parent
+        for _ in range(10):  # Limit search depth
+            if (current / "pyproject.toml").exists() or (current / "setup.py").exists():
+                return current
+            if current.parent == current:
+                break
+            current = current.parent
+        # Last resort fallback
+        return Path(__file__).resolve().parent.parent.parent.parent
+    PROJECT_ROOT = _find_project_root()
 
 # Presidio: REQUIRED for scrubbing.
 from presidio_analyzer import AnalyzerEngine
@@ -531,11 +549,29 @@ class PromptTemplateRegistry:
         self._setup_hot_reload()  # Setup file system watcher
 
     def _create_environment(self) -> Environment:
-        """Creates and configures the Jinja2 environment with custom filters."""
+        """Creates and configures the Jinja2 environment with custom filters.
+        
+        Uses a ChoiceLoader to search for templates in multiple locations:
+        1. The specified plugin_dir (repo-specific)
+        2. The project root prompt_templates directory (fallback)
+        """
         if not os.path.exists(self.plugin_dir):
             os.makedirs(self.plugin_dir, exist_ok=True)
+        
+        # Build list of template loaders with fallback to project root
+        loaders = [FileSystemLoader(self.plugin_dir)]
+        
+        # Add project root prompt_templates as fallback
+        project_root_templates = PROJECT_ROOT / "prompt_templates"
+        # Use Path.resolve() for reliable path comparison
+        plugin_dir_resolved = Path(self.plugin_dir).resolve()
+        project_templates_resolved = project_root_templates.resolve()
+        if project_root_templates.exists() and plugin_dir_resolved != project_templates_resolved:
+            loaders.append(FileSystemLoader(str(project_root_templates)))
+            logger.info(f"Added fallback template directory: {project_root_templates}")
+        
         env = Environment(
-            loader=FileSystemLoader(self.plugin_dir),
+            loader=ChoiceLoader(loaders),
             autoescape=select_autoescape(["html", "xml", "htm", "j2", "jinja2"]),
             enable_async=True,
         )  # Enable async rendering with selective autoescape for XSS protection
