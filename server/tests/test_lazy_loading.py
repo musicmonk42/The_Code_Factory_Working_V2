@@ -119,7 +119,13 @@ def app():
     """
     if not FASTAPI_AVAILABLE:
         pytest.skip("FastAPI not available")
-    from server.main import app
+    from server.main import app, _load_routers, _include_routers
+    
+    # Manually load and include routers for test environment
+    # TestClient doesn't automatically trigger lifespan, so we do it manually
+    if _load_routers():
+        _include_routers(app)
+    
     return app
 
 
