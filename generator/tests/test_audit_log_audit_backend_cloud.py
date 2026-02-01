@@ -38,6 +38,8 @@ import sys
 
 def stub_module(name: str) -> types.ModuleType:
     """Create/import a dotted module hierarchy top-down (e.g., 'a.b.c')."""
+    import importlib.machinery
+    
     parent = None
     full = ""
     for part in name.split("."):
@@ -45,8 +47,12 @@ def stub_module(name: str) -> types.ModuleType:
         if full not in sys.modules:
             m = types.ModuleType(full)
             m.__path__ = []  # Required for packages
-            m.__spec__ = None  # Required by Python import system
-            m.__file__ = "<mocked>"
+            m.__spec__ = importlib.machinery.ModuleSpec(
+                name=full,
+                loader=None,
+                is_package=True
+            )
+            m.__file__ = f"<mocked {full}>"
             sys.modules[full] = m
             if parent:
                 setattr(parent, part, m)
@@ -246,16 +252,26 @@ if p not in sys.path:
     sys.path.insert(0, p)
 # create pseudo packages: 'audit_log' and 'audit_log.audit_backend'
 if "audit_log" not in sys.modules:
+    import importlib.machinery
     pkg = types.ModuleType("audit_log")
     pkg.__path__ = [str(REPO_ROOT / "generator" / "audit_log")]
-    pkg.__spec__ = None
-    pkg.__file__ = "<mocked>"
+    pkg.__spec__ = importlib.machinery.ModuleSpec(
+        name="audit_log",
+        loader=None,
+        is_package=True
+    )
+    pkg.__file__ = "<mocked audit_log>"
     sys.modules["audit_log"] = pkg
 if "audit_log.audit_backend" not in sys.modules:
+    import importlib.machinery
     subpkg = types.ModuleType("audit_log.audit_backend")
     subpkg.__path__ = [str(PKG_ROOT)]
-    subpkg.__spec__ = None
-    subpkg.__file__ = "<mocked>"
+    subpkg.__spec__ = importlib.machinery.ModuleSpec(
+        name="audit_log.audit_backend",
+        loader=None,
+        is_package=True
+    )
+    subpkg.__file__ = "<mocked audit_log.audit_backend>"
     sys.modules["audit_log.audit_backend"] = subpkg
     # CRITICAL: Set the subpackage as an attribute on the parent package
     # so that patch() can resolve paths like "audit_log.audit_backend.X"
