@@ -14,15 +14,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from omnicore_engine.security_config import (
-    ComplianceFramework,
-    EnterpriseSecurityConfig,
-    SecurityLevel,
-    get_encryption_key_age,
-    get_security_config,
-    is_ip_allowed,
-    validate_compliance,
-)
+# Imports from omnicore_engine.security_config are deferred to each test method for lazy loading
 
 
 class TestSecurityLevel:
@@ -30,6 +22,8 @@ class TestSecurityLevel:
 
     def test_security_levels(self):
         """Test all security levels are defined"""
+        from omnicore_engine.security_config import SecurityLevel
+        
         assert SecurityLevel.PUBLIC == "PUBLIC"
         assert SecurityLevel.INTERNAL == "INTERNAL"
         assert SecurityLevel.CONFIDENTIAL == "CONFIDENTIAL"
@@ -42,6 +36,8 @@ class TestComplianceFramework:
 
     def test_compliance_frameworks(self):
         """Test all compliance frameworks are defined"""
+        from omnicore_engine.security_config import ComplianceFramework
+        
         assert ComplianceFramework.SOC2_TYPE2 == "SOC2_TYPE2"
         assert ComplianceFramework.ISO_27001 == "ISO_27001"
         assert ComplianceFramework.HIPAA == "HIPAA"
@@ -55,6 +51,8 @@ class TestEnterpriseSecurityConfig:
 
     def test_default_configuration(self):
         """Test default security configuration values"""
+        from omnicore_engine.security_config import ComplianceFramework, EnterpriseSecurityConfig, SecurityLevel
+        
         config = EnterpriseSecurityConfig()
 
         # Test compliance defaults
@@ -89,6 +87,8 @@ class TestEnterpriseSecurityConfig:
 
     def test_password_complexity_rules(self):
         """Test password complexity configuration"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         config = EnterpriseSecurityConfig()
 
         rules = config.PASSWORD_COMPLEXITY_RULES
@@ -101,6 +101,8 @@ class TestEnterpriseSecurityConfig:
 
     def test_rate_limiting_configuration(self):
         """Test rate limiting settings"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         config = EnterpriseSecurityConfig()
 
         assert config.GLOBAL_RATE_LIMIT_PER_SECOND == 100
@@ -113,6 +115,8 @@ class TestEnterpriseSecurityConfig:
 
     def test_file_security_configuration(self):
         """Test file upload security settings"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         config = EnterpriseSecurityConfig()
 
         assert config.MAX_FILE_UPLOAD_SIZE_BYTES == 52428800  # 50MB
@@ -123,6 +127,8 @@ class TestEnterpriseSecurityConfig:
 
     def test_security_headers(self):
         """Test security headers configuration"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         config = EnterpriseSecurityConfig()
 
         assert config.REQUIRE_SECURE_HEADERS == True
@@ -138,6 +144,8 @@ class TestComplianceValidation:
 
     def test_hipaa_compliance_validation(self):
         """Test HIPAA compliance requirements"""
+        from omnicore_engine.security_config import ComplianceFramework, EnterpriseSecurityConfig
+        
         # Valid HIPAA configuration
         config = EnterpriseSecurityConfig(
             COMPLIANCE_FRAMEWORKS=[ComplianceFramework.HIPAA],
@@ -157,6 +165,8 @@ class TestComplianceValidation:
 
     def test_pci_dss_compliance_validation(self):
         """Test PCI-DSS compliance requirements"""
+        from omnicore_engine.security_config import ComplianceFramework, EnterpriseSecurityConfig
+        
         # Valid PCI-DSS configuration
         config = EnterpriseSecurityConfig(
             COMPLIANCE_FRAMEWORKS=[ComplianceFramework.PCI_DSS],
@@ -177,6 +187,8 @@ class TestComplianceValidation:
 
     def test_gdpr_compliance_validation(self):
         """Test GDPR compliance requirements"""
+        from omnicore_engine.security_config import ComplianceFramework, EnterpriseSecurityConfig
+        
         # Valid GDPR configuration
         config = EnterpriseSecurityConfig(
             COMPLIANCE_FRAMEWORKS=[ComplianceFramework.GDPR],
@@ -194,6 +206,8 @@ class TestComplianceValidation:
 
     def test_multiple_compliance_frameworks(self):
         """Test configuration with multiple compliance frameworks"""
+        from omnicore_engine.security_config import ComplianceFramework, EnterpriseSecurityConfig
+        
         config = EnterpriseSecurityConfig(
             COMPLIANCE_FRAMEWORKS=[ComplianceFramework.HIPAA, ComplianceFramework.GDPR],
             AUDIT_LOG_RETENTION_DAYS=2190,
@@ -211,6 +225,8 @@ class TestValidators:
 
     def test_tls_version_validator(self):
         """Test TLS version validation"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         # Valid TLS versions
         config = EnterpriseSecurityConfig(MIN_TLS_VERSION="1.2")
         assert config.MIN_TLS_VERSION == "1.2"
@@ -224,6 +240,8 @@ class TestValidators:
 
     def test_ip_range_validator(self):
         """Test IP range validation"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         # Valid IP ranges
         config = EnterpriseSecurityConfig(
             ALLOWED_IP_RANGES=["192.168.1.0/24", "10.0.0.0/8"]
@@ -236,6 +254,8 @@ class TestValidators:
 
     def test_field_constraints(self):
         """Test pydantic field constraints"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         # Test minimum password length constraint
         with pytest.raises(ValueError):
             EnterpriseSecurityConfig(MIN_PASSWORD_LENGTH=10)  # Below minimum of 14
@@ -254,6 +274,8 @@ class TestComplianceReport:
 
     def test_export_compliance_report(self):
         """Test compliance report export"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         config = EnterpriseSecurityConfig()
         report = config.export_compliance_report()
 
@@ -278,6 +300,8 @@ class TestComplianceReport:
 
     def test_report_timestamp_format(self):
         """Test report timestamp is in ISO format"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         config = EnterpriseSecurityConfig()
         report = config.export_compliance_report()
 
@@ -290,6 +314,8 @@ class TestSingletonPattern:
 
     def test_get_security_config_singleton(self):
         """Test that get_security_config returns singleton"""
+        from omnicore_engine.security_config import get_security_config
+        
         config1 = get_security_config()
         config2 = get_security_config()
 
@@ -298,6 +324,8 @@ class TestSingletonPattern:
     @patch("omnicore_engine.security_config._security_config", None)
     def test_singleton_initialization(self):
         """Test singleton initialization"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig, get_security_config
+        
         config = get_security_config()
 
         assert config is not None
@@ -309,12 +337,16 @@ class TestUtilityFunctions:
 
     def test_validate_compliance_success(self):
         """Test successful compliance validation"""
+        from omnicore_engine.security_config import validate_compliance
+        
         # Use real config for validation - it should pass with defaults
         result = validate_compliance()
         assert result == True
 
     def test_validate_compliance_failure(self):
         """Test failed compliance validation"""
+        from omnicore_engine.security_config import validate_compliance
+        
         with patch("omnicore_engine.security_config.get_security_config") as mock_get:
             mock_config = Mock()
             mock_config.validate_compliance_requirements = Mock(
@@ -328,6 +360,8 @@ class TestUtilityFunctions:
 
     def test_get_encryption_key_age(self):
         """Test encryption key age retrieval"""
+        from omnicore_engine.security_config import get_encryption_key_age
+        
         # This is a placeholder function in the module
         age = get_encryption_key_age()
         assert isinstance(age, timedelta)
@@ -335,6 +369,8 @@ class TestUtilityFunctions:
 
     def test_is_ip_allowed_with_blocked_ranges(self):
         """Test IP allow/block logic"""
+        from omnicore_engine.security_config import is_ip_allowed
+        
         with patch("omnicore_engine.security_config.get_security_config") as mock_get:
             mock_config = Mock()
             mock_config.BLOCKED_IP_RANGES = ["192.168.0.0/16", "10.0.0.0/8"]
@@ -350,6 +386,8 @@ class TestUtilityFunctions:
 
     def test_is_ip_allowed_with_allowed_ranges(self):
         """Test IP allowlist logic"""
+        from omnicore_engine.security_config import is_ip_allowed
+        
         with patch("omnicore_engine.security_config.get_security_config") as mock_get:
             mock_config = Mock()
             mock_config.BLOCKED_IP_RANGES = []
@@ -365,6 +403,8 @@ class TestUtilityFunctions:
 
     def test_is_ip_allowed_priority(self):
         """Test that blocked ranges take priority over allowed"""
+        from omnicore_engine.security_config import is_ip_allowed
+        
         with patch("omnicore_engine.security_config.get_security_config") as mock_get:
             mock_config = Mock()
             mock_config.BLOCKED_IP_RANGES = ["192.168.0.0/16"]
@@ -380,6 +420,8 @@ class TestConfigurationSecurity:
 
     def test_secret_redaction(self):
         """Test that secrets are redacted in JSON encoding"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         config = EnterpriseSecurityConfig()
 
         # In Pydantic V2, model_config replaces Config class
@@ -395,6 +437,8 @@ class TestConfigurationSecurity:
 
     def test_environment_configuration(self):
         """Test environment variable configuration"""
+        from omnicore_engine.security_config import EnterpriseSecurityConfig
+        
         config = EnterpriseSecurityConfig()
 
         # In Pydantic V2, use model_config

@@ -16,19 +16,17 @@ _project_root = _omnicore_dir.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-# Verify omnicore_engine package can be imported
+# Verify omnicore_engine package can be discovered
 # This helps pytest resolve "omnicore_engine.tests" module path during collection
-try:
-    import omnicore_engine
-except ImportError as e:
-    # If omnicore_engine cannot be imported as a package, it may not be installed
-    # This is a CRITICAL error that will cause pytest collection to fail
+# Use find_spec instead of actual import to avoid expensive import-time initialization
+import importlib.util
+spec = importlib.util.find_spec('omnicore_engine')
+if spec is None:
     import warnings
     error_msg = (
         f"\n{'='*80}\n"
         f"CRITICAL: omnicore_engine package not found!\n"
         f"{'='*80}\n"
-        f"Error: {e}\n\n"
         f"The omnicore_engine package must be installed for pytest to collect tests.\n\n"
         f"SOLUTION:\n"
         f"  Install the unified Code Factory platform from project root:\n"
@@ -43,17 +41,15 @@ except ImportError as e:
     # Also print to stderr for visibility
     print(error_msg, file=sys.stderr)
 
-# Verify that omnicore_engine.tests can be imported
+# Verify that omnicore_engine.tests can be discovered
 # This is critical for pytest collection to work properly
-try:
-    import omnicore_engine.tests
-except ImportError as e:
+spec_tests = importlib.util.find_spec('omnicore_engine.tests')
+if spec_tests is None:
     import warnings
     error_msg = (
         f"\n{'='*80}\n"
         f"CRITICAL: omnicore_engine.tests module cannot be imported!\n"
         f"{'='*80}\n"
-        f"Error: {e}\n\n"
         f"This usually means the package was installed from the wrong location.\n\n"
         f"SOLUTION:\n"
         f"  Install the unified platform from project root:\n"

@@ -2,12 +2,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from omnicore_engine.plugin_registry import PluginRegistry, PlugInKind, plugin
-
+# Defer heavy imports to test functions to reduce time during collection
+# DO NOT import from omnicore_engine.plugin_registry at module level
 
 @pytest.mark.asyncio
 async def test_import_fixer_engine():
     """Test that OmniCoreOmega can be created with mocked dependencies."""
+    from omnicore_engine.plugin_registry import PluginRegistry
+    
     # Mock all required dependencies
     with (
         patch("omnicore_engine.engines.Database") as MockDatabase,
@@ -54,6 +56,8 @@ async def test_import_fixer_engine():
 @pytest.mark.asyncio
 async def test_generator_plugin_creation(tmp_path):
     """Test that plugins can be registered and retrieved from the registry."""
+    from omnicore_engine.plugin_registry import PluginRegistry
+    
     registry = PluginRegistry()
 
     # Create a test plugin file that uses the correct plugin registration

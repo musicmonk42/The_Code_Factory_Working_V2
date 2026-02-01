@@ -17,17 +17,7 @@ import pytest
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from omnicore_engine.core import (
-    Base,
-    ExplainableAI,
-    MerkleTree,
-    OmniCoreEngine,
-    configure_logging,
-    get_plugin_metrics,
-    get_test_metrics,
-    omnicore_engine,
-    safe_serialize,
-)
+# Defer heavy imports to test functions to reduce time during collection
 
 
 class TestSafeSerialize:
@@ -35,6 +25,8 @@ class TestSafeSerialize:
 
     def test_primitive_types(self):
         """Test serialization of primitive types"""
+        from omnicore_engine.core import safe_serialize
+        
         assert safe_serialize("string") == "string"
         assert safe_serialize(42) == 42
         assert safe_serialize(3.14) == 3.14
@@ -43,6 +35,8 @@ class TestSafeSerialize:
 
     def test_datetime_serialization(self):
         """Test datetime and date serialization"""
+        from omnicore_engine.core import safe_serialize
+        
         dt = datetime(2024, 1, 1, 12, 0, 0)
         assert safe_serialize(dt) == "2024-01-01T12:00:00"
 
@@ -51,11 +45,15 @@ class TestSafeSerialize:
 
     def test_bytes_serialization(self):
         """Test bytes serialization"""
+        from omnicore_engine.core import safe_serialize
+        
         assert safe_serialize(b"hello") == "hello"
         assert safe_serialize(b"\x00\x01\x02") == "\x00\x01\x02"
 
     def test_collection_serialization(self):
         """Test serialization of collections"""
+        from omnicore_engine.core import safe_serialize
+        
         # Set and frozenset
         assert safe_serialize({1, 2, 3}) == [1, 2, 3]
         assert safe_serialize(frozenset([1, 2])) == [1, 2]
@@ -69,6 +67,8 @@ class TestSafeSerialize:
 
     def test_numpy_serialization(self):
         """Test NumPy array serialization"""
+        from omnicore_engine.core import safe_serialize
+        
         arr = np.array([1, 2, 3])
         assert safe_serialize(arr) == [1, 2, 3]
 
@@ -77,6 +77,8 @@ class TestSafeSerialize:
 
     def test_decimal_uuid_serialization(self):
         """Test Decimal and UUID serialization"""
+        from omnicore_engine.core import safe_serialize
+        
         d = Decimal("3.14159")
         assert safe_serialize(d) == pytest.approx(3.14159)
 
@@ -85,6 +87,8 @@ class TestSafeSerialize:
 
     def test_circular_reference_handling(self):
         """Test handling of circular references"""
+        from omnicore_engine.core import safe_serialize
+        
         obj = {}
         obj["self"] = obj
 
@@ -93,6 +97,8 @@ class TestSafeSerialize:
 
     def test_model_dump_objects(self):
         """Test objects with model_dump method"""
+        from omnicore_engine.core import safe_serialize
+        
         mock_obj = Mock()
         mock_obj.model_dump.return_value = {"field": "value"}
 
@@ -100,6 +106,8 @@ class TestSafeSerialize:
 
     def test_dict_method_objects(self):
         """Test objects with dict method"""
+        from omnicore_engine.core import safe_serialize
+        
         mock_obj = Mock()
         mock_obj.dict.return_value = {"field": "value"}
         del mock_obj.model_dump  # Ensure model_dump doesn't exist
@@ -108,7 +116,8 @@ class TestSafeSerialize:
 
     def test_unserializable_objects(self):
         """Test handling of unserializable objects"""
-
+        from omnicore_engine.core import safe_serialize
+        
         class UnserializableClass:
             def __str__(self):
                 raise Exception("Cannot convert to string")
@@ -123,12 +132,15 @@ class TestBase:
 
     def test_base_cannot_be_instantiated(self):
         """Test that Base class cannot be directly instantiated"""
+        from omnicore_engine.core import Base
+        
         with pytest.raises(TypeError):
             Base()
 
     def test_base_subclass_implementation(self):
         """Test proper subclass implementation of Base"""
-
+        from omnicore_engine.core import Base
+        
         class TestComponent(Base):
             async def initialize(self):
                 pass
@@ -152,6 +164,8 @@ class TestMetricsFunctions:
 
     def test_get_plugin_metrics_success(self):
         """Test successful plugin metrics retrieval"""
+        from omnicore_engine.core import get_plugin_metrics
+        
         mock_metrics_func = Mock(return_value={"metric1": 10, "metric2": 20})
         mock_metrics_module = Mock(get_plugin_metrics=mock_metrics_func)
 
@@ -163,6 +177,8 @@ class TestMetricsFunctions:
 
     def test_get_plugin_metrics_import_error(self):
         """Test plugin metrics when module not available"""
+        from omnicore_engine.core import get_plugin_metrics
+        
         with patch.dict("sys.modules", {"omnicore_engine.metrics": None}):
             result = get_plugin_metrics()
             assert "error" in result
@@ -170,6 +186,8 @@ class TestMetricsFunctions:
 
     def test_get_test_metrics_success(self):
         """Test successful test metrics retrieval"""
+        from omnicore_engine.core import get_test_metrics
+        
         mock_metrics_func = Mock(return_value={"tests_run": 100, "tests_passed": 95})
         mock_metrics_module = Mock(get_test_metrics=mock_metrics_func)
 
@@ -186,6 +204,8 @@ class TestExplainableAI:
     @pytest.mark.asyncio
     async def test_initialization_success(self):
         """Test successful initialization of ExplainableAI"""
+        from omnicore_engine.core import ExplainableAI
+        
         mock_reasoner = Mock()
         mock_reasoner.initialize = AsyncMock()
         mock_reasoner_class = Mock(return_value=mock_reasoner)
@@ -204,6 +224,8 @@ class TestExplainableAI:
     @pytest.mark.asyncio
     async def test_initialization_import_error(self):
         """Test initialization when reasoner module not available"""
+        from omnicore_engine.core import ExplainableAI
+        
         with patch.dict("sys.modules", {"omnicore_engine.explainable_reasoner": None}):
             ai = ExplainableAI()
             await ai.initialize()
@@ -214,6 +236,8 @@ class TestExplainableAI:
     @pytest.mark.asyncio
     async def test_shutdown(self):
         """Test shutdown of ExplainableAI"""
+        from omnicore_engine.core import ExplainableAI
+        
         ai = ExplainableAI()
         ai.is_initialized = True
         ai.reasoner = Mock()
@@ -227,6 +251,8 @@ class TestExplainableAI:
     @pytest.mark.asyncio
     async def test_explain_event_success(self):
         """Test successful event explanation"""
+        from omnicore_engine.core import ExplainableAI
+        
         ai = ExplainableAI()
         ai.is_initialized = True
         ai.reasoner = Mock()
@@ -241,6 +267,8 @@ class TestExplainableAI:
     @pytest.mark.asyncio
     async def test_explain_event_not_initialized(self):
         """Test explain_event when not initialized"""
+        from omnicore_engine.core import ExplainableAI
+        
         ai = ExplainableAI()
         ai.is_initialized = False
 
@@ -252,6 +280,8 @@ class TestExplainableAI:
     @pytest.mark.asyncio
     async def test_reason_event_success(self):
         """Test successful event reasoning"""
+        from omnicore_engine.core import ExplainableAI
+        
         ai = ExplainableAI()
         ai.is_initialized = True
         ai.reasoner = Mock()
@@ -267,12 +297,16 @@ class TestMerkleTree:
 
     def test_empty_tree(self):
         """Test empty Merkle tree"""
+        from omnicore_engine.core import MerkleTree
+        
         tree = MerkleTree()
         assert tree.root is None
         assert tree.leaves == []
 
     def test_add_single_leaf(self):
         """Test adding a single leaf"""
+        from omnicore_engine.core import MerkleTree
+        
         tree = MerkleTree()
         tree.add_leaf(b"test_data")
 
@@ -282,6 +316,8 @@ class TestMerkleTree:
 
     def test_add_multiple_leaves(self):
         """Test adding multiple leaves"""
+        from omnicore_engine.core import MerkleTree
+        
         tree = MerkleTree()
 
         for i in range(4):
@@ -292,6 +328,8 @@ class TestMerkleTree:
 
     def test_verify_proof_valid(self):
         """Test proof verification with valid proof"""
+        from omnicore_engine.core import MerkleTree
+        
         tree = MerkleTree()
 
         leaf_data = b"test_leaf"
@@ -303,6 +341,8 @@ class TestMerkleTree:
 
     def test_verify_proof_invalid(self):
         """Test proof verification with invalid proof"""
+        from omnicore_engine.core import MerkleTree
+        
         tree = MerkleTree()
 
         tree.add_leaf(b"leaf1")
@@ -313,6 +353,8 @@ class TestMerkleTree:
 
     def test_get_proof_leaf_not_found(self):
         """Test get_proof with non-existent leaf"""
+        from omnicore_engine.core import MerkleTree
+        
         tree = MerkleTree()
         tree.add_leaf(b"existing_leaf")
 
@@ -321,11 +363,15 @@ class TestMerkleTree:
 
     def test_get_root_empty_tree(self):
         """Test get_root() returns empty string for empty tree"""
+        from omnicore_engine.core import MerkleTree
+        
         tree = MerkleTree()
         assert tree.get_root() == ""
 
     def test_get_root_with_data(self):
         """Test get_root() returns root hash when tree has data"""
+        from omnicore_engine.core import MerkleTree
+        
         tree = MerkleTree()
         tree.add_leaf(b"test_data")
 
@@ -337,6 +383,8 @@ class TestMerkleTree:
 
     def test_get_root_matches_get_merkle_root(self):
         """Test get_root() is equivalent to get_merkle_root()"""
+        from omnicore_engine.core import MerkleTree
+        
         tree = MerkleTree()
 
         # Empty tree
@@ -350,6 +398,8 @@ class TestMerkleTree:
 
     def test_get_root_returns_hex_string(self):
         """Test get_root() returns a valid hex string"""
+        from omnicore_engine.core import MerkleTree
+        
         tree = MerkleTree()
         tree.add_leaf(b"test_data")
 
@@ -381,6 +431,8 @@ class TestOmniCoreEngine:
     @pytest.fixture
     def engine(self, mock_settings):
         """Create engine instance with mock settings"""
+        from omnicore_engine.core import OmniCoreEngine
+        
         return OmniCoreEngine(mock_settings)
 
     def test_initialization_state(self, engine):
@@ -563,11 +615,15 @@ class TestGlobalSingleton:
 
     def test_singleton_exists(self):
         """Test that global singleton exists"""
+        from omnicore_engine.core import OmniCoreEngine, omnicore_engine
+        
         assert omnicore_engine is not None
         assert isinstance(omnicore_engine, OmniCoreEngine)
 
     def test_singleton_has_settings(self):
         """Test that singleton has settings"""
+        from omnicore_engine.core import omnicore_engine
+        
         assert hasattr(omnicore_engine, "settings")
 
 
@@ -578,6 +634,8 @@ class TestLoggingConfiguration:
     @patch("omnicore_engine.core.logging.basicConfig")
     def test_configure_logging(self, mock_basic_config, mock_structlog_configure):
         """Test logging configuration"""
+        from omnicore_engine.core import configure_logging
+        
         configure_logging()
 
         mock_structlog_configure.assert_called_once()
