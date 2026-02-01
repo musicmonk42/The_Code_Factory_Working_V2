@@ -167,6 +167,20 @@ def register_summarizer(name: str):
 
 # --- END FIX ---
 
+# --- CIRCULAR IMPORT FIX: Import runner_logging BEFORE runner_core ---
+# runner_core imports from runner_parsers, which imports from runner_logging.
+# We must ensure runner_logging is initialized first to break the circular import.
+# The import is for side-effect (module initialization) only - no variable is used.
+try:
+    from . import runner_logging  # noqa: F401 - imported for side effects
+    _ensure_submodule_alias("runner_logging")
+except ImportError as _logging_init_err:
+    # Log the error but continue - fallback logging will be handled by runner_parsers
+    import logging as _init_logging
+    _init_logging.getLogger(__name__).debug(
+        f"Early runner_logging import failed (fallback logging available): {_logging_init_err}"
+    )
+
 # --- CRITICAL FIX: ALWAYS IMPORT SANDBOX FUNCTIONS ---
 # REMOVED THE "if not TESTING:" CONDITION THAT WAS BREAKING IMPORTS
 try:
