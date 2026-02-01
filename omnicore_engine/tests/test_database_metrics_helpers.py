@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from metrics_helpers import (
+from omnicore_engine.database.metrics_helpers import (
     get_or_create_counter_local,
     get_or_create_gauge_local,
     get_or_create_histogram_local,
@@ -75,7 +75,7 @@ class TestGetOrCreateCounter:
         Gauge(name, "Test gauge")
 
         # Try to create a counter with same name
-        with patch("metrics_helpers.logger") as mock_logger:
+        with patch("omnicore_engine.database.metrics_helpers.logger") as mock_logger:
             counter = get_or_create_counter_local(name, "Test counter")
             # Should return the existing metric (even though it's wrong type)
             assert counter is not None
@@ -85,8 +85,8 @@ class TestGetOrCreateCounter:
         name = "test_counter"
         documentation = "Test documentation"
 
-        with patch("metrics_helpers.Counter", side_effect=Exception("Creation failed")):
-            with patch("metrics_helpers.logger") as mock_logger:
+        with patch("omnicore_engine.database.metrics_helpers.Counter", side_effect=Exception("Creation failed")):
+            with patch("omnicore_engine.database.metrics_helpers.logger") as mock_logger:
                 with pytest.raises(Exception):
                     get_or_create_counter_local(name, documentation)
                 mock_logger.error.assert_called()
@@ -142,7 +142,7 @@ class TestGetOrCreateGauge:
         Counter(name, "Test counter")
 
         # Try to create a gauge with same name
-        with patch("metrics_helpers.logger") as mock_logger:
+        with patch("omnicore_engine.database.metrics_helpers.logger") as mock_logger:
             gauge = get_or_create_gauge_local(name, "Test gauge")
             # Should log warning and return existing metric
             mock_logger.warning.assert_called()
@@ -153,8 +153,8 @@ class TestGetOrCreateGauge:
         name = "test_gauge"
         documentation = "Test documentation"
 
-        with patch("metrics_helpers.Gauge", side_effect=Exception("Creation failed")):
-            with patch("metrics_helpers.logger") as mock_logger:
+        with patch("omnicore_engine.database.metrics_helpers.Gauge", side_effect=Exception("Creation failed")):
+            with patch("omnicore_engine.database.metrics_helpers.logger") as mock_logger:
                 with pytest.raises(Exception):
                     get_or_create_gauge_local(name, documentation)
                 mock_logger.error.assert_called()
@@ -221,7 +221,7 @@ class TestGetOrCreateHistogram:
         Gauge(name, "Test gauge")
 
         # Try to create a histogram with same name
-        with patch("metrics_helpers.logger") as mock_logger:
+        with patch("omnicore_engine.database.metrics_helpers.logger") as mock_logger:
             histogram = get_or_create_histogram_local(name, "Test histogram")
             # Should log warning and return existing metric
             mock_logger.warning.assert_called()
@@ -233,9 +233,9 @@ class TestGetOrCreateHistogram:
         documentation = "Test documentation"
 
         with patch(
-            "metrics_helpers.Histogram", side_effect=Exception("Creation failed")
+            "omnicore_engine.database.metrics_helpers.Histogram", side_effect=Exception("Creation failed")
         ):
-            with patch("metrics_helpers.logger") as mock_logger:
+            with patch("omnicore_engine.database.metrics_helpers.logger") as mock_logger:
                 with pytest.raises(Exception):
                     get_or_create_histogram_local(name, documentation)
                 mock_logger.error.assert_called()
@@ -288,7 +288,7 @@ class TestRegistryIntegration:
         mock_counter = Mock(spec=Counter)
         mock_names["existing_counter"] = mock_counter
 
-        with patch("metrics_helpers.REGISTRY._names_to_collectors", mock_names):
+        with patch("omnicore_engine.database.metrics_helpers.REGISTRY._names_to_collectors", mock_names):
             result = get_or_create_counter_local("existing_counter", "Test")
             assert result is mock_counter
 

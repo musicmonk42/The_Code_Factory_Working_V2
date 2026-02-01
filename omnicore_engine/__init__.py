@@ -24,6 +24,9 @@ if not logger.handlers:
 # Avoid importing submodules at package import time to prevent heavy initialization.
 # Provide accessor functions that import lazily.
 
+# Module cache for lazy-loaded submodules to prevent stub module creation
+_module_cache = {}
+
 
 def get_plugin_registry():
     """Return the PLUGIN_REGISTRY singleton (lazy import).
@@ -81,6 +84,9 @@ def __getattr__(name: str) -> Any:
     1. Direct imports: from omnicore_engine import plugin_registry
     2. Lazy loading: only import when actually accessed
     
+    The function ensures proper module caching to prevent stub module creation
+    when using imports like "from omnicore_engine.database import Database".
+    
     Args:
         name: The attribute/module name being accessed
         
@@ -90,6 +96,10 @@ def __getattr__(name: str) -> Any:
     Raises:
         AttributeError: If the requested attribute doesn't exist
     """
+    # Check cache first
+    if name in _module_cache:
+        return _module_cache[name]
+    
     # Map of lazy-loadable modules
     _lazy_modules = {
         'plugin_registry': '.plugin_registry',
@@ -102,10 +112,20 @@ def __getattr__(name: str) -> Any:
     
     if name in _lazy_modules:
         import importlib
+        import sys
         try:
             module = importlib.import_module(_lazy_modules[name], package=__package__)
-            # Cache the imported module in the package namespace
+            # Cache the imported module in multiple places to prevent stub modules:
+            # 1. Package namespace (globals) - for "from omnicore_engine import database"
             globals()[name] = module
+            # 2. Module cache dict - for explicit tracking and reuse
+            _module_cache[name] = module
+            # 3. sys.modules - ensure Python's import system can find it
+            # This is crucial for "from omnicore_engine.database import X" to work
+            full_module_name = f'{__package__}.{name}'
+            if full_module_name not in sys.modules:
+                sys.modules[full_module_name] = module
+            
             logger.debug(f"Lazy-loaded module: omnicore_engine.{name}")
             return module
         except ImportError as e:
