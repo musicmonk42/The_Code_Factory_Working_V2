@@ -14,7 +14,7 @@ self_healing_path = os.path.abspath(
 )
 sys.path.insert(0, self_healing_path)
 
-from arbiter_plugin_registry import (
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import (
     PLUGIN_REGISTRY,
     PluginBase,
     PluginDependencyError,
@@ -549,10 +549,10 @@ async def test_reload(reset_registry):
         # The module is imported as arbiter_plugin_registry due to sys.path manipulation
         with (
             patch(
-                "arbiter_plugin_registry.importlib.import_module",
+                "self_fixing_engineer.arbiter.arbiter_plugin_registry.importlib.import_module",
                 return_value=mock_module,
             ),
-            patch("arbiter_plugin_registry.importlib.reload", return_value=mock_module),
+            patch("self_fixing_engineer.arbiter.arbiter_plugin_registry.importlib.reload", return_value=mock_module),
         ):
             result = await reg.reload(kind, name)
             assert result is True

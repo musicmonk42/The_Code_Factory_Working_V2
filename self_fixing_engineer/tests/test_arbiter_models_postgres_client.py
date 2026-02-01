@@ -13,7 +13,7 @@ from arbiter.otel_config import get_tracer
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # Import from the correct module
-from postgres_client import (
+from self_fixing_engineer.arbiter.models.postgres_client import (
     DB_CALLS_ERRORS,
     DB_CALLS_TOTAL,
     DB_CONNECTIONS_CURRENT,
@@ -129,7 +129,7 @@ async def pg_client(mocker: MockerFixture):
 
     # Mock create_pool
     mocker.patch(
-        "postgres_client.asyncpg.create_pool", mocker.AsyncMock(return_value=mock_pool)
+        "self_fixing_engineer.arbiter.models.postgres_client.asyncpg.create_pool", mocker.AsyncMock(return_value=mock_pool)
     )
 
     client = PostgresClient()
@@ -203,7 +203,7 @@ async def test_connect_failure(mocker: MockerFixture):
     from asyncpg import exceptions as asyncpg_exceptions
 
     mocker.patch(
-        "postgres_client.asyncpg.create_pool",
+        "self_fixing_engineer.arbiter.models.postgres_client.asyncpg.create_pool",
         side_effect=asyncpg_exceptions.PostgresError("Connection failed"),
     )
 
@@ -633,7 +633,7 @@ async def test_ssl_mode(mocker: MockerFixture):
 
     # Capture the create_pool call
     create_pool_mock = mocker.patch(
-        "postgres_client.asyncpg.create_pool", mocker.AsyncMock(return_value=mock_pool)
+        "self_fixing_engineer.arbiter.models.postgres_client.asyncpg.create_pool", mocker.AsyncMock(return_value=mock_pool)
     )
 
     # Create a new client instance
