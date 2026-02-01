@@ -148,80 +148,70 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
           fi
-          # Install self_fixing_engineer package (contains arbiter - CRITICAL) with verbose output
-          echo "Installing self_fixing_engineer package (contains arbiter)..."
-          python -m pip install -v --no-cache-dir -c .github/constraints.txt -e ./self_fixing_engineer || {
-            echo "ERROR: Failed to install self_fixing_engineer package"
+          
+          # Install the unified Code Factory platform from project root
+          # This installs all packages (generator, omnicore_engine, self_fixing_engineer, server)
+          # in a single editable installation, which ensures proper package resolution
+          echo "Installing unified Code Factory platform from project root..."
+          python -m pip install -v --no-cache-dir -c .github/constraints.txt -e . || {
+            echo "ERROR: Failed to install Code Factory platform from project root"
             exit 1
           }
           
-          # Verify package installed AND importable (CRITICAL: test import, not just pip show)
-          echo "=== Verifying self_fixing_engineer package installation ==="
-          pip show self_fixing_engineer || {
-            echo "ERROR: self_fixing_engineer package not found in pip"
+          # Verify all packages are installed and importable
+          echo "=== Verifying package installations ==="
+          
+          # Verify code-factory package
+          pip show code-factory || {
+            echo "ERROR: code-factory package not found in pip"
             exit 1
           }
           
-          # CRITICAL: Test actual import
-          python -c "import self_fixing_engineer" || {
-            echo "ERROR: self_fixing_engineer package installed but cannot be imported"
-            echo "This usually indicates:"
-            echo "  - Missing __init__.py files"
-            echo "  - Broken package structure"
-            echo "  - Import-time initialization errors"
-            echo ""
-            echo "Package location:"
-            pip show self_fixing_engineer | grep Location
-            echo ""
-            echo "Package contents:"
-            ls -la self_fixing_engineer/ || true
-            exit 1
-          }
-          
-          echo "✓ self_fixing_engineer package verified (installed and importable)"
-          # Install omnicore_engine package in editable mode
-          echo "Installing omnicore_engine package..."
-          python -m pip install -v --no-cache-dir -c .github/constraints.txt -e ./omnicore_engine || {
-            echo "ERROR: Failed to install omnicore_engine package"
-            exit 1
-          }
-          
-          # Verify package installed AND importable
-          echo "=== Verifying omnicore_engine package installation ==="
-          pip show omnicore_engine || {
-            echo "ERROR: omnicore_engine package not found in pip"
-            exit 1
-          }
-          
-          # CRITICAL: Test actual import
+          # Test omnicore_engine package
+          echo "Testing omnicore_engine..."
           python -c "import omnicore_engine" || {
-            echo "ERROR: omnicore_engine package installed but cannot be imported"
-            echo "This usually indicates:"
-            echo "  - Missing __init__.py files"
-            echo "  - Broken package structure"
-            echo "  - Circular import dependencies"
-            echo "  - Import-time initialization errors"
-            echo ""
+            echo "ERROR: omnicore_engine cannot be imported"
             echo "Package location:"
-            pip show omnicore_engine | grep Location
-            echo ""
+            pip show code-factory | grep Location || true
             echo "Package contents:"
             ls -la omnicore_engine/ || true
-            echo ""
-            echo "Testing syntax of __init__.py:"
-            python -m py_compile omnicore_engine/__init__.py 2>&1 || echo "Syntax error in __init__.py"
             exit 1
           }
           
-          # Test plugin_registry specifically (it's causing the failures)
+          # Test plugin_registry specifically (it's been causing failures)
           python -c "from omnicore_engine import plugin_registry" || {
             echo "ERROR: plugin_registry cannot be imported"
-            echo "Testing plugin_registry.py syntax:"
-            python -m py_compile omnicore_engine/plugin_registry.py 2>&1 || echo "Syntax error detected"
             exit 1
           }
           
-          echo "✓ omnicore_engine package verified (installed and importable)"
+          # Test omnicore_engine.tests module (critical for pytest collection)
+          python -c "import omnicore_engine.tests" || {
+            echo "ERROR: omnicore_engine.tests cannot be imported - this will cause pytest collection to fail"
+            echo "Tests directory contents:"
+            ls -la omnicore_engine/tests/ || true
+            exit 1
+          }
+          
+          # Test self_fixing_engineer package
+          echo "Testing self_fixing_engineer..."
+          python -c "import self_fixing_engineer" || {
+            echo "ERROR: self_fixing_engineer cannot be imported"
+            exit 1
+          }
+          
+          # Test generator package
+          echo "Testing generator..."
+          python -c "import generator" || {
+            echo "WARNING: generator cannot be imported (may be expected)"
+          }
+          
+          # Test server package
+          echo "Testing server..."
+          python -c "import server" || {
+            echo "WARNING: server cannot be imported (may be expected)"
+          }
+          
+          echo "✓ All packages verified (installed and importable)"
           # Install common test/runtime extras that may be missing
           pip install --no-cache-dir -c .github/constraints.txt PyYAML httpx PyJWT || true
           pip install --no-cache-dir -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
