@@ -19,8 +19,6 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import prometheus_client.core as _core
-import prometheus_client.registry as _reg
 import pytest
 
 # Fresh Prometheus registry per test to avoid "Duplicated timeseries"
@@ -41,9 +39,10 @@ from generator.audit_log.audit_backend import (
 @pytest.fixture(autouse=True)
 def fresh_prom_registry(monkeypatch):
     reg = CollectorRegistry()
-    # Patch both modules where the default REGISTRY is referenced
-    monkeypatch.setattr(_reg, "REGISTRY", reg, raising=True)
-    monkeypatch.setattr(_core, "REGISTRY", reg, raising=True)
+    # Patch at import paths, not on potentially-mocked modules
+    monkeypatch.setattr("prometheus_client.REGISTRY", reg)
+    monkeypatch.setattr("prometheus_client.registry.REGISTRY", reg)
+    monkeypatch.setattr("prometheus_client.core.REGISTRY", reg)
     yield
 
 

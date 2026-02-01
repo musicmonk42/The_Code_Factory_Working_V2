@@ -49,16 +49,26 @@ p = str(REPO_ROOT / "generator")
 if p not in sys.path:
     sys.path.insert(0, p)
 if "audit_log" not in sys.modules:
+    import importlib.machinery
     pkg = types.ModuleType("audit_log")
     pkg.__path__ = [str(REPO_ROOT / "generator" / "audit_log")]
-    pkg.__spec__ = None
-    pkg.__file__ = "<mocked>"
+    pkg.__spec__ = importlib.machinery.ModuleSpec(
+        name="audit_log",
+        loader=None,
+        is_package=True
+    )
+    pkg.__file__ = "<mocked audit_log>"
     sys.modules["audit_log"] = pkg
 if "audit_log.audit_backend" not in sys.modules:
+    import importlib.machinery
     subpkg = types.ModuleType("audit_log.audit_backend")
     subpkg.__path__ = [str(PKG_ROOT)]
-    subpkg.__spec__ = None
-    subpkg.__file__ = "<mocked>"
+    subpkg.__spec__ = importlib.machinery.ModuleSpec(
+        name="audit_log.audit_backend",
+        loader=None,
+        is_package=True
+    )
+    subpkg.__file__ = "<mocked audit_log.audit_backend>"
     sys.modules["audit_log.audit_backend"] = subpkg
     sys.modules["audit_log"].audit_backend = subpkg
 
