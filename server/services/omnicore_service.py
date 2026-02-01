@@ -781,18 +781,15 @@ class OmniCoreService:
     
     async def _run_codegen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute code generation agent."""
-        # Check if agent is available
-        loader = get_agent_loader()
-        if not loader.is_agent_available('codegen'):
-            error = loader.get_agent_error('codegen')
-            error_msg = error.error_message if error else "Codegen agent not available"
+        # Check if agent is available using service's own tracking
+        if not self.agents_available.get('codegen', False) or self._codegen_func is None:
+            error_msg = "Codegen agent not available"
             logger.error(f"Codegen agent unavailable for job {job_id}: {error_msg}")
             return {
                 "status": "error",
                 "message": f"Codegen agent not available: {error_msg}",
                 "agent_available": False,
                 "job_id": job_id,
-                "missing_dependencies": error.missing_dependencies if error else [],
             }
         
         # Check if LLM provider is configured
@@ -1205,18 +1202,15 @@ class OmniCoreService:
     
     async def _run_testgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute test generation agent."""
-        # Check if agent is available
-        loader = get_agent_loader()
-        if not loader.is_agent_available('testgen'):
-            error = loader.get_agent_error('testgen')
-            error_msg = error.error_message if error else "Testgen agent not available"
+        # Check if agent is available using service's own tracking
+        if not self.agents_available.get('testgen', False) or self._testgen_class is None:
+            error_msg = "Testgen agent not available"
             logger.error(f"Testgen agent unavailable for job {job_id}: {error_msg}")
             return {
                 "status": "error",
                 "message": f"Testgen agent not available: {error_msg}",
                 "agent_available": False,
                 "job_id": job_id,
-                "missing_dependencies": error.missing_dependencies if error else [],
             }
         
         try:
@@ -1272,18 +1266,15 @@ class OmniCoreService:
     
     async def _run_deploy(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute deployment configuration generation."""
-        # Check if agent is available
-        loader = get_agent_loader()
-        if not loader.is_agent_available('deploy'):
-            error = loader.get_agent_error('deploy')
-            error_msg = error.error_message if error else "Deploy agent not available"
+        # Check if agent is available using service's own tracking
+        if not self.agents_available.get('deploy', False) or self._deploy_class is None:
+            error_msg = "Deploy agent not available"
             logger.warning(f"Deploy agent unavailable for job {job_id}: {error_msg}")
             return {
                 "status": "error",
                 "message": f"Deploy agent not available: {error_msg}",
                 "agent_available": False,
                 "job_id": job_id,
-                "missing_dependencies": error.missing_dependencies if error else [],
             }
         
         try:
@@ -1377,18 +1368,15 @@ class OmniCoreService:
     
     async def _run_docgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute documentation generation."""
-        # Check if agent is available
-        loader = get_agent_loader()
-        if not loader.is_agent_available('docgen'):
-            error = loader.get_agent_error('docgen')
-            error_msg = error.error_message if error else "Docgen agent not available"
+        # Check if agent is available using service's own tracking
+        if not self.agents_available.get('docgen', False) or self._docgen_class is None:
+            error_msg = "Docgen agent not available"
             logger.warning(f"Docgen agent unavailable for job {job_id}: {error_msg}")
             return {
                 "status": "error",
                 "message": f"Docgen agent not available: {error_msg}",
                 "agent_available": False,
                 "job_id": job_id,
-                "missing_dependencies": error.missing_dependencies if error else [],
             }
         
         try:
@@ -1473,18 +1461,15 @@ class OmniCoreService:
     
     async def _run_critique(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute critique/security scanning."""
-        # Check if agent is available
-        loader = get_agent_loader()
-        if not loader.is_agent_available('critique'):
-            error = loader.get_agent_error('critique')
-            error_msg = error.error_message if error else "Critique agent not available"
+        # Check if agent is available using service's own tracking
+        if not self.agents_available.get('critique', False) or self._critique_class is None:
+            error_msg = "Critique agent not available"
             logger.warning(f"Critique agent unavailable for job {job_id}: {error_msg}")
             return {
                 "status": "error",
                 "message": f"Critique agent not available: {error_msg}",
                 "agent_available": False,
                 "job_id": job_id,
-                "missing_dependencies": error.missing_dependencies if error else [],
             }
         
         try:
