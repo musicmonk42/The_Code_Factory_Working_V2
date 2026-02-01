@@ -103,9 +103,9 @@ def pytest_configure(config):
         os.environ['PYTEST_COLLECTING_ONLY'] = '1'
 
 
-@pytest.fixture(autouse=True, scope="function")
+@pytest.fixture(autouse=True, scope="session")
 def reset_prometheus_collectors():
-    """Reset Prometheus collectors before each test to prevent duplicates.
+    """Reset Prometheus collectors once per test session to reduce memory overhead.
     
     Note: Uses private API `_collector_to_names` as the public API doesn't
     provide a way to iterate collectors for cleanup. This is wrapped in
@@ -113,14 +113,13 @@ def reset_prometheus_collectors():
     """
     REGISTRY = _get_prometheus_registry()
     
-    # Store collectors to remove using a defensive approach
+    # Only clean up at session start
     try:
         collectors = list(REGISTRY._collector_to_names.keys())
     except (AttributeError, KeyError):
-        # If the internal structure changes, skip cleanup
         collectors = []
     
-    # Unregister all collectors
+    # Unregister all collectors at session start
     for collector in collectors:
         try:
             REGISTRY.unregister(collector)
@@ -129,14 +128,4 @@ def reset_prometheus_collectors():
     
     yield
     
-    # Clean up after test
-    try:
-        collectors = list(REGISTRY._collector_to_names.keys())
-    except (AttributeError, KeyError):
-        collectors = []
-        
-    for collector in collectors:
-        try:
-            REGISTRY.unregister(collector)
-        except Exception:
-            pass
+    # Skip cleanup after tests - let process exit handle it

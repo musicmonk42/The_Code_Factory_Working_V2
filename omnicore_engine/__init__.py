@@ -8,6 +8,7 @@ heavy initialization during pytest collection or package import.
 """
 
 import logging
+import os
 import sys
 from typing import Any
 
@@ -20,6 +21,17 @@ if not logger.handlers:
         logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     )
     logger.addHandler(handler)
+
+# Detect pytest collection phase to skip expensive imports
+PYTEST_COLLECTING = (
+    os.getenv('PYTEST_COLLECTING_ONLY') == '1' or
+    os.getenv('PYTEST_CURRENT_TEST') is not None or
+    any(arg in sys.argv for arg in ['--collect-only', '--co']) or
+    any('--collect' in arg for arg in sys.argv)
+)
+
+if PYTEST_COLLECTING:
+    logger.info("Pytest collection detected - skipping heavy initialization")
 
 # Avoid importing submodules at package import time to prevent heavy initialization.
 # Provide accessor functions that import lazily.
@@ -35,11 +47,17 @@ def get_plugin_registry():
     initialization during package import or pytest collection.
 
     Returns:
-        The global plugin registry singleton instance.
+        The global plugin registry singleton instance, or a stub during collection.
         
     Raises:
         ImportError: If plugin_registry module cannot be imported.
     """
+    if PYTEST_COLLECTING:
+        # Return a stub during collection to avoid heavy initialization
+        return type('StubRegistry', (), {
+            '__getattr__': lambda self, name: lambda *args, **kwargs: None
+        })()
+    
     try:
         from .plugin_registry import PLUGIN_REGISTRY as _PLUGIN_REGISTRY
         return _PLUGIN_REGISTRY
@@ -58,11 +76,18 @@ def get_plugin_event_handler_class():
     initialization during package import or pytest collection.
 
     Returns:
-        The PluginEventHandler class (not an instance).
+        The PluginEventHandler class (not an instance), or a stub during collection.
         
     Raises:
         ImportError: If plugin_event_handler module cannot be imported.
     """
+    if PYTEST_COLLECTING:
+        # Return a stub class during collection to avoid heavy initialization
+        return type('StubPluginEventHandler', (), {
+            '__init__': lambda self, *args, **kwargs: None,
+            '__getattr__': lambda self, name: lambda *args, **kwargs: None
+        })
+    
     try:
         from .plugin_event_handler import PluginEventHandler as _PluginEventHandler
         return _PluginEventHandler
