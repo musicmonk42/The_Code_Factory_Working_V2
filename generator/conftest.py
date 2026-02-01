@@ -11,15 +11,11 @@ The following modules are mocked to prevent expensive initialization:
 1. Simulation modules (simulation, simulation_module, etc.)
    - Reason: Heavy database connections and message bus initialization
    
-2. ChromaDB (chromadb, chromadb.utils.embedding_functions)
-   - Reason: Large vector database initialization, file I/O
-   - Impact: Prevents 1-2 minute startup delay
-   
-3. Presidio (presidio_analyzer, presidio_anonymizer)
+2. Presidio (presidio_analyzer, presidio_anonymizer)
    - Reason: Downloads SpaCy NLP models (100+ MB) on first use
    - Impact: Prevents network timeouts and CPU exhaustion
    
-4. SpaCy (spacy)
+3. SpaCy (spacy)
    - Reason: Large NLP model loading
    - Impact: Prevents memory pressure and long initialization
 
@@ -70,6 +66,7 @@ except ImportError as e:
 # NOTE: omnicore_engine modules removed - they were causing plugin_registry import failures
 # The plugin_registry is a core component that many tests depend on.
 # Mocking parent modules breaks child module imports via PEP 562 lazy loading.
+# NOTE: ChromaDB modules REMOVED - they are used by source code and already installed
 SIMULATION_MODULES_TO_MOCK = [
     "simulation",
     "simulation.simulation_module",
@@ -79,11 +76,12 @@ SIMULATION_MODULES_TO_MOCK = [
     # These were breaking plugin_registry imports via PEP 562 lazy loading.
     # "omnicore_engine.engines",  # ❌ REMOVED - breaks plugin_registry imports
     # "omnicore_engine.plugin_registry",  # ❌ REMOVED - tests need real plugin_registry
-    # Add heavy ML/NLP dependencies that cause timeouts
-    "chromadb",
-    "chromadb.config",
-    "chromadb.utils",
-    "chromadb.utils.embedding_functions",
+    # NOTE: ChromaDB modules REMOVED - they are used by source code and already installed
+    # "chromadb",  # ❌ REMOVED - needed by source code
+    # "chromadb.config",  # ❌ REMOVED
+    # "chromadb.utils",  # ❌ REMOVED
+    # "chromadb.utils.embedding_functions",  # ❌ REMOVED
+    # Keep only truly optional heavy ML/NLP dependencies:
     "presidio_analyzer",
     "presidio_analyzer.analyzer_engine",
     "presidio_anonymizer",
