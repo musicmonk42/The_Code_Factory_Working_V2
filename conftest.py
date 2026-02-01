@@ -2083,8 +2083,8 @@ def setup_test_stubs():
     # Initialize cryptography protection (deferred from module level)
     _initialize_crypto_protection()
     
-    # Initialize Prometheus stubs (deferred if we were in collection mode)
-    _initialize_prometheus_stubs()
+    # NOTE: _initialize_prometheus_stubs() removed - prometheus_client is now
+    # a required dependency installed via requirements.txt, no stub needed
     
     # Initialize optional dependency mocks
     _initialize_optional_dependency_mocks()
