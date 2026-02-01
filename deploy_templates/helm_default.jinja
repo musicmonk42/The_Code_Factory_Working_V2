@@ -1,0 +1,91 @@
+{# 
+  Helm Chart Deployment Template
+  Generates Helm chart configuration for Kubernetes deployment.
+  
+  Features:
+    - Values.yaml generation
+    - Service and deployment configuration
+    - Resource limits and requests
+    - Ingress and networking setup
+    - ConfigMap and Secret management
+#}
+
+# Helm Chart Configuration Generation
+
+Generate a Helm chart for {{ target | default('the application') }}.
+
+{% if files %}
+## Files to Include:
+{% for file in files %}
+- {{ file }}
+{% endfor %}
+{% endif %}
+
+{% if context is defined %}
+## Application Context
+{% if context.language is defined %}
+- Language: {{ context.language }}
+{% endif %}
+{% if context.framework is defined %}
+- Framework: {{ context.framework }}
+{% endif %}
+{% if context.dependencies is defined and context.dependencies %}
+- Dependencies: {{ context.dependencies | join(', ') }}
+{% endif %}
+{% endif %}
+
+## Requirements
+
+The Helm chart should include:
+
+1. **values.yaml** - Default configuration values including:
+   - Image repository and tag
+   - Service type and ports
+   - Resource limits and requests
+   - Environment variables
+   - ConfigMap and Secret references
+   - Ingress configuration
+
+2. **Deployment Configuration**
+   - Replica count with autoscaling support
+   - Pod template with proper labels and annotations
+   - Container configuration with health checks
+   - Resource management (CPU/memory limits)
+   - Volume mounts and persistent storage
+
+3. **Service Configuration**
+   - Service type (ClusterIP, NodePort, LoadBalancer)
+   - Port mappings
+   - Selector labels
+   - Session affinity if needed
+
+4. **Ingress Setup** (if applicable)
+   - Host and path routing
+   - TLS configuration
+   - Annotations for ingress controller
+
+5. **Best Practices**
+   - Use Helm templating for flexibility
+   - Include helpful comments
+   - Set sensible defaults
+   - Support common customization patterns
+   - Follow Kubernetes naming conventions
+
+{% if repo_path is defined %}
+## Repository Path
+{{ repo_path }}
+{% endif %}
+
+{% if instructions is defined and instructions %}
+## Additional Instructions
+{{ instructions }}
+{% endif %}
+
+{% if few_shot_examples is defined and few_shot_examples %}
+## Example Patterns
+
+{{ few_shot_examples }}
+{% endif %}
+
+---
+**Output Format**: Generate the Helm chart values.yaml or the complete chart structure as requested. Use proper YAML formatting with comments explaining configuration options.
