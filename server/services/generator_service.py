@@ -755,3 +755,25 @@ class GeneratorService:
             ],
             "count": 1,
         }
+
+
+def get_generator_service() -> GeneratorService:
+    """
+    Dependency injection function for GeneratorService.
+    
+    Creates a GeneratorService instance with OmniCoreService for
+    centralized routing of generator operations.
+    
+    Returns:
+        GeneratorService: Configured generator service instance
+        
+    Example:
+        >>> from fastapi import Depends
+        >>> @router.post("/endpoint")
+        >>> async def handler(service: GeneratorService = Depends(get_generator_service)):
+        ...     result = await service.create_generation_job(...)
+    """
+    from server.services.omnicore_service import get_omnicore_service
+    
+    omnicore = get_omnicore_service()
+    return GeneratorService(omnicore_service=omnicore)

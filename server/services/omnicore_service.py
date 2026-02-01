@@ -2681,3 +2681,22 @@ class OmniCoreService:
         requirements["status"] = "clarified"
         
         return requirements
+
+
+def get_omnicore_service() -> OmniCoreService:
+    """
+    Dependency injection function for OmniCoreService.
+    
+    Creates an OmniCoreService instance for centralized routing
+    and coordination of all module operations.
+    
+    Returns:
+        OmniCoreService: Configured OmniCore service instance
+        
+    Example:
+        >>> from fastapi import Depends
+        >>> @router.post("/endpoint")
+        >>> async def handler(service: OmniCoreService = Depends(get_omnicore_service)):
+        ...     result = await service.route_job(...)
+    """
+    return OmniCoreService()
