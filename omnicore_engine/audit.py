@@ -1250,13 +1250,14 @@ class ExplainAudit:
 
                 await self._db_client.save_audit_record(record.model_dump())
 
-                await self.knowledge_graph.add_fact(
-                    "AuditRecords",
-                    record.uuid,
-                    record.model_dump(),
-                    source="audit",
-                    timestamp=datetime.utcnow().isoformat(),
-                )
+                if self.knowledge_graph:
+                    await self.knowledge_graph.add_fact(
+                        "AuditRecords",
+                        record.uuid,
+                        record.model_dump(),
+                        source="audit",
+                        timestamp=datetime.utcnow().isoformat(),
+                    )
 
             logger.info(
                 f"Flushed {len(records_to_flush)} audit records to DB/KG/Blockchain (if enabled)."
