@@ -95,8 +95,3 @@ def test_opentelemetry_functional():
     with tracer.start_as_current_span("test_span") as span:
         assert span is not None
         assert hasattr(span, 'set_attribute'), "Span should have set_attribute method"
-
-
-if __name__ == "__main__":
-    # Run the tests
-    pytest.main([__file__, "-v"])
