@@ -17,7 +17,7 @@ from arbiter.otel_config import get_tracer
 # Initialize tracer using centralized config
 tracer = get_tracer(__name__)
 
-from codebase_analyzer import (
+from arbiter.codebase_analyzer import (
     MYPY_AVAILABLE,
     RADON_AVAILABLE,
     CodebaseAnalyzer,
@@ -61,8 +61,8 @@ def mock_config_file(temp_dir):
 @pytest.fixture(autouse=True)
 def mock_metrics():
     with (
-        patch("codebase_analyzer.analyzer_ops_total") as mock_ops,
-        patch("codebase_analyzer.analyzer_errors_total") as mock_errors,
+        patch("arbiter.codebase_analyzer.analyzer_ops_total") as mock_ops,
+        patch("arbiter.codebase_analyzer.analyzer_errors_total") as mock_errors,
     ):
         mock_ops.labels.return_value.inc = MagicMock()
         mock_errors.labels.return_value.inc = MagicMock()
@@ -82,7 +82,7 @@ def mock_metrics():
     ],
 )
 def test_conditional_imports(dep, flag, caplog):
-    with patch(f"codebase_analyzer.{flag}", False):
+    with patch(f"arbiter.codebase_analyzer.{flag}", False):
         # We need a way to reliably test this. A simple patch on the global is not enough
         # as the check happens at module import time. This test might be fragile.
         # A better approach would be to test the logic that uses these flags.
@@ -306,7 +306,7 @@ def test_generate_junit_xml_report():
 # Test CLI scan command
 def test_cli_scan():
     runner = CliRunner()
-    with patch("codebase_analyzer.CodebaseAnalyzer") as mock_analyzer_class:
+    with patch("arbiter.codebase_analyzer.CodebaseAnalyzer") as mock_analyzer_class:
         mock_instance = MagicMock()
         mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
         mock_instance.__aexit__ = AsyncMock()
@@ -325,7 +325,7 @@ def test_cli_scan():
 # Test CLI tools command
 def test_cli_tools():
     runner = CliRunner()
-    with patch("codebase_analyzer.CodebaseAnalyzer") as mock_analyzer_class:
+    with patch("arbiter.codebase_analyzer.CodebaseAnalyzer") as mock_analyzer_class:
         mock_instance = MagicMock()
         mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
         mock_instance.__aexit__ = AsyncMock()

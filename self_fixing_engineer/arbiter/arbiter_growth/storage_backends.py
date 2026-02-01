@@ -10,9 +10,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Protocol, Union
 
 import redis.asyncio as redis
-from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, TopicPartition
 from aiokafka.errors import KafkaError
-from aiokafka.structs import TopicPartition
 from cryptography.fernet import Fernet, InvalidToken
 from opentelemetry import trace
 from arbiter.otel_config import get_tracer_safe
