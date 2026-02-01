@@ -204,69 +204,12 @@ if os.environ.get("TESTING") == "1":
         # urllib3 expects zstandard.__version__ to be a string for regex parsing
         sys.modules["zstandard"].__version__ = "0.22.0"
     
-    # Special early initialization for aiohttp (needs ClientSession and other classes)
-    if "aiohttp" not in sys.modules:
-        # Create a minimal but functional aiohttp mock for early imports
-        # This will be replaced/enhanced by _initialize_aiohttp_stubs later if needed
-        aiohttp_early = types.ModuleType("aiohttp")
-        aiohttp_early.__file__ = "<mocked aiohttp early>"
-        aiohttp_early.__path__ = []
-        aiohttp_early.__spec__ = importlib.util.spec_from_loader("aiohttp", loader=None)
-        
-        # ClientSession class
-        class EarlyClientSession:
-            def __init__(self, *args, **kwargs):
-                pass
-            async def __aenter__(self):
-                return self
-            async def __aexit__(self, *args):
-                pass
-            async def close(self):
-                pass
-            async def get(self, *args, **kwargs):
-                from unittest.mock import MagicMock
-                resp = MagicMock()
-                resp.status = 200
-                resp.json = MagicMock(return_value={})
-                return resp
-            async def post(self, *args, **kwargs):
-                from unittest.mock import MagicMock
-                resp = MagicMock()
-                resp.status = 200
-                resp.json = MagicMock(return_value={})
-                return resp
-        
-        # ClientResponse class
-        class EarlyClientResponse:
-            def __init__(self, *args, **kwargs):
-                self.status = 200
-                self.headers = {}
-            async def json(self):
-                return {}
-            async def text(self):
-                return ""
-            async def read(self):
-                return b""
-        
-        # Exception classes
-        class EarlyClientError(Exception):
-            pass
-        
-        class EarlyClientResponseError(EarlyClientError):
-            pass
-        
-        aiohttp_early.ClientSession = EarlyClientSession
-        aiohttp_early.ClientResponse = EarlyClientResponse
-        aiohttp_early.ClientError = EarlyClientError
-        aiohttp_early.ClientResponseError = EarlyClientResponseError
-        
-        # Add __getattr__ for other attributes
-        def _aiohttp_early_getattr(name):
-            from unittest.mock import MagicMock
-            return MagicMock()
-        aiohttp_early.__getattr__ = _aiohttp_early_getattr
-        
-        sys.modules["aiohttp"] = aiohttp_early
+    # REMOVED: Early aiohttp mocking - now using real aiohttp installation
+    # This was causing issues with aiohttp submodules (helpers, client_exceptions)
+    # not being importable. With aiohttp properly installed in requirements.txt,
+    # we don't need to mock it during collection.
+    # 
+    # The real aiohttp module will be imported naturally when tests need it.
     
     # CPU TIMEOUT FIX: Skip expensive module existence checks during test collection.
     # Previously, _check_module_exists() used importlib.util.find_spec() which triggers
