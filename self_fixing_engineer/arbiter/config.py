@@ -165,10 +165,10 @@ def get_or_create_histogram(
 
 # Prometheus metrics
 CONFIG_ACCESS = get_or_create_counter(
-    "config_access_total", "Total configuration accesses", ("setting")
+    "config_access_total", "Total configuration accesses", ("setting",)
 )
 CONFIG_ERRORS = get_or_create_counter(
-    "config_errors_total", "Total configuration errors", ("error_type")
+    "config_errors_total", "Total configuration errors", ("error_type",)
 )
 CONFIG_OPS_TOTAL = get_or_create_counter(
     "config_ops_total", "Total config operations", ["operation"]
@@ -185,11 +185,11 @@ class ConfigError(Exception):
 class LLMSettings(BaseSettings):
     default_provider: str = Field("openai")
     retry_providers: List[str] = Field(
-        ["anthropic", "google"], validation_alias=AliasChoices("LLM_RETRY_PROVIDERS")
+        ["anthropic", "google"]
     )
     timeout_seconds: float = Field(30.0)
     api_url: HttpUrl = Field(
-        default="https://api.openai.com/v1/completions", validation_alias=AliasChoices("LLM_API_URL")
+        default="https://api.openai.com/v1/completions"
     )
     api_key: Optional[SecretStr] = Field(
         default=SecretStr("sk-dummy-llm-key-for-tests"), validation_alias=AliasChoices("OPENAI_API_KEY")
@@ -206,8 +206,9 @@ class LLMSettings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
-        case_sensitive=True,
-        env_prefix="LLM_")
+        case_sensitive=False,  # Allow case-insensitive env var matching (LLM_DEFAULT_PROVIDER -> default_provider)
+        env_prefix="LLM_"
+    )
 
 
 # --- Primary Configuration Class using Pydantic BaseSettings ---

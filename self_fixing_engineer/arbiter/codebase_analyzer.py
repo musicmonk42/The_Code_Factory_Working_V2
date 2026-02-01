@@ -322,8 +322,8 @@ def _get_or_create_metric(metric_class, name, description, labelnames=None, **kw
             
             # Fallback: iterate through collectors to find the one with matching name
             for collector in list(REGISTRY._collector_to_names.keys()):
-                # Check various attributes that might hold the metric name
-                collector_name = getattr(collector, "_name", None) or getattr(collector, "describe", lambda: [])
+                # Check if collector has _name attribute
+                collector_name = getattr(collector, "_name", None)
                 if collector_name == name:
                     logger.debug(
                         f"Metric '{name}' already registered, reusing existing instance"
