@@ -2518,6 +2518,9 @@ function escapeHtml(text) {
 
 // ==================== Audit Logs ====================
 
+// Global storage for current audit logs
+window.currentAuditLogs = [];
+
 /**
  * Initialize audit logs functionality
  */
@@ -2566,23 +2569,24 @@ function displayAuditLogs(data) {
     
     if (!data.logs || data.logs.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="no-data">No audit logs found</td></tr>';
+        window.currentAuditLogs = [];
         return;
     }
     
-    tbody.innerHTML = data.logs.map(log => {
-        const logJson = JSON.stringify(log).replace(/'/g, '&#39;');
-        return `
-            <tr onclick="showAuditDetail(${escapeHtml(logJson)})">
-                <td>${formatTimestamp(log.timestamp)}</td>
-                <td><span class="badge event-${log.event_type || 'unknown'}">${log.event_type || 'N/A'}</span></td>
-                <td>${log.job_id || 'N/A'}</td>
-                <td>${log.action || log.name || 'N/A'}</td>
-                <td>${log.user || log.actor || 'system'}</td>
-                <td><span class="status-badge ${log.status || 'unknown'}">${log.status || 'N/A'}</span></td>
-                <td><button class="btn-link" onclick="event.stopPropagation(); showAuditDetail(${escapeHtml(logJson)})">View</button></td>
-            </tr>
-        `;
-    }).join('');
+    // Store logs globally for detail view
+    window.currentAuditLogs = data.logs;
+    
+    tbody.innerHTML = data.logs.map((log, index) => `
+        <tr onclick="showAuditDetailByIndex(${index})">
+            <td>${formatTimestamp(log.timestamp)}</td>
+            <td><span class="badge event-${log.event_type || 'unknown'}">${log.event_type || 'N/A'}</span></td>
+            <td>${log.job_id || 'N/A'}</td>
+            <td>${log.action || log.name || 'N/A'}</td>
+            <td>${log.user || log.actor || 'system'}</td>
+            <td><span class="status-badge ${log.status || 'unknown'}">${log.status || 'N/A'}</span></td>
+            <td><button class="btn-link" onclick="event.stopPropagation(); showAuditDetailByIndex(${index})">View</button></td>
+        </tr>
+    `).join('');
 }
 
 /**
@@ -2614,7 +2618,23 @@ function updateAuditStats(data) {
 }
 
 /**
- * Show audit log details in modal
+ * Show audit log details in modal by index
+ */
+function showAuditDetailByIndex(index) {
+    const modal = document.getElementById('audit-detail-modal');
+    const jsonPre = document.getElementById('audit-detail-json');
+    
+    if (window.currentAuditLogs && window.currentAuditLogs[index]) {
+        const log = window.currentAuditLogs[index];
+        jsonPre.textContent = JSON.stringify(log, null, 2);
+        modal.classList.add('active');
+    } else {
+        console.error('Log not found at index:', index);
+    }
+}
+
+/**
+ * Show audit log details in modal (legacy support)
  */
 function showAuditDetail(logJson) {
     const modal = document.getElementById('audit-detail-modal');
