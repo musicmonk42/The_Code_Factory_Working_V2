@@ -1,6 +1,8 @@
 import os
 import sys
 import types
+import importlib.machinery
+import importlib.util
 from pathlib import Path
 
 # REMOVED: matplotlib import causes expensive font cache initialization during import
@@ -113,10 +115,15 @@ if os.environ.get("TESTING") == "1":
     # CRITICAL: Mock dynaconf EARLY before stub modules are created
     # This prevents stub modules from importing an incomplete dynaconf
     if "dynaconf" not in sys.modules:
-        dynaconf_module = types.ModuleType("dynaconf")
+        import importlib.machinery
+        dynaconf_spec = importlib.machinery.ModuleSpec(
+            name="dynaconf",
+            loader=None,
+            is_package=True
+        )
+        dynaconf_module = importlib.util.module_from_spec(dynaconf_spec)
         dynaconf_module.__file__ = "<mocked dynaconf>"
         dynaconf_module.__path__ = []
-        dynaconf_module.__spec__ = importlib.util.spec_from_loader("dynaconf", loader=None)
         
         class MockDynaconf:
             def __init__(self, *args, **kwargs):
@@ -170,10 +177,16 @@ if os.environ.get("TESTING") == "1":
     
     for mod_name in early_mocks:
         if mod_name not in sys.modules:
-            early_mock = types.ModuleType(mod_name)
+            # Use proper ModuleSpec to prevent AttributeError: __spec__
+            import importlib.machinery
+            early_spec = importlib.machinery.ModuleSpec(
+                name=mod_name,
+                loader=None,
+                is_package=True
+            )
+            early_mock = importlib.util.module_from_spec(early_spec)
             early_mock.__file__ = f"<mocked {mod_name}>"
             early_mock.__path__ = []
-            early_mock.__spec__ = importlib.util.spec_from_loader(mod_name, loader=None)
             
             # Create a unique __getattr__ for each module (avoid closure issues)
             def make_getattr():
@@ -192,10 +205,14 @@ if os.environ.get("TESTING") == "1":
                 for i in range(1, len(parts)):
                     parent_name = ".".join(parts[:i])
                     if parent_name not in sys.modules:
-                        parent_mock = types.ModuleType(parent_name)
+                        parent_spec = importlib.machinery.ModuleSpec(
+                            name=parent_name,
+                            loader=None,
+                            is_package=True
+                        )
+                        parent_mock = importlib.util.module_from_spec(parent_spec)
                         parent_mock.__file__ = f"<mocked {parent_name}>"
                         parent_mock.__path__ = []
-                        parent_mock.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
                         parent_mock.__getattr__ = make_getattr()
                         sys.modules[parent_name] = parent_mock
     
@@ -208,10 +225,15 @@ if os.environ.get("TESTING") == "1":
     if "aiohttp" not in sys.modules:
         # Create a minimal but functional aiohttp mock for early imports
         # This will be replaced/enhanced by _initialize_aiohttp_stubs later if needed
-        aiohttp_early = types.ModuleType("aiohttp")
+        import importlib.machinery
+        aiohttp_early_spec = importlib.machinery.ModuleSpec(
+            name="aiohttp",
+            loader=None,
+            is_package=True
+        )
+        aiohttp_early = importlib.util.module_from_spec(aiohttp_early_spec)
         aiohttp_early.__file__ = "<mocked aiohttp early>"
         aiohttp_early.__path__ = []
-        aiohttp_early.__spec__ = importlib.util.spec_from_loader("aiohttp", loader=None)
         
         # ClientSession class
         class EarlyClientSession:
@@ -298,11 +320,16 @@ if os.environ.get("TESTING") == "1":
 
     for module_name in _stub_modules.keys():
         if module_name not in sys.modules:
-            # Create a minimal stub module
-            stub = types.ModuleType(module_name)
+            # Create a minimal stub module with proper ModuleSpec
+            import importlib.machinery
+            stub_spec = importlib.machinery.ModuleSpec(
+                name=module_name,
+                loader=None,
+                is_package=True
+            )
+            stub = importlib.util.module_from_spec(stub_spec)
             stub.__file__ = f"<stub {module_name}>"
             stub.__path__ = []
-            stub.__spec__ = importlib.util.spec_from_loader(module_name, loader=None)
             stub.__getattr__ = _stub_getattr
             sys.modules[module_name] = stub
             
@@ -313,10 +340,14 @@ if os.environ.get("TESTING") == "1":
                     parent_name = ".".join(parts[:i])
                     if parent_name not in sys.modules:
                         # DON'T try to import - just create stub
-                        parent_stub = types.ModuleType(parent_name)
+                        parent_spec = importlib.machinery.ModuleSpec(
+                            name=parent_name,
+                            loader=None,
+                            is_package=True
+                        )
+                        parent_stub = importlib.util.module_from_spec(parent_spec)
                         parent_stub.__file__ = f"<stub {parent_name}>"
                         parent_stub.__path__ = []
-                        parent_stub.__spec__ = importlib.util.spec_from_loader(parent_name, loader=None)
                         parent_stub.__getattr__ = _stub_getattr
                         sys.modules[parent_name] = parent_stub
                         
@@ -357,10 +388,12 @@ def _create_stub_module(name: str) -> types.ModuleType:
     stub.__path__ = []  # Make it a package
     
     # CRITICAL: Add __spec__ to prevent AttributeError during pytest collection
-    stub.__spec__ = importlib.util.spec_from_loader(
-        name, 
+    # Use proper ModuleSpec instead of spec_from_loader
+    import importlib.machinery
+    stub.__spec__ = importlib.machinery.ModuleSpec(
+        name=name, 
         loader=None,
-        origin=f"<stub:{name}>"
+        is_package=True
     )
     
     # Add safe __getattr__ that returns None instead of raising
@@ -461,8 +494,13 @@ def _create_mock_module(name):
     # Add __path__ attribute to support submodule imports (packages need this)
     mock_module.__path__ = []
     # Add __spec__ attribute to satisfy importlib.util.find_spec checks
-    # This prevents "ValueError: torch.__spec__ is None" errors
-    mock_module.__spec__ = importlib.util.spec_from_loader(name, loader=None)
+    # Use proper ModuleSpec instead of spec_from_loader
+    import importlib.machinery
+    mock_module.__spec__ = importlib.machinery.ModuleSpec(
+        name=name,
+        loader=None,
+        is_package=True
+    )
 
     # Add a __getattr__ to handle submodule/attribute access gracefully
     def _mock_getattr(attr_name):
@@ -706,12 +744,15 @@ def _initialize_botocore_exceptions():
             import importlib.util
             
             # Create botocore.exceptions with REAL exception classes
-            botocore_exc_module = types.ModuleType("botocore.exceptions")
+            import importlib.machinery
+            botocore_exc_spec = importlib.machinery.ModuleSpec(
+                name="botocore.exceptions",
+                loader=None,
+                is_package=True
+            )
+            botocore_exc_module = importlib.util.module_from_spec(botocore_exc_spec)
             botocore_exc_module.__file__ = "<mocked botocore.exceptions>"
             botocore_exc_module.__path__ = []
-            botocore_exc_module.__spec__ = importlib.util.spec_from_loader(
-                "botocore.exceptions", loader=None
-            )
             
             # Create proper exception classes that inherit from BaseException
             # These are independent exceptions - they don't need to inherit from each other
@@ -1094,12 +1135,17 @@ def _initialize_tenacity_stubs():
             def __and__(self, other):
                 return _RetryPredicate()
         
-        # Create the tenacity module
+        # Create the tenacity module with proper ModuleSpec
         import importlib.util
-        tenacity_module = types.ModuleType("tenacity")
+        import importlib.machinery
+        tenacity_spec = importlib.machinery.ModuleSpec(
+            name="tenacity",
+            loader=None,
+            is_package=True
+        )
+        tenacity_module = importlib.util.module_from_spec(tenacity_spec)
         tenacity_module.__file__ = "<mocked tenacity>"
         tenacity_module.__path__ = []
-        tenacity_module.__spec__ = importlib.util.spec_from_loader("tenacity", loader=None)
         
         # Retry decorator - returns the function unchanged
         def mock_retry(*args, **kwargs):
@@ -1204,11 +1250,16 @@ def _initialize_aiohttp_stubs():
         # Create complete aiohttp stubs for test collection
         import types
         import importlib.util
+        import importlib.machinery
         
-        aiohttp_module = types.ModuleType("aiohttp")
+        aiohttp_spec = importlib.machinery.ModuleSpec(
+            name="aiohttp",
+            loader=None,
+            is_package=True
+        )
+        aiohttp_module = importlib.util.module_from_spec(aiohttp_spec)
         aiohttp_module.__file__ = "<mocked aiohttp>"
         aiohttp_module.__path__ = []
-        aiohttp_module.__spec__ = importlib.util.spec_from_loader("aiohttp", loader=None)
         
         # Create ClientTimeout class
         class ClientTimeout:
@@ -1451,11 +1502,15 @@ def _initialize_aiohttp_stubs():
             """Mock aiohttp.web.run_app."""
             pass
         
-        # Create web submodule
-        web_module = types.ModuleType("aiohttp.web")
+        # Create web submodule with proper ModuleSpec
+        web_spec = importlib.machinery.ModuleSpec(
+            name="aiohttp.web",
+            loader=None,
+            is_package=True
+        )
+        web_module = importlib.util.module_from_spec(web_spec)
         web_module.__file__ = "<mocked aiohttp.web>"
         web_module.__path__ = []
-        web_module.__spec__ = importlib.util.spec_from_loader("aiohttp.web", loader=None)
         web_module.Request = WebRequest
         web_module.Response = WebResponse
         web_module.Application = WebApplication
@@ -1737,55 +1792,52 @@ def _initialize_prometheus_stubs():
     UPDATED: prometheus_client is now a required dependency in requirements.txt.
     This function now only creates stubs if the real package is not available.
     
-    Unusual circumstances where stubs might be needed:
-    - During initial test collection before dependencies are fully loaded
-    - In minimal test environments where only subset of dependencies are available
-    - During CI/CD pipeline bootstrapping phases
-    
-    This function can be called from the setup_test_stubs session fixture
-    or at module level (when not in collection mode). It's safe to call multiple
-    times - it will only create stubs if prometheus_client is not already available.
+    FIX: Uses proper ModuleSpec to prevent AttributeError: __spec__
     """
-    # First check if prometheus_client is already loaded to avoid unnecessary import attempts
-    # This is faster than trying an import every time
+    # Check if already loaded
     if "prometheus_client" in sys.modules:
-        # Already loaded, don't replace it with a stub
         return
     
     # Try to import the real prometheus_client
-    # If successful, this will add it to sys.modules
     try:
         import prometheus_client
-        # Successfully imported, don't need stub
-        return
+        return  # Successfully imported, don't need stub
     except ImportError:
-        # Not available, create stub below
-        pass
+        pass  # Not available, create stub below
     
-    # Create prometheus_client package stub
-    prom_module = types.ModuleType("prometheus_client")
+    import importlib.machinery
+    import importlib.util
+    
+    # Create prometheus_client package stub WITH proper ModuleSpec
+    prom_spec = importlib.machinery.ModuleSpec(
+        name="prometheus_client",
+        loader=None,
+        is_package=True
+    )
+    prom_module = importlib.util.module_from_spec(prom_spec)
     prom_module.__file__ = "<mocked prometheus_client>"
-    prom_module.__path__ = []  # Make it a package
-    prom_module.__spec__ = importlib.util.spec_from_loader(
-        "prometheus_client", loader=None
-    )
+    prom_module.__path__ = []
 
-    # Create core submodule
-    prom_core = types.ModuleType("prometheus_client.core")
-    prom_core.__file__ = "<mocked prometheus_client.core>"
-    prom_core.__path__ = []  # Make it a package
-    prom_core.__spec__ = importlib.util.spec_from_loader(
-        "prometheus_client.core", loader=None
+    # Create core submodule WITH proper ModuleSpec
+    core_spec = importlib.machinery.ModuleSpec(
+        name="prometheus_client.core",
+        loader=None,
+        is_package=True
     )
+    prom_core = importlib.util.module_from_spec(core_spec)
+    prom_core.__file__ = "<mocked prometheus_client.core>"
+    prom_core.__path__ = []
     prom_module.core = prom_core
 
-    # Create registry submodule
-    prom_registry = types.ModuleType("prometheus_client.registry")
-    prom_registry.__file__ = "<mocked prometheus_client.registry>"
-    prom_registry.__path__ = []  # Make it a package
-    prom_registry.__spec__ = importlib.util.spec_from_loader(
-        "prometheus_client.registry", loader=None
+    # Create registry submodule WITH proper ModuleSpec
+    registry_spec = importlib.machinery.ModuleSpec(
+        name="prometheus_client.registry",
+        loader=None,
+        is_package=True
     )
+    prom_registry = importlib.util.module_from_spec(registry_spec)
+    prom_registry.__file__ = "<mocked prometheus_client.registry>"
+    prom_registry.__path__ = []
     prom_module.registry = prom_registry
 
     # Add common classes/functions to core
@@ -1889,27 +1941,18 @@ def _initialize_prometheus_stubs():
         def info(self, *args, **kwargs):
             pass
 
+    # Create shared registry instance
+    _shared_registry = _MockCollectorRegistry()
+
     prom_module.CollectorRegistry = _MockCollectorRegistry
     prom_module.Counter = _MockCounter
     prom_module.Histogram = _MockHistogram
     prom_module.Gauge = _MockGauge
     prom_module.Info = _MockInfo
-    prom_module.Summary = _MockHistogram  # Summary is similar to Histogram
-    prom_module.ProcessCollector = lambda *args, **kwargs: None
-    prom_module.PROCESS_COLLECTOR = None  # Process collector singleton
-    prom_module.PLATFORM_COLLECTOR = lambda *args, **kwargs: None
-    prom_module.GC_COLLECTOR = None  # GC collector singleton
-    prom_module.generate_latest = lambda *args, **kwargs: b""
-    prom_module.start_http_server = lambda *args, **kwargs: None
-    
-    # Create the shared REGISTRY instance
-    _shared_registry = _MockCollectorRegistry()
+    prom_module.Summary = _MockHistogram
     prom_module.REGISTRY = _shared_registry
-    # Also expose REGISTRY on registry submodule (imported by some modules)
-    prom_registry.REGISTRY = _shared_registry
-    prom_registry.CollectorRegistry = _MockCollectorRegistry
-    
-    # Also expose metric types on core submodule (some tests import from there)
+
+    # Also expose metric types on core submodule
     prom_core.Counter = _MockCounter
     prom_core.Histogram = _MockHistogram
     prom_core.Gauge = _MockGauge
@@ -1919,25 +1962,28 @@ def _initialize_prometheus_stubs():
     
     prom_module.CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
 
-    # Create multiprocess submodule
-    prom_multiprocess = types.ModuleType("prometheus_client.multiprocess")
+    # Create multiprocess submodule WITH proper ModuleSpec
+    multiproc_spec = importlib.machinery.ModuleSpec(
+        name="prometheus_client.multiprocess",
+        loader=None,
+        is_package=True
+    )
+    prom_multiprocess = importlib.util.module_from_spec(multiproc_spec)
     prom_multiprocess.__file__ = "<mocked prometheus_client.multiprocess>"
     prom_multiprocess.__path__ = []
-    prom_multiprocess.__spec__ = importlib.util.spec_from_loader(
-        "prometheus_client.multiprocess", loader=None
-    )
     prom_multiprocess.MultiProcessCollector = lambda *args, **kwargs: None
     prom_module.multiprocess = prom_multiprocess
 
-    # Create metrics submodule
-    prom_metrics = types.ModuleType("prometheus_client.metrics")
-    prom_metrics.__file__ = "<mocked prometheus_client.metrics>"
-    prom_metrics.__path__ = []  # Make it a package
-    prom_metrics.__spec__ = importlib.util.spec_from_loader(
-        "prometheus_client.metrics", loader=None
+    # Create metrics submodule WITH proper ModuleSpec
+    metrics_spec = importlib.machinery.ModuleSpec(
+        name="prometheus_client.metrics",
+        loader=None,
+        is_package=True
     )
+    prom_metrics = importlib.util.module_from_spec(metrics_spec)
+    prom_metrics.__file__ = "<mocked prometheus_client.metrics>"
+    prom_metrics.__path__ = []
 
-    # Create a base class for metric wrappers
     class MetricWrapperBase:
         def __init__(self, *args, **kwargs):
             pass
@@ -1945,7 +1991,7 @@ def _initialize_prometheus_stubs():
     prom_metrics.MetricWrapperBase = MetricWrapperBase
     prom_module.metrics = prom_metrics
 
-    # Register modules
+    # Register modules in sys.modules
     sys.modules["prometheus_client"] = prom_module
     sys.modules["prometheus_client.core"] = prom_core
     sys.modules["prometheus_client.registry"] = prom_registry
@@ -2084,7 +2130,14 @@ def _ensure_module_specs():
         if module is not None and isinstance(module, types.ModuleType):
             if not hasattr(module, '__spec__') or module.__spec__ is None:
                 try:
-                    module.__spec__ = importlib.util.spec_from_loader(name, loader=None)
+                    # Use proper ModuleSpec instead of spec_from_loader
+                    import importlib.machinery
+                    is_package = name in parent_modules
+                    module.__spec__ = importlib.machinery.ModuleSpec(
+                        name=name,
+                        loader=None,
+                        is_package=is_package
+                    )
                 except Exception:
                     pass  # Some modules can't have spec set
             if not hasattr(module, '__path__'):
@@ -2553,10 +2606,15 @@ def mock_modules(monkeypatch):
         for name in module_names:
             # Create a proper mock module with __spec__ and __path__ to prevent
             # "AttributeError: __spec__" errors during import system operations
-            mock_module = types.ModuleType(name)
+            import importlib.machinery
+            mock_spec = importlib.machinery.ModuleSpec(
+                name=name,
+                loader=None,
+                is_package=True
+            )
+            mock_module = importlib.util.module_from_spec(mock_spec)
             mock_module.__file__ = f"<mocked {name}>"
             mock_module.__path__ = []
-            mock_module.__spec__ = importlib.util.spec_from_loader(name, loader=None)
             # Use a dict to cache attribute mocks for consistent behavior
             mock_module._attr_cache = {}
             def _module_getattr(attr, cache=mock_module._attr_cache):
@@ -3327,10 +3385,15 @@ def mock_streamlit_setup():
     
     # Create a proper mock module with __spec__ and __path__ to prevent
     # "AttributeError: __spec__" errors during import system operations
-    streamlit_mock = types.ModuleType("streamlit")
+    import importlib.machinery
+    streamlit_spec = importlib.machinery.ModuleSpec(
+        name="streamlit",
+        loader=None,
+        is_package=True
+    )
+    streamlit_mock = importlib.util.module_from_spec(streamlit_spec)
     streamlit_mock.__file__ = "<mocked streamlit>"
     streamlit_mock.__path__ = []
-    streamlit_mock.__spec__ = importlib.util.spec_from_loader("streamlit", loader=None)
     # Use a dict to cache attribute mocks for consistent behavior
     streamlit_mock._attr_cache = {}
     def _streamlit_getattr(name):
