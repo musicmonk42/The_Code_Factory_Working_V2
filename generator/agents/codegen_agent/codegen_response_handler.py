@@ -74,8 +74,8 @@ _AUDIT_LOG_FAILURE_COUNT = 0
 
 
 try:  # Prefer real runner logging if available
-    # --- FIX: Changed import to be relative ---
-    from ...runner.runner_logging import log_audit_event as _runner_log_audit_event
+    # --- FIX: Changed import to be relative and import sync version ---
+    from ...runner.runner_audit import log_audit_event_sync as _runner_log_audit_event
 except ImportError:  # Fallback stub
     _USING_STUB_AUDIT_LOG = True
 
@@ -129,23 +129,14 @@ except ImportError:  # Fallback stub
 
 def log_audit_event(event_type: str, payload: Dict[str, Any] | None = None) -> None:
     """
-    Direct wrapper so we have a stable entrypoint in this module.
-
-    Handles both sync and async implementations of the underlying logger
-    without causing 'coroutine was never awaited' warnings in sync contexts.
+    Direct wrapper for audit logging in synchronous contexts.
+    
+    Uses log_audit_event_sync from runner_audit which handles async via create_task.
     """
     payload = payload or {}
     fn = _runner_log_audit_event
     try:
-        if inspect.iscoroutinefunction(fn):
-            # We are in a sync context; don't create an un-awaited coroutine.
-            logger.warning(
-                "Async log_audit_event detected; skipping await in sync context. "
-                "event_type=%s payload=%s",
-                event_type,
-                payload,
-            )
-            return
+        # _runner_log_audit_event is now the sync version, just call it directly
         fn(event_type, payload)
     except Exception:  # pragma: no cover - logging failures must never break main flow
         logger.exception("Failed to emit audit event: %s", event_type)

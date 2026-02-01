@@ -154,13 +154,8 @@ except ImportError as e:
 
         return MockConfig()
 
-    def log_audit_event(*args, **kwargs):
-        """Mock audit event logger - logs warning that auditing is disabled."""
-        if not TESTING:
-            logger.error(
-                "AUDIT DISABLED: log_audit_event mock called in non-testing mode. "
-                "Audit events are NOT being recorded."
-            )
+    # NOTE: log_audit_event is imported from runner.runner_logging (or runner_audit)
+    # No mock needed here as it's handled by the module itself
 
     def redact_secrets(text: str) -> str:
         """Mock secret redaction - returns text unchanged with warning."""

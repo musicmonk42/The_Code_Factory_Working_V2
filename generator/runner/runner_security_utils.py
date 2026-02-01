@@ -463,8 +463,8 @@ def redact_secrets(
         return data
 
     try:
-        # FIX: Lazy import to break circular dependency - use relative import
-        from .runner_logging import log_audit_event
+        # FIX: Lazy import to break circular dependency - use sync version
+        from .runner_audit import log_audit_event_sync as log_audit_event
     except ImportError:
         # If logging not available, continue without it
         log_audit_event = None
@@ -522,20 +522,13 @@ def redact_secrets(
             )
             result = data
 
-        # [FIX] Replaced add_provenance with log_audit_event (fire-and-forget)
-        # The log_audit_event is likely async, so we must use create_task
-        # to call it from this sync function.
+        # [FIX] Use log_audit_event_sync (fire-and-forget)
         if log_audit_event:
             try:
-                asyncio.create_task(
-                    log_audit_event(
-                        action="security_redact",
-                        data={"method": effective_method, "data_type": str(type(data))},
-                    )
+                log_audit_event(
+                    action="security_redact",
+                    data={"method": effective_method, "data_type": str(type(data))},
                 )
-            except RuntimeError:
-                # Happens if called outside an event loop (e.g., in a script). Ignore.
-                logger.debug("Cannot create task for audit log: No running event loop.")
             except Exception:
                 # Silently ignore logging failures - never crash due to logging
                 pass

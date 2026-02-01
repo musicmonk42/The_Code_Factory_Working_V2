@@ -89,21 +89,18 @@ except Exception:
         return base64.b64encode(b"unsigned").decode()
 
 
-# [FIX] End of patch
-
-# Initialize from environment variables at import time to prevent race conditions
-# where log_audit_event() is called before configure_logging_from_config()
-_DEFAULT_AUDIT_KEY_ID: str = (
-    os.getenv("AGENTIC_AUDIT_HMAC_KEY", "")
-    or os.getenv("AUDIT_SIGNING_KEY", "")
-    or os.getenv("RUNNER_AUDIT_SIGNING_KEY_ID", "")
+# [FIX] Import audit functionality from runner_audit to break circular dependencies
+from .runner_audit import (
+    log_audit_event,
+    log_audit_event_sync,
+    get_audit_state,
+    set_audit_key_id as _set_audit_key_id_internal,
+    get_last_audit_hash,
 )
 
-# [NEW] State management for the audit chain
-_AUDIT_CHAIN_LOCK = asyncio.Lock()
-_LAST_AUDIT_HASH: str = (
-    ""  # In production, initialize this from the last audit log in persistent storage
-)
+# Keep references to internal state for backward compatibility
+_AUDIT_CHAIN_LOCK = asyncio.Lock()  # Note: actual lock is in runner_audit
+_LAST_AUDIT_HASH: str = ""  # Note: actual state is in runner_audit
 
 # External dependency check for ecdsa
 try:
@@ -499,145 +496,8 @@ async def stop_logging_services():
         logger.info("Dashboard streaming service stopped.")
 
 
-# [NEW] Replaces add_provenance and SigningFormatter
-async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
-    """
-    Creates, signs, and logs a secure, chained audit event using the
-    V0 audit_crypto system.
-    """
-    global _LAST_AUDIT_HASH
-
-    # --- FIX: Lazy import metrics and security functions to break circular dependencies ---
-    try:
-        from runner.runner_metrics import (  # Use only specific metrics
-            ANOMALY_DETECTED_TOTAL,
-            PROVENANCE_LOG_ENTRIES,
-        )
-    except ImportError:
-
-        class DummyMetric:
-            def labels(self, *a, **k):
-                return self
-
-            def inc(self, *a, **k):
-                pass
-
-            def set(self, *a, **k):
-                pass
-
-        PROVENANCE_LOG_ENTRIES = DummyMetric()
-        ANOMALY_DETECTED_TOTAL = DummyMetric()
-
-    # NOTE: The dependency on `runner_security_utils` is implicitly handled by the top-level
-    # SIGNING_ENABLED block, but we must ensure access to compute_hash.
-
-    if not _DEFAULT_AUDIT_KEY_ID:
-        # This check is now critical and should have been caught at startup,
-        # but we double-check to prevent unsigned logs.
-        if not os.getenv("DEV_MODE", "0") == "1" and not os.getenv(
-            "PYTEST_CURRENT_TEST"
-        ):
-            logger.critical(
-                f"FATAL: log_audit_event called for '{action}' but no signing key is configured and not in DEV_MODE. This should have been caught at startup.",
-                extra={"action": action, "reason": "key_id_missing_in_prod"},
-            )
-            # In a true "fail-closed" system, this would raise a RuntimeError.
-            # We rely on the startup check, but log a critical failure here.
-            return
-        else:
-            logger.error(
-                f"log_audit_event: No audit signing key ID is configured. Audit event '{action}' will not be signed (DEV_MODE).",
-                extra={"action": action, "reason": "key_id_missing"},
-            )
-            return
-
-    logger.debug(f"Attempting to log audit event: {action}", extra={"action": action})
-
-    # Helper function to handle non-serializable objects (particularly bytes)
-    def safe_json_default(o):
-        """Convert non-serializable objects to JSON-safe formats."""
-        if isinstance(o, bytes):
-            return base64.b64encode(o).decode('utf-8')
-        if isinstance(o, datetime):
-            return o.isoformat()
-        if isinstance(o, (set, frozenset)):
-            return list(o)
-        if isinstance(o, uuid.UUID):
-            return str(o)
-        return f"<Not Serializable: {type(o).__name__}>"
-
-    async with _AUDIT_CHAIN_LOCK:
-        try:
-            current_prev_hash = _LAST_AUDIT_HASH
-
-            # 1. Construct the entry to be signed
-            entry_to_sign = {
-                "action": action,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "user": getpass.getuser() or "unknown",
-                "run_id": kwargs.get("run_id"),
-                "data": data,
-                "extra_context": {k: v for k, v in kwargs.items() if k != "run_id"},
-            }
-
-            # 2. Call the superior V0 safe_sign function
-            signature_b64 = await safe_sign(
-                entry=entry_to_sign,
-                key_id=_DEFAULT_AUDIT_KEY_ID,
-                prev_hash=current_prev_hash,
-            )
-
-            # 3. Create the final, complete log entry
-            final_audit_log = {
-                **entry_to_sign,
-                "prev_hash": current_prev_hash,
-                "signature": signature_b64,
-                "key_id": _DEFAULT_AUDIT_KEY_ID,
-            }
-
-            # 4. Log the complete, signed event to the 'runner.audit' logger
-            audit_logger = logging.getLogger("runner.audit")
-            audit_logger.info(
-                json.dumps(final_audit_log, default=safe_json_default)
-            )  # Log as a single JSON string
-
-            # 5. Update the chain's state with the hash of the *signed content*
-            entry_for_hash_calc = entry_to_sign.copy()
-            entry_for_hash_calc["prev_hash"] = current_prev_hash
-            entry_for_hash_calc.pop("signature", None)
-            entry_for_hash_calc.pop("key_id", None)
-
-            data_that_was_signed = json.dumps(
-                entry_for_hash_calc, sort_keys=True, default=safe_json_default
-            ).encode("utf-8")
-            _LAST_AUDIT_HASH = compute_hash(data_that_was_signed)
-
-            logger.debug(
-                f"Successfully logged signed audit event: {action}",
-                extra={
-                    "action": action,
-                    "key_id": _DEFAULT_AUDIT_KEY_ID,
-                    "next_hash": _LAST_AUDIT_HASH,
-                },
-            )
-            PROVENANCE_LOG_ENTRIES.labels(action=action).inc()
-
-        except CryptoOperationError as e:
-            logger.critical(
-                f"CRITICAL: Failed to sign audit event '{action}'. The audit chain may be broken. Error: {e}",
-                exc_info=True,
-                extra={"action": action, "error_type": "CryptoOperationError"},
-            )
-            ANOMALY_DETECTED_TOTAL.labels(
-                type="audit_signing_failure", severity="critical"
-            ).inc()
-        except Exception as e:
-            logger.critical(
-                f"CRITICAL: Unexpected error during audit event logging for '{action}'. Error: {e}",
-                exc_info=True,
-                extra={"action": action, "error_type": "UnexpectedError"},
-            )
-
+# [MOVED] log_audit_event has been moved to runner_audit.py to break circular dependencies
+# It is re-imported above and exported here for backward compatibility
 
 # [NEW] Compatibility shim for legacy callers
 add_provenance = log_audit_event
@@ -2028,7 +1888,7 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
 
     [NEW] This function also initializes the audit system key ID.
     """
-    global _DEFAULT_AUDIT_KEY_ID
+    from .runner_audit import set_audit_key_id, get_last_audit_hash
 
     logger = logging.getLogger("runner")
     logger.setLevel(logging.DEBUG)  # All handlers will filter by their own levels
@@ -2045,14 +1905,14 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
     # [NEW] Configure the V0 Audit Crypto System Key ID
     audit_key_id = getattr(runner_config, "audit_signing_key_id", None)
     if audit_key_id and isinstance(audit_key_id, str):
-        _DEFAULT_AUDIT_KEY_ID = audit_key_id
+        set_audit_key_id(audit_key_id)
         logger.info(f"Audit event signing enabled with Key ID: {audit_key_id}")
 
-        if not _LAST_AUDIT_HASH:
+        if not get_last_audit_hash():
             logger.info("Initializing new audit chain. _LAST_AUDIT_HASH is empty.")
 
     else:
-        _DEFAULT_AUDIT_KEY_ID = ""
+        set_audit_key_id("")
         # [NEW] Fail-closed logic
         if not os.getenv("DEV_MODE", "0") == "1" and not os.getenv(
             "PYTEST_CURRENT_TEST"
