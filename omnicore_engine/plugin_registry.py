@@ -218,6 +218,9 @@ def get_settings():
         _settings = ArbiterConfig()
     return _settings
 
+# Module-level settings variable for backwards compatibility with tests that patch this attribute
+settings = get_settings()
+
 try:
     import networkx as nx
 
@@ -471,10 +474,11 @@ def safe_execute_plugin(fn: Callable, *args, **kwargs):
 def verify_plugin_signature(plugin_code: bytes, signature: str) -> bool:
     """Verifies the HMAC signature of plugin code."""
     signing_key = getattr(
-        get_settings(), "PLUGIN_SIGNING_KEY", "insecure_default_key"
+        settings, "PLUGIN_SIGNING_KEY", "insecure_default_key"
     ).encode()
     expected_sig = hmac.new(signing_key, plugin_code, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected_sig, signature)
+
 
 
 def validate_plugin_path(filepath: Path, plugin_dir: Path) -> Path:
@@ -1206,6 +1210,24 @@ class PluginRegistry:
         for k in self.plugins:
             all_names.extend(self.plugins[k].keys())
         return all_names
+
+    def get_plugin_for_task(self, task_name: str) -> Optional[Plugin]:
+        """
+        Search for a plugin by name across all registered kinds.
+        
+        This method provides a convenient way to find a plugin when the kind is unknown,
+        searching through all registered plugin kinds.
+        
+        Args:
+            task_name: The name of the plugin/task to search for
+            
+        Returns:
+            The Plugin instance if found, None otherwise
+        """
+        for kind_plugins in self.plugins.values():
+            if task_name in kind_plugins:
+                return kind_plugins[task_name]
+        return None
 
     def __repr__(self):
         return f"PluginRegistry(plugins={dict(self.plugins)})"
