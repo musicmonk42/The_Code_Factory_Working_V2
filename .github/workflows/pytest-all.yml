@@ -625,7 +625,7 @@ jobs:
           else
             # Other modules can use standard settings
             COVERAGE_ARGS="--cov=${{ matrix.module }} --cov-report=xml:coverage-${{ matrix.module }}.xml"
-            PYTEST_ARGS="-n 1"
+            PYTEST_ARGS="-n 1 --dist loadscope"
             TIMEOUT_VALUE=300
           fi
           
@@ -635,7 +635,7 @@ jobs:
             $PYTEST_ARGS \
             -v \
             --tb=line \
-            --maxfail=15 \
+            --maxfail=10 \
             --timeout=${TIMEOUT_VALUE} \
             --durations=20 \
             $COVERAGE_ARGS \

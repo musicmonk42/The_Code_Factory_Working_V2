@@ -434,16 +434,10 @@ class TestOmniCoreEngine:
         mock_registry = Mock()
         mock_registry.get_plugin_for_task = Mock(return_value=mock_plugin)
 
-        # Create a proper mock module with PLUGIN_REGISTRY attribute
-        from types import ModuleType
-        
-        mock_plugin_registry_module = ModuleType("plugin_registry")
-        mock_plugin_registry_module.PLUGIN_REGISTRY = mock_registry
-
-        with patch.dict(
-            "sys.modules",
-            {"omnicore_engine.plugin_registry": mock_plugin_registry_module},
-        ):
+        # Patch the plugin_registry module that gets imported inside perform_task
+        with patch("omnicore_engine.core.plugin_registry") as mock_plugin_registry:
+            mock_plugin_registry.PLUGIN_REGISTRY = mock_registry
+            
             result = await engine.perform_task("test_task", param1="value1")
 
             assert result == "task_result"
