@@ -557,6 +557,16 @@ jobs:
           echo "=== Test discovery (quick check) ==="
           timeout 30 python -m pytest ${{ matrix.module }}/ --collect-only --quiet 2>&1 | tail -20 || echo "Collection took >30s or failed"
       
+      - name: Fix PyTorch memory issues
+        run: |
+          # Enable memory overcommit
+          echo 1 | sudo tee /proc/sys/vm/overcommit_memory
+          sudo sysctl -w vm.max_map_count=262144
+          
+          # Reinstall torch as CPU-only (smaller footprint)
+          pip uninstall -y torch torchvision torchaudio || true
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+      
       - name: Run tests for ${{ matrix.module }}
         timeout-minutes: 30
         env:
