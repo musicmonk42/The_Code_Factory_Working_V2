@@ -31,18 +31,17 @@ os.environ["DISABLE_TELEMETRY"] = "1"
 # ---- Mock HuggingFace Transformers Pipeline ----
 # Prevents loading of heavy models like toxic-bert (~400MB+)
 try:
-    from transformers import pipeline as _real_pipeline
-    
-    def mock_pipeline(*args, **kwargs):
-        """Mock HuggingFace pipeline to prevent model loading."""
-        mock_pipe = MagicMock()
-        mock_pipe.return_value = [{"label": "SAFE", "score": 0.99}]
-        return mock_pipe
-    
-    # Patch the pipeline function at module level
-    sys.modules["transformers"].pipeline = mock_pipeline
-except ImportError:
-    # transformers not installed, no need to mock
+    if "transformers" in sys.modules:
+        def mock_pipeline(*args, **kwargs):
+            """Mock HuggingFace pipeline to prevent model loading."""
+            mock_pipe = MagicMock()
+            mock_pipe.return_value = [{"label": "SAFE", "score": 0.99}]
+            return mock_pipe
+        
+        # Patch the pipeline function at module level
+        sys.modules["transformers"].pipeline = mock_pipeline
+except (ImportError, KeyError):
+    # transformers not installed or not imported, no need to mock
     pass
 
 
@@ -72,26 +71,25 @@ except Exception:
 # ---- Mock HuggingFaceEmbeddings ----
 # Prevents downloading and loading embedding models like all-MiniLM-L6-v2 (~90MB)
 try:
-    from langchain_community.embeddings import HuggingFaceEmbeddings as _real_embeddings
-    
-    class MockHuggingFaceEmbeddings:
-        """Mock HuggingFaceEmbeddings to prevent model downloads."""
+    if "langchain_community.embeddings" in sys.modules:
+        class MockHuggingFaceEmbeddings:
+            """Mock HuggingFaceEmbeddings to prevent model downloads."""
+            
+            def __init__(self, *args, **kwargs):
+                """Initialize without loading any models."""
+                self.model_name = kwargs.get("model_name", "mock-model")
+            
+            def embed_documents(self, texts):
+                """Return mock embeddings."""
+                return [[0.0] * 384 for _ in texts]
+            
+            def embed_query(self, text):
+                """Return mock embedding."""
+                return [0.0] * 384
         
-        def __init__(self, *args, **kwargs):
-            """Initialize without loading any models."""
-            self.model_name = kwargs.get("model_name", "mock-model")
-        
-        def embed_documents(self, texts):
-            """Return mock embeddings."""
-            return [[0.0] * 384 for _ in texts]
-        
-        def embed_query(self, text):
-            """Return mock embedding."""
-            return [0.0] * 384
-    
-    # Patch at module level
-    sys.modules["langchain_community.embeddings"].HuggingFaceEmbeddings = MockHuggingFaceEmbeddings
-except ImportError:
+        # Patch at module level
+        sys.modules["langchain_community.embeddings"].HuggingFaceEmbeddings = MockHuggingFaceEmbeddings
+except (ImportError, KeyError):
     pass
 
 
@@ -134,15 +132,3 @@ def cleanup_memory():
     # Force garbage collection
     gc.collect()
 
-
-@pytest.fixture(autouse=True)
-def mock_heavy_components():
-    """
-    Autouse fixture to mock heavy components for all tests.
-    
-    This ensures that even if environment variables are not checked,
-    the heavy components are still mocked.
-    """
-    with patch("transformers.pipeline") as mock_pipe:
-        mock_pipe.return_value = MagicMock(return_value=[{"label": "SAFE", "score": 0.99}])
-        yield mock_pipe

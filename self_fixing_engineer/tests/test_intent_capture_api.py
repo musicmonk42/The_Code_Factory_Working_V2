@@ -56,7 +56,6 @@ def app(test_secret_key):
         mock_hf_pipeline = MagicMock(return_value=[{"label": "SAFE", "score": 0.99}])
 
         # Import here to ensure environment variables are set
-        import sys
         import self_fixing_engineer.intent_capture.api as api_module
         
         # Apply patches after import using the actual module reference
