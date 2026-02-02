@@ -244,15 +244,26 @@ def validate_file_path(path: str) -> Path:
     try:
         resolved_path = Path(path).resolve()
         
-        # Check for path traversal and system directories
-        if ".." in path or path.startswith("/etc") or path.startswith("/sys"):
-            raise ValueError(f"Potentially unsafe path: {path}")
+        # Define allowed directories
+        allowed_dirs = [Path.cwd(), Path("/tmp")]
+        
+        # Check if resolved path is within allowed directories (after resolution)
+        is_allowed = any(
+            str(resolved_path).startswith(str(allowed_dir.resolve())) 
+            for allowed_dir in allowed_dirs
+        )
+        
+        if not is_allowed:
+            raise ValueError(f"Access denied to path: {path}")
         
         # Check existence
         if not resolved_path.exists():
             raise FileNotFoundError(f"Path does not exist: {path}")
             
         return resolved_path
+    except (ValueError, FileNotFoundError):
+        # Re-raise these specific exceptions without wrapping
+        raise
     except Exception as e:
         logger.error(f"Invalid file path: {path}, error: {e}")
         raise ValueError(f"Invalid path: {path}") from e

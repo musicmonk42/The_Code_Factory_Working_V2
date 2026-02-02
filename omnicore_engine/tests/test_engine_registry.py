@@ -106,6 +106,7 @@ class TestPluginService:
 
         service = PluginService(mock_dependencies["registry"])
         assert service.plugin_registry == mock_dependencies["registry"]
+        assert service.message_bus is not None
 
     @pytest.mark.asyncio
     @pytest.mark.integration
