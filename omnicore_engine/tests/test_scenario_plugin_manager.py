@@ -428,38 +428,15 @@ class TestOmniCoreEngine:
     @pytest.mark.asyncio
     async def test_perform_task_with_plugin(self, engine):
         """Test performing task with available plugin"""
-        import sys
-        
         mock_plugin = Mock()
         mock_plugin.execute = AsyncMock(return_value="task_result")
 
         mock_registry = Mock()
         mock_registry.get_plugin_for_task = Mock(return_value=mock_plugin)
 
-        # Create mock module
-        mock_plugin_registry_module = Mock()
-        mock_plugin_registry_module.PLUGIN_REGISTRY = mock_registry
-        
-        # Save original state
-        import omnicore_engine
-        original_module = sys.modules.get("omnicore_engine.plugin_registry")
-        original_global = omnicore_engine.__dict__.get("plugin_registry")
-        original_cache = None
-        if hasattr(omnicore_engine, '_module_cache'):
-            original_cache = omnicore_engine._module_cache.get("plugin_registry")
-        
-        try:
-            # Clear ALL THREE caches used by omnicore_engine.__getattr__
-            sys.modules.pop("omnicore_engine.plugin_registry", None)
-            omnicore_engine.__dict__.pop("plugin_registry", None)
-            if hasattr(omnicore_engine, '_module_cache'):
-                omnicore_engine._module_cache.pop("plugin_registry", None)
-            
-            # Now inject our mock into all THREE locations
-            sys.modules["omnicore_engine.plugin_registry"] = mock_plugin_registry_module
-            omnicore_engine.__dict__["plugin_registry"] = mock_plugin_registry_module
-            if hasattr(omnicore_engine, '_module_cache'):
-                omnicore_engine._module_cache["plugin_registry"] = mock_plugin_registry_module
+        # Patch the module at the point where it's imported
+        with patch("omnicore_engine.plugin_registry") as mock_plugin_registry_module:
+            mock_plugin_registry_module.PLUGIN_REGISTRY = mock_registry
             
             result = await engine.perform_task("test_task", param1="value1")
 
@@ -467,19 +444,6 @@ class TestOmniCoreEngine:
             mock_plugin.execute.assert_called_once_with(
                 action="test_task", param1="value1"
             )
-        finally:
-            # Restore the original state to all THREE locations
-            sys.modules.pop("omnicore_engine.plugin_registry", None)
-            omnicore_engine.__dict__.pop("plugin_registry", None)
-            if hasattr(omnicore_engine, '_module_cache'):
-                omnicore_engine._module_cache.pop("plugin_registry", None)
-            
-            if original_module is not None:
-                sys.modules["omnicore_engine.plugin_registry"] = original_module
-            if original_global is not None:
-                omnicore_engine.__dict__["plugin_registry"] = original_global
-            if original_cache is not None and hasattr(omnicore_engine, '_module_cache'):
-                omnicore_engine._module_cache["plugin_registry"] = original_cache
 
     @pytest.mark.asyncio
     async def test_perform_task_no_plugin(self, engine):
