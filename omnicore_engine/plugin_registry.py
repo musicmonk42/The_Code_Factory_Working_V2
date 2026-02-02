@@ -218,6 +218,9 @@ def get_settings():
         _settings = ArbiterConfig()
     return _settings
 
+# Module-level settings variable for backwards compatibility with tests that patch this attribute
+settings = get_settings()
+
 try:
     import networkx as nx
 
@@ -1206,6 +1209,24 @@ class PluginRegistry:
         for k in self.plugins:
             all_names.extend(self.plugins[k].keys())
         return all_names
+
+    def get_plugin_for_task(self, task_name: str) -> Optional[Plugin]:
+        """
+        Search for a plugin by name across all registered kinds.
+        
+        This method provides a convenient way to find a plugin when the kind is unknown,
+        searching through all registered plugin kinds.
+        
+        Args:
+            task_name: The name of the plugin/task to search for
+            
+        Returns:
+            The Plugin instance if found, None otherwise
+        """
+        for kind_plugins in self.plugins.values():
+            if task_name in kind_plugins:
+                return kind_plugins[task_name]
+        return None
 
     def __repr__(self):
         return f"PluginRegistry(plugins={dict(self.plugins)})"

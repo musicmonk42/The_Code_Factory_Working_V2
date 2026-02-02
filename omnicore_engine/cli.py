@@ -220,15 +220,23 @@ system_audit_merkle_tree_global: Optional[Any] = (
 
 def sanitize_env_vars():
     """Redacts sensitive information from environment variables."""
-    sensitive_vars = ["PASSWORD", "SECRET", "KEY", "TOKEN", "DSN", "URL", "PASS"]
-    for var in os.environ:
-        if any(s in var.upper() for s in sensitive_vars):
-            os.environ[var] = "[REDACTED]"
+    try:
+        sensitive_vars = ["PASSWORD", "SECRET", "KEY", "TOKEN", "DSN", "URL", "PASS"]
+        for var in os.environ:
+            if any(s in var.upper() for s in sensitive_vars):
+                os.environ[var] = "[REDACTED]"
+    except Exception as e:
+        logger.warning(f"Error sanitizing environment variables: {e}")
 
 
 def safe_command(cmd: str) -> List[str]:
     """Uses shlex to safely parse a command string into a list of arguments."""
-    return shlex.split(cmd)
+    try:
+        return shlex.split(cmd)
+    except Exception as e:
+        logger.error(f"Error parsing command '{cmd}': {e}")
+        # Return a safe fallback - split by spaces
+        return cmd.split()
 
 
 def validate_file_path(path: str) -> Path:
