@@ -69,7 +69,24 @@ except Exception:  # catch ImportError *and* any runtime error
         def start_span(self, *a, **k):
             return _NoOpSpan()
 
+    class _NoOpTrace:
+        """No-op trace module when OpenTelemetry is not available."""
+        def get_current_span(self):
+            return _NoOpSpan()
+        
+        def get_tracer(self, *a, **k):
+            return _NoOpTracer()
+        
+        class Status:
+            def __init__(self, *a, **k):
+                pass
+        
+        class StatusCode:
+            ERROR = "ERROR"
+            OK = "OK"
+
     _tracer = _NoOpTracer()
+    trace = _NoOpTrace()
     HAS_OPENTELEMETRY = False
 
 
@@ -221,6 +238,16 @@ register_error_code("LLM_CIRCUIT_OPEN", "Circuit breaker is open for the LLM pro
 register_error_code(
     "LLM_PLUGIN_NOT_FOUND",
     "The specified LLM provider plugin is not loaded or available.",
+)
+
+# FIX: Register deployment-related error codes
+register_error_code(
+    "VALIDATION_FAILED",
+    "Deployment configuration validation failed."
+)
+register_error_code(
+    "SIMULATION_FAILED",
+    "Deployment simulation failed."
 )
 
 

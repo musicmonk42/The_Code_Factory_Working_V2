@@ -1798,14 +1798,34 @@ Format your response as a JSON array of objects with 'question' and 'category' f
 
     async def _save_history(self):
         try:
+            # Use a local variable for the actual save path (don't mutate config)
+            save_path = self.config.HISTORY_FILE
+            
             # Ensure the directory exists before saving
-            history_dir = os.path.dirname(self.config.HISTORY_FILE)
+            history_dir = os.path.dirname(save_path)
             if history_dir and not os.path.exists(history_dir):
-                os.makedirs(history_dir, mode=0o755, exist_ok=True)
-                self.logger.info(
-                    f"Created history directory: {history_dir}",
-                    extra={"operation": "create_history_dir"}
-                )
+                try:
+                    os.makedirs(history_dir, mode=0o755, exist_ok=True)
+                    self.logger.info(
+                        f"Created history directory: {history_dir}",
+                        extra={"operation": "create_history_dir"}
+                    )
+                except PermissionError as pe:
+                    # Fallback to /tmp if primary path is not writable
+                    fallback_path = "/tmp/clarifier_history.json"
+                    self.logger.warning(
+                        f"Permission denied for {history_dir}, using fallback: {fallback_path}",
+                        extra={
+                            "operation": "create_history_dir_fallback",
+                            "original_path": save_path,
+                            "fallback_path": fallback_path
+                        }
+                    )
+                    # Use local variable instead of mutating config
+                    save_path = fallback_path
+                    # /tmp typically exists, but verify we can write to it
+                    if not os.access(os.path.dirname(fallback_path), os.W_OK):
+                        raise PermissionError(f"Cannot write to fallback directory: {os.path.dirname(fallback_path)}")
             
             history_data = json.dumps(self.history)
             if self.config.HISTORY_COMPRESSION:
@@ -1813,15 +1833,28 @@ Format your response as a JSON array of objects with 'question' and 'category' f
             else:
                 history_data = history_data.encode()
             encrypted_data = self.fernet.encrypt(history_data)
-            temp_file = f"{self.config.HISTORY_FILE}.{uuid.uuid4()}.tmp"
+            temp_file = f"{save_path}.{uuid.uuid4()}.tmp"
             async with aiofiles.open(temp_file, "wb") as f:
                 await f.write(encrypted_data)
-            os.rename(temp_file, self.config.HISTORY_FILE)
-            os.chmod(self.config.HISTORY_FILE, stat.S_IREAD | stat.S_IWRITE)
+            os.rename(temp_file, save_path)
+            os.chmod(save_path, stat.S_IREAD | stat.S_IWRITE)
             self.logger.info(
-                "History saved successfully.", extra={"operation": "save_history"}
+                "History saved successfully.", extra={"operation": "save_history", "path": save_path}
             )
             self.circuit_breaker.record_success()
+        except PermissionError as pe:
+            # During shutdown, log the permission error but don't crash
+            self.logger.warning(
+                f"Permission error saving history: {pe}. History not saved.",
+                extra={
+                    "operation": "save_history_permission_denied",
+                    "error_type": "PermissionError",
+                    "path": self.config.HISTORY_FILE,
+                },
+            )
+            CLARIFIER_ERRORS.labels("save_history_permission_denied").inc()
+            self.circuit_breaker.record_failure(pe)
+            # Don't re-raise during shutdown to allow graceful termination
         except Exception as e:
             self.logger.error(
                 f"Error saving history: {e}",
@@ -1833,6 +1866,8 @@ Format your response as a JSON array of objects with 'question' and 'category' f
             )
             CLARIFIER_ERRORS.labels("save_history_failed").inc()
             self.circuit_breaker.record_failure(e)
+            # Only re-raise if not during shutdown context
+            # During normal operation, history save failures should be visible
             raise
 
     async def graceful_shutdown(self, reason: str):
@@ -1864,7 +1899,15 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                     exc_info=True,
                     extra={"operation": "context_manager_close_failed"},
                 )
-        await self._save_history()
+        try:
+            await self._save_history()
+        except Exception as e:
+            # Catch any remaining exceptions during shutdown to prevent crash
+            self.logger.error(
+                f"Failed to save history during shutdown: {e}",
+                exc_info=True,
+                extra={"operation": "save_history_shutdown_failed"},
+            )
         self.logger.info("Shutdown complete.", extra={"operation": "shutdown_complete"})
 
     async def run(self):

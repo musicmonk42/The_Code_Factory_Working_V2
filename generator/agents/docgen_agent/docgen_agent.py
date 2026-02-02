@@ -1037,10 +1037,10 @@ class DocgenAgent:
                 # Log LLM metrics
                 llm_latency = time.monotonic() - start_llm
                 LLM_CALLS_TOTAL.labels(
-                    provider="docgen_agent", model=llm_model, task="generate_docs"
+                    provider="docgen_agent", model=llm_model
                 ).inc()
                 LLM_LATENCY_SECONDS.labels(
-                    provider="docgen_agent", model=llm_model, task="generate_docs"
+                    provider="docgen_agent", model=llm_model
                 ).observe(llm_latency)
                 add_provenance(
                     {
@@ -1055,11 +1055,11 @@ class DocgenAgent:
                 usage = llm_response.get("usage", {})
                 if usage.get("input_tokens"):
                     LLM_TOKEN_INPUT_TOTAL.labels(
-                        model=llm_model, provider="docgen_agent", task="generate_docs"
+                        model=llm_model, provider="docgen_agent"
                     ).inc(usage["input_tokens"])
                 if usage.get("output_tokens"):
                     LLM_TOKEN_OUTPUT_TOTAL.labels(
-                        model=llm_model, provider="docgen_agent", task="generate_docs"
+                        model=llm_model, provider="docgen_agent"
                     ).inc(usage["output_tokens"])
 
                 # 5. Validate & Process
@@ -1434,10 +1434,10 @@ class DocgenAgent:
 
             # Log metrics
             LLM_CALLS_TOTAL.labels(
-                provider="docgen_agent", model=llm_model, task="generate_docs"
+                provider="docgen_agent", model=llm_model
             ).inc()
             LLM_LATENCY_SECONDS.labels(
-                provider="docgen_agent", model=llm_model, task="generate_docs"
+                provider="docgen_agent", model=llm_model
             ).observe(llm_latency)
 
             # Stage 4: Validation

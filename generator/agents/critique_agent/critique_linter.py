@@ -8,7 +8,7 @@ import shutil
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from collections import Counter
+from collections import Counter as CollectionsCounter
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -1058,7 +1058,7 @@ async def run_single_lint(
         LINT_LATENCY.labels(language, tool_cfg["tool"]).observe(latency)
         LINT_CALLS.labels(language, tool_cfg["tool"]).inc()
 
-        severity_counts = Counter(e["severity"] for e in parsed_errors)
+        severity_counts = CollectionsCounter(e["severity"] for e in parsed_errors)
         for sev, count in severity_counts.items():
             # Use Gauge.set to record the count for the current run
             LINT_ERRORS_COUNT.labels(language, sev).set(count)
@@ -1207,7 +1207,7 @@ async def run_all_lints_and_checks(
             final_errors = all_errors_collected
 
         total_errors = len(final_errors)
-        errors_by_severity = Counter(e["severity"] for e in final_errors)
+        errors_by_severity = CollectionsCounter(e["severity"] for e in final_errors)
         # Use runner-provided audit logging utility
         log_action(
             "All Lints and Checks Completed",
