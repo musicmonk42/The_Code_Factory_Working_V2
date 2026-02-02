@@ -736,6 +736,17 @@ class AgentLoader:
         Raises:
             RuntimeError: If called outside an async context
         """
+        # Check if we're in an async context FIRST (before any state changes)
+        import asyncio
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError as e:
+            # Not in an async context - raise immediately
+            raise RuntimeError(
+                "start_background_loading must be called from an async context "
+                "(e.g., during FastAPI application lifespan)"
+            ) from e
+        
         if self._loading_started:
             logger.warning("Background agent loading already started - preventing duplicate initialization")
             return
@@ -751,8 +762,6 @@ class AgentLoader:
                 (AgentType.DOCGEN, "generator.agents.docgen_agent.docgen_agent", ["DocgenAgent"]),
                 (AgentType.CRITIQUE, "generator.agents.critique_agent.critique_agent", ["CritiqueAgent"]),
             ]
-        
-        import asyncio
         
         async def load_agents_async():
             """Load agents asynchronously with startup lock."""
