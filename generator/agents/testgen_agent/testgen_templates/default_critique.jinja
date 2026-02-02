@@ -1,0 +1,21 @@
+# Test Critique Prompt
+
+## Current Tests
+{% for filename, content in generated_tests.items() %}
+### {{ filename }}
+```{{ language }}
+{{ content }}
+```
+{% endfor %}
+
+## Validation Results
+{{ validation_feedback }}
+
+## Task
+Review the tests and identify:
+1. Missing test cases
+2. Inadequate coverage areas
+3. Edge cases not tested
+4. Potential improvements
+
+Provide specific, actionable feedback.

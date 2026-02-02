@@ -1,0 +1,25 @@
+# Test Generation Prompt
+
+## Task
+Generate comprehensive unit tests for the following code.
+
+## Code to Test
+{% for filename, content in code_files.items() %}
+### {{ filename }}
+```{{ language }}
+{{ content }}
+```
+{% endfor %}
+
+## Requirements
+- Generate tests using {{ language }} testing framework
+- Aim for {{ quality_threshold }}% code coverage
+- Include edge cases and error handling
+- Follow best practices for {{ language }} testing
+
+## Output Format
+Provide the complete test code wrapped in code blocks.
+Each test file should start with:
+```{{ language }}
+# Test file for <filename>
+```

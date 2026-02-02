@@ -1,0 +1,30 @@
+# Test Refinement Prompt
+
+## Original Code
+{% for filename, content in code_files.items() %}
+### {{ filename }}
+```{{ language }}
+{{ content }}
+```
+{% endfor %}
+
+## Current Tests
+{% for filename, content in generated_tests.items() %}
+### {{ filename }}
+```{{ language }}
+{{ content }}
+```
+{% endfor %}
+
+## Critique Feedback
+{{ critique }}
+
+## Validation Issues
+{{ validation_feedback }}
+
+## Task
+Refine the tests based on the critique and validation results.
+Focus on addressing the specific issues identified.
+
+## Output Format
+Provide the complete refined test code wrapped in code blocks.
