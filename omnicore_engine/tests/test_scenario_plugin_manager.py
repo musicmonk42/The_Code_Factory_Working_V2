@@ -440,6 +440,7 @@ class TestOmniCoreEngine:
         mock_plugin_registry_module = ModuleType("plugin_registry")
         mock_plugin_registry_module.PLUGIN_REGISTRY = mock_registry
 
+        # Patch the import inside perform_task
         with patch.dict(
             "sys.modules",
             {"omnicore_engine.plugin_registry": mock_plugin_registry_module},

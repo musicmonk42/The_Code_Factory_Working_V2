@@ -63,6 +63,8 @@ markers = [
     "slow: marks tests as slow (deselected by default in CI)",
     "integration: marks tests as integration tests (deselected by default in CI)",
     "requires_redis: marks tests that require Redis connection",
+    "forked: marks tests that should run in isolated forked process",
+    "flaky: marks tests as flaky (may need retries)",
 ]
 # Environment variables to set for all test runs
 env = [

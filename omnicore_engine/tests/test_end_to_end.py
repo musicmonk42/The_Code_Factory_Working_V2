@@ -1,4 +1,5 @@
 import asyncio
+from io import BytesIO
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -73,6 +74,7 @@ async def test_end_to_end_plugin_cli(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(10)  # Short timeout to avoid hanging
 async def test_end_to_end_audit_workflow(tmp_path, app):
     """
     Test the audit export endpoint with mocked audit system.
@@ -93,15 +95,17 @@ async def test_end_to_end_audit_workflow(tmp_path, app):
         # This tests the full API path for exporting an audit bundle.
         response = client.get("/admin/audit/export-proof-bundle?user_id=test_user")
 
-        # The endpoint requires authentication, so we expect 401 without proper setup
-        # or 404 if admin APIs are disabled
-        assert response.status_code in [200, 401, 404]
+        # Accept 401 (unauthorized) or 404 (endpoint not found) as these are expected
+        # without proper authentication setup or if admin APIs are disabled
+        assert response.status_code in [401, 404], \
+            f"Expected 401 or 404, got {response.status_code}"
 
 
 # --- Test Concurrent Plugin Execution ---
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(10)  # Short timeout to avoid hanging
 async def test_concurrent_plugin_execution(tmp_path, app):
     """
     Test concurrent execution of the fix-imports endpoint.
@@ -118,12 +122,11 @@ async def test_concurrent_plugin_execution(tmp_path, app):
     ):
         # Define an async function to make a single API request.
         async def make_request(index):
-            # Create a separate temp file for each request to avoid conflicts
-            test_file = tmp_path / f"test_{index}.py"
-            test_file.write_text(f"# Test file {index}\ndata")
+            # Use BytesIO to avoid file handle conflicts
+            file_content = f"# Test file {index}\ndata".encode('utf-8')
+            file_obj = BytesIO(file_content)
             
-            with open(test_file, "rb") as f:
-                return client.post("/fix-imports/", files={"file": (f"test_{index}.py", f)})
+            return client.post("/fix-imports/", files={"file": (f"test_{index}.py", file_obj)})
 
         # Create multiple tasks to make concurrent API requests.
         tasks = [make_request(i) for i in range(5)]
