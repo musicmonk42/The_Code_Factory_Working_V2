@@ -141,16 +141,20 @@ class TestSimulateCommand:
             temp_file = f.name
 
         try:
-            # Patch asyncio.run to prevent actual execution
+            # Mock ExplainAudit to prevent instantiation errors
+            mock_explain_audit = Mock()
+            
+            # Patch asyncio.run and ExplainAudit to prevent actual execution
             with patch("sys.argv", ["cli.py", "simulate", "--request_file", temp_file]):
-                with patch("omnicore_engine.cli.asyncio.run") as mock_run:
-                    # Configure mock to return None to simulate successful execution
-                    mock_run.return_value = None
-                    try:
-                        main()
-                    except SystemExit as e:
-                        # Accept both successful exit (0) and other exits
-                        assert e.code in (0, None)
+                with patch("omnicore_engine.cli.ExplainAudit", mock_explain_audit):
+                    with patch("omnicore_engine.cli.asyncio.run") as mock_run:
+                        # Configure mock to return None to simulate successful execution
+                        mock_run.return_value = None
+                        try:
+                            main()
+                        except SystemExit as e:
+                            # Accept both successful exit (0) and other exits
+                            assert e.code in (0, None)
         finally:
             # Cleanup
             if os.path.exists(temp_file):
