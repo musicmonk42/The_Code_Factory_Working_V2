@@ -1,0 +1,423 @@
+# ============================================================================
+# Enhanced Audit Log Configuration
+# ============================================================================
+# This is a comprehensive configuration file for the audit logging system.
+# It includes all available configuration options organized by category.
+#
+# For production deployments, use audit_config.production.yaml
+# For development, use audit_config.development.yaml
+#
+# Environment variables take precedence over this configuration file.
+# ============================================================================
+
+# ============================================================================
+# CRYPTOGRAPHIC PROVIDER CONFIGURATION
+# ============================================================================
+# Cryptographic provider type determines how keys are managed and used
+# Options: "software" (file-based keys) or "hsm" (Hardware Security Module)
+# Production: Use "hsm" for enhanced security
+# Development: Use "software" for simplicity
+PROVIDER_TYPE: "software"
+
+# Default signing algorithm
+# Options: "rsa" (RSA-PSS), "ecdsa" (ECDSA-P256), "ed25519" (EdDSA), "hmac" (HMAC-SHA256)
+# Recommendation: "ed25519" for best performance and security
+DEFAULT_ALGO: "ed25519"
+
+# Key rotation interval in seconds
+# Minimum: 86400 (24 hours)
+# Recommended: 604800 (7 days) for production
+# Must be >= 86400 for compliance
+KEY_ROTATION_INTERVAL_SECONDS: 86400
+
+# ============================================================================
+# SOFTWARE CRYPTO PROVIDER SETTINGS (when PROVIDER_TYPE="software")
+# ============================================================================
+# Directory for storing cryptographic keys (software mode only)
+# Production: Use secure filesystem with restricted permissions (0700)
+# WARNING: Not suitable for production - consider using HSM or cloud KMS
+SOFTWARE_KEY_DIR: "audit_keys"
+
+# ============================================================================
+# CLOUD KEY MANAGEMENT (KMS) SETTINGS
+# ============================================================================
+# AWS KMS Key ID for encrypting/decrypting software keys
+# Format: "alias/key-name" or full ARN
+# Required when using software provider with cloud integration
+KMS_KEY_ID: "alias/audit-log-key"
+
+# AWS region for KMS operations
+# Required when using AWS KMS
+AWS_REGION: "us-east-1"
+
+# ============================================================================
+# HSM (Hardware Security Module) SETTINGS (when PROVIDER_TYPE="hsm")
+# ============================================================================
+# Enable HSM-based cryptographic operations
+# Requires PKCS#11 compatible HSM and proper library configuration
+# HSM_ENABLED: false
+
+# Path to PKCS#11 library for HSM integration
+# Example: "/usr/lib/softhsm/libsofthsm2.so"
+# HSM_LIBRARY_PATH: ""
+
+# HSM slot ID for key operations
+# HSM_SLOT_ID: 0
+
+# HSM PIN for authentication
+# SECURITY: NEVER hardcode - use environment variable or secrets manager
+# HSM_PIN: ""  # Set via AUDIT_CRYPTO_HSM_PIN environment variable
+
+# ============================================================================
+# BACKEND CONFIGURATION
+# ============================================================================
+# Storage backend type
+# Options:
+#   - "file": Local file-based storage with WAL
+#   - "sqlite": SQLite database with WAL journal mode
+#   - "s3": AWS S3 bucket storage
+#   - "gcs": Google Cloud Storage
+#   - "azure": Azure Blob Storage
+#   - "http": Remote HTTP endpoint
+#   - "kafka": Apache Kafka streaming
+#   - "splunk": Splunk HEC endpoint
+#   - "memory": In-memory (testing only)
+BACKEND_TYPE: "file"
+
+# Backend-specific parameters (JSON object)
+# File backend: {"log_file": "/path/to/audit.log"}
+# SQLite backend: {"db_file": "/path/to/audit.db"}
+# S3 backend: {"bucket": "audit-logs", "prefix": "prod/"}
+# BACKEND_PARAMS: {}
+
+# ============================================================================
+# COMPRESSION SETTINGS
+# ============================================================================
+# Compression algorithm for log entries
+# Options: "none", "gzip", "zstd" (recommended)
+# "zstd" provides best compression ratio and performance
+COMPRESSION_ALGO: "zstd"
+
+# Compression level (algorithm-dependent)
+# zstd: 1-22 (3 recommended for balanced performance)
+# gzip: 1-9 (6 recommended)
+COMPRESSION_LEVEL: 3
+
+# ============================================================================
+# BATCH PROCESSING SETTINGS
+# ============================================================================
+# Batch flush interval in seconds
+# How often to flush buffered log entries to storage
+# Range: 1-60 seconds
+# Production: 5-10 seconds recommended
+BATCH_FLUSH_INTERVAL: 10
+
+# Maximum batch size (number of entries)
+# Flush when batch reaches this size, regardless of interval
+# Range: 1-1000
+# Production: 100-500 recommended
+BATCH_MAX_SIZE: 100
+
+# ============================================================================
+# RETRY AND FAULT TOLERANCE
+# ============================================================================
+# Maximum retry attempts for failed operations
+# Range: 0-10
+# 0 = no retries, 3-5 recommended for production
+RETRY_MAX_ATTEMPTS: 3
+
+# Exponential backoff factor for retries
+# Delay between retries = backoff_factor * (2 ^ retry_number)
+# Range: 0.1-5.0
+# 0.5-1.0 recommended for production
+RETRY_BACKOFF_FACTOR: 0.5
+
+# Circuit breaker failure threshold
+# Number of consecutive failures before circuit opens
+CIRCUIT_BREAKER_THRESHOLD: 5
+
+# Circuit breaker timeout (seconds)
+# How long to wait before attempting to close circuit
+CIRCUIT_BREAKER_TIMEOUT: 60
+
+# ============================================================================
+# TAMPER DETECTION
+# ============================================================================
+# Enable cryptographic chaining and tamper detection
+# Production: MUST be enabled for compliance
+TAMPER_DETECTION_ENABLED: true
+
+# Enable self-healing for detected tampering
+# Automatically repairs chain when tampering is detected
+SELF_HEALING_ENABLED: true
+
+# ============================================================================
+# HEALTH CHECKS AND MONITORING
+# ============================================================================
+# Health check interval in seconds
+# How often to verify backend connectivity and health
+# Range: 10-300 seconds
+HEALTH_CHECK_INTERVAL: 30
+
+# Health check timeout in seconds
+# Maximum time to wait for health check response
+HEALTH_CHECK_TIMEOUT: 5
+
+# ============================================================================
+# API AND SERVICE PORTS
+# ============================================================================
+# Prometheus metrics server port
+METRICS_PORT: 8002
+
+# FastAPI REST API port
+API_PORT: 8003
+
+# gRPC service port
+GRPC_PORT: 50051
+
+# ============================================================================
+# ALERTING CONFIGURATION
+# ============================================================================
+# Alert endpoint URL for critical events
+# Supports HTTP/HTTPS webhooks for Slack, Teams, PagerDuty, etc.
+# Example: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+ALERT_ENDPOINT: "http://localhost:8080/alert"
+
+# Alert severity levels to trigger notifications
+# Options: "critical", "error", "warning"
+# Set to "critical" to only alert on critical issues
+ALERT_MIN_SEVERITY: "error"
+
+# Alert retry attempts
+ALERT_RETRY_ATTEMPTS: 3
+
+# Alert retry backoff factor
+ALERT_BACKOFF_FACTOR: 1.0
+
+# ============================================================================
+# ENCRYPTION SETTINGS
+# ============================================================================
+# Enable encryption of log entries at rest
+# Production: MUST be enabled
+ENCRYPTION_ENABLED: true
+
+# Encryption key (base64-encoded)
+# SECURITY: NEVER hardcode - set via AUDIT_LOG_ENCRYPTION_KEY environment variable
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# ENCRYPTION_KEY: ""  # Set via environment variable
+
+# ============================================================================
+# RBAC (Role-Based Access Control) SETTINGS
+# ============================================================================
+# Path to users and roles configuration file
+# Format: JSON or YAML with user/role definitions
+# Example: {"users": {"admin": {"roles": ["admin"], "password_hash": "..."}}}
+USERS_CONFIG_PATH: ""
+
+# Enable RBAC enforcement
+# Production: MUST be enabled
+RBAC_ENABLED: true
+
+# ============================================================================
+# OBSERVABILITY AND TRACING
+# ============================================================================
+# Enable OpenTelemetry distributed tracing
+TRACING_ENABLED: true
+
+# Tracing sample rate (0.0-1.0)
+# 1.0 = trace all requests (high overhead)
+# 0.1 = trace 10% of requests (recommended for production)
+TRACING_SAMPLE_RATE: 0.1
+
+# OpenTelemetry collector endpoint
+# Example: "http://localhost:4317" for gRPC
+OTEL_EXPORTER_OTLP_ENDPOINT: ""
+
+# ============================================================================
+# LOG IMMUTABILITY
+# ============================================================================
+# Enable immutable logging (prevent deletion/modification)
+# Production: MUST be enabled for compliance
+IMMUTABLE: true
+
+# ============================================================================
+# PII REDACTION
+# ============================================================================
+# Enable automatic PII (Personally Identifiable Information) redaction
+# Uses Microsoft Presidio for detection
+PII_REDACTION_ENABLED: true
+
+# PII entities to redact
+# Options: "EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD", "SSN", "IP_ADDRESS", etc.
+PII_ENTITIES:
+  - "EMAIL_ADDRESS"
+  - "PHONE_NUMBER"
+  - "CREDIT_CARD"
+  - "SSN"
+
+# ============================================================================
+# DEVELOPMENT MODE SETTINGS
+# ============================================================================
+# Enable development mode (NEVER in production)
+# Allows ephemeral keys, dummy users, and relaxed security
+# WARNING: Disables critical security features
+DEV_MODE: false
+
+# Allow initialization without full crypto configuration
+# Production: MUST be false
+CRYPTO_ALLOW_INIT_FAILURE: false
+
+# Allow dummy crypto provider (testing only)
+# Production: MUST be false
+CRYPTO_ALLOW_DUMMY_PROVIDER: false
+
+# Allow insecure secrets (testing only)
+# Production: MUST be false
+DEV_MODE_ALLOW_INSECURE_SECRETS: false
+
+# ============================================================================
+# SECRET MANAGEMENT
+# ============================================================================
+# Secret manager type
+# Options: "aws" (AWS Secrets Manager), "gcp" (GCP Secret Manager),
+#          "vault" (HashiCorp Vault), "env" (environment variables),
+#          "mock" (testing only - NEVER in production)
+SECRET_MANAGER: "env"
+
+# Use AWS Secrets Manager
+USE_AWS_SECRETS: false
+
+# Use GCP Secret Manager
+USE_GCP_SECRETS: false
+
+# Use HashiCorp Vault
+USE_HASHICORP_VAULT: false
+
+# Use environment variables for secrets
+# Only acceptable for development or containerized deployments with secure env injection
+USE_ENV_SECRETS: true
+
+# Vault address (if using HashiCorp Vault)
+# VAULT_ADDR: ""
+
+# GCP project ID (if using GCP Secret Manager)
+# GCP_PROJECT_ID: ""
+
+# ============================================================================
+# PERFORMANCE TUNING
+# ============================================================================
+# Worker thread pool size for crypto operations
+CRYPTO_WORKER_THREADS: 4
+
+# Async task queue size
+ASYNC_QUEUE_SIZE: 1000
+
+# Connection pool size (for database backends)
+DB_POOL_SIZE: 10
+
+# Connection timeout (seconds)
+CONNECTION_TIMEOUT: 30
+
+# ============================================================================
+# COMPLIANCE AND AUDIT SETTINGS
+# ============================================================================
+# Compliance mode
+# Options: "soc2", "hipaa", "pci-dss", "gdpr", "standard"
+# Enforces additional requirements based on compliance framework
+COMPLIANCE_MODE: "standard"
+
+# Data retention period (days)
+# How long to retain audit logs before archival/deletion
+# SOC2: 365 days minimum
+# HIPAA: 2555 days (7 years) minimum
+# PCI-DSS: 365 days minimum
+DATA_RETENTION_DAYS: 365
+
+# Enable automated archival after retention period
+ENABLE_ARCHIVAL: false
+
+# Archive destination
+# ARCHIVE_BACKEND_TYPE: "s3"
+# ARCHIVE_BACKEND_PARAMS: {}
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+# Log level for audit log module
+# Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+LOG_LEVEL: "INFO"
+
+# Log format
+# Options: "json", "text"
+# Production: Use "json" for structured logging
+LOG_FORMAT: "json"
+
+# Enable debug logging for crypto operations
+CRYPTO_DEBUG: false
+
+# ============================================================================
+# FEATURE FLAGS
+# ============================================================================
+# Crypto mode
+# Options: "full" (all features), "disabled" (no crypto), "dev" (dummy keys)
+# Production: MUST be "full"
+CRYPTO_MODE: "full"
+
+# Force real crypto provider (override dev mode)
+CRYPTO_FORCE_REAL_PROVIDER: false
+
+# Shutdown timeout for crypto operations (seconds)
+CRYPTO_SHUTDOWN_TIMEOUT_SECONDS: 5.0
+
+# ============================================================================
+# ENVIRONMENT VARIABLE MAPPING
+# ============================================================================
+# This configuration file can be overridden by environment variables.
+# See docs/AUDIT_CONFIGURATION.md for complete environment variable reference.
+#
+# Core Settings:
+#   AUDIT_LOG_BACKEND_TYPE -> BACKEND_TYPE
+#   AUDIT_LOG_BACKEND_PARAMS -> BACKEND_PARAMS (JSON string)
+#   AUDIT_LOG_ENCRYPTION_KEY -> ENCRYPTION_KEY
+#   AUDIT_LOG_METRICS_PORT -> METRICS_PORT
+#   AUDIT_LOG_API_PORT -> API_PORT
+#   AUDIT_LOG_GRPC_PORT -> GRPC_PORT
+#   AUDIT_LOG_IMMUTABLE -> IMMUTABLE
+#   AUDIT_LOG_USERS_CONFIG -> USERS_CONFIG_PATH
+#   AUDIT_LOG_DEV_MODE -> DEV_MODE
+#
+# Crypto Settings:
+#   AUDIT_CRYPTO_PROVIDER_TYPE -> PROVIDER_TYPE
+#   AUDIT_CRYPTO_DEFAULT_ALGO -> DEFAULT_ALGO
+#   AUDIT_CRYPTO_MODE -> CRYPTO_MODE
+#   AUDIT_CRYPTO_ALLOW_INIT_FAILURE -> CRYPTO_ALLOW_INIT_FAILURE
+#   AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER -> CRYPTO_ALLOW_DUMMY_PROVIDER
+#   AUDIT_CRYPTO_FORCE_REAL_PROVIDER -> CRYPTO_FORCE_REAL_PROVIDER
+#   AUDIT_CRYPTO_SHUTDOWN_TIMEOUT_SECONDS -> CRYPTO_SHUTDOWN_TIMEOUT_SECONDS
+#   AUDIT_CRYPTO_SOFTWARE_KEY_DIR -> SOFTWARE_KEY_DIR
+#   AUDIT_CRYPTO_KMS_KEY_ID -> KMS_KEY_ID
+#   AUDIT_CRYPTO_KEY_ROTATION_INTERVAL_SECONDS -> KEY_ROTATION_INTERVAL_SECONDS
+#   AUDIT_CRYPTO_HSM_LIBRARY_PATH -> HSM_LIBRARY_PATH
+#   AUDIT_CRYPTO_HSM_SLOT_ID -> HSM_SLOT_ID
+#   AUDIT_CRYPTO_HSM_PIN -> HSM_PIN
+#
+# Backend Settings:
+#   AUDIT_COMPRESSION_ALGO -> COMPRESSION_ALGO
+#   AUDIT_COMPRESSION_LEVEL -> COMPRESSION_LEVEL
+#   AUDIT_BATCH_FLUSH_INTERVAL -> BATCH_FLUSH_INTERVAL
+#   AUDIT_BATCH_MAX_SIZE -> BATCH_MAX_SIZE
+#   AUDIT_RETRY_MAX_ATTEMPTS -> RETRY_MAX_ATTEMPTS
+#   AUDIT_RETRY_BACKOFF_FACTOR -> RETRY_BACKOFF_FACTOR
+#   AUDIT_HEALTH_CHECK_INTERVAL -> HEALTH_CHECK_INTERVAL
+#   AUDIT_TAMPER_DETECTION_ENABLED -> TAMPER_DETECTION_ENABLED
+#
+# Secret Management:
+#   AUDIT_DEV_MODE_ALLOW_INSECURE_SECRETS -> DEV_MODE_ALLOW_INSECURE_SECRETS
+#   SECRET_MANAGER -> SECRET_MANAGER
+#   USE_AWS_SECRETS -> USE_AWS_SECRETS
+#   USE_GCP_SECRETS -> USE_GCP_SECRETS
+#   USE_HASHICORP_VAULT -> USE_HASHICORP_VAULT
+#   USE_ENV_SECRETS -> USE_ENV_SECRETS
+#   VAULT_ADDR -> VAULT_ADDR
+#   GCP_PROJECT_ID -> GCP_PROJECT_ID
+# ============================================================================

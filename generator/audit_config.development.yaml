@@ -1,0 +1,242 @@
+# ============================================================================
+# Development Audit Log Configuration
+# ============================================================================
+# This configuration file contains developer-friendly defaults optimized for
+# local testing and development environments.
+#
+# WARNING: This configuration is NOT suitable for production use.
+# It includes relaxed security settings and dummy providers for ease of development.
+# ============================================================================
+
+# ============================================================================
+# CRYPTOGRAPHIC PROVIDER CONFIGURATION
+# ============================================================================
+# Use software provider for development simplicity
+PROVIDER_TYPE: "software"
+
+# Ed25519 is fast and sufficient for development
+DEFAULT_ALGO: "ed25519"
+
+# Rotate keys daily in development
+KEY_ROTATION_INTERVAL_SECONDS: 86400
+
+# ============================================================================
+# SOFTWARE CRYPTO PROVIDER SETTINGS
+# ============================================================================
+# Local directory for development keys
+SOFTWARE_KEY_DIR: "audit_keys"
+
+# ============================================================================
+# CLOUD KEY MANAGEMENT (Development/Mock)
+# ============================================================================
+# Mock KMS settings for development
+KMS_KEY_ID: "alias/audit-log-key-dev"
+AWS_REGION: "us-east-1"
+
+# ============================================================================
+# BACKEND CONFIGURATION
+# ============================================================================
+# Use file backend for simplicity in development
+BACKEND_TYPE: "file"
+
+# Simple file backend for local development
+# BACKEND_PARAMS: {"log_file": "./audit_dev.log"}
+
+# Alternative: Use in-memory backend for testing
+# BACKEND_TYPE: "memory"
+
+# ============================================================================
+# COMPRESSION SETTINGS (Minimal for faster development)
+# ============================================================================
+# Disable compression for easier debugging
+COMPRESSION_ALGO: "none"
+COMPRESSION_LEVEL: 0
+
+# ============================================================================
+# BATCH PROCESSING (Immediate for debugging)
+# ============================================================================
+# Flush frequently for immediate visibility
+BATCH_FLUSH_INTERVAL: 1
+BATCH_MAX_SIZE: 10
+
+# ============================================================================
+# RETRY AND FAULT TOLERANCE (Minimal for fast failures)
+# ============================================================================
+# Fail fast in development to catch issues quickly
+RETRY_MAX_ATTEMPTS: 1
+RETRY_BACKOFF_FACTOR: 0.1
+CIRCUIT_BREAKER_THRESHOLD: 3
+CIRCUIT_BREAKER_TIMEOUT: 30
+
+# ============================================================================
+# TAMPER DETECTION (Can be disabled for development)
+# ============================================================================
+# Enable tamper detection to test the feature
+TAMPER_DETECTION_ENABLED: true
+SELF_HEALING_ENABLED: true
+
+# ============================================================================
+# HEALTH CHECKS AND MONITORING
+# ============================================================================
+# Quick health checks for development
+HEALTH_CHECK_INTERVAL: 10
+HEALTH_CHECK_TIMEOUT: 2
+
+# ============================================================================
+# API AND SERVICE PORTS (Default development ports)
+# ============================================================================
+METRICS_PORT: 8002
+API_PORT: 8003
+GRPC_PORT: 50051
+
+# ============================================================================
+# ALERTING CONFIGURATION
+# ============================================================================
+# Use local test endpoint or disable alerts in development
+ALERT_ENDPOINT: "http://localhost:8080/alert"
+ALERT_MIN_SEVERITY: "warning"
+ALERT_RETRY_ATTEMPTS: 1
+ALERT_BACKOFF_FACTOR: 0.5
+
+# ============================================================================
+# ENCRYPTION SETTINGS
+# ============================================================================
+# Enable encryption but allow initialization without key for testing
+ENCRYPTION_ENABLED: true
+# Dev key will be auto-generated if not provided
+
+# ============================================================================
+# RBAC SETTINGS (Relaxed for development)
+# ============================================================================
+# Use dummy users for development
+USERS_CONFIG_PATH: ""
+RBAC_ENABLED: false  # Disabled for easier development
+
+# ============================================================================
+# OBSERVABILITY AND TRACING
+# ============================================================================
+# Enable full tracing in development for debugging
+TRACING_ENABLED: true
+TRACING_SAMPLE_RATE: 1.0  # Trace all requests in development
+OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4317"
+
+# ============================================================================
+# LOG IMMUTABILITY
+# ============================================================================
+# Can be disabled for testing modification scenarios
+IMMUTABLE: true
+
+# ============================================================================
+# PII REDACTION (Can be disabled for testing)
+# ============================================================================
+# Enable to test PII redaction features
+PII_REDACTION_ENABLED: false  # Easier debugging without redaction
+PII_ENTITIES:
+  - "EMAIL_ADDRESS"
+  - "PHONE_NUMBER"
+
+# ============================================================================
+# DEVELOPMENT MODE (ENABLED FOR DEVELOPMENT)
+# ============================================================================
+# Enable dev mode for relaxed security and automatic dummy values
+DEV_MODE: true
+CRYPTO_ALLOW_INIT_FAILURE: true  # Don't fail if crypto can't initialize
+CRYPTO_ALLOW_DUMMY_PROVIDER: true  # Allow dummy crypto for testing
+DEV_MODE_ALLOW_INSECURE_SECRETS: true  # Allow mock secret manager
+
+# ============================================================================
+# SECRET MANAGEMENT (Development - Mock/Env)
+# ============================================================================
+# Use environment variables or mock secret manager for development
+SECRET_MANAGER: "mock"
+USE_AWS_SECRETS: false
+USE_GCP_SECRETS: false
+USE_HASHICORP_VAULT: false
+USE_ENV_SECRETS: true
+
+# ============================================================================
+# PERFORMANCE TUNING (Minimal for development)
+# ============================================================================
+# Lower resource usage for local development
+CRYPTO_WORKER_THREADS: 2
+ASYNC_QUEUE_SIZE: 100
+DB_POOL_SIZE: 5
+CONNECTION_TIMEOUT: 10
+
+# ============================================================================
+# COMPLIANCE AND AUDIT SETTINGS
+# ============================================================================
+# Use standard mode for development
+COMPLIANCE_MODE: "standard"
+
+# Short retention for development
+DATA_RETENTION_DAYS: 30
+
+ENABLE_ARCHIVAL: false
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+# Verbose logging for development
+LOG_LEVEL: "DEBUG"
+LOG_FORMAT: "text"  # Human-readable format for console output
+CRYPTO_DEBUG: true  # Enable crypto debugging
+
+# ============================================================================
+# FEATURE FLAGS (Development)
+# ============================================================================
+# Use dev crypto mode for automatic dummy keys
+CRYPTO_MODE: "dev"
+CRYPTO_FORCE_REAL_PROVIDER: false
+CRYPTO_SHUTDOWN_TIMEOUT_SECONDS: 2.0
+
+# ============================================================================
+# DEVELOPMENT QUICK START
+# ============================================================================
+# To use this configuration:
+#
+# 1. Copy this file to audit_config.yaml:
+#    cp audit_config.development.yaml audit_config.yaml
+#
+# 2. Set AUDIT_LOG_DEV_MODE=true in your environment:
+#    export AUDIT_LOG_DEV_MODE=true
+#
+# 3. Start your development server:
+#    python server/main.py
+#
+# 4. Access the audit API:
+#    http://localhost:8003/docs
+#
+# 5. View metrics:
+#    http://localhost:8002/metrics
+#
+# For production deployment, see audit_config.production.yaml
+# ============================================================================
+
+# ============================================================================
+# COMMON DEVELOPMENT ENVIRONMENT VARIABLES
+# ============================================================================
+# Set these in your .env file for local development:
+#
+# # Enable development mode
+# AUDIT_LOG_DEV_MODE=true
+# AUDIT_CRYPTO_MODE=dev
+#
+# # Use in-memory backend for testing
+# # AUDIT_LOG_BACKEND_TYPE=memory
+#
+# # Or use file backend with custom path
+# # AUDIT_LOG_BACKEND_TYPE=file
+# # AUDIT_LOG_BACKEND_PARAMS={"log_file": "./dev_audit.log"}
+#
+# # Allow startup without all crypto configured
+# AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1
+#
+# # Use mock secret manager
+# SECRET_MANAGER=mock
+# USE_ENV_SECRETS=true
+#
+# # Verbose logging
+# LOG_LEVEL=DEBUG
+# AUDIT_CRYPTO_DEBUG=1
+# ============================================================================

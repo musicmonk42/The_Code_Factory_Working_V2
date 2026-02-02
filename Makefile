@@ -104,6 +104,56 @@ security-scan: ## Run security scans
 	@echo "$(GREEN)Security scan complete!$(NC)"
 
 # =============================================================================
+# Audit Configuration
+# =============================================================================
+
+audit-config-validate: ## Validate audit log configuration
+	@echo "$(BLUE)Validating audit log configuration...$(NC)"
+	python generator/audit_log/validate_config.py --config generator/audit_config.yaml
+	@echo "$(GREEN)Audit configuration validation complete!$(NC)"
+
+audit-config-validate-prod: ## Validate production audit configuration
+	@echo "$(BLUE)Validating production audit log configuration...$(NC)"
+	python generator/audit_log/validate_config.py --config generator/audit_config.production.yaml
+	@echo "$(GREEN)Production audit configuration validation complete!$(NC)"
+
+audit-config-validate-dev: ## Validate development audit configuration
+	@echo "$(BLUE)Validating development audit log configuration...$(NC)"
+	python generator/audit_log/validate_config.py --config generator/audit_config.development.yaml
+	@echo "$(GREEN)Development audit configuration validation complete!$(NC)"
+
+audit-config-validate-env: ## Validate audit configuration from environment variables
+	@echo "$(BLUE)Validating audit log configuration from environment...$(NC)"
+	python generator/audit_log/validate_config.py --env
+	@echo "$(GREEN)Environment audit configuration validation complete!$(NC)"
+
+audit-config-validate-strict: ## Validate audit configuration in strict mode (warnings = errors)
+	@echo "$(BLUE)Validating audit log configuration (strict mode)...$(NC)"
+	python generator/audit_log/validate_config.py --config generator/audit_config.yaml --strict
+	@echo "$(GREEN)Strict audit configuration validation complete!$(NC)"
+
+audit-config-setup-prod: ## Set up production audit configuration
+	@echo "$(BLUE)Setting up production audit configuration...$(NC)"
+	@if [ -f generator/audit_config.yaml ]; then \
+		echo "$(YELLOW)Backing up existing audit_config.yaml...$(NC)"; \
+		cp generator/audit_config.yaml generator/audit_config.yaml.backup; \
+	fi
+	cp generator/audit_config.production.yaml generator/audit_config.yaml
+	@echo "$(GREEN)Production audit configuration copied to generator/audit_config.yaml$(NC)"
+	@echo "$(YELLOW)Review and update with your environment-specific values$(NC)"
+	@echo "$(YELLOW)Run 'make audit-config-validate' to verify$(NC)"
+
+audit-config-setup-dev: ## Set up development audit configuration
+	@echo "$(BLUE)Setting up development audit configuration...$(NC)"
+	@if [ -f generator/audit_config.yaml ]; then \
+		echo "$(YELLOW)Backing up existing audit_config.yaml...$(NC)"; \
+		cp generator/audit_config.yaml generator/audit_config.yaml.backup; \
+	fi
+	cp generator/audit_config.development.yaml generator/audit_config.yaml
+	@echo "$(GREEN)Development audit configuration copied to generator/audit_config.yaml$(NC)"
+	@echo "$(YELLOW)Run 'make audit-config-validate' to verify$(NC)"
+
+# =============================================================================
 # Docker
 # =============================================================================
 
