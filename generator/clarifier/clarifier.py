@@ -1798,8 +1798,11 @@ Format your response as a JSON array of objects with 'question' and 'category' f
 
     async def _save_history(self):
         try:
+            # Use a local variable for the actual save path (don't mutate config)
+            save_path = self.config.HISTORY_FILE
+            
             # Ensure the directory exists before saving
-            history_dir = os.path.dirname(self.config.HISTORY_FILE)
+            history_dir = os.path.dirname(save_path)
             if history_dir and not os.path.exists(history_dir):
                 try:
                     os.makedirs(history_dir, mode=0o755, exist_ok=True)
@@ -1814,14 +1817,15 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                         f"Permission denied for {history_dir}, using fallback: {fallback_path}",
                         extra={
                             "operation": "create_history_dir_fallback",
-                            "original_path": self.config.HISTORY_FILE,
+                            "original_path": save_path,
                             "fallback_path": fallback_path
                         }
                     )
-                    self.config.HISTORY_FILE = fallback_path
-                    history_dir = os.path.dirname(self.config.HISTORY_FILE)
-                    if history_dir and not os.path.exists(history_dir):
-                        os.makedirs(history_dir, mode=0o755, exist_ok=True)
+                    # Use local variable instead of mutating config
+                    save_path = fallback_path
+                    # /tmp typically exists, but verify we can write to it
+                    if not os.access(os.path.dirname(fallback_path), os.W_OK):
+                        raise PermissionError(f"Cannot write to fallback directory: {os.path.dirname(fallback_path)}")
             
             history_data = json.dumps(self.history)
             if self.config.HISTORY_COMPRESSION:
@@ -1829,13 +1833,13 @@ Format your response as a JSON array of objects with 'question' and 'category' f
             else:
                 history_data = history_data.encode()
             encrypted_data = self.fernet.encrypt(history_data)
-            temp_file = f"{self.config.HISTORY_FILE}.{uuid.uuid4()}.tmp"
+            temp_file = f"{save_path}.{uuid.uuid4()}.tmp"
             async with aiofiles.open(temp_file, "wb") as f:
                 await f.write(encrypted_data)
-            os.rename(temp_file, self.config.HISTORY_FILE)
-            os.chmod(self.config.HISTORY_FILE, stat.S_IREAD | stat.S_IWRITE)
+            os.rename(temp_file, save_path)
+            os.chmod(save_path, stat.S_IREAD | stat.S_IWRITE)
             self.logger.info(
-                "History saved successfully.", extra={"operation": "save_history"}
+                "History saved successfully.", extra={"operation": "save_history", "path": save_path}
             )
             self.circuit_breaker.record_success()
         except PermissionError as pe:
