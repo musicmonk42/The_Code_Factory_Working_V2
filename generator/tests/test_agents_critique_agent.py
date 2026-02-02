@@ -199,8 +199,8 @@ async def test_python_plugin_lint_delegates_safely(
         # project_dir may be Path or str depending on implementation; normalize
         assert str(project_dir) == str(tmp_path) or project_dir == str(tmp_path)
 
-        # lang may be in kwargs
-        assert kwargs.get("lang") == "python"
+        # language may be in kwargs (parameter name is 'language', not 'lang')
+        assert kwargs.get("language") == "python"
 
         # project_dir may also be present as kw; if so, it must match
         if "project_dir" in kwargs:
