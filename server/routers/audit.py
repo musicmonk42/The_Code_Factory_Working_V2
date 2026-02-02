@@ -579,3 +579,356 @@ async def get_all_event_types() -> Dict[str, Any]:
         "total_event_types": len(all_types),
         "all_event_types_sorted": sorted(list(all_types)),
     }
+
+
+@router.get("/config/status")
+async def get_audit_config_status() -> Dict[str, Any]:
+    """
+    Get audit log configuration status and information.
+    
+    Returns detailed information about the audit logging configuration including:
+    - Configuration source (YAML file or environment variables)
+    - Active configuration values (non-sensitive)
+    - Security status (encryption, RBAC, immutability)
+    - Backend configuration
+    - Compliance mode
+    - Configuration validation status
+    
+    **Returns:**
+    - config_source: Where configuration is loaded from
+    - backend: Backend configuration details
+    - security: Security feature status
+    - compliance: Compliance mode and settings
+    - performance: Performance-related settings
+    - validation: Configuration validation results
+    """
+    import os
+    import yaml
+    from pathlib import Path
+    
+    logger.info("Fetching audit configuration status")
+    
+    config_info = {
+        "config_source": "environment_variables",
+        "config_file": None,
+        "backend": {},
+        "security": {},
+        "compliance": {},
+        "performance": {},
+        "validation": {},
+        "features": {},
+    }
+    
+    # Check if YAML config file exists
+    possible_config_paths = [
+        "generator/audit_config.yaml",
+        "generator/audit_config.production.yaml",
+        "generator/audit_config.development.yaml",
+    ]
+    
+    config_file_path = None
+    for config_path in possible_config_paths:
+        full_path = Path(config_path)
+        if full_path.exists():
+            config_file_path = config_path
+            config_info["config_source"] = "yaml_file"
+            config_info["config_file"] = config_path
+            break
+    
+    # Load configuration from file if it exists
+    config_data = {}
+    if config_file_path:
+        try:
+            with open(config_file_path, 'r') as f:
+                config_data = yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.error(f"Error loading config file {config_file_path}: {e}")
+            config_info["config_file_error"] = str(e)
+    
+    # Get configuration values (environment variables take precedence)
+    def get_config(key: str, default=None):
+        """Get config value with environment variable precedence"""
+        # Map config keys to environment variable names
+        env_mappings = {
+            "BACKEND_TYPE": "AUDIT_LOG_BACKEND_TYPE",
+            "PROVIDER_TYPE": "AUDIT_CRYPTO_PROVIDER_TYPE",
+            "DEFAULT_ALGO": "AUDIT_CRYPTO_DEFAULT_ALGO",
+            "COMPRESSION_ALGO": "AUDIT_COMPRESSION_ALGO",
+            "BATCH_FLUSH_INTERVAL": "AUDIT_BATCH_FLUSH_INTERVAL",
+            "IMMUTABLE": "AUDIT_LOG_IMMUTABLE",
+            "ENCRYPTION_ENABLED": "AUDIT_ENCRYPTION_ENABLED",
+            "TAMPER_DETECTION_ENABLED": "AUDIT_TAMPER_DETECTION_ENABLED",
+            "RBAC_ENABLED": "AUDIT_RBAC_ENABLED",
+            "COMPLIANCE_MODE": "AUDIT_COMPLIANCE_MODE",
+            "DEV_MODE": "AUDIT_LOG_DEV_MODE",
+            "CRYPTO_MODE": "AUDIT_CRYPTO_MODE",
+        }
+        
+        env_var = env_mappings.get(key, f"AUDIT_{key}")
+        env_value = os.getenv(env_var)
+        
+        if env_value is not None:
+            # Convert string booleans
+            if env_value.lower() in ["true", "false"]:
+                return env_value.lower() == "true"
+            # Convert numbers
+            try:
+                return int(env_value)
+            except ValueError:
+                try:
+                    return float(env_value)
+                except ValueError:
+                    return env_value
+        
+        return config_data.get(key, default)
+    
+    # Backend configuration
+    config_info["backend"] = {
+        "type": get_config("BACKEND_TYPE", "file"),
+        "compression_enabled": get_config("COMPRESSION_ALGO", "none") != "none",
+        "compression_algorithm": get_config("COMPRESSION_ALGO", "none"),
+        "batch_flush_interval": get_config("BATCH_FLUSH_INTERVAL", 10),
+        "batch_max_size": get_config("BATCH_MAX_SIZE", 100),
+    }
+    
+    # Security configuration
+    encryption_key_set = bool(os.getenv("AUDIT_LOG_ENCRYPTION_KEY"))
+    
+    config_info["security"] = {
+        "encryption_enabled": get_config("ENCRYPTION_ENABLED", True),
+        "encryption_key_configured": encryption_key_set,
+        "immutable": get_config("IMMUTABLE", True),
+        "tamper_detection_enabled": get_config("TAMPER_DETECTION_ENABLED", True),
+        "rbac_enabled": get_config("RBAC_ENABLED", True),
+        "dev_mode": get_config("DEV_MODE", False),
+        "crypto_provider": get_config("PROVIDER_TYPE", "software"),
+        "signing_algorithm": get_config("DEFAULT_ALGO", "ed25519"),
+        "crypto_mode": get_config("CRYPTO_MODE", "full"),
+    }
+    
+    # Compliance configuration
+    config_info["compliance"] = {
+        "mode": get_config("COMPLIANCE_MODE", "standard"),
+        "data_retention_days": get_config("DATA_RETENTION_DAYS", 365),
+        "pii_redaction_enabled": get_config("PII_REDACTION_ENABLED", True),
+    }
+    
+    # Performance configuration
+    config_info["performance"] = {
+        "retry_max_attempts": get_config("RETRY_MAX_ATTEMPTS", 3),
+        "retry_backoff_factor": get_config("RETRY_BACKOFF_FACTOR", 0.5),
+        "health_check_interval": get_config("HEALTH_CHECK_INTERVAL", 30),
+    }
+    
+    # Feature status
+    config_info["features"] = {
+        "tracing_enabled": get_config("TRACING_ENABLED", True),
+        "metrics_enabled": True,  # Always enabled
+        "api_enabled": True,  # Always enabled if this endpoint is accessible
+        "grpc_enabled": get_config("GRPC_PORT") is not None,
+    }
+    
+    # Validation status
+    validation_warnings = []
+    validation_errors = []
+    
+    # Check for common configuration issues
+    if config_info["security"]["dev_mode"]:
+        validation_warnings.append("DEV_MODE is enabled - not suitable for production")
+    
+    if not config_info["security"]["encryption_key_configured"]:
+        if not config_info["security"]["dev_mode"]:
+            validation_errors.append("Encryption key not configured (AUDIT_LOG_ENCRYPTION_KEY not set)")
+        else:
+            validation_warnings.append("Encryption key not configured (acceptable in dev mode)")
+    
+    if not config_info["security"]["immutable"]:
+        validation_warnings.append("Immutability disabled - logs can be modified")
+    
+    if not config_info["security"]["tamper_detection_enabled"]:
+        validation_warnings.append("Tamper detection disabled - security risk")
+    
+    if config_info["security"]["crypto_provider"] == "software":
+        validation_warnings.append("Using software crypto provider - consider HSM for production")
+    
+    if config_info["backend"]["type"] == "file":
+        validation_warnings.append("Using file backend - consider cloud storage for production")
+    
+    if config_info["backend"]["type"] == "memory":
+        validation_errors.append("Using memory backend - data will not persist!")
+    
+    config_info["validation"] = {
+        "status": "ok" if not validation_errors else "error",
+        "warnings": validation_warnings,
+        "errors": validation_errors,
+        "warnings_count": len(validation_warnings),
+        "errors_count": len(validation_errors),
+    }
+    
+    # Documentation links
+    config_info["documentation"] = {
+        "configuration_guide": "/docs/AUDIT_CONFIGURATION.md",
+        "quick_start": "/generator/AUDIT_CONFIG_README.md",
+        "validation_script": "python generator/audit_log/validate_config.py",
+    }
+    
+    # Configuration files available
+    config_info["available_templates"] = {
+        "production": "generator/audit_config.production.yaml",
+        "development": "generator/audit_config.development.yaml",
+        "enhanced": "generator/audit_config.enhanced.yaml",
+    }
+    
+    return config_info
+
+
+@router.get("/config/documentation")
+async def get_audit_config_documentation() -> Dict[str, Any]:
+    """
+    Get audit configuration documentation and help.
+    
+    Returns information about:
+    - Available configuration options
+    - Environment variables
+    - Configuration templates
+    - Validation commands
+    - Quick start guides
+    
+    **Returns:**
+    - configuration_options: List of available configuration categories
+    - environment_variables: Key environment variables
+    - templates: Available configuration templates
+    - validation: Validation commands
+    - documentation_links: Links to comprehensive documentation
+    """
+    return {
+        "configuration_options": {
+            "cryptographic_provider": {
+                "description": "Configure cryptographic signing and key management",
+                "key_settings": [
+                    "PROVIDER_TYPE (software/hsm)",
+                    "DEFAULT_ALGO (rsa/ecdsa/ed25519/hmac)",
+                    "KEY_ROTATION_INTERVAL_SECONDS",
+                ],
+            },
+            "backend_storage": {
+                "description": "Configure where audit logs are stored",
+                "key_settings": [
+                    "BACKEND_TYPE (file/sqlite/s3/gcs/azure/kafka/splunk)",
+                    "BACKEND_PARAMS (JSON configuration)",
+                    "COMPRESSION_ALGO (none/gzip/zstd)",
+                ],
+            },
+            "security": {
+                "description": "Security features and encryption",
+                "key_settings": [
+                    "ENCRYPTION_ENABLED (true/false)",
+                    "IMMUTABLE (true/false)",
+                    "TAMPER_DETECTION_ENABLED (true/false)",
+                    "RBAC_ENABLED (true/false)",
+                ],
+            },
+            "performance": {
+                "description": "Batch processing and retry configuration",
+                "key_settings": [
+                    "BATCH_FLUSH_INTERVAL (seconds)",
+                    "BATCH_MAX_SIZE (entries)",
+                    "RETRY_MAX_ATTEMPTS",
+                    "COMPRESSION_LEVEL",
+                ],
+            },
+            "compliance": {
+                "description": "Compliance framework settings",
+                "key_settings": [
+                    "COMPLIANCE_MODE (soc2/hipaa/pci-dss/gdpr/standard)",
+                    "DATA_RETENTION_DAYS",
+                    "PII_REDACTION_ENABLED",
+                ],
+            },
+        },
+        "environment_variables": {
+            "critical": {
+                "AUDIT_LOG_ENCRYPTION_KEY": "Base64-encoded Fernet key (REQUIRED in production)",
+                "AUDIT_CRYPTO_MODE": "Crypto mode: full/dev/disabled",
+                "AUDIT_LOG_DEV_MODE": "Enable development mode (NEVER in production)",
+            },
+            "core": {
+                "AUDIT_LOG_BACKEND_TYPE": "Storage backend type",
+                "AUDIT_LOG_BACKEND_PARAMS": "Backend-specific parameters (JSON)",
+                "AUDIT_LOG_IMMUTABLE": "Prevent log deletion/modification",
+                "AUDIT_CRYPTO_PROVIDER_TYPE": "Crypto provider (software/hsm)",
+            },
+            "performance": {
+                "AUDIT_COMPRESSION_ALGO": "Compression algorithm",
+                "AUDIT_BATCH_FLUSH_INTERVAL": "Batch flush interval (seconds)",
+                "AUDIT_BATCH_MAX_SIZE": "Maximum batch size",
+                "AUDIT_RETRY_MAX_ATTEMPTS": "Retry attempts",
+            },
+        },
+        "templates": {
+            "production": {
+                "file": "generator/audit_config.production.yaml",
+                "description": "Production-hardened configuration with security-first defaults",
+                "command": "make audit-config-setup-prod",
+            },
+            "development": {
+                "file": "generator/audit_config.development.yaml",
+                "description": "Developer-friendly configuration for local testing",
+                "command": "make audit-config-setup-dev",
+            },
+            "enhanced": {
+                "file": "generator/audit_config.enhanced.yaml",
+                "description": "Complete reference with all options documented",
+                "use_case": "Reference documentation for all available settings",
+            },
+        },
+        "validation": {
+            "validate_current": {
+                "command": "make audit-config-validate",
+                "description": "Validate current audit_config.yaml",
+            },
+            "validate_production": {
+                "command": "make audit-config-validate-prod",
+                "description": "Validate production template",
+            },
+            "validate_strict": {
+                "command": "make audit-config-validate-strict",
+                "description": "Strict validation (warnings = errors)",
+            },
+            "validate_env": {
+                "command": "make audit-config-validate-env",
+                "description": "Validate environment variables",
+            },
+            "manual": {
+                "command": "python generator/audit_log/validate_config.py --config <file>",
+                "description": "Manually validate any configuration file",
+            },
+        },
+        "documentation_links": {
+            "complete_reference": "docs/AUDIT_CONFIGURATION.md",
+            "quick_start": "generator/AUDIT_CONFIG_README.md",
+            "module_readme": "generator/audit_log/README.md",
+            "implementation_summary": "AUDIT_CONFIG_IMPLEMENTATION_SUMMARY.md",
+        },
+        "quick_start": {
+            "development": [
+                "1. Run: make audit-config-setup-dev",
+                "2. Set: export AUDIT_LOG_DEV_MODE=true",
+                "3. Validate: make audit-config-validate",
+                "4. Start: python server/main.py",
+            ],
+            "production": [
+                "1. Run: make audit-config-setup-prod",
+                "2. Edit: vim generator/audit_config.yaml",
+                "3. Generate key: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"",
+                "4. Set: export AUDIT_LOG_ENCRYPTION_KEY=<generated-key>",
+                "5. Validate: make audit-config-validate-strict",
+                "6. Deploy your application",
+            ],
+        },
+        "help": {
+            "message": "For complete documentation, see docs/AUDIT_CONFIGURATION.md",
+            "validation_script": "Run 'python generator/audit_log/validate_config.py --help' for validation options",
+            "makefile_help": "Run 'make help' to see all available audit configuration commands",
+        },
+    }

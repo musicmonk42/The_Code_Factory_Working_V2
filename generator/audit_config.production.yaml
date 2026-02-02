@@ -1,0 +1,223 @@
+# ============================================================================
+# Production-Hardened Audit Log Configuration
+# ============================================================================
+# This configuration file contains production-ready defaults with security-first
+# settings and compliance-ready configurations.
+#
+# IMPORTANT SECURITY NOTES:
+# - All sensitive values MUST be set via environment variables or secrets manager
+# - NEVER commit actual production keys or credentials to version control
+# - Review and adjust settings based on your specific compliance requirements
+# - Regularly rotate all cryptographic keys according to your security policy
+# ============================================================================
+
+# ============================================================================
+# CRYPTOGRAPHIC PROVIDER CONFIGURATION
+# ============================================================================
+# Production: Use HSM for maximum security, or cloud KMS as second choice
+# Software provider is NOT recommended for production but included as fallback
+PROVIDER_TYPE: "software"  # Change to "hsm" for production HSM deployment
+
+# Ed25519 provides excellent security with best performance
+DEFAULT_ALGO: "ed25519"
+
+# Rotate keys weekly (7 days) for production
+KEY_ROTATION_INTERVAL_SECONDS: 604800
+
+# ============================================================================
+# SOFTWARE CRYPTO PROVIDER SETTINGS
+# ============================================================================
+# If using software provider, ensure directory has restricted permissions (0700)
+# WARNING: Consider migrating to HSM or cloud KMS for production
+SOFTWARE_KEY_DIR: "/var/audit/keys"
+
+# ============================================================================
+# CLOUD KEY MANAGEMENT (KMS)
+# ============================================================================
+# Configure your KMS key for encrypting software keys
+KMS_KEY_ID: "alias/audit-log-key-prod"
+AWS_REGION: "us-east-1"
+
+# ============================================================================
+# BACKEND CONFIGURATION
+# ============================================================================
+# Production: Use cloud storage or dedicated database
+# Options: "s3", "gcs", "azure", "sqlite", "kafka"
+BACKEND_TYPE: "file"  # Change to cloud backend for production
+
+# Backend parameters - configure based on your chosen backend
+# Example S3: {"bucket": "company-audit-logs", "prefix": "production/"}
+# Example SQLite: {"db_file": "/var/audit/audit_production.db"}
+# BACKEND_PARAMS set via AUDIT_LOG_BACKEND_PARAMS environment variable
+
+# ============================================================================
+# COMPRESSION SETTINGS (Optimized for production)
+# ============================================================================
+# Zstd provides best compression with minimal CPU overhead
+COMPRESSION_ALGO: "zstd"
+COMPRESSION_LEVEL: 3
+
+# ============================================================================
+# BATCH PROCESSING (Balanced for reliability and performance)
+# ============================================================================
+BATCH_FLUSH_INTERVAL: 5
+BATCH_MAX_SIZE: 500
+
+# ============================================================================
+# RETRY AND FAULT TOLERANCE (Production-grade resilience)
+# ============================================================================
+RETRY_MAX_ATTEMPTS: 5
+RETRY_BACKOFF_FACTOR: 1.0
+CIRCUIT_BREAKER_THRESHOLD: 10
+CIRCUIT_BREAKER_TIMEOUT: 120
+
+# ============================================================================
+# TAMPER DETECTION (REQUIRED FOR COMPLIANCE)
+# ============================================================================
+TAMPER_DETECTION_ENABLED: true
+SELF_HEALING_ENABLED: true
+
+# ============================================================================
+# HEALTH CHECKS AND MONITORING
+# ============================================================================
+HEALTH_CHECK_INTERVAL: 60
+HEALTH_CHECK_TIMEOUT: 10
+
+# ============================================================================
+# API AND SERVICE PORTS
+# ============================================================================
+# Use non-default ports in production for security
+METRICS_PORT: 8002
+API_PORT: 8003
+GRPC_PORT: 50051
+
+# ============================================================================
+# ALERTING CONFIGURATION
+# ============================================================================
+# Configure your production alerting endpoint (Slack, PagerDuty, etc.)
+# ALERT_ENDPOINT set via environment variable for security
+ALERT_ENDPOINT: ""  # Set via AUDIT_ALERT_ENDPOINT environment variable
+ALERT_MIN_SEVERITY: "error"
+ALERT_RETRY_ATTEMPTS: 5
+ALERT_BACKOFF_FACTOR: 2.0
+
+# ============================================================================
+# ENCRYPTION SETTINGS (REQUIRED FOR PRODUCTION)
+# ============================================================================
+ENCRYPTION_ENABLED: true
+# ENCRYPTION_KEY MUST be set via AUDIT_LOG_ENCRYPTION_KEY environment variable
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# ============================================================================
+# RBAC SETTINGS (REQUIRED FOR PRODUCTION)
+# ============================================================================
+# Users configuration should be in a separate secure file
+USERS_CONFIG_PATH: "/etc/audit/users.yaml"
+RBAC_ENABLED: true
+
+# ============================================================================
+# OBSERVABILITY AND TRACING
+# ============================================================================
+TRACING_ENABLED: true
+TRACING_SAMPLE_RATE: 0.1  # 10% sampling reduces overhead
+OTEL_EXPORTER_OTLP_ENDPOINT: ""  # Set via environment variable
+
+# ============================================================================
+# LOG IMMUTABILITY (REQUIRED FOR COMPLIANCE)
+# ============================================================================
+IMMUTABLE: true
+
+# ============================================================================
+# PII REDACTION (REQUIRED FOR GDPR/HIPAA COMPLIANCE)
+# ============================================================================
+PII_REDACTION_ENABLED: true
+PII_ENTITIES:
+  - "EMAIL_ADDRESS"
+  - "PHONE_NUMBER"
+  - "CREDIT_CARD"
+  - "SSN"
+  - "IP_ADDRESS"
+  - "PERSON"
+  - "LOCATION"
+
+# ============================================================================
+# DEVELOPMENT MODE (MUST BE DISABLED IN PRODUCTION)
+# ============================================================================
+DEV_MODE: false
+CRYPTO_ALLOW_INIT_FAILURE: false
+CRYPTO_ALLOW_DUMMY_PROVIDER: false
+DEV_MODE_ALLOW_INSECURE_SECRETS: false
+
+# ============================================================================
+# SECRET MANAGEMENT (Production-grade only)
+# ============================================================================
+# Use proper secret manager - NEVER use mock or env in production
+SECRET_MANAGER: "aws"  # Options: "aws", "gcp", "vault"
+USE_AWS_SECRETS: true
+USE_GCP_SECRETS: false
+USE_HASHICORP_VAULT: false
+USE_ENV_SECRETS: false  # Only for containerized environments with secure injection
+
+# ============================================================================
+# PERFORMANCE TUNING (Optimized for production load)
+# ============================================================================
+CRYPTO_WORKER_THREADS: 8
+ASYNC_QUEUE_SIZE: 5000
+DB_POOL_SIZE: 20
+CONNECTION_TIMEOUT: 30
+
+# ============================================================================
+# COMPLIANCE AND AUDIT SETTINGS
+# ============================================================================
+# Set to your required compliance framework
+COMPLIANCE_MODE: "soc2"  # Options: "soc2", "hipaa", "pci-dss", "gdpr"
+
+# Data retention based on compliance requirements
+# SOC2: 365 days minimum
+# HIPAA: 2555 days (7 years)
+# PCI-DSS: 365 days minimum
+# GDPR: As per your DPA requirements
+DATA_RETENTION_DAYS: 2555  # 7 years for HIPAA compliance
+
+ENABLE_ARCHIVAL: true
+# Archive to cold storage after 1 year
+# ARCHIVE_BACKEND_TYPE: "s3"
+# ARCHIVE_BACKEND_PARAMS: {"bucket": "company-audit-logs-archive", "storage_class": "GLACIER"}
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+LOG_LEVEL: "INFO"  # Use "WARNING" to reduce log volume in production
+LOG_FORMAT: "json"  # Structured logging for log aggregation
+CRYPTO_DEBUG: false
+
+# ============================================================================
+# FEATURE FLAGS (Production-hardened)
+# ============================================================================
+CRYPTO_MODE: "full"
+CRYPTO_FORCE_REAL_PROVIDER: true
+CRYPTO_SHUTDOWN_TIMEOUT_SECONDS: 10.0
+
+# ============================================================================
+# PRODUCTION DEPLOYMENT CHECKLIST
+# ============================================================================
+# Before deploying to production, ensure:
+#
+# [ ] All sensitive values are set via environment variables or secrets manager
+# [ ] Cryptographic keys are generated with appropriate entropy
+# [ ] Key rotation is scheduled and tested
+# [ ] Backup and disaster recovery procedures are documented
+# [ ] Alert endpoints are configured and tested
+# [ ] Monitoring dashboards are set up
+# [ ] RBAC users and roles are properly configured
+# [ ] Compliance requirements are verified
+# [ ] Security audit has been performed
+# [ ] Incident response procedures are in place
+# [ ] Data retention policies comply with regulations
+# [ ] Archival processes are tested
+# [ ] Performance testing under expected load is completed
+# [ ] Failover and high availability are configured
+# [ ] Log aggregation and analysis tools are integrated
+#
+# See docs/AUDIT_CONFIGURATION.md for detailed deployment guide
+# ============================================================================

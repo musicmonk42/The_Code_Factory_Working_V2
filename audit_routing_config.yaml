@@ -1,0 +1,504 @@
+# ============================================================================
+# Unified Audit Log Routing Configuration
+# ============================================================================
+# This configuration defines how audit logs from all platform modules are routed
+# through the OmniCore Engine - the platform's CENTRAL HUB ORCHESTRATOR.
+#
+# ARCHITECTURE:
+# OmniCore Engine is the central orchestration hub for The Code Factory platform.
+# ALL audit logs, events, and operations flow through OmniCore for:
+# - Centralized orchestration and coordination
+# - Unified storage and retention
+# - Cross-module correlation and analysis
+# - Centralized monitoring and alerting
+# - Compliance reporting and governance
+# - Security analysis and threat detection
+#
+# AUDIT LOG FLOW:
+# Generator Module     ─┐
+# Self-Fixing Engineer ─┼─→ OmniCore Hub → Unified Storage → Analytics
+# All Other Modules    ─┘   (Orchestrator)   (Centralized)   (Insights)
+#
+# OmniCore orchestrates all audit operations and ensures consistency across
+# the entire platform.
+# ============================================================================
+
+# =============================================================================
+# OMNICORE AS CENTRAL HUB
+# =============================================================================
+
+omnicore_hub:
+  # OmniCore is the central orchestration hub
+  role: "central_orchestrator"
+  description: "OmniCore Engine orchestrates all audit log processing for the platform"
+  
+  # Hub endpoints
+  ingestion_endpoint: "http://localhost:8001/audit/ingest"
+  configuration_endpoint: "http://localhost:8001/audit/config/status"
+  health_endpoint: "http://localhost:8001/health"
+  
+  # Hub capabilities
+  capabilities:
+    - "audit_log_orchestration"
+    - "cross_module_correlation"
+    - "unified_storage_coordination"
+    - "compliance_reporting"
+    - "security_analysis"
+    - "alerting_coordination"
+    - "meta_supervision"
+  
+  # Processing pipeline
+  pipeline:
+    - "ingestion"      # Receive logs from all modules
+    - "validation"     # Validate log structure and content
+    - "enrichment"     # Add context and correlation data
+    - "routing"        # Route to appropriate storage/destinations
+    - "analysis"       # Real-time analysis and pattern detection
+    - "alerting"       # Trigger alerts based on rules
+
+# =============================================================================
+# MODULE ROUTING TO OMNICORE HUB
+# =============================================================================
+
+# ALL modules route through OmniCore as the central hub
+
+# Generator Module → OmniCore Hub
+generator:
+  enabled: true
+  module_type: "code_generation"
+  orchestrated_by: "omnicore"
+  
+  # Generator sends ALL audit events to OmniCore
+  route_all_events_to_hub: true
+  hub_endpoint: "http://localhost:8001/audit/ingest"
+  
+  # Generator's own audit API (for local queries)
+  local_audit_api: "http://localhost:8003"
+  
+  # Event types to route
+  event_types:
+    - "code_generated"
+    - "test_generated"
+    - "doc_generated"
+    - "deployment"
+    - "error"
+    - "security"
+    - "compliance"
+    - "crypto_operation"
+    - "rbac_denial"
+    - "tamper_detection"
+  
+  # Priority for routing to hub
+  priority: "high"
+  
+  # OmniCore orchestrates generator's audit lifecycle
+  orchestration:
+    retention_managed_by_hub: true
+    alerting_managed_by_hub: true
+    compliance_managed_by_hub: true
+
+# Self-Fixing Engineer Module → OmniCore Hub
+self_fixing_engineer:
+  enabled: true
+  module_type: "self_fixing_and_testing"
+  orchestrated_by: "omnicore"
+  
+  # SFE sends ALL audit events to OmniCore Hub
+  route_all_events_to_hub: true
+  hub_endpoint: "http://localhost:8001/audit/ingest"
+  
+  # Sub-modules within SFE (all route through OmniCore)
+  sub_modules:
+    # Arbiter - Bug detection and fixing
+    arbiter:
+      local_audit_path: "./logs/arbiter_audit_log.jsonl"
+      route_to_hub: true
+      event_types:
+        - "bug_detected"
+        - "fix_applied"
+        - "fix_failed"
+        - "security_violation"
+        - "policy_violation"
+        - "learning_update"
+        - "self_audit"
+      priority: "critical"
+    
+    # Test Generation
+    test_generation:
+      local_audit_path: "./logs/testgen_audit.jsonl"
+      route_to_hub: true
+      event_types:
+        - "test_generation_start"
+        - "test_execution_complete"
+        - "test_failure"
+        - "coverage_analysis"
+      priority: "high"
+    
+    # Simulation
+    simulation:
+      local_audit_path: "./logs/simulation_audit.jsonl"
+      route_to_hub: true
+      event_types:
+        - "agent_decision"
+        - "policy_decision"
+        - "simulation_complete"
+        - "anomaly_detected"
+      priority: "medium"
+    
+    # Guardrails/Compliance
+    guardrails:
+      local_audit_path: "./simulation/results/audit_trail.log"
+      route_to_hub: true
+      event_types:
+        - "compliance_check"
+        - "gap_detected"
+        - "policy_violation"
+        - "security_violation"
+      priority: "critical"
+  
+  # OmniCore orchestrates SFE's audit lifecycle
+  orchestration:
+    retention_managed_by_hub: true
+    alerting_managed_by_hub: true
+    compliance_managed_by_hub: true
+    cross_module_correlation: true
+
+# OmniCore Module (self) - Hub's own operations
+omnicore:
+  enabled: true
+  module_type: "central_orchestrator"
+  is_hub: true
+  
+  # OmniCore processes its own audit logs internally
+  local_audit_path: "./logs/omnicore_audit.jsonl"
+  self_orchestration: true
+  
+  # OmniCore event types
+  event_types:
+    - "workflow_orchestration"
+    - "plugin_management"
+    - "meta_supervision"
+    - "error_tracking"
+    - "performance_monitoring"
+    - "security_events"
+    - "hub_operations"
+  
+  # Hub responsibilities
+  hub_responsibilities:
+    - "ingest_from_all_modules"
+    - "validate_and_enrich"
+    - "route_to_storage"
+    - "coordinate_alerting"
+    - "manage_compliance"
+    - "provide_analytics"
+    - "orchestrate_retention"
+
+# =============================================================================
+# UNIFIED STORAGE CONFIGURATION
+# =============================================================================
+
+unified_storage:
+  enabled: true
+  backend_type: "hybrid"  # Use multiple backends
+  
+  # Primary storage (fast, searchable)
+  primary:
+    type: "elasticsearch"  # or "opensearch"
+    endpoint: "http://localhost:9200"
+    index_pattern: "audit-logs-{date}"
+    retention_days: 90
+  
+  # Archive storage (long-term retention)
+  archive:
+    type: "s3"  # or "gcs", "azure"
+    bucket: "company-audit-logs"
+    prefix: "unified/"
+    retention_days: 2555  # 7 years for compliance
+  
+  # Hot storage (recent logs, high performance)
+  hot:
+    type: "redis"
+    endpoint: "redis://localhost:6379"
+    ttl_seconds: 86400  # 24 hours
+    max_entries: 100000
+
+# =============================================================================
+# ROUTING RULES
+# =============================================================================
+
+routing_rules:
+  # Critical events - immediate routing to all destinations
+  critical:
+    severity_levels:
+      - "critical"
+      - "security"
+    route_to:
+      - "unified_storage.primary"
+      - "unified_storage.hot"
+      - "alert_system"
+    latency_sla_ms: 100
+  
+  # High priority - fast routing
+  high:
+    severity_levels:
+      - "error"
+      - "compliance"
+    route_to:
+      - "unified_storage.primary"
+      - "unified_storage.hot"
+    latency_sla_ms: 500
+  
+  # Medium priority - standard routing
+  medium:
+    severity_levels:
+      - "warning"
+      - "info"
+    route_to:
+      - "unified_storage.primary"
+    latency_sla_ms: 2000
+  
+  # Low priority - batch routing
+  low:
+    severity_levels:
+      - "debug"
+      - "trace"
+    route_to:
+      - "unified_storage.primary"
+    latency_sla_ms: 10000
+    batch_enabled: true
+    batch_size: 1000
+
+# =============================================================================
+# CORRELATION AND ENRICHMENT
+# =============================================================================
+
+correlation:
+  enabled: true
+  
+  # Correlation keys for cross-module tracking
+  correlation_keys:
+    - "job_id"
+    - "request_id"
+    - "trace_id"
+    - "user_id"
+    - "session_id"
+  
+  # Enrichment - add context to routed logs
+  enrichment:
+    enabled: true
+    add_fields:
+      - "source_module"
+      - "routing_timestamp"
+      - "routing_path"
+      - "correlation_id"
+      - "environment"
+
+# =============================================================================
+# FILTERING AND TRANSFORMATION
+# =============================================================================
+
+filtering:
+  enabled: true
+  
+  # Global filters (apply to all modules)
+  global:
+    # Exclude test/debug logs in production
+    exclude_patterns:
+      - "event_type: 'test_*'"
+      - "source: 'pytest'"
+    
+    # Include only specific severities in production
+    include_severities:
+      - "info"
+      - "warning"
+      - "error"
+      - "critical"
+  
+  # Module-specific filters
+  by_module:
+    generator:
+      sample_rate: 1.0  # 100% sampling
+    
+    self_fixing_engineer:
+      sample_rate: 1.0  # 100% sampling
+    
+    omnicore:
+      sample_rate: 1.0  # 100% sampling
+
+# Transformation rules
+transformation:
+  enabled: true
+  
+  # Normalize field names across modules
+  field_mapping:
+    "timestamp": "timestamp"
+    "event_type": "event_type"
+    "severity": "severity"
+    "message": "message"
+    "details": "details"
+    "module": "source_module"
+  
+  # Standardize timestamp format
+  timestamp_format: "iso8601"
+  
+  # Ensure consistent structure
+  enforce_schema: true
+
+# =============================================================================
+# BUFFERING AND BATCHING
+# =============================================================================
+
+buffering:
+  enabled: true
+  buffer_size: 10000  # Max entries in buffer
+  buffer_timeout_seconds: 5  # Max time before flush
+  
+  # Per-module buffers
+  per_module_buffers: true
+  
+  # Overflow handling
+  overflow_strategy: "drop_oldest"  # Options: drop_oldest, drop_newest, reject
+
+batching:
+  enabled: true
+  batch_size: 500  # Entries per batch
+  batch_timeout_seconds: 10  # Max time before sending batch
+  
+  # Compression for batches
+  compress_batches: true
+  compression_algorithm: "zstd"
+
+# =============================================================================
+# RELIABILITY AND FAULT TOLERANCE
+# =============================================================================
+
+reliability:
+  # Retry configuration for routing failures
+  retry:
+    enabled: true
+    max_attempts: 5
+    backoff_factor: 2.0
+    max_backoff_seconds: 60
+  
+  # Circuit breaker for failing destinations
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 10
+    timeout_seconds: 60
+    half_open_requests: 3
+  
+  # Dead letter queue for failed routes
+  dead_letter_queue:
+    enabled: true
+    storage_type: "file"
+    path: "./logs/audit_dlq.jsonl"
+    max_size_mb: 1000
+    retention_days: 7
+
+# =============================================================================
+# MONITORING AND METRICS
+# =============================================================================
+
+monitoring:
+  enabled: true
+  
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    port: 9093
+    metrics:
+      - "audit_logs_routed_total"
+      - "audit_logs_dropped_total"
+      - "audit_routing_latency_seconds"
+      - "audit_buffer_size"
+      - "audit_batch_size"
+  
+  # OpenTelemetry tracing
+  opentelemetry:
+    enabled: true
+    service_name: "audit-router"
+    trace_all_routes: false  # Only trace failures
+    trace_slow_routes_ms: 1000
+
+# =============================================================================
+# ALERTING
+# =============================================================================
+
+alerting:
+  enabled: true
+  
+  # Alert on routing failures
+  routing_failures:
+    enabled: true
+    threshold: 10  # Alert after 10 consecutive failures
+    alert_channels:
+      - "slack"
+      - "pagerduty"
+  
+  # Alert on high latency
+  high_latency:
+    enabled: true
+    threshold_ms: 5000
+    alert_channels:
+      - "slack"
+  
+  # Alert on buffer overflow
+  buffer_overflow:
+    enabled: true
+    threshold_percentage: 90
+    alert_channels:
+      - "slack"
+
+# =============================================================================
+# COMPLIANCE AND GOVERNANCE
+# =============================================================================
+
+compliance:
+  # Ensure all audit logs are routed and stored
+  enforce_routing: true
+  
+  # Audit the audit routing (meta-audit)
+  meta_audit_enabled: true
+  meta_audit_path: "./logs/routing_audit.jsonl"
+  
+  # Compliance reporting
+  reporting:
+    enabled: true
+    report_interval_hours: 24
+    report_destination: "./reports/audit_routing_report.json"
+
+# =============================================================================
+# SECURITY
+# =============================================================================
+
+security:
+  # Encrypt logs in transit
+  encrypt_in_transit: true
+  tls_enabled: true
+  
+  # Authenticate routing requests
+  authentication:
+    enabled: true
+    method: "api_key"  # Options: api_key, mutual_tls, jwt
+  
+  # Validate log integrity during routing
+  integrity_check:
+    enabled: true
+    verify_signatures: true
+
+# =============================================================================
+# DOCUMENTATION
+# =============================================================================
+
+# For more information:
+# - docs/AUDIT_CONFIGURATION.md - Complete audit configuration reference
+# - docs/AUDIT_ROUTING.md - Audit log routing architecture
+# - docs/AUDIT_CONFIGURATION_WEB_ACCESS.md - API access
+# - omnicore_engine/docs/ROUTING.md - OmniCore routing details
+
+# Environment variables:
+# - AUDIT_ROUTING_ENABLED: Enable/disable routing
+# - OMNICORE_AUDIT_ENDPOINT: OmniCore audit ingestion endpoint
+# - UNIFIED_STORAGE_TYPE: Type of unified storage
+# - ROUTING_BUFFER_SIZE: Buffer size for routing
+# ============================================================================
