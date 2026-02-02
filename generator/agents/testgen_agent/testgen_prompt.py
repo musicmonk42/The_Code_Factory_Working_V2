@@ -1035,7 +1035,7 @@ def _get_agentic_builder():
     return _agentic_builder
 
 
-def build_agentic_prompt(prompt_type: str, builder_name: str = "test", **kwargs) -> str:
+async def build_agentic_prompt(prompt_type: str, builder_name: str = "test", **kwargs) -> str:
     """
     Public API to build an agentic prompt using a specified builder.
     """
@@ -1047,7 +1047,7 @@ def build_agentic_prompt(prompt_type: str, builder_name: str = "test", **kwargs)
         raise ValueError(f"Prompt builder '{builder_name}' not registered.")
 
     builder = builder_class(_get_director())
-    return asyncio.run(builder.build(prompt_type, **kwargs))
+    return await builder.build(prompt_type, **kwargs)
 
 
 async def _add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs):
