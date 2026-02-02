@@ -90,26 +90,31 @@ async def test_audit_entry(tmp_path):
     mock_settings = _get_mock_settings()
     mock_arbiter_config = _get_mock_arbiter_config()
 
-    # Apply Fix: Patch settings for both Database and ExplainAudit initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
+    
+    # Import Database before patching
+    from omnicore_engine.database import Database as RealDatabase
+    
+    # Patch Database in audit module namespace BEFORE creating ExplainAudit
     with patch("omnicore_engine.database.database.settings", mock_settings), \
          patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config), \
-         patch("omnicore_engine.audit.AUDIT_ERRORS") as mock_errors, \
-         patch("omnicore_engine.audit.AUDIT_RECORDS") as mock_records, \
-         patch("omnicore_engine.audit.AUDIT_RECORDS_PROCESSED_TOTAL") as mock_processed:
-        db = Database(db_url)
-        # Mock database save operation to avoid table creation issues
-        db.save_audit_record = AsyncMock()
-        # Don't initialize database tables for this test
-        # await db.initialize()
-
-        # Initialize ExplainAudit with the mocked Merkle Tree
+         patch("omnicore_engine.audit.Database", RealDatabase) as MockDatabaseClass, \
+         patch("omnicore_engine.audit.AUDIT_ERRORS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS_PROCESSED_TOTAL"):
+        
+        # Create ExplainAudit - it will use the patched Database
         audit = ExplainAudit(system_audit_merkle_tree=mock_merkle_tree)
+        
+        # Create a real db instance and mock its save method
+        db = RealDatabase(db_url)
+        db.save_audit_record = AsyncMock()
+        
+        # Replace audit's db client
         audit._db_client = db
-        # Disable knowledge_graph to avoid method errors
         audit.knowledge_graph = None
 
-    # Mock the policy engine to allow the entry
+    # Rest of test remains the same
     with patch.object(
         audit.policy_engine,
         "should_auto_learn",
@@ -118,8 +123,6 @@ async def test_audit_entry(tmp_path):
         await audit.add_entry_async(
             "test_event", "test_name", {"foo": 1}, sim_id="sim1"
         )
-
-        # Manually flush the buffer to ensure the record is saved to the db client
         await audit._flush_buffer()
 
     # Use the actual query_audit_records method instead of non-existent get_records
@@ -175,20 +178,27 @@ async def test_audit_db_failure(mocker, tmp_path):
     mock_settings = _get_mock_settings()
     mock_arbiter_config = _get_mock_arbiter_config()
 
-    # Apply Fix: Patch settings for both Database and ExplainAudit initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
+    
+    # Import Database before patching
+    from omnicore_engine.database import Database as RealDatabase
+    
+    # Patch Database in audit module namespace BEFORE creating ExplainAudit
     with patch("omnicore_engine.database.database.settings", mock_settings), \
          patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config), \
-         patch("omnicore_engine.audit.AUDIT_ERRORS") as mock_errors, \
-         patch("omnicore_engine.audit.AUDIT_RECORDS") as mock_records, \
-         patch("omnicore_engine.audit.AUDIT_RECORDS_PROCESSED_TOTAL") as mock_processed:
-        db = Database(db_url)
-        # Mock database save operation to avoid table creation issues
-        # Don't initialize database tables for this test
-
+         patch("omnicore_engine.audit.Database", RealDatabase), \
+         patch("omnicore_engine.audit.AUDIT_ERRORS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS_PROCESSED_TOTAL"):
+        
+        # Create ExplainAudit - it will use the patched Database
         audit = ExplainAudit(system_audit_merkle_tree=mock_merkle_tree)
-        audit._db_client = db  # Assign the db client to the audit instance
-        # Disable knowledge_graph to avoid method errors
+        
+        # Create a real db instance
+        db = RealDatabase(db_url)
+        
+        # Replace audit's db client
+        audit._db_client = db
         audit.knowledge_graph = None
 
     # Track if save_audit_record was called and raised
@@ -234,20 +244,28 @@ async def test_merkle_tree_integrity(tmp_path):
     mock_settings = _get_mock_settings()
     mock_arbiter_config = _get_mock_arbiter_config()
 
-    # Apply Fix: Patch settings for both Database and ExplainAudit initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
+    
+    # Import Database before patching
+    from omnicore_engine.database import Database as RealDatabase
+    
+    # Patch Database in audit module namespace BEFORE creating ExplainAudit
     with patch("omnicore_engine.database.database.settings", mock_settings), \
          patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config), \
-         patch("omnicore_engine.audit.AUDIT_ERRORS") as mock_errors, \
-         patch("omnicore_engine.audit.AUDIT_RECORDS") as mock_records, \
-         patch("omnicore_engine.audit.AUDIT_RECORDS_PROCESSED_TOTAL") as mock_processed:
-        db = Database(db_url)
-        # Mock database save operation to avoid table creation issues
-        db.save_audit_record = AsyncMock()
-
+         patch("omnicore_engine.audit.Database", RealDatabase), \
+         patch("omnicore_engine.audit.AUDIT_ERRORS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS_PROCESSED_TOTAL"):
+        
+        # Create ExplainAudit - it will use the patched Database
         audit = ExplainAudit(system_audit_merkle_tree=mock_merkle_tree)
+        
+        # Create a real db instance and mock its save method
+        db = RealDatabase(db_url)
+        db.save_audit_record = AsyncMock()
+        
+        # Replace audit's db client
         audit._db_client = db
-        # Disable knowledge_graph to avoid method errors
         audit.knowledge_graph = None
 
     with patch.object(
@@ -277,15 +295,24 @@ async def test_audit_snapshot_replay(tmp_path):
     mock_settings = _get_mock_settings()
     mock_arbiter_config = _get_mock_arbiter_config()
 
-    # Apply Fix: Patch settings for both Database and ExplainAudit initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
+    
+    # Import Database before patching
+    from omnicore_engine.database import Database as RealDatabase
+    
+    # Patch Database in audit module namespace BEFORE creating ExplainAudit
     with patch("omnicore_engine.database.database.settings", mock_settings), \
-         patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config):
-        db = Database(db_url)
-        # Mock database save operation to avoid table creation issues
-        db.save_audit_record = AsyncMock()
-
+         patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config), \
+         patch("omnicore_engine.audit.Database", RealDatabase):
+        
+        # Create ExplainAudit - it will use the patched Database
         audit = ExplainAudit(system_audit_merkle_tree=mock_merkle_tree)
+        
+        # Create a real db instance and mock its save method
+        db = RealDatabase(db_url)
+        db.save_audit_record = AsyncMock()
+        
+        # Replace audit's db client
         audit._db_client = db
 
     # Test snapshotting (using the real method name)
@@ -343,15 +370,24 @@ async def test_concurrent_audit_entries(tmp_path):
     mock_settings = _get_mock_settings()
     mock_arbiter_config = _get_mock_arbiter_config()
 
-    # Apply Fix: Patch settings for both Database and ExplainAudit initialization
     db_url = _sqlite_url_from_path(tmp_path / "test.db")
+    
+    # Import Database before patching
+    from omnicore_engine.database import Database as RealDatabase
+    
+    # Patch Database in audit module namespace BEFORE creating ExplainAudit
     with patch("omnicore_engine.database.database.settings", mock_settings), \
-         patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config):
-        db = Database(db_url)
-        # Mock database save operation to avoid table creation issues
-        db.save_audit_record = AsyncMock()
-
+         patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config), \
+         patch("omnicore_engine.audit.Database", RealDatabase):
+        
+        # Create ExplainAudit - it will use the patched Database
         audit = ExplainAudit(system_audit_merkle_tree=mock_merkle_tree)
+        
+        # Create a real db instance and mock its save method
+        db = RealDatabase(db_url)
+        db.save_audit_record = AsyncMock()
+        
+        # Replace audit's db client
         audit._db_client = db
 
     # Create a list of async tasks to add audit entries

@@ -25,25 +25,27 @@ class TestUtilityFunctions:
 
     def test_sanitize_env_vars(self):
         """Test environment variable sanitization"""
-        from omnicore_engine.cli import sanitize_env_vars
-        
-        # Set some test env vars
-        os.environ["TEST_PASSWORD"] = "secret123"
-        os.environ["API_KEY"] = "key456"
-        os.environ["NORMAL_VAR"] = "normal_value"
+        # Mock heavy dependencies before importing
+        from unittest.mock import MagicMock
+        with patch("omnicore_engine.cli.OmniCoreOmega_instance", None), \
+             patch.dict('sys.modules', {'omnicore_engine.core': MagicMock()}):
+            from omnicore_engine.cli import sanitize_env_vars
+            
+            # Set some test env vars
+            os.environ["TEST_PASSWORD"] = "secret123"
+            os.environ["API_KEY"] = "key456"
+            os.environ["NORMAL_VAR"] = "normal_value"
 
-        sanitize_env_vars()
+            sanitize_env_vars()
 
-        assert os.environ["TEST_PASSWORD"] == "[REDACTED]"
-        assert os.environ["API_KEY"] == "[REDACTED]"
-        assert (
-            os.environ["NORMAL_VAR"] == "normal_value"
-        )  # Doesn't contain sensitive keywords
+            assert os.environ["TEST_PASSWORD"] == "[REDACTED]"
+            assert os.environ["API_KEY"] == "[REDACTED]"
+            assert os.environ["NORMAL_VAR"] == "normal_value"
 
-        # Cleanup
-        del os.environ["TEST_PASSWORD"]
-        del os.environ["API_KEY"]
-        del os.environ["NORMAL_VAR"]
+            # Cleanup
+            del os.environ["TEST_PASSWORD"]
+            del os.environ["API_KEY"]
+            del os.environ["NORMAL_VAR"]
 
     def test_safe_command(self):
         """Test safe command parsing"""

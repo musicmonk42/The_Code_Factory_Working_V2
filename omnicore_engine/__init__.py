@@ -53,10 +53,20 @@ def get_plugin_registry():
         ImportError: If plugin_registry module cannot be imported.
     """
     if PYTEST_COLLECTING:
-        # Return a stub during collection to avoid heavy initialization
-        return type('StubRegistry', (), {
-            '__getattr__': lambda self, name: lambda *args, **kwargs: None
-        })()
+        # Return a stub that provides safe behavior during collection
+        class StubRegistry:
+            def __getattr__(self, name):
+                def stub_method(*args, **kwargs):
+                    # Return None for any method calls during collection
+                    logger.debug(f"StubRegistry.{name} called during collection - returning None")
+                    return None
+                return stub_method
+            
+            def __bool__(self):
+                # Make stub truthy so `if registry:` checks pass
+                return True
+        
+        return StubRegistry()
     
     try:
         from .plugin_registry import PLUGIN_REGISTRY as _PLUGIN_REGISTRY

@@ -658,6 +658,14 @@ class ExplainAudit:
             redis_url=self.config.REDIS_URL,
             encryption_key=encryption_key_b64_string,
         )
+        
+        # Defensive check: Ensure Database class was successfully imported
+        if Database is None:
+            raise ImportError(
+                "Database class could not be imported. "
+                "Ensure omnicore_engine.database module dependencies (SQLAlchemy, aiosqlite) are installed."
+            )
+        
         self._db_client = Database(
             self.config.DATABASE_URL, system_audit_merkle_tree=system_audit_merkle_tree
         )
