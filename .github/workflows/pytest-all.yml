@@ -567,13 +567,37 @@ jobs:
           echo "=== Running pytest tests for ${{ matrix.module }} ==="
           echo "NLTK_DATA: $NLTK_DATA"
           
-          # Conditionally add -n flag based on module
+          # Memory optimization for self_fixing_engineer module
           if [ "${{ matrix.module }}" = "self_fixing_engineer" ]; then
-            # Run self_fixing_engineer without xdist (single process, no workers)
+            echo "=== Applying memory optimizations for self_fixing_engineer ==="
+            
+            # Force garbage collection
+            python -c "import gc; gc.collect()"
+            
+            # Set virtual memory limit to 3GB to catch issues early
+            ulimit -v 3000000 2>/dev/null || true
+            
+            # Configure swap space
+            sudo swapoff -a || true
+            sudo fallocate -l 4G /swapfile || true
+            sudo chmod 600 /swapfile || true
+            sudo mkswap /swapfile || true
+            sudo swapon /swapfile || true
+            
+            # Disable coverage to reduce memory overhead
+            COVERAGE_ARGS=""
             PYTEST_ARGS=""
+            TIMEOUT_VALUE=180
+            
+            echo "✓ Memory optimizations applied"
+            echo "  - Coverage: DISABLED"
+            echo "  - Timeout: ${TIMEOUT_VALUE}s (reduced from 300s)"
+            echo "  - Parallel workers: DISABLED"
           else
-            # Other modules can use xdist with 1 worker
+            # Other modules can use standard settings
+            COVERAGE_ARGS="--cov=${{ matrix.module }} --cov-report=xml:coverage-${{ matrix.module }}.xml"
             PYTEST_ARGS="-n 1"
+            TIMEOUT_VALUE=300
           fi
           
           # Use python -m pytest to ensure proper sys.path setup
@@ -583,9 +607,8 @@ jobs:
             -v \
             --tb=short \
             --maxfail=5 \
-            --timeout=300 \
-            --cov=${{ matrix.module }} \
-            --cov-report=xml:coverage-${{ matrix.module }}.xml \
+            --timeout=${TIMEOUT_VALUE} \
+            $COVERAGE_ARGS \
             --junitxml=junit-${{ matrix.module }}.xml \
             -p no:randomly \
             -p no:cacheprovider \
@@ -603,6 +626,13 @@ jobs:
                 echo "  - Syntax errors in test files"
                 echo ""
                 echo "Check the logs above for import errors or initialization failures"
+              elif [ $EXIT_CODE -eq 137 ]; then
+                echo "ERROR: Process killed by OOM killer (exit code 137)"
+                echo "Memory consumption exceeded available resources"
+                echo "Consider:"
+                echo "  - Reducing test parallelization further"
+                echo "  - Splitting tests into smaller batches"
+                echo "  - Investigating memory leaks in test code"
               elif [ $EXIT_CODE -eq 152 ]; then
                 echo "ERROR: CPU time limit exceeded (SIGXCPU)"
               fi
@@ -612,7 +642,7 @@ jobs:
           echo "✓ Tests completed for ${{ matrix.module }}"
           
       - name: Profile test collection (on failure)
-        if: failure()
+        if: failure() && matrix.module != 'self_fixing_engineer'
         run: |
           echo "=== Running test collection with CPU profiling for ${{ matrix.module }} ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
@@ -625,10 +655,20 @@ jobs:
             python -c "import pstats; p = pstats.Stats('collection_profile.stats'); p.sort_stats('cumulative').print_stats(30)"
           fi
         continue-on-error: true
+
+      - name: Lightweight test collection debug (self_fixing_engineer only)
+        if: failure() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Lightweight test collection for self_fixing_engineer (no profiling) ==="
+          python -m pytest self_fixing_engineer/tests/ \
+            --collect-only \
+            --quiet \
+            2>&1 | head -50 || true
+        continue-on-error: true
           
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && matrix.module != 'self_fixing_engineer'
         with:
           name: coverage-${{ matrix.module }}
           path: coverage-${{ matrix.module }}.xml
