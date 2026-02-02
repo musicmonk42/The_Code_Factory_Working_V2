@@ -39,16 +39,25 @@ class TestTestgenPathResolution:
             
             service = OmniCoreService()
             
+            # Mark agents as already loaded to prevent _load_agents from running
+            service._agents_loaded = True
+            
             # Enable testgen agent
             service.agents_available["testgen"] = True
             
-            # Mock the testgen class
+            # Mock the testgen agent instance with proper async support
             mock_testgen_instance = Mock()
+            
+            # Mock async methods as AsyncMock
+            mock_testgen_instance._async_init = AsyncMock(return_value=None)
             mock_testgen_instance.generate_tests = AsyncMock(return_value={
                 "test_files": ["test_main.py"],
                 "coverage": 85.0,
                 "report": "Tests generated successfully"
             })
+            
+            # Mock hasattr check for _async_init (needed for line 1282 in omnicore_service.py)
+            mock_testgen_instance.__dict__['_async_init'] = mock_testgen_instance._async_init
             
             # Mock the testgen class constructor
             mock_testgen_class = Mock(return_value=mock_testgen_instance)
@@ -57,7 +66,7 @@ class TestTestgenPathResolution:
             # Mock the policy class
             service._testgen_policy_class = Mock(return_value=Mock())
             
-            return service
+            yield service  # Changed from 'return' to 'yield' for proper context manager cleanup
 
     @pytest.mark.asyncio
     async def test_path_resolution_with_relative_paths(self, mock_testgen_service, tmp_path):
@@ -130,6 +139,10 @@ class TestTestgenPathResolution:
         original_cwd = os.getcwd()
         try:
             os.chdir(tmp_path)
+            
+            # Enable warning level logging to capture the warning message
+            import logging
+            caplog.set_level(logging.WARNING)
             
             # Point code_path to the outside directory
             payload = {
