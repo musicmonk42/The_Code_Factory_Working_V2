@@ -1398,7 +1398,17 @@ class PluginWatcher:
         self._observer.join()
 
 
-PLUGIN_REGISTRY = PluginRegistry()
+# Defensive initialization for test/collection environments
+if os.environ.get('PYTEST_COLLECTING') == '1' or os.environ.get('SKIP_EXPENSIVE_INIT') == '1':
+    PLUGIN_REGISTRY = None  # Explicit None for collection mode
+    logger.debug("PLUGIN_REGISTRY initialization skipped during pytest collection")
+else:
+    try:
+        PLUGIN_REGISTRY = PluginRegistry()
+        logger.info("PLUGIN_REGISTRY initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize PLUGIN_REGISTRY: {e}")
+        PLUGIN_REGISTRY = None
 
 
 def plugin(
