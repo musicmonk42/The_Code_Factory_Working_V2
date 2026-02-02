@@ -42,7 +42,7 @@ from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
 from runner.llm_client import call_llm_api
 from runner.runner_errors import LLMError
 # FIX: Import add_provenance from runner_audit to avoid circular dependency
-from runner.runner_audit import log_audit_event as add_provenance
+from runner.runner_audit import log_audit_event as add_provenance, log_audit_event_sync as add_provenance_sync
 from runner.runner_logging import logger
 from runner.runner_metrics import LLM_ERRORS_TOTAL
 from watchdog.events import FileSystemEventHandler
@@ -172,7 +172,7 @@ class MultiVectorDBManager:
             )
 
             # REFACTORED: Use add_provenance
-            add_provenance(
+            await add_provenance(
                 "VectorDBUpdate",
                 {
                     "collection": collection_name,
@@ -220,7 +220,7 @@ class MultiVectorDBManager:
                 contexts[col_name] = f"Could not retrieve relevant context: {str(e)}"
 
         # REFACTORED: Use add_provenance
-        add_provenance(
+        await add_provenance(
             "VectorDBQuery",
             {
                 "collections": collections,
@@ -235,7 +235,7 @@ class MultiVectorDBManager:
         """Closes any resources held by the vector DB manager."""
         self.collections.clear()
         logger.info("MultiVectorDBManager resources cleared.")
-        add_provenance(
+        await add_provenance(
             "VectorDBClosed",
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -312,7 +312,7 @@ class AdvancedTemplateTracker:
         self._save()
 
         # REFACTORED: Use add_provenance
-        add_provenance(
+        add_provenance_sync(
             "TemplatePerformanceLogged",
             {
                 "template_hash": template_hash,
@@ -353,7 +353,7 @@ class AdvancedTemplateTracker:
         )
 
         # REFACTORED: Use add_provenance
-        add_provenance(
+        add_provenance_sync(
             "TemplateVersioned",
             {
                 "template_name": template_name,
@@ -388,7 +388,7 @@ class AdvancedTemplateTracker:
             )
 
             # REFACTORED: Use add_provenance
-            add_provenance(
+            add_provenance_sync(
                 "TemplateRollback",
                 {
                     "template_name": template_name,
@@ -422,7 +422,7 @@ class AdvancedTemplateTracker:
         post_hash = hashlib.sha256(scrubbed_prompt.encode("utf-8")).hexdigest()
 
         # REFACTORED: Use add_provenance
-        add_provenance(
+        await add_provenance(
             "TemplateEvolutionPromptSanitized",
             {
                 "pre_hash": pre_hash,
@@ -433,7 +433,7 @@ class AdvancedTemplateTracker:
         )
 
         if COMPLIANCE_MODE:
-            add_provenance(
+            await add_provenance(
                 "ComplianceSensitiveData",
                 {
                     "scrubbed_fields": {
@@ -506,7 +506,7 @@ class AdvancedTemplateTracker:
                 self.rollback_template(template_name, best_version)
 
                 # REFACTORED: Use add_provenance
-                add_provenance(
+                add_provenance_sync(
                     "RegressionDetected",
                     {
                         "template_hash": template_hash,
@@ -568,7 +568,7 @@ class AdvancedTemplateTracker:
         try:
             self.data = self._load()
             logger.info("Templates reloaded successfully.")
-            add_provenance(
+            await add_provenance(
                 "TemplateReload",
                 {
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -585,7 +585,7 @@ class AdvancedTemplateTracker:
             self.observer.join()
         self._save()
         logger.info("AdvancedTemplateTracker resources saved and closed.")
-        add_provenance(
+        await add_provenance(
             "TemplateTrackerClosed",
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -620,7 +620,7 @@ class AdaptivePromptDirector:
         """Sets a callback for human-in-the-loop review (sync or async)."""
         self.human_review_callback = callback
         logger.info("Human review callback set.")
-        add_provenance(
+        add_provenance_sync(
             "HumanReviewCallbackSet",
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -708,7 +708,7 @@ class AdaptivePromptDirector:
             contexts["coverage"] = "No coverage report available."
 
         # REFACTORED: Use add_provenance
-        add_provenance(
+        add_provenance_sync(
             "RichContextGenerated",
             {
                 "contexts": list(contexts.keys()),
@@ -730,7 +730,7 @@ class AdaptivePromptDirector:
         logger.debug(f"Adapted chain based on prior_quality {prior_quality}: {chain}")
 
         # REFACTORED: Use add_provenance
-        add_provenance(
+        add_provenance_sync(
             "ChainAdapted",
             {
                 "prior_quality": prior_quality,
@@ -746,7 +746,7 @@ class AdaptivePromptDirector:
         await self.multi_vdb.close()
         await self.tracker.close()
         logger.info("AdaptivePromptDirector resources closed.")
-        add_provenance(
+        await add_provenance(
             "DirectorClosed",
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -792,7 +792,7 @@ class AgenticPromptBuilder(abc.ABC):
         post_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
 
         # REFACTORED: Use add_provenance
-        add_provenance(
+        add_provenance_sync(
             "TextSanitized",
             {
                 "pre_hash": pre_hash,
@@ -802,7 +802,7 @@ class AgenticPromptBuilder(abc.ABC):
             }
         )
         if COMPLIANCE_MODE:
-            add_provenance(
+            add_provenance_sync(
                 "ComplianceSensitiveData",
                 {
                     "scrubbed_fields": {
@@ -844,7 +844,7 @@ class AgenticPromptBuilder(abc.ABC):
                 # LLM_LATENCY_SECONDS.labels(provider="testgen_prompt", model=model, task="manage_tokens_summarize").observe(time.time() - start_time)
 
                 new_tokens = len(tokenizer.encode(prompt))
-                add_provenance(
+                await add_provenance(
                     "PromptSummarized",
                     {
                         "original_tokens": tokens,
@@ -977,7 +977,7 @@ class DefaultPromptBuilder(AgenticPromptBuilder):
                 raise ValueError("Human review rejected the prompt.")
 
         # REFACTORED: Use add_provenance
-        add_provenance(
+        await add_provenance(
             f"{prompt_type.capitalize()} Prompt Built",
             {
                 "length": len(prompt),
