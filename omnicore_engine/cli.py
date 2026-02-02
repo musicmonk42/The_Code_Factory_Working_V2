@@ -235,8 +235,8 @@ def safe_command(cmd: str) -> List[str]:
         return shlex.split(cmd)
     except Exception as e:
         logger.error(f"Error parsing command '{cmd}': {e}")
-        # Return a safe fallback - split by spaces
-        return cmd.split()
+        # Return empty list instead of unsafe fallback to prevent command injection
+        return []
 
 
 def validate_file_path(path: str) -> Path:
