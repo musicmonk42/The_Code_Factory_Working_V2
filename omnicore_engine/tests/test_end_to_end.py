@@ -95,9 +95,10 @@ async def test_end_to_end_audit_workflow(tmp_path, app):
         # This tests the full API path for exporting an audit bundle.
         response = client.get("/admin/audit/export-proof-bundle?user_id=test_user")
 
-        # The endpoint requires authentication or may not exist
-        # Accept various status codes that indicate endpoint behavior
-        assert response.status_code in [200, 401, 403, 404, 405, 422]
+        # Accept 401 (unauthorized) or 404 (endpoint not found) as these are expected
+        # without proper authentication setup or if admin APIs are disabled
+        assert response.status_code in [401, 404], \
+            f"Expected 401 or 404, got {response.status_code}"
 
 
 # --- Test Concurrent Plugin Execution ---

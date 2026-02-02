@@ -150,11 +150,12 @@ class TestSimulateCommand:
                     with patch("omnicore_engine.cli.asyncio.run") as mock_run:
                         # Configure mock to return None to simulate successful execution
                         mock_run.return_value = None
-                        try:
+                        # main() calls sys.exit(EXIT_CODE_SUCCESS) at the end
+                        with pytest.raises(SystemExit) as exc_info:
                             main()
-                        except SystemExit as e:
-                            # Accept both successful exit (0) and other exits
-                            assert e.code in (0, None)
+                        # Verify it exited with success code (0)
+                        assert exc_info.value.code == 0, \
+                            f"Expected exit code 0, got {exc_info.value.code}"
         finally:
             # Cleanup
             if os.path.exists(temp_file):
