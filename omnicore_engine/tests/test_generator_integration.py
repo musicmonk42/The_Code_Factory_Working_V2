@@ -25,9 +25,8 @@ class TestGeneratorIntegration:
 
     def setup_method(self):
         """Clear registry before each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-
-        ENGINE_REGISTRY.clear()
+        # Avoid importing during test collection - import inside test methods if needed
+        pass
 
     @pytest.mark.integration
     def test_generator_imports_available(self):
