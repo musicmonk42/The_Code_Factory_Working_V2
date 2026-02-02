@@ -613,8 +613,9 @@ async def safety_check_fix(
             if total_count > 0:
                 pass_rate = pass_count / total_count
             else:
-                # No tests run - treat as pass
-                pass_rate = 1.0
+                # No tests run - log warning but return True to avoid blocking on test infrastructure issues
+                logger.warning("No tests were executed in safety_check_fix, passing by default")
+                return True
 
         if pass_rate < 1.0:
             logger.warning(
