@@ -180,7 +180,7 @@ async def test_python_plugin_lint_delegates_safely(
 
     recorded: Dict[str, Any] = {"saved": False, "called": False}
 
-    def fake_save_files_to_output(files: Dict[str, str], outdir: Path) -> None:
+    async def fake_save_files_to_output(files: Dict[str, str], outdir: Path) -> None:
         assert "main.py" in files
         assert outdir == tmp_path
         recorded["saved"] = True
