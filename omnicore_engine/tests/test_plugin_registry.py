@@ -70,14 +70,21 @@ def test_func():
             safe_exec_plugin(code, "test.py")
 
     def test_verify_plugin_signature_valid(self):
-        """Test plugin signature verification with valid signature"""
+        """Test plugin signature verification with valid HMAC-SHA256 signature"""
         code = b"test plugin code"
-        # Recalculate the correct SHA256 hash
-        import hashlib
-        expected_signature = hashlib.sha256(code).hexdigest()
         
-        result = verify_plugin_signature(code, expected_signature)
-        assert result == True
+        # Mock settings with a known signing key
+        with patch("omnicore_engine.plugin_registry.settings") as mock_settings:
+            test_key = "test_signing_key"
+            mock_settings.PLUGIN_SIGNING_KEY = test_key
+            
+            # Calculate HMAC signature (not plain SHA256)
+            import hmac
+            import hashlib
+            expected_signature = hmac.new(test_key.encode(), code, hashlib.sha256).hexdigest()
+            
+            result = verify_plugin_signature(code, expected_signature)
+            assert result == True
 
     def test_verify_plugin_signature_invalid(self):
         """Test plugin signature verification with invalid signature"""

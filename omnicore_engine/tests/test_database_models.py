@@ -34,10 +34,19 @@ def engine():
 def session():
     """Provide a database session with all tables created."""
     from omnicore_engine.database.models import Base
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    
+    # CRITICAL FIX: Import arbiter models to register parent tables
+    try:
+        from arbiter.agent_state import AgentState as ArbiterAgentState
+        # This ensures the parent agent_state table is in Base.metadata
+    except ImportError:
+        pass  # Standalone mode - _StandaloneAgentState will be used
     
     engine = create_engine("sqlite:///:memory:", echo=False)
     
-    # CRITICAL: Create all tables including agent_state
+    # Create all tables including parent tables from arbiter
     Base.metadata.create_all(engine)
     
     Session = sessionmaker(bind=engine)

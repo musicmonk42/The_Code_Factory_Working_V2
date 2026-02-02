@@ -42,7 +42,10 @@ pythonpath = ["."]
 # - no:randomly: Disable pytest-randomly plugin (if installed) to reduce collection overhead
 # - no:cacheprovider: Disable pytest cache to avoid filesystem overhead during collection
 # - import-mode=importlib: Use importlib for faster, more reliable imports
-addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider --import-mode=importlib"
+# - n 2: Reduce parallelism to prevent worker crashes (was causing issues with higher values)
+# - maxfail=5: Stop after 5 failures to save time
+# - forked: Run tests in isolated forked processes for better isolation
+addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider --import-mode=importlib -n 2 --maxfail=5 --forked"
 # REMOVED: testpaths configuration
 # Test directories should be specified on the command line to prevent pytest from
 # automatically scanning and loading all test modules during pytest initialization.

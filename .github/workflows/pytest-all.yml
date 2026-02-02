@@ -627,9 +627,9 @@ jobs:
             echo "  - Timeout: ${TIMEOUT_VALUE}s (increased from 300s)"
             echo "  - Parallel workers: DISABLED"
           else
-            # Other modules can use standard settings
+            # Other modules can use standard settings with reduced parallelism
             COVERAGE_ARGS="--cov=${{ matrix.module }} --cov-report=xml:coverage-${{ matrix.module }}.xml"
-            PYTEST_ARGS="-n 1 --dist loadscope"
+            PYTEST_ARGS="-n 2 --dist loadscope --forked"
             TIMEOUT_VALUE=300
           fi
           
@@ -640,7 +640,7 @@ jobs:
             $PYTEST_ARGS \
             -v \
             --tb=line \
-            --maxfail=10 \
+            --maxfail=5 \
             --timeout=${TIMEOUT_VALUE} \
             --durations=20 \
             $COVERAGE_ARGS \

@@ -240,16 +240,22 @@ def safe_command(cmd: str) -> List[str]:
 
 
 def validate_file_path(path: str) -> Path:
-    """
-    Validates that a file path is within a list of allowed directories
-    to prevent path traversal attacks.
-    """
-    resolved = Path(path).resolve()
-    # Ensure path is within allowed directories
-    allowed_dirs = [Path.cwd(), Path("/tmp")]
-    if not any(str(resolved).startswith(str(d)) for d in allowed_dirs):
-        raise ValueError(f"Access denied to path: {path}")
-    return resolved
+    """Validate and resolve a file path, preventing directory traversal."""
+    try:
+        resolved_path = Path(path).resolve()
+        
+        # Check for path traversal and system directories
+        if ".." in path or path.startswith("/etc") or path.startswith("/sys"):
+            raise ValueError(f"Potentially unsafe path: {path}")
+        
+        # Check existence
+        if not resolved_path.exists():
+            raise FileNotFoundError(f"Path does not exist: {path}")
+            
+        return resolved_path
+    except Exception as e:
+        logger.error(f"Invalid file path: {path}, error: {e}")
+        raise ValueError(f"Invalid path: {path}") from e
 
 
 # --- Custom Error Codes for Automation ---
