@@ -184,25 +184,14 @@ class OmniCoreService:
         # Validate LLM provider configuration
         self._validate_llm_configuration()
         
-        # Try to import and cache agent modules
-        self._load_agents()
+        # DON'T call _load_agents() here to avoid circular imports
+        self._agents_loaded = False  # Track if agents have been loaded
         
         # Initialize OmniCore integrations
         self._init_omnicore_components()
         
-        # Log initialization status
-        available = [k for k, v in self.agents_available.items() if v]
-        unavailable = [k for k, v in self.agents_available.items() if not v]
-        
-        if available:
-            logger.info(f"OmniCoreService initialized. Available agents: {', '.join(available)}")
-        if unavailable:
-            logger.warning(f"Some agents unavailable: {', '.join(unavailable)}")
-            if self.agent_config and self.agent_config.strict_mode:
-                raise RuntimeError(
-                    f"STRICT_MODE: Required agents are unavailable: {', '.join(unavailable)}. "
-                    f"Install required dependencies or disable strict mode."
-                )
+        # Log that agents will be loaded on-demand
+        logger.info("OmniCore initialized - agents will be loaded on demand")
         
         # Log system state and what triggers agent execution
         self._log_system_ready_state()
@@ -407,6 +396,27 @@ class OmniCoreService:
             logger.info("Using rule-based clarifier (LLM clarifier not configured)")
             self._clarifier_llm_class = None
             self.agents_available["clarifier"] = True
+    
+    def _ensure_agents_loaded(self):
+        """Lazy-load agents on first use to avoid circular imports."""
+        if not self._agents_loaded:
+            logger.info("Loading agents on demand...")
+            self._load_agents()
+            self._agents_loaded = True
+            
+            # Log initialization status after loading
+            available = [k for k, v in self.agents_available.items() if v]
+            unavailable = [k for k, v in self.agents_available.items() if not v]
+            
+            if available:
+                logger.info(f"Agents loaded. Available: {', '.join(available)}")
+            if unavailable:
+                logger.warning(f"Some agents unavailable: {', '.join(unavailable)}")
+                if self.agent_config and self.agent_config.strict_mode:
+                    raise RuntimeError(
+                        f"STRICT_MODE: Required agents are unavailable: {', '.join(unavailable)}. "
+                        f"Install required dependencies or disable strict mode."
+                    )
     
     def _build_llm_config(self) -> Dict[str, Any]:
         """
@@ -819,6 +829,9 @@ class OmniCoreService:
     
     async def _run_codegen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute code generation agent."""
+        # Ensure agents are loaded before use
+        self._ensure_agents_loaded()
+        
         # Check if agent is available using service's own tracking
         if not self.agents_available.get('codegen', False) or self._codegen_func is None:
             error_msg = "Codegen agent not available"
@@ -1242,6 +1255,9 @@ class OmniCoreService:
         """Execute test generation agent."""
         logger.info(f"[TESTGEN] Starting test generation for job {job_id}")
         
+        # Ensure agents are loaded before use
+        self._ensure_agents_loaded()
+        
         # Check if agent is available using service's own tracking
         if not self.agents_available.get('testgen', False) or self._testgen_class is None:
             error_msg = "Testgen agent not available"
@@ -1336,6 +1352,9 @@ class OmniCoreService:
     
     async def _run_deploy(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute deployment configuration generation."""
+        # Ensure agents are loaded before use
+        self._ensure_agents_loaded()
+        
         # Check if agent is available using service's own tracking
         if not self.agents_available.get('deploy', False) or self._deploy_class is None:
             error_msg = "Deploy agent not available"
@@ -1438,6 +1457,9 @@ class OmniCoreService:
     
     async def _run_docgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute documentation generation."""
+        # Ensure agents are loaded before use
+        self._ensure_agents_loaded()
+        
         # Check if agent is available using service's own tracking
         if not self.agents_available.get('docgen', False) or self._docgen_class is None:
             error_msg = "Docgen agent not available"
@@ -1531,6 +1553,9 @@ class OmniCoreService:
     
     async def _run_critique(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute critique/security scanning."""
+        # Ensure agents are loaded before use
+        self._ensure_agents_loaded()
+        
         # Check if agent is available using service's own tracking
         if not self.agents_available.get('critique', False) or self._critique_class is None:
             error_msg = "Critique agent not available"
@@ -1637,6 +1662,9 @@ class OmniCoreService:
         Returns:
             Dict with status and clarification questions
         """
+        # Ensure agents are loaded before use
+        self._ensure_agents_loaded()
+        
         try:
             readme_content = payload.get("readme_content", "")
             
@@ -1801,6 +1829,10 @@ class OmniCoreService:
     async def _run_full_pipeline(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute full generation pipeline."""
         logger.info(f"[PIPELINE] Starting pipeline for job {job_id}")
+        
+        # Ensure agents are loaded before use
+        self._ensure_agents_loaded()
+        
         try:
             # Run pipeline stages sequentially
             stages_completed = []
