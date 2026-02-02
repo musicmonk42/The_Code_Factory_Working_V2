@@ -29,6 +29,8 @@ except ImportError:
             self.LOG_LEVEL = "INFO"
             self.database_path = "sqlite:///./omnicore.db"
             self.DB_PATH = "sqlite:///./omnicore.db"
+            self.DATABASE_URL = "sqlite:///./omnicore.db"
+            self.REDIS_URL = "redis://localhost:6379"
             self.ENCRYPTION_KEY = SecretStr(Fernet.generate_key().decode("utf-8"))
             self.ENCRYPTION_KEY_BYTES = Fernet.generate_key()
             self.AUDIT_BUFFER_SIZE = 100
