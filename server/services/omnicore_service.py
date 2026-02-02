@@ -1255,9 +1255,18 @@ class OmniCoreService:
         
         try:
             code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
-            coverage_target = payload.get("coverage_target", 80.0)
+            test_type = payload.get("test_type", "unit")
+            coverage_target = float(payload.get("coverage_target", 80.0))
             
-            # Create policy for test generation
+            # Create testgen agent with correct repo path
+            repo_path = Path(f"./uploads/{job_id}").resolve()  # Resolve to absolute
+            agent = self._testgen_class(str(repo_path))
+            
+            # Initialize the agent's codebase asynchronously if method exists
+            if hasattr(agent, '_async_init'):
+                await agent._async_init()
+            
+            # Set up policy for test generation
             policy = self._testgen_policy_class(
                 quality_threshold=coverage_target / 100.0,
                 max_refinements=2,
@@ -1266,12 +1275,28 @@ class OmniCoreService:
             
             # Find code files to test
             code_files = []
-            code_dir = Path(code_path)
-            repo_path = Path(f"./uploads/{job_id}")
+            code_dir = Path(code_path).resolve()  # Resolve to absolute path
+            
+            logger.info(f"[TESTGEN] Resolved repo_path: {repo_path}")
+            logger.info(f"[TESTGEN] Resolved code_dir: {code_dir}")
+            
             if code_dir.exists():
                 # Convert absolute paths to relative paths from repo_path
                 # This prevents path duplication when testgen agent prepends repo_path
-                code_files = [str(f.relative_to(repo_path)) for f in code_dir.rglob("*.py") if not f.name.startswith("test_")]
+                for f in code_dir.rglob("*.py"):
+                    if not f.name.startswith("test_"):
+                        try:
+                            # Get absolute path and convert to relative
+                            abs_file_path = f.resolve()
+                            rel_path = abs_file_path.relative_to(repo_path)
+                            code_files.append(str(rel_path))
+                            logger.debug(f"[TESTGEN] Added file: {abs_file_path} -> {rel_path}")
+                        except ValueError as e:
+                            # File is outside repo_path
+                            logger.warning(
+                                f"[TESTGEN] File {f} is outside repo_path {repo_path}, skipping. Error: {e}"
+                            )
+                            continue
             
             if not code_files:
                 logger.error(f"[TESTGEN] No code files found in {code_path} for job {job_id}")
@@ -1280,32 +1305,33 @@ class OmniCoreService:
                     "message": f"No code files found in {code_path}",
                 }
             
-            # Initialize and run testgen agent
-            logger.info(f"[TESTGEN] Running testgen agent for job {job_id} with {len(code_files)} code files")
-            agent = self._testgen_class(repo_path=repo_path)
+            logger.info(
+                f"[TESTGEN] Running testgen agent for job {job_id} with {len(code_files)} code files"
+            )
+            logger.info(f"[TESTGEN] Code files (relative to repo_path): {code_files}")
             
+            # Generate tests
             result = await agent.generate_tests(
                 target_files=code_files,
                 language="python",
-                policy=policy,
+                policy=policy
             )
             
-            logger.info(f"[TESTGEN] Test generation completed successfully for job {job_id}")
-            
+            logger.info(f"[TESTGEN] Test generation completed for job {job_id}")
             return {
-                "status": "completed",
-                "test_files": result.get("test_files", []),
-                "coverage": result.get("coverage", 0.0),
-                "report": result.get("report", ""),
+                "status": "success",
+                "job_id": job_id,
+                "result": result,
             }
             
         except Exception as e:
-            logger.error(f"[TESTGEN] Error running testgen agent for job {job_id}: {e}", exc_info=True)
+            logger.error(
+                f"[TESTGEN] Error running testgen agent for job {job_id}: {str(e)}",
+                exc_info=True
+            )
             return {
                 "status": "error",
                 "message": str(e),
-                "error_type": type(e).__name__,
-                "stage": "testgen",
             }
     
     async def _run_deploy(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
