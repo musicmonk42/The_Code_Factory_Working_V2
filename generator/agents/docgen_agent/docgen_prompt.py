@@ -285,8 +285,8 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
                     model="gpt-3.5-turbo",
                     task="summarize_context",
                 ).observe(time.time() - start_time)
-                add_provenance(
-                    {"action": "summarize_prompt_context", "model": "gpt-3.5-turbo"}
+                await add_provenance(
+                    "summarize_prompt_context", {"action": "summarize_prompt_context", "model": "gpt-3.5-turbo"}
                 )
             except Exception as llm_e:
                 logger.error(
@@ -335,8 +335,8 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
                 model="gpt-3.5-turbo",
                 task="summarize_context_global",
             ).observe(time.time() - start_time_global)
-            add_provenance(
-                {"action": "summarize_prompt_context_global", "model": "gpt-3.5-turbo"}
+            await add_provenance(
+                "summarize_prompt_context_global", {"action": "summarize_prompt_context_global", "model": "gpt-3.5-turbo"}
             )
         except Exception as llm_e:
             logger.error(
@@ -830,7 +830,8 @@ class DocGenPromptAgent:
             LLM_LATENCY_SECONDS.labels(
                 provider="docgen_prompt", model=llm_model, task="enforce_sections"
             ).observe(time.time() - start_time)
-            add_provenance(
+            await add_provenance(
+                "enforce_prompt_sections",
                 {
                     "action": "enforce_prompt_sections",
                     "model": llm_model,
@@ -932,7 +933,8 @@ class DocGenPromptAgent:
                 LLM_LATENCY_SECONDS.labels(
                     provider="docgen_prompt", model=llm_model, task="optimize_feedback"
                 ).observe(time.time() - start_time)
-                add_provenance(
+                await add_provenance(
+                    "optimize_prompt_feedback",
                     {
                         "action": "optimize_prompt_feedback",
                         "model": llm_model,
@@ -1266,7 +1268,8 @@ class DocGenPromptAgent:
                             model=scoring_llm_model,
                             task="ab_test_score",
                         ).inc()
-                        add_provenance(
+                        await add_provenance(
+                            "ab_test_prompt_score",
                             {
                                 "action": "ab_test_prompt_score",
                                 "model": scoring_llm_model,
