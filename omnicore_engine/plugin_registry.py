@@ -1398,17 +1398,19 @@ class PluginWatcher:
         self._observer.join()
 
 
-# Defensive initialization for test/collection environments
-if os.environ.get('PYTEST_COLLECTING') == '1' or os.environ.get('SKIP_EXPENSIVE_INIT') == '1':
-    PLUGIN_REGISTRY = None  # Explicit None for collection mode
-    logger.debug("PLUGIN_REGISTRY initialization skipped during pytest collection")
-else:
-    try:
-        PLUGIN_REGISTRY = PluginRegistry()
+# Always initialize PLUGIN_REGISTRY - even during test collection
+# The initialization is already lightweight at import time (heavy operations
+# are deferred to async initialize() method)
+try:
+    PLUGIN_REGISTRY = PluginRegistry()
+    if os.environ.get('PYTEST_COLLECTING') == '1' or os.environ.get('SKIP_EXPENSIVE_INIT') == '1':
+        logger.debug("PLUGIN_REGISTRY created in lightweight mode (test/collection environment)")
+    else:
         logger.info("PLUGIN_REGISTRY initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize PLUGIN_REGISTRY: {e}")
-        PLUGIN_REGISTRY = None
+except Exception as e:
+    logger.error(f"Failed to initialize PLUGIN_REGISTRY: {e}")
+    # Fallback to a minimal instance rather than None to prevent AttributeError
+    PLUGIN_REGISTRY = PluginRegistry()
 
 
 def plugin(
@@ -1435,15 +1437,22 @@ def plugin(
             params_schema=params_schema if params_schema is not None else {},
             signature=signature,
         )
+        # Defensive: performance_tracker may be None during early initialization
+        performance_tracker = None
+        if PLUGIN_REGISTRY is not None:
+            performance_tracker = getattr(PLUGIN_REGISTRY, 'performance_tracker', None)
+
         plugin_instance = Plugin(
-            meta, fn, performance_tracker=PLUGIN_REGISTRY.performance_tracker
+            meta, fn, performance_tracker=performance_tracker
         )
         if subscriptions is not None:
             plugin_instance.subscriptions_to_register = subscriptions
+        # This should never happen now, but keep as safety check
         if PLUGIN_REGISTRY is None:
             logger.error(
-                f"PLUGIN_REGISTRY is not initialized when plugin '{name}' is being registered."
+                f"PLUGIN_REGISTRY is None when plugin '{name}' is being registered. This should not happen."
             )
+            # Return the function unmodified to prevent further errors
             return fn
 
         # Verify signature for plugins not sourced from 'engine' or 'local'
