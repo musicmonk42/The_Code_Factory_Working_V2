@@ -2,7 +2,7 @@ import json
 import os
 from unittest.mock import MagicMock
 
-import dlt_backend
+from self_fixing_engineer.plugins.dlt_backend import dlt_backend
 import pytest
 
 # --- Test Fixtures and Setup ---
