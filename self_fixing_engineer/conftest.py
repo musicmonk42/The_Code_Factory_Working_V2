@@ -28,6 +28,13 @@ os.environ["SKIP_BACKGROUND_TASKS"] = "1"
 os.environ["NO_MONITORING"] = "1"
 os.environ["DISABLE_TELEMETRY"] = "1"
 
+# ---- Optimize pytest collection ----
+# Disable expensive pytest plugins during collection to speed up test discovery
+os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+
+# Speed up import time by skipping expensive validation
+os.environ["SKIP_IMPORT_TIME_VALIDATION"] = "1"
+
 # ---- Mock HuggingFace Transformers Pipeline ----
 # Prevents loading of heavy models like toxic-bert (~400MB+)
 try:

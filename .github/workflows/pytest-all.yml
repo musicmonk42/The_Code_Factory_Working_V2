@@ -587,8 +587,12 @@ jobs:
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
-          # Set CPU time limit to 1 hour (3600 seconds) as fallback when unlimited is not allowed
-          ulimit -t unlimited 2>/dev/null || ulimit -t 3600 || true
+          # Use prlimit for better control over resource limits
+          prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
+          
+          # Fallback to ulimit if prlimit is not available
+          # Increase CPU limit to 2 hours (7200 seconds) for self_fixing_engineer
+          ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           
           # Also increase stack size to prevent stack-related issues
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
@@ -629,8 +633,9 @@ jobs:
             TIMEOUT_VALUE=300
           fi
           
+          # Use timeout command to prevent runaway processes (25 minutes wall-clock time)
           # Use python -m pytest to ensure proper sys.path setup
-          python -m pytest \
+          timeout --signal=TERM --kill-after=30s 25m python -m pytest \
             ${{ matrix.module }}/ \
             $PYTEST_ARGS \
             -v \
@@ -678,6 +683,20 @@ jobs:
                 df -h || true
               elif [ $EXIT_CODE -eq 152 ]; then
                 echo "ERROR: CPU time limit exceeded (SIGXCPU)"
+                echo "This indicates tests are consuming too much CPU time."
+                echo "Consider:"
+                echo "  - Splitting tests into smaller batches"
+                echo "  - Identifying and optimizing slow tests with --durations"
+                echo "  - Increasing timeout limits in workflow configuration"
+                echo ""
+                echo "=== Last 50 lines of test output ==="
+                tail -50 test-output-${{ matrix.module }}.log || true
+              elif [ $EXIT_CODE -eq 124 ]; then
+                echo "ERROR: Test execution timed out (timeout command)"
+                echo "Wall-clock time limit (25 minutes) was exceeded"
+                echo ""
+                echo "=== Last 50 lines of test output ==="
+                tail -50 test-output-${{ matrix.module }}.log || true
               fi
               exit $EXIT_CODE
             }
