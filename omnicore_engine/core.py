@@ -1092,7 +1092,7 @@ class OmniCoreEngine:
             else:
                 return plugin.execute(action=task_name, **kwargs)
         except Exception as e:
-            self.logger.error(f"Error performing task {task_name}: {e}")
+            self.logger.error(f"Error performing task {task_name}: {e}", exc_info=True)
             return None
 
     async def _shutdown_component_instance(self, name: str) -> bool:

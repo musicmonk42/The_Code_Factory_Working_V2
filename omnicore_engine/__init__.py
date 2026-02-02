@@ -141,6 +141,7 @@ def __getattr__(name: str) -> Any:
         'meta_supervisor': '.meta_supervisor',
         'database': '.database',
         'message_bus': '.message_bus',
+        'engines': '.engines',
     }
     
     if name in _lazy_modules:
