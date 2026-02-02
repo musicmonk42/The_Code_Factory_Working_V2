@@ -571,7 +571,7 @@ jobs:
           python -m pytest \
             ${{ matrix.module }}/ \
             --forked \
-            --maxprocesses=2 \
+            --maxprocesses=1 \
             -v \
             --tb=short \
             --maxfail=5 \
