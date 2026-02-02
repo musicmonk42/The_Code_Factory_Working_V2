@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 class TestUtilityFunctions:
     """Test utility functions used by CLI"""
 
+    @pytest.mark.forked
     def test_sanitize_env_vars(self):
         """Test environment variable sanitization"""
         # The sanitize_env_vars function is simple and doesn't use OmniCoreOmega_instance
@@ -45,6 +46,7 @@ class TestUtilityFunctions:
         del os.environ["API_KEY"]
         del os.environ["NORMAL_VAR"]
 
+    @pytest.mark.forked
     def test_safe_command(self):
         """Test safe command parsing"""
         from omnicore_engine.cli import safe_command
@@ -61,6 +63,7 @@ class TestUtilityFunctions:
         result = safe_command("file\\ name.txt")
         assert result == ["file name.txt"]
 
+    @pytest.mark.forked
     def test_validate_file_path_valid(self):
         """Test validation of valid file paths"""
         from omnicore_engine.cli import validate_file_path

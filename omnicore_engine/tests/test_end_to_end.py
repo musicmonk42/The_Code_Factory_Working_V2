@@ -111,20 +111,22 @@ async def test_concurrent_plugin_execution(tmp_path, app):
     mock_ai_manager.get_refactoring_suggestion = Mock(return_value={"result": "data"})
 
     client = TestClient(app)
-    test_file = tmp_path / "test.py"
-    test_file.write_text("data")
 
     # Patch AIManager for all concurrent requests
     with patch(
         "omnicore_engine.fastapi_app.AIManager", Mock(return_value=mock_ai_manager)
     ):
         # Define an async function to make a single API request.
-        async def make_request():
+        async def make_request(index):
+            # Create a separate temp file for each request to avoid conflicts
+            test_file = tmp_path / f"test_{index}.py"
+            test_file.write_text(f"# Test file {index}\ndata")
+            
             with open(test_file, "rb") as f:
-                return client.post("/fix-imports/", files={"file": ("test.py", f)})
+                return client.post("/fix-imports/", files={"file": (f"test_{index}.py", f)})
 
         # Create multiple tasks to make concurrent API requests.
-        tasks = [make_request() for _ in range(5)]
+        tasks = [make_request(i) for i in range(5)]
 
         # Run all tasks concurrently and wait for them to complete.
         responses = await asyncio.gather(*tasks)
