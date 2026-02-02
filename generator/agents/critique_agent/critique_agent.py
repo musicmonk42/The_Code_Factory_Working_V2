@@ -335,9 +335,8 @@ class CritiqueConfig(BaseModel):
             raise ValueError("No valid pipeline_steps specified.")
         if sanitized_steps:
             values["pipeline_steps"] = sanitized_steps
-        else:
-            # Should not normally happen due to defaults, but keep safe.
-            values["pipeline_steps"] = ["lint"]
+        # If no pipeline_steps provided, let the default factory handle it
+        # Don't set a fallback here as it would override the default_factory
 
         # Normalize max_retries
         max_retries = values.get("max_retries", 3)
