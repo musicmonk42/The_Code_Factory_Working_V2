@@ -1240,10 +1240,12 @@ class OmniCoreService:
     
     async def _run_testgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute test generation agent."""
+        logger.info(f"[TESTGEN] Starting test generation for job {job_id}")
+        
         # Check if agent is available using service's own tracking
         if not self.agents_available.get('testgen', False) or self._testgen_class is None:
             error_msg = "Testgen agent not available"
-            logger.error(f"Testgen agent unavailable for job {job_id}: {error_msg}")
+            logger.error(f"[TESTGEN] Testgen agent unavailable for job {job_id}: {error_msg}")
             return {
                 "status": "error",
                 "message": f"Testgen agent not available: {error_msg}",
@@ -1269,13 +1271,14 @@ class OmniCoreService:
                 code_files = [str(f) for f in code_dir.rglob("*.py") if not f.name.startswith("test_")]
             
             if not code_files:
+                logger.error(f"[TESTGEN] No code files found in {code_path} for job {job_id}")
                 return {
                     "status": "error",
                     "message": f"No code files found in {code_path}",
                 }
             
             # Initialize and run testgen agent
-            logger.info(f"Running testgen agent for job {job_id}")
+            logger.info(f"[TESTGEN] Running testgen agent for job {job_id} with {len(code_files)} code files")
             repo_path = Path(f"./uploads/{job_id}")
             agent = self._testgen_class(repo_path=repo_path)
             
@@ -1285,7 +1288,7 @@ class OmniCoreService:
                 policy=policy,
             )
             
-            logger.info(f"Test generation completed for job {job_id}")
+            logger.info(f"[TESTGEN] Test generation completed successfully for job {job_id}")
             
             return {
                 "status": "completed",
@@ -1295,7 +1298,7 @@ class OmniCoreService:
             }
             
         except Exception as e:
-            logger.error(f"Error running testgen agent: {e}", exc_info=True)
+            logger.error(f"[TESTGEN] Error running testgen agent for job {job_id}: {e}", exc_info=True)
             return {
                 "status": "error",
                 "message": str(e),
@@ -1769,15 +1772,18 @@ class OmniCoreService:
     
     async def _run_full_pipeline(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute full generation pipeline."""
+        logger.info(f"[PIPELINE] Starting pipeline for job {job_id}")
         try:
             # Run pipeline stages sequentially
             stages_completed = []
             
             # 1. Clarify (optional)
             if payload.get("readme_content"):
+                logger.info(f"[PIPELINE] Job {job_id} starting step: clarify")
                 clarify_result = await self._run_clarifier(job_id, payload)
                 if clarify_result.get("status") != "error":
                     stages_completed.append("clarify")
+                    logger.info(f"[PIPELINE] Job {job_id} completed step: clarify")
             
             # 2. Codegen
             # Transform payload for codegen - it needs 'requirements' not 'readme_content'
@@ -1809,9 +1815,18 @@ class OmniCoreService:
                     "test_type": "unit",
                     "coverage_target": 80.0,
                 }
+                logger.info(f"[PIPELINE] Job {job_id} starting step: testgen")
                 testgen_result = await self._run_testgen(job_id, testgen_payload)
-                if testgen_result.get("status") != "error":
+                if testgen_result.get("status") == "completed":
                     stages_completed.append("testgen")
+                    logger.info(f"[PIPELINE] Job {job_id} completed step: testgen")
+                elif testgen_result.get("status") == "error":
+                    logger.error(f"[PIPELINE] Job {job_id} failed step: testgen - {testgen_result.get('message', 'Unknown error')}")
+                    return {
+                        "status": "failed",
+                        "message": f"Test generation failed: {testgen_result.get('message', 'Unknown error')}",
+                        "stages_completed": stages_completed,
+                    }
             
             # 4. Deploy (if requested)
             if payload.get("include_deployment", False):
@@ -1820,9 +1835,13 @@ class OmniCoreService:
                     "platform": "docker",
                     "include_ci_cd": True,
                 }
+                logger.info(f"[PIPELINE] Job {job_id} starting step: deploy")
                 deploy_result = await self._run_deploy(job_id, deploy_payload)
-                if deploy_result.get("status") != "error":
+                if deploy_result.get("status") == "completed":
                     stages_completed.append("deploy")
+                    logger.info(f"[PIPELINE] Job {job_id} completed step: deploy")
+                elif deploy_result.get("status") == "error":
+                    logger.warning(f"[PIPELINE] Job {job_id} failed step: deploy - {deploy_result.get('message', 'Unknown error')} (continuing pipeline)")
             
             # 5. Docgen (if requested)
             if payload.get("include_docs", False):
@@ -1831,9 +1850,13 @@ class OmniCoreService:
                     "doc_type": "api",
                     "format": "markdown",
                 }
+                logger.info(f"[PIPELINE] Job {job_id} starting step: docgen")
                 docgen_result = await self._run_docgen(job_id, docgen_payload)
-                if docgen_result.get("status") != "error":
+                if docgen_result.get("status") == "completed":
                     stages_completed.append("docgen")
+                    logger.info(f"[PIPELINE] Job {job_id} completed step: docgen")
+                elif docgen_result.get("status") == "error":
+                    logger.warning(f"[PIPELINE] Job {job_id} failed step: docgen - {docgen_result.get('message', 'Unknown error')} (continuing pipeline)")
             
             # 6. Critique (if requested)
             if payload.get("run_critique", False):
@@ -1842,10 +1865,15 @@ class OmniCoreService:
                     "scan_types": ["security", "quality"],
                     "auto_fix": False,
                 }
+                logger.info(f"[PIPELINE] Job {job_id} starting step: critique")
                 critique_result = await self._run_critique(job_id, critique_payload)
-                if critique_result.get("status") != "error":
+                if critique_result.get("status") == "completed":
                     stages_completed.append("critique")
+                    logger.info(f"[PIPELINE] Job {job_id} completed step: critique")
+                elif critique_result.get("status") == "error":
+                    logger.warning(f"[PIPELINE] Job {job_id} failed step: critique - {critique_result.get('message', 'Unknown error')} (continuing pipeline)")
             
+            logger.info(f"[PIPELINE] Pipeline completed successfully for job {job_id}")
             return {
                 "status": "completed",
                 "stages_completed": stages_completed,
@@ -1853,10 +1881,11 @@ class OmniCoreService:
             }
             
         except Exception as e:
-            logger.error(f"Error running full pipeline: {e}", exc_info=True)
+            logger.error(f"[PIPELINE] Job {job_id} FAILED with exception: {str(e)}", exc_info=True)
             return {
-                "status": "error",
+                "status": "failed",
                 "message": str(e),
+                "error_type": type(e).__name__,
             }
     
     async def _configure_llm(self, payload: Dict[str, Any]) -> Dict[str, Any]:
