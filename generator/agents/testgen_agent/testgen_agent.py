@@ -51,6 +51,7 @@ from opentelemetry.trace import Status, StatusCode  # For OpenTelemetry tracing
 try:
     from presidio_analyzer import AnalyzerEngine
     from presidio_anonymizer import AnonymizerEngine
+    from presidio_anonymizer.entities import OperatorConfig
 
     HAS_PRESIDIO = True
     # Lazy initialization - will be created on first use instead of at module load time
@@ -242,7 +243,7 @@ def scrub_text(text: str) -> str:
         scrubbed_content = anonymizer.anonymize(
             text=text,
             analyzer_results=results,
-            anonymizers={"DEFAULT": {"type": "replace", "new_value": "[REDACTED]"}},
+            operators={"DEFAULT": OperatorConfig("replace", {"new_value": "[REDACTED]"})},
         ).text
 
         return scrubbed_content
@@ -737,21 +738,23 @@ Agent --> Dev : Deliver Report
                 )
 
                 # REFACTORED: Replace log_action with add_provenance
-                provenance_data = {
-                    "action": f"llm_call_{purpose}",
-                    "run_id": run_id,
-                    "prompt_summary": scrub_text(prompt[:500]),
-                    "response_summary": scrub_text(response_content[:500]),
-                    "model_used": llm_model,
-                    "input_tokens": prompt_tokens,
-                    "output_tokens": completion_tokens,
-                    "cost_estimate": response.get("cost_usd", "N/A"),
-                    "prompt_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
-                    "response_hash": hashlib.sha256(
-                        response_content.encode("utf-8")
-                    ).hexdigest(),
-                }
-                add_provenance(provenance_data, **log_extra)
+                add_provenance(
+                    f"llm_call_{purpose}",
+                    {
+                        "run_id": run_id,
+                        "prompt_summary": scrub_text(prompt[:500]),
+                        "response_summary": scrub_text(response_content[:500]),
+                        "model_used": llm_model,
+                        "input_tokens": prompt_tokens,
+                        "output_tokens": completion_tokens,
+                        "cost_estimate": response.get("cost_usd", "N/A"),
+                        "prompt_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                        "response_hash": hashlib.sha256(
+                            response_content.encode("utf-8")
+                        ).hexdigest(),
+                    },
+                    **log_extra
+                )
 
                 return response
             except Exception as e:
@@ -825,8 +828,8 @@ Agent --> Dev : Deliver Report
                 span.add_event("Loading code files.")
                 code_files = await self._load_code_files(target_files)
                 add_provenance(
+                    "code_files_loaded",
                     {
-                        "action": "code_files_loaded",
                         "run_id": run_id,
                         "files_count": len(code_files),
                         "file_names": list(code_files.keys()),
@@ -956,8 +959,8 @@ Agent --> Dev : Deliver Report
                                     "Parsed tests are still empty after self-healing."
                                 )
                             add_provenance(
+                                "self_heal_success",
                                 {
-                                    "action": "self_heal_success",
                                     "run_id": run_id,
                                     "original_error": str(e),
                                 },
@@ -989,8 +992,8 @@ Agent --> Dev : Deliver Report
                         run_id,
                     )
                     add_provenance(
+                        f"validation_report_{attempt}",
                         {
-                            "action": f"validation_report_{attempt}",
                             "run_id": run_id,
                             "report": validation_report,
                         },
@@ -1077,8 +1080,8 @@ Agent --> Dev : Deliver Report
                     )
                     history[-1]["critique_response"] = critique_response
                     add_provenance(
+                        f"critique_response_{attempt}",
                         {
-                            "action": f"critique_response_{attempt}",
                             "run_id": run_id,
                             "response_summary": scrub_text(
                                 critique_response.get("content", "")[:200]
