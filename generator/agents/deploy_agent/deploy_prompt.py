@@ -319,7 +319,7 @@ async def optimize_deployment_prompt_text(prompt_text: str) -> str:
         LLM_LATENCY_SECONDS.labels(
             provider="deploy_prompt", model=SUMMARY_MODEL
         ).observe(time.time() - start_time_summary)
-        add_provenance(
+        await add_provenance(
             "summarize_context",
             {
                 "model": SUMMARY_MODEL,

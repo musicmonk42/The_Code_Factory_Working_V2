@@ -596,7 +596,7 @@ class DockerValidator(Validator):
             LLM_LATENCY_SECONDS.labels(
                 provider="deploy_validator", model="gpt-4o"
             ).observe(time.time() - start_time)
-            add_provenance({"action": "fix_docker_config", "model": "gpt-4o"})
+            await add_provenance("fix_docker_config", {"action": "fix_docker_config", "model": "gpt-4o"})
 
             # The LLM client returns a structured dict: {'content': '...', 'model': ...}
             fixed_config_content = fixed_response.get("content", "").strip()
@@ -769,7 +769,7 @@ class HelmValidator(Validator):
             LLM_LATENCY_SECONDS.labels(
                 provider="deploy_validator", model="gpt-4o"
             ).observe(time.time() - start_time)
-            add_provenance({"action": "fix_helm_config", "model": "gpt-4o"})
+            await add_provenance("fix_helm_config", {"action": "fix_helm_config", "model": "gpt-4o"})
 
             fixed_config_content = fixed_response.get("content", "").strip()
 

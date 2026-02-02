@@ -652,7 +652,7 @@ class FormatHandler(ABC):
                 raise ValueError(error_msg)
 
             # FIX: Changed to match log_audit_event signature: (event_name, data)
-            add_provenance(
+            await add_provenance(
                 "provenance",
                 {
                     "action": "summarize_section",
@@ -1276,7 +1276,7 @@ async def repair_sections(
             provider="deploy_response_handler", model="gpt-4o"
         ).observe(time.time() - start_time_repair_llm)
         # FIX: Changed to match log_audit_event signature: (event_name, data)
-        add_provenance(
+        await add_provenance(
             "provenance",
             {
                 "action": "repair_sections",
@@ -1691,7 +1691,7 @@ async def handle_deploy_response(
             }
             # Use central runner provenance utility for logging the final stamp
             # FIX: Changed to match log_audit_event signature: (event_name, data)
-            add_provenance("provenance", provenance)
+            await add_provenance("provenance", provenance)
 
             total_latency = time.perf_counter() - start_time
             handler_latency.labels(format=output_format, operation="total").observe(

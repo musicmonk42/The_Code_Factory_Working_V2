@@ -29,10 +29,12 @@ from runner.runner_errors import LLMError, RunnerError
 from runner.runner_file_utils import get_commits
 
 # --- FIX: Import log_audit_event from runner_audit to avoid circular dependency ---
-from runner.runner_audit import log_audit_event
+from runner.runner_audit import log_audit_event, log_audit_event_sync
 from runner.runner_audit import log_audit_event as log_action
-# Note: add_provenance is an alias for log_audit_event
+# Note: add_provenance is an alias for log_audit_event (async)
 add_provenance = log_audit_event
+# For sync contexts (e.g., __init__), use log_audit_event_sync
+add_provenance_sync = log_audit_event_sync
 from runner.runner_logging import logger
 from runner.runner_metrics import LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
 from runner.runner_metrics import (
@@ -553,8 +555,8 @@ class DeployAgent:
         # -------------------------------------------------
 
         self.run_id = str(uuid.uuid4())
-        # --- FIX: Pass the event_name to add_provenance (which is an alias for log_audit_event) ---
-        add_provenance("provenance", {"run_id": self.run_id, "agent": "DeployAgent"})
+        # --- FIX: Use sync version in __init__ (not async context) ---
+        add_provenance_sync("provenance", {"run_id": self.run_id, "agent": "DeployAgent"})
 
         self.history: List[Dict[str, Any]] = []
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -947,7 +949,7 @@ Validation results:
 
 Respond in plain prose only (no JSON / no code fences).
 """)
-        add_provenance(
+        await add_provenance(
             "provenance",
             {"action": "explanation_llm_call", "target": target, "model": "grok-4"},
         )
@@ -994,8 +996,8 @@ Respond in plain prose only (no JSON / no code fences).
             targets,
             extra={"run_id": self.run_id},
         )
-        # --- FIX: Pass the event_name to add_provenance (which is an alias for log_audit_event) ---
-        add_provenance(
+        # --- FIX: Await add_provenance in async context ---
+        await add_provenance(
             "provenance",
             {"action": "pipeline_start", "doc_type": doc_type, "targets": targets},
         )
@@ -1037,8 +1039,8 @@ Respond in plain prose only (no JSON / no code fences).
                                 )
                                 # --------------------------------------------
                                 prompt = scrub_text(prompt)
-                                # --- FIX: Pass the event_name to add_provenance (which is an alias for log_audit_event) ---
-                                add_provenance(
+                                # --- FIX: Await add_provenance in async context ---
+                                await add_provenance(
                                     "provenance",
                                     {"target": t, "model": llm_model},
                                 )
@@ -1490,8 +1492,8 @@ Respond in plain prose only (no JSON / no code fences).
         stream: bool,
     ) -> Optional[Dict[str, Any]]:
         with tracer.start_as_current_span("deploy.self_heal"):
-            # --- FIX: Pass the event_name to add_provenance (which is an alias for log_audit_event) ---
-            add_provenance("provenance", {"action": "self_heal_attempt"})
+            # --- FIX: Await add_provenance in async context ---
+            await add_provenance("provenance", {"action": "self_heal_attempt"})
             for attempt in range(1, 4):
                 try:
                     healing_prompt = scrub_text(f"""
