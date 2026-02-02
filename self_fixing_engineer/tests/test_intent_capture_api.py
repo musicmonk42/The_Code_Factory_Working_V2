@@ -40,6 +40,7 @@ def app(test_secret_key):
         "USE_VECTOR_MEMORY": "false",
         "DISABLE_SENTRY": "1",
         "OTEL_SDK_DISABLED": "1",
+        "TRUSTED_HOSTS": "localhost,127.0.0.1,testserver,test",  # Allow test client
     }
     
     with patch.dict(os.environ, env_overrides):
@@ -54,13 +55,16 @@ def app(test_secret_key):
         # Mock HuggingFace pipeline to prevent model loading
         mock_hf_pipeline = MagicMock(return_value=[{"label": "SAFE", "score": 0.99}])
 
-        with patch("intent_capture.api.aredis.from_url", new=mock_from_url):
-            with patch("intent_capture.api.limiter.limiter.hit", new=mock_limiter_hit):
-                with patch("intent_capture.api.hf_pipeline", mock_hf_pipeline):
-                    # Import here to ensure environment variables are set
-                    import intent_capture.api as api_module
-                    app_instance = api_module.create_app()
-                    yield app_instance
+        # Import here to ensure environment variables are set
+        import sys
+        import self_fixing_engineer.intent_capture.api as api_module
+        
+        # Apply patches after import using the actual module reference
+        with patch.object(api_module, "aredis") as mock_aredis:
+            mock_aredis.from_url = mock_from_url
+            with patch.object(api_module, "hf_pipeline", mock_hf_pipeline):
+                app_instance = api_module.create_app()
+                yield app_instance
 
 
 @pytest.fixture
@@ -83,8 +87,9 @@ def mock_get_or_create_agent():
         }
     )
 
-    with patch(
-        "intent_capture.api.get_or_create_agent", AsyncMock(return_value=mock_agent)
+    import self_fixing_engineer.intent_capture.api as api_module
+    with patch.object(
+        api_module, "get_or_create_agent", AsyncMock(return_value=mock_agent)
     ) as mock_func:
         yield mock_func
 
