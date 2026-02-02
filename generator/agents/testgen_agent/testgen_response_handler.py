@@ -50,7 +50,7 @@ from aiohttp import web
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner.llm_client import call_llm_api
 # FIX: Import add_provenance from runner_audit to avoid circular dependency
-from runner.runner_audit import log_audit_event as add_provenance
+from runner.runner_audit import log_audit_event as add_provenance, log_audit_event_sync as add_provenance_sync
 from runner.runner_logging import logger
 from runner.runner_metrics import LLM_ERRORS_TOTAL
 from watchdog.events import FileSystemEventHandler
@@ -192,7 +192,7 @@ class ResponseParser(ABC):
             }
             logger.info(f"Recovered {len(recovered_files)} code blocks.")
 
-            add_provenance(
+            add_provenance_sync(
                 "RecoveryAttempt",
                 {
                     "strategy": "regex_code_blocks",
@@ -252,7 +252,7 @@ Return only the corrected response with proper file names and code structure.
                             f"LLM auto-healing successful on attempt {attempt + 1}."
                         )
 
-                        add_provenance(
+                        await add_provenance(
                             "LLMAutoHealSuccess",
                             {
                                 "attempt": attempt + 1,
@@ -300,7 +300,7 @@ class DefaultResponseParser(ResponseParser):
         if not response or not response.strip():
             raise ValueError("Empty or whitespace-only response cannot be parsed.")
 
-        add_provenance(
+        add_provenance_sync(
             "ParseAttempt",
             {
                 "language": language,
@@ -618,7 +618,7 @@ class DefaultResponseParser(ResponseParser):
                 f"Validation found {total_issues} issues across {len(test_files)} files."
             )
 
-            add_provenance(
+            await add_provenance(
                 "ValidationCompleted",
                 {
                     "language": language,
@@ -905,7 +905,7 @@ class DefaultResponseParser(ResponseParser):
                     meta["extraction_error"] = str(e)
             metadata[filename] = meta
 
-        add_provenance(
+        add_provenance_sync(
             "Metadata Extracted",
             {
                 "metadata": metadata,
@@ -962,7 +962,7 @@ class ParserRegistry:
         """Reloads parser plugins."""
         PARSERS["default"] = DefaultResponseParser()
         logger.info("Parser plugins reloaded successfully (or default re-initialized).")
-        add_provenance(
+        await add_provenance(
             "ParserReload",
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1018,7 +1018,7 @@ async def parse_llm_response(
         test_files = parser.parse(response, language)
         await parser.validate(test_files, language, code_files)
         metadata = parser.extract_metadata(test_files, language)
-        add_provenance(
+        await add_provenance(
             "Metadata Extracted",
             {
                 "metadata": metadata,
@@ -1037,7 +1037,7 @@ async def parse_llm_response(
             try:
                 await parser.validate(healed_files, language, code_files)
                 metadata = parser.extract_metadata(healed_files, language)
-                add_provenance(
+                await add_provenance(
                     "Metadata Extracted After Healing",
                     {
                         "metadata": metadata,
@@ -1076,7 +1076,7 @@ async def startup():
     logger.info("Initializing TestGen Response Handler components...")
     asyncio.create_task(start_health_server())
     logger.info("TestGen Response Handler components initialized.")
-    add_provenance(
+    await add_provenance(
         "Startup",
         {"timestamp": datetime.now(timezone.utc).isoformat()}
     )
@@ -1087,7 +1087,7 @@ async def shutdown():
     logger.info("Shutting down TestGen Response Handler components...")
     await parser_registry.close()
     logger.info("TestGen Response Handler components shut down.")
-    add_provenance(
+    await add_provenance(
         "Shutdown",
         {"timestamp": datetime.now(timezone.utc).isoformat()}
     )

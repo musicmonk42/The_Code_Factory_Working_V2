@@ -738,7 +738,7 @@ Agent --> Dev : Deliver Report
                 )
 
                 # REFACTORED: Replace log_action with add_provenance
-                add_provenance(
+                await add_provenance(
                     f"llm_call_{purpose}",
                     {
                         "run_id": run_id,
@@ -827,7 +827,7 @@ Agent --> Dev : Deliver Report
             try:
                 span.add_event("Loading code files.")
                 code_files = await self._load_code_files(target_files)
-                add_provenance(
+                await add_provenance(
                     "code_files_loaded",
                     {
                         "run_id": run_id,
@@ -958,7 +958,7 @@ Agent --> Dev : Deliver Report
                                 raise ValueError(
                                     "Parsed tests are still empty after self-healing."
                                 )
-                            add_provenance(
+                            await add_provenance(
                                 "self_heal_success",
                                 {
                                     "run_id": run_id,
@@ -991,7 +991,7 @@ Agent --> Dev : Deliver Report
                         policy,
                         run_id,
                     )
-                    add_provenance(
+                    await add_provenance(
                         f"validation_report_{attempt}",
                         {
                             "run_id": run_id,
@@ -1079,7 +1079,7 @@ Agent --> Dev : Deliver Report
                         "critique",
                     )
                     history[-1]["critique_response"] = critique_response
-                    add_provenance(
+                    await add_provenance(
                         f"critique_response_{attempt}",
                         {
                             "run_id": run_id,

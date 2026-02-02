@@ -43,9 +43,9 @@ from runner import (  # Removed tracer - doesn't exist in runner
     run_stress_tests,
     run_tests_in_sandbox,
 )
-# FIX: Import only logger at module level to break circular import
-# add_provenance is imported lazily via _get_add_provenance() when needed
+# FIX: Import audit functions directly now that circular import is resolved
 from runner.runner_logging import logger
+from runner.runner_audit import log_audit_event as add_provenance, log_audit_event_sync as add_provenance_sync
 from runner.runner_mutation import (  # FIX 2: Added Mutation Runner Imports
     mutation_test,
     property_based_test,
@@ -53,12 +53,6 @@ from runner.runner_mutation import (  # FIX 2: Added Mutation Runner Imports
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-
-# FIX: Lazy import helper for add_provenance to break circular import
-def _get_add_provenance():
-    """Lazily import add_provenance from runner_audit to avoid circular import at module load time."""
-    from runner.runner_audit import log_audit_event as add_provenance
-    return add_provenance
 
 # -----------------------------------
 
@@ -123,16 +117,14 @@ async def start_health_server():
     site = web.TCPSite(runner, "0.0.0.0", 8082)
     await site.start()
     logger.info("Health endpoint server started on port 8082.")
-    # REFACTORED: Use add_provenance (fire and forget)
+    # REFACTORED: Use add_provenance
     try:
-        asyncio.create_task(
-            _get_add_provenance()(
-                "HealthServerStarted",
-                {"port": 8082, "timestamp": datetime.now(timezone.utc).isoformat()},
-            )
+        await add_provenance(
+            "HealthServerStarted",
+            {"port": 8082, "timestamp": datetime.now(timezone.utc).isoformat()},
         )
-    except RuntimeError:
-        # No event loop, skip
+    except Exception:
+        # Ignore provenance errors
         pass
 
 
@@ -164,16 +156,10 @@ class ValidatorRegistry:
         VALIDATORS[name] = validator
         logger.info(f"Registered validator: {name}")
         # REFACTORED: Use add_provenance (fire and forget in sync context)
-        try:
-            asyncio.create_task(
-                _get_add_provenance()(
-                    "ValidatorRegistered",
-                    {"name": name, "timestamp": datetime.now(timezone.utc).isoformat()},
-                )
-            )
-        except RuntimeError:
-            # No event loop in sync context, skip
-            pass
+        add_provenance_sync(
+            "ValidatorRegistered",
+            {"name": name, "timestamp": datetime.now(timezone.utc).isoformat()},
+        )
 
     def _setup_hot_reload(self):
         """Sets up Watchdog to monitor plugin directory for changes."""
@@ -249,7 +235,7 @@ class ValidatorRegistry:
 
         # REFACTORED: Use add_provenance
         try:
-            await _get_add_provenance()(
+            await add_provenance(
                 "ValidatorPluginsReloaded",
                 {
                     "count": len(VALIDATORS),
@@ -800,7 +786,7 @@ async def validate_test_quality(
 
     # REFACTORED: Use add_provenance
     try:
-        await _get_add_provenance()(
+        await add_provenance(
             "TestQualityValidated",
             {
                 "validation_type": validation_type,
@@ -825,7 +811,7 @@ async def startup():
     asyncio.create_task(start_health_server())
     # REFACTORED: Use add_provenance
     try:
-        await _get_add_provenance()(
+        await add_provenance(
             "Startup", {"timestamp": datetime.now(timezone.utc).isoformat()}
         )
     except Exception:
@@ -837,7 +823,7 @@ async def shutdown():
     await validator_registry.close()
     # REFACTORED: Use add_provenance
     try:
-        await _get_add_provenance()(
+        await add_provenance(
             "Shutdown", {"timestamp": datetime.now(timezone.utc).isoformat()}
         )
     except Exception:
