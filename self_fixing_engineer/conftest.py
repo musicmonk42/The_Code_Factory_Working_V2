@@ -118,6 +118,19 @@ def cleanup_memory():
     except (ImportError, AttributeError):
         pass
     
+    # Clear Prometheus registry to prevent duplicate metric registration
+    try:
+        from prometheus_client import REGISTRY
+        # Get all collectors except the default ones
+        collectors = list(REGISTRY._collector_to_names.keys())
+        for collector in collectors:
+            try:
+                REGISTRY.unregister(collector)
+            except Exception:
+                pass  # Ignore errors during cleanup
+    except (ImportError, AttributeError):
+        pass
+    
     # Force garbage collection
     gc.collect()
 

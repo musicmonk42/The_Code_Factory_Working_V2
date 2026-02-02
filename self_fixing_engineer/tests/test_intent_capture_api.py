@@ -63,8 +63,10 @@ def app(test_secret_key):
         with patch.object(api_module, "aredis") as mock_aredis:
             mock_aredis.from_url = mock_from_url
             with patch.object(api_module, "hf_pipeline", mock_hf_pipeline):
-                app_instance = api_module.create_app()
-                yield app_instance
+                # Patch the limiter's hit method
+                with patch.object(api_module.limiter.limiter, "hit", mock_limiter_hit):
+                    app_instance = api_module.create_app()
+                    yield app_instance
 
 
 @pytest.fixture
@@ -221,9 +223,10 @@ async def test_predict_agent_error(
 
     response = await async_client.post("/predict", json=payload, headers=headers)
 
-    # FIX: The API returns 400 for AgentError, not 500
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "Something went wrong in the agent" in response.json()["detail"]
+    # AgentError is a server-side error, returns HTTP 500
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    # The handler returns a generic error message for security
+    assert "internal server error occurred in the agent" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -294,6 +297,8 @@ async def test_prune_sessions_forbidden(
 
 def test_app_config_secret_handling(monkeypatch, test_secret_key):
     """Test that AppConfig correctly loads secrets from the environment."""
+    import self_fixing_engineer.intent_capture.api as api_module
+    
     monkeypatch.setenv("JWT_SECRET", test_secret_key)
 
     config = api_module.AppConfig()
