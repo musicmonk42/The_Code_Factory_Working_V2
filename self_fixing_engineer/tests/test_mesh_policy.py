@@ -80,7 +80,7 @@ for key, value in TEST_ENV.items():
 # ---- Test Models ----
 
 
-class TestPolicySchema(BaseModel):
+class MockPolicySchema(BaseModel):
     """Test schema for policy validation."""
 
     id: str
@@ -100,7 +100,7 @@ async def local_backend():
     from mesh.mesh_policy import MeshPolicyBackend
 
     backend = MeshPolicyBackend(
-        backend_type="local", policy_schema=TestPolicySchema, local_dir=str(TEST_DIR)
+        backend_type="local", policy_schema=MockPolicySchema, local_dir=str(TEST_DIR)
     )
     await backend.healthcheck()
 

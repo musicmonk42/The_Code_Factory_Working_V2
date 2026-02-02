@@ -26,7 +26,7 @@ try:
 except ImportError:
     DEAP_AVAILABLE = False
 
-from envs.evolution import (
+from self_fixing_engineer.envs.evolution import (
     ConfigurationSpace,
     EvolutionConfig,
     FitnessEvaluator,

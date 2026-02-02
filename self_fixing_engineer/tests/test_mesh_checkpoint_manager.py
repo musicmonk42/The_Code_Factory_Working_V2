@@ -52,7 +52,7 @@ for key, value in TEST_ENV.items():
 # ---- Test Models ----
 
 
-class TestStateSchema(BaseModel):
+class MockStateSchema(BaseModel):
     """Schema for state validation testing."""
 
     counter: int
@@ -107,7 +107,7 @@ async def manager_with_schema():
     from mesh.checkpoint.checkpoint_manager import CheckpointManager
 
     mgr = CheckpointManager(
-        backend_type="local", state_schema=TestStateSchema, keep_versions=3
+        backend_type="local", state_schema=MockStateSchema, keep_versions=3
     )
     await mgr.initialize()
 

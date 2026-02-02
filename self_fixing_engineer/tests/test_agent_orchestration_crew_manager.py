@@ -156,21 +156,21 @@ def caplog(caplog):
     return caplog
 
 
-# Test agent class
-class TestAgent(CrewAgentBase):
+# Mock agent class for testing
+class MockCrewAgent(CrewAgentBase):
     pass
 
 
-# Register the test agent class
-CrewManager.register_agent_class(TestAgent)
+# Register the mock agent class
+CrewManager.register_agent_class(MockCrewAgent)
 
 
 @pytest.mark.asyncio
 async def test_register_and_get_agent_class():
     """Test agent class registry."""
-    CrewManager.register_agent_class(TestAgent)
-    cls = CrewManager.get_agent_class_by_name("TestAgent")
-    assert cls == TestAgent
+    CrewManager.register_agent_class(MockCrewAgent)
+    cls = CrewManager.get_agent_class_by_name("MockCrewAgent")
+    assert cls == MockCrewAgent
 
 
 @pytest.mark.asyncio
@@ -209,13 +209,13 @@ async def test_add_agent_success(crew_manager):
     """Test adding an agent."""
     agent_info = await crew_manager.add_agent(
         "test_agent",
-        TestAgent,
+        MockCrewAgent,
         config={"key": "value"},
         tags=["tag1"],
         metadata={"meta": "data"},
     )
     assert agent_info["name"] == "test_agent"
-    assert agent_info["agent_class_name"] == "TestAgent"
+    assert agent_info["agent_class_name"] == "MockCrewAgent"
     assert agent_info["status"] == "STOPPED"
 
 
@@ -223,7 +223,7 @@ async def test_add_agent_success(crew_manager):
 async def test_add_agent_invalid_name(crew_manager):
     """Test invalid agent name."""
     with pytest.raises(ValueError, match="Invalid agent name"):
-        await crew_manager.add_agent("invalid@name", TestAgent)
+        await crew_manager.add_agent("invalid@name", MockCrewAgent)
 
 
 @pytest.mark.asyncio
@@ -231,7 +231,7 @@ async def test_add_agent_invalid_config(crew_manager):
     """Test invalid config."""
     large_config = {"key": "a" * (MAX_CONFIG_SIZE + 1)}
     with pytest.raises(ValueError, match="Invalid config"):
-        await crew_manager.add_agent("test_agent", TestAgent, config=large_config)
+        await crew_manager.add_agent("test_agent", MockCrewAgent, config=large_config)
 
 
 @pytest.mark.asyncio
@@ -240,7 +240,7 @@ async def test_add_agent_rbac_failure(crew_manager):
     crew_manager._check_rbac = AsyncMock(return_value=False)
     with pytest.raises(PermissionError):
         await crew_manager.add_agent(
-            "test_agent", TestAgent, caller_role="unauthorized"
+            "test_agent", MockCrewAgent, caller_role="unauthorized"
         )
     crew_manager._check_rbac = AsyncMock(return_value=True)
 
@@ -249,9 +249,9 @@ async def test_add_agent_rbac_failure(crew_manager):
 async def test_add_agent_max_agents(crew_manager, monkeypatch):
     """Test max agents cap."""
     monkeypatch.setattr(crew_manager, "_max_agents", 1)
-    await crew_manager.add_agent("agent1", TestAgent)
+    await crew_manager.add_agent("agent1", MockCrewAgent)
     with pytest.raises(ResourceError):
-        await crew_manager.add_agent("agent2", TestAgent)
+        await crew_manager.add_agent("agent2", MockCrewAgent)
 
 
 @pytest.mark.asyncio
@@ -263,7 +263,7 @@ async def test_sync_add_agent():
 @pytest.mark.asyncio
 async def test_remove_agent(crew_manager):
     """Test removing an agent."""
-    await crew_manager.add_agent("test_agent", TestAgent)
+    await crew_manager.add_agent("test_agent", MockCrewAgent)
     await crew_manager.remove_agent("test_agent")
     assert "test_agent" not in crew_manager.agents
 
@@ -271,7 +271,7 @@ async def test_remove_agent(crew_manager):
 @pytest.mark.asyncio
 async def test_start_agent_success(crew_manager):
     """Test starting an agent."""
-    await crew_manager.add_agent("test_agent", TestAgent)
+    await crew_manager.add_agent("test_agent", MockCrewAgent)
     await crew_manager.start_agent("test_agent")
     assert crew_manager.agents["test_agent"]["status"] == "RUNNING"
 
@@ -288,7 +288,7 @@ async def test_start_agent_resource_error(crew_manager, monkeypatch):
             crew_manager, "_start_sandbox_with_retries", mock_start_sandbox_with_retries
         )
 
-        await crew_manager.add_agent("test_agent", TestAgent)
+        await crew_manager.add_agent("test_agent", MockCrewAgent)
 
         # Start the agent - it should fail but not raise the exception
         await crew_manager.start_agent("test_agent")
@@ -306,7 +306,7 @@ async def test_start_agent_resource_error(crew_manager, monkeypatch):
 @pytest.mark.asyncio
 async def test_stop_agent_success(crew_manager):
     """Test stopping an agent."""
-    await crew_manager.add_agent("test_agent", TestAgent)
+    await crew_manager.add_agent("test_agent", MockCrewAgent)
     await crew_manager.start_agent("test_agent")
     await crew_manager.stop_agent("test_agent")
     assert crew_manager.agents["test_agent"]["status"] == "STOPPED"
@@ -315,7 +315,7 @@ async def test_stop_agent_success(crew_manager):
 @pytest.mark.asyncio
 async def test_reload_agent(crew_manager):
     """Test reloading an agent."""
-    await crew_manager.add_agent("test_agent", TestAgent)
+    await crew_manager.add_agent("test_agent", MockCrewAgent)
     await crew_manager.start_agent("test_agent")
 
     # Reload with new config
@@ -330,8 +330,8 @@ async def test_reload_agent(crew_manager):
 @pytest.mark.asyncio
 async def test_scale_agents(crew_manager):
     """Test scaling agents."""
-    await crew_manager.add_agent("agent1", TestAgent, tags=["scale"])
-    await crew_manager.scale(3, TestAgent, tags=["scale"])
+    await crew_manager.add_agent("agent1", MockCrewAgent, tags=["scale"])
+    await crew_manager.scale(3, MockCrewAgent, tags=["scale"])
     agents = crew_manager.list_agents(tags=["scale"])
     assert len(agents) == 3
 
@@ -344,7 +344,7 @@ async def test_heartbeat_monitor():
     manager._check_rbac = AsyncMock(return_value=True)
 
     # Don't actually run the monitor - just verify the setup
-    await manager.add_agent("test_agent", TestAgent)
+    await manager.add_agent("test_agent", MockCrewAgent)
     assert "test_agent" in manager.agents
 
     # Clean up
@@ -354,7 +354,7 @@ async def test_heartbeat_monitor():
 @pytest.mark.asyncio
 async def test_health_report(crew_manager):
     """Test health report generation."""
-    await crew_manager.add_agent("test_agent", TestAgent)
+    await crew_manager.add_agent("test_agent", MockCrewAgent)
     health = await crew_manager.health()
     assert "test_agent" in health
 
@@ -362,7 +362,7 @@ async def test_health_report(crew_manager):
 @pytest.mark.asyncio
 async def test_lint(crew_manager):
     """Test linting for duplicates/unused."""
-    await crew_manager.add_agent("test_agent", TestAgent)
+    await crew_manager.add_agent("test_agent", MockCrewAgent)
     lint = await crew_manager.lint()
     assert lint["duplicates"] == []
 
@@ -370,7 +370,7 @@ async def test_lint(crew_manager):
 @pytest.mark.asyncio
 async def test_describe(crew_manager):
     """Test describe method."""
-    await crew_manager.add_agent("test_agent", TestAgent, tags=["tag1"])
+    await crew_manager.add_agent("test_agent", MockCrewAgent, tags=["tag1"])
     desc = await crew_manager.describe()
     assert desc["agent_count"] == 1
     assert desc["tags_configured"]["test_agent"] == ["tag1"]
@@ -386,7 +386,7 @@ async def test_save_load_redis(crew_manager):
     mock_redis.set = AsyncMock()
     crew_manager.redis_pool = mock_redis
 
-    await crew_manager.add_agent("test_agent", TestAgent)
+    await crew_manager.add_agent("test_agent", MockCrewAgent)
     await crew_manager.save_state_redis()
 
     mock_redis.set.assert_called()
@@ -395,7 +395,7 @@ async def test_save_load_redis(crew_manager):
 @pytest.mark.asyncio
 async def test_shutdown(crew_manager):
     """Test full shutdown."""
-    await crew_manager.add_agent("test_agent", TestAgent)
+    await crew_manager.add_agent("test_agent", MockCrewAgent)
     await crew_manager.start_agent("test_agent")
     await crew_manager.shutdown()
     assert crew_manager._closed

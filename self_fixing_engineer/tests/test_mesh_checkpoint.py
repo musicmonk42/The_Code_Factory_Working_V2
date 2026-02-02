@@ -122,7 +122,7 @@ def sensitive_state():
     }
 
 
-class TestSchema(BaseModel):
+class MockCheckpointSchema(BaseModel):
     """Schema for validation testing."""
 
     counter: int
@@ -505,7 +505,7 @@ class TestEdgeCases:
         """Test schema validation."""
         from mesh.checkpoint.checkpoint_exceptions import CheckpointValidationError
 
-        checkpoint_manager.state_schema = TestSchema
+        checkpoint_manager.state_schema = MockCheckpointSchema
 
         # Valid schema
         valid_state = {"counter": 1, "status": "ok", "metadata": {}}
