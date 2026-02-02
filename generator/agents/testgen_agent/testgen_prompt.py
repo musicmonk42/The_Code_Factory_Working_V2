@@ -173,8 +173,8 @@ class MultiVectorDBManager:
 
             # REFACTORED: Use add_provenance
             add_provenance(
+                "VectorDBUpdate",
                 {
-                    "action": "VectorDBUpdate",
                     "collection": collection_name,
                     "file_count": len(files),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -221,8 +221,8 @@ class MultiVectorDBManager:
 
         # REFACTORED: Use add_provenance
         add_provenance(
+            "VectorDBQuery",
             {
-                "action": "VectorDBQuery",
                 "collections": collections,
                 "query_length": len(query_text),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -236,8 +236,8 @@ class MultiVectorDBManager:
         self.collections.clear()
         logger.info("MultiVectorDBManager resources cleared.")
         add_provenance(
+            "VectorDBClosed",
             {
-                "action": "VectorDBClosed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
@@ -313,8 +313,8 @@ class AdvancedTemplateTracker:
 
         # REFACTORED: Use add_provenance
         add_provenance(
+            "TemplatePerformanceLogged",
             {
-                "action": "TemplatePerformanceLogged",
                 "template_hash": template_hash,
                 "scores": scores,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -354,8 +354,8 @@ class AdvancedTemplateTracker:
 
         # REFACTORED: Use add_provenance
         add_provenance(
+            "TemplateVersioned",
             {
-                "action": "TemplateVersioned",
                 "template_name": template_name,
                 "version": version,
                 "content_hash": content_hash,
@@ -389,8 +389,8 @@ class AdvancedTemplateTracker:
 
             # REFACTORED: Use add_provenance
             add_provenance(
+                "TemplateRollback",
                 {
-                    "action": "TemplateRollback",
                     "template_name": template_name,
                     "version": to_version,
                     "content_hash": content_hash,
@@ -423,8 +423,8 @@ class AdvancedTemplateTracker:
 
         # REFACTORED: Use add_provenance
         add_provenance(
+            "TemplateEvolutionPromptSanitized",
             {
-                "action": "TemplateEvolutionPromptSanitized",
                 "pre_hash": pre_hash,
                 "post_hash": post_hash,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -434,8 +434,8 @@ class AdvancedTemplateTracker:
 
         if COMPLIANCE_MODE:
             add_provenance(
+                "ComplianceSensitiveData",
                 {
-                    "action": "ComplianceSensitiveData",
                     "scrubbed_fields": {
                         "prompt": {"pre_hash": pre_hash, "post_hash": post_hash}
                     },
@@ -507,8 +507,8 @@ class AdvancedTemplateTracker:
 
                 # REFACTORED: Use add_provenance
                 add_provenance(
+                    "RegressionDetected",
                     {
-                        "action": "RegressionDetected",
                         "template_hash": template_hash,
                         "primary_metric": primary_metric,
                         "new_score": new_scores.get(primary_metric, 0),
@@ -569,8 +569,8 @@ class AdvancedTemplateTracker:
             self.data = self._load()
             logger.info("Templates reloaded successfully.")
             add_provenance(
+                "TemplateReload",
                 {
-                    "action": "TemplateReload",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "trigger": "hot_reload",
                 }
@@ -586,8 +586,8 @@ class AdvancedTemplateTracker:
         self._save()
         logger.info("AdvancedTemplateTracker resources saved and closed.")
         add_provenance(
+            "TemplateTrackerClosed",
             {
-                "action": "TemplateTrackerClosed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
@@ -621,8 +621,8 @@ class AdaptivePromptDirector:
         self.human_review_callback = callback
         logger.info("Human review callback set.")
         add_provenance(
+            "HumanReviewCallbackSet",
             {
-                "action": "HumanReviewCallbackSet",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
@@ -709,8 +709,8 @@ class AdaptivePromptDirector:
 
         # REFACTORED: Use add_provenance
         add_provenance(
+            "RichContextGenerated",
             {
-                "action": "RichContextGenerated",
                 "contexts": list(contexts.keys()),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "trigger": "get_rich_context",
@@ -731,8 +731,8 @@ class AdaptivePromptDirector:
 
         # REFACTORED: Use add_provenance
         add_provenance(
+            "ChainAdapted",
             {
-                "action": "ChainAdapted",
                 "prior_quality": prior_quality,
                 "chain": chain,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -747,8 +747,8 @@ class AdaptivePromptDirector:
         await self.tracker.close()
         logger.info("AdaptivePromptDirector resources closed.")
         add_provenance(
+            "DirectorClosed",
             {
-                "action": "DirectorClosed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
@@ -793,8 +793,8 @@ class AgenticPromptBuilder(abc.ABC):
 
         # REFACTORED: Use add_provenance
         add_provenance(
+            "TextSanitized",
             {
-                "action": "TextSanitized",
                 "pre_hash": pre_hash,
                 "post_hash": post_hash,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -803,8 +803,8 @@ class AgenticPromptBuilder(abc.ABC):
         )
         if COMPLIANCE_MODE:
             add_provenance(
+                "ComplianceSensitiveData",
                 {
-                    "action": "ComplianceSensitiveData",
                     "scrubbed_fields": {
                         "text": {"pre_hash": pre_hash, "post_hash": post_hash}
                     },
@@ -845,8 +845,8 @@ class AgenticPromptBuilder(abc.ABC):
 
                 new_tokens = len(tokenizer.encode(prompt))
                 add_provenance(
+                    "PromptSummarized",
                     {
-                        "action": "PromptSummarized",
                         "original_tokens": tokens,
                         "new_tokens": new_tokens,
                         "trigger": "manage_tokens",
@@ -978,8 +978,8 @@ class DefaultPromptBuilder(AgenticPromptBuilder):
 
         # REFACTORED: Use add_provenance
         add_provenance(
+            f"{prompt_type.capitalize()} Prompt Built",
             {
-                "action": f"{prompt_type.capitalize()} Prompt Built",
                 "length": len(prompt),
                 "tokens": len(tiktoken.get_encoding("cl100k_base").encode(prompt)),
                 "template_hash": template_hash,
