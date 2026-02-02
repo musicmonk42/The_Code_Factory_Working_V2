@@ -1,0 +1,174 @@
+# ============================================================================
+# OmniCore Engine Audit Log Configuration
+# ============================================================================
+# This configuration extends the main audit configuration with OmniCore-specific
+# settings for workflow orchestration, plugin management, and meta-supervision.
+#
+# This file inherits from generator/audit_config.yaml and adds module-specific
+# settings. All generator audit settings apply unless overridden here.
+# ============================================================================
+
+# =============================================================================
+# OMNICORE AUDIT SETTINGS
+# =============================================================================
+
+# Audit log path for OmniCore events
+AUDIT_LOG_PATH: "./logs/omnicore_audit.jsonl"
+
+# Log rotation settings
+AUDIT_LOG_ROTATION: "midnight"  # Options: midnight, h (hourly), d (daily), w0-w6 (weekly)
+AUDIT_LOG_INTERVAL: 1  # Rotation interval
+AUDIT_LOG_MAX_SIZE: 10485760  # 10MB max file size before rotation
+AUDIT_LOG_RETENTION: 30  # Keep 30 rotated files
+
+# Compression for rotated logs
+AUDIT_LOG_COMPRESSION: "gzip"  # Options: none, gzip
+
+# Encryption for OmniCore audit logs
+AUDIT_LOG_ENCRYPT: false  # Set to true in production
+# AUDIT_LOG_ENCRYPTION_KEY set via environment variable
+
+# Batch processing for OmniCore
+AUDIT_LOG_BATCH_SIZE: 100  # Entries per batch
+AUDIT_LOG_BATCH_TIMEOUT: 1.0  # Seconds before forcing flush
+
+# Buffer settings
+AUDIT_BUFFER_SIZE: 100  # In-memory buffer size
+AUDIT_FLUSH_INTERVAL: 1.0  # Flush interval in seconds
+
+# =============================================================================
+# DLT (Distributed Ledger Technology) INTEGRATION
+# =============================================================================
+
+# Enable DLT anchoring for critical audit events
+DLT_ENABLED: false  # Set to true if using blockchain anchoring
+DLT_ANCHOR_CRITICAL: true  # Anchor only critical events
+DLT_RETRY_COUNT: 3  # Retry attempts for DLT operations
+DLT_BATCH_SIZE: 10  # DLT batch size
+
+# =============================================================================
+# OMNICORE-SPECIFIC EVENT TYPES
+# =============================================================================
+
+# Event types specific to OmniCore Engine
+AUDIT_EVENT_TYPES:
+  workflow_orchestration:
+    - code_factory_workflow_start
+    - code_factory_workflow_complete
+    - workflow_step_execute
+    - workflow_step_complete
+    - workflow_error
+  
+  plugin_management:
+    - plugin_installed
+    - plugin_loaded
+    - plugin_unloaded
+    - plugin_error
+    - plugin_event_handled
+  
+  meta_supervision:
+    - supervisor_health_check
+    - supervisor_alert
+    - supervisor_intervention
+    - policy_violation_detected
+    - auto_recovery_initiated
+  
+  error_tracking:
+    - error_logged
+    - error_resolved
+    - error_escalated
+    - critical_failure
+  
+  performance:
+    - metric_collected
+    - performance_threshold_exceeded
+    - latency_alert
+    - throughput_alert
+
+# =============================================================================
+# OMNICORE SECURITY SETTINGS
+# =============================================================================
+
+# Encryption settings (inherits from main config)
+# Override if OmniCore needs different encryption
+# ENCRYPTION_ENABLED: true
+# IMMUTABLE: true
+# TAMPER_DETECTION_ENABLED: true
+
+# OmniCore-specific RBAC
+OMNICORE_RBAC_ENABLED: true
+
+# =============================================================================
+# PROMETHEUS METRICS
+# =============================================================================
+
+# Enable Prometheus metrics for OmniCore audit
+PROMETHEUS_ENABLED: true
+PROMETHEUS_PORT: 9091  # Different from main audit (8002)
+
+# =============================================================================
+# OPENTELEMETRY TRACING
+# =============================================================================
+
+# Distributed tracing for OmniCore audit operations
+OTEL_ENABLED: true
+OTEL_SERVICE_NAME: "omnicore-audit"
+OTEL_EXPORT_INTERVAL: 5000  # milliseconds
+
+# =============================================================================
+# INTEGRATION WITH MAIN AUDIT SYSTEM
+# =============================================================================
+
+# Route critical OmniCore events to main audit system
+ROUTE_TO_MAIN_AUDIT: true
+MAIN_AUDIT_ENDPOINT: "http://localhost:8003/log"  # Main audit API
+
+# Event severity routing
+ROUTE_SEVERITY_LEVELS:
+  - "critical"
+  - "error"
+  - "security"
+  - "compliance"
+
+# =============================================================================
+# COMPLIANCE SETTINGS
+# =============================================================================
+
+# Compliance mode (inherits from main config or override)
+# COMPLIANCE_MODE: "soc2"
+
+# OmniCore-specific retention (may differ from main)
+OMNICORE_DATA_RETENTION_DAYS: 365
+
+# =============================================================================
+# ALERTING
+# =============================================================================
+
+# Alert on critical OmniCore events
+ALERT_ENABLED: true
+ALERT_WEBHOOK_URL: ""  # Set via environment variable
+ALERT_SEVERITY_THRESHOLD: "error"  # Minimum severity to alert
+
+# Alert channels
+ALERT_CHANNELS:
+  slack: false
+  email: false
+  pagerduty: false
+  webhook: true
+
+# =============================================================================
+# DOCUMENTATION
+# =============================================================================
+
+# For complete OmniCore audit configuration options, see:
+# - docs/AUDIT_CONFIGURATION.md (main audit system)
+# - omnicore_engine/docs/AUDIT.md (OmniCore-specific)
+# - docs/AUDIT_CONFIGURATION_WEB_ACCESS.md (API access)
+
+# Environment variable overrides:
+# - All AUDIT_LOG_* variables from main config apply
+# - AUDIT_LOG_PATH: Override log file path
+# - AUDIT_LOG_ENCRYPTION_KEY: Encryption key for OmniCore logs
+# - DLT_ENABLED: Enable/disable DLT anchoring
+# - PROMETHEUS_PORT: Metrics port for OmniCore
+# ============================================================================

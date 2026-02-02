@@ -1,0 +1,285 @@
+# ============================================================================
+# Self-Fixing Engineer Audit Log Configuration
+# ============================================================================
+# This configuration extends the main audit configuration with Self-Fixing
+# Engineer specific settings for arbiter operations, bug detection, test
+# generation, and simulation.
+#
+# This file inherits from generator/audit_config.yaml and adds module-specific
+# settings. All generator audit settings apply unless overridden here.
+# ============================================================================
+
+# =============================================================================
+# ARBITER AUDIT SETTINGS
+# =============================================================================
+
+# Audit log path for Arbiter events
+AUDIT_LOG_PATH: "./logs/arbiter_audit_log.jsonl"
+
+# Log rotation settings
+AUDIT_LOG_ROTATION: "midnight"
+AUDIT_LOG_INTERVAL: 1
+AUDIT_LOG_MAX_SIZE: 10485760  # 10MB
+AUDIT_LOG_RETENTION: 30  # 30 days
+
+# Compression
+AUDIT_LOG_COMPRESSION: "gzip"
+
+# Encryption
+AUDIT_LOG_ENCRYPT: false  # Set to true in production
+# AUDIT_LOG_ENCRYPTION_KEY set via environment variable
+
+# Batch processing
+AUDIT_LOG_BATCH_SIZE: 100
+AUDIT_LOG_BATCH_TIMEOUT: 1.0
+
+# Buffer settings (Arbiter-specific)
+AUDIT_BUFFER_SIZE: 100
+AUDIT_FLUSH_INTERVAL: 1.0
+
+# =============================================================================
+# DLT INTEGRATION (Blockchain anchoring)
+# =============================================================================
+
+DLT_ENABLED: false
+DLT_ANCHOR_CRITICAL: true  # Anchor only critical bug fixes
+DLT_RETRY_COUNT: 3
+DLT_BATCH_SIZE: 10
+
+# =============================================================================
+# ARBITER-SPECIFIC EVENT TYPES
+# =============================================================================
+
+AUDIT_EVENT_TYPES:
+  bug_detection:
+    - codebase_scan
+    - bug_detected
+    - vulnerability_found
+    - code_smell_detected
+    - performance_issue_found
+  
+  fix_operations:
+    - fix_proposal_generated
+    - fix_application_started
+    - fix_applied_successfully
+    - fix_failed
+    - fix_rollback
+    - fix_verification
+  
+  learning:
+    - learning_update
+    - pattern_learned
+    - model_updated
+    - knowledge_graph_updated
+    - meta_learning_completed
+  
+  policy:
+    - policy_enforcement
+    - policy_violation
+    - policy_updated
+    - compliance_check
+    - governance_action
+  
+  security:
+    - key_management
+    - key_rotation
+    - access_control
+    - authentication_event
+    - authorization_event
+  
+  self_operations:
+    - self_audit
+    - self_diagnosis
+    - explore_and_fix
+    - auto_optimize
+    - health_check
+
+# =============================================================================
+# TEST GENERATION AUDIT SETTINGS
+# =============================================================================
+
+# Test generation specific log path
+TEST_GENERATION_AUDIT_PATH: "./logs/testgen_audit.jsonl"
+
+# Test generation event types
+TEST_GENERATION_EVENTS:
+  - test_generation_start
+  - test_execution_complete
+  - test_failure
+  - coverage_analysis
+  - spec_parsing
+  - feedback_received
+  - test_suite_updated
+
+# =============================================================================
+# SIMULATION AUDIT SETTINGS  
+# =============================================================================
+
+# Simulation specific log path
+SIMULATION_AUDIT_PATH: "./logs/simulation_audit.jsonl"
+
+# Simulation event types
+SIMULATION_EVENTS:
+  - agent_decision
+  - policy_decision
+  - simulation_start
+  - simulation_complete
+  - anomaly_detected
+  - environment_changed
+  - multi_agent_interaction
+
+# =============================================================================
+# GUARDRAILS AUDIT SETTINGS
+# =============================================================================
+
+# Guardrails/compliance log path
+GUARDRAILS_AUDIT_PATH: "./simulation/results/audit_trail.log"
+
+# Guardrails event types
+GUARDRAILS_EVENTS:
+  - compliance_check
+  - gap_detected
+  - enforcement_failure
+  - policy_violation
+  - key_rotation
+  - access_denied
+  - security_violation
+
+# =============================================================================
+# SECURITY SETTINGS
+# =============================================================================
+
+# Encryption settings (inherits from main config)
+# ENCRYPTION_ENABLED: true
+# IMMUTABLE: true
+# TAMPER_DETECTION_ENABLED: true
+
+# Arbiter-specific RBAC
+ARBITER_RBAC_ENABLED: true
+
+# =============================================================================
+# PROMETHEUS METRICS
+# =============================================================================
+
+PROMETHEUS_ENABLED: true
+PROMETHEUS_PORT: 9092  # Different port for SFE metrics
+
+# =============================================================================
+# OPENTELEMETRY TRACING
+# =============================================================================
+
+OTEL_ENABLED: true
+OTEL_SERVICE_NAME: "self-fixing-engineer-audit"
+OTEL_EXPORT_INTERVAL: 5000
+
+# =============================================================================
+# INTEGRATION WITH MAIN AUDIT SYSTEM
+# =============================================================================
+
+# Route critical SFE events to main audit system
+ROUTE_TO_MAIN_AUDIT: true
+MAIN_AUDIT_ENDPOINT: "http://localhost:8003/log"
+
+# Event severity routing
+ROUTE_SEVERITY_LEVELS:
+  - "critical"
+  - "error"
+  - "security"
+  - "compliance"
+  - "bug_fix"
+
+# Route specific event types to main audit
+ROUTE_EVENT_TYPES:
+  - "security_violation"
+  - "policy_violation"
+  - "critical_bug_fix"
+  - "key_rotation"
+  - "fix_rollback"
+
+# =============================================================================
+# COMPLIANCE SETTINGS
+# =============================================================================
+
+# Compliance mode (inherits from main config)
+# COMPLIANCE_MODE: "soc2"
+
+# SFE-specific retention
+SFE_DATA_RETENTION_DAYS: 365
+
+# PII redaction for bug reports
+PII_REDACTION_ENABLED: true
+PII_REDACT_IN_BUG_REPORTS: true
+
+# =============================================================================
+# ALERTING
+# =============================================================================
+
+ALERT_ENABLED: true
+ALERT_WEBHOOK_URL: ""  # Set via environment variable
+ALERT_SEVERITY_THRESHOLD: "error"
+
+# Alert on specific events
+ALERT_ON_EVENTS:
+  - "critical_bug_detected"
+  - "fix_failed"
+  - "security_violation"
+  - "policy_violation"
+  - "self_diagnosis_failure"
+
+# Alert channels
+ALERT_CHANNELS:
+  slack: false
+  email: false
+  pagerduty: false
+  webhook: true
+
+# =============================================================================
+# KNOWLEDGE GRAPH AUDIT
+# =============================================================================
+
+# Track knowledge graph changes
+KNOWLEDGE_GRAPH_AUDIT: true
+KNOWLEDGE_GRAPH_AUDIT_PATH: "./logs/knowledge_graph_audit.jsonl"
+
+# =============================================================================
+# BUG MANAGER AUDIT
+# =============================================================================
+
+# Track bug lifecycle
+BUG_MANAGER_AUDIT: true
+BUG_MANAGER_AUDIT_PATH: "./logs/bug_manager_audit.jsonl"
+
+# =============================================================================
+# EXPLAINABLE AI AUDIT
+# =============================================================================
+
+# Track reasoning and explanations
+EXPLAINABLE_AI_AUDIT: true
+EXPLAINABLE_AI_AUDIT_PATH: "./logs/explainable_ai_audit.jsonl"
+
+# =============================================================================
+# META-LEARNING AUDIT
+# =============================================================================
+
+# Track meta-learning updates
+META_LEARNING_AUDIT: true
+META_LEARNING_AUDIT_PATH: "./logs/meta_learning_audit.jsonl"
+
+# =============================================================================
+# DOCUMENTATION
+# =============================================================================
+
+# For complete SFE audit configuration options, see:
+# - docs/AUDIT_CONFIGURATION.md (main audit system)
+# - self_fixing_engineer/docs/AUDIT.md (SFE-specific)
+# - docs/AUDIT_CONFIGURATION_WEB_ACCESS.md (API access)
+
+# Environment variable overrides:
+# - All AUDIT_LOG_* variables from main config apply
+# - AUDIT_LOG_PATH: Override log file path for arbiter
+# - TEST_GENERATION_AUDIT_PATH: Test generation log path
+# - SIMULATION_AUDIT_PATH: Simulation log path
+# - GUARDRAILS_AUDIT_PATH: Guardrails log path
+# - DLT_ENABLED: Enable/disable blockchain anchoring
+# - PROMETHEUS_PORT: Metrics port for SFE
+# ============================================================================

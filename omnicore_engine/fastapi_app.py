@@ -1479,3 +1479,114 @@ async def fix_imports(file: UploadFile = Depends(validate_upload)):
     except Exception as e:
         logger.error(f"Error during import fixing: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"message": str(e)})
+
+
+# ============================================================================
+# AUDIT CONFIGURATION ENDPOINTS
+# ============================================================================
+
+@router.get("/audit/config/status")
+async def get_omnicore_audit_config_status() -> Dict[str, Any]:
+    """
+    Get OmniCore audit configuration status.
+    
+    Returns OmniCore-specific audit configuration including routing,
+    DLT integration, and module-specific settings.
+    """
+    import yaml
+    from pathlib import Path
+    
+    logger.info("Fetching OmniCore audit configuration status")
+    
+    config_info = {
+        "module": "omnicore",
+        "config_source": "environment_variables",
+        "config_file": None,
+        "omnicore_config": {},
+        "integration": {},
+        "routing": {},
+        "features": {},
+    }
+    
+    # Check for config file
+    config_path = Path("omnicore_engine/audit_config.yaml")
+    if config_path.exists():
+        config_info["config_source"] = "yaml_file"
+        config_info["config_file"] = str(config_path)
+        try:
+            with open(config_path) as f:
+                config_data = yaml.safe_load(f) or {}
+                config_info["omnicore_config"] = {
+                    "audit_log_path": config_data.get("AUDIT_LOG_PATH", "./logs/omnicore_audit.jsonl"),
+                    "rotation": config_data.get("AUDIT_LOG_ROTATION", "midnight"),
+                    "retention_days": config_data.get("AUDIT_LOG_RETENTION", 30),
+                    "compression": config_data.get("AUDIT_LOG_COMPRESSION", "gzip"),
+                }
+        except Exception as e:
+            logger.error(f"Error loading config: {e}")
+    
+    # Integration status
+    config_info["integration"] = {
+        "main_audit_system": "http://localhost:8003",
+        "routing_enabled": True,
+        "omnicore_ingestion": "http://localhost:8001/audit/ingest",
+    }
+    
+    # Features
+    config_info["features"] = {
+        "dlt_enabled": os.getenv("DLT_ENABLED", "false").lower() == "true",
+        "prometheus_enabled": True,
+        "prometheus_port": 9091,
+    }
+    
+    config_info["documentation"] = {
+        "config_file": "omnicore_engine/audit_config.yaml",
+        "routing": "audit_routing_config.yaml",
+        "docs": "docs/AUDIT_CONFIGURATION.md",
+    }
+    
+    return config_info
+
+
+@router.post("/audit/ingest")
+async def ingest_audit_log(log_entry: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ingest audit log from other modules.
+    
+    Receives audit logs from Generator and SFE modules for centralized processing.
+    """
+    try:
+        required_fields = ["source_module", "event_type"]
+        missing = [f for f in required_fields if f not in log_entry]
+        if missing:
+            raise HTTPException(400, f"Missing fields: {missing}")
+        
+        ingestion_id = f"ing_{int(time.time() * 1000)}"
+        log_entry["ingestion_id"] = ingestion_id
+        log_entry["ingestion_timestamp"] = datetime.datetime.utcnow().isoformat()
+        
+        routed_to = []
+        if omnicore_engine.audit:
+            try:
+                await omnicore_engine.audit.log_action(
+                    action=log_entry.get("event_type"),
+                    details=log_entry.get("details", {}),
+                    user=log_entry.get("user", "system"),
+                    job_id=log_entry.get("job_id"),
+                )
+                routed_to.append("omnicore_audit")
+            except Exception as e:
+                logger.error(f"Error routing to OmniCore audit: {e}")
+        
+        logger.info(f"Audit log ingested: {ingestion_id}")
+        
+        return {
+            "status": "accepted",
+            "ingestion_id": ingestion_id,
+            "routed_to": routed_to,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error ingesting audit log: {e}")
+        raise HTTPException(500, str(e))
