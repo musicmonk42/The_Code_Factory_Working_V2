@@ -673,12 +673,10 @@ class TestPytestCollectionFix:
         
         try:
             os.environ['PYTEST_COLLECTING'] = '1'
-            # Force reimport by removing from cache
-            if 'omnicore_engine.plugin_registry' in sys.modules:
-                # Just verify current state
-                from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
-                assert PLUGIN_REGISTRY is not None, "PLUGIN_REGISTRY should never be None"
-                assert hasattr(PLUGIN_REGISTRY, 'performance_tracker'), "PLUGIN_REGISTRY should have performance_tracker attribute"
+            # Verify current state - module is already imported, so we check existing instance
+            from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
+            assert PLUGIN_REGISTRY is not None, "PLUGIN_REGISTRY should never be None"
+            assert hasattr(PLUGIN_REGISTRY, 'performance_tracker'), "PLUGIN_REGISTRY should have performance_tracker attribute"
         finally:
             if original_value is None:
                 os.environ.pop('PYTEST_COLLECTING', None)
