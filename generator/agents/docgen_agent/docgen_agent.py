@@ -1042,7 +1042,8 @@ class DocgenAgent:
                 LLM_LATENCY_SECONDS.labels(
                     provider="docgen_agent", model=llm_model
                 ).observe(llm_latency)
-                add_provenance(
+                await add_provenance(
+                    "generate_docs",
                     {
                         "action": "generate_docs",
                         "model": llm_model,
@@ -1152,7 +1153,8 @@ class DocgenAgent:
                         logger.info(
                             "Generated documentation summaries.", extra=log_extra
                         )
-                        add_provenance(
+                        await add_provenance(
+                            "doc_summary_generated",
                             {
                                 "action": "Doc Summary Generated",
                                 "run_id": run_id,
