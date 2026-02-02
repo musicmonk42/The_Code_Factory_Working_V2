@@ -567,10 +567,19 @@ jobs:
           echo "=== Running pytest tests for ${{ matrix.module }} ==="
           echo "NLTK_DATA: $NLTK_DATA"
           
+          # Conditionally add -n flag based on module
+          if [ "${{ matrix.module }}" = "self_fixing_engineer" ]; then
+            # Run self_fixing_engineer without xdist (single process, no workers)
+            PYTEST_ARGS=""
+          else
+            # Other modules can use xdist with 1 worker
+            PYTEST_ARGS="-n 1"
+          fi
+          
           # Use python -m pytest to ensure proper sys.path setup
           python -m pytest \
             ${{ matrix.module }}/ \
-            -n 1 \
+            $PYTEST_ARGS \
             -v \
             --tb=short \
             --maxfail=5 \
