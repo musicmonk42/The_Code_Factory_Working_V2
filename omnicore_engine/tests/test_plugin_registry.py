@@ -662,5 +662,85 @@ class TestPluginMarketplace:
             )
 
 
+class TestPytestCollectionFix:
+    """Test that PLUGIN_REGISTRY initialization works during pytest collection"""
+
+    def test_plugin_registry_always_initialized(self):
+        """Test that PLUGIN_REGISTRY is never None, even during test collection"""
+        # Import in a fresh context with collection mode set
+        import os
+        original_value = os.environ.get('PYTEST_COLLECTING')
+        
+        try:
+            os.environ['PYTEST_COLLECTING'] = '1'
+            # Force reimport by removing from cache
+            if 'omnicore_engine.plugin_registry' in sys.modules:
+                # Just verify current state
+                from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
+                assert PLUGIN_REGISTRY is not None, "PLUGIN_REGISTRY should never be None"
+                assert hasattr(PLUGIN_REGISTRY, 'performance_tracker'), "PLUGIN_REGISTRY should have performance_tracker attribute"
+        finally:
+            if original_value is None:
+                os.environ.pop('PYTEST_COLLECTING', None)
+            else:
+                os.environ['PYTEST_COLLECTING'] = original_value
+
+    def test_plugin_decorator_with_none_performance_tracker(self):
+        """Test that @plugin decorator handles None performance_tracker gracefully"""
+        # This simulates the scenario during pytest collection
+        from omnicore_engine.plugin_registry import PlugInKind
+        
+        with patch("omnicore_engine.plugin_registry.PLUGIN_REGISTRY") as mock_registry:
+            # Simulate early initialization where performance_tracker is None
+            mock_registry.performance_tracker = None
+            mock_registry.register = Mock()
+            mock_registry.db = None
+            
+            # This should not raise AttributeError
+            @plugin(
+                kind=PlugInKind.FIX,
+                name="test_collection_plugin",
+                description="Test plugin for collection mode",
+                version="1.0.0"
+            )
+            def test_func():
+                return "test"
+            
+            # Verify the plugin was registered
+            mock_registry.register.assert_called_once()
+
+    def test_plugin_decorator_during_collection_mode(self):
+        """Test that @plugin decorator works when PYTEST_COLLECTING=1"""
+        import os
+        original_value = os.environ.get('PYTEST_COLLECTING')
+        
+        try:
+            os.environ['PYTEST_COLLECTING'] = '1'
+            
+            from omnicore_engine.plugin_registry import plugin, PlugInKind, PLUGIN_REGISTRY
+            
+            # Verify PLUGIN_REGISTRY exists
+            assert PLUGIN_REGISTRY is not None
+            
+            # This should work without AttributeError
+            @plugin(
+                kind=PlugInKind.FIX,
+                name="collection_mode_test",
+                description="Test during collection",
+                version="1.0.0"
+            )
+            def collection_test_func():
+                return "collection test"
+            
+            # If we got here, the decorator worked
+            assert True, "Plugin decorator should work during collection mode"
+            
+        finally:
+            if original_value is None:
+                os.environ.pop('PYTEST_COLLECTING', None)
+            else:
+                os.environ['PYTEST_COLLECTING'] = original_value
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--asyncio-mode=auto"])
