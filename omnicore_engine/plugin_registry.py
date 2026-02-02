@@ -474,10 +474,11 @@ def safe_execute_plugin(fn: Callable, *args, **kwargs):
 def verify_plugin_signature(plugin_code: bytes, signature: str) -> bool:
     """Verifies the HMAC signature of plugin code."""
     signing_key = getattr(
-        get_settings(), "PLUGIN_SIGNING_KEY", "insecure_default_key"
+        settings, "PLUGIN_SIGNING_KEY", "insecure_default_key"
     ).encode()
     expected_sig = hmac.new(signing_key, plugin_code, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected_sig, signature)
+
 
 
 def validate_plugin_path(filepath: Path, plugin_dir: Path) -> Path:
