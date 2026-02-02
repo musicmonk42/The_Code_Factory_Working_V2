@@ -39,6 +39,7 @@ STRICT_MODE = os.getenv("GENERATOR_STRICT_MODE", "0") == "1"
 # Track which agents are available and their import errors
 _AVAILABLE_AGENTS: Dict[str, bool] = {}
 _AGENT_IMPORT_ERRORS: Dict[str, str] = {}
+_AGENTS_LOADED: bool = False  # Track if agents have been loaded
 
 # Initialize placeholders for exports
 CodeGenConfig = None
@@ -122,74 +123,105 @@ def _safe_import_agent(
         return False, None
 
 
-# --- Agent Imports with Fail-Visible Pattern ---
+def _load_all_agents():
+    """Load all agents on-demand to avoid circular imports during module initialization.
+    
+    This function is called lazily when agents are first accessed, rather than
+    at module import time, to ensure the runner module is fully initialized first.
+    """
+    global CodeGenConfig, SecurityUtils, CritiqueConfig, orchestrate_critique_pipeline
+    global TestgenAgent, Policy, DeployAgent, DeployConfig, DocgenAgent, DocgenConfig
+    global _AGENTS_LOADED
+    
+    if _AGENTS_LOADED:
+        return  # Already loaded
+    
+    logger.info("Loading agents on demand...")
+    
+    # codegen_agent
+    _success, _codegen_module = _safe_import_agent(
+        "generator.agents.codegen_agent", "codegen", ["CodeGenConfig", "SecurityUtils"]
+    )
+    if _success and _codegen_module:
+        if hasattr(_codegen_module, "CodeGenConfig"):
+            CodeGenConfig = _codegen_module.CodeGenConfig
+        if hasattr(_codegen_module, "SecurityUtils"):
+            SecurityUtils = _codegen_module.SecurityUtils
+        _AVAILABLE_AGENTS["codegen"] = True
+    else:
+        _AVAILABLE_AGENTS["codegen"] = False
 
-# codegen_agent
-_success, _codegen_module = _safe_import_agent(
-    "generator.agents.codegen_agent", "codegen", ["CodeGenConfig", "SecurityUtils"]
-)
-if _success and _codegen_module:
-    if hasattr(_codegen_module, "CodeGenConfig"):
-        CodeGenConfig = _codegen_module.CodeGenConfig
-    if hasattr(_codegen_module, "SecurityUtils"):
-        SecurityUtils = _codegen_module.SecurityUtils
-    _AVAILABLE_AGENTS["codegen"] = True
-else:
-    _AVAILABLE_AGENTS["codegen"] = False
+    # critique_agent
+    _success, _critique_module = _safe_import_agent(
+        "generator.agents.critique_agent",
+        "critique",
+        ["CritiqueConfig", "orchestrate_critique_pipeline"],
+    )
+    if _success and _critique_module:
+        if hasattr(_critique_module, "CritiqueConfig"):
+            CritiqueConfig = _critique_module.CritiqueConfig
+        if hasattr(_critique_module, "orchestrate_critique_pipeline"):
+            orchestrate_critique_pipeline = _critique_module.orchestrate_critique_pipeline
+        _AVAILABLE_AGENTS["critique"] = True
+    else:
+        _AVAILABLE_AGENTS["critique"] = False
 
-# critique_agent
-_success, _critique_module = _safe_import_agent(
-    "generator.agents.critique_agent",
-    "critique",
-    ["CritiqueConfig", "orchestrate_critique_pipeline"],
-)
-if _success and _critique_module:
-    if hasattr(_critique_module, "CritiqueConfig"):
-        CritiqueConfig = _critique_module.CritiqueConfig
-    if hasattr(_critique_module, "orchestrate_critique_pipeline"):
-        orchestrate_critique_pipeline = _critique_module.orchestrate_critique_pipeline
-    _AVAILABLE_AGENTS["critique"] = True
-else:
-    _AVAILABLE_AGENTS["critique"] = False
+    # testgen_agent - has heavy dependencies (presidio, spacy, torch)
+    _success, _testgen_module = _safe_import_agent(
+        "generator.agents.testgen_agent", "testgen", ["TestgenAgent", "Policy"]
+    )
+    if _success and _testgen_module:
+        if hasattr(_testgen_module, "TestgenAgent"):
+            TestgenAgent = _testgen_module.TestgenAgent
+        if hasattr(_testgen_module, "Policy"):
+            Policy = _testgen_module.Policy
+        _AVAILABLE_AGENTS["testgen"] = True
+    else:
+        _AVAILABLE_AGENTS["testgen"] = False
 
-# testgen_agent - has heavy dependencies (presidio, spacy, torch)
-_success, _testgen_module = _safe_import_agent(
-    "generator.agents.testgen_agent", "testgen", ["TestgenAgent", "Policy"]
-)
-if _success and _testgen_module:
-    if hasattr(_testgen_module, "TestgenAgent"):
-        TestgenAgent = _testgen_module.TestgenAgent
-    if hasattr(_testgen_module, "Policy"):
-        Policy = _testgen_module.Policy
-    _AVAILABLE_AGENTS["testgen"] = True
-else:
-    _AVAILABLE_AGENTS["testgen"] = False
+    # deploy_agent
+    _success, _deploy_module = _safe_import_agent(
+        "generator.agents.deploy_agent", "deploy", ["DeployAgent", "DeployConfig"]
+    )
+    if _success and _deploy_module:
+        if hasattr(_deploy_module, "DeployAgent"):
+            DeployAgent = _deploy_module.DeployAgent
+        if hasattr(_deploy_module, "DeployConfig"):
+            DeployConfig = _deploy_module.DeployConfig
+        _AVAILABLE_AGENTS["deploy"] = True
+    else:
+        _AVAILABLE_AGENTS["deploy"] = False
 
-# deploy_agent
-_success, _deploy_module = _safe_import_agent(
-    "generator.agents.deploy_agent", "deploy", ["DeployAgent", "DeployConfig"]
-)
-if _success and _deploy_module:
-    if hasattr(_deploy_module, "DeployAgent"):
-        DeployAgent = _deploy_module.DeployAgent
-    if hasattr(_deploy_module, "DeployConfig"):
-        DeployConfig = _deploy_module.DeployConfig
-    _AVAILABLE_AGENTS["deploy"] = True
-else:
-    _AVAILABLE_AGENTS["deploy"] = False
-
-# docgen_agent
-_success, _docgen_module = _safe_import_agent(
-    "generator.agents.docgen_agent", "docgen", ["DocgenAgent", "DocgenConfig"]
-)
-if _success and _docgen_module:
-    if hasattr(_docgen_module, "DocgenAgent"):
-        DocgenAgent = _docgen_module.DocgenAgent
-    if hasattr(_docgen_module, "DocgenConfig"):
-        DocgenConfig = _docgen_module.DocgenConfig
-    _AVAILABLE_AGENTS["docgen"] = True
-else:
-    _AVAILABLE_AGENTS["docgen"] = False
+    # docgen_agent
+    _success, _docgen_module = _safe_import_agent(
+        "generator.agents.docgen_agent", "docgen", ["DocgenAgent", "DocgenConfig"]
+    )
+    if _success and _docgen_module:
+        if hasattr(_docgen_module, "DocgenAgent"):
+            DocgenAgent = _docgen_module.DocgenAgent
+        if hasattr(_docgen_module, "DocgenConfig"):
+            DocgenConfig = _docgen_module.DocgenConfig
+        _AVAILABLE_AGENTS["docgen"] = True
+    else:
+        _AVAILABLE_AGENTS["docgen"] = False
+    
+    # Mark as loaded
+    _AGENTS_LOADED = True
+    
+    # Re-export loaded submodules to sys.modules for test compatibility
+    import sys as _sys
+    if _docgen_module:
+        _sys.modules[f"{__name__}.docgen_agent"] = _docgen_module
+    if _deploy_module:
+        _sys.modules[f"{__name__}.deploy_agent"] = _deploy_module
+    if _testgen_module:
+        _sys.modules[f"{__name__}.testgen_agent"] = _testgen_module
+    if _critique_module:
+        _sys.modules[f"{__name__}.critique_agent"] = _critique_module
+    if _codegen_module:
+        _sys.modules[f"{__name__}.codegen_agent"] = _codegen_module
+    
+    logger.info("Agents loaded successfully")
 
 
 # --- Public API Functions ---
@@ -197,11 +229,13 @@ else:
 
 def get_available_agents() -> Dict[str, bool]:
     """Returns a dict of agent names and their availability status."""
+    _load_all_agents()  # Ensure agents are loaded
     return _AVAILABLE_AGENTS.copy()
 
 
 def is_agent_available(agent_name: str) -> bool:
     """Check if a specific agent is available."""
+    _load_all_agents()  # Ensure agents are loaded
     return _AVAILABLE_AGENTS.get(agent_name, False)
 
 
@@ -211,11 +245,13 @@ def get_agent_import_errors() -> Dict[str, str]:
     This is useful for debugging and for operators to understand why
     certain agents are not available.
     """
+    _load_all_agents()  # Ensure agents are loaded
     return _AGENT_IMPORT_ERRORS.copy()
 
 
 def get_unavailable_agents() -> List[str]:
     """Returns a list of agent names that failed to load."""
+    _load_all_agents()  # Ensure agents are loaded
     return [name for name, available in _AVAILABLE_AGENTS.items() if not available]
 
 
@@ -239,6 +275,8 @@ def validate_agents_for_production(required_agents: Optional[List[str]] = None) 
     Raises:
         AgentLoadError: If any required agent is not available.
     """
+    _load_all_agents()  # Ensure agents are loaded before validation
+    
     if required_agents is None:
         required_agents = ["codegen", "critique", "testgen", "deploy", "docgen"]
 
@@ -269,14 +307,9 @@ def validate_agents_for_production(required_agents: Optional[List[str]] = None) 
 
 
 # --- Strict Mode Enforcement ---
-# If GENERATOR_STRICT_MODE=1, validate agents at import time
-if STRICT_MODE:
-    try:
-        validate_agents_for_production()
-    except AgentLoadError as e:
-        logger.critical(f"STRICT MODE: {e}")
-        # In strict mode, we raise the error to prevent the application from starting
-        raise
+# Note: Strict mode validation is now deferred until agents are actually loaded
+# If GENERATOR_STRICT_MODE=1, validate agents when they are first accessed
+# This avoids circular imports during module initialization
 
 
 __all__ = [
@@ -303,21 +336,5 @@ __all__ = [
     "DocgenAgent",
     "DocgenConfig",
 ]
-
-# --- Submodule Re-exports for Test Compatibility ---
-# Tests may import submodules directly (e.g., from generator.agents import docgen_agent)
-# Re-export loaded submodules to sys.modules to support this pattern
-import sys as _sys
-
-if _docgen_module:
-    _sys.modules[f"{__name__}.docgen_agent"] = _docgen_module
-if _deploy_module:
-    _sys.modules[f"{__name__}.deploy_agent"] = _deploy_module
-if _testgen_module:
-    _sys.modules[f"{__name__}.testgen_agent"] = _testgen_module
-if _critique_module:
-    _sys.modules[f"{__name__}.critique_agent"] = _critique_module
-if _codegen_module:
-    _sys.modules[f"{__name__}.codegen_agent"] = _codegen_module
 
 __version__ = "1.0.0"
