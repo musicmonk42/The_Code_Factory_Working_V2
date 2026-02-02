@@ -31,12 +31,20 @@ def engine():
 
 
 @pytest.fixture
-def session(engine):
-    """Create a database session for testing."""
+def session():
+    """Provide a database session with all tables created."""
+    from omnicore_engine.database.models import Base
+    
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    
+    # CRITICAL: Create all tables including agent_state
+    Base.metadata.create_all(engine)
+    
     Session = sessionmaker(bind=engine)
     session = Session()
     yield session
     session.close()
+    engine.dispose()
 
 
 class TestAgentState:
