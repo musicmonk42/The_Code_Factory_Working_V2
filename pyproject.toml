@@ -42,10 +42,11 @@ pythonpath = ["."]
 # - no:randomly: Disable pytest-randomly plugin (if installed) to reduce collection overhead
 # - no:cacheprovider: Disable pytest cache to avoid filesystem overhead during collection
 # - import-mode=importlib: Use importlib for faster, more reliable imports
-# - n 2: Reduce parallelism to prevent worker crashes (was causing issues with higher values)
 # - maxfail=5: Stop after 5 failures to save time
-# - forked: Run tests in isolated forked processes for better isolation
-addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider --import-mode=importlib -n 2 --maxfail=5 --forked"
+# NOTE: pytest-xdist options (-n, --forked) removed from addopts.
+# CI workflow controls parallelism via command line, and having these in addopts
+# caused conflicts when workflows disabled parallelism for memory-intensive modules.
+addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider --import-mode=importlib --maxfail=5"
 # REMOVED: testpaths configuration
 # Test directories should be specified on the command line to prevent pytest from
 # automatically scanning and loading all test modules during pytest initialization.
@@ -69,15 +70,10 @@ markers = [
     "forked: marks tests that should run in isolated forked process",
     "flaky: marks tests as flaky (may need retries)",
 ]
-# Environment variables to set for all test runs
-env = [
-    "PYTEST_COLLECTING=1",
-    "SKIP_AUDIT_INIT=1",
-    "SKIP_BACKGROUND_TASKS=1",
-    "NO_MONITORING=1",
-    "DISABLE_TELEMETRY=1",
-    "OTEL_SDK_DISABLED=1",
-]
+# NOTE: Environment variables for tests are set in the CI workflow (.github/workflows/pytest-all.yml)
+# The 'env' configuration option requires pytest-env plugin which is not installed.
+# Required env vars for tests: TESTING=1, CI=1, SKIP_AUDIT_INIT=1, SKIP_BACKGROUND_TASKS=1,
+# NO_MONITORING=1, DISABLE_TELEMETRY=1, OTEL_SDK_DISABLED=1
 # Filter warnings from various modules
 filterwarnings = [
     # Pydantic V1 -> V2 Deprecation Warnings (from omnicore_engine)
