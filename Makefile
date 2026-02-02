@@ -154,6 +154,38 @@ audit-config-setup-dev: ## Set up development audit configuration
 	@echo "$(YELLOW)Run 'make audit-config-validate' to verify$(NC)"
 
 # =============================================================================
+# Server and API
+# =============================================================================
+
+audit-config-api-docs: ## Show audit configuration API endpoints
+	@echo "$(BLUE)Audit Configuration API Endpoints$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Configuration Status:$(NC)"
+	@echo "  GET /audit/config/status"
+	@echo "  Returns current audit configuration, security status, and validation results"
+	@echo ""
+	@echo "$(YELLOW)Configuration Documentation:$(NC)"
+	@echo "  GET /audit/config/documentation"
+	@echo "  Returns comprehensive configuration reference and quick start guides"
+	@echo ""
+	@echo "$(YELLOW)Usage:$(NC)"
+	@echo "  1. Start server: make run-server"
+	@echo "  2. Open API docs: http://localhost:8000/docs"
+	@echo "  3. Navigate to 'Audit Logs' section"
+	@echo "  4. Test new endpoints"
+	@echo ""
+	@echo "$(YELLOW)Or use curl:$(NC)"
+	@echo "  curl http://localhost:8000/audit/config/status"
+	@echo "  curl http://localhost:8000/audit/config/documentation"
+	@echo ""
+
+run-server: ## Run the unified Code Factory server
+	@echo "$(BLUE)Starting Code Factory server...$(NC)"
+	@echo "$(YELLOW)API docs: http://localhost:8000/docs$(NC)"
+	@echo "$(YELLOW)Audit config: http://localhost:8000/audit/config/status$(NC)"
+	cd server && python main.py
+
+# =============================================================================
 # Docker
 # =============================================================================
 
