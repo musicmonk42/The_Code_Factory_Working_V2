@@ -1300,6 +1300,7 @@ class OmniCoreService:
                 "status": "error",
                 "message": str(e),
                 "error_type": type(e).__name__,
+                "stage": "testgen",
             }
     
     async def _run_deploy(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
