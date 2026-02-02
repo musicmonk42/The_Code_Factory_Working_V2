@@ -98,7 +98,7 @@ async def test_audit_entry(tmp_path):
     # Patch Database in audit module namespace BEFORE creating ExplainAudit
     with patch("omnicore_engine.database.database.settings", mock_settings), \
          patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config), \
-         patch("omnicore_engine.audit.Database", RealDatabase) as MockDatabaseClass, \
+         patch("omnicore_engine.audit.Database", RealDatabase), \
          patch("omnicore_engine.audit.AUDIT_ERRORS"), \
          patch("omnicore_engine.audit.AUDIT_RECORDS"), \
          patch("omnicore_engine.audit.AUDIT_RECORDS_PROCESSED_TOTAL"):
