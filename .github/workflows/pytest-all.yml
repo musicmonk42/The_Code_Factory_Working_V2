@@ -543,8 +543,22 @@ jobs:
           
           echo "✓ aiohttp installation complete and verified"
       
+      - name: Pre-test system health check
+        run: |
+          echo "=== System resources before tests ==="
+          free -h
+          df -h
+          ulimit -a
+          
+          echo "=== Python environment ==="
+          python --version
+          pip list | grep -E "pytest|xdist|cov" | head -10
+          
+          echo "=== Test discovery (quick check) ==="
+          timeout 30 python -m pytest ${{ matrix.module }}/ --collect-only --quiet 2>&1 | tail -20 || echo "Collection took >30s or failed"
+      
       - name: Run tests for ${{ matrix.module }}
-        timeout-minutes: 20
+        timeout-minutes: 30
         env:
           TESTING: "1"
           AWS_REGION: ""
@@ -572,9 +586,9 @@ jobs:
           echo "=== Running pytest tests for ${{ matrix.module }} ==="
           echo "NLTK_DATA: $NLTK_DATA"
           
-          # Memory optimization for self_fixing_engineer module
-          if [ "${{ matrix.module }}" = "self_fixing_engineer" ]; then
-            echo "=== Applying memory optimizations for self_fixing_engineer ==="
+          # Memory optimization for self_fixing_engineer AND generator modules
+          if [ "${{ matrix.module }}" = "self_fixing_engineer" ] || [ "${{ matrix.module }}" = "generator" ]; then
+            echo "=== Applying memory optimizations for ${{ matrix.module }} ==="
             
             # Force garbage collection
             python -c "import gc; gc.collect()"
@@ -589,14 +603,14 @@ jobs:
             sudo mkswap /swapfile || true
             sudo swapon /swapfile || true
             
-            # Disable coverage to reduce memory overhead
+            # Disable parallelization and coverage for memory-intensive modules
             COVERAGE_ARGS=""
             PYTEST_ARGS=""
-            TIMEOUT_VALUE=180
+            TIMEOUT_VALUE=600  # Increase timeout to 10 minutes per test
             
             echo "✓ Memory optimizations applied"
             echo "  - Coverage: DISABLED"
-            echo "  - Timeout: ${TIMEOUT_VALUE}s (reduced from 300s)"
+            echo "  - Timeout: ${TIMEOUT_VALUE}s (increased from 300s)"
             echo "  - Parallel workers: DISABLED"
           else
             # Other modules can use standard settings
@@ -610,9 +624,10 @@ jobs:
             ${{ matrix.module }}/ \
             $PYTEST_ARGS \
             -v \
-            --tb=short \
-            --maxfail=5 \
+            --tb=line \
+            --maxfail=15 \
             --timeout=${TIMEOUT_VALUE} \
+            --durations=20 \
             $COVERAGE_ARGS \
             --junitxml=junit-${{ matrix.module }}.xml \
             -p no:randomly \
@@ -638,6 +653,19 @@ jobs:
                 echo "  - Reducing test parallelization further"
                 echo "  - Splitting tests into smaller batches"
                 echo "  - Investigating memory leaks in test code"
+              elif [ $EXIT_CODE -eq 143 ]; then
+                echo "ERROR: Process terminated (SIGTERM - exit code 143)"
+                echo "This typically indicates:"
+                echo "  - Timeout or resource exhaustion"
+                echo "  - Runner service shutdown"
+                echo "  - Memory pressure from test suite"
+                echo ""
+                echo "=== Last 100 lines of test output ==="
+                tail -100 test-output-${{ matrix.module }}.log
+                echo ""
+                echo "=== System resources at failure ==="
+                free -h || true
+                df -h || true
               elif [ $EXIT_CODE -eq 152 ]; then
                 echo "ERROR: CPU time limit exceeded (SIGXCPU)"
               fi
@@ -647,7 +675,7 @@ jobs:
           echo "✓ Tests completed for ${{ matrix.module }}"
           
       - name: Profile test collection (on failure)
-        if: failure() && matrix.module != 'self_fixing_engineer'
+        if: failure() && matrix.module != 'self_fixing_engineer' && matrix.module != 'generator'
         run: |
           echo "=== Running test collection with CPU profiling for ${{ matrix.module }} ==="
           timeout 180s python -m cProfile -o collection_profile.stats -m pytest \
@@ -673,7 +701,7 @@ jobs:
           
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
-        if: always() && matrix.module != 'self_fixing_engineer'
+        if: always() && matrix.module != 'self_fixing_engineer' && matrix.module != 'generator'
         with:
           name: coverage-${{ matrix.module }}
           path: coverage-${{ matrix.module }}.xml
