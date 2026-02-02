@@ -55,6 +55,9 @@ class TestBackpressureManager(unittest.TestCase):
 
     def test_initialization_invalid_threshold(self):
         """Test initialization with invalid threshold values."""
+        # Import at test level to avoid collection-time errors
+        from omnicore_engine.message_bus.backpressure import BackpressureManager
+        
         # Test threshold = 0
         with self.assertRaises(ValueError) as context:
             BackpressureManager(self.mock_message_bus, threshold=0)

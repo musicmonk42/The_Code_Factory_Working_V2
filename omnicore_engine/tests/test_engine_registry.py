@@ -23,15 +23,15 @@ class TestEngineRegistry:
 
     def setup_method(self):
         """Clear registry before each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-
-        ENGINE_REGISTRY.clear()
+        # Avoid importing during test collection - import inside test methods if needed
+        pass
 
     @pytest.mark.integration
     def test_register_engine_success(self):
         """Test successful engine registration"""
         from omnicore_engine.engines import ENGINE_REGISTRY, register_engine
 
+        ENGINE_REGISTRY.clear()
         entrypoints = {"initialize": Mock(), "shutdown": Mock(), "execute": Mock()}
 
         register_engine("test_engine", entrypoints)
@@ -42,8 +42,9 @@ class TestEngineRegistry:
     @pytest.mark.integration
     def test_register_engine_invalid_entrypoints(self):
         """Test registration with invalid entrypoints"""
-        from omnicore_engine.engines import register_engine
-
+        from omnicore_engine.engines import register_engine, ENGINE_REGISTRY
+        
+        ENGINE_REGISTRY.clear()
         with pytest.raises(TypeError, match="Entrypoints must be a dictionary"):
             register_engine("bad_engine", "not_a_dict")
 
@@ -55,6 +56,7 @@ class TestEngineRegistry:
         """Test retrieving an existing engine"""
         from omnicore_engine.engines import ENGINE_REGISTRY, get_engine
 
+        ENGINE_REGISTRY.clear()
         entrypoints = {"func": Mock()}
         ENGINE_REGISTRY["existing_engine"] = entrypoints
 
@@ -64,8 +66,9 @@ class TestEngineRegistry:
     @pytest.mark.integration
     def test_get_engine_not_exists(self):
         """Test retrieving non-existent engine"""
-        from omnicore_engine.engines import get_engine
+        from omnicore_engine.engines import get_engine, ENGINE_REGISTRY
 
+        ENGINE_REGISTRY.clear()
         result = get_engine("nonexistent_engine")
         assert result is None
 
@@ -75,23 +78,27 @@ class TestPluginService:
 
     @pytest.fixture
     def mock_dependencies(self):
-        """Create mock dependencies"""
-        with patch("omnicore_engine.engines.Database") as mock_db:
-            with patch("omnicore_engine.engines.ShardedMessageBus") as mock_bus:
-                with patch("omnicore_engine.engines.ArbiterConfig") as mock_config:
-                    mock_config.return_value.DB_PATH = "sqlite:///test.db"
-                    mock_registry = Mock()
-                    mock_bus_instance = Mock()
-                    mock_bus_instance.subscribe = AsyncMock()
-                    mock_bus_instance.publish = AsyncMock()
-                    mock_bus.return_value = mock_bus_instance
-
-                    yield {
-                        "registry": mock_registry,
-                        "bus": mock_bus_instance,
-                        "db": mock_db,
-                        "config": mock_config,
-                    }
+        """Create mock dependencies without importing heavy modules."""
+        mock_db = Mock()
+        mock_db.return_value = Mock()
+        
+        mock_bus_instance = Mock()
+        mock_bus_instance.subscribe = AsyncMock()
+        mock_bus_instance.publish = AsyncMock()
+        
+        mock_bus = Mock()
+        mock_bus.return_value = mock_bus_instance
+        
+        mock_config = Mock()
+        mock_config.return_value.DB_PATH = "sqlite:///test.db"
+        mock_registry = Mock()
+        
+        yield {
+            "registry": mock_registry,
+            "bus": mock_bus_instance,
+            "db": mock_db,
+            "config": mock_config,
+        }
 
     @pytest.mark.asyncio
     @pytest.mark.integration
