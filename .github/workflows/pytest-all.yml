@@ -544,6 +544,7 @@ jobs:
           echo "✓ aiohttp installation complete and verified"
       
       - name: Run tests for ${{ matrix.module }}
+        timeout-minutes: 20
         env:
           TESTING: "1"
           AWS_REGION: ""
@@ -562,7 +563,11 @@ jobs:
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
-          ulimit -t unlimited 2>/dev/null || true
+          # Set CPU time limit to 1 hour (3600 seconds) as fallback when unlimited is not allowed
+          ulimit -t unlimited 2>/dev/null || ulimit -t 3600 || true
+          
+          # Also increase stack size to prevent stack-related issues
+          ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running pytest tests for ${{ matrix.module }} ==="
           echo "NLTK_DATA: $NLTK_DATA"
