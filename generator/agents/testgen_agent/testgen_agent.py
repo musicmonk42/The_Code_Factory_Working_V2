@@ -51,6 +51,7 @@ from opentelemetry.trace import Status, StatusCode  # For OpenTelemetry tracing
 try:
     from presidio_analyzer import AnalyzerEngine
     from presidio_anonymizer import AnonymizerEngine
+    from presidio_anonymizer.entities import OperatorConfig
 
     HAS_PRESIDIO = True
     # Lazy initialization - will be created on first use instead of at module load time
@@ -242,7 +243,7 @@ def scrub_text(text: str) -> str:
         scrubbed_content = anonymizer.anonymize(
             text=text,
             analyzer_results=results,
-            anonymizers={"DEFAULT": {"type": "replace", "new_value": "[REDACTED]"}},
+            operators={"DEFAULT": OperatorConfig("replace", {"new_value": "[REDACTED]"})},
         ).text
 
         return scrubbed_content

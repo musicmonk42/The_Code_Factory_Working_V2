@@ -188,6 +188,7 @@ from runner.runner_metrics import LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL
 try:
     from presidio_analyzer import AnalyzerEngine  # type: ignore
     from presidio_anonymizer import AnonymizerEngine  # type: ignore
+    from presidio_anonymizer.entities import OperatorConfig  # type: ignore
 except Exception:  # pragma: no cover
     AnalyzerEngine = None
     AnonymizerEngine = None
@@ -278,7 +279,7 @@ def scrub_text(text: str) -> str:
             anonymized = anonymizer.anonymize(
                 text=text,
                 analyzer_results=results,
-                anonymizers={"DEFAULT": {"type": "replace", "new_value": "[REDACTED]"}},
+                operators={"DEFAULT": OperatorConfig("replace", {"new_value": "[REDACTED]"})},
             )
             return anonymized.text
         except Exception as e:  # pragma: no cover
