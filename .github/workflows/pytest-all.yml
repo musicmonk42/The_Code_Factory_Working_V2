@@ -570,8 +570,7 @@ jobs:
           # Use python -m pytest to ensure proper sys.path setup
           python -m pytest \
             ${{ matrix.module }}/ \
-            --forked \
-            --maxprocesses=1 \
+            -n 1 \
             -v \
             --tb=short \
             --maxfail=5 \
