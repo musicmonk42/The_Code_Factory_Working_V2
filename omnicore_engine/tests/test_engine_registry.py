@@ -86,9 +86,15 @@ class TestPluginService:
             mock_config.return_value.DB_PATH = "sqlite:///:memory:"
             mock_registry = Mock()
             
+            # Create mock performance tracker
+            mock_performance_tracker = Mock()
+            mock_performance_tracker.track_operation = AsyncMock()
+            mock_performance_tracker.record_metric = Mock()
+            
             mock_bus_instance = Mock()
             mock_bus_instance.subscribe = AsyncMock()
             mock_bus_instance.publish = AsyncMock()
+            mock_bus_instance.performance_tracker = mock_performance_tracker
             mock_bus.return_value = mock_bus_instance
             
             yield {
