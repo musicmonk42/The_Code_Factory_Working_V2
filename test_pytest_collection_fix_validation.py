@@ -94,25 +94,28 @@ def test_clarifier_prompt_module_can_be_parsed():
     env['PYTEST_COLLECTING'] = '1'
     env['SKIP_AUDIT_INIT'] = '1'
     
+    # Get the project root directory (where this test file is located)
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    clarifier_file = os.path.join('generator', 'clarifier', 'clarifier_prompt.py')
+    
     # Just check that the @plugin decorator at line 371 doesn't cause an immediate error
-    code = """
+    code = f"""
 import sys
 import ast
+import os
 sys.path.insert(0, '.')
 
 # Parse the file to ensure the @plugin decorator syntax is valid
-with open('generator/clarifier/clarifier_prompt.py', 'r') as f:
+file_path = os.path.join('{clarifier_file}')
+with open(file_path, 'r') as f:
     content = f.read()
     try:
         ast.parse(content)
         print("✅ clarifier_prompt.py parsed successfully")
     except SyntaxError as e:
-        print(f"❌ Syntax error in clarifier_prompt.py: {e}")
+        print(f"❌ Syntax error in clarifier_prompt.py: {{e}}")
         sys.exit(1)
 """
-    
-    # Get the project root directory (where this test file is located)
-    project_root = os.path.dirname(os.path.abspath(__file__))
     
     result = subprocess.run(
         [sys.executable, '-c', code],

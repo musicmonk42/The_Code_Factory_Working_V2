@@ -730,8 +730,7 @@ class TestPytestCollectionFix:
             def collection_test_func():
                 return "collection test"
             
-            # If we got here, the decorator worked
-            assert True, "Plugin decorator should work during collection mode"
+            # If we got here without exception, the decorator worked successfully
             
         finally:
             if original_value is None:
