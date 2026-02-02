@@ -859,7 +859,7 @@ Agent --> Dev : Deliver Report
 
                     if attempt == 0:
                         span.add_event("Building initial generation prompt.")
-                        generation_prompt = build_agentic_prompt(
+                        generation_prompt = await build_agentic_prompt(
                             "generation", language=language, code_files=code_files
                         )
                         logger.info(
@@ -887,7 +887,7 @@ Agent --> Dev : Deliver Report
                             "generated_tests_content", {}
                         )
 
-                        refinement_prompt = build_agentic_prompt(
+                        refinement_prompt = await build_agentic_prompt(
                             "refinement",
                             language=language,
                             code_files=code_files,
@@ -933,7 +933,7 @@ Agent --> Dev : Deliver Report
                             extra=log_extra,
                         )
                         span.add_event("Parse failure, attempting self-heal.")
-                        self_heal_prompt = build_agentic_prompt(
+                        self_heal_prompt = await build_agentic_prompt(
                             "self_heal",
                             language=language,
                             generated_tests=llm_response_from_generation.get(
@@ -1059,7 +1059,7 @@ Agent --> Dev : Deliver Report
                         break
 
                     span.add_event(f"Building critique prompt for attempt {attempt+1}.")
-                    critique_prompt = build_agentic_prompt(
+                    critique_prompt = await build_agentic_prompt(
                         "critique",
                         language=language,
                         code_files=code_files,

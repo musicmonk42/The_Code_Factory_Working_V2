@@ -331,7 +331,7 @@ class TestPromptBuilders:
 class TestHelperFunctions:
     """Test module helper functions"""
 
-    def test_build_agentic_prompt_handles_missing_templates(self, temp_dir):
+    async def test_build_agentic_prompt_handles_missing_templates(self, temp_dir):
         """Should handle missing templates gracefully"""
         # Create empty template directory
         template_dir = temp_dir / "templates"
@@ -341,7 +341,7 @@ class TestHelperFunctions:
             "agents.testgen_agent.testgen_prompt.TEMPLATE_DIR", str(template_dir)
         ):
             with pytest.raises(FileNotFoundError):
-                build_agentic_prompt("test_generation", code="def test(): pass")
+                await build_agentic_prompt("test_generation", code="def test(): pass")
 
     @pytest.mark.skip(reason="Requires ONNX runtime which has DLL issues on Windows")
     def test_initialize_codebase_for_rag(self, temp_dir, mock_chromadb):
