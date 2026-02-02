@@ -1055,11 +1055,11 @@ class DocgenAgent:
                 usage = llm_response.get("usage", {})
                 if usage.get("input_tokens"):
                     LLM_TOKEN_INPUT_TOTAL.labels(
-                        model=llm_model, provider="docgen_agent", task="generate_docs"
+                        model=llm_model, provider="docgen_agent"
                     ).inc(usage["input_tokens"])
                 if usage.get("output_tokens"):
                     LLM_TOKEN_OUTPUT_TOTAL.labels(
-                        model=llm_model, provider="docgen_agent", task="generate_docs"
+                        model=llm_model, provider="docgen_agent"
                     ).inc(usage["output_tokens"])
 
                 # 5. Validate & Process
