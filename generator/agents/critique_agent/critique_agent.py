@@ -72,7 +72,7 @@ except ImportError as e:
             return args[0]
         return {}
 
-    def save_files_to_output(files: Dict[str, str], output_dir: Path) -> None:
+    async def save_files_to_output(files: Dict[str, str], output_dir: Path) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
         for filename, content in files.items():
             file_path = output_dir / filename
@@ -335,9 +335,10 @@ class CritiqueConfig(BaseModel):
             raise ValueError("No valid pipeline_steps specified.")
         if sanitized_steps:
             values["pipeline_steps"] = sanitized_steps
-        else:
-            # Should not normally happen due to defaults, but keep safe.
-            values["pipeline_steps"] = ["lint"]
+        # If no pipeline_steps provided, let the default_factory handle it.
+        # Default factory (defined at line 233-242) provides:
+        #   ["lint", "test", "e2e_test", "stress_test", "security_scan", "semantic", "fix"]
+        # Don't set a fallback here as it would override the default_factory
 
         # Normalize max_retries
         max_retries = values.get("max_retries", 3)
@@ -661,7 +662,7 @@ class PythonCritiquePlugin(LanguageCritiquePlugin):
         config: CritiqueConfig,
     ) -> Dict[str, Any]:
         logger.info(f"Running Python lint for files in {temp_dir}")
-        save_files_to_output(code_files, temp_dir)
+        await save_files_to_output(code_files, temp_dir)
         # Delegate to shared lints/checks
         return await run_all_lints_and_checks(
             code_files,
@@ -735,7 +736,7 @@ class JavaScriptCritiquePlugin(LanguageCritiquePlugin):
         config: CritiqueConfig,
     ) -> Dict[str, Any]:
         logger.info("Running JavaScript lint (ESLint)...")
-        save_files_to_output(code_files, temp_dir)
+        await save_files_to_output(code_files, temp_dir)
         return await run_all_lints_and_checks(
             code_files,
             str(temp_dir),
@@ -808,7 +809,7 @@ class GoCritiquePlugin(LanguageCritiquePlugin):
         config: CritiqueConfig,
     ) -> Dict[str, Any]:
         logger.info("Running Go lint (golangci-lint)...")
-        save_files_to_output(code_files, temp_dir)
+        await save_files_to_output(code_files, temp_dir)
         return await run_all_lints_and_checks(
             code_files,
             str(temp_dir),
@@ -1158,7 +1159,7 @@ async def orchestrate_critique_pipeline(
         # --- Execution sandbox ---
         with tempfile.TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
-            save_files_to_output(code_files, temp_dir)
+            await save_files_to_output(code_files, temp_dir)
 
             # Instantiate plugin once
             try:
@@ -1411,7 +1412,7 @@ async def orchestrate_critique_pipeline(
                         else:
                             # apply_auto_fixes returns modified code_files mapping
                             code_files = fix_result
-                            save_files_to_output(code_files, temp_dir)
+                            await save_files_to_output(code_files, temp_dir)
                             results["fixes_applied"] = True
                     except Exception as e:
                         results["fix_error"] = str(e)
