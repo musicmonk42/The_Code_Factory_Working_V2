@@ -25,6 +25,8 @@ class TestUtilityFunctions:
 
     def test_sanitize_env_vars(self):
         """Test environment variable sanitization"""
+        # The sanitize_env_vars function is simple and doesn't use OmniCoreOmega_instance
+        # Import directly - the function itself is lightweight
         from omnicore_engine.cli import sanitize_env_vars
         
         # Set some test env vars
@@ -36,9 +38,7 @@ class TestUtilityFunctions:
 
         assert os.environ["TEST_PASSWORD"] == "[REDACTED]"
         assert os.environ["API_KEY"] == "[REDACTED]"
-        assert (
-            os.environ["NORMAL_VAR"] == "normal_value"
-        )  # Doesn't contain sensitive keywords
+        assert os.environ["NORMAL_VAR"] == "normal_value"
 
         # Cleanup
         del os.environ["TEST_PASSWORD"]
