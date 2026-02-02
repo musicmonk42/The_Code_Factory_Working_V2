@@ -223,6 +223,16 @@ register_error_code(
     "The specified LLM provider plugin is not loaded or available.",
 )
 
+# FIX: Register deployment-related error codes
+register_error_code(
+    "VALIDATION_FAILED",
+    "Deployment configuration validation failed."
+)
+register_error_code(
+    "SIMULATION_FAILED",
+    "Deployment simulation failed."
+)
+
 
 class BackendError(RunnerError):
     """

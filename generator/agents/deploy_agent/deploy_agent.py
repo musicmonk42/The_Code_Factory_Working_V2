@@ -1300,7 +1300,11 @@ Respond in plain prose only (no JSON / no code fences).
                     vres = await self.validate_configs_final(config_content, target)
                     if not vres.get("valid", False):
                         DEPLOY_ERRORS.labels(error_type="ValidationFailed").inc()
-                        raise RunnerError(f"Validation failed: {vres}")
+                        raise RunnerError(
+                            error_code="VALIDATION_FAILED",
+                            detail=f"Validation failed: {vres}",
+                            task_id=self.run_id
+                        )
                 else:
                     vres = {"valid": True, "details": "Skipped"}
 
@@ -1311,7 +1315,11 @@ Respond in plain prose only (no JSON / no code fences).
                         "skipped",
                     ):
                         DEPLOY_ERRORS.labels(error_type="SimulationFailed").inc()
-                        raise RunnerError(f"Simulation failed: {sres}")
+                        raise RunnerError(
+                            error_code="SIMULATION_FAILED",
+                            detail=f"Simulation failed: {sres}",
+                            task_id=self.run_id
+                        )
                 else:
                     sres = {
                         "status": "skipped",

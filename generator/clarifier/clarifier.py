@@ -1801,11 +1801,27 @@ Format your response as a JSON array of objects with 'question' and 'category' f
             # Ensure the directory exists before saving
             history_dir = os.path.dirname(self.config.HISTORY_FILE)
             if history_dir and not os.path.exists(history_dir):
-                os.makedirs(history_dir, mode=0o755, exist_ok=True)
-                self.logger.info(
-                    f"Created history directory: {history_dir}",
-                    extra={"operation": "create_history_dir"}
-                )
+                try:
+                    os.makedirs(history_dir, mode=0o755, exist_ok=True)
+                    self.logger.info(
+                        f"Created history directory: {history_dir}",
+                        extra={"operation": "create_history_dir"}
+                    )
+                except PermissionError as pe:
+                    # Fallback to /tmp if primary path is not writable
+                    fallback_path = "/tmp/clarifier_history.json"
+                    self.logger.warning(
+                        f"Permission denied for {history_dir}, using fallback: {fallback_path}",
+                        extra={
+                            "operation": "create_history_dir_fallback",
+                            "original_path": self.config.HISTORY_FILE,
+                            "fallback_path": fallback_path
+                        }
+                    )
+                    self.config.HISTORY_FILE = fallback_path
+                    history_dir = os.path.dirname(self.config.HISTORY_FILE)
+                    if history_dir and not os.path.exists(history_dir):
+                        os.makedirs(history_dir, mode=0o755, exist_ok=True)
             
             history_data = json.dumps(self.history)
             if self.config.HISTORY_COMPRESSION:
@@ -1822,6 +1838,19 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                 "History saved successfully.", extra={"operation": "save_history"}
             )
             self.circuit_breaker.record_success()
+        except PermissionError as pe:
+            # During shutdown, log the permission error but don't crash
+            self.logger.warning(
+                f"Permission error saving history: {pe}. History not saved.",
+                extra={
+                    "operation": "save_history_permission_denied",
+                    "error_type": "PermissionError",
+                    "path": self.config.HISTORY_FILE,
+                },
+            )
+            CLARIFIER_ERRORS.labels("save_history_permission_denied").inc()
+            self.circuit_breaker.record_failure(pe)
+            # Don't re-raise during shutdown to allow graceful termination
         except Exception as e:
             self.logger.error(
                 f"Error saving history: {e}",
@@ -1833,6 +1862,8 @@ Format your response as a JSON array of objects with 'question' and 'category' f
             )
             CLARIFIER_ERRORS.labels("save_history_failed").inc()
             self.circuit_breaker.record_failure(e)
+            # Only re-raise if not during shutdown context
+            # During normal operation, history save failures should be visible
             raise
 
     async def graceful_shutdown(self, reason: str):
@@ -1864,7 +1895,15 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                     exc_info=True,
                     extra={"operation": "context_manager_close_failed"},
                 )
-        await self._save_history()
+        try:
+            await self._save_history()
+        except Exception as e:
+            # Catch any remaining exceptions during shutdown to prevent crash
+            self.logger.error(
+                f"Failed to save history during shutdown: {e}",
+                exc_info=True,
+                extra={"operation": "save_history_shutdown_failed"},
+            )
         self.logger.info("Shutdown complete.", extra={"operation": "shutdown_complete"})
 
     async def run(self):
