@@ -1267,8 +1267,11 @@ class OmniCoreService:
             # Find code files to test
             code_files = []
             code_dir = Path(code_path)
+            repo_path = Path(f"./uploads/{job_id}")
             if code_dir.exists():
-                code_files = [str(f) for f in code_dir.rglob("*.py") if not f.name.startswith("test_")]
+                # Convert absolute paths to relative paths from repo_path
+                # This prevents path duplication when testgen agent prepends repo_path
+                code_files = [str(f.relative_to(repo_path)) for f in code_dir.rglob("*.py") if not f.name.startswith("test_")]
             
             if not code_files:
                 logger.error(f"[TESTGEN] No code files found in {code_path} for job {job_id}")
@@ -1279,7 +1282,6 @@ class OmniCoreService:
             
             # Initialize and run testgen agent
             logger.info(f"[TESTGEN] Running testgen agent for job {job_id} with {len(code_files)} code files")
-            repo_path = Path(f"./uploads/{job_id}")
             agent = self._testgen_class(repo_path=repo_path)
             
             result = await agent.generate_tests(
