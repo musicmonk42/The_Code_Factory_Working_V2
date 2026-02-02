@@ -1,15 +1,9 @@
 import asyncio
-import importlib
 import os
 import uuid
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-# Import agent_core module separately for reloading
-import intent_capture.agent_core as agent_core_module
-
-# Import the module under test and its components
-import intent_capture.api as api_module
 import pytest
 
 # FIX: Import from intent_capture.agent_core to use absolute path
@@ -29,17 +23,26 @@ def test_secret_key():
     return "a_very_strong_and_long_secret_key_for_unit_tests_thirty_two_chars"
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def app(test_secret_key):
-    """Fixture to create a fresh FastAPI app instance for the test module."""
-    with patch.dict(
-        os.environ,
-        {"JWT_SECRET": test_secret_key, "REDIS_URL": "redis://mock-redis:6379/0"},
-    ):
-        # Reload modules to ensure they pick up mocked environment variables
-        importlib.reload(agent_core_module)
-        importlib.reload(api_module)
-
+    """Fixture to create a fresh FastAPI app instance for each test.
+    
+    Changed from scope="module" to scope="function" to:
+    - Force cleanup after each test
+    - Prevent memory accumulation
+    - Avoid long-lived heavy objects (FastAPI app, HuggingFace models, Redis connections)
+    """
+    # Set environment variables BEFORE importing to prevent heavy initialization
+    env_overrides = {
+        "JWT_SECRET": test_secret_key,
+        "REDIS_URL": "redis://mock-redis:6379/0",
+        "TEST_MODE": "true",
+        "USE_VECTOR_MEMORY": "false",
+        "DISABLE_SENTRY": "1",
+        "OTEL_SDK_DISABLED": "1",
+    }
+    
+    with patch.dict(os.environ, env_overrides):
         # FIX: Correctly mock aredis.from_url to be awaitable
         mock_redis_client = AsyncMock()
         mock_redis_client.sismember.return_value = False
@@ -47,11 +50,17 @@ def app(test_secret_key):
 
         # FIX: Mock the rate limiter's hit method to be async
         mock_limiter_hit = AsyncMock(return_value=True)
+        
+        # Mock HuggingFace pipeline to prevent model loading
+        mock_hf_pipeline = MagicMock(return_value=[{"label": "SAFE", "score": 0.99}])
 
         with patch("intent_capture.api.aredis.from_url", new=mock_from_url):
             with patch("intent_capture.api.limiter.limiter.hit", new=mock_limiter_hit):
-                app_instance = api_module.create_app()
-                yield app_instance
+                with patch("intent_capture.api.hf_pipeline", mock_hf_pipeline):
+                    # Import here to ensure environment variables are set
+                    import intent_capture.api as api_module
+                    app_instance = api_module.create_app()
+                    yield app_instance
 
 
 @pytest.fixture
