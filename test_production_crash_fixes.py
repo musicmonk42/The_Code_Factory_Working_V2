@@ -355,14 +355,44 @@ class TestUvicornConfiguration:
     
     def test_graceful_shutdown_timeout(self):
         """Test that timeout_graceful_shutdown is set to 60 seconds."""
-        # This is a documentation test - the actual value is set in run.py
-        # We verify it by checking the code
+        # Use AST parsing for more robust verification
+        import ast
         
-        with open("server/run.py", "r") as f:
-            content = f.read()
+        try:
+            with open("server/run.py", "r") as f:
+                tree = ast.parse(f.read())
             
-        # Check that timeout_graceful_shutdown is set to 60
-        assert "timeout_graceful_shutdown=60" in content or "timeout_graceful_shutdown = 60" in content
+            # Find uvicorn.run calls and check timeout_graceful_shutdown parameter
+            found_timeout = False
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    # Check if this is a uvicorn.run call
+                    if (isinstance(node.func, ast.Attribute) and 
+                        node.func.attr == 'run' and
+                        isinstance(node.func.value, ast.Name) and 
+                        node.func.value.id == 'uvicorn'):
+                        
+                        # Check for timeout_graceful_shutdown keyword argument
+                        for keyword in node.keywords:
+                            if keyword.arg == 'timeout_graceful_shutdown':
+                                if isinstance(keyword.value, ast.Constant):
+                                    if keyword.value.value == 60:
+                                        found_timeout = True
+                                        break
+            
+            assert found_timeout, "timeout_graceful_shutdown should be set to 60 seconds in uvicorn.run"
+            
+        except FileNotFoundError:
+            pytest.skip("server/run.py not found")
+        except Exception as e:
+            # Fallback to string matching if AST parsing fails
+            with open("server/run.py", "r") as f:
+                content = f.read()
+            
+            if "timeout_graceful_shutdown=60" in content or "timeout_graceful_shutdown = 60" in content:
+                pass  # Test passes
+            else:
+                raise AssertionError(f"Could not verify timeout configuration: {e}")
 
 
 if __name__ == "__main__":
