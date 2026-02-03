@@ -200,8 +200,8 @@ class TestMessageBusIntegration:
 
                     service = PluginService(mock_registry)
 
-                    # Allow async tasks to run
-                    await asyncio.sleep(0.1)
+                    # Start subscriptions explicitly
+                    await service.start_subscriptions()
 
                     # Verify subscriptions were created
                     calls = mock_bus_instance.subscribe.call_args_list
@@ -232,7 +232,7 @@ class TestMessageBusIntegration:
                     mock_bus_class.return_value = mock_bus_instance
 
                     service = PluginService(mock_registry)
-                    await asyncio.sleep(0)  # Let subscriptions complete
+                    await service.start_subscriptions()
 
                     # Register a mock generator engine
                     register_engine("generator", {"description": "Generator"})
@@ -268,7 +268,7 @@ class TestMessageBusIntegration:
                     mock_bus_class.return_value = mock_bus_instance
 
                     service = PluginService(mock_registry)
-                    await asyncio.sleep(0)  # Let subscriptions complete
+                    await service.start_subscriptions()
 
                     # Test fix_and_regenerate workflow
                     mock_message = Mock()
