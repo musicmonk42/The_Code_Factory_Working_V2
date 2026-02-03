@@ -7,17 +7,18 @@
 
 import base64
 import time
-import unittest
 
+import pytest
 from cryptography.fernet import Fernet, InvalidToken
 
 from omnicore_engine.message_bus.encryption import FernetEncryption
 
 
-class TestFernetEncryption(unittest.TestCase):
+class TestFernetEncryption:
     """Test suite for FernetEncryption class."""
 
-    def setUp(self):
+    @pytest.fixture(autouse=True)
+    def setup(self):
         """Set up test fixtures before each test."""
         # Generate test keys
         self.key1 = Fernet.generate_key()
@@ -33,46 +34,46 @@ class TestFernetEncryption(unittest.TestCase):
     def test_initialization_single_key(self):
         """Test initialization with a single key."""
         encryption = FernetEncryption([self.key1])
-        self.assertIsNotNone(encryption.multi_fernet)
+        assert encryption.multi_fernet is not None
 
         # Test encryption/decryption works
         data = b"test data"
         encrypted = encryption.encrypt(data)
         decrypted = encryption.decrypt(encrypted)
-        self.assertEqual(data, decrypted)
+        assert data == decrypted
 
     def test_initialization_multiple_keys(self):
         """Test initialization with multiple keys for rotation."""
         encryption = FernetEncryption([self.key1, self.key2, self.key3])
-        self.assertIsNotNone(encryption.multi_fernet)
+        assert encryption.multi_fernet is not None
 
         # Test encryption/decryption works
         data = b"test data with multiple keys"
         encrypted = encryption.encrypt(data)
         decrypted = encryption.decrypt(encrypted)
-        self.assertEqual(data, decrypted)
+        assert data == decrypted
 
     def test_initialization_empty_keys(self):
         """Test initialization with empty key list."""
-        with self.assertRaises(ValueError) as context:
+        with pytest.raises(ValueError) as context:
             FernetEncryption([])
-        self.assertIn("At least one encryption key is required", str(context.exception))
+        assert "At least one encryption key is required" in str(context.value)
 
     def test_initialization_none_key(self):
         """Test initialization with None in key list."""
-        with self.assertRaises(ValueError) as context:
+        with pytest.raises(ValueError) as context:
             FernetEncryption([self.key1, None, self.key2])
-        self.assertIn("none can be empty", str(context.exception))
+        assert "none can be empty" in str(context.value)
 
     def test_initialization_empty_string_key(self):
         """Test initialization with empty string key."""
-        with self.assertRaises(ValueError) as context:
+        with pytest.raises(ValueError) as context:
             FernetEncryption([self.key1, b"", self.key2])
-        self.assertIn("none can be empty", str(context.exception))
+        assert "none can be empty" in str(context.value)
 
     def test_initialization_invalid_key_format(self):
         """Test initialization with invalid key format."""
-        with self.assertRaises(Exception):  # Fernet will raise an exception
+        with pytest.raises(Exception):  # Fernet will raise an exception
             FernetEncryption([b"invalid_key_format"])
 
     def test_encrypt_basic(self):
@@ -81,21 +82,21 @@ class TestFernetEncryption(unittest.TestCase):
         encrypted = self.encryption_single.encrypt(data)
 
         # Encrypted data should be different from original
-        self.assertNotEqual(data, encrypted)
+        assert data != encrypted
 
         # Encrypted data should be bytes
-        self.assertIsInstance(encrypted, bytes)
+        assert isinstance(encrypted, bytes)
 
         # Should be able to decrypt back
         decrypted = self.encryption_single.decrypt(encrypted)
-        self.assertEqual(data, decrypted)
+        assert data == decrypted
 
     def test_encrypt_empty_data(self):
         """Test encryption of empty data."""
         data = b""
         encrypted = self.encryption_single.encrypt(data)
         decrypted = self.encryption_single.decrypt(encrypted)
-        self.assertEqual(data, decrypted)
+        assert data == decrypted
 
     def test_encrypt_large_data(self):
         """Test encryption of large data."""
@@ -103,7 +104,7 @@ class TestFernetEncryption(unittest.TestCase):
         data = b"x" * (1024 * 1024)
         encrypted = self.encryption_single.encrypt(data)
         decrypted = self.encryption_single.decrypt(encrypted)
-        self.assertEqual(data, decrypted)
+        assert data == decrypted
 
     def test_encrypt_various_data_types(self):
         """Test encryption with various byte patterns."""
@@ -118,7 +119,7 @@ class TestFernetEncryption(unittest.TestCase):
         for data in test_cases:
             encrypted = self.encryption_single.encrypt(data)
             decrypted = self.encryption_single.decrypt(encrypted)
-            self.assertEqual(data, decrypted, f"Failed for data: {data[:20]}...")
+            assert data == decrypted, f"Failed for data: {data[:20]}..."
 
     def test_decrypt_with_wrong_key(self):
         """Test decryption with wrong key."""
@@ -129,14 +130,14 @@ class TestFernetEncryption(unittest.TestCase):
         wrong_key = Fernet.generate_key()
         wrong_encryption = FernetEncryption([wrong_key])
 
-        with self.assertRaises(InvalidToken):
+        with pytest.raises(InvalidToken):
             wrong_encryption.decrypt(encrypted)
 
     def test_decrypt_invalid_data(self):
         """Test decryption of invalid data."""
         invalid_data = b"This is not encrypted data"
 
-        with self.assertRaises(InvalidToken):
+        with pytest.raises(InvalidToken):
             self.encryption_single.decrypt(invalid_data)
 
     def test_key_rotation_encrypt_with_new_decrypt_with_old(self):
@@ -152,7 +153,7 @@ class TestFernetEncryption(unittest.TestCase):
 
         # Should still be able to decrypt
         decrypted = encryption_rotated.decrypt(encrypted)
-        self.assertEqual(data, decrypted)
+        assert data == decrypted
 
     def test_key_rotation_old_encrypted_data(self):
         """Test decrypting data encrypted with old keys."""
@@ -167,7 +168,7 @@ class TestFernetEncryption(unittest.TestCase):
 
         # Should still decrypt data encrypted with old key
         decrypted = new_encryption.decrypt(encrypted)
-        self.assertEqual(data, decrypted)
+        assert data == decrypted
 
     def test_multiple_encryption_decryption_cycles(self):
         """Test multiple encryption/decryption cycles."""
@@ -177,7 +178,7 @@ class TestFernetEncryption(unittest.TestCase):
         for i in range(10):
             encrypted = self.encryption_single.encrypt(data)
             decrypted = self.encryption_single.decrypt(encrypted)
-            self.assertEqual(data, decrypted, f"Failed at cycle {i}")
+            assert data == decrypted, f"Failed at cycle {i}"
 
     def test_concurrent_encryption(self):
         """Test thread safety of encryption operations."""
@@ -204,11 +205,11 @@ class TestFernetEncryption(unittest.TestCase):
             concurrent.futures.wait(futures)
 
         # Verify no errors occurred
-        self.assertEqual(len(errors), 0, f"Errors occurred: {errors}")
+        assert len(errors) == 0, f"Errors occurred: {errors}"
 
         # Verify all operations succeeded
         for thread_id, (original, decrypted) in results.items():
-            self.assertEqual(original, decrypted)
+            assert original == decrypted
 
     def test_encryption_determinism(self):
         """Test that encryption is non-deterministic (different each time)."""
@@ -220,14 +221,14 @@ class TestFernetEncryption(unittest.TestCase):
         encrypted3 = self.encryption_single.encrypt(data)
 
         # Encrypted values should be different (Fernet includes timestamp)
-        self.assertNotEqual(encrypted1, encrypted2)
-        self.assertNotEqual(encrypted2, encrypted3)
-        self.assertNotEqual(encrypted1, encrypted3)
+        assert encrypted1 != encrypted2
+        assert encrypted2 != encrypted3
+        assert encrypted1 != encrypted3
 
         # But all should decrypt to same value
-        self.assertEqual(self.encryption_single.decrypt(encrypted1), data)
-        self.assertEqual(self.encryption_single.decrypt(encrypted2), data)
-        self.assertEqual(self.encryption_single.decrypt(encrypted3), data)
+        assert self.encryption_single.decrypt(encrypted1) == data
+        assert self.encryption_single.decrypt(encrypted2) == data
+        assert self.encryption_single.decrypt(encrypted3) == data
 
     def test_key_generation(self):
         """Test generating valid Fernet keys."""
@@ -236,31 +237,31 @@ class TestFernetEncryption(unittest.TestCase):
 
         # All keys should be valid
         for key in keys:
-            self.assertIsInstance(key, bytes)
-            self.assertEqual(len(key), 44)  # Fernet keys are 44 bytes (base64)
+            assert isinstance(key, bytes)
+            assert len(key) == 44  # Fernet keys are 44 bytes (base64)
 
             # Should be valid base64
             try:
                 base64.urlsafe_b64decode(key)
             except Exception:
-                self.fail(f"Invalid base64 key: {key}")
+                pytest.fail(f"Invalid base64 key: {key}")
 
             # Should work for encryption
             encryption = FernetEncryption([key])
             test_data = b"test"
             encrypted = encryption.encrypt(test_data)
             decrypted = encryption.decrypt(encrypted)
-            self.assertEqual(test_data, decrypted)
+            assert test_data == decrypted
 
     def test_protocol_implementation(self):
         """Test that FernetEncryption implements EncryptionStrategy protocol."""
         # Check that required methods exist
-        self.assertTrue(hasattr(self.encryption_single, "encrypt"))
-        self.assertTrue(hasattr(self.encryption_single, "decrypt"))
+        assert hasattr(self.encryption_single, "encrypt")
+        assert hasattr(self.encryption_single, "decrypt")
 
         # Check method signatures
-        self.assertTrue(callable(self.encryption_single.encrypt))
-        self.assertTrue(callable(self.encryption_single.decrypt))
+        assert callable(self.encryption_single.encrypt)
+        assert callable(self.encryption_single.decrypt)
 
     def test_encryption_with_time_delay(self):
         """Test that old encrypted data can still be decrypted."""
@@ -272,7 +273,7 @@ class TestFernetEncryption(unittest.TestCase):
 
         # Should still decrypt successfully
         decrypted = self.encryption_single.decrypt(encrypted)
-        self.assertEqual(data, decrypted)
+        assert data == decrypted
 
     def test_key_rotation_remove_old_key(self):
         """Test removing old keys from rotation."""
@@ -286,7 +287,7 @@ class TestFernetEncryption(unittest.TestCase):
         reduced_encryption = FernetEncryption([self.key2, self.key3])
 
         # Should fail to decrypt since it was encrypted with key1
-        with self.assertRaises(InvalidToken):
+        with pytest.raises(InvalidToken):
             reduced_encryption.decrypt(encrypted)
 
     def test_edge_case_single_byte(self):
@@ -294,7 +295,7 @@ class TestFernetEncryption(unittest.TestCase):
         data = b"a"
         encrypted = self.encryption_single.encrypt(data)
         decrypted = self.encryption_single.decrypt(encrypted)
-        self.assertEqual(data, decrypted)
+        assert data == decrypted
 
     def test_edge_case_max_fernet_message(self):
         """Test encryption near Fernet's practical limits."""
@@ -302,10 +303,10 @@ class TestFernetEncryption(unittest.TestCase):
         data = b"x" * (10 * 1024 * 1024)  # 10MB
         encrypted = self.encryption_single.encrypt(data)
         decrypted = self.encryption_single.decrypt(encrypted)
-        self.assertEqual(data, decrypted)
+        assert data == decrypted
 
 
-class TestEncryptionIntegration(unittest.TestCase):
+class TestEncryptionIntegration:
     """Integration tests for encryption in message bus context."""
 
     def test_message_payload_encryption(self):
@@ -330,7 +331,7 @@ class TestEncryptionIntegration(unittest.TestCase):
         # Parse back to dict
         decrypted_payload = json.loads(decrypted.decode("utf-8"))
 
-        self.assertEqual(payload, decrypted_payload)
+        assert payload == decrypted_payload
 
     def test_key_rotation_migration(self):
         """Test migrating from old to new encryption keys."""
@@ -355,16 +356,16 @@ class TestEncryptionIntegration(unittest.TestCase):
         # Should be able to decrypt old data
         for i, encrypted in enumerate(encrypted_items):
             decrypted = migrated_encryption.decrypt(encrypted)
-            self.assertEqual(data_items[i], decrypted)
+            assert data_items[i] == decrypted
 
         # New encryptions use the new key
         new_data = b"New data"
         new_encrypted = migrated_encryption.encrypt(new_data)
 
         # Old encryption (without new key) can't decrypt new data
-        with self.assertRaises(InvalidToken):
+        with pytest.raises(InvalidToken):
             old_encryption.decrypt(new_encrypted)
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    pytest.main([__file__, "-v"])

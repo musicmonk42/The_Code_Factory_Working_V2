@@ -6,17 +6,18 @@
 # modules cannot be properly serialized across process boundaries.
 
 import hashlib
-import unittest
+import pytest
 from collections import Counter, defaultdict
 from unittest.mock import Mock
 
 from omnicore_engine.message_bus.hash_ring import ConsistentHashRing
 
 
-class TestConsistentHashRing(unittest.TestCase):
+class TestConsistentHashRing:
     """Test suite for ConsistentHashRing class."""
 
-    def setUp(self):
+    @pytest.fixture(autouse=True)
+    def setup(self):
         """Set up test fixtures before each test."""
         self.nodes = ["node1", "node2", "node3"]
         self.ring = ConsistentHashRing(nodes=self.nodes, replicas=100)
@@ -25,13 +26,13 @@ class TestConsistentHashRing(unittest.TestCase):
         """Test initialization with a list of nodes."""
         ring = ConsistentHashRing(nodes=["node1", "node2"], replicas=50)
 
-        self.assertEqual(ring.replicas, 50)
-        self.assertEqual(len(ring.nodes), 2)
-        self.assertIn("node1", ring.nodes)
-        self.assertIn("node2", ring.nodes)
+        assert ring.replicas == 50
+        assert len(ring.nodes) == 2
+        assert "node1" in ring.nodes
+        assert "node2" in ring.nodes
 
         # Check ring has correct number of entries (nodes * replicas)
-        self.assertEqual(len(ring.ring), 2 * 50)
+        assert len(ring.ring) == 2 * 50
 
     def test_initialization_empty_nodes(self):
         """Test initialization with empty node list."""
@@ -42,8 +43,8 @@ class TestConsistentHashRing(unittest.TestCase):
         with patch("omnicore_engine.message_bus.hash_ring.logger") as mock_logger:
             ring = ConsistentHashRing(nodes=[], replicas=100)
 
-            self.assertEqual(len(ring.nodes), 0)
-            self.assertEqual(len(ring.ring), 0)
+            assert len(ring.nodes) == 0
+            assert len(ring.ring) == 0
 
             # Should log warning
             mock_logger.warning.assert_called_with(
@@ -53,7 +54,7 @@ class TestConsistentHashRing(unittest.TestCase):
     def test_initialization_default_replicas(self):
         """Test default replicas value."""
         ring = ConsistentHashRing(nodes=["node1"])
-        self.assertEqual(ring.replicas, 100)
+        assert ring.replicas == 100
 
     def test_add_node(self):
         """Test adding a new node to the ring."""
@@ -63,14 +64,14 @@ class TestConsistentHashRing(unittest.TestCase):
         ring.add_node("node2")
 
         # Check node was added
-        self.assertIn("node2", ring.nodes)
-        self.assertEqual(len(ring.nodes), 2)
+        assert "node2" in ring.nodes
+        assert len(ring.nodes) == 2
 
         # Check ring size increased correctly
-        self.assertEqual(len(ring.ring), initial_ring_size + 10)
+        assert len(ring.ring) == initial_ring_size + 10
 
         # Verify nodes are sorted
-        self.assertEqual(ring.nodes, sorted(ring.nodes))
+        assert ring.nodes == sorted(ring.nodes)
 
     def test_add_duplicate_node(self):
         """Test adding a duplicate node."""
@@ -84,8 +85,8 @@ class TestConsistentHashRing(unittest.TestCase):
             ring.add_node("node1")
 
             # Should not add duplicate
-            self.assertEqual(len(ring.nodes), initial_node_count)
-            self.assertEqual(len(ring.ring), initial_ring_size)
+            assert len(ring.nodes) == initial_node_count
+            assert len(ring.ring) == initial_ring_size
 
             # Should log warning
             mock_logger.warning.assert_called_with(
@@ -101,15 +102,15 @@ class TestConsistentHashRing(unittest.TestCase):
         ring.remove_node("node1")
 
         # Check node was removed
-        self.assertNotIn("node1", ring.nodes)
-        self.assertEqual(len(ring.nodes), 1)
+        assert "node1" not in ring.nodes
+        assert len(ring.nodes) == 1
 
         # Check ring size decreased correctly
-        self.assertEqual(len(ring.ring), initial_ring_size - 10)
+        assert len(ring.ring) == initial_ring_size - 10
 
         # Verify no "node1" entries remain in ring
         for _, node in ring.ring:
-            self.assertNotEqual(node, "node1")
+            assert node != "node1"
 
     def test_remove_nonexistent_node(self):
         """Test removing a node that doesn't exist."""
@@ -123,8 +124,8 @@ class TestConsistentHashRing(unittest.TestCase):
             ring.remove_node("nonexistent")
 
             # Should not change ring
-            self.assertEqual(len(ring.nodes), initial_node_count)
-            self.assertEqual(len(ring.ring), initial_ring_size)
+            assert len(ring.nodes) == initial_node_count
+            assert len(ring.ring) == initial_ring_size
 
             # Should log warning
             mock_logger.warning.assert_called_with(
@@ -140,16 +141,16 @@ class TestConsistentHashRing(unittest.TestCase):
 
         for key in keys:
             node = ring.get_node(key)
-            self.assertIn(node, ["node1", "node2", "node3"])
+            assert node in ["node1", "node2", "node3"]
 
     def test_get_node_empty_ring(self):
         """Test getting a node when ring is empty."""
         ring = ConsistentHashRing(nodes=[], replicas=100)
 
-        with self.assertRaises(ValueError) as context:
+        with pytest.raises(ValueError) as context:
             ring.get_node("any_key")
 
-        self.assertIn("No nodes in hash ring", str(context.exception))
+        assert "No nodes in hash ring" in str(context.value)
 
     def test_get_node_consistency(self):
         """Test that same key always maps to same node."""
@@ -161,7 +162,7 @@ class TestConsistentHashRing(unittest.TestCase):
         nodes = [ring.get_node(key) for _ in range(10)]
 
         # All should be the same
-        self.assertEqual(len(set(nodes)), 1)
+        assert len(set(nodes)) == 1
 
     def test_get_node_distribution(self):
         """Test that keys are distributed across nodes."""
@@ -176,12 +177,12 @@ class TestConsistentHashRing(unittest.TestCase):
             distribution[node] += 1
 
         # Each node should get some keys
-        self.assertEqual(len(distribution), 3)
+        assert len(distribution) == 3
 
         # Distribution should be somewhat balanced (each node gets at least 20%)
         for node, count in distribution.items():
-            self.assertGreater(count, 200)  # At least 20% of 1000
-            self.assertLess(count, 500)  # At most 50% of 1000
+            assert count > 200  # At least 20% of 1000
+            assert count < 500  # At most 50% of 1000
 
     def test_hash_function(self):
         """Test the hash function properties."""
@@ -190,17 +191,17 @@ class TestConsistentHashRing(unittest.TestCase):
         # Test determinism
         hash1 = ring._hash("test_key")
         hash2 = ring._hash("test_key")
-        self.assertEqual(hash1, hash2)
+        assert hash1 == hash2
 
         # Test different keys produce different hashes
         hash3 = ring._hash("different_key")
-        self.assertNotEqual(hash1, hash3)
+        assert hash1 != hash3
 
         # Test hash is an integer
-        self.assertIsInstance(hash1, int)
+        assert isinstance(hash1, int)
 
         # Test hash is positive
-        self.assertGreater(hash1, 0)
+        assert hash1 > 0
 
     def test_ring_ordering(self):
         """Test that ring maintains sorted order."""
@@ -208,7 +209,7 @@ class TestConsistentHashRing(unittest.TestCase):
 
         # Check ring is sorted by hash values
         hash_values = [hash_val for hash_val, _ in ring.ring]
-        self.assertEqual(hash_values, sorted(hash_values))
+        assert hash_values == sorted(hash_values)
 
     def test_replica_distribution(self):
         """Test that replicas are well distributed."""
@@ -218,7 +219,7 @@ class TestConsistentHashRing(unittest.TestCase):
         hash_values = [hash_val for hash_val, node in ring.ring if node == "node1"]
 
         # Check we have correct number of replicas
-        self.assertEqual(len(hash_values), 100)
+        assert len(hash_values) == 100
 
         # Check replicas are spread out (no clustering)
         # Sort and check gaps between consecutive replicas
@@ -228,7 +229,7 @@ class TestConsistentHashRing(unittest.TestCase):
             gaps.append(hash_values[i] - hash_values[i - 1])
 
         # At least some variety in gap sizes (not all identical)
-        self.assertGreater(len(set(gaps)), 1)
+        assert len(set(gaps)) > 1
 
     def test_add_node_dynamic(self):
         """Test dynamic node addition with rebalancing callback."""
@@ -240,7 +241,7 @@ class TestConsistentHashRing(unittest.TestCase):
         ring.add_node_dynamic("node3", rebalance_callback)
 
         # Node should be added
-        self.assertIn("node3", ring.nodes)
+        assert "node3" in ring.nodes
 
         # Callback should be called
         rebalance_callback.assert_called_once_with("node3", [])
@@ -271,7 +272,7 @@ class TestConsistentHashRing(unittest.TestCase):
         ring.remove_node_dynamic("node1", rebalance_callback)
 
         # Node should be removed
-        self.assertNotIn("node1", ring.nodes)
+        assert "node1" not in ring.nodes
 
         # Callback should be called
         rebalance_callback.assert_called_once_with("node1", [])
@@ -305,7 +306,7 @@ class TestConsistentHashRing(unittest.TestCase):
 
         # Should wrap around to first node in ring
         node = ring.get_node("large_key")
-        self.assertIn(node, ["node1", "node2"])
+        assert node in ["node1", "node2"]
 
         # Restore original hash
         ring._hash = original_hash
@@ -331,17 +332,17 @@ class TestConsistentHashRing(unittest.TestCase):
         after_counts = Counter(after_failure.values())
 
         # node2 should have no keys
-        self.assertEqual(after_counts.get("node2", 0), 0)
+        assert after_counts.get("node2", 0) == 0
 
         # Keys from node2 should be redistributed to node1 and node3
         node2_keys = [k for k, v in before_failure.items() if v == "node2"]
         for key in node2_keys:
-            self.assertIn(after_failure[key], ["node1", "node3"])
+            assert after_failure[key] in ["node1", "node3"]
 
         # Keys not on node2 should stay on same node
         for key in keys:
             if before_failure[key] != "node2":
-                self.assertEqual(before_failure[key], after_failure[key])
+                assert before_failure[key] == after_failure[key]
 
     def test_incremental_scaling(self):
         """Test scaling from 1 to many nodes."""
@@ -349,20 +350,20 @@ class TestConsistentHashRing(unittest.TestCase):
 
         # Start with single node
         key = "test_key"
-        self.assertEqual(ring.get_node(key), "node1")
+        assert ring.get_node(key) == "node1"
 
         # Add nodes incrementally
         ring.add_node("node2")
         node_after_2 = ring.get_node(key)
-        self.assertIn(node_after_2, ["node1", "node2"])
+        assert node_after_2 in ["node1", "node2"]
 
         ring.add_node("node3")
         node_after_3 = ring.get_node(key)
-        self.assertIn(node_after_3, ["node1", "node2", "node3"])
+        assert node_after_3 in ["node1", "node2", "node3"]
 
         ring.add_node("node4")
         node_after_4 = ring.get_node(key)
-        self.assertIn(node_after_4, ["node1", "node2", "node3", "node4"])
+        assert node_after_4 in ["node1", "node2", "node3", "node4"]
 
     def test_sha256_properties(self):
         """Test SHA256 hash properties used in the implementation."""
@@ -376,7 +377,7 @@ class TestConsistentHashRing(unittest.TestCase):
         expected_hash = hashlib.sha256(test_key.encode("utf-8")).hexdigest()[:16]
         expected_val = int(expected_hash, 16)
 
-        self.assertEqual(hash_val, expected_val)
+        assert hash_val == expected_val
 
     def test_collision_handling(self):
         """Test that hash collisions are handled (though very unlikely with SHA256)."""
@@ -393,10 +394,10 @@ class TestConsistentHashRing(unittest.TestCase):
         # Should still work without error
         ring._hash = lambda key: test_hash - 1  # Return hash just before duplicates
         node = ring.get_node("any_key")
-        self.assertIn(node, ["node1", "node2"])
+        assert node in ["node1", "node2"]
 
 
-class TestConsistentHashRingPerformance(unittest.TestCase):
+class TestConsistentHashRingPerformance:
     """Performance tests for ConsistentHashRing."""
 
     def test_large_scale_nodes(self):
@@ -405,8 +406,8 @@ class TestConsistentHashRingPerformance(unittest.TestCase):
         ring = ConsistentHashRing(nodes=nodes, replicas=100)
 
         # Should handle large number of nodes
-        self.assertEqual(len(ring.nodes), 100)
-        self.assertEqual(len(ring.ring), 100 * 100)
+        assert len(ring.nodes) == 100
+        assert len(ring.ring) == 100 * 100
 
         # Should still distribute keys
         distribution = defaultdict(int)
@@ -415,7 +416,7 @@ class TestConsistentHashRingPerformance(unittest.TestCase):
             distribution[node] += 1
 
         # Most nodes should get at least one key
-        self.assertGreater(len(distribution), 50)
+        assert len(distribution) > 50
 
     def test_get_node_performance(self):
         """Test get_node performance with large ring."""
@@ -430,8 +431,9 @@ class TestConsistentHashRingPerformance(unittest.TestCase):
         elapsed = time.time() - start
 
         # Should be fast (less than 1 second for 10000 lookups)
-        self.assertLess(elapsed, 1.0)
+        assert elapsed < 1.0
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    pytest.main([__file__, "-v"])
+
