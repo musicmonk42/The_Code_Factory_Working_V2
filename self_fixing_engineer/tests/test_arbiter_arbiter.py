@@ -119,8 +119,9 @@ def mock_engine(tmp_path):
 
 def test_arbiter_module_loaded():
     """Test that arbiter module was loaded."""
-    assert arbiter is not None
-    assert hasattr(arbiter, "Arbiter")
+    # Import Arbiter class directly - this triggers lazy loading via __getattr__
+    from self_fixing_engineer.arbiter import Arbiter
+    assert Arbiter is not None, "Arbiter class should be importable"
 
 
 def test_available_classes():
