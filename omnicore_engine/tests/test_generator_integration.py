@@ -198,7 +198,7 @@ class TestMessageBusIntegration:
                     mock_bus_instance.subscribe = AsyncMock()
                     mock_bus_class.return_value = mock_bus_instance
 
-                    service = PluginService(mock_registry)
+                    service = PluginService(mock_registry, message_bus=mock_bus_instance)
 
                     # Start subscriptions explicitly
                     await service.start_subscriptions()
@@ -231,7 +231,7 @@ class TestMessageBusIntegration:
                     mock_bus_instance.publish = AsyncMock()
                     mock_bus_class.return_value = mock_bus_instance
 
-                    service = PluginService(mock_registry)
+                    service = PluginService(mock_registry, message_bus=mock_bus_instance)
                     await service.start_subscriptions()
 
                     # Register a mock generator engine
@@ -267,7 +267,7 @@ class TestMessageBusIntegration:
                     mock_bus_instance.publish = AsyncMock()
                     mock_bus_class.return_value = mock_bus_instance
 
-                    service = PluginService(mock_registry)
+                    service = PluginService(mock_registry, message_bus=mock_bus_instance)
                     await service.start_subscriptions()
 
                     # Test fix_and_regenerate workflow
