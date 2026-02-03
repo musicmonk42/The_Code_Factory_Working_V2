@@ -415,7 +415,7 @@ async def test_run_subprocess_safe_timeout(
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
 
-    from runner.runner_errors import TimeoutError as RunnerTimeoutError
+    from generator.runner.runner_errors import TimeoutError as RunnerTimeoutError
 
     with pytest.raises(RunnerTimeoutError):
         await runner_mutation._run_subprocess_safe(
