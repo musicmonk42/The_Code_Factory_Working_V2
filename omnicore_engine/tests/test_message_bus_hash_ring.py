@@ -1,9 +1,14 @@
 # test_hash_ring.py
 
+# Note: This test file uses context managers (with patch(...)) instead of
+# @patch decorators to ensure compatibility with pytest-xdist parallel execution.
+# Decorators cause issues when pytest-xdist forks worker processes because mocked
+# modules cannot be properly serialized across process boundaries.
+
 import hashlib
 import unittest
 from collections import Counter, defaultdict
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from omnicore_engine.message_bus.hash_ring import ConsistentHashRing
 
@@ -28,18 +33,20 @@ class TestConsistentHashRing(unittest.TestCase):
         # Check ring has correct number of entries (nodes * replicas)
         self.assertEqual(len(ring.ring), 2 * 50)
 
-    @patch("omnicore_engine.message_bus.hash_ring.logger")
-    def test_initialization_empty_nodes(self, mock_logger):
+    def test_initialization_empty_nodes(self):
         """Test initialization with empty node list."""
-        ring = ConsistentHashRing(nodes=[], replicas=100)
+        from unittest.mock import patch
+        
+        with patch("omnicore_engine.message_bus.hash_ring.logger") as mock_logger:
+            ring = ConsistentHashRing(nodes=[], replicas=100)
 
-        self.assertEqual(len(ring.nodes), 0)
-        self.assertEqual(len(ring.ring), 0)
+            self.assertEqual(len(ring.nodes), 0)
+            self.assertEqual(len(ring.ring), 0)
 
-        # Should log warning
-        mock_logger.warning.assert_called_with(
-            "Initializing ConsistentHashRing with no nodes."
-        )
+            # Should log warning
+            mock_logger.warning.assert_called_with(
+                "Initializing ConsistentHashRing with no nodes."
+            )
 
     def test_initialization_default_replicas(self):
         """Test default replicas value."""
@@ -63,24 +70,26 @@ class TestConsistentHashRing(unittest.TestCase):
         # Verify nodes are sorted
         self.assertEqual(ring.nodes, sorted(ring.nodes))
 
-    @patch("omnicore_engine.message_bus.hash_ring.logger")
-    def test_add_duplicate_node(self, mock_logger):
+    def test_add_duplicate_node(self):
         """Test adding a duplicate node."""
+        from unittest.mock import patch
+        
         ring = ConsistentHashRing(nodes=["node1"], replicas=10)
         initial_ring_size = len(ring.ring)
         initial_node_count = len(ring.nodes)
 
-        ring.add_node("node1")
+        with patch("omnicore_engine.message_bus.hash_ring.logger") as mock_logger:
+            ring.add_node("node1")
 
-        # Should not add duplicate
-        self.assertEqual(len(ring.nodes), initial_node_count)
-        self.assertEqual(len(ring.ring), initial_ring_size)
+            # Should not add duplicate
+            self.assertEqual(len(ring.nodes), initial_node_count)
+            self.assertEqual(len(ring.ring), initial_ring_size)
 
-        # Should log warning
-        mock_logger.warning.assert_called_with(
-            "Attempted to add a duplicate node to the hash ring. Skipping.",
-            node="node1",
-        )
+            # Should log warning
+            mock_logger.warning.assert_called_with(
+                "Attempted to add a duplicate node to the hash ring. Skipping.",
+                node="node1",
+            )
 
     def test_remove_node(self):
         """Test removing a node from the ring."""
@@ -100,23 +109,25 @@ class TestConsistentHashRing(unittest.TestCase):
         for _, node in ring.ring:
             self.assertNotEqual(node, "node1")
 
-    @patch("omnicore_engine.message_bus.hash_ring.logger")
-    def test_remove_nonexistent_node(self, mock_logger):
+    def test_remove_nonexistent_node(self):
         """Test removing a node that doesn't exist."""
+        from unittest.mock import patch
+        
         ring = ConsistentHashRing(nodes=["node1"], replicas=10)
         initial_ring_size = len(ring.ring)
         initial_node_count = len(ring.nodes)
 
-        ring.remove_node("nonexistent")
+        with patch("omnicore_engine.message_bus.hash_ring.logger") as mock_logger:
+            ring.remove_node("nonexistent")
 
-        # Should not change ring
-        self.assertEqual(len(ring.nodes), initial_node_count)
-        self.assertEqual(len(ring.ring), initial_ring_size)
+            # Should not change ring
+            self.assertEqual(len(ring.nodes), initial_node_count)
+            self.assertEqual(len(ring.ring), initial_ring_size)
 
-        # Should log warning
-        mock_logger.warning.assert_called_with(
-            "Attempted to remove non-existent node from hash ring.", node="nonexistent"
-        )
+            # Should log warning
+            mock_logger.warning.assert_called_with(
+                "Attempted to remove non-existent node from hash ring.", node="nonexistent"
+            )
 
     def test_get_node_basic(self):
         """Test getting a node for a key."""
@@ -232,20 +243,21 @@ class TestConsistentHashRing(unittest.TestCase):
         # Callback should be called
         rebalance_callback.assert_called_once_with("node3", [])
 
-    @patch("omnicore_engine.message_bus.hash_ring.logger")
-    def test_add_node_dynamic_duplicate(self, mock_logger):
+    def test_add_node_dynamic_duplicate(self):
         """Test dynamic addition of duplicate node."""
+        from unittest.mock import patch, Mock
+        
         ring = ConsistentHashRing(nodes=["node1"], replicas=10)
-
         rebalance_callback = Mock()
 
-        ring.add_node_dynamic("node1", rebalance_callback)
+        with patch("omnicore_engine.message_bus.hash_ring.logger") as mock_logger:
+            ring.add_node_dynamic("node1", rebalance_callback)
 
-        # Callback should not be called
-        rebalance_callback.assert_not_called()
+            # Callback should not be called
+            rebalance_callback.assert_not_called()
 
-        # Should log warning
-        mock_logger.warning.assert_called_with("Node node1 already exists.")
+            # Should log warning
+            mock_logger.warning.assert_called_with("Node node1 already exists.")
 
     def test_remove_node_dynamic(self):
         """Test dynamic node removal with rebalancing callback."""
@@ -262,20 +274,21 @@ class TestConsistentHashRing(unittest.TestCase):
         # Callback should be called
         rebalance_callback.assert_called_once_with("node1", [])
 
-    @patch("omnicore_engine.message_bus.hash_ring.logger")
-    def test_remove_node_dynamic_nonexistent(self, mock_logger):
+    def test_remove_node_dynamic_nonexistent(self):
         """Test dynamic removal of non-existent node."""
+        from unittest.mock import patch, Mock
+        
         ring = ConsistentHashRing(nodes=["node1"], replicas=10)
-
         rebalance_callback = Mock()
 
-        ring.remove_node_dynamic("node2", rebalance_callback)
+        with patch("omnicore_engine.message_bus.hash_ring.logger") as mock_logger:
+            ring.remove_node_dynamic("node2", rebalance_callback)
 
-        # Callback should not be called
-        rebalance_callback.assert_not_called()
+            # Callback should not be called
+            rebalance_callback.assert_not_called()
 
-        # Should log warning
-        mock_logger.warning.assert_called_with("Node node2 not found.")
+            # Should log warning
+            mock_logger.warning.assert_called_with("Node node2 not found.")
 
     def test_wrap_around(self):
         """Test wrap-around behavior when hash is larger than all ring values."""

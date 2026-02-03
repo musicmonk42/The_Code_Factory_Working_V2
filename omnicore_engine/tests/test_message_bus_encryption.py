@@ -1,5 +1,10 @@
 # test_encryption.py
 
+# Note: This test file uses context managers (with patch(...)) instead of
+# @patch decorators to ensure compatibility with pytest-xdist parallel execution.
+# Decorators cause issues when pytest-xdist forks worker processes because mocked
+# modules cannot be properly serialized across process boundaries.
+
 import base64
 import time
 import unittest
