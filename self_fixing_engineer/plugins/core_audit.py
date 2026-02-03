@@ -419,7 +419,18 @@ class AuditLogger:
             self._log_queue, *wrapped_handlers, respect_handler_level=True
         )
         self._attached_handlers = wrapped_handlers
-        self._listener.start()
+        # Handle test mode where thread creation might fail
+        try:
+            self._listener.start()
+        except RuntimeError as e:
+            # In test mode or resource-constrained environments, threads may not be available
+            # Fall back to direct handler attachment without queue listener
+            if "can't start new thread" in str(e):
+                self._listener = None
+                for h in wrapped_handlers:
+                    self.logger.addHandler(h)
+            else:
+                raise
 
     def _configure_logger_locked(self) -> None:
         """(Re)configures the logger and caches hot-path settings. Assumes the caller holds _init_lock."""
