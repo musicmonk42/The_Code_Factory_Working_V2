@@ -43,12 +43,12 @@ async def test_get_or_create_metric_success(monkeypatch):
     # Reload the module to apply the monkeypatch for global variables
     import importlib
 
-    import simulation.quantum
+    import self_fixing_engineer.simulation.quantum as simulation_quantum
 
-    importlib.reload(simulation.quantum)
+    importlib.reload(simulation_quantum)
 
-    metric = simulation.quantum.get_or_create_metric(
-        simulation.quantum.Histogram, "test_hist", "Test histogram"
+    metric = simulation_quantum.get_or_create_metric(
+        simulation_quantum.Histogram, "test_hist", "Test histogram"
     )
     assert metric._name == "test_hist"
 
