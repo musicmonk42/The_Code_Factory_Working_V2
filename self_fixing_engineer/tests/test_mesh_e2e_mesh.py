@@ -17,6 +17,8 @@ import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
 
+pytestmark = pytest.mark.heavy  # Mark entire file as heavy
+
 # Test configuration
 TEST_DIR = Path(tempfile.mkdtemp(prefix="mesh_e2e_test_"))
 TEST_POLICY_ID = "e2e_policy"

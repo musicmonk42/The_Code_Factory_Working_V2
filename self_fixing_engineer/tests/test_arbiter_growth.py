@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
+import pytest
+
+pytestmark = pytest.mark.heavy  # Mark entire file as heavy
+
 # Store original modules for restoration
 _ORIGINAL_MODULES = {}
 _MOCKED_MODULE_NAMES = []

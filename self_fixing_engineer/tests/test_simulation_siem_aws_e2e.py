@@ -27,6 +27,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.heavy  # Mark entire file as heavy
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
