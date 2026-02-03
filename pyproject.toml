@@ -69,6 +69,7 @@ markers = [
     "requires_redis: marks tests that require Redis connection",
     "forked: marks tests that should run in isolated forked process",
     "flaky: marks tests as flaky (may need retries)",
+    "heavy: marks tests as resource-intensive (deselect with '-m \"not heavy\"')",
 ]
 # NOTE: Environment variables for tests are set in the CI workflow (.github/workflows/pytest-all.yml)
 # The 'env' configuration option requires pytest-env plugin which is not installed.
