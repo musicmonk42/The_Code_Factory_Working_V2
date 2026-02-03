@@ -571,6 +571,7 @@ jobs:
         timeout-minutes: 30
         env:
           TESTING: "1"
+          PYTEST_CURRENT_TEST: "true"
           AWS_REGION: ""
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
