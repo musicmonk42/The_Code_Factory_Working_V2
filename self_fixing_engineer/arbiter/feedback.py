@@ -599,7 +599,7 @@ class FeedbackManager:
     async def record_feedback(
         self,
         user_id: str,
-        feedback_type: Any = None,
+        feedback_type: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Records feedback from the CLI or other sources.
@@ -608,12 +608,22 @@ class FeedbackManager:
         
         Args:
             user_id: The user ID associated with the feedback.
-            feedback_type: The type of feedback (optional, can be None).
+            feedback_type: The type of feedback (optional). Can be a string like "general", 
+                "bug_report", etc. If None, defaults to "general".
             details: Additional details about the feedback event.
         """
+        # Convert feedback_type to string if it has a value attribute (like an enum)
+        feedback_type_str = "general"
+        if feedback_type is not None:
+            if hasattr(feedback_type, 'value'):
+                # Handle enum types like FeedbackType
+                feedback_type_str = str(feedback_type.value)
+            else:
+                feedback_type_str = str(feedback_type)
+        
         feedback_entry = {
             "user_id": user_id,
-            "feedback_type": str(feedback_type) if feedback_type else "general",
+            "feedback_type": feedback_type_str,
             "details": details or {},
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": "cli_feedback",
