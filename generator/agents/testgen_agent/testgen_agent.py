@@ -645,21 +645,39 @@ Agent --> Dev : Deliver Report
             )
 
         try:
-            proc = subprocess.run(
-                ["git", "log", "-n", "5", "--pretty=format:%h %ad %s", "--no-merges"],
+            # First check if we're in a git repository
+            git_check = subprocess.run(
+                ["git", "rev-parse", "--git-dir"],
                 cwd=str(self.repo_path),
                 capture_output=True,
                 text=True,
-                check=True,
-                timeout=30,
+                timeout=5,
             )
-            git_log_output = proc.stdout.strip()
-            if git_log_output:
-                report_parts.append(
-                    f"\n## Recent Commits\n```\n{scrub_text(git_log_output)}\n```\n"
+            
+            if git_check.returncode != 0:
+                # Not a git repository - skip git operations gracefully
+                logger.debug(
+                    "Not a git repository, skipping git-based operations",
+                    extra=log_extra,
                 )
+                report_parts.append("\n## Recent Commits\n_Not a git repository._\n")
             else:
-                report_parts.append("\n## Recent Commits\n_No recent commits found._\n")
+                # We're in a git repo, proceed with git log
+                proc = subprocess.run(
+                    ["git", "log", "-n", "5", "--pretty=format:%h %ad %s", "--no-merges"],
+                    cwd=str(self.repo_path),
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=30,
+                )
+                git_log_output = proc.stdout.strip()
+                if git_log_output:
+                    report_parts.append(
+                        f"\n## Recent Commits\n```\n{scrub_text(git_log_output)}\n```\n"
+                    )
+                else:
+                    report_parts.append("\n## Recent Commits\n_No recent commits found._\n")
         except FileNotFoundError:
             logger.warning(
                 "Git command not found. Cannot fetch changelog for report.",
@@ -788,8 +806,10 @@ Agent --> Dev : Deliver Report
             reraise=True,  # Re-raise the last exception if all retries fail
         )
 
-        # Call the inner function using the retryer
-        return await retryer.call(_attempt_llm_call)
+        # Call the inner function using the retryer with correct async iteration pattern
+        async for attempt in retryer:
+            with attempt:
+                return await _attempt_llm_call()
 
     # --- END FIX ---
 
