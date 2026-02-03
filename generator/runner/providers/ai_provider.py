@@ -8,7 +8,7 @@ observability, error handling, security, and cost estimation.
 
 import asyncio
 import os  # <-- ADDED
-from typing import Any, AsyncGenerator, Dict, Union
+from typing import Any, AsyncGenerator, Dict, Optional, Union
 
 import aiohttp
 from openai import (  # <-- ADDED SDK ERRORS
@@ -21,7 +21,17 @@ from openai import (  # <-- ADDED SDK ERRORS
 from generator.runner.llm_provider_base import LLMProvider
 from generator.runner.runner_config import load_config  # <-- ADDED
 from generator.runner.runner_errors import ConfigurationError, LLMError  # <-- ADDED
-from tiktoken import Encoding, get_encoding
+
+# Defensive import for tiktoken
+try:
+    import tiktoken
+    from tiktoken import Encoding, get_encoding
+    HAS_TIKTOKEN = True
+except ImportError:
+    HAS_TIKTOKEN = False
+    tiktoken = None
+    Encoding = None
+    get_encoding = None
 
 
 class OpenAIProvider(LLMProvider):
@@ -53,7 +63,7 @@ class OpenAIProvider(LLMProvider):
 
         # Initialize client with the API key
         self.client = AsyncOpenAI(api_key=self.api_key)
-        self.tokenizer_cache: Dict[str, Encoding] = {}
+        self.tokenizer_cache: Dict[str, Any] = {}  # Use Any to handle optional tiktoken
         self.custom_headers: Dict[str, str] = {}
         self.custom_endpoint: str = None
         self.registered_models: set = {"gpt-3.5-turbo", "gpt-4", "gpt-4o"}
@@ -77,10 +87,16 @@ class OpenAIProvider(LLMProvider):
         """
         self.registered_models.add(model)
 
-    def _get_tokenizer(self, model: str) -> Encoding:
+    def _get_tokenizer(self, model: str) -> Any:
         """
         Get model-specific tokenizer.
         """
+        if not HAS_TIKTOKEN:
+            raise ImportError(
+                "tiktoken is required but not installed. "
+                "Install it with: pip install tiktoken"
+            )
+        
         if model not in self.tokenizer_cache:
             # Check for specific models, fallback to default
             if "gpt-4" in model or "gpt-3.5" in model or "gpt-4o" in model:
@@ -88,7 +104,7 @@ class OpenAIProvider(LLMProvider):
             else:
                 encoding_name = "p50k_base"  # Older models
 
-            self.tokenizer_cache[model] = get_encoding(encoding_name)
+            self.tokenizer_cache[model] = tiktoken.get_encoding(encoding_name)
         return self.tokenizer_cache[model]
 
     async def _api_call(self, model: str, messages: list, stream: bool, **kwargs):
