@@ -111,6 +111,7 @@ class TestPluginService:
         from omnicore_engine.engines import PluginService
 
         service = PluginService(mock_dependencies["registry"])
+        await service.start_subscriptions()
         assert service.plugin_registry == mock_dependencies["registry"]
         assert service.message_bus is not None
 
@@ -121,6 +122,7 @@ class TestPluginService:
         from omnicore_engine.engines import PluginService
 
         service = PluginService(mock_dependencies["registry"])
+        await service.start_subscriptions()
 
         with patch("omnicore_engine.engines.BugManager") as mock_bug_manager:
             mock_manager_instance = Mock()
@@ -141,6 +143,7 @@ class TestPluginService:
         from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
 
         service = PluginService(mock_dependencies["registry"])
+        await service.start_subscriptions()
 
         # Setup mock import fixer engine
         mock_fixer = Mock()
@@ -165,6 +168,7 @@ class TestPluginService:
         from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
 
         service = PluginService(mock_dependencies["registry"])
+        await service.start_subscriptions()
 
         mock_fixer = Mock()
         mock_fixer.fix_code = AsyncMock(return_value="fixed code")
@@ -187,6 +191,7 @@ class TestPluginService:
         from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
 
         service = PluginService(mock_dependencies["registry"])
+        await service.start_subscriptions()
         ENGINE_REGISTRY.clear()
 
         message = Mock()
@@ -204,6 +209,7 @@ class TestPluginService:
         from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
 
         service = PluginService(mock_dependencies["registry"])
+        await service.start_subscriptions()
 
         mock_fixer = Mock()
         mock_fixer.fix_file = AsyncMock(side_effect=Exception("Fix failed"))
@@ -225,6 +231,7 @@ class TestPluginService:
         from omnicore_engine.engines import PluginService
 
         service = PluginService(mock_dependencies["registry"])
+        await service.start_subscriptions()
 
         mock_fetcher = AsyncMock(return_value=["Company1", "Company2"])
         mock_dependencies["registry"].get.return_value = mock_fetcher
@@ -241,6 +248,7 @@ class TestPluginService:
         from omnicore_engine.engines import PluginService
 
         service = PluginService(mock_dependencies["registry"])
+        await service.start_subscriptions()
         mock_dependencies["registry"].get.return_value = None
 
         with pytest.raises(RuntimeError, match="No company_list plugin registered"):
@@ -253,6 +261,7 @@ class TestPluginService:
         from omnicore_engine.engines import PluginService
 
         service = PluginService(mock_dependencies["registry"])
+        await service.start_subscriptions()
 
         mock_fetcher = AsyncMock(return_value={"score": 85})
         mock_dependencies["registry"].get.return_value = mock_fetcher
@@ -269,6 +278,7 @@ class TestPluginService:
         from omnicore_engine.engines import PluginService
 
         service = PluginService(mock_dependencies["registry"])
+        await service.start_subscriptions()
 
         mock_simulator = AsyncMock(return_value={"results": "simulation data"})
         mock_dependencies["registry"].get.return_value = mock_simulator

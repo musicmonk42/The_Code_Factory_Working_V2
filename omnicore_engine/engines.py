@@ -373,42 +373,38 @@ class PluginService:
         self.message_bus = ShardedMessageBus(
             config=settings, db=Database(settings.DB_PATH)
         )
-
-        # Subscribe to a channel for a bug detected by the Arbiter
-        asyncio.create_task(
-            self.message_bus.subscribe("arbiter:bug_detected", self.handle_arbiter_bug)
-        )
-
-        # Subscribe to a channel for self-healing import fixer requests
-        asyncio.create_task(
-            self.message_bus.subscribe(
-                "shif:fix_import_request", self.handle_shif_request
-            )
-        )
-
-        # Subscribe to generator channels
-        asyncio.create_task(
-            self.message_bus.subscribe(
-                "generator:codegen_request", self.handle_codegen_request
-            )
-        )
-        asyncio.create_task(
-            self.message_bus.subscribe(
-                "generator:testgen_request", self.handle_testgen_request
-            )
-        )
-        asyncio.create_task(
-            self.message_bus.subscribe(
-                "generator:docgen_request", self.handle_docgen_request
-            )
-        )
-        asyncio.create_task(
-            self.message_bus.subscribe(
-                "workflow:sfe_to_generator", self.handle_sfe_to_generator
-            )
-        )
-
         self.logger = logging.getLogger("PluginService")
+        self._subscriptions_started = False
+
+    async def start_subscriptions(self):
+        """Start async subscriptions - must be called from async context"""
+        if self._subscriptions_started:
+            return
+        
+        # Subscribe to a channel for a bug detected by the Arbiter
+        await self.message_bus.subscribe("arbiter:bug_detected", self.handle_arbiter_bug)
+        
+        # Subscribe to a channel for self-healing import fixer requests
+        await self.message_bus.subscribe(
+            "shif:fix_import_request", self.handle_shif_request
+        )
+        
+        # Subscribe to generator channels
+        await self.message_bus.subscribe(
+            "generator:codegen_request", self.handle_codegen_request
+        )
+        await self.message_bus.subscribe(
+            "generator:testgen_request", self.handle_testgen_request
+        )
+        await self.message_bus.subscribe(
+            "generator:docgen_request", self.handle_docgen_request
+        )
+        await self.message_bus.subscribe(
+            "workflow:sfe_to_generator", self.handle_sfe_to_generator
+        )
+        
+        self._subscriptions_started = True
+        self.logger.info("PluginService subscriptions started")
 
     async def handle_arbiter_bug(self, message):
         self.logger.info(f"Received Arbiter bug event: {message.payload}")
@@ -905,6 +901,9 @@ class OmniCoreOmega:
 
     async def initialize_asset_data(self):
         logger.info("OmniCoreOmega: Starting asset data initialization.")
+
+        # Start PluginService subscriptions
+        await self.plugin_service.start_subscriptions()
 
         # Initialize the Self-Healing Import Fixer engine
         await self.import_fixer_engine.initialize()
