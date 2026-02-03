@@ -20,14 +20,42 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+# FIX: Create proper exception classes for mocking
+class MockLLMError(Exception):
+    """Mock LLMError for testing."""
+    pass
+
+class MockRunnerError(Exception):
+    """Mock RunnerError for testing."""
+    pass
+
 # FIX: Mock runner modules before importing docgen_agent to handle source file import issues
-sys.modules["runner"] = MagicMock()
-sys.modules["runner.llm_client"] = MagicMock()
-sys.modules["runner.runner_logging"] = MagicMock()
-sys.modules["runner.runner_metrics"] = MagicMock()
-sys.modules["runner.runner_errors"] = MagicMock()
-sys.modules["runner.runner_file_utils"] = MagicMock()
-sys.modules["runner.summarize_utils"] = MagicMock()
+mock_runner = MagicMock()
+mock_runner_llm_client = MagicMock()
+mock_runner_logging = MagicMock()
+mock_runner_metrics = MagicMock()
+mock_runner_errors = MagicMock()
+mock_runner_errors.LLMError = MockLLMError
+mock_runner_errors.RunnerError = MockRunnerError
+mock_runner_file_utils = MagicMock()
+mock_summarize_utils = MagicMock()
+
+sys.modules["runner"] = mock_runner
+sys.modules["runner.llm_client"] = mock_runner_llm_client
+sys.modules["runner.runner_logging"] = mock_runner_logging
+sys.modules["runner.runner_metrics"] = mock_runner_metrics
+sys.modules["runner.runner_errors"] = mock_runner_errors
+sys.modules["runner.runner_file_utils"] = mock_runner_file_utils
+sys.modules["runner.summarize_utils"] = mock_summarize_utils
+
+# FIX: Mock tiktoken to prevent network calls during testing
+mock_tiktoken = MagicMock()
+mock_encoding = MagicMock()
+mock_encoding.encode.return_value = [1, 2, 3, 4, 5]  # Return mock tokens
+mock_encoding.decode.return_value = "decoded text"
+mock_tiktoken.get_encoding.return_value = mock_encoding
+mock_tiktoken.encoding_for_model.return_value = mock_encoding
+sys.modules["tiktoken"] = mock_tiktoken
 
 # FIX: Add Path, Tuple, Optional to builtins for type hint resolution in source files
 import builtins
@@ -64,6 +92,41 @@ def comprehensive_repo():
         (repo_path / "docs").mkdir()
         (repo_path / "doc_templates").mkdir()
         (repo_path / "few_shot_docs").mkdir()
+        # FIX: Create prompt_templates directory with required templates
+        (repo_path / "prompt_templates").mkdir()
+        
+        # FIX: Create required template files
+        (repo_path / "prompt_templates" / "markdown_default.jinja").write_text("""
+Generate Markdown documentation for the following code:
+
+Language: {{ language }}
+File: {{ file_path }}
+
+Source Code:
+```
+{{ content }}
+```
+
+Instructions: {{ instructions }}
+
+Please generate comprehensive markdown documentation.
+""")
+        
+        (repo_path / "prompt_templates" / "python_default.jinja").write_text("""
+Generate Python documentation for the following code:
+
+Language: {{ language }}
+File: {{ file_path }}
+
+Source Code:
+```
+{{ content }}
+```
+
+Instructions: {{ instructions }}
+
+Please generate comprehensive Python documentation with docstrings.
+""")
 
         # Create Python module with comprehensive docstrings
         (repo_path / "src" / "calculator.py").write_text('''
@@ -275,7 +338,7 @@ def mock_all_llm():
     """Mock all LLM calls across all modules."""
     patches = [
         patch("generator.agents.docgen_agent.docgen_agent.call_llm_api"),
-        patch("generator.agents.docgen_agent.docgen_agent.call_ensemble_api"),
+        # FIX: Removed patch for call_ensemble_api as it doesn't exist in docgen_agent
         patch("generator.agents.docgen_agent.docgen_prompt.call_llm_api"),
     ]
 
