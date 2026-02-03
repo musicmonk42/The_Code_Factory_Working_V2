@@ -4,6 +4,69 @@
 const API_BASE = '/api';
 let websocket = null;
 
+// WebSocket connection state management
+const ConnectionState = {
+    DISCONNECTED: 'disconnected',
+    CONNECTING: 'connecting',
+    CONNECTED: 'connected',
+    RECONNECTING: 'reconnecting',
+    ERROR: 'error'
+};
+
+let connectionState = ConnectionState.DISCONNECTED;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_BASE_DELAY = 1000; // ms
+const CONNECTION_TIMEOUT = 10000; // ms
+let connectionTimeout = null;
+let heartbeatInterval = null;
+let isReconnecting = false;
+let reconnectTimeoutId = null;
+let wsEventHandlers = null; // Store event handlers for cleanup
+
+// Fetch wrapper with timeout and retry logic
+async function fetchWithRetry(url, options = {}, maxRetries = 3) {
+    const timeout = options.timeout || 30000;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        
+        try {
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                // Check if it's a client error (4xx) - don't retry these
+                const isClientError = response.status >= 400 && response.status < 500;
+                const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+                error.isClientError = isClientError;
+                throw error;
+            }
+            
+            return response;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            
+            if (attempt === maxRetries) {
+                throw error;
+            }
+            
+            // Don't retry on client errors (4xx)
+            if (error.isClientError) {
+                throw error;
+            }
+            
+            // Exponential backoff
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+        }
+    }
+}
+
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
@@ -20,6 +83,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load initial data
     loadHealthCheck();
     loadJobStats();
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+        if (websocket) {
+            stopHeartbeat();
+            if (reconnectTimeoutId) {
+                clearTimeout(reconnectTimeoutId);
+            }
+            websocket.close();
+        }
+    });
 });
 
 // Navigation
@@ -60,7 +134,7 @@ function initDashboard() {
 
 async function loadHealthCheck() {
     try {
-        const response = await fetch('/health');
+        const response = await fetchWithRetry('/health');
         const data = await response.json();
         
         updateHealthIndicators(data.components);
@@ -70,7 +144,7 @@ async function loadHealthCheck() {
         if (versionEl) versionEl.textContent = data.version;
     } catch (error) {
         console.error('Health check failed:', error);
-        showError('Failed to load health status');
+        showError('Failed to load health status. Please check your connection and try again.');
     }
 }
 
@@ -100,7 +174,7 @@ function updateHealthIndicators(components) {
 
 async function loadJobStats() {
     try {
-        const response = await fetch(`${API_BASE}/jobs/`);
+        const response = await fetchWithRetry(`${API_BASE}/jobs/`);
         const data = await response.json();
         
         const total = data.total;
@@ -112,65 +186,246 @@ async function loadJobStats() {
         document.getElementById('completed-jobs').textContent = completed;
     } catch (error) {
         console.error('Failed to load job stats:', error);
+        // Don't show error to user for background updates
     }
 }
 
 // WebSocket Connection
 function connectWebSocket() {
+    // Prevent multiple simultaneous connection attempts
+    if (connectionState === ConnectionState.CONNECTING || 
+        connectionState === ConnectionState.CONNECTED ||
+        connectionState === ConnectionState.RECONNECTING) {
+        console.log('Connection already in progress or established');
+        return;
+    }
+    
+    updateConnectionState(ConnectionState.CONNECTING);
+    
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}${API_BASE}/events/ws`;
     
+    // Set connection timeout
+    connectionTimeout = setTimeout(() => {
+        if (websocket && websocket.readyState === WebSocket.CONNECTING) {
+            console.error('WebSocket connection timeout');
+            websocket.close();
+            updateConnectionState(ConnectionState.ERROR);
+            addEvent('System', 'Connection timeout - Please check network and try again', 'error');
+            
+            // Attempt reconnection
+            if (!isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                attemptReconnect();
+            }
+        }
+    }, CONNECTION_TIMEOUT);
+    
     websocket = new WebSocket(wsUrl);
     
-    websocket.onopen = () => {
-        document.getElementById('stream-status').textContent = 'Connected';
-        document.getElementById('stream-status').style.background = 'rgba(0, 204, 136, 0.2)';
-        document.getElementById('stream-status').style.color = 'var(--success)';
-        document.getElementById('connect-stream').disabled = true;
-        document.getElementById('disconnect-stream').disabled = false;
+    // Store event handlers for cleanup
+    wsEventHandlers = {
+        onopen: () => {
+            clearTimeout(connectionTimeout);
+            reconnectAttempts = 0; // Reset on successful connection
+            isReconnecting = false;
+            updateConnectionState(ConnectionState.CONNECTED);
+            
+            document.getElementById('stream-status').textContent = 'Connected';
+            document.getElementById('stream-status').style.background = 'rgba(0, 204, 136, 0.2)';
+            document.getElementById('stream-status').style.color = 'var(--success)';
+            document.getElementById('connect-stream').disabled = true;
+            document.getElementById('disconnect-stream').disabled = false;
+            
+            addEvent('System', 'Connected to event stream', 'info');
+            
+            // Start heartbeat to detect stale connections
+            startHeartbeat();
+        },
         
-        addEvent('System', 'Connected to event stream', 'info');
-    };
-    
-    websocket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        addEvent(data.event_type, data.message, data.severity);
+        onmessage: (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                
+                // Handle heartbeat pong response
+                if (data.type === 'pong') {
+                    return;
+                }
+                
+                addEvent(data.event_type, data.message, data.severity);
+                
+                // Update stats if job event
+                if (data.event_type && data.event_type.includes('job')) {
+                    loadJobStats();
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+                addEvent('System', 'Error parsing event data', 'error');
+            }
+        },
         
-        // Update stats if job event
-        if (data.event_type.includes('job')) {
-            loadJobStats();
+        onerror: (error) => {
+            clearTimeout(connectionTimeout);
+            console.error('WebSocket error:', error);
+            console.error('Error details:', { type: error.type, target: error.target?.url });
+            updateConnectionState(ConnectionState.ERROR);
+            addEvent('System', 'Connection error - Attempting to reconnect...', 'error');
+        },
+        
+        onclose: (event) => {
+            clearTimeout(connectionTimeout);
+            stopHeartbeat();
+            
+            const closeCode = event.code || 1006; // 1006 = abnormal closure
+            const closeReason = event.reason || 'No reason provided';
+            const wasClean = event.wasClean;
+            
+            console.log(`WebSocket closed. Code: ${closeCode}, Reason: ${closeReason}, Clean: ${wasClean}`);
+            
+            // Only update state if not already reconnecting
+            if (connectionState !== ConnectionState.RECONNECTING) {
+                updateConnectionState(ConnectionState.DISCONNECTED);
+            }
+            
+            document.getElementById('stream-status').textContent = isReconnecting ? 'Reconnecting...' : 'Disconnected';
+            document.getElementById('stream-status').style.background = 'rgba(176, 184, 212, 0.1)';
+            document.getElementById('stream-status').style.color = 'var(--text-secondary)';
+            document.getElementById('connect-stream').disabled = isReconnecting;
+            document.getElementById('disconnect-stream').disabled = true;
+            
+            const message = isReconnecting ? 
+                `Connection lost. Code: ${closeCode}. Reconnecting...` :
+                `Disconnected. Code: ${closeCode}, Reason: ${closeReason}`;
+            addEvent('System', message, 'warning');
+            
+            // Attempt automatic reconnection for abnormal closures
+            if (!wasClean && !isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                attemptReconnect();
+            }
         }
     };
     
-    websocket.onerror = (error) => {
-        // Note: Browser WebSocket error events typically don't provide detailed error properties
-        // The close event (onclose) will provide the actual status code and reason
-        console.error('WebSocket error:', error);
-        console.error('Error details:', { type: error.type, target: error.target?.url });
-        addEvent('System', `Connection error - Check console for details`, 'error');
-    };
-    
-    websocket.onclose = (event) => {
-        const closeCode = event.code || 1006; // 1006 = abnormal closure
-        const closeReason = event.reason || 'No reason provided';
-        const wasClean = event.wasClean ? 'clean' : 'unclean';
-        
-        console.log(`WebSocket closed. Code: ${closeCode}, Reason: ${closeReason}, Clean: ${wasClean}`);
-        
-        document.getElementById('stream-status').textContent = 'Disconnected';
-        document.getElementById('stream-status').style.background = 'rgba(176, 184, 212, 0.1)';
-        document.getElementById('stream-status').style.color = 'var(--text-secondary)';
-        document.getElementById('connect-stream').disabled = false;
-        document.getElementById('disconnect-stream').disabled = true;
-        
-        addEvent('System', `Disconnected (HTTP ${closeCode}: ${closeReason})`, 'warning');
-    };
+    // Attach event handlers
+    websocket.onopen = wsEventHandlers.onopen;
+    websocket.onmessage = wsEventHandlers.onmessage;
+    websocket.onerror = wsEventHandlers.onerror;
+    websocket.onclose = wsEventHandlers.onclose;
 }
 
 function disconnectWebSocket() {
+    // Prevent disconnect during connection attempt
+    if (connectionState === ConnectionState.CONNECTING) {
+        console.log('Cannot disconnect while connecting');
+        return;
+    }
+    
+    isReconnecting = false;
+    reconnectAttempts = 0;
+    
+    if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+        reconnectTimeoutId = null;
+    }
+    
+    stopHeartbeat();
+    
     if (websocket) {
-        websocket.close();
+        // Clean closure
+        if (websocket.readyState === WebSocket.OPEN || 
+            websocket.readyState === WebSocket.CONNECTING) {
+            websocket.close(1000, 'User disconnected');
+        }
         websocket = null;
+    }
+    
+    updateConnectionState(ConnectionState.DISCONNECTED);
+}
+
+// Helper function to calculate reconnection delay with exponential backoff
+function getReconnectDelay() {
+    return Math.min(30000, RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts));
+}
+
+// Attempt to reconnect with exponential backoff
+function attemptReconnect() {
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        addEvent('System', 'Max reconnection attempts reached. Please reconnect manually.', 'error');
+        updateConnectionState(ConnectionState.ERROR);
+        document.getElementById('connect-stream').disabled = false;
+        return;
+    }
+    
+    isReconnecting = true;
+    reconnectAttempts++;
+    updateConnectionState(ConnectionState.RECONNECTING);
+    
+    const delay = getReconnectDelay();
+    const delaySeconds = delay / 1000;
+    console.log(`Attempting reconnection ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delaySeconds}s`);
+    addEvent('System', `Reconnecting in ${delaySeconds}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`, 'info');
+    
+    reconnectTimeoutId = setTimeout(() => {
+        connectWebSocket();
+    }, delay);
+}
+
+// Heartbeat mechanism to detect stale connections
+function startHeartbeat() {
+    stopHeartbeat(); // Clear any existing interval
+    
+    heartbeatInterval = setInterval(() => {
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
+            try {
+                websocket.send(JSON.stringify({ type: 'ping' }));
+            } catch (error) {
+                console.error('Failed to send heartbeat:', error);
+                stopHeartbeat();
+            }
+        }
+    }, 30000); // Send heartbeat every 30 seconds
+}
+
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+// Update connection state and UI
+function updateConnectionState(newState) {
+    connectionState = newState;
+    
+    // Update UI based on connection state
+    const statusEl = document.getElementById('stream-status');
+    if (!statusEl) return;
+    
+    switch (newState) {
+        case ConnectionState.CONNECTING:
+            statusEl.textContent = 'Connecting...';
+            statusEl.style.background = 'rgba(255, 193, 7, 0.2)';
+            statusEl.style.color = 'var(--warning)';
+            break;
+        case ConnectionState.CONNECTED:
+            statusEl.textContent = 'Connected';
+            statusEl.style.background = 'rgba(0, 204, 136, 0.2)';
+            statusEl.style.color = 'var(--success)';
+            break;
+        case ConnectionState.RECONNECTING:
+            statusEl.textContent = 'Reconnecting...';
+            statusEl.style.background = 'rgba(255, 193, 7, 0.2)';
+            statusEl.style.color = 'var(--warning)';
+            break;
+        case ConnectionState.ERROR:
+            statusEl.textContent = 'Error';
+            statusEl.style.background = 'rgba(255, 82, 82, 0.2)';
+            statusEl.style.color = 'var(--error)';
+            break;
+        case ConnectionState.DISCONNECTED:
+        default:
+            statusEl.textContent = 'Disconnected';
+            statusEl.style.background = 'rgba(176, 184, 212, 0.1)';
+            statusEl.style.color = 'var(--text-secondary)';
+            break;
     }
 }
 
@@ -226,7 +481,7 @@ async function loadJobs() {
             url += `?status=${statusFilter}`;
         }
         
-        const response = await fetch(url);
+        const response = await fetchWithRetry(url);
         const data = await response.json();
         
         if (data.jobs.length === 0) {
@@ -241,7 +496,7 @@ async function loadJobs() {
         });
     } catch (error) {
         console.error('Failed to load jobs:', error);
-        container.innerHTML = '<p class="error">Failed to load jobs</p>';
+        container.innerHTML = '<p class="error">Failed to load jobs. Please try again.</p>';
     }
 }
 
@@ -314,7 +569,7 @@ function createJobCard(job) {
 
 async function viewJobDetails(jobId) {
     try {
-        const response = await fetch(`${API_BASE}/jobs/${jobId}/progress`);
+        const response = await fetchWithRetry(`${API_BASE}/jobs/${jobId}/progress`);
         const data = await response.json();
         
         alert(`Job ${jobId}\nStatus: ${data.status}\nProgress: ${data.overall_progress.toFixed(1)}%`);
@@ -389,7 +644,7 @@ async function uploadFiles() {
     
     // First create a job
     try {
-        const jobResponse = await fetch(`${API_BASE}/jobs/`, {
+        const jobResponse = await fetchWithRetry(`${API_BASE}/jobs/`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({description: 'File upload job', metadata: {}})
@@ -400,7 +655,7 @@ async function uploadFiles() {
         const formData = new FormData();
         selectedFiles.forEach(file => formData.append('files', file));
         
-        const uploadResponse = await fetch(`${API_BASE}/generator/${job.id}/upload`, {
+        const uploadResponse = await fetchWithRetry(`${API_BASE}/generator/${job.id}/upload`, {
             method: 'POST',
             body: formData
         });
@@ -436,7 +691,7 @@ async function analyzeCode() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/sfe/${jobId}/analyze`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/${jobId}/analyze`, {
             method: 'POST'
         });
         const data = await response.json();
@@ -452,7 +707,7 @@ async function loadErrors(jobId) {
     const container = document.getElementById('errors-list');
     
     try {
-        const response = await fetch(`${API_BASE}/sfe/${jobId}/errors`);
+        const response = await fetchWithRetry(`${API_BASE}/sfe/${jobId}/errors`);
         const data = await response.json();
         
         if (data.errors.length === 0) {
@@ -481,7 +736,7 @@ async function loadErrors(jobId) {
 
 async function proposeFix(errorId) {
     try {
-        const response = await fetch(`${API_BASE}/sfe/errors/${errorId}/propose-fix`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/errors/${errorId}/propose-fix`, {
             method: 'POST'
         });
         const data = await response.json();
@@ -497,7 +752,7 @@ async function loadInsights() {
     const container = document.getElementById('insights-content');
     
     try {
-        const response = await fetch(`${API_BASE}/sfe/insights`);
+        const response = await fetchWithRetry(`${API_BASE}/sfe/insights`);
         const data = await response.json();
         
         container.innerHTML = `
@@ -521,7 +776,7 @@ async function loadFixes() {
     container.innerHTML = '<p class="loading">Loading fixes...</p>';
     
     try {
-        const response = await fetch(`${API_BASE}/fixes/`);
+        const response = await fetchWithRetry(`${API_BASE}/fixes/`);
         const data = await response.json();
         
         if (data.length === 0) {
@@ -562,7 +817,7 @@ function createFixCard(fix) {
 
 async function applyFix(fixId) {
     try {
-        const response = await fetch(`${API_BASE}/sfe/fixes/${fixId}/apply`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/fixes/${fixId}/apply`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({force: false, dry_run: false})
@@ -579,7 +834,7 @@ async function applyFix(fixId) {
 
 async function rollbackFix(fixId) {
     try {
-        const response = await fetch(`${API_BASE}/sfe/fixes/${fixId}/rollback`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/fixes/${fixId}/rollback`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({reason: 'User requested'})
@@ -610,7 +865,7 @@ async function refreshSystemStatus() {
 
 async function loadSystemState() {
     try {
-        const response = await fetch(`${API_BASE}/health`);
+        const response = await fetchWithRetry(`${API_BASE}/health`);
         const data = await response.json();
         
         const stateElement = document.getElementById('system-state');
@@ -629,7 +884,7 @@ async function loadSystemState() {
 
 async function loadAgentStatus() {
     try {
-        const response = await fetch(`${API_BASE}/agents`);
+        const response = await fetchWithRetry(`${API_BASE}/agents`);
         const data = await response.json();
         
         const agentsList = document.getElementById('agents-status-list');
@@ -686,7 +941,7 @@ async function loadAgentStatus() {
 
 async function loadLLMStatus() {
     try {
-        const response = await fetch(`${API_BASE}/api-keys/`);
+        const response = await fetchWithRetry(`${API_BASE}/api-keys/`);
         const data = await response.json();
         
         const llmStatus = document.getElementById('llm-config-status');
@@ -737,7 +992,7 @@ async function loadLLMStatus() {
 async function loadOmniCoreStatus() {
     try {
         // Load plugins info
-        const pluginsResponse = await fetch(`${API_BASE}/omnicore/plugins`);
+        const pluginsResponse = await fetchWithRetry(`${API_BASE}/omnicore/plugins`);
         const pluginsData = await pluginsResponse.json();
         
         document.getElementById('plugins-info').innerHTML = 
@@ -748,7 +1003,7 @@ async function loadOmniCoreStatus() {
             '<p class="status-ok">✅ Operational</p>';
             
         // API version
-        const healthResponse = await fetch(`${API_BASE}/health`);
+        const healthResponse = await fetchWithRetry(`${API_BASE}/health`);
         const healthData = await healthResponse.json();
         document.getElementById('api-version').textContent = healthData.version || '1.0.0';
     } catch (error) {
@@ -778,7 +1033,7 @@ async function runFullDiagnostics() {
         
         // System health
         try {
-            const response = await fetch(`${API_BASE}/health`);
+            const response = await fetchWithRetry(`${API_BASE}/health`);
             diagnostics.system = await response.json();
         } catch (e) {
             diagnostics.system.error = e.message;
@@ -786,7 +1041,7 @@ async function runFullDiagnostics() {
         
         // Agent status
         try {
-            const response = await fetch(`${API_BASE}/agents`);
+            const response = await fetchWithRetry(`${API_BASE}/agents`);
             diagnostics.agents = await response.json();
         } catch (e) {
             diagnostics.agents.error = e.message;
@@ -794,7 +1049,7 @@ async function runFullDiagnostics() {
         
         // LLM configuration
         try {
-            const response = await fetch(`${API_BASE}/api-keys/`);
+            const response = await fetchWithRetry(`${API_BASE}/api-keys/`);
             diagnostics.llm = await response.json();
         } catch (e) {
             diagnostics.llm.error = e.message;
@@ -802,7 +1057,7 @@ async function runFullDiagnostics() {
         
         // OmniCore
         try {
-            const response = await fetch(`${API_BASE}/omnicore/plugins`);
+            const response = await fetchWithRetry(`${API_BASE}/omnicore/plugins`);
             diagnostics.omnicore = await response.json();
         } catch (e) {
             diagnostics.omnicore.error = e.message;
@@ -855,7 +1110,7 @@ async function saveLLMConfiguration(e) {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/api-keys/${provider}`, {
+        const response = await fetchWithRetry(`${API_BASE}/api-keys/${provider}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -886,7 +1141,7 @@ async function refreshProviderStatus() {
     grid.innerHTML = '<p class="loading">Loading provider status...</p>';
     
     try {
-        const response = await fetch(`${API_BASE}/api-keys/`);
+        const response = await fetchWithRetry(`${API_BASE}/api-keys/`);
         const data = await response.json();
         
         const providers = data.providers || {};
@@ -924,7 +1179,7 @@ async function refreshProviderStatus() {
 
 async function activateProvider(provider) {
     try {
-        const response = await fetch(`${API_BASE}/api-keys/${provider}/activate`, {
+        const response = await fetchWithRetry(`${API_BASE}/api-keys/${provider}/activate`, {
             method: 'POST'
         });
         
@@ -945,7 +1200,7 @@ async function removeProvider(provider) {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/api-keys/${provider}`, {
+        const response = await fetchWithRetry(`${API_BASE}/api-keys/${provider}`, {
             method: 'DELETE'
         });
         
@@ -1009,7 +1264,7 @@ async function createJob() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/jobs/`, {
+        const response = await fetchWithRetry(`${API_BASE}/jobs/`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({description, metadata})
@@ -1149,7 +1404,7 @@ document.head.appendChild(style);
 
 async function downloadJobFiles(jobId) {
     try {
-        const response = await fetch(`${API_BASE}/jobs/${jobId}/download`);
+        const response = await fetchWithRetry(`${API_BASE}/jobs/${jobId}/download`);
         if (response.ok) {
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
@@ -1168,7 +1423,7 @@ async function downloadJobFiles(jobId) {
 
 async function viewJobFiles(jobId) {
     try {
-        const response = await fetch(`${API_BASE}/jobs/${jobId}/files`);
+        const response = await fetchWithRetry(`${API_BASE}/jobs/${jobId}/files`);
         const data = await response.json();
         
         if (data.files.length === 0) {
@@ -1191,7 +1446,7 @@ async function cancelJob(jobId) {
     if (!confirm('Cancel this job?')) return;
     
     try {
-        const response = await fetch(`${API_BASE}/jobs/${jobId}/cancel`, {
+        const response = await fetchWithRetry(`${API_BASE}/jobs/${jobId}/cancel`, {
             method: 'POST'
         });
         if (response.ok) {
@@ -1207,7 +1462,7 @@ async function deleteJob(jobId) {
     if (!confirm('Delete this job? This cannot be undone.')) return;
     
     try {
-        const response = await fetch(`${API_BASE}/jobs/${jobId}`, {
+        const response = await fetchWithRetry(`${API_BASE}/jobs/${jobId}`, {
             method: 'DELETE'
         });
         if (response.ok) {
@@ -1228,7 +1483,7 @@ async function runAgentPipeline() {
     // If no job ID, create one automatically
     if (!jobIdInput) {
         try {
-            const createResponse = await fetch(`${API_BASE}/jobs/`, {
+            const createResponse = await fetchWithRetry(`${API_BASE}/jobs/`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({description: 'Pipeline job', metadata: {}})
@@ -1259,7 +1514,7 @@ async function runAgentPipeline() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/generator/${jobId}/pipeline`, {
+        const response = await fetchWithRetry(`${API_BASE}/generator/${jobId}/pipeline`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -1308,7 +1563,7 @@ async function runCodegen() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/generator/${jobId}/codegen`, {
+        const response = await fetchWithRetry(`${API_BASE}/generator/${jobId}/codegen`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -1342,7 +1597,7 @@ async function runTestgen() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/generator/${jobId}/testgen`, {
+        const response = await fetchWithRetry(`${API_BASE}/generator/${jobId}/testgen`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -1376,7 +1631,7 @@ async function runDocgen() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/generator/${jobId}/docgen`, {
+        const response = await fetchWithRetry(`${API_BASE}/generator/${jobId}/docgen`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -1410,7 +1665,7 @@ async function runDeploy() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/generator/${jobId}/deploy`, {
+        const response = await fetchWithRetry(`${API_BASE}/generator/${jobId}/deploy`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -1444,7 +1699,7 @@ async function runCritique() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/generator/${jobId}/critique`, {
+        const response = await fetchWithRetry(`${API_BASE}/generator/${jobId}/critique`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -1478,7 +1733,7 @@ async function submitLLMConfig() {
     const apiKey = document.getElementById('llm-api-key').value;
     
     try {
-        const response = await fetch(`${API_BASE}/generator/llm/configure`, {
+        const response = await fetchWithRetry(`${API_BASE}/generator/llm/configure`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({provider, model_name: model, api_key: apiKey})
@@ -1494,7 +1749,7 @@ async function submitLLMConfig() {
 
 async function getLLMStatus() {
     try {
-        const response = await fetch(`${API_BASE}/generator/llm/status`);
+        const response = await fetchWithRetry(`${API_BASE}/generator/llm/status`);
         const data = await response.json();
         alert(`LLM Status:\nProvider: ${data.current_provider}\nModel: ${data.model_name}\nStatus: ${data.status}`);
     } catch (error) {
@@ -1528,7 +1783,7 @@ async function publishMessage() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/omnicore/message-bus/publish`, {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/message-bus/publish`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({topic, payload, priority})
@@ -1544,7 +1799,7 @@ async function publishMessage() {
 
 async function listTopics() {
     try {
-        const response = await fetch(`${API_BASE}/omnicore/message-bus/topics`);
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/message-bus/topics`);
         const data = await response.json();
         alert('Active Topics:\n\n' + data.topics.join('\n'));
     } catch (error) {
@@ -1554,7 +1809,7 @@ async function listTopics() {
 
 async function listPlugins() {
     try {
-        const response = await fetch(`${API_BASE}/omnicore/plugins`);
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/plugins`);
         const data = await response.json();
         
         const container = document.getElementById('plugins-list');
@@ -1579,7 +1834,7 @@ async function listPlugins() {
 
 async function reloadPlugin(pluginId) {
     try {
-        const response = await fetch(`${API_BASE}/omnicore/plugins/${pluginId}/reload`, {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/plugins/${pluginId}/reload`, {
             method: 'POST'
         });
         if (response.ok) {
@@ -1593,7 +1848,7 @@ async function reloadPlugin(pluginId) {
 
 async function browseMarketplace() {
     try {
-        const response = await fetch(`${API_BASE}/omnicore/plugins/marketplace`);
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/plugins/marketplace`);
         const data = await response.json();
         
         let list = 'Available Plugins:\n\n';
@@ -1614,7 +1869,7 @@ async function executeQuery() {
     const query = document.getElementById('db-query').value;
     
     try {
-        const response = await fetch(`${API_BASE}/omnicore/database/query`, {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/database/query`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({query, parameters: {}})
@@ -1629,7 +1884,7 @@ async function executeQuery() {
 
 async function exportDatabase() {
     try {
-        const response = await fetch(`${API_BASE}/omnicore/database/export`, {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/database/export`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({format: 'json', include_metadata: true})
@@ -1643,7 +1898,7 @@ async function exportDatabase() {
 
 async function listCircuitBreakers() {
     try {
-        const response = await fetch(`${API_BASE}/omnicore/circuit-breakers`);
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/circuit-breakers`);
         const data = await response.json();
         
         const container = document.getElementById('circuit-breakers-list');
@@ -1671,7 +1926,7 @@ async function listCircuitBreakers() {
 
 async function resetCircuitBreaker(name) {
     try {
-        const response = await fetch(`${API_BASE}/omnicore/circuit-breakers/${name}/reset`, {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/circuit-breakers/${name}/reset`, {
             method: 'POST'
         });
         if (response.ok) {
@@ -1685,7 +1940,7 @@ async function resetCircuitBreaker(name) {
 
 async function listDeadLetterQueue() {
     try {
-        const response = await fetch(`${API_BASE}/omnicore/dead-letter-queue`);
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/dead-letter-queue`);
         const data = await response.json();
         alert(`Dead Letter Queue:\n${data.messages.length} failed messages`);
     } catch (error) {
@@ -1697,7 +1952,7 @@ async function listDeadLetterQueue() {
 
 async function detectBugs() {
     try {
-        const response = await fetch(`${API_BASE}/sfe/bugs/detect`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/detect`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({code_path: '.', analysis_depth: 'deep'})
@@ -1711,7 +1966,7 @@ async function detectBugs() {
 
 async function analyzeCodebase() {
     try {
-        const response = await fetch(`${API_BASE}/sfe/codebase/analyze`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/codebase/analyze`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({code_path: '.', include_dependencies: true})
@@ -1733,7 +1988,7 @@ async function prioritizeBugs() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/sfe/${jobId}/bugs/prioritize`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/${jobId}/bugs/prioritize`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({criteria: ['severity', 'impact']})
@@ -1746,7 +2001,7 @@ async function prioritizeBugs() {
 
 async function fixImports() {
     try {
-        const response = await fetch(`${API_BASE}/sfe/imports/fix`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/imports/fix`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({file_path: '.', auto_install: false})
@@ -1767,7 +2022,7 @@ async function queryKnowledgeGraph() {
     const depth = parseInt(document.getElementById('kg-depth').value);
     
     try {
-        const response = await fetch(`${API_BASE}/sfe/knowledge-graph/query`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/knowledge-graph/query`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({query, max_depth: depth})
@@ -1789,7 +2044,7 @@ async function executeSandbox() {
     const timeout = parseInt(document.getElementById('sandbox-timeout').value);
     
     try {
-        const response = await fetch(`${API_BASE}/sfe/sandbox/execute`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/sandbox/execute`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({code, language: 'python', timeout_seconds: timeout})
@@ -1804,7 +2059,7 @@ async function executeSandbox() {
 
 async function checkCompliance() {
     try {
-        const response = await fetch(`${API_BASE}/sfe/compliance/check`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/compliance/check`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({standards: ['PCI-DSS', 'HIPAA'], code_path: '.'})
@@ -1818,7 +2073,7 @@ async function checkCompliance() {
 
 async function queryDLT() {
     try {
-        const response = await fetch(`${API_BASE}/sfe/dlt/audit`);
+        const response = await fetchWithRetry(`${API_BASE}/sfe/dlt/audit`);
         const data = await response.json();
         alert(`DLT Audit Logs:\n${data.total_records} records on blockchain`);
     } catch (error) {
@@ -1830,7 +2085,7 @@ async function queryDLT() {
 
 async function startArbiter() {
     try {
-        const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({command: 'start', config: {}})
@@ -1851,7 +2106,7 @@ async function startArbiter() {
 
 async function stopArbiter() {
     try {
-        const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({command: 'stop'})
@@ -1884,7 +2139,7 @@ async function configureArbiter() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({command: 'configure', config: parsedConfig})
@@ -1905,7 +2160,7 @@ async function configureArbiter() {
 
 async function getArbiterStatus() {
     try {
-        const response = await fetch(`${API_BASE}/sfe/arbiter/control`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({command: 'status'})
@@ -1935,7 +2190,7 @@ async function triggerCompetition() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/sfe/arena/compete`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/arena/compete`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -1965,7 +2220,7 @@ async function getRLStatus() {
     if (!envId) return showError('Please enter an environment ID');
     
     try {
-        const response = await fetch(`${API_BASE}/sfe/rl/environment/${envId}/status`);
+        const response = await fetchWithRetry(`${API_BASE}/sfe/rl/environment/${envId}/status`);
         const data = await response.json();
         alert(`RL Environment Status:\n\nState: ${data.state}\nEpisodes: ${data.episodes_completed}\nReward: ${data.total_reward}`);
     } catch (error) {
@@ -2003,7 +2258,7 @@ function initModals() {
 
 // ===== ADDITIONAL UTILITY FUNCTIONS =====
 
-function showSubscribe() {
+async function showSubscribe() {
     const topic = prompt('Enter topic to subscribe to:');
     if (!topic) return;
     
@@ -2013,16 +2268,22 @@ function showSubscribe() {
         return;
     }
     
-    fetch(`${API_BASE}/omnicore/message-bus/subscribe`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({topic, subscriber_id: 'web-ui'})
-    })
-    .then(() => showSuccess(`Subscribed to topic: ${topic}`))
-    .catch(err => showError('Subscription failed: ' + err.message));
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/message-bus/subscribe`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({topic, subscriber_id: 'web-ui'})
+        });
+        
+        await response.json(); // Validate JSON response
+        showSuccess(`Subscribed to topic: ${topic}`);
+    } catch (error) {
+        console.error('Subscription failed:', error);
+        showError(`Subscription failed: ${error.message}. Please check the topic name and try again.`);
+    }
 }
 
-function showInstallPlugin() {
+async function showInstallPlugin() {
     const pluginName = prompt('Enter plugin name to install:');
     if (!pluginName) return;
     
@@ -2032,16 +2293,22 @@ function showInstallPlugin() {
         return;
     }
     
-    fetch(`${API_BASE}/omnicore/plugins/install`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({plugin_name: pluginName, version: 'latest'})
-    })
-    .then(() => showSuccess(`Installing plugin: ${pluginName}`))
-    .catch(err => showError('Installation failed: ' + err.message));
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/plugins/install`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({plugin_name: pluginName, version: 'latest'})
+        });
+        
+        await response.json(); // Validate JSON response
+        showSuccess(`Installing plugin: ${pluginName}`);
+    } catch (error) {
+        console.error('Installation failed:', error);
+        showError(`Installation failed: ${error.message}. Please check the plugin name and try again.`);
+    }
 }
 
-function showRateLimit() {
+async function showRateLimit() {
     const limit = prompt('Enter rate limit (requests per minute):');
     if (!limit) return;
     
@@ -2051,16 +2318,22 @@ function showRateLimit() {
         return;
     }
     
-    fetch(`${API_BASE}/omnicore/rate-limits/configure`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({limit: limitNum, window_seconds: 60})
-    })
-    .then(() => showSuccess(`Rate limit configured: ${limitNum}/min`))
-    .catch(err => showError('Configuration failed: ' + err.message));
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/rate-limits/configure`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({limit: limitNum, window_seconds: 60})
+        });
+        
+        await response.json(); // Validate JSON response
+        showSuccess(`Rate limit configured: ${limitNum}/min`);
+    } catch (error) {
+        console.error('Configuration failed:', error);
+        showError(`Configuration failed: ${error.message}. Please check your input and try again.`);
+    }
 }
 
-function showSIEMConfig() {
+async function showSIEMConfig() {
     const endpoint = prompt('Enter SIEM endpoint URL:');
     if (!endpoint) return;
     
@@ -2083,13 +2356,19 @@ function showSIEMConfig() {
         return;
     }
     
-    fetch(`${API_BASE}/sfe/siem/configure`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({siem_endpoint: endpoint, enabled: true})
-    })
-    .then(() => showSuccess('SIEM integration configured'))
-    .catch(err => showError('Configuration failed: ' + err.message));
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/siem/configure`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({siem_endpoint: endpoint, enabled: true})
+        });
+        
+        await response.json(); // Validate JSON response
+        showSuccess('SIEM integration configured');
+    } catch (error) {
+        console.error('Configuration failed:', error);
+        showError(`Configuration failed: ${error.message}. Please check the endpoint URL and try again.`);
+    }
 }
 
 // ==================== Clarifier Functions ====================
@@ -2124,7 +2403,7 @@ async function startClarification() {
         // Create a job first if jobIdInput is empty, or validate existing job ID
         if (!jobIdInput) {
             // Create a new job
-            const jobResponse = await fetch(`${API_BASE}/jobs/`, {
+            const jobResponse = await fetchWithRetry(`${API_BASE}/jobs/`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -2150,7 +2429,7 @@ async function startClarification() {
             }
             
             // Validate job ID exists
-            const validateResponse = await fetch(`${API_BASE}/jobs/${sanitizedJobId}`);
+            const validateResponse = await fetchWithRetry(`${API_BASE}/jobs/${sanitizedJobId}`);
             if (!validateResponse.ok) {
                 throw new Error(`Job ID '${sanitizedJobId}' not found. Please create a job first or leave the field empty to auto-generate.`);
             }
@@ -2158,7 +2437,7 @@ async function startClarification() {
         }
         
         // Call clarifier API
-        const response = await fetch(`${API_BASE}/generator/${currentClarifierJobId}/clarify`, {
+        const response = await fetchWithRetry(`${API_BASE}/generator/${currentClarifierJobId}/clarify`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -2220,7 +2499,7 @@ async function submitAnswer() {
     
     try {
         // Submit answer to API
-        const response = await fetch(`${API_BASE}/generator/${currentClarifierJobId}/clarification/respond`, {
+        const response = await fetchWithRetry(`${API_BASE}/generator/${currentClarifierJobId}/clarification/respond`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -2287,7 +2566,7 @@ function skipQuestion() {
  */
 async function fetchClarifiedRequirements() {
     try {
-        const response = await fetch(`${API_BASE}/generator/${currentClarifierJobId}/clarification/feedback`);
+        const response = await fetchWithRetry(`${API_BASE}/generator/${currentClarifierJobId}/clarification/feedback`);
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -2431,7 +2710,7 @@ async function proceedToGeneration() {
     
     try {
         // Create a job for code generation
-        const response = await fetch(`${API_BASE}/jobs/`, {
+        const response = await fetchWithRetry(`${API_BASE}/jobs/`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -2585,7 +2864,7 @@ async function loadAuditLogs() {
         params.append('limit', limit);
         
         // Call unified endpoint
-        const response = await fetch(`${API_BASE}/audit/logs/all?${params}`);
+        const response = await fetchWithRetry(`${API_BASE}/audit/logs/all?${params}`);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -2738,7 +3017,7 @@ function clearAuditFilters() {
  */
 async function loadEventTypes() {
     try {
-        const response = await fetch(`${API_BASE}/audit/logs/event-types`);
+        const response = await fetchWithRetry(`${API_BASE}/audit/logs/event-types`);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
