@@ -7,6 +7,19 @@ from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 logger = logging.getLogger(__name__)
 
 
+def _safe_isinstance(obj, cls) -> bool:
+    """Safely check isinstance, handling cases where cls may be mocked.
+    
+    During testing, prometheus_client classes may be mocked, causing
+    isinstance() to fail with TypeError. This function catches that error.
+    """
+    try:
+        return isinstance(obj, cls)
+    except TypeError:
+        # cls is likely a mock and not a valid type for isinstance()
+        return False
+
+
 def _validate_labelnames(labelnames) -> tuple:
     """Validate and convert labelnames to tuple. Raises Exception for invalid types."""
     if labelnames is None:
@@ -23,7 +36,7 @@ def get_or_create_counter_local(
     labelnames = _validate_labelnames(labelnames)
     try:
         collector = REGISTRY._names_to_collectors.get(name)
-        if collector and isinstance(collector, Counter):
+        if collector and _safe_isinstance(collector, Counter):
             return collector
         return Counter(name, documentation, labelnames=labelnames)
     except ValueError:
@@ -40,7 +53,7 @@ def get_or_create_gauge_local(
     labelnames = _validate_labelnames(labelnames)
     try:
         collector = REGISTRY._names_to_collectors.get(name)
-        if collector and isinstance(collector, Gauge):
+        if collector and _safe_isinstance(collector, Gauge):
             return collector
         return Gauge(name, documentation, labelnames=labelnames)
     except ValueError:
@@ -63,7 +76,7 @@ def get_or_create_histogram_local(
     labelnames = _validate_labelnames(labelnames)
     try:
         collector = REGISTRY._names_to_collectors.get(name)
-        if collector and isinstance(collector, Histogram):
+        if collector and _safe_isinstance(collector, Histogram):
             return collector
         return Histogram(name, documentation, labelnames=labelnames, buckets=buckets)
     except ValueError:
