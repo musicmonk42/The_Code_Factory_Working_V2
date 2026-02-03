@@ -16,7 +16,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Optional, Tuple
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -336,14 +336,6 @@ Permission is hereby granted...
 @pytest.fixture
 def mock_all_llm():
     """Mock all LLM calls across all modules."""
-    patches = [
-        patch("generator.agents.docgen_agent.docgen_agent.call_llm_api"),
-        # FIX: Removed patch for call_ensemble_api as it doesn't exist in docgen_agent
-        patch("generator.agents.docgen_agent.docgen_prompt.call_llm_api"),
-    ]
-
-    mocks = [p.start() for p in patches]
-
     # Configure default responses
     doc_response = {
         "content": """
@@ -396,8 +388,20 @@ Divide two numbers with zero-division handling.
         "tokens_used": 500,
     }
 
-    for mock in mocks:
-        mock.return_value = doc_response
+    # FIX: Use AsyncMock for async functions to properly support 'await'
+    async_mock1 = AsyncMock(return_value=doc_response)
+    async_mock2 = AsyncMock(return_value=doc_response)
+    
+    patches = [
+        patch("generator.agents.docgen_agent.docgen_agent.call_llm_api", async_mock1),
+        # FIX: Removed patch for call_ensemble_api as it doesn't exist in docgen_agent
+        patch("generator.agents.docgen_agent.docgen_prompt.call_llm_api", async_mock2),
+    ]
+
+    for p in patches:
+        p.start()
+    
+    mocks = [async_mock1, async_mock2]
 
     yield mocks
 
@@ -576,9 +580,11 @@ class TestComponentIntegration:
     ):
         """Test flow from prompt generation to validation."""
         # 1. Generate prompt
+        # FIX: Pass repo_path to use the correct prompt_templates directory
         prompt_agent = DocGenPromptAgent(
             template_dir=str(comprehensive_repo / "doc_templates"),
             few_shot_dir=str(comprehensive_repo / "few_shot_docs"),
+            repo_path=str(comprehensive_repo),
         )
 
         file_path = str(comprehensive_repo / "src" / "calculator.py")
