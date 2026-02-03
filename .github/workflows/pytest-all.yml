@@ -615,6 +615,19 @@ jobs:
             echo "  - Coverage: DISABLED"
             echo "  - Timeout: ${TIMEOUT_VALUE}s"
             echo "  - Parallel workers: DISABLED"
+          elif [ "${{ matrix.module }}" = "server" ]; then
+            echo "=== Applying I/O optimizations for ${{ matrix.module }} ==="
+            
+            # Server tests are I/O-bound (Redis, async operations) and don't benefit from parallelization
+            # pytest-xdist workers cause communication issues during teardown
+            COVERAGE_ARGS="--cov=server --cov-report=xml:coverage-server.xml"
+            PYTEST_ARGS=""  # No parallelization
+            TIMEOUT_VALUE=600  # 10 minutes per test (some integration tests need longer)
+            
+            echo "✓ I/O optimizations applied"
+            echo "  - Coverage: ENABLED"
+            echo "  - Timeout: ${TIMEOUT_VALUE}s"
+            echo "  - Parallel workers: DISABLED (I/O-bound tests)"
           else
             # Other modules can use standard settings with reduced parallelism
             COVERAGE_ARGS="--cov=${{ matrix.module }} --cov-report=xml:coverage-${{ matrix.module }}.xml"
