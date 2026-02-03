@@ -1049,14 +1049,22 @@ allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "") or os.getenv("CORS_ORIGIN
 allowed_origins = [
     origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()
 ]
+_is_production = os.getenv("PRODUCTION_MODE", "0") == "1" or os.getenv("APP_ENV", "").lower() == "production"
 if not allowed_origins and _FASTAPI_AVAILABLE:
-    # Default to common development origins when ALLOWED_ORIGINS/CORS_ORIGINS is not set
-    # In production, ALLOWED_ORIGINS or CORS_ORIGINS should be explicitly configured
-    allowed_origins = ["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:3000", "http://127.0.0.1:8000"]
-    logger.warning(
-        "ALLOWED_ORIGINS/CORS_ORIGINS environment variable not set. Using default development origins: %s",
-        allowed_origins
-    )
+    if _is_production:
+        # In production, require explicit CORS configuration
+        logger.error(
+            "CRITICAL: ALLOWED_ORIGINS/CORS_ORIGINS environment variable not set in production mode. "
+            "CORS will be restricted to empty origins. Please configure ALLOWED_ORIGINS or CORS_ORIGINS."
+        )
+        allowed_origins = []  # No CORS allowed without explicit config in production
+    else:
+        # Default to common development origins in non-production mode
+        allowed_origins = ["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:3000", "http://127.0.0.1:8000"]
+        logger.warning(
+            "ALLOWED_ORIGINS/CORS_ORIGINS environment variable not set. Using default development origins: %s",
+            allowed_origins
+        )
 
 if _FASTAPI_AVAILABLE:
     api.add_middleware(

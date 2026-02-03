@@ -62,7 +62,6 @@ SIGNING_ENABLED = (
 
 # Also check if crypto mode is disabled
 CRYPTO_MODE = os.getenv("AUDIT_CRYPTO_MODE", "").lower()
-CRYPTO_ACTUALLY_ENABLED = SIGNING_ENABLED and CRYPTO_MODE not in ("disabled", "")
 
 try:
     if SIGNING_ENABLED:
