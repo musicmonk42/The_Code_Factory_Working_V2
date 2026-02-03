@@ -137,7 +137,7 @@ class ComplianceEnforcementError(Exception):
         )
         try:
             # Try to get a running event loop; if there is one, schedule the async task
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()  # Verify loop exists
             asyncio.create_task(
                 _log_to_central_audit(
                     "action_blocked",
@@ -387,7 +387,7 @@ def _audit_log_gap(message: str, details: Optional[Dict[str, Any]] = None):
         self_healing_compliance_gap_alerts_total.inc()
     try:
         # Try to get a running event loop; if there is one, schedule the async task
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()  # Verify loop exists
         asyncio.create_task(_log_to_central_audit("compliance_gap_alert", log_entry))
     except RuntimeError:
         # No running event loop - just log without the async audit
