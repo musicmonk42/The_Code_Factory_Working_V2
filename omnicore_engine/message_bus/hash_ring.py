@@ -98,9 +98,9 @@ class ConsistentHashRing:
 
         hash_key = self._hash(key)
 
-        # bisect_left finds the insertion point, which is the position of the first element >= hash_key.
-        # This is the "next" replica in the ring.
-        idx = bisect.bisect_left(self.ring, (hash_key, ""))
+        # bisect_right finds the insertion point after any matching values.
+        # This gives us the "next" replica clockwise on the ring.
+        idx = bisect.bisect_right(self.ring, (hash_key, ""))
 
         # If we loop past the end of the ring, we wrap around to the first element.
         if idx == len(self.ring):
