@@ -13,8 +13,9 @@ from prometheus_client import CollectorRegistry
 
 # Get the absolute path to the simulation directory
 test_dir = os.path.dirname(os.path.abspath(__file__))
-simulation_dir = os.path.dirname(test_dir)  # Go up from tests/ to simulation/
-project_root = os.path.dirname(simulation_dir)  # Go up to project root
+self_fixing_engineer_dir = os.path.dirname(test_dir)  # Go up from tests/ to self_fixing_engineer/
+project_root = os.path.dirname(self_fixing_engineer_dir)  # Go up to project root
+simulation_dir = os.path.join(self_fixing_engineer_dir, "simulation")  # simulation is inside self_fixing_engineer
 
 # Define plugins_dir - workflow_viz is in simulation/plugins/
 plugins_dir = os.path.join(simulation_dir, "plugins")
@@ -24,6 +25,8 @@ if plugins_dir not in sys.path:
     sys.path.insert(0, plugins_dir)
 if simulation_dir not in sys.path:
     sys.path.insert(0, simulation_dir)
+if self_fixing_engineer_dir not in sys.path:
+    sys.path.insert(0, self_fixing_engineer_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 

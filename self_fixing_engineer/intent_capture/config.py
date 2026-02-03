@@ -73,6 +73,10 @@ try:
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False
+    # Define a stub class when watchdog is not available
+    class FileSystemEventHandler:
+        """Stub class when watchdog is not available."""
+        pass
 
 try:
     import boto3

@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
-# --- Best Practice: Add plugins directory to sys.path for direct imports ---
-PLUGIN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins"))
+# --- Best Practice: Add simulation/plugins directory to sys.path for direct imports ---
+PLUGIN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "simulation", "plugins"))
 if PLUGIN_DIR not in sys.path:
     sys.path.insert(0, PLUGIN_DIR)
 

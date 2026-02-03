@@ -106,15 +106,11 @@ except ImportError:
 
 
 try:
+    from opentelemetry import trace
+    tracer = trace.get_tracer(__name__)
     TRACING_AVAILABLE = True
 except ImportError:
     TRACING_AVAILABLE = False
-
-    class NullTracer:
-        def start_as_current_span(self, name, *args, **kwargs):
-            return NullContext()
-
-    tracer = NullTracer()
 
     class NullContext:
         def __enter__(self):
@@ -125,6 +121,12 @@ except ImportError:
 
         def set_attribute(self, key, value):
             pass
+
+    class NullTracer:
+        def start_as_current_span(self, name, *args, **kwargs):
+            return NullContext()
+
+    tracer = NullTracer()
 
 
 try:

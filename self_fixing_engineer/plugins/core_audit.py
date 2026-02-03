@@ -419,7 +419,27 @@ class AuditLogger:
             self._log_queue, *wrapped_handlers, respect_handler_level=True
         )
         self._attached_handlers = wrapped_handlers
-        self._listener.start()
+        # Handle test mode where thread creation might fail
+        try:
+            self._listener.start()
+        except RuntimeError as e:
+            # RuntimeError with thread creation failure can occur in:
+            # - Test environments during collection (resource limits)
+            # - Containers with restricted threading
+            # - Python subprocess without proper threading support
+            # Check for thread-related error indicators
+            error_msg = str(e).lower()
+            is_thread_error = any(
+                indicator in error_msg
+                for indicator in ["thread", "can't start", "resource temporarily unavailable"]
+            )
+            if is_thread_error:
+                # Fallback: Use direct handler attachment (not thread-safe but functional)
+                self._listener = None
+                for h in wrapped_handlers:
+                    self.logger.addHandler(h)
+            else:
+                raise
 
     def _configure_logger_locked(self) -> None:
         """(Re)configures the logger and caches hot-path settings. Assumes the caller holds _init_lock."""

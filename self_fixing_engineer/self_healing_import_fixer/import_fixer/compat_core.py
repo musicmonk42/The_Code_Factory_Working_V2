@@ -440,6 +440,7 @@ _alert_operator: Optional[Callable[..., Any]] = None
 _scrub_secrets: Optional[Callable[..., Any]] = None
 _audit_logger: Optional[Any] = None
 _secrets_manager: Optional[Any] = None
+_SECRETS_MANAGER: Optional[Any] = None  # Gets set by dynamic import in _initialize_core_modules
 
 
 # --- Environment-Driven Configuration & Validation ---
@@ -1536,8 +1537,8 @@ for _meth in ("info", "warning", "error", "debug", "log_event"):
         audit_logger = _fallback_audit_logger_instance
         break
 SECRETS_MANAGER = (
-    _secrets_manager
-    if core_statuses["analyzer.core_secrets"].loaded
+    _SECRETS_MANAGER
+    if core_statuses["analyzer.core_secrets"].loaded and _SECRETS_MANAGER is not None
     else _fallback_secrets_manager_instance
 )
 

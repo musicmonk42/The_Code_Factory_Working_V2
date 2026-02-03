@@ -87,6 +87,10 @@ except Exception:  # pragma: no cover - tracing optional
 
     trace = _NoOp()  # type: ignore
 
+    def get_tracer_safe(name: str, version: Optional[str] = None):
+        """Fallback get_tracer_safe when otel_config import fails."""
+        return _NoOpTracer()
+
 tracer = get_tracer_safe(__name__)
 
 # --- Logging ---
