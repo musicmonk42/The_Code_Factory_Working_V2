@@ -30,12 +30,20 @@ sys.modules["runner.runner_errors"] = MagicMock()
 sys.modules["runner.runner_file_utils"] = MagicMock()
 sys.modules["runner.summarize_utils"] = MagicMock()
 
-# <--- FIX: Mock sentence_transformers
-sys.modules["sentence_transformers"] = MagicMock()
+# <--- FIX: Mock sentence_transformers with properly configured mock
+mock_sentence_transformers = MagicMock()
+
+# Create a mock SentenceTransformer class that returns a properly configured instance
+mock_model_instance = MagicMock()
+mock_model_instance.encode.return_value = MagicMock()  # Returns tensor-like mock
+mock_sentence_transformers.SentenceTransformer.return_value = mock_model_instance
+
 # <--- ADDED FIX: Configure the mock for util.semantic_search to return one hit
 mock_util = MagicMock()
 mock_util.semantic_search.return_value = [[{"corpus_id": 0, "score": 0.9}]]
-sys.modules["sentence_transformers"].util = mock_util
+mock_sentence_transformers.util = mock_util
+
+sys.modules["sentence_transformers"] = mock_sentence_transformers
 
 
 # FIX: Add Path, Tuple, Optional to builtins for type hint resolution in source files
@@ -65,6 +73,25 @@ from generator.agents.docgen_agent.docgen_prompt import (
 # =============================================================================
 # FIXTURES
 # =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def mock_sentence_transformers_fixture():
+    """Mock sentence_transformers for each test to prevent cross-test pollution."""
+    mock_st_module = MagicMock()
+    mock_model_instance = MagicMock()
+    mock_model_instance.encode.return_value = MagicMock()  # Returns tensor-like mock
+    mock_st_module.SentenceTransformer.return_value = mock_model_instance
+    
+    mock_st_util = MagicMock()
+    mock_st_util.semantic_search.return_value = [[{"corpus_id": 0, "score": 0.9}]]
+    mock_st_module.util = mock_st_util
+    
+    # Patch at both module level and in sys.modules
+    with patch.dict("sys.modules", {"sentence_transformers": mock_st_module}), \
+         patch("generator.agents.docgen_agent.docgen_prompt.SentenceTransformer", mock_st_module.SentenceTransformer), \
+         patch("generator.agents.docgen_agent.docgen_prompt.util", mock_st_util):
+        yield
 
 
 @pytest.fixture(autouse=True)
