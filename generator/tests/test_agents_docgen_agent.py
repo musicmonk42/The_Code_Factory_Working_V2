@@ -48,9 +48,14 @@ builtins.abstractabstractmethod = abstractmethod
 
 # --- Mock Presidio ---
 mock_analyzer = MagicMock()
-mock_anonymizer = MagicMock()
+mock_anonymizer = type(sys)("presidio_anonymizer")
+mock_anonymizer.AnonymizerEngine = MagicMock()
+mock_anonymizer_entities = type(sys)("presidio_anonymizer.entities")
+mock_anonymizer_entities.OperatorConfig = MagicMock()
 sys.modules["presidio_analyzer"] = mock_analyzer
 sys.modules["presidio_anonymizer"] = mock_anonymizer
+sys.modules["presidio_anonymizer.entities"] = mock_anonymizer_entities
+mock_anonymizer.entities = mock_anonymizer_entities
 
 # --- Mock Sphinx ---
 mock_sphinx = MagicMock()
