@@ -21,9 +21,7 @@ import sys
 
 # Detect pytest collection mode to avoid expensive initialization
 # This prevents CPU timeouts during pytest --collect-only
-PYTEST_COLLECTING = bool(
-    os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING")
-)
+PYTEST_COLLECTING = bool(os.getenv("PYTEST_COLLECTING"))
 
 # Module-level variables for lazy loading
 arbiter = None

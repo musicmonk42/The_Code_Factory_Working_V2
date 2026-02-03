@@ -13,7 +13,7 @@ import pytest
 
 # Fix import path for audit_log module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import audit_log
+from self_fixing_engineer.guardrails import audit_log
 
 
 # Mock dependencies that may not be available in test env

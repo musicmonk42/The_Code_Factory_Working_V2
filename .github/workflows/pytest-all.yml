@@ -58,7 +58,6 @@ jobs:
       CI: '1'  # Add this to skip audit background thread
       SKIP_AUDIT_INIT: '1'  # Explicitly skip audit logger initialization
       OTEL_SDK_DISABLED: '1'
-      PYTEST_CURRENT_TEST: 'true'
       REDIS_URL: redis://localhost:6379
       ENCRYPTION_KEY: "0mRtqFHlMkj0xTZO14sBFr1H6jkmmI0LWyK97sGyGew="
       APP_ENV: test
@@ -572,7 +571,6 @@ jobs:
         timeout-minutes: 30
         env:
           TESTING: "1"
-          PYTEST_CURRENT_TEST: "true"
           AWS_REGION: ""
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -700,7 +698,6 @@ jobs:
         timeout-minutes: 15
         env:
           TESTING: "1"
-          PYTEST_CURRENT_TEST: "true"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
           NLTK_DATA: "$HOME/nltk_data"
         run: |
@@ -724,7 +721,6 @@ jobs:
         timeout-minutes: 15
         env:
           TESTING: "1"
-          PYTEST_CURRENT_TEST: "true"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
         run: |
           set -o pipefail
@@ -748,7 +744,6 @@ jobs:
         timeout-minutes: 15
         env:
           TESTING: "1"
-          PYTEST_CURRENT_TEST: "true"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
         run: |
           set -o pipefail
@@ -771,7 +766,6 @@ jobs:
         timeout-minutes: 15
         env:
           TESTING: "1"
-          PYTEST_CURRENT_TEST: "true"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
         run: |
           set -o pipefail
@@ -794,7 +788,6 @@ jobs:
         timeout-minutes: 15
         env:
           TESTING: "1"
-          PYTEST_CURRENT_TEST: "true"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
         run: |
           set -o pipefail
