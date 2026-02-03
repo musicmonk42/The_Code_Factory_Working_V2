@@ -2,7 +2,7 @@ import logging
 import re
 from unittest.mock import MagicMock, patch
 
-import core_utils
+from plugins import core_utils
 import pytest
 
 # --- Fixtures and Mocks ---
@@ -73,8 +73,10 @@ def alert_operator(monkeypatch, secrets):
     # Patch logging to avoid file/console IO.
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
+    # Create a dummy logger outside of the lambda to avoid recursion
+    dummy_logger = logging.getLogger("dummy_logger")
     monkeypatch.setattr(
-        logging, "getLogger", lambda name=None: logging.getLogger("dummy_logger")
+        logging, "getLogger", lambda name=None: dummy_logger
     )
     secrets_mgr = DummySecretsManager(secrets)
     audit_logger = DummyAuditLogger(secrets_mgr)
