@@ -173,6 +173,7 @@ class TestDeployPromptAgentInit:
                 patch("os.path.exists", side_effect=[False, True, False, True]),
                 patch("os.makedirs"),
                 patch("watchdog.observers.Observer"),
+                patch("generator.agents.deploy_agent.deploy_prompt.SentenceTransformer", None),
             ):
 
                 agent = DeployPromptAgent(
