@@ -29,10 +29,15 @@ Version: 1.0.0
 import asyncio
 import json
 import logging
+import os
+import sys
 import time
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
+
+# Add the simulation directory to the path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "simulation")))
 
 # Configure logging for tests
 logging.basicConfig(

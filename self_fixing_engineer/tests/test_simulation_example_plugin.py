@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Fix the import path - add the plugins directory to path
+# Fix the import path - add the simulation/plugins directory to path
 sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins"))
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "simulation", "plugins"))
 )
 
 # Mock cachetools before importing the plugin since it might not be installed
