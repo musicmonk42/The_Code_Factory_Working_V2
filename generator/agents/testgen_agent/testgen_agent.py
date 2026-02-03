@@ -882,12 +882,9 @@ Agent --> Dev : Deliver Report
                     ]
                     
                     # Add import for the module being tested
-                    module_name = file_path.replace('/', '.').replace('.py', '')
-                    if module_name.startswith('.'):
-                        module_name = module_name[1:]
-                    
+                    # Note: Explicit imports are preferred over wildcard imports
                     test_lines.append(f'# Import the module being tested')
-                    test_lines.append(f'# from {module_name} import *')
+                    test_lines.append(f'# Example: from your_module import ClassName, function_name')
                     test_lines.append('')
                     test_lines.append('')
                     

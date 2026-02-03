@@ -9,8 +9,9 @@ import os
 import sys
 from pathlib import Path
 
-# Add the project to the path
-sys.path.insert(0, '/home/runner/work/The_Code_Factory_Working_V2/The_Code_Factory_Working_V2')
+# Add the project to the path - compute relative to this script
+SCRIPT_DIR = Path(__file__).parent
+sys.path.insert(0, str(SCRIPT_DIR))
 
 # Set testing mode
 os.environ["TESTING"] = "1"
