@@ -30,11 +30,21 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 # Gold Standard Imports
-import chromadb
+# Defensive import for chromadb to handle OpenTelemetry conflicts
+try:
+    import chromadb
+    from chromadb.utils import embedding_functions
+    HAS_CHROMADB = True
+except ImportError as e:
+    import logging
+    logging.getLogger(__name__).warning(f"ChromaDB not available: {e}")
+    chromadb = None
+    embedding_functions = None
+    HAS_CHROMADB = False
+
 import nest_asyncio  # For handling asyncio.run() in running event loops
 import tiktoken  # Imported for token counting
 from aiohttp import web
-from chromadb.utils import embedding_functions
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
 
@@ -124,6 +134,8 @@ class MultiVectorDBManager:
     """
 
     def __init__(self, path: str = "./chroma_db"):
+        if not HAS_CHROMADB:
+            raise ImportError("ChromaDB is not available. Cannot initialize MultiVectorDBManager.")
         self.client = chromadb.PersistentClient(path=path)
         self.embedding_function = embedding_functions.DefaultEmbeddingFunction()
         self.collections = {

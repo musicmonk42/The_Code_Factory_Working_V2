@@ -35,8 +35,23 @@ To disable mocking for debugging or specific test scenarios:
 Tests do NOT need to explicitly request this fixture - it applies automatically.
 ================================================================================
 """
+
+# Ensure OpenTelemetry is available before any imports that depend on it
 import os
 import sys
+
+# Set testing environment variable early
+os.environ['TESTING'] = '1'
+os.environ['OTEL_SDK_DISABLED'] = '1'
+
+# Pre-import OpenTelemetry to ensure it's available for chromadb
+try:
+    import opentelemetry
+    import opentelemetry.sdk
+    import opentelemetry.sdk.resources
+except ImportError:
+    pass  # Tests will handle missing OpenTelemetry gracefully
+
 import types
 from pathlib import Path
 import pytest
