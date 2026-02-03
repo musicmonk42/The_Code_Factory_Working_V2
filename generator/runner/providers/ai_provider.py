@@ -92,7 +92,10 @@ class OpenAIProvider(LLMProvider):
         Get model-specific tokenizer.
         """
         if not HAS_TIKTOKEN:
-            raise ImportError("tiktoken is required but not installed")
+            raise ImportError(
+                "tiktoken is required but not installed. "
+                "Install it with: pip install tiktoken"
+            )
         
         if model not in self.tokenizer_cache:
             # Check for specific models, fallback to default
