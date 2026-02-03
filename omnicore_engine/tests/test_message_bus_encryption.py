@@ -1,15 +1,10 @@
 # test_encryption.py
 
 import base64
-import sys
 import time
 import unittest
-from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from omnicore_engine.message_bus.encryption import FernetEncryption
 

@@ -1,14 +1,9 @@
 # test_hash_ring.py
 
 import hashlib
-import sys
 import unittest
 from collections import Counter, defaultdict
-from pathlib import Path
 from unittest.mock import Mock, patch
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from omnicore_engine.message_bus.hash_ring import ConsistentHashRing
 
