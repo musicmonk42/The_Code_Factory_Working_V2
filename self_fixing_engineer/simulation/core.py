@@ -661,11 +661,13 @@ class RedactingFormatter(logging.Formatter):
 
 
 # Create a stream handler for the module logger with redacting formatter
-log_handler = logging.StreamHandler()
-log_handler.setFormatter(
-    RedactingFormatter("%(asctime)s - %(levelname)s - %(correlation_id)s - %(message)s")
-)
-logger.addHandler(log_handler)
+# Only add handler if one doesn't already exist with RedactingFormatter
+if not any(isinstance(h.formatter, RedactingFormatter) for h in logger.handlers):
+    log_handler = logging.StreamHandler()
+    log_handler.setFormatter(
+        RedactingFormatter("%(asctime)s - %(levelname)s - %(correlation_id)s - %(message)s")
+    )
+    logger.addHandler(log_handler)
 
 
 @correlated
