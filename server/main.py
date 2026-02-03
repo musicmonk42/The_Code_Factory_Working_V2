@@ -57,20 +57,19 @@ else:
 # Set to "0" once AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is properly configured
 os.environ.setdefault("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "1")
 
-# Set audit crypto mode based on whether secrets are configured
-# New default is "software" (cryptographically secure)
+# Set audit crypto mode - new default is "software" (cryptographically secure)
 # Options: "software" (default, requires secrets), "dev" (uses dummy keys), "disabled" (no crypto)
 # NOTE: Production environments will enforce "software" or "hsm" mode (disabled is blocked)
-if os.environ.get("AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64"):
-    # Secrets are configured, use full crypto mode
-    os.environ.setdefault("AUDIT_CRYPTO_MODE", "software")
-else:
-    # No secrets configured yet
-    # In production: This will trigger a validation error at startup (secure by default)
-    # In dev/test: Factory will automatically use dev mode
-    # To temporarily allow startup in production, explicitly set AUDIT_CRYPTO_MODE=disabled
-    # (not recommended for production - see AUDIT_CONFIGURATION.md)
-    os.environ.setdefault("AUDIT_CRYPTO_MODE", "software")
+# 
+# Behavior:
+# - With secrets configured: Uses software mode with real crypto
+# - Without secrets in production: Triggers validation error at startup (secure by default)
+# - Without secrets in dev/test: Factory automatically uses dev mode
+# 
+# To temporarily allow startup in production without secrets (NOT RECOMMENDED):
+# - Explicitly set AUDIT_CRYPTO_MODE=disabled (will log critical security warning)
+# - See AUDIT_CONFIGURATION.md for migration guide
+os.environ.setdefault("AUDIT_CRYPTO_MODE", "software")
 
 
 # INJECT SIGNING KEY (Required for Production Audit Logging)

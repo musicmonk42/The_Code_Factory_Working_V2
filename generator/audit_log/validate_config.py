@@ -207,7 +207,7 @@ class ConfigValidator:
                     "Use 'software' or 'hsm' for cryptographic audit log signatures. "
                     "Refer to docs/AUDIT_CONFIGURATION.md for migration guide."
                 )
-            elif audit_crypto_mode not in ["software", "hsm", "full"]:
+            elif audit_crypto_mode not in ["software", "hsm"]:
                 self.add_warning(
                     f"AUDIT_CRYPTO_MODE='{audit_crypto_mode}' is not a standard production value. "
                     "Recommended: 'software' or 'hsm'"
