@@ -1,0 +1,199 @@
+# Runner Configuration File
+# Production-grade default configuration for test execution and code generation
+#
+# This file provides sensible defaults for all runner backends and frameworks.
+# Override these settings using environment variables or command-line arguments.
+
+version: 4
+
+# Backend configurations for test execution
+backends:
+  - name: docker
+    enabled: true
+    config:
+      network: bridge
+      timeout: 300  # 5 minutes default timeout
+      memory_limit: "2g"
+      cpu_limit: "2.0"
+      
+  - name: kubernetes
+    enabled: false
+    config:
+      namespace: default
+      timeout: 600
+      resource_limits:
+        memory: "2Gi"
+        cpu: "2000m"
+      
+  - name: local
+    enabled: true
+    config:
+      timeout: 300
+      max_parallel: 4
+
+# Framework-specific test runners
+frameworks:
+  python:
+    runner: pytest
+    config:
+      args: ["-v", "--tb=short", "--maxfail=5"]
+      coverage_enabled: true
+      coverage_threshold: 80
+      
+  javascript:
+    runner: jest
+    config:
+      args: ["--verbose", "--maxWorkers=4"]
+      coverage_enabled: true
+      coverage_threshold: 80
+      
+  typescript:
+    runner: jest
+    config:
+      args: ["--verbose", "--maxWorkers=4"]
+      coverage_enabled: true
+      coverage_threshold: 80
+      
+  java:
+    runner: junit
+    config:
+      args: []
+      coverage_enabled: true
+      
+  go:
+    runner: "go test"
+    config:
+      args: ["-v", "-race"]
+      coverage_enabled: true
+      
+  rust:
+    runner: cargo
+    config:
+      args: ["test", "--verbose"]
+      
+  ruby:
+    runner: rspec
+    config:
+      args: ["--format", "documentation"]
+
+# LLM provider configuration
+llm:
+  providers:
+    - name: openai
+      enabled: true
+      priority: 1
+      
+    - name: claude
+      enabled: false
+      priority: 2
+      
+    - name: local
+      enabled: false
+      priority: 3
+      
+  # Global timeout for LLM calls (seconds)
+  timeout: 300  # 5 minutes
+  
+  # Retry configuration
+  max_retries: 3
+  retry_delay: 10  # seconds
+  exponential_backoff: true
+  
+  # Rate limiting
+  rate_limit:
+    requests_per_minute: 60
+    tokens_per_minute: 90000
+
+# Audit configuration
+audit:
+  enabled: true
+  buffer_size: 1000
+  flush_interval: 60  # seconds
+  
+  # Kafka streaming (optional)
+  kafka:
+    enabled: false
+    bootstrap_servers: "localhost:9092"
+    topic: "audit_logs"
+    
+  # File-based audit logs (fallback)
+  file:
+    enabled: true
+    path: "logs/audit"
+    max_size_mb: 100
+    rotation: daily
+
+# Security configuration
+security:
+  # PII detection and redaction
+  presidio:
+    enabled: true
+    cache_recognizers: true
+    languages: ["en"]
+    
+  # Plugin integrity checking
+  plugin_integrity:
+    enabled: true
+    manifest_path: "generator/runner/providers/plugin_hash_manifest.json"
+    strict_mode: false  # Set to true to fail on missing or modified plugins
+    
+  # Secret scanning
+  secret_scanning:
+    enabled: true
+    patterns:
+      - "API[_-]?KEY"
+      - "SECRET"
+      - "PASSWORD"
+      - "TOKEN"
+
+# Performance tuning
+performance:
+  # Parallel execution
+  parallel:
+    enabled: true
+    max_workers: 4
+    
+  # Caching
+  cache:
+    enabled: true
+    ttl: 3600  # 1 hour
+    max_size_mb: 500
+    
+  # Timeout configurations
+  timeouts:
+    test_execution: 300  # 5 minutes
+    code_generation: 300  # 5 minutes
+    llm_call: 300  # 5 minutes
+
+# Monitoring and observability
+monitoring:
+  # Metrics collection
+  metrics:
+    enabled: true
+    prometheus:
+      enabled: true
+      port: 9090
+      
+  # Distributed tracing
+  tracing:
+    enabled: true
+    sample_rate: 0.1  # 10% sampling
+    
+  # Logging
+  logging:
+    level: INFO
+    format: json
+    structured: true
+
+# Feature flags
+features:
+  # Experimental features
+  experimental:
+    auto_fix: false
+    smart_retry: true
+    adaptive_timeout: true
+    
+  # Beta features
+  beta:
+    multi_llm_ensemble: false
+    advanced_caching: true

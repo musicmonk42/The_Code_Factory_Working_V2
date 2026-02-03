@@ -420,17 +420,49 @@ class KafkaAuditStreamer:
         self.producer = None
         self.topic = topic
         self.logger = logger
+        self._last_connection_attempt = 0
+        self._connection_retry_delay = 60  # seconds
+        
         if KAFKA_AVAILABLE:
             try:
-                self.producer = Producer({"bootstrap.servers": bootstrap_servers})
-                self.logger.info("Kafka producer initialized")
+                # Configure Kafka producer with retry and backoff settings
+                # to prevent connection spam
+                config = {
+                    'bootstrap.servers': bootstrap_servers,
+                    'socket.timeout.ms': 10000,  # 10 seconds
+                    'message.timeout.ms': 30000,  # 30 seconds
+                    'retry.backoff.ms': 1000,  # 1 second backoff between retries
+                    'retries': 3,  # Maximum 3 retries
+                    'socket.keepalive.enable': True,
+                    # Reduce client metadata request frequency
+                    'topic.metadata.refresh.interval.ms': 300000,  # 5 minutes
+                    'metadata.max.age.ms': 180000,  # 3 minutes
+                }
+                
+                self.producer = Producer(config)
+                
+                # Test connection with a single poll
+                try:
+                    self.producer.poll(0)
+                    self.logger.info(
+                        f"✓ Kafka producer connected to {bootstrap_servers}"
+                    )
+                except Exception as poll_error:
+                    self.logger.warning(
+                        f"Kafka connection test failed: {poll_error}. "
+                        "Will retry on first event."
+                    )
+                    
             except Exception as e:
                 self.logger.warning(
-                    f"Kafka initialization failed: {e}; falling back to logging"
+                    f"Kafka initialization failed ({bootstrap_servers}): {e}. "
+                    "Falling back to file-only audit logging."
                 )
+                self.producer = None
         else:
-            self.logger.warning(
-                "confluent_kafka not available; Kafka streaming disabled."
+            self.logger.info(
+                "confluent_kafka not available; Kafka streaming disabled. "
+                "Using file-based audit logging only."
             )
 
     async def stream_event(self, record: Dict[str, Any]):

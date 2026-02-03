@@ -435,16 +435,17 @@ class LLMPluginManager:
         """
         Legacy compatibility:
         Load expected hash for a module from plugin_hash_manifest.json in the
-        plugin directory, if it exists.
+        plugin directory, if it exists. If not, generate it.
         """
         manifest_path = self.plugin_dir / "plugin_hash_manifest.json"
         if not manifest_path.exists():
+            # Generate manifest on first access
             logger.warning(
                 f"Legacy plugin_hash_manifest.json missing at {manifest_path}. "
-                "Integrity check may be skipped."
+                "Generating manifest now..."
             )
-            return "INTEGRITY_CHECK_DISABLED"
-
+            self._ensure_manifest()
+            
         try:
             data = json.loads(manifest_path.read_text())
             return data.get(modname, "INTEGRITY_CHECK_DISABLED")
@@ -453,6 +454,76 @@ class LLMPluginManager:
                 f"Failed to read or parse legacy manifest {manifest_path}: {e}"
             )
             return "INTEGRITY_CHECK_DISABLED"
+    
+    def _ensure_manifest(self) -> Path:
+        """
+        Ensure plugin hash manifest exists.
+        
+        If the manifest file doesn't exist, generates it by computing SHA-256
+        hashes for all *_provider.py files in the plugin directory.
+        
+        Returns:
+            Path to the manifest file
+            
+        Compliance:
+            - SI-7: Software, Firmware, and Information Integrity
+            - Provides baseline for integrity verification
+        """
+        manifest_path = self.plugin_dir / "plugin_hash_manifest.json"
+        
+        # Create plugin directory if it doesn't exist
+        self.plugin_dir.mkdir(parents=True, exist_ok=True)
+        
+        if manifest_path.exists():
+            return manifest_path
+        
+        # Generate manifest
+        logger.info(f"Generating plugin hash manifest at {manifest_path}")
+        manifest = {}
+        
+        try:
+            # Find all provider files
+            provider_files = list(self.plugin_dir.glob("*_provider.py"))
+            
+            if not provider_files:
+                logger.warning(
+                    f"No provider files found in {self.plugin_dir}. "
+                    "Creating empty manifest."
+                )
+            
+            # Compute hash for each provider
+            for provider_file in provider_files:
+                try:
+                    h = hashlib.sha256()
+                    with open(provider_file, "rb") as f:
+                        for chunk in iter(lambda: f.read(8192), b""):
+                            h.update(chunk)
+                    manifest[provider_file.name] = h.hexdigest()
+                    logger.debug(
+                        f"Computed hash for {provider_file.name}: "
+                        f"{h.hexdigest()[:16]}..."
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to compute hash for {provider_file.name}: {e}"
+                    )
+                    manifest[provider_file.name] = "HASH_COMPUTATION_FAILED"
+            
+            # Write manifest
+            with open(manifest_path, "w") as f:
+                json.dump(manifest, f, indent=2, sort_keys=True)
+            
+            logger.info(
+                f"✓ Plugin hash manifest created: {len(manifest)} providers hashed"
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to generate plugin hash manifest: {e}", exc_info=True)
+            # Create empty manifest to prevent repeated attempts
+            with open(manifest_path, "w") as f:
+                json.dump({}, f)
+        
+        return manifest_path
 
     # ---------------------------------------------------------------------- #
     # Scanning / Loading
