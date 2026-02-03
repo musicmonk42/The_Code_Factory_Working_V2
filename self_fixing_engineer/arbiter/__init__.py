@@ -21,9 +21,7 @@ import sys
 
 # Detect pytest collection mode to avoid expensive initialization
 # This prevents CPU timeouts during pytest --collect-only
-PYTEST_COLLECTING = bool(
-    os.getenv("PYTEST_CURRENT_TEST") or os.getenv("PYTEST_COLLECTING")
-)
+PYTEST_COLLECTING = bool(os.getenv("PYTEST_COLLECTING"))
 
 # Module-level variables for lazy loading
 arbiter = None
@@ -55,7 +53,8 @@ def _load_components():
     
     # Import and expose main components that tests and other modules expect
     try:
-        from . import arbiter as _arbiter
+        # Import arbiter.py module explicitly to avoid circular reference
+        import self_fixing_engineer.arbiter.arbiter as _arbiter
         from .arbiter import Arbiter as _Arbiter
         arbiter = _arbiter
         Arbiter = _Arbiter
