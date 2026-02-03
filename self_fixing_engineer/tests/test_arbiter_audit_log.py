@@ -157,8 +157,8 @@ async def encrypted_logger(encrypted_config):
     mock_fernet.encrypt.return_value = b"encrypted_data"
     mock_fernet.decrypt.return_value = b'{"test": "data"}'
 
-    with patch("audit_log.Fernet", return_value=mock_fernet):
-        with patch("audit_log.PBKDF2HMAC"):
+    with patch("self_fixing_engineer.arbiter.audit_log.Fernet", return_value=mock_fernet):
+        with patch("self_fixing_engineer.arbiter.audit_log.PBKDF2HMAC"):
             logger = TamperEvidentLogger(encrypted_config)
             logger._fernet = mock_fernet
             yield logger
@@ -211,7 +211,7 @@ class TestAuditLoggerConfig:
 
     def test_encryption_without_key_generates_key(self, temp_log_dir):
         """Test that enabling encryption without a key generates one."""
-        with patch("audit_log.Fernet"):
+        with patch("self_fixing_engineer.arbiter.audit_log.Fernet"):
             config = AuditLoggerConfig(
                 log_path=temp_log_dir / "test.jsonl", encrypt_logs=True
             )

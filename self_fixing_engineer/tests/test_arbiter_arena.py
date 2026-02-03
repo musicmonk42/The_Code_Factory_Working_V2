@@ -60,12 +60,12 @@ class TestArbiterArena:
 
     def test_arena_initialization(self, mock_config, mock_db_engine):
         """Test that arena can be initialized with mocked dependencies."""
-        # Mock the HumanInLoopConfig to avoid Pydantic validation
-        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig") as mock_hitl_config:
+        # Patch the human_loop module since it's imported lazily in __init__
+        with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig") as mock_hitl_config:
             mock_hitl_config.return_value = MagicMock()
 
             # Mock HumanInLoop class
-            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop") as mock_hitl:
+            with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop") as mock_hitl:
                 mock_hitl.return_value = MagicMock()
 
                 # Mock the Arbiter class to avoid its initialization issues
@@ -99,8 +99,8 @@ class TestArbiterArena:
     @pytest.mark.asyncio
     async def test_arena_context_manager(self, mock_config, mock_db_engine):
         """Test arena works as an async context manager."""
-        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig"):
-            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop"):
+        with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig"):
+            with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop"):
                 with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
                     from self_fixing_engineer.arbiter.arena import ArbiterArena
 
@@ -120,8 +120,8 @@ class TestArbiterArena:
     @pytest.mark.asyncio
     async def test_register_and_remove_arbiter(self, mock_config, mock_db_engine):
         """Test registering and removing arbiters from arena."""
-        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig"):
-            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop"):
+        with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig"):
+            with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop"):
                 with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
                     from self_fixing_engineer.arbiter.arena import ArbiterArena
 
@@ -142,8 +142,8 @@ class TestArbiterArena:
     @pytest.mark.asyncio
     async def test_get_random_arbiter(self, mock_config, mock_db_engine):
         """Test getting a random arbiter from the arena."""
-        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig"):
-            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop"):
+        with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig"):
+            with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop"):
                 with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
                     from self_fixing_engineer.arbiter.arena import ArbiterArena
 
@@ -167,8 +167,8 @@ class TestArbiterArena:
         """Test that webhooks are sent correctly."""
         mock_config.WEBHOOK_URL = "http://example.com/webhook"
 
-        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig"):
-            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop"):
+        with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig"):
+            with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop"):
                 with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
                     from self_fixing_engineer.arbiter.arena import ArbiterArena
 
@@ -189,8 +189,8 @@ class TestArbiterArena:
 
     def test_setup_routes(self, mock_config, mock_db_engine):
         """Test that FastAPI routes are set up correctly."""
-        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig"):
-            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop"):
+        with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig"):
+            with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop"):
                 with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
                     from self_fixing_engineer.arbiter.arena import ArbiterArena
 

@@ -158,3 +158,37 @@ def session_cleanup():
     gc.collect()
     gc.collect()
 
+
+# ---- OpenTelemetry Tracing Setup for Tests ----
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_opentelemetry_tracer():
+    """
+    Set up a minimal OpenTelemetry tracer provider for the entire test session.
+    
+    This ensures that trace.get_current_span() and tracer.start_as_current_span() 
+    work properly even when OTEL_SDK_DISABLED is set. Many tests in the arbiter 
+    modules rely on OpenTelemetry tracing.
+    """
+    try:
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        
+        # Set up a minimal provider
+        provider = TracerProvider()
+        # Use in-memory exporter (lightweight, no I/O)
+        exporter = InMemorySpanExporter()
+        processor = SimpleSpanProcessor(exporter)
+        provider.add_span_processor(processor)
+        
+        # Set as the global provider
+        trace.set_tracer_provider(provider)
+        
+    except ImportError:
+        # OpenTelemetry not available, skip setup
+        pass
+    
+    yield
+

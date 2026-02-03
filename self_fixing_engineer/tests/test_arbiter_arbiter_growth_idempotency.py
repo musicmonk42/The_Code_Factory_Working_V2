@@ -11,33 +11,21 @@ from self_fixing_engineer.arbiter.arbiter_growth.idempotency import (
     IdempotencyStore,
     IdempotencyStoreError,
 )
-from opentelemetry import trace  # Added for the tracer fixture
-
-# FIX: Added imports to set up a real OpenTelemetry context for tests
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+from opentelemetry import trace
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 # --- Fixtures ---
 
 
-# This is the original, correct fixture.
-# It will work once conftest.py is fixed.
+# The tracer fixture now just returns a tracer from the global provider
+# set up in conftest.py by setup_opentelemetry_tracer
 @pytest.fixture(scope="session")
 def tracer():
     """
-    Provides a REAL OpenTelemetry tracer for tests.
-    This sets up a minimal provider to ensure trace.get_current_span() works.
+    Provides a tracer for tests.
+    The OpenTelemetry provider is already set up globally in conftest.py.
     """
-    # Set up a simple provider and processor to make tracing work
-    provider = TracerProvider()
-    processor = SimpleSpanProcessor(ConsoleSpanExporter())
-    provider.add_span_processor(processor)
-
-    # Set this as the global provider for the test session
-    trace.set_tracer_provider(provider)
-
     return trace.get_tracer("test.idempotency")
 
 
@@ -106,13 +94,7 @@ async def test_check_and_set_miss(idempotency_store, mock_redis, tracer):
     mock_redis.set.return_value = True
 
     with tracer.start_as_current_span("test-span"):
-        await idempotency_store.check_and_set("new_key")
-
-
-async def test_check_and_set_miss(idempotency_store, mock_redis):
-    """Tests the behavior of check_and_set on a cache miss (new key)."""
-    mock_redis.set.return_value = True
-    result = await idempotency_store.check_and_set("new_key")
+        result = await idempotency_store.check_and_set("new_key")
 
     assert result is True
     mock_redis.set.assert_awaited_with(
@@ -130,18 +112,7 @@ async def test_check_and_set_hit(idempotency_store, mock_redis, tracer):
     mock_redis.set.return_value = False
 
     with tracer.start_as_current_span("test-span"):
-        await idempotency_store.check_and_set("existing_key")
-    # Verify metrics
-    assert (
-        IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() == 1
-    )
-
-
-@pytest.mark.asyncio
-async def test_check_and_set_hit(idempotency_store, mock_redis):
-    """Tests the behavior of check_and_set on a cache hit (existing key)."""
-    mock_redis.set.return_value = False
-    result = await idempotency_store.check_and_set("existing_key")
+        result = await idempotency_store.check_and_set("existing_key")
 
     assert result is False
     assert (
@@ -229,7 +200,7 @@ async def test_start_retry_logic(set_env_redis_url):
         call_count += 1
         if call_count <= 2:
             raise RedisError(f"Fail {call_count}")
-        return True
+        return True  # Success on third attempt
 
     mock_redis_client.ping = AsyncMock(side_effect=ping_side_effect)
 
@@ -237,11 +208,6 @@ async def test_start_retry_logic(set_env_redis_url):
         "self_fixing_engineer.arbiter.arbiter_growth.idempotency.redis.from_url",
         return_value=mock_redis_client,
     ):
-        return True  # Success on third attempt
-
-    mock_redis_client.ping = AsyncMock(side_effect=ping_side_effect)
-
-    with patch("redis.asyncio.from_url", return_value=mock_redis_client):
         await store.start()
         assert mock_redis_client.ping.await_count == 3
         assert store.redis is not None
@@ -253,22 +219,13 @@ async def test_start_fails_after_max_retries(set_env_redis_url, caplog):
     store = IdempotencyStore(arbiter_name="test")
     mock_redis_client = AsyncMock(spec=Redis)
 
+    # Always fail
     mock_redis_client.ping = AsyncMock(side_effect=RedisError("Persistent failure"))
 
     with patch(
         "self_fixing_engineer.arbiter.arbiter_growth.idempotency.redis.from_url",
         return_value=mock_redis_client,
     ):
-        with pytest.raises(IdempotencyStoreError, match="Failed to connect to Redis"):
-            await store.start()
-
-        assert mock_redis_client.ping.await_count == 5
-        assert "Failed to connect to IdempotencyStore Redis" in caplog.text
-        assert store.redis is None
-    # Always fail
-    mock_redis_client.ping = AsyncMock(side_effect=RedisError("Persistent failure"))
-
-    with patch("redis.asyncio.from_url", return_value=mock_redis_client):
         with pytest.raises(IdempotencyStoreError, match="Failed to connect to Redis"):
             await store.start()
 
@@ -305,30 +262,15 @@ async def test_stop_when_not_started(set_env_redis_url):
 @pytest.mark.asyncio
 async def test_concurrent_check_and_set(idempotency_store, mock_redis, tracer):
     """Tests that concurrent operations are handled correctly."""
+    # Simulate the first call succeeding and subsequent calls failing
     mock_redis.set.side_effect = [True] + [False] * 49
 
     async def check_key():
         with tracer.start_as_current_span("test-span-concurrent"):
             return await idempotency_store.check_and_set("concurrent_key")
 
-    # Don't initialize redis
-    await idempotency_store.stop()  # Should not raise
-
-
-@pytest.mark.asyncio
-async def test_concurrent_check_and_set(idempotency_store, mock_redis):
-    """Tests that concurrent operations are handled correctly."""
-    # Simulate the first call succeeding and subsequent calls failing
-    mock_redis.set.side_effect = [True] + [False] * 49
-
-    async def check_key():
-        return await idempotency_store.check_and_set("concurrent_key")
-
     tasks = [check_key() for _ in range(50)]
     results = await asyncio.gather(*tasks)
-
-    assert results.count(True) == 1
-    assert results.count(False) == 49
 
     # Only one call should succeed (return True)
     assert results.count(True) == 1
