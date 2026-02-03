@@ -127,11 +127,20 @@ services:
       - LLM_TIMEOUT=300
       - LLM_MAX_RETRIES=3
       - LLM_TEMPERATURE=0.7
+      - TESTGEN_LLM_TIMEOUT=${TESTGEN_LLM_TIMEOUT:-300}  # Testgen-specific timeout (5 minutes)
       
       # ============================================
       # Infrastructure
       # ============================================
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}  # Kafka broker addresses
+      
+      # ============================================
+      # CORS Configuration
+      # CRITICAL: Set ALLOWED_ORIGINS for production domains
+      # Example: https://yourdomain.com,https://app.yourdomain.com
+      # ============================================
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}  # REQUIRED for production web clients
       
       # ============================================
       # Feature Flags
