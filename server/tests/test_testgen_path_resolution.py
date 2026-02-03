@@ -95,7 +95,7 @@ class TestTestgenPathResolution:
             result = await mock_testgen_service._run_testgen(job_id, payload)
             
             # Verify it succeeded
-            assert result["status"] == "success"
+            assert result["status"] == "completed"
             
             # Verify testgen was called with proper arguments
             mock_testgen_service._testgen_class.assert_called_once()
@@ -235,7 +235,7 @@ class TestTestgenPathResolution:
             result = await mock_testgen_service._run_testgen(job_id, payload)
             
             # Verify it succeeded
-            assert result["status"] == "success"
+            assert result["status"] == "completed"
             
             # Verify generate_tests was called
             mock_testgen_instance = mock_testgen_service._testgen_class.return_value

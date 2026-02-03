@@ -192,6 +192,9 @@ class TestOmniCoreServiceInitialization:
         
         service = OmniCoreService()
         
+        # Trigger lazy loading to get the log messages
+        service._ensure_agents_loaded()
+        
         # Check that unavailable agents were logged
         unavailable = [k for k, v in service.agents_available.items() if not v]
         if unavailable:
@@ -215,9 +218,12 @@ class TestOmniCoreServiceInitialization:
         # The agents_available dict will remain False (initialized to False in __init__)
         mock_load_agents.return_value = None
         
-        # Should raise because agents can't load without dependencies in strict mode
+        # Create service (lazy loading means no immediate error)
+        service = OmniCoreService()
+        
+        # Should raise when agents are lazy-loaded in strict mode with unavailable agents
         with pytest.raises(RuntimeError, match="STRICT_MODE"):
-            service = OmniCoreService()
+            service._ensure_agents_loaded()
 
 
 class TestAgentIntegration:
@@ -260,6 +266,9 @@ class TestAgentIntegration:
             mock_get_loader.return_value = mock_loader
             
             service = OmniCoreService()
+            
+            # Mark agents as already loaded to prevent _ensure_agents_loaded() from resetting state
+            service._agents_loaded = True
             
             # Manually set agent availability and functions
             service.agents_available = {
@@ -411,6 +420,10 @@ class TestDispatcherIntegration:
             mock_get_loader.return_value = mock_loader
             
             service = OmniCoreService()
+            
+            # Mark agents as already loaded to prevent _ensure_agents_loaded from resetting state
+            service._agents_loaded = True
+            
             service.agents_available["codegen"] = True
             service._codegen_func = mock_codegen_func
             

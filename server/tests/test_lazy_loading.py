@@ -60,6 +60,10 @@ class TestBackgroundAgentLoading:
         """Test that background loading requires async context."""
         loader = AgentLoader()
         
+        # Reset the singleton's loading state for this test
+        # This is necessary because other tests may have triggered loading
+        loader._loading_started = False
+        
         # Calling outside async context should raise RuntimeError
         with pytest.raises(RuntimeError, match="must be called from an async context"):
             loader.start_background_loading([])
