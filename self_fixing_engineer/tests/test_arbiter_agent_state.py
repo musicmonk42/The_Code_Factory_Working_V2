@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import create_engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -144,22 +145,25 @@ def session(engine):
         s.rollback()
 
 
-@pytest.fixture
-def async_engine():
+@pytest_asyncio.fixture
+async def async_engine():
     """Create async SQLite engine for async tests."""
-    return create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    yield engine
+    await engine.dispose()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def async_session(async_engine):
     """Provide async session for async tests."""
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    async with AsyncSession(async_engine) as session:
+    async_session_maker = sessionmaker(
+        async_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with async_session_maker() as session:
         yield session
-
-    await async_engine.dispose()
 
 
 @pytest.fixture
