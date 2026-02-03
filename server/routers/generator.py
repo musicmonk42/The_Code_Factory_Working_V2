@@ -725,11 +725,35 @@ async def clarify_requirements(
             readme_content=readme_content,
             ambiguities=ambiguities,
         )
-        logger.info(
-            f"Clarification initiated successfully for job {job_id}",
-            extra={"result_keys": list(result.keys()) if isinstance(result, dict) else None}
-        )
-        return result
+        
+        # Check if questions were generated and return proper response
+        questions = result.get("clarifications", [])
+        questions_count = result.get("questions_count", len(questions))
+        
+        if questions and questions_count > 0:
+            # Questions generated - return them for UI display
+            logger.info(
+                f"Clarification initiated with {questions_count} questions for job {job_id}",
+                extra={"result_keys": list(result.keys()) if isinstance(result, dict) else None}
+            )
+            return {
+                "status": "questions_generated",
+                "job_id": job_id,
+                "clarifications": questions,
+                "total_questions": questions_count,
+                "method": result.get("method", "rule_based"),
+            }
+        else:
+            # No questions - requirements are clear
+            logger.info(
+                f"No clarification needed for job {job_id} - requirements are clear",
+                extra={"result_keys": list(result.keys()) if isinstance(result, dict) else None}
+            )
+            return {
+                "status": "no_clarification_needed",
+                "job_id": job_id,
+                "message": "No ambiguities detected - requirements are clear",
+            }
     except Exception as e:
         logger.error(
             f"Error processing clarification for job {job_id}: {e}",
