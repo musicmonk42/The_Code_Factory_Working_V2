@@ -349,7 +349,7 @@ class TestPolicyValidation:
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
-            from agents.testgen_agent.testgen_prompt import SecurityPolicy
+            from generator.agents.testgen_agent.testgen_prompt import SecurityPolicy
 
             policy = SecurityPolicy()
             assert policy.audit_log == []
@@ -361,7 +361,7 @@ class TestPolicyValidation:
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
-            from agents.testgen_agent.testgen_prompt import SecurityPolicy
+            from generator.agents.testgen_agent.testgen_prompt import SecurityPolicy
 
             policy = SecurityPolicy()
 
@@ -380,7 +380,7 @@ class TestTextSanitization:
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
-            from agents.testgen_agent.testgen_prompt import _presidio_sanitize
+            from generator.agents.testgen_agent.testgen_prompt import _presidio_sanitize
 
             # Test with PII data
             text_with_pii = "My email is john@example.com and phone is 555-987-6543"
@@ -395,7 +395,7 @@ class TestTextSanitization:
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
-            from agents.testgen_agent.testgen_prompt import _local_regex_sanitize
+            from generator.agents.testgen_agent.testgen_prompt import _local_regex_sanitize
 
             # Test email sanitization
             text = "Contact me at john@example.com or jane.doe@company.org"
@@ -419,7 +419,7 @@ class TestAgentCreation:
 
         with patch.dict("sys.modules", mocks):
             with tempfile.TemporaryDirectory() as temp_dir:
-                from agents.testgen_agent.testgen_agent import TestgenAgent
+                from generator.agents.testgen_agent.testgen_agent import TestgenAgent
 
                 agent = TestgenAgent(temp_dir)
                 assert agent.repo_path == Path(temp_dir)
@@ -434,7 +434,7 @@ class TestResponseHandler:
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
-            from agents.testgen_agent.testgen_response_handler import (
+            from generator.agents.testgen_agent.testgen_response_handler import (
                 _local_regex_sanitize,
             )
 
@@ -456,7 +456,7 @@ class TestValidationSystem:
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
-            from agents.testgen_agent.testgen_validator import (
+            from generator.agents.testgen_agent.testgen_validator import (
                 VALIDATORS,
                 CoverageValidator,
                 validate_test_quality,
@@ -495,7 +495,7 @@ class TestHealthEndpoints:
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
-            from agents.testgen_agent.testgen_prompt import healthz
+            from generator.agents.testgen_agent.testgen_prompt import healthz
 
             mock_request = Mock()
             response = await healthz(mock_request)
@@ -515,7 +515,7 @@ class TestVectorDatabase:
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
-            from agents.testgen_agent.testgen_prompt import MultiVectorDBManager
+            from generator.agents.testgen_agent.testgen_prompt import MultiVectorDBManager
 
             # Test initialization
             manager = MultiVectorDBManager()
@@ -545,7 +545,7 @@ class TestTemplateSystem:
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
-            from agents.testgen_agent.testgen_prompt import AdvancedTemplateTracker
+            from generator.agents.testgen_agent.testgen_prompt import AdvancedTemplateTracker
 
             with tempfile.TemporaryDirectory() as temp_dir:
                 db_path = os.path.join(temp_dir, "test_template_performance.json")
