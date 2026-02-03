@@ -272,9 +272,8 @@ function connectWebSocket() {
             const closeCode = event.code || 1006; // 1006 = abnormal closure
             const closeReason = event.reason || 'No reason provided';
             const wasClean = event.wasClean;
-            const cleanStatus = wasClean ? 'clean' : 'unclean';
             
-            console.log(`WebSocket closed. Code: ${closeCode}, Reason: ${closeReason}, Clean: ${cleanStatus}`);
+            console.log(`WebSocket closed. Code: ${closeCode}, Reason: ${closeReason}, Clean: ${wasClean ? 'clean' : 'unclean'}`);
             
             // Only update state if not already reconnecting
             if (connectionState !== ConnectionState.RECONNECTING) {
