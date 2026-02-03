@@ -467,6 +467,70 @@ async def download_job_files(job_id: str):
     )
 
 
+@router.get("/{job_id}/download-partial")
+async def download_partial_results(job_id: str):
+    """
+    Download generated files even if job is incomplete (development/debugging only).
+    
+    ⚠️  SECURITY WARNING: This endpoint is intended for development/debugging only.
+    In production environments, implement authentication checks to prevent unauthorized access.
+    
+    This endpoint allows downloading partial results when a job hasn't completed
+    normally. Useful for debugging and retrieving code when test generation or
+    other late-stage steps hang or fail.
+    
+    **Path Parameters:**
+    - job_id: Unique job identifier
+    
+    **Returns:**
+    - ZIP file download (application/zip) with PARTIAL suffix in filename
+    
+    **Errors:**
+    - 404: Job not found or no files available
+    
+    **TODO**: Add authentication in production.
+    Example implementation:
+        
+        # Check if in development mode
+        if not os.getenv("DEVELOPMENT_MODE", "false").lower() == "true":
+            # Require authentication
+            raise HTTPException(status_code=403, detail="This endpoint requires authentication")
+    """
+    from fastapi.responses import FileResponse
+    from pathlib import Path
+    import zipfile
+    import tempfile
+    
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    
+    job_dir = Path(f"./uploads/{job_id}")
+    if not job_dir.exists() or not list(job_dir.rglob('*')):
+        raise HTTPException(
+            status_code=404,
+            detail=f"No files found for job {job_id}",
+        )
+    
+    # Create temporary ZIP file
+    with tempfile.NamedTemporaryFile(mode='w+b', suffix='.zip', delete=False) as tmp_file:
+        zip_path = tmp_file.name
+        
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Add all files from job directory
+            for file_path in job_dir.rglob('*'):
+                if file_path.is_file():
+                    arcname = file_path.relative_to(job_dir)
+                    zipf.write(file_path, arcname=arcname)
+        
+        logger.info(f"Created partial ZIP archive for job {job_id}")
+    
+    return FileResponse(
+        path=zip_path,
+        media_type='application/zip',
+        filename=f'job_{job_id}_PARTIAL.zip',
+    )
+
+
 @router.get("/{job_id}/files", response_model=JobFilesResponse)
 async def list_job_files(job_id: str) -> JobFilesResponse:
     """

@@ -2451,8 +2451,29 @@ async function startClarification() {
         
         const result = await response.json();
         
-        // Process clarification response
-        if (result.clarifications && result.clarifications.length > 0) {
+        // Process clarification response based on status
+        if (result.status === "questions_generated" && result.clarifications && result.clarifications.length > 0) {
+            // Questions generated - display them
+            updateClarifierStatus(`Waiting for answer (1/${result.total_questions})`, 'waiting');
+            
+            // Store questions globally
+            window.clarificationQuestions = result.clarifications;
+            window.currentQuestionIndex = 0;
+            
+            // Display first question
+            displayClarificationQuestion(result.clarifications[0], 0);
+            
+            // Show UI elements
+            document.getElementById('clarifier-conversation').style.display = 'block';
+            document.getElementById('answer-section').style.display = 'block';
+            
+        } else if (result.status === "no_clarification_needed") {
+            // No questions - requirements are clear
+            updateClarifierStatus('Complete', 'active');
+            addClarifierMessage('system', '✅ Requirements are clear - no clarification needed', 'System');
+            
+        } else if (result.clarifications && result.clarifications.length > 0) {
+            // Legacy response format - handle for backward compatibility
             updateClarifierStatus('Waiting for your answers', 'waiting');
             
             // Display first question
@@ -2466,6 +2487,7 @@ async function startClarification() {
             window.clarifierQuestions = result.clarifications;
             window.currentQuestionIndex = 0;
         } else {
+            // Unexpected response - treat as no clarification needed
             updateClarifierStatus('Complete', 'active');
             addClarifierMessage('system', 'No clarifications needed. Requirements are clear!', 'System');
             displayClarifiedRequirements(result);
@@ -2476,6 +2498,30 @@ async function startClarification() {
         updateClarifierStatus('Error', 'error');
         showError('Failed to start clarification: ' + error.message);
     }
+}
+
+/**
+ * Display a clarification question in the conversation
+ */
+function displayClarificationQuestion(question, index) {
+    // Extract question text - handle both string and object formats
+    let questionText;
+    if (typeof question === 'string') {
+        questionText = question;
+    } else {
+        questionText = question.question || question;
+    }
+    
+    // Extract category - default to "general"
+    const category = typeof question === 'object' ? (question.category || "general") : "general";
+    
+    const total = window.clarificationQuestions ? window.clarificationQuestions.length : 1;
+    
+    addClarifierMessage(
+        'assistant',
+        `Question ${index + 1}/${total} (Category: ${category})\n\n${questionText}`,
+        'Clarification Needed'
+    );
 }
 
 /**
