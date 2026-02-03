@@ -116,7 +116,7 @@ MOCK_CORRELATION_ID = str(uuid.uuid4())
 # --- START FIX 1: Promote all test classes to module level ---
 
 
-class TestPlugin(AuditPlugin):
+class _TestPlugin(AuditPlugin):
     """Pickleable Test Plugin promoted to module level."""
 
     def __init__(self):
@@ -172,7 +172,7 @@ class MockConfigPlugin(AuditPlugin):
         pass
 
 
-class TestCommercialPlugin(CommercialPlugin):
+class _TestCommercialPlugin(CommercialPlugin):
     """Pickleable Commercial Plugin for testing usage counting."""
 
     def __init__(self):
@@ -257,9 +257,9 @@ def mock_aiofiles():
 
 @pytest.fixture
 def test_plugin():
-    """Provides a TestPlugin instance for use in tests."""
-    # Use the globally defined TestPlugin class
-    plugin = TestPlugin()
+    """Provides a _TestPlugin instance for use in tests."""
+    # Use the globally defined _TestPlugin class
+    plugin = _TestPlugin()
     register_plugin("TestPlugin", plugin, {"redact": True, "augment": True})
     return plugin
 
@@ -435,8 +435,8 @@ class TestAuditPlugins:
         # Need to register a CommercialPlugin for this test
         plugins.clear()
 
-        # Use the globally defined TestCommercialPlugin class
-        commercial_plugin = TestCommercialPlugin()
+        # Use the globally defined _TestCommercialPlugin class
+        commercial_plugin = _TestCommercialPlugin()
         register_plugin("TestCommercialPlugin", commercial_plugin)
 
         for i in range(3):

@@ -1304,7 +1304,7 @@ async def health_check():
         failed_backends.append("templates")
         details["templates"] = "directory missing"
 
-    audit_logger.log_action("HealthCheck", {"status": status, "details": details})
+    await audit_logger.log_action("HealthCheck", {"status": status, "details": details})
 
     if failed_backends:
         return {
