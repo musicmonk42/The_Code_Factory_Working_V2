@@ -4,6 +4,63 @@
 const API_BASE = '/api';
 let websocket = null;
 
+// WebSocket connection state management
+const ConnectionState = {
+    DISCONNECTED: 'disconnected',
+    CONNECTING: 'connecting',
+    CONNECTED: 'connected',
+    RECONNECTING: 'reconnecting',
+    ERROR: 'error'
+};
+
+let connectionState = ConnectionState.DISCONNECTED;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_BASE_DELAY = 1000; // ms
+const CONNECTION_TIMEOUT = 10000; // ms
+let connectionTimeout = null;
+let heartbeatInterval = null;
+let isReconnecting = false;
+let reconnectTimeoutId = null;
+let wsEventHandlers = null; // Store event handlers for cleanup
+
+// Fetch wrapper with timeout and retry logic
+async function fetchWithRetry(url, options = {}, maxRetries = 3) {
+    const timeout = options.timeout || 30000;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+            
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return response;
+        } catch (error) {
+            if (attempt === maxRetries) {
+                throw error;
+            }
+            
+            // Don't retry on 4xx errors (client errors)
+            if (error.message.includes('HTTP 4')) {
+                throw error;
+            }
+            
+            // Exponential backoff
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+        }
+    }
+}
+
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
@@ -20,6 +77,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load initial data
     loadHealthCheck();
     loadJobStats();
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+        if (websocket) {
+            stopHeartbeat();
+            if (reconnectTimeoutId) {
+                clearTimeout(reconnectTimeoutId);
+            }
+            websocket.close();
+        }
+    });
 });
 
 // Navigation
@@ -60,7 +128,7 @@ function initDashboard() {
 
 async function loadHealthCheck() {
     try {
-        const response = await fetch('/health');
+        const response = await fetchWithRetry('/health');
         const data = await response.json();
         
         updateHealthIndicators(data.components);
@@ -70,7 +138,7 @@ async function loadHealthCheck() {
         if (versionEl) versionEl.textContent = data.version;
     } catch (error) {
         console.error('Health check failed:', error);
-        showError('Failed to load health status');
+        showError('Failed to load health status. Please check your connection and try again.');
     }
 }
 
@@ -100,7 +168,7 @@ function updateHealthIndicators(components) {
 
 async function loadJobStats() {
     try {
-        const response = await fetch(`${API_BASE}/jobs/`);
+        const response = await fetchWithRetry(`${API_BASE}/jobs/`);
         const data = await response.json();
         
         const total = data.total;
@@ -112,65 +180,245 @@ async function loadJobStats() {
         document.getElementById('completed-jobs').textContent = completed;
     } catch (error) {
         console.error('Failed to load job stats:', error);
+        // Don't show error to user for background updates
     }
 }
 
 // WebSocket Connection
 function connectWebSocket() {
+    // Prevent multiple simultaneous connection attempts
+    if (connectionState === ConnectionState.CONNECTING || 
+        connectionState === ConnectionState.CONNECTED ||
+        connectionState === ConnectionState.RECONNECTING) {
+        console.log('Connection already in progress or established');
+        return;
+    }
+    
+    updateConnectionState(ConnectionState.CONNECTING);
+    
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}${API_BASE}/events/ws`;
     
+    // Set connection timeout
+    connectionTimeout = setTimeout(() => {
+        if (websocket && websocket.readyState === WebSocket.CONNECTING) {
+            console.error('WebSocket connection timeout');
+            websocket.close();
+            updateConnectionState(ConnectionState.ERROR);
+            addEvent('System', 'Connection timeout - Please check network and try again', 'error');
+            
+            // Attempt reconnection
+            if (!isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                attemptReconnect();
+            }
+        }
+    }, CONNECTION_TIMEOUT);
+    
     websocket = new WebSocket(wsUrl);
     
-    websocket.onopen = () => {
-        document.getElementById('stream-status').textContent = 'Connected';
-        document.getElementById('stream-status').style.background = 'rgba(0, 204, 136, 0.2)';
-        document.getElementById('stream-status').style.color = 'var(--success)';
-        document.getElementById('connect-stream').disabled = true;
-        document.getElementById('disconnect-stream').disabled = false;
+    // Store event handlers for cleanup
+    wsEventHandlers = {
+        onopen: () => {
+            clearTimeout(connectionTimeout);
+            reconnectAttempts = 0; // Reset on successful connection
+            isReconnecting = false;
+            updateConnectionState(ConnectionState.CONNECTED);
+            
+            document.getElementById('stream-status').textContent = 'Connected';
+            document.getElementById('stream-status').style.background = 'rgba(0, 204, 136, 0.2)';
+            document.getElementById('stream-status').style.color = 'var(--success)';
+            document.getElementById('connect-stream').disabled = true;
+            document.getElementById('disconnect-stream').disabled = false;
+            
+            addEvent('System', 'Connected to event stream', 'info');
+            
+            // Start heartbeat to detect stale connections
+            startHeartbeat();
+        },
         
-        addEvent('System', 'Connected to event stream', 'info');
-    };
-    
-    websocket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        addEvent(data.event_type, data.message, data.severity);
+        onmessage: (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                
+                // Handle heartbeat pong response
+                if (data.type === 'pong') {
+                    return;
+                }
+                
+                addEvent(data.event_type, data.message, data.severity);
+                
+                // Update stats if job event
+                if (data.event_type && data.event_type.includes('job')) {
+                    loadJobStats();
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+                addEvent('System', 'Error parsing event data', 'error');
+            }
+        },
         
-        // Update stats if job event
-        if (data.event_type.includes('job')) {
-            loadJobStats();
+        onerror: (error) => {
+            clearTimeout(connectionTimeout);
+            console.error('WebSocket error:', error);
+            console.error('Error details:', { type: error.type, target: error.target?.url });
+            updateConnectionState(ConnectionState.ERROR);
+            addEvent('System', 'Connection error - Attempting to reconnect...', 'error');
+        },
+        
+        onclose: (event) => {
+            clearTimeout(connectionTimeout);
+            stopHeartbeat();
+            
+            const closeCode = event.code || 1006; // 1006 = abnormal closure
+            const closeReason = event.reason || 'No reason provided';
+            const wasClean = event.wasClean ? 'clean' : 'unclean';
+            
+            console.log(`WebSocket closed. Code: ${closeCode}, Reason: ${closeReason}, Clean: ${wasClean}`);
+            
+            // Only update state if not already reconnecting
+            if (connectionState !== ConnectionState.RECONNECTING) {
+                updateConnectionState(ConnectionState.DISCONNECTED);
+            }
+            
+            document.getElementById('stream-status').textContent = isReconnecting ? 'Reconnecting...' : 'Disconnected';
+            document.getElementById('stream-status').style.background = 'rgba(176, 184, 212, 0.1)';
+            document.getElementById('stream-status').style.color = 'var(--text-secondary)';
+            document.getElementById('connect-stream').disabled = isReconnecting;
+            document.getElementById('disconnect-stream').disabled = true;
+            
+            const message = isReconnecting ? 
+                `Connection lost (${closeCode}). Reconnecting...` :
+                `Disconnected (${closeCode}: ${closeReason})`;
+            addEvent('System', message, 'warning');
+            
+            // Attempt automatic reconnection for abnormal closures
+            if (!wasClean && !isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                attemptReconnect();
+            }
         }
     };
     
-    websocket.onerror = (error) => {
-        // Note: Browser WebSocket error events typically don't provide detailed error properties
-        // The close event (onclose) will provide the actual status code and reason
-        console.error('WebSocket error:', error);
-        console.error('Error details:', { type: error.type, target: error.target?.url });
-        addEvent('System', `Connection error - Check console for details`, 'error');
-    };
-    
-    websocket.onclose = (event) => {
-        const closeCode = event.code || 1006; // 1006 = abnormal closure
-        const closeReason = event.reason || 'No reason provided';
-        const wasClean = event.wasClean ? 'clean' : 'unclean';
-        
-        console.log(`WebSocket closed. Code: ${closeCode}, Reason: ${closeReason}, Clean: ${wasClean}`);
-        
-        document.getElementById('stream-status').textContent = 'Disconnected';
-        document.getElementById('stream-status').style.background = 'rgba(176, 184, 212, 0.1)';
-        document.getElementById('stream-status').style.color = 'var(--text-secondary)';
-        document.getElementById('connect-stream').disabled = false;
-        document.getElementById('disconnect-stream').disabled = true;
-        
-        addEvent('System', `Disconnected (HTTP ${closeCode}: ${closeReason})`, 'warning');
-    };
+    // Attach event handlers
+    websocket.onopen = wsEventHandlers.onopen;
+    websocket.onmessage = wsEventHandlers.onmessage;
+    websocket.onerror = wsEventHandlers.onerror;
+    websocket.onclose = wsEventHandlers.onclose;
 }
 
 function disconnectWebSocket() {
+    // Prevent disconnect during connection attempt
+    if (connectionState === ConnectionState.CONNECTING) {
+        console.log('Cannot disconnect while connecting');
+        return;
+    }
+    
+    isReconnecting = false;
+    reconnectAttempts = 0;
+    
+    if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+        reconnectTimeoutId = null;
+    }
+    
+    stopHeartbeat();
+    
     if (websocket) {
-        websocket.close();
+        // Clean closure
+        if (websocket.readyState === WebSocket.OPEN || 
+            websocket.readyState === WebSocket.CONNECTING) {
+            websocket.close(1000, 'User disconnected');
+        }
         websocket = null;
+    }
+    
+    updateConnectionState(ConnectionState.DISCONNECTED);
+}
+
+// Helper function to calculate reconnection delay with exponential backoff
+function getReconnectDelay() {
+    return Math.min(30000, RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts));
+}
+
+// Attempt to reconnect with exponential backoff
+function attemptReconnect() {
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        addEvent('System', 'Max reconnection attempts reached. Please reconnect manually.', 'error');
+        updateConnectionState(ConnectionState.ERROR);
+        document.getElementById('connect-stream').disabled = false;
+        return;
+    }
+    
+    isReconnecting = true;
+    reconnectAttempts++;
+    updateConnectionState(ConnectionState.RECONNECTING);
+    
+    const delay = getReconnectDelay();
+    console.log(`Attempting reconnection ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+    addEvent('System', `Reconnecting in ${delay/1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`, 'info');
+    
+    reconnectTimeoutId = setTimeout(() => {
+        connectWebSocket();
+    }, delay);
+}
+
+// Heartbeat mechanism to detect stale connections
+function startHeartbeat() {
+    stopHeartbeat(); // Clear any existing interval
+    
+    heartbeatInterval = setInterval(() => {
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
+            try {
+                websocket.send(JSON.stringify({ type: 'ping' }));
+            } catch (error) {
+                console.error('Failed to send heartbeat:', error);
+                stopHeartbeat();
+            }
+        }
+    }, 30000); // Send heartbeat every 30 seconds
+}
+
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+// Update connection state and UI
+function updateConnectionState(newState) {
+    connectionState = newState;
+    
+    // Update UI based on connection state
+    const statusEl = document.getElementById('stream-status');
+    if (!statusEl) return;
+    
+    switch (newState) {
+        case ConnectionState.CONNECTING:
+            statusEl.textContent = 'Connecting...';
+            statusEl.style.background = 'rgba(255, 193, 7, 0.2)';
+            statusEl.style.color = 'var(--warning)';
+            break;
+        case ConnectionState.CONNECTED:
+            statusEl.textContent = 'Connected';
+            statusEl.style.background = 'rgba(0, 204, 136, 0.2)';
+            statusEl.style.color = 'var(--success)';
+            break;
+        case ConnectionState.RECONNECTING:
+            statusEl.textContent = 'Reconnecting...';
+            statusEl.style.background = 'rgba(255, 193, 7, 0.2)';
+            statusEl.style.color = 'var(--warning)';
+            break;
+        case ConnectionState.ERROR:
+            statusEl.textContent = 'Error';
+            statusEl.style.background = 'rgba(255, 82, 82, 0.2)';
+            statusEl.style.color = 'var(--error)';
+            break;
+        case ConnectionState.DISCONNECTED:
+        default:
+            statusEl.textContent = 'Disconnected';
+            statusEl.style.background = 'rgba(176, 184, 212, 0.1)';
+            statusEl.style.color = 'var(--text-secondary)';
+            break;
     }
 }
 
@@ -2003,7 +2251,7 @@ function initModals() {
 
 // ===== ADDITIONAL UTILITY FUNCTIONS =====
 
-function showSubscribe() {
+async function showSubscribe() {
     const topic = prompt('Enter topic to subscribe to:');
     if (!topic) return;
     
@@ -2013,16 +2261,22 @@ function showSubscribe() {
         return;
     }
     
-    fetch(`${API_BASE}/omnicore/message-bus/subscribe`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({topic, subscriber_id: 'web-ui'})
-    })
-    .then(() => showSuccess(`Subscribed to topic: ${topic}`))
-    .catch(err => showError('Subscription failed: ' + err.message));
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/message-bus/subscribe`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({topic, subscriber_id: 'web-ui'})
+        });
+        
+        await response.json(); // Validate JSON response
+        showSuccess(`Subscribed to topic: ${topic}`);
+    } catch (error) {
+        console.error('Subscription failed:', error);
+        showError(`Subscription failed: ${error.message}. Please check the topic name and try again.`);
+    }
 }
 
-function showInstallPlugin() {
+async function showInstallPlugin() {
     const pluginName = prompt('Enter plugin name to install:');
     if (!pluginName) return;
     
@@ -2032,16 +2286,22 @@ function showInstallPlugin() {
         return;
     }
     
-    fetch(`${API_BASE}/omnicore/plugins/install`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({plugin_name: pluginName, version: 'latest'})
-    })
-    .then(() => showSuccess(`Installing plugin: ${pluginName}`))
-    .catch(err => showError('Installation failed: ' + err.message));
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/plugins/install`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({plugin_name: pluginName, version: 'latest'})
+        });
+        
+        await response.json(); // Validate JSON response
+        showSuccess(`Installing plugin: ${pluginName}`);
+    } catch (error) {
+        console.error('Installation failed:', error);
+        showError(`Installation failed: ${error.message}. Please check the plugin name and try again.`);
+    }
 }
 
-function showRateLimit() {
+async function showRateLimit() {
     const limit = prompt('Enter rate limit (requests per minute):');
     if (!limit) return;
     
@@ -2051,16 +2311,22 @@ function showRateLimit() {
         return;
     }
     
-    fetch(`${API_BASE}/omnicore/rate-limits/configure`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({limit: limitNum, window_seconds: 60})
-    })
-    .then(() => showSuccess(`Rate limit configured: ${limitNum}/min`))
-    .catch(err => showError('Configuration failed: ' + err.message));
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/omnicore/rate-limits/configure`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({limit: limitNum, window_seconds: 60})
+        });
+        
+        await response.json(); // Validate JSON response
+        showSuccess(`Rate limit configured: ${limitNum}/min`);
+    } catch (error) {
+        console.error('Configuration failed:', error);
+        showError(`Configuration failed: ${error.message}. Please check your input and try again.`);
+    }
 }
 
-function showSIEMConfig() {
+async function showSIEMConfig() {
     const endpoint = prompt('Enter SIEM endpoint URL:');
     if (!endpoint) return;
     
@@ -2083,13 +2349,19 @@ function showSIEMConfig() {
         return;
     }
     
-    fetch(`${API_BASE}/sfe/siem/configure`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({siem_endpoint: endpoint, enabled: true})
-    })
-    .then(() => showSuccess('SIEM integration configured'))
-    .catch(err => showError('Configuration failed: ' + err.message));
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/siem/configure`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({siem_endpoint: endpoint, enabled: true})
+        });
+        
+        await response.json(); // Validate JSON response
+        showSuccess('SIEM integration configured');
+    } catch (error) {
+        console.error('Configuration failed:', error);
+        showError(`Configuration failed: ${error.message}. Please check the endpoint URL and try again.`);
+    }
 }
 
 // ==================== Clarifier Functions ====================
