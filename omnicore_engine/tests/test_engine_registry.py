@@ -17,14 +17,22 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Defer heavy imports to test functions to reduce memory during collection
 # from omnicore_engine.engines import (...) - moved to test functions
 
+# Disable parallel execution for tests that modify shared ENGINE_REGISTRY
+pytestmark = pytest.mark.xdist_group(name="engine_registry_serial")
+
 
 class TestEngineRegistry:
     """Test the engine registry functions"""
 
     def setup_method(self):
         """Clear registry before each test"""
-        # Avoid importing during test collection - import inside test methods if needed
-        pass
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
+    
+    def teardown_method(self):
+        """Clean up after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
 
     @pytest.mark.integration
     def test_register_engine_success(self):
@@ -75,6 +83,11 @@ class TestEngineRegistry:
 
 class TestPluginService:
     """Test the PluginService class"""
+
+    def teardown_method(self):
+        """Clean up ENGINE_REGISTRY after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
 
     @pytest.fixture
     def mock_dependencies(self):

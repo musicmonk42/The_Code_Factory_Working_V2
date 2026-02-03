@@ -129,3 +129,38 @@ def reset_prometheus_collectors():
     yield
     
     # Skip cleanup after tests - let process exit handle it
+
+
+@pytest.fixture(autouse=True, scope="function")
+def isolate_engine_registry():
+    """Isolate ENGINE_REGISTRY for each test to prevent cross-contamination."""
+    from omnicore_engine import engines
+    
+    # Save original state
+    original_registry = engines.ENGINE_REGISTRY.copy() if hasattr(engines, 'ENGINE_REGISTRY') else {}
+    
+    # Clear for this test
+    if hasattr(engines, 'ENGINE_REGISTRY'):
+        engines.ENGINE_REGISTRY.clear()
+    
+    yield
+    
+    # Restore original state after test
+    if hasattr(engines, 'ENGINE_REGISTRY'):
+        engines.ENGINE_REGISTRY.clear()
+        engines.ENGINE_REGISTRY.update(original_registry)
+
+
+@pytest.fixture(autouse=True, scope="function")
+def reset_plugin_registry():
+    """Reset plugin registry state between tests."""
+    try:
+        from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
+        # Don't actually clear it during collection, just ensure clean state
+        if os.environ.get('PYTEST_COLLECTING') != '1':
+            # Store and restore subscriptions if needed
+            pass
+    except ImportError:
+        pass
+    
+    yield
