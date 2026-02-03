@@ -39,7 +39,7 @@ from fastapi.security import (
 from pydantic import BaseModel, ConfigDict, Field
 
 # Security imports
-from security_config import EnterpriseSecurityConfig, SecurityLevel, get_security_config
+from omnicore_engine.security_config import EnterpriseSecurityConfig, SecurityLevel, get_security_config
 
 # SQLAlchemy imports
 from sqlalchemy.sql import text
