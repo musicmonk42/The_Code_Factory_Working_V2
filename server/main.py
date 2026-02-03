@@ -684,6 +684,17 @@ else:
     logger.warning(f"Static directory not found: {static_dir}")
 
 
+# Favicon endpoint - return 204 No Content to avoid 404 errors
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """
+    Handle favicon.ico requests gracefully.
+    Returns 204 No Content to avoid 404 errors in browser console.
+    """
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
 # Exception handlers
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
