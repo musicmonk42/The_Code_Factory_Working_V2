@@ -53,7 +53,8 @@ def _load_components():
     
     # Import and expose main components that tests and other modules expect
     try:
-        from . import arbiter as _arbiter
+        # Import arbiter.py module explicitly to avoid circular reference
+        import self_fixing_engineer.arbiter.arbiter as _arbiter
         from .arbiter import Arbiter as _Arbiter
         arbiter = _arbiter
         Arbiter = _Arbiter

@@ -55,9 +55,9 @@ def mock_dependencies(monkeypatch):
         def from_public_bytes(cls, data):
             return cls()
 
-    monkeypatch.setattr("audit_log.CRYPTO_AVAILABLE", True)
-    monkeypatch.setattr("audit_log.Ed25519PrivateKey", MockEd25519PrivateKey)
-    monkeypatch.setattr("audit_log.Ed25519PublicKey", MockEd25519PublicKey)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.CRYPTO_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.Ed25519PrivateKey", MockEd25519PrivateKey)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.Ed25519PublicKey", MockEd25519PublicKey)
 
     # Mock serialization
     mock_serialization = MagicMock()
@@ -69,10 +69,10 @@ def mock_dependencies(monkeypatch):
     mock_serialization.PrivateFormat.PKCS8 = MagicMock()
     mock_serialization.PublicFormat.Raw = MagicMock()
     mock_serialization.BestAvailableEncryption = MagicMock(return_value=MagicMock())
-    monkeypatch.setattr("audit_log.serialization", mock_serialization)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.serialization", mock_serialization)
 
     # Mock aiofiles - disable it to force sync fallback
-    monkeypatch.setattr("audit_log.aiofiles", None)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.aiofiles", None)
 
     # Mock portalocker
     class MockPortalocker:
@@ -84,14 +84,14 @@ def mock_dependencies(monkeypatch):
         def unlock(self, *args):
             pass
 
-    monkeypatch.setattr("audit_log.portalocker", MockPortalocker())
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.portalocker", MockPortalocker())
 
     # Mock other integrations
-    monkeypatch.setattr("audit_log.KAFKA_AVAILABLE", False)
-    monkeypatch.setattr("audit_log.DLT_BACKEND_AVAILABLE", False)
-    monkeypatch.setattr("audit_log.REQUESTS_AVAILABLE", False)
-    monkeypatch.setattr("audit_log.ETHEREUM_AVAILABLE", False)
-    monkeypatch.setattr("audit_log.ELASTIC_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.KAFKA_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.DLT_BACKEND_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.REQUESTS_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.ETHEREUM_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.ELASTIC_AVAILABLE", False)
 
 
 @pytest.fixture
@@ -121,7 +121,7 @@ def caplog(caplog):
 async def test_validate_dependencies_production(mock_env, monkeypatch, caplog):
     """Test dependency validation in production."""
     monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.setattr("audit_log.CRYPTO_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.CRYPTO_AVAILABLE", False)
     with pytest.raises(SystemExit):
         audit_log.validate_dependencies()
     assert "cryptography not installed" in caplog.text
@@ -311,7 +311,7 @@ async def test_key_rotation_failure(temp_log_path, monkeypatch):
     def mock_generate():
         raise Exception("Test error")
 
-    monkeypatch.setattr("audit_log.Ed25519PrivateKey.generate", mock_generate)
+    monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.Ed25519PrivateKey.generate", mock_generate)
     logger = audit_log.AuditLogger(log_path=temp_log_path)
     success = await audit_log.key_rotation(logger)
     assert not success
