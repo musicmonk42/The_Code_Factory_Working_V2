@@ -20,10 +20,12 @@ class FernetEncryption:
             keys (List[bytes]): A list of one or more URL-safe base64-encoded keys.
                                 The first key in the list is the primary key for encryption.
         """
+        # Two-step validation provides clearer error messages:
+        # 1. Check for empty list
         if not keys:
             raise ValueError("At least one encryption key is required.")
         
-        # Validate each key explicitly - check for None and empty bytes
+        # 2. Validate each key explicitly - check for None and empty bytes
         if any(key is None or key == b"" for key in keys):
             raise ValueError("At least one encryption key is required, and none can be empty.")
 

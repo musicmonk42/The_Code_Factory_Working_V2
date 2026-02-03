@@ -35,6 +35,8 @@ class TestConsistentHashRing(unittest.TestCase):
 
     def test_initialization_empty_nodes(self):
         """Test initialization with empty node list."""
+        # Import patch locally to ensure pytest-xdist compatibility
+        # (module-level @patch decorators fail with process forking)
         from unittest.mock import patch
         
         with patch("omnicore_engine.message_bus.hash_ring.logger") as mock_logger:
@@ -245,7 +247,7 @@ class TestConsistentHashRing(unittest.TestCase):
 
     def test_add_node_dynamic_duplicate(self):
         """Test dynamic addition of duplicate node."""
-        from unittest.mock import patch, Mock
+        from unittest.mock import patch
         
         ring = ConsistentHashRing(nodes=["node1"], replicas=10)
         rebalance_callback = Mock()
@@ -276,7 +278,7 @@ class TestConsistentHashRing(unittest.TestCase):
 
     def test_remove_node_dynamic_nonexistent(self):
         """Test dynamic removal of non-existent node."""
-        from unittest.mock import patch, Mock
+        from unittest.mock import patch
         
         ring = ConsistentHashRing(nodes=["node1"], replicas=10)
         rebalance_callback = Mock()
