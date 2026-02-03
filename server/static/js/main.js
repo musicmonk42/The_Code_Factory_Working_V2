@@ -2472,12 +2472,6 @@ async function startClarification() {
             updateClarifierStatus('Complete', 'active');
             addClarifierMessage('system', '✅ Requirements are clear - no clarification needed', 'System');
             
-            // TODO: Auto-start codegen after clarification is complete
-            // setTimeout(() => {
-            //     addClarifierMessage('system', 'Starting code generation...', 'System');
-            //     startCodegen(currentClarifierJobId);
-            // }, 1500);
-            
         } else if (result.clarifications && result.clarifications.length > 0) {
             // Legacy response format - handle for backward compatibility
             updateClarifierStatus('Waiting for your answers', 'waiting');

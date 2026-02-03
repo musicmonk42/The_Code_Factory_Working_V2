@@ -14,6 +14,7 @@ This module implements proper agent integration with:
 
 import aiofiles
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -1666,7 +1667,6 @@ class OmniCoreService:
                 output_dir.mkdir(parents=True, exist_ok=True)
                 
                 report_path = output_dir / "critique_report.json"
-                import json
                 async with aiofiles.open(report_path, "w", encoding="utf-8") as f:
                     await f.write(json.dumps(critique_result, indent=2))
                 
