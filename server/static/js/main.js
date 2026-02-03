@@ -29,10 +29,10 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
     const timeout = options.timeout || 30000;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
-            
             const response = await fetch(url, {
                 ...options,
                 signal: controller.signal
@@ -41,17 +41,23 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
             clearTimeout(timeoutId);
             
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                // Check if it's a client error (4xx) - don't retry these
+                const isClientError = response.status >= 400 && response.status < 500;
+                const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+                error.isClientError = isClientError;
+                throw error;
             }
             
             return response;
         } catch (error) {
+            clearTimeout(timeoutId);
+            
             if (attempt === maxRetries) {
                 throw error;
             }
             
-            // Don't retry on 4xx errors (client errors)
-            if (error.message.match(/HTTP 4\d{2}:/)) {
+            // Don't retry on client errors (4xx)
+            if (error.isClientError) {
                 throw error;
             }
             
@@ -273,7 +279,7 @@ function connectWebSocket() {
             const closeReason = event.reason || 'No reason provided';
             const wasClean = event.wasClean;
             
-            console.log(`WebSocket closed. Code: ${closeCode}, Reason: ${closeReason}, Clean: ${wasClean ? 'clean' : 'unclean'}`);
+            console.log(`WebSocket closed. Code: ${closeCode}, Reason: ${closeReason}, Clean: ${wasClean}`);
             
             // Only update state if not already reconnecting
             if (connectionState !== ConnectionState.RECONNECTING) {
@@ -353,8 +359,9 @@ function attemptReconnect() {
     updateConnectionState(ConnectionState.RECONNECTING);
     
     const delay = getReconnectDelay();
-    console.log(`Attempting reconnection ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
-    addEvent('System', `Reconnecting in ${delay/1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`, 'info');
+    const delaySeconds = delay / 1000;
+    console.log(`Attempting reconnection ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delaySeconds}s`);
+    addEvent('System', `Reconnecting in ${delaySeconds}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`, 'info');
     
     reconnectTimeoutId = setTimeout(() => {
         connectWebSocket();
