@@ -389,19 +389,18 @@ Divide two numbers with zero-division handling.
     }
 
     # FIX: Use AsyncMock for async functions to properly support 'await'
-    async_mock1 = AsyncMock(return_value=doc_response)
-    async_mock2 = AsyncMock(return_value=doc_response)
+    docgen_agent_llm_mock = AsyncMock(return_value=doc_response)
+    docgen_prompt_llm_mock = AsyncMock(return_value=doc_response)
     
     patches = [
-        patch("generator.agents.docgen_agent.docgen_agent.call_llm_api", async_mock1),
-        # FIX: Removed patch for call_ensemble_api as it doesn't exist in docgen_agent
-        patch("generator.agents.docgen_agent.docgen_prompt.call_llm_api", async_mock2),
+        patch("generator.agents.docgen_agent.docgen_agent.call_llm_api", docgen_agent_llm_mock),
+        patch("generator.agents.docgen_agent.docgen_prompt.call_llm_api", docgen_prompt_llm_mock),
     ]
 
     for p in patches:
         p.start()
     
-    mocks = [async_mock1, async_mock2]
+    mocks = [docgen_agent_llm_mock, docgen_prompt_llm_mock]
 
     yield mocks
 
