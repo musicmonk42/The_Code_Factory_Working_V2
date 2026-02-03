@@ -651,6 +651,21 @@ class OmniCoreService:
                 "to_check_status": "GET /api/jobs/{job_id}/progress",
             },
         }
+    
+    async def start_periodic_audit_flush(self):
+        """
+        Start periodic audit flush task.
+        
+        HIGH: Call this from application startup to enable periodic audit log flushing.
+        """
+        if self._audit_client and self._omnicore_components_available.get("audit"):
+            try:
+                await self._audit_client.start_periodic_flush()
+                logger.info("✓ Periodic audit flush initialized via OmniCore service")
+            except Exception as e:
+                logger.warning(f"Failed to start periodic audit flush: {e}", exc_info=True)
+        else:
+            logger.debug("Audit client not available, skipping periodic flush initialization")
 
     async def route_job(
         self,

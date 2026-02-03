@@ -588,6 +588,15 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     logger.info("=" * 80)
     logger.info("Platform initialization complete")
     logger.info("=" * 80)
+    
+    # HIGH: Start periodic audit flush task now that event loop is running
+    try:
+        from server.utils.omnicore import get_omnicore_service
+        omnicore = get_omnicore_service()
+        if omnicore:
+            await omnicore.start_periodic_audit_flush()
+    except Exception as e:
+        logger.warning(f"Failed to initialize periodic audit flush: {e}", exc_info=True)
 
 
 @asynccontextmanager
