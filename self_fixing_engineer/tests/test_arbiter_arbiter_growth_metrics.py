@@ -180,7 +180,7 @@ def test_get_or_create_uses_custom_buckets_from_config(
 def test_get_or_create_handles_unregister_failure(isolated_registry):
     """Tests that unregister failures are handled gracefully."""
     # Create a Counter
-    get_or_create_metric(
+    counter = get_or_create_metric(
         Counter, "test_metric", "Test metric", registry=isolated_registry
     )
 
@@ -188,13 +188,15 @@ def test_get_or_create_handles_unregister_failure(isolated_registry):
     with patch.object(
         isolated_registry, "unregister", side_effect=Exception("Unregister failed")
     ):
-        # Should still create the new metric type
-        gauge = get_or_create_metric(
+        # When unregister fails, should return existing metric to avoid duplicate error
+        result = get_or_create_metric(
             Gauge, "test_metric", "Test metric", registry=isolated_registry
         )
 
-        # The old counter should still exist, but we get a new gauge
-        assert isinstance(gauge, Gauge)
+        # The old counter should be returned since unregister failed
+        # (can't create a new Gauge if the Counter can't be unregistered)
+        assert isinstance(result, Counter)
+        assert result is counter
 
 
 def test_concurrent_metric_creation(isolated_registry):
