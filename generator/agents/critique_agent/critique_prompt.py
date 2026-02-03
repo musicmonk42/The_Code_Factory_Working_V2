@@ -113,7 +113,7 @@ except ImportError as e:
     def log_audit_event(*args, **kwargs):
         logging.warning("Audit logging disabled.")
 
-    def log_action(*args, **kwargs):
+    async def log_action(*args, **kwargs):
         logging.warning("Log action disabled.")
 
     def redact_secrets(text: str) -> str:

@@ -89,7 +89,7 @@ def patch_prompt_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # --- Logging stub ---
 
-    def fake_log_action(event: str, details: Dict[str, Any] | None = None) -> None:
+    async def fake_log_action(event: str, details: Dict[str, Any] | None = None) -> None:
         # Intentionally ignore; we only assert that calls don't explode.
         return None
 

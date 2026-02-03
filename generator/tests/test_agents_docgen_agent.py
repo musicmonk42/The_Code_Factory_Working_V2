@@ -135,17 +135,13 @@ def mock_llm_calls():
         patch(
             "agents.docgen_agent.docgen_agent.call_llm_api", new_callable=AsyncMock
         ) as mock_llm,
-        patch(
-            "agents.docgen_agent.docgen_agent.call_ensemble_api", new_callable=AsyncMock
-        ) as mock_ensemble,
     ):
 
         mock_llm.return_value = {
             "content": "# Mocked LLM Docs",
             "usage": {"input_tokens": 10, "output_tokens": 5},
         }
-        mock_ensemble.return_value = mock_llm.return_value
-        yield {"llm": mock_llm, "ensemble": mock_ensemble}
+        yield {"llm": mock_llm}
 
 
 @pytest.fixture
@@ -180,9 +176,6 @@ def agent(temp_repo):
         patch("agents.docgen_agent.SphinxDocGenerator") as MockSphinxGen,
         patch("agents.docgen_agent.BatchProcessor") as MockBatchProcessor,
         patch("agents.docgen_agent.docgen_agent.call_llm_api", new_callable=AsyncMock),
-        patch(
-            "agents.docgen_agent.docgen_agent.call_ensemble_api", new_callable=AsyncMock
-        ),
     ):
 
         MockPromptAgent.return_value.get_doc_prompt = AsyncMock(

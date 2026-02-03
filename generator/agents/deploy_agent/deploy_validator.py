@@ -638,7 +638,6 @@ class DockerValidator(Validator):
                 LLM_ERRORS_TOTAL.labels(
                     provider="deploy_validator",
                     model="gpt-4o",
-                    error_type="EmptyLLMResponse",
                 ).inc()
                 raise ValueError("LLM returned empty content for Dockerfile fix.")
 
@@ -654,7 +653,6 @@ class DockerValidator(Validator):
                 LLM_ERRORS_TOTAL.labels(
                     provider="deploy_validator",
                     model="gpt-4o",
-                    error_type=type(e).__name__,
                 ).inc()
             logger.error(
                 "Failed to fix Dockerfile issues using LLM: %s", e, exc_info=True
@@ -810,7 +808,6 @@ class HelmValidator(Validator):
                 LLM_ERRORS_TOTAL.labels(
                     provider="deploy_validator",
                     model="gpt-4o",
-                    error_type="EmptyLLMResponse",
                 ).inc()
                 raise ValueError("LLM returned empty content for Helm fix.")
 
@@ -826,7 +823,6 @@ class HelmValidator(Validator):
                 LLM_ERRORS_TOTAL.labels(
                     provider="deploy_validator",
                     model="gpt-4o",
-                    error_type=type(e).__name__,
                 ).inc()
             logger.error(
                 "Failed to fix Helm chart issues using LLM: %s", e, exc_info=True
