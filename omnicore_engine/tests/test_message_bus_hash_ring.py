@@ -17,7 +17,7 @@ class TestConsistentHashRing:
     """Test suite for ConsistentHashRing class."""
 
     @pytest.fixture(autouse=True)
-    def setup_method(self):
+    def setup(self):
         """Set up test fixtures before each test."""
         self.nodes = ["node1", "node2", "node3"]
         self.ring = ConsistentHashRing(nodes=self.nodes, replicas=100)

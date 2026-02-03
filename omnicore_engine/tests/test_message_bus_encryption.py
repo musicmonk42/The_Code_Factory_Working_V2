@@ -18,7 +18,7 @@ class TestFernetEncryption:
     """Test suite for FernetEncryption class."""
 
     @pytest.fixture(autouse=True)
-    def setup_method(self):
+    def setup(self):
         """Set up test fixtures before each test."""
         # Generate test keys
         self.key1 = Fernet.generate_key()
