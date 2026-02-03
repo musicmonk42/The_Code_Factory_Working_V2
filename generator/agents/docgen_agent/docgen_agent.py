@@ -1110,10 +1110,14 @@ class DocgenAgent:
                         )
 
                 # Combine validator issues and agent-level issues
-                all_compliance_issues = (
-                    validator_result["issues"].get("compliance_issues", [])
-                    + agent_compliance_issues
-                )
+                # FIX: Handle both list and dict formats for validator_result["issues"]
+                validator_issues = validator_result.get("issues", [])
+                if isinstance(validator_issues, dict):
+                    compliance_from_validator = validator_issues.get("compliance_issues", [])
+                else:
+                    # If issues is a list, there are no compliance-specific issues from validator
+                    compliance_from_validator = []
+                all_compliance_issues = compliance_from_validator + agent_compliance_issues
 
                 # 7. Generate Sphinx documentation if requested
                 sphinx_rst = None
@@ -1492,10 +1496,14 @@ class DocgenAgent:
                 except Exception as e:
                     logger.error(f"Compliance plugin '{plugin.name}' failed: {e}")
 
-            all_compliance_issues = (
-                validator_result["issues"].get("compliance_issues", [])
-                + agent_compliance_issues
-            )
+            # FIX: Handle both list and dict formats for validator_result["issues"]
+            validator_issues = validator_result.get("issues", [])
+            if isinstance(validator_issues, dict):
+                compliance_from_validator = validator_issues.get("compliance_issues", [])
+            else:
+                # If issues is a list, there are no compliance-specific issues from validator
+                compliance_from_validator = []
+            all_compliance_issues = compliance_from_validator + agent_compliance_issues
 
             yield {
                 "stage": "compliance",
