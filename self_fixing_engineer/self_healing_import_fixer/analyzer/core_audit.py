@@ -45,6 +45,16 @@ REGULATORY_MODE = (
     os.getenv("REGULATORY_MODE", "true").lower() == "true" and not TESTING_MODE
 )
 
+# AUDIT_VERIFY_ON_STARTUP: Control whether to verify audit log integrity on startup
+# Default: disabled unless explicitly enabled or in production/regulatory mode
+# This prevents false positives during development and allows system to start
+# even if there are pre-existing logs from different configurations
+AUDIT_VERIFY_ON_STARTUP = (
+    os.getenv("AUDIT_VERIFY_ON_STARTUP", "false").lower() == "true"
+    or (PRODUCTION_MODE and not TESTING_MODE)
+    or (REGULATORY_MODE and not TESTING_MODE)
+)
+
 # --- Import Core Dependencies ---
 try:
     from .core_secrets import SECRETS_MANAGER
@@ -418,15 +428,36 @@ class RegulatoryAuditLogger:
     async def verify_integrity(self, full_scan: bool = False) -> bool:
         """
         Verify audit log integrity.
+        
+        Args:
+            full_scan: If True, verify entire log. If False, verify based on config.
 
         Returns:
             bool: True if integrity verified, exits system if compromised
         """
+        # Check if verification should be skipped based on configuration
+        if not AUDIT_VERIFY_ON_STARTUP and not full_scan:
+            logger.info(
+                "Audit log verification skipped (AUDIT_VERIFY_ON_STARTUP=false). "
+                "Set AUDIT_VERIFY_ON_STARTUP=true or enable PRODUCTION_MODE to enforce verification."
+            )
+            return True
+        
         violations = []
         line_number = 0
         previous_hash = None
 
         try:
+            # Check if log file exists and has content
+            if not self.primary_log.exists():
+                logger.info("Audit log file does not exist yet - skipping verification")
+                return True
+                
+            # Check if log file is empty
+            if self.primary_log.stat().st_size == 0:
+                logger.info("Audit log file is empty - skipping verification")
+                return True
+
             if AIOFILES_AVAILABLE:
                 async with aiofiles.open(self.primary_log, "rb") as f:
                     async for line in f:
@@ -464,10 +495,25 @@ class RegulatoryAuditLogger:
                                 )
 
                             # Verify hash chain
-                            if (
+                            # Special handling for first entry (line 1) and potential log rotation
+                            if line_number == 1:
+                                # First entry - establish genesis
+                                if stored_previous_hash is not None:
+                                    logger.warning(
+                                        "First audit log entry has non-null previous_hash. "
+                                        "This may indicate log rotation or improper initialization."
+                                    )
+                            elif line_number == 2 and previous_hash is None:
+                                # Second entry but no previous hash computed - might be after log rotation
+                                logger.warning(
+                                    "Audit log appears to have been rotated or reinitialized. "
+                                    "Re-establishing hash chain from current position."
+                                )
+                            elif (
                                 previous_hash is not None
                                 and stored_previous_hash != previous_hash
                             ):
+                                # Hash chain broken - this is a potential security issue
                                 violations.append(
                                     {
                                         "line": line_number,
@@ -530,10 +576,25 @@ class RegulatoryAuditLogger:
                                 )
 
                             # Verify hash chain
-                            if (
+                            # Special handling for first entry (line 1) and potential log rotation
+                            if line_number == 1:
+                                # First entry - establish genesis
+                                if stored_previous_hash is not None:
+                                    logger.warning(
+                                        "First audit log entry has non-null previous_hash. "
+                                        "This may indicate log rotation or improper initialization."
+                                    )
+                            elif line_number == 2 and previous_hash is None:
+                                # Second entry but no previous hash computed - might be after log rotation
+                                logger.warning(
+                                    "Audit log appears to have been rotated or reinitialized. "
+                                    "Re-establishing hash chain from current position."
+                                )
+                            elif (
                                 previous_hash is not None
                                 and stored_previous_hash != previous_hash
                             ):
+                                # Hash chain broken - this is a potential security issue
                                 violations.append(
                                     {
                                         "line": line_number,
