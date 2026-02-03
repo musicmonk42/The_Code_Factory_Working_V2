@@ -132,7 +132,7 @@ class TestCaseResultModel(BaseModel):
             status = str(status).lower()
             allowed = {"passed", "failed", "error", "skipped"}
             if status not in allowed:
-                raise ValueError(f"Invalid status for TestCaseResultModel: {status}")
+                raise ValueError(f"Invalid status for TestCaseResult: {status}")
             values["status"] = status
         return values
 
