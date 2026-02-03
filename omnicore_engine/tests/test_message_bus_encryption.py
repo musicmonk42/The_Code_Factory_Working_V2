@@ -30,6 +30,8 @@ class TestFernetEncryption:
 
         # Create encryption instance with multiple keys for rotation
         self.encryption_multi = FernetEncryption([self.key1, self.key2, self.key3])
+        
+        yield
 
     def test_initialization_single_key(self):
         """Test initialization with a single key."""
