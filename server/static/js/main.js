@@ -51,7 +51,7 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
             }
             
             // Don't retry on 4xx errors (client errors)
-            if (error.message.match(/HTTP 4\d{2}/)) {
+            if (error.message.match(/HTTP 4\d{2}:/)) {
                 throw error;
             }
             
@@ -287,8 +287,8 @@ function connectWebSocket() {
             document.getElementById('disconnect-stream').disabled = true;
             
             const message = isReconnecting ? 
-                `Connection lost (${closeCode}). Reconnecting...` :
-                `Disconnected (${closeCode}: ${closeReason})`;
+                `Connection lost. Code: ${closeCode}. Reconnecting...` :
+                `Disconnected. Code: ${closeCode}, Reason: ${closeReason}`;
             addEvent('System', message, 'warning');
             
             // Attempt automatic reconnection for abnormal closures
