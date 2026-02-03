@@ -1363,7 +1363,7 @@ class OmniCoreService:
                 
                 logger.info(f"[TESTGEN] Test generation completed for job {job_id}")
                 return {
-                    "status": "success",
+                    "status": "completed",
                     "job_id": job_id,
                     "result": result,
                 }
