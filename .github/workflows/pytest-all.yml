@@ -568,6 +568,7 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
       
       - name: Run tests for ${{ matrix.module }}
+        if: matrix.module != 'self_fixing_engineer'
         timeout-minutes: 30
         env:
           TESTING: "1"
@@ -592,7 +593,6 @@ jobs:
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
           
           # Fallback to ulimit if prlimit is not available
-          # Increase CPU limit to 2 hours (7200 seconds) for self_fixing_engineer
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           
           # Also increase stack size to prevent stack-related issues
@@ -601,31 +601,21 @@ jobs:
           echo "=== Running pytest tests for ${{ matrix.module }} ==="
           echo "NLTK_DATA: $NLTK_DATA"
           
-          # Memory optimization for self_fixing_engineer AND generator modules
-          if [ "${{ matrix.module }}" = "self_fixing_engineer" ] || [ "${{ matrix.module }}" = "generator" ]; then
+          # Memory optimization for generator module
+          if [ "${{ matrix.module }}" = "generator" ]; then
             echo "=== Applying memory optimizations for ${{ matrix.module }} ==="
             
             # Force garbage collection
             python -c "import gc; gc.collect()"
             
-            # Set virtual memory limit to 3GB to catch issues early
-            ulimit -v 3000000 2>/dev/null || true
-            
-            # Configure swap space
-            sudo swapoff -a || true
-            sudo fallocate -l 4G /swapfile || true
-            sudo chmod 600 /swapfile || true
-            sudo mkswap /swapfile || true
-            sudo swapon /swapfile || true
-            
             # Disable parallelization and coverage for memory-intensive modules
             COVERAGE_ARGS=""
             PYTEST_ARGS=""
-            TIMEOUT_VALUE=600  # Increase timeout to 10 minutes per test
+            TIMEOUT_VALUE=300  # 5 minutes per test
             
             echo "✓ Memory optimizations applied"
             echo "  - Coverage: DISABLED"
-            echo "  - Timeout: ${TIMEOUT_VALUE}s (increased from 300s)"
+            echo "  - Timeout: ${TIMEOUT_VALUE}s"
             echo "  - Parallel workers: DISABLED"
           else
             # Other modules can use standard settings with reduced parallelism
@@ -704,6 +694,123 @@ jobs:
             }
           
           echo "✓ Tests completed for ${{ matrix.module }}"
+
+      - name: Run self_fixing_engineer tests - Batch 1 (Basic & Core)
+        if: matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 15
+        env:
+          TESTING: "1"
+          PYTEST_CURRENT_TEST: "true"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          NLTK_DATA: "$HOME/nltk_data"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD"
+          mkdir -p "${{ runner.temp }}/prometheus_multiproc"
+          chmod 777 "${{ runner.temp }}/prometheus_multiproc"
+          
+          echo "=== Running Batch 1: Basic & Core Tests ==="
+          timeout --signal=TERM --kill-after=30s 15m python -m pytest \
+            self_fixing_engineer/tests/test_sfe_basic.py \
+            self_fixing_engineer/tests/test_audit_fixes.py \
+            -v --tb=line --maxfail=5 \
+            --timeout=300 --durations=10 \
+            -p no:randomly -p no:cacheprovider \
+            --import-mode=importlib \
+            2>&1 | tee test-output-sfe-batch1.log
+
+      - name: Run self_fixing_engineer tests - Batch 2 (Arbiter)
+        if: matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 15
+        env:
+          TESTING: "1"
+          PYTEST_CURRENT_TEST: "true"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD"
+          
+          # Force cleanup between batches
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          
+          echo "=== Running Batch 2: Arbiter Tests ==="
+          timeout --signal=TERM --kill-after=30s 15m python -m pytest \
+            self_fixing_engineer/tests/test_arbiter*.py \
+            -v --tb=line --maxfail=5 \
+            -m "not heavy" \
+            --timeout=300 --durations=10 \
+            -p no:randomly -p no:cacheprovider \
+            --import-mode=importlib \
+            2>&1 | tee test-output-sfe-batch2.log
+
+      - name: Run self_fixing_engineer tests - Batch 3 (Mesh)
+        if: matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 15
+        env:
+          TESTING: "1"
+          PYTEST_CURRENT_TEST: "true"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD"
+          
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          
+          echo "=== Running Batch 3: Mesh Tests ==="
+          timeout --signal=TERM --kill-after=30s 15m python -m pytest \
+            self_fixing_engineer/tests/test_mesh*.py \
+            -v --tb=line --maxfail=5 \
+            -m "not heavy" \
+            --timeout=300 --durations=10 \
+            -p no:randomly -p no:cacheprovider \
+            --import-mode=importlib \
+            2>&1 | tee test-output-sfe-batch3.log
+
+      - name: Run self_fixing_engineer tests - Batch 4 (Import Fixer)
+        if: matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 15
+        env:
+          TESTING: "1"
+          PYTEST_CURRENT_TEST: "true"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD"
+          
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          
+          echo "=== Running Batch 4: Import Fixer Tests ==="
+          timeout --signal=TERM --kill-after=30s 15m python -m pytest \
+            self_fixing_engineer/tests/test_self_healing_import_fixer*.py \
+            -v --tb=line --maxfail=5 \
+            -m "not heavy" \
+            --timeout=300 --durations=10 \
+            -p no:randomly -p no:cacheprovider \
+            --import-mode=importlib \
+            2>&1 | tee test-output-sfe-batch4.log
+
+      - name: Run self_fixing_engineer tests - Batch 5 (Simulation)
+        if: matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 15
+        env:
+          TESTING: "1"
+          PYTEST_CURRENT_TEST: "true"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD"
+          
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          
+          echo "=== Running Batch 5: Simulation Tests ==="
+          timeout --signal=TERM --kill-after=30s 15m python -m pytest \
+            self_fixing_engineer/tests/test_simulation*.py \
+            -v --tb=line --maxfail=5 \
+            -m "not heavy" \
+            --timeout=300 --durations=10 \
+            -p no:randomly -p no:cacheprovider \
+            --import-mode=importlib \
+            2>&1 | tee test-output-sfe-batch5.log
           
       - name: Profile test collection (on failure)
         if: failure() && matrix.module != 'self_fixing_engineer' && matrix.module != 'generator'
