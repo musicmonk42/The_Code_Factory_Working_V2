@@ -332,7 +332,7 @@ class TestConsistentHashRing:
         after_counts = Counter(after_failure.values())
 
         # node2 should have no keys
-        assert after_counts.get("node2" == 0, 0)
+        assert after_counts.get("node2", 0) == 0
 
         # Keys from node2 should be redistributed to node1 and node3
         node2_keys = [k for k, v in before_failure.items() if v == "node2"]
