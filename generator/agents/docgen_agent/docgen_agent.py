@@ -1090,7 +1090,6 @@ class DocgenAgent:
                     await response_validator.process_and_validate_response(
                         raw_response=llm_response,
                         output_format=output_format,  # Use the mapped format
-                        lang="en",
                         auto_correct=True,
                         repo_path=self.repo_path,
                     )

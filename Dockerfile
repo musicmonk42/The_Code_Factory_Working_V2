@@ -209,11 +209,22 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install ca-certificates first for SSL support
 # Add graphviz for PlantUML diagram generation support
 # Add libvirt-dev and pkg-config for virtualization support (optional)
+# Add wget, gnupg, lsb-release for Trivy installation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
- && apt-get install -y --no-install-recommends curl git libmagic1 graphviz libvirt-dev pkg-config \
+ && apt-get install -y --no-install-recommends curl git libmagic1 graphviz libvirt-dev pkg-config wget gnupg lsb-release \
  && rm -rf /var/lib/apt/lists/*
+
+# Install Trivy for security scanning (deployment validation)
+# Trivy is required for deploy agent security scanning functionality
+# Following modern GPG key management practices (apt-key is deprecated)
+RUN wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/trivy-archive-keyring.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/trivy.list > /dev/null && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends trivy && \
+    rm -rf /var/lib/apt/lists/* && \
+    trivy --version
 
 # Create non-root user with restricted shell for security
 # Using specific UID/GID to prevent privilege escalation attacks
