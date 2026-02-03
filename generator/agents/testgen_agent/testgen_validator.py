@@ -46,7 +46,7 @@ from runner import (  # Removed tracer - doesn't exist in runner
 # FIX: Import audit functions directly now that circular import is resolved
 from runner.runner_logging import logger
 from runner.runner_audit import log_audit_event as add_provenance, log_audit_event_sync as add_provenance_sync
-from runner.runner_mutation import (  # FIX 2: Added Mutation Runner Imports
+from generator.runner.runner_mutation import (  # FIX 2: Added Mutation Runner Imports
     mutation_test,
     property_based_test,
 )

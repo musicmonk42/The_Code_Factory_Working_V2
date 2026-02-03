@@ -105,7 +105,7 @@ sys.modules["watchdog.observers"] = Mock()
 sys.modules["watchdog.observers"].Observer = MockObserver
 
 # Now import the module under test
-from agents.testgen_agent.testgen_validator import (
+from generator.agents.testgen_agent.testgen_validator import (
     MAX_SANDBOX_RUNS,
     CoverageValidator,
     MutationValidator,

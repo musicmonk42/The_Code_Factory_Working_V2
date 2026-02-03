@@ -6,8 +6,8 @@ from typing import Any, AsyncIterator, Dict
 from unittest.mock import patch
 
 import pytest
-from runner import runner_mutation
-from runner.runner_mutation import (
+from generator.runner import runner_mutation
+from generator.runner.runner_mutation import (
     _MUTATOR_REGISTRY,
     fuzz_test,
     mutation_test,
