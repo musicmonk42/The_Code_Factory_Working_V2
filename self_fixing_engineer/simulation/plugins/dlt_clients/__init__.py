@@ -42,12 +42,13 @@ _base_logger = logging.getLogger("dlt_clients")
 _base_logger.setLevel(logging.DEBUG)
 
 # Check if we're in test mode to avoid starting threads during collection
+# Note: pytest presence always enables test mode for safety during test collection
 import os
 _IN_TEST_MODE = os.environ.get("TEST_MODE", "").lower() == "true" or "pytest" in sys.modules
 
 if not _base_logger.handlers:
     if _IN_TEST_MODE:
-        # In test mode, use a simple handler to avoid thread issues
+        # In test mode, use a simple handler to avoid thread issues during test collection
         handler = logging.StreamHandler(sys.stdout)
         formatter = logging.Formatter(
             "%(asctime)s - [%(levelname)s] - %(name)s - client:%(client_type)s - cid:%(correlation_id)s - %(message)s"
@@ -74,5 +75,7 @@ if not _base_logger.handlers:
             listener.start()
             _base_logger.addHandler(queue_handler)
         except RuntimeError:
-            # Fallback if thread creation fails
+            # Fallback: Thread creation failed (e.g., resource constraints, certain test environments)
+            # Using direct handler attachment - note this is not thread-safe for concurrent logging
+            _base_logger.warning("QueueListener thread creation failed, using direct handler (not thread-safe)")
             _base_logger.addHandler(handler)
