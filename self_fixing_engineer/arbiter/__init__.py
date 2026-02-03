@@ -54,7 +54,11 @@ def _load_components():
     # Import and expose main components that tests and other modules expect
     try:
         # Import arbiter.py module explicitly to avoid circular reference
-        import self_fixing_engineer.arbiter.arbiter as _arbiter
+        # First trigger the import to populate sys.modules
+        import self_fixing_engineer.arbiter.arbiter
+        # Then get the actual module from sys.modules (the import statement above
+        # may return None due to __init__.py setting arbiter=None at module level)
+        _arbiter = sys.modules.get('self_fixing_engineer.arbiter.arbiter')
         from .arbiter import Arbiter as _Arbiter
         arbiter = _arbiter
         Arbiter = _Arbiter
