@@ -1015,6 +1015,24 @@ class HCLHandler(FormatHandler):
         return issues
 
 
+class MarkdownHandler(FormatHandler):
+    """
+    Handler for Markdown documentation format (e.g., deployment docs).
+    Minimal validation for documentation content.
+    """
+
+    def parse(self, content: str) -> dict:
+        """Parse markdown content into a simple structure."""
+        return {"content": content, "type": "markdown"}
+
+    def validate(self, data: dict) -> list:
+        """Validate markdown documentation content."""
+        issues = []
+        if not data or not data.get("content"):
+            issues.append("Markdown documentation content is empty.")
+        return issues
+
+
 class HandlerRegistry:
     """
     Registry for format handlers with hot-reload capability.
@@ -1048,6 +1066,7 @@ class HandlerRegistry:
             "yaml": YAMLHandler,
             "json": JSONHandler,
             "hcl": HCLHandler,
+            "markdown": MarkdownHandler,
         }
         for fmt, handler_class in built_in_handlers.items():
             self.handlers[fmt] = handler_class
