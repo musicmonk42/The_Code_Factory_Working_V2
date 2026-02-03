@@ -1043,20 +1043,25 @@ api = FastAPI(
 api.state.limiter = limiter
 api.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# PRODUCTION FIX: Restrict CORS origins. Load allowed origins from an environment variable.
-allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "")
+# PRODUCTION FIX: Restrict CORS origins. Load allowed origins from environment variable.
+# Support both ALLOWED_ORIGINS and CORS_ORIGINS for compatibility
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "") or os.getenv("CORS_ORIGINS", "")
 allowed_origins = [
     origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()
 ]
 if not allowed_origins and _FASTAPI_AVAILABLE:
+    # Default to common development origins when ALLOWED_ORIGINS/CORS_ORIGINS is not set
+    # In production, ALLOWED_ORIGINS or CORS_ORIGINS should be explicitly configured
+    allowed_origins = ["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:3000", "http://127.0.0.1:8000"]
     logger.warning(
-        "ALLOWED_ORIGINS environment variable not set. CORS will be disabled."
+        "ALLOWED_ORIGINS/CORS_ORIGINS environment variable not set. Using default development origins: %s",
+        allowed_origins
     )
 
 if _FASTAPI_AVAILABLE:
     api.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # MODIFIED as per Step 3 (For testing; restrict in prod)
+        allow_origins=allowed_origins,  # Use configured origins instead of wildcard
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
