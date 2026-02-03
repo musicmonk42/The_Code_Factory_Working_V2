@@ -630,6 +630,7 @@ class ExplainAudit:
         self.buffer: List[ExplainRecord] = []
         self.buffer_size = self.config.AUDIT_BUFFER_SIZE
         self.flush_interval = self.config.AUDIT_FLUSH_INTERVAL
+        self.flush_task_started = False  # Track if flush task is running
 
         self.web3 = None
         self.encrypter: Optional[Fernet] = None
@@ -1592,6 +1593,11 @@ class ExplainAudit:
             raise
 
     def _start_flush_task(self):
+        """Start periodic flush task if not already started."""
+        if self.flush_task_started:
+            logger.debug("Periodic flush task already started, skipping")
+            return
+            
         async def periodic_flush_coro():
             while True:
                 await asyncio.sleep(self.flush_interval)
@@ -1612,15 +1618,46 @@ class ExplainAudit:
             try:
                 asyncio.get_running_loop()  # Raises RuntimeError if no loop
                 asyncio.create_task(periodic_flush_coro())
-                logger.info("Periodic audit flush task created.")
+                self.flush_task_started = True
+                logger.info(f"Periodic audit flush task started (interval: {self.flush_interval}s)")
             except RuntimeError:
                 logger.warning(
-                    "No running event loop found; periodic audit flush task will not start automatically. Buffer relies on size threshold."
+                    "No running event loop found; periodic audit flush task will not start automatically. "
+                    "Buffer relies on size threshold. Call start_periodic_flush() from async context to enable."
                 )
         except RuntimeError:
             logger.warning(
-                "No running event loop found at init; periodic audit flush task will not start automatically. Buffer relies on size threshold."
+                "No running event loop found at init; periodic audit flush task will not start automatically. "
+                "Buffer relies on size threshold. Call start_periodic_flush() from async context to enable."
             )
+    
+    async def start_periodic_flush(self):
+        """
+        PUBLIC: Start periodic flush task from an async context.
+        
+        Call this from application startup (e.g., FastAPI lifespan) to enable
+        periodic audit log flushing when event loop is guaranteed to be running.
+        """
+        if self.flush_task_started:
+            logger.debug("Periodic flush task already running")
+            return
+        
+        async def periodic_flush_coro():
+            while True:
+                await asyncio.sleep(self.flush_interval)
+                try:
+                    await self._flush_buffer()
+                except Exception as e:
+                    logger.error(
+                        f"Error during periodic audit flush: {e}", exc_info=True
+                    )
+        
+        try:
+            asyncio.create_task(periodic_flush_coro())
+            self.flush_task_started = True
+            logger.info(f"✓ Periodic audit flush task started (interval: {self.flush_interval}s)")
+        except Exception as e:
+            logger.error(f"Failed to start periodic audit flush task: {e}", exc_info=True)
 
     async def _log_audit(
         self, event: str, sim_id: str, user_id: str, details: Dict[str, Any]

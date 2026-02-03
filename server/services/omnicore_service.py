@@ -651,6 +651,21 @@ class OmniCoreService:
                 "to_check_status": "GET /api/jobs/{job_id}/progress",
             },
         }
+    
+    async def start_periodic_audit_flush(self):
+        """
+        Start periodic audit flush task.
+        
+        HIGH: Call this from application startup to enable periodic audit log flushing.
+        """
+        if self._audit_client and self._omnicore_components_available.get("audit"):
+            try:
+                await self._audit_client.start_periodic_flush()
+                logger.info("✓ Periodic audit flush initialized via OmniCore service")
+            except Exception as e:
+                logger.warning(f"Failed to start periodic audit flush: {e}", exc_info=True)
+        else:
+            logger.debug("Audit client not available, skipping periodic flush initialization")
 
     async def route_job(
         self,
@@ -688,7 +703,16 @@ class OmniCoreService:
             
             try:
                 result = await self._dispatch_generator_action(job_id, action, payload)
-                logger.info(f"Task Completed: Job {job_id} action {action} finished successfully")
+                # CRITICAL FIX: Check actual result status before logging success
+                # Don't log "finished successfully" if the job actually failed
+                result_status = result.get("status", "unknown")
+                if result_status in ["completed", "success", "acknowledged"]:
+                    logger.info(f"Task Completed: Job {job_id} action {action} finished successfully")
+                elif result_status in ["failed", "error"]:
+                    logger.error(f"Task Failed: Job {job_id} action {action} failed: {result.get('message', 'Unknown error')}")
+                else:
+                    logger.warning(f"Task Status: Job {job_id} action {action} finished with status: {result_status}")
+                
                 return {
                     "job_id": job_id,
                     "routed": True,

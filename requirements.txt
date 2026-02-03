@@ -179,6 +179,7 @@ jsonpointer==3.0.0
 jsonschema==4.25.1
 jsonschema-specifications==2025.4.1
 kafka-python==2.3.0
+confluent-kafka==2.3.0
 kiwisolver==1.4.9
 kubernetes==33.1.0
 langchain==0.3.27

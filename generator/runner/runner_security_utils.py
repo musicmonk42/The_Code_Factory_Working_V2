@@ -88,6 +88,62 @@ _PRESIDIO_NLP_MODE: bool = (
 # This module will no longer import or increment UTIL_ERRORS.
 
 
+def _add_custom_recognizers(analyzer_engine):
+    """
+    Add custom recognizers for entities not covered by default Presidio patterns.
+    
+    HIGH: Adds support for API_KEY and CARDINAL entities to prevent exposure in logs.
+    
+    Args:
+        analyzer_engine: Presidio AnalyzerEngine instance to add recognizers to
+    """
+    try:
+        from presidio_analyzer import Pattern, PatternRecognizer
+        
+        # HIGH: Add API_KEY recognizer for common API key patterns
+        # Matches patterns like: sk-abc123..., xai-..., Bearer ..., etc.
+        api_key_patterns = [
+            Pattern(
+                name="api_key_pattern_1",
+                regex=r"\b(sk|pk|xai|ghp|gho|Bearer)[-_]?[a-zA-Z0-9]{20,}\b",
+                score=0.8,
+            ),
+            Pattern(
+                name="api_key_pattern_2",
+                regex=r"\b[A-Z0-9]{32,}\b",  # Long alphanumeric strings (32+ chars)
+                score=0.5,
+            ),
+        ]
+        api_key_recognizer = PatternRecognizer(
+            supported_entity="API_KEY",
+            patterns=api_key_patterns,
+            context=["key", "token", "secret", "api", "bearer", "authorization"],
+        )
+        analyzer_engine.registry.add_recognizer(api_key_recognizer)
+        
+        # HIGH: Add CARDINAL recognizer to redact numbers that might be sensitive
+        # Matches standalone numbers (card IDs, account numbers, etc.)
+        # Using 8+ digits to avoid false positives with dates, ports, etc.
+        cardinal_patterns = [
+            Pattern(
+                name="cardinal_number",
+                regex=r"\b\d{8,}\b",  # Numbers with 8+ digits (account numbers, IDs)
+                score=0.3,
+            ),
+        ]
+        cardinal_recognizer = PatternRecognizer(
+            supported_entity="CARDINAL",
+            patterns=cardinal_patterns,
+            context=["id", "number", "account", "card", "ssn"],  # More specific context
+        )
+        analyzer_engine.registry.add_recognizer(cardinal_recognizer)
+        
+        logger.info("✓ Added custom recognizers for API_KEY and CARDINAL entities")
+        
+    except Exception as e:
+        logger.warning(f"Failed to add custom recognizers: {e}")
+
+
 # [NEW] Function to lazily load Presidio/spaCy dependencies
 def _load_presidio_engine() -> bool:
     """
@@ -142,25 +198,35 @@ def _load_presidio_engine() -> bool:
         # Enterprise-grade: Make model configurable via environment
         model_name = os.getenv("PRESIDIO_SPACY_MODEL", "en_core_web_sm")
 
+        # MEDIUM: Support multilingual PII detection for Spanish, Italian, Polish
         # Try with configured model (default: small), fallback to regex-only
-        # Using smaller model reduces memory footprint and startup time
+        # Using smaller models reduces memory footprint and startup time
         configuration = {
             "nlp_engine_name": "spacy",
-            "models": [{"lang_code": "en", "model_name": model_name}],
+            "models": [
+                {"lang_code": "en", "model_name": model_name},
+                # Add multilingual models if available
+                {"lang_code": "es", "model_name": "es_core_news_sm"},
+                {"lang_code": "it", "model_name": "it_core_news_sm"},
+                {"lang_code": "pl", "model_name": "pl_core_news_sm"},
+            ],
         }
 
         try:
             # Attempt to create NLP engine with configured model
             provider = NlpEngineProvider(nlp_configuration=configuration)
             nlp_engine = provider.create_engine()
-            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
-            # This ensures only English recognizers are loaded, matching the NLP engine configuration
+            # HIGH: Support multilingual PII detection (en, es, it, pl)
+            # This enables detection of Spanish NIF, Italian fiscal codes, Polish PESEL, etc.
             _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(
-                nlp_engine=nlp_engine, supported_languages=["en"]
+                nlp_engine=nlp_engine, supported_languages=["en", "es", "it", "pl"]
             )
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
             _PRESIDIO_NLP_MODE = True  # Full NLP mode available
+            
+            # HIGH: Add custom recognizers for API_KEY and CARDINAL entities
+            _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
             
             # Suppress non-critical Presidio warnings for unmapped entities
             # These warnings clutter logs but don't affect functionality
@@ -193,6 +259,9 @@ def _load_presidio_engine() -> bool:
             _PRESIDIO_AVAILABLE = True
             _PRESIDIO_NLP_MODE = False  # Degraded to regex-only mode
             
+            # HIGH: Add custom recognizers even in regex-only mode
+            _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
+            
             # Suppress non-critical Presidio warnings
             presidio_logger = logging.getLogger("presidio_analyzer")
             presidio_logger.addFilter(
@@ -219,6 +288,9 @@ def _load_presidio_engine() -> bool:
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
             _PRESIDIO_NLP_MODE = False  # Degraded to regex-only mode
+            
+            # HIGH: Add custom recognizers even in regex-only mode
+            _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
             
             # Suppress non-critical Presidio warnings
             presidio_logger = logging.getLogger("presidio_analyzer")

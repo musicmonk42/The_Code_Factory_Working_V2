@@ -735,13 +735,29 @@ Agent --> Dev : Deliver Report
             try:
                 time.time()
 
+                # CRITICAL FIX: Add configurable timeout for LLM calls to prevent indefinite hangs
+                # Default is 300s (increased from 120s) to handle heavy test generation workloads
+                # Can be configured via TESTGEN_LLM_TIMEOUT environment variable
+                llm_timeout = int(os.getenv("TESTGEN_LLM_TIMEOUT", "300"))
+                
                 # REFACTORED: Rely entirely on runner.llm_client for retry, metrics, and tracing
-                response = await call_ensemble_api(
-                    prompt=prompt,
-                    models=[{"model": llm_model}],  # call_ensemble_api expects a list
-                    voting_strategy="majority",  # Default strategy
-                    stream=stream,
-                )
+                # Wrap with asyncio.wait_for to enforce timeout
+                try:
+                    response = await asyncio.wait_for(
+                        call_ensemble_api(
+                            prompt=prompt,
+                            models=[{"model": llm_model}],  # call_ensemble_api expects a list
+                            voting_strategy="majority",  # Default strategy
+                            stream=stream,
+                        ),
+                        timeout=llm_timeout
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(
+                        f"[TESTGEN] LLM call timed out after {llm_timeout}s for purpose: {purpose}",
+                        extra=log_extra
+                    )
+                    raise  # Re-raise to trigger retry logic
 
                 # NOTE: All metric tracking is handled internally by call_ensemble_api
                 # and reflected in the provenance log. We remove all manual increments.
