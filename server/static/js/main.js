@@ -2504,8 +2504,17 @@ async function startClarification() {
  * Display a clarification question in the conversation
  */
 function displayClarificationQuestion(question, index) {
-    const questionText = typeof question === 'string' ? question : question.question || question;
-    const category = typeof question === 'object' ? question.category || "general" : "general";
+    // Extract question text - handle both string and object formats
+    let questionText;
+    if (typeof question === 'string') {
+        questionText = question;
+    } else {
+        questionText = question.question || question;
+    }
+    
+    // Extract category - default to "general"
+    const category = typeof question === 'object' ? (question.category || "general") : "general";
+    
     const total = window.clarificationQuestions ? window.clarificationQuestions.length : 1;
     
     addClarifierMessage(
