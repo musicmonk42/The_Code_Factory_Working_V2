@@ -691,7 +691,6 @@ async def favicon():
     Handle favicon.ico requests gracefully.
     Returns 204 No Content to avoid 404 errors in browser console.
     """
-    from fastapi.responses import Response
     return Response(status_code=204)
 
 
