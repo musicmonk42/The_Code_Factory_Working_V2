@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 # Type checking imports - only used for type hints, not at runtime
 if TYPE_CHECKING:
-    from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+    from self_fixing_engineer.arbiter.human_loop import HumanInLoop, HumanInLoopConfig
 
 __all__ = ["ArbiterArena", "run_arena", "run_arena_async"]
 
@@ -65,23 +65,23 @@ except ImportError as e:
 
     SIMULATION_AVAILABLE = False
 
-from arbiter.agent_state import Base
-from arbiter.arbiter import Arbiter  # Correct import
-from arbiter.arbiter_plugin_registry import PlugInKind, get_registry
-from arbiter.codebase_analyzer import CodebaseAnalyzer
+from self_fixing_engineer.arbiter.agent_state import Base
+from self_fixing_engineer.arbiter.arbiter import Arbiter  # Correct import
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, get_registry
+from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer
 
 # Import core components with ABSOLUTE PATHS
-from arbiter.config import ArbiterConfig
-from arbiter.feedback import FeedbackManager
+from self_fixing_engineer.arbiter.config import ArbiterConfig
+from self_fixing_engineer.arbiter.feedback import FeedbackManager
 
 # REMOVED: from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
 # Using lazy import to avoid circular dependencies
-from arbiter.logging_utils import PIIRedactorFilter
+from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
 
 # NEW: Import metric creation helpers from arbiter.metrics
-from arbiter.metrics import get_or_create_counter, get_or_create_gauge
-from arbiter.monitoring import Monitor
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.metrics import get_or_create_counter, get_or_create_gauge
+from self_fixing_engineer.arbiter.monitoring import Monitor
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 
 
 # Lazy getter for plugin registry to avoid import-time initialization
@@ -283,7 +283,7 @@ class ArbiterArena:
         )
 
         # Lazy import to avoid circular dependencies
-        from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+        from self_fixing_engineer.arbiter.human_loop import HumanInLoop, HumanInLoopConfig
 
         hitl_config = HumanInLoopConfig(
             DATABASE_URL=self.settings.DB_PATH,
@@ -497,7 +497,7 @@ class ArbiterArena:
 
             async def create_in_memory_tables():
                 async with db_engine_for_arbiters.begin() as conn:
-                    from arbiter.agent_state import Base
+                    from self_fixing_engineer.arbiter.agent_state import Base
 
                     await conn.run_sync(Base.metadata.create_all)
 
@@ -512,7 +512,7 @@ class ArbiterArena:
 
         # Fix 5: Create shared MessageQueueService instance
         try:
-            from arbiter.message_queue_service import MessageQueueService
+            from self_fixing_engineer.arbiter.message_queue_service import MessageQueueService
 
             shared_mq_service = MessageQueueService(
                 backend_type="redis_streams",
@@ -582,7 +582,7 @@ class ArbiterArena:
 
         # Fix 5: Create DecisionOptimizer after all Arbiters are initialized
         try:
-            from arbiter.decision_optimizer import DecisionOptimizer
+            from self_fixing_engineer.arbiter.decision_optimizer import DecisionOptimizer
 
             decision_optimizer = DecisionOptimizer(
                 plugin_registry=_get_plugin_registry_dict(),
@@ -1144,7 +1144,7 @@ async def run_arena_async(settings=None):
     Args:
         settings: Optional ArbiterConfig instance. If None, will be initialized.
     """
-    from arbiter.config import ArbiterConfig as Settings
+    from self_fixing_engineer.arbiter.config import ArbiterConfig as Settings
 
     if settings is None:
         try:
@@ -1233,7 +1233,7 @@ def run_arena():
             "Use 'await run_arena_async()' instead."
         )
 
-    from arbiter.config import ArbiterConfig as Settings
+    from self_fixing_engineer.arbiter.config import ArbiterConfig as Settings
 
     try:
         settings = Settings.initialize()

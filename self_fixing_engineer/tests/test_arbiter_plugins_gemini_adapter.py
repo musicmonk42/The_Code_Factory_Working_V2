@@ -7,8 +7,8 @@ import google.api_core.exceptions as google_exceptions
 import pytest
 
 # Import the adapter and related exceptions
-from arbiter.plugins.gemini_adapter import GeminiAdapter
-from arbiter.plugins.llm_client import (
+from self_fixing_engineer.arbiter.plugins.gemini_adapter import GeminiAdapter
+from self_fixing_engineer.arbiter.plugins.llm_client import (
     APIError,
     AuthError,
     CircuitBreakerOpenError,
@@ -42,7 +42,7 @@ class TestGeminiAdapter:
     @pytest.fixture
     async def adapter(self, valid_settings):
         """Creates a GeminiAdapter instance with mocked LLMClient."""
-        with patch("arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.model = "gemini-1.5-flash"
@@ -55,7 +55,7 @@ class TestGeminiAdapter:
 
     def test_init_with_valid_settings(self, valid_settings):
         """Test successful initialization with valid settings."""
-        with patch("arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
 
@@ -79,7 +79,7 @@ class TestGeminiAdapter:
     def test_init_with_llm_client_failure(self, valid_settings):
         """Test initialization fails when LLMClient raises exception."""
         with patch(
-            "arbiter.plugins.gemini_adapter.LLMClient",
+            "self_fixing_engineer.arbiter.plugins.gemini_adapter.LLMClient",
             side_effect=Exception("Connection failed"),
         ):
             with pytest.raises(ValueError, match="Failed to initialize LLMClient"):
@@ -87,7 +87,7 @@ class TestGeminiAdapter:
 
     def test_init_with_none_client(self, valid_settings):
         """Test initialization fails when LLMClient returns None."""
-        with patch("arbiter.plugins.gemini_adapter.LLMClient", return_value=None):
+        with patch("self_fixing_engineer.arbiter.plugins.gemini_adapter.LLMClient", return_value=None):
             with pytest.raises(ValueError, match="LLMClient initialization failed"):
                 GeminiAdapter(valid_settings)
 
@@ -95,7 +95,7 @@ class TestGeminiAdapter:
         """Test initialization with minimal settings uses defaults."""
         settings = {"GEMINI_API_KEY": "test-key"}
 
-        with patch("arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
             mock_instance = Mock()
             mock_instance.model = "gemini-1.5-flash"
             mock_client.return_value = mock_instance
@@ -382,7 +382,7 @@ class TestGeminiAdapter:
 
     def test_sanitize_prompt_custom_pii_pattern(self, valid_settings):
         """Test that custom PII patterns from config are applied."""
-        with patch("arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
             mock_client.return_value = Mock()
             adapter = GeminiAdapter(valid_settings)
 
@@ -402,7 +402,7 @@ class TestGeminiAdapter:
     @pytest.mark.asyncio
     async def test_async_context_manager(self, valid_settings):
         """Test async context manager functionality."""
-        with patch("arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock()
@@ -415,7 +415,7 @@ class TestGeminiAdapter:
     @pytest.mark.asyncio
     async def test_context_manager_handles_close_error(self, valid_settings):
         """Test that context manager handles errors during session close."""
-        with patch("arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock(
@@ -432,10 +432,10 @@ class TestGeminiAdapter:
         """Test that metrics are recorded on successful generation."""
         with (
             patch(
-                "arbiter.plugins.gemini_adapter.gemini_call_latency_seconds"
+                "self_fixing_engineer.arbiter.plugins.gemini_adapter.gemini_call_latency_seconds"
             ) as mock_latency,
             patch(
-                "arbiter.plugins.gemini_adapter.gemini_call_success_total"
+                "self_fixing_engineer.arbiter.plugins.gemini_adapter.gemini_call_success_total"
             ) as mock_success,
         ):
 
@@ -458,10 +458,10 @@ class TestGeminiAdapter:
         """Test that error metrics are recorded on failed generation."""
         with (
             patch(
-                "arbiter.plugins.gemini_adapter.gemini_call_latency_seconds"
+                "self_fixing_engineer.arbiter.plugins.gemini_adapter.gemini_call_latency_seconds"
             ) as mock_latency,
             patch(
-                "arbiter.plugins.gemini_adapter.gemini_call_errors_total"
+                "self_fixing_engineer.arbiter.plugins.gemini_adapter.gemini_call_errors_total"
             ) as mock_errors,
         ):
 
@@ -480,7 +480,7 @@ class TestGeminiAdapter:
         adapter.circuit_breaker_last_failure_time = asyncio.get_event_loop().time()
 
         with patch(
-            "arbiter.plugins.gemini_adapter.gemini_call_errors_total"
+            "self_fixing_engineer.arbiter.plugins.gemini_adapter.gemini_call_errors_total"
         ) as mock_errors:
             with pytest.raises(CircuitBreakerOpenError):
                 await adapter.generate("Test", correlation_id="cb-test")

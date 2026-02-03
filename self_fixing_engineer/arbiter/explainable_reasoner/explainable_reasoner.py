@@ -41,9 +41,9 @@ except ImportError:
 # Add to requirements.txt: pybreaker>=1.0.0, sentry-sdk, PyJWT>=2.10.2, transformers>=4.49.1, pydantic>=2.11.7, pytest, pytest-asyncio, pytest-cov, hypothesis, locust, huggingface_hub, Pillow, cryptography, prometheus-client
 __version__ = "1.2.0"
 
-from arbiter.explainable_reasoner.adapters import LLMAdapter, LLMAdapterFactory
-from arbiter.explainable_reasoner.audit_ledger import AuditLedgerClient
-from arbiter.explainable_reasoner.history_manager import (
+from self_fixing_engineer.arbiter.explainable_reasoner.adapters import LLMAdapter, LLMAdapterFactory
+from self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger import AuditLedgerClient
+from self_fixing_engineer.arbiter.explainable_reasoner.history_manager import (
     BaseHistoryManager,
     PostgresHistoryManager,
     RedisHistoryManager,
@@ -51,16 +51,16 @@ from arbiter.explainable_reasoner.history_manager import (
 )
 
 # --- Corrected Internal Imports ---
-from arbiter.explainable_reasoner.metrics import (
+from self_fixing_engineer.arbiter.explainable_reasoner.metrics import (
     get_metrics_content,
     get_or_create_metric,
 )
-from arbiter.explainable_reasoner.prompt_strategies import PromptStrategyFactory
-from arbiter.explainable_reasoner.reasoner_errors import (
+from self_fixing_engineer.arbiter.explainable_reasoner.prompt_strategies import PromptStrategyFactory
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors import (
     ReasonerError,
     ReasonerErrorCode,
 )
-from arbiter.explainable_reasoner.utils import (
+from self_fixing_engineer.arbiter.explainable_reasoner.utils import (
     _format_multimodal_for_prompt,
     _rule_based_fallback,
     _sanitize_context,
@@ -372,7 +372,7 @@ class ReasonerConfig(BaseModel):
 
 # Conditional Import for MultiModalData
 try:
-    from arbiter.models.multi_modal_schemas import (
+    from self_fixing_engineer.arbiter.models.multi_modal_schemas import (
         AudioAnalysisResult,
         ImageAnalysisResult,
         MultiModalAnalysisResult,

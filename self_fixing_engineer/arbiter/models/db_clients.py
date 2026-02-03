@@ -68,7 +68,7 @@ except ImportError:
 
 # OpenTelemetry tracing - Using centralized configuration
 try:
-    from arbiter.otel_config import get_tracer
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
 
     tracer = get_tracer(__name__)
     OTEL_AVAILABLE = True
@@ -1359,7 +1359,7 @@ class SQLiteClient:
 # ============================================================================
 
 try:
-    from arbiter.models.postgres_client import PostgresClient
+    from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient
 except ImportError:
     logger.warning(
         "PostgresClient not available - arbiter.models.postgres_client module not found"

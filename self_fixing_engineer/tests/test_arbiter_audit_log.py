@@ -48,7 +48,7 @@ if _sfe_dir not in sys.path:
     sys.path.insert(0, _sfe_dir)
 
 # Import the module under test
-from arbiter.audit_log import (
+from self_fixing_engineer.arbiter.audit_log import (
     AuditLoggerConfig,
     CompressionType,
     RotationType,

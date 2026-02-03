@@ -6,7 +6,7 @@ from unittest.mock import Mock, mock_open, patch
 import pytest
 
 # Import the module components to test
-from arbiter.knowledge_graph.prompt_strategies import (
+from self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies import (
     BASE_AGENT_PROMPT_TEMPLATE,
     CRITIQUE_PROMPT_TEMPLATE,
     REFLECTION_PROMPT_TEMPLATE,
@@ -32,10 +32,10 @@ class TestPromptTemplateLoading:
 
         with patch("builtins.open", mock_open(read_data=json.dumps(test_templates))):
             with patch(
-                "arbiter.knowledge_graph.prompt_strategies.logger"
+                "self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies.logger"
             ) as mock_logger:
                 with patch.dict(
-                    "arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
+                    "self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
                 ):
                     _load_templates()
 
@@ -46,10 +46,10 @@ class TestPromptTemplateLoading:
         """Test fallback when template file is not found (uses debug level)"""
         with patch("builtins.open", side_effect=FileNotFoundError()):
             with patch(
-                "arbiter.knowledge_graph.prompt_strategies.logger"
+                "self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies.logger"
             ) as mock_logger:
                 with patch.dict(
-                    "arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
+                    "self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
                 ):
                     _load_templates()
 
@@ -62,10 +62,10 @@ class TestPromptTemplateLoading:
         """Test fallback when JSON file is malformed"""
         with patch("builtins.open", mock_open(read_data="invalid json {")):
             with patch(
-                "arbiter.knowledge_graph.prompt_strategies.logger"
+                "self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies.logger"
             ) as mock_logger:
                 with patch.dict(
-                    "arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
+                    "self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
                 ):
                     _load_templates()
 
@@ -76,10 +76,10 @@ class TestPromptTemplateLoading:
         """Test fallback on unexpected errors"""
         with patch("builtins.open", side_effect=PermissionError("No permission")):
             with patch(
-                "arbiter.knowledge_graph.prompt_strategies.logger"
+                "self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies.logger"
             ) as mock_logger:
                 with patch.dict(
-                    "arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
+                    "self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
                 ):
                     _load_templates()
 
@@ -98,15 +98,15 @@ class TestPromptTemplateLoading:
 
         # Fix: Patch PROMPT_TEMPLATE_FILE directly and ensure all required templates are provided
         with patch(
-            "arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATE_FILE",
+            "self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATE_FILE",
             custom_path,
         ):
             with patch(
                 "builtins.open", mock_open(read_data=json.dumps(test_templates))
             ) as mock_file:
-                with patch("arbiter.knowledge_graph.prompt_strategies.logger"):
+                with patch("self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies.logger"):
                     # Import and call the function to reload templates
-                    from arbiter.knowledge_graph.prompt_strategies import (
+                    from self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies import (
                         _load_templates,
                     )
 

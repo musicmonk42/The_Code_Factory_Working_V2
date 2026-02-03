@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 # Import the centralized tracer configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from guardrails.audit_log import audit_log_event_async as audit_log
 from guardrails.compliance_mapper import load_compliance_map
 from tenacity import (

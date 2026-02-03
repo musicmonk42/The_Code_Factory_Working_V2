@@ -20,7 +20,7 @@ def test_decision_optimizer_settings_env_pollution(monkeypatch):
     )
 
     # Now import config and try to instantiate
-    from arbiter.policy.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.policy.config import ArbiterConfig
 
     # Try to instantiate and print result
     try:

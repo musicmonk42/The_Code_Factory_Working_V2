@@ -3,7 +3,7 @@ import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
-from arbiter.config import (
+from self_fixing_engineer.arbiter.config import (
     ArbiterConfig,
     get_or_create_counter,
     get_or_create_gauge,

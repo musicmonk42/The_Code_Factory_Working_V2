@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
-from arbiter.explainable_reasoner.history_manager import (
+from self_fixing_engineer.arbiter.explainable_reasoner.history_manager import (
     BaseHistoryManager,
     PostgresHistoryManager,
     RedisHistoryManager,
@@ -19,7 +19,7 @@ from arbiter.explainable_reasoner.history_manager import (
 )
 
 # Import the actual module and its dependencies from the correct package path
-from arbiter.explainable_reasoner.reasoner_errors import (
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors import (
     ReasonerError,
     ReasonerErrorCode,
 )
@@ -62,7 +62,7 @@ def mock_metrics():
 @pytest_asyncio.fixture
 async def sqlite_manager(temp_db_path, mock_audit_client, mock_metrics):
     """Create a real SQLite manager for testing."""
-    with patch("arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics):
+    with patch("self_fixing_engineer.arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics):
         manager = SQLiteHistoryManager(
             db_path=temp_db_path,
             max_history_size=5,
@@ -188,8 +188,8 @@ async def postgres_manager(mock_audit_client, mock_metrics):
             return None
 
     with (
-        patch("arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics),
-        patch("arbiter.explainable_reasoner.history_manager.POSTGRES_AVAILABLE", True),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.history_manager.POSTGRES_AVAILABLE", True),
     ):
 
         manager = PostgresHistoryManager(
@@ -298,8 +298,8 @@ async def redis_manager(mock_audit_client, mock_metrics):
     mock_client.zscan_iter = mock_zscan_iter
 
     with (
-        patch("arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics),
-        patch("arbiter.explainable_reasoner.history_manager.REDIS_AVAILABLE", True),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.history_manager.REDIS_AVAILABLE", True),
     ):
 
         manager = RedisHistoryManager(
@@ -361,7 +361,7 @@ class TestSQLiteHistoryManager:
     async def test_init_db(self, temp_db_path, mock_audit_client, mock_metrics):
         """Test database initialization."""
         with patch(
-            "arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics
+            "self_fixing_engineer.arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics
         ):
             manager = SQLiteHistoryManager(
                 db_path=temp_db_path,

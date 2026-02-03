@@ -5,12 +5,12 @@ import tempfile
 from unittest.mock import Mock, patch
 
 import pytest
-from arbiter.plugins.multi_modal_config import MultiModalConfig
+from self_fixing_engineer.arbiter.plugins.multi_modal_config import MultiModalConfig
 
 # Import all the components we need to test
-from arbiter.plugins.multi_modal_plugin import MultiModalPlugin
-from arbiter.plugins.multimodal.interface import DummyMultiModalPlugin, ProcessingResult
-from arbiter.plugins.multimodal.providers.default_multimodal_providers import (
+from self_fixing_engineer.arbiter.plugins.multi_modal_plugin import MultiModalPlugin
+from self_fixing_engineer.arbiter.plugins.multimodal.interface import DummyMultiModalPlugin, ProcessingResult
+from self_fixing_engineer.arbiter.plugins.multimodal.providers.default_multimodal_providers import (
     DefaultAudioProcessor,
     DefaultImageProcessor,
     DefaultTextProcessor,
@@ -25,7 +25,7 @@ if not PluginRegistry._processors.get("image", {}).get("default"):
     PluginRegistry.register_processor("video", "default", DefaultVideoProcessor)
     PluginRegistry.register_processor("text", "default", DefaultTextProcessor)
 
-from arbiter.plugins.multimodal.providers.default_multimodal_providers import (
+from self_fixing_engineer.arbiter.plugins.multimodal.providers.default_multimodal_providers import (
     DefaultAudioProcessor,
     DefaultImageProcessor,
     DefaultTextProcessor,
@@ -154,7 +154,7 @@ class TestE2EMultiModalSystem:
         # Text with PII
         text_with_pii = "Contact john@example.com or call 555-123-4567"
 
-        with patch("arbiter.plugins.multi_modal_plugin.logger"):
+        with patch("self_fixing_engineer.arbiter.plugins.multi_modal_plugin.logger"):
             result = await plugin_with_config.process_text(text_with_pii)
             assert result.success is True
             # PII should be masked in logs but not necessarily in results
@@ -470,16 +470,16 @@ def mock_metrics():
     """Mock metrics for all tests."""
     with (
         patch(
-            "arbiter.plugins.multi_modal_plugin.get_or_create_counter", get_or_create
+            "self_fixing_engineer.arbiter.plugins.multi_modal_plugin.get_or_create_counter", get_or_create
         ),
         patch(
-            "arbiter.plugins.multi_modal_plugin.get_or_create_histogram", get_or_create
+            "self_fixing_engineer.arbiter.plugins.multi_modal_plugin.get_or_create_histogram", get_or_create
         ),
         patch(
-            "arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
+            "self_fixing_engineer.arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
             get_or_create,
         ),
-        patch("arbiter.plugins.multimodal.interface.get_or_create", get_or_create),
+        patch("self_fixing_engineer.arbiter.plugins.multimodal.interface.get_or_create", get_or_create),
     ):
         yield
 

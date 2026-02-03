@@ -22,7 +22,7 @@ from aiohttp import web
 from aiolimiter import AsyncLimiter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from arbiter.arbiter_plugin_registry import PlugInKind, register
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, register
 from dotenv import load_dotenv
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, Field, validator

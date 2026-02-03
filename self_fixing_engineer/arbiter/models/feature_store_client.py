@@ -199,7 +199,7 @@ except ImportError:
             return "stub_tx_hash_123"
 
 
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 
 # OpenTelemetry Tracing - Use centralized configuration
 from opentelemetry.trace import Status, StatusCode

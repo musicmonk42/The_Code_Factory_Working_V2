@@ -25,7 +25,7 @@ from urllib.parse import urlparse
 import redis.asyncio as redis
 
 # Import the centralized tracer configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from cryptography.fernet import Fernet
 from prometheus_client import REGISTRY, Counter, Histogram
 from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator

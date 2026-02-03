@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import aiofiles
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary
 from sqlalchemy import JSON, Column, DateTime, String
 from sqlalchemy.orm import declarative_base
@@ -28,7 +28,7 @@ except ImportError:
     PSYCOPG2_AVAILABLE = False
     logging.warning("psycopg2 not available. PostgreSQL features will be disabled.")
 import aiosqlite
-from arbiter.arbiter_plugin_registry import PlugInKind, register, get_registry
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, register, get_registry
 
 
 # Lazy-loaded registry to avoid import-time initialization
@@ -39,11 +39,11 @@ def _get_arbiter_registry():
 
 # Mock/Placeholder imports for a self-contained fix
 try:
-    from arbiter import PermissionManager
-    from arbiter.agent_state import Base
-    from arbiter.config import ArbiterConfig
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter.postgres_client import PostgresClient
+    from self_fixing_engineer.arbiter import PermissionManager
+    from self_fixing_engineer.arbiter.agent_state import Base
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
     from arbiter_plugin_registry import PlugInKind as MockPlugInKind
     from arbiter_plugin_registry import get_registry as get_mock_registry
 
@@ -941,8 +941,8 @@ class FeedbackManager:
 
 
 def check_permission(role: str, permission: str):
-    from arbiter import PermissionManager
-    from arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter import PermissionManager
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
 
     permission_mgr = PermissionManager(ArbiterConfig())
     return permission_mgr.check_permission(role, permission)

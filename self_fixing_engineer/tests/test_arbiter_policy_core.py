@@ -35,8 +35,8 @@ except ImportError:
 # This MUST happen before importing the module under test
 
 # Create mock modules
-sys.modules["arbiter.plugins.llm_client"] = MagicMock()
-sys.modules["arbiter.policy.circuit_breaker"] = MagicMock()
+sys.modules["self_fixing_engineer.arbiter.plugins.llm_client"] = MagicMock()
+sys.modules["self_fixing_engineer.arbiter.policy.circuit_breaker"] = MagicMock()
 
 # Mock guardrails modules with proper structure
 guardrails_audit_log_mock = MagicMock()
@@ -48,7 +48,7 @@ guardrails_compliance_mapper_mock.load_compliance_map = MagicMock(return_value={
 sys.modules["guardrails.compliance_mapper"] = guardrails_compliance_mapper_mock
 
 # Mock the metrics module if not already present
-if "arbiter.policy.metrics" not in sys.modules:
+if "self_fixing_engineer.arbiter.policy.metrics" not in sys.modules:
     metrics_mock = MagicMock()
     metrics_mock.policy_decision_total = MagicMock()
     metrics_mock.policy_file_reload_count = MagicMock()
@@ -58,11 +58,11 @@ if "arbiter.policy.metrics" not in sys.modules:
     metrics_mock.get_or_create_metric = MagicMock(return_value=MagicMock())
     metrics_mock.Histogram = MagicMock
     metrics_mock.Counter = MagicMock
-    sys.modules["arbiter.policy.metrics"] = metrics_mock
+    sys.modules["self_fixing_engineer.arbiter.policy.metrics"] = metrics_mock
 
 # Now import the config module and create a proper ArbiterConfig class if it doesn't exist
 try:
-    from arbiter.policy.config import ArbiterConfig, get_config
+    from self_fixing_engineer.arbiter.policy.config import ArbiterConfig, get_config
 except ImportError:
     # Create a minimal ArbiterConfig class for testing
     class ArbiterConfig:
@@ -123,10 +123,10 @@ except ImportError:
     config_module = MagicMock()
     config_module.ArbiterConfig = ArbiterConfig
     config_module.get_config = get_config
-    sys.modules["arbiter.policy.config"] = config_module
+    sys.modules["self_fixing_engineer.arbiter.policy.config"] = config_module
 
 # Now import the module under test
-from arbiter.policy.core import (
+from self_fixing_engineer.arbiter.policy.core import (
     BasicDecisionOptimizer,
     PolicyEngine,
     SQLiteClient,
@@ -176,13 +176,13 @@ def mock_circuit_breaker(monkeypatch):
     mock_record_success = Mock()
 
     monkeypatch.setattr(
-        "arbiter.policy.core.is_llm_policy_circuit_breaker_open", mock_is_open
+        "self_fixing_engineer.arbiter.policy.core.is_llm_policy_circuit_breaker_open", mock_is_open
     )
     monkeypatch.setattr(
-        "arbiter.policy.core.record_llm_policy_api_failure", mock_record_failure
+        "self_fixing_engineer.arbiter.policy.core.record_llm_policy_api_failure", mock_record_failure
     )
     monkeypatch.setattr(
-        "arbiter.policy.core.record_llm_policy_api_success", mock_record_success
+        "self_fixing_engineer.arbiter.policy.core.record_llm_policy_api_success", mock_record_success
     )
 
     return {
@@ -239,7 +239,7 @@ def tmp_policy_file(valid_policy_content):
 @pytest.fixture
 def arbiter_config(tmp_policy_file):
     """Creates a real ArbiterConfig instance for testing."""
-    from arbiter.policy.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.policy.config import ArbiterConfig
 
     config = ArbiterConfig()
     config.POLICY_CONFIG_FILE_PATH = tmp_policy_file
@@ -633,7 +633,7 @@ class TestPolicyEngine:
         mock_llm.generate_text = AsyncMock(return_value="YES, safe data")
         mock_llm_class = MagicMock(return_value=mock_llm)
 
-        monkeypatch.setattr("arbiter.policy.core.LLMClient", mock_llm_class)
+        monkeypatch.setattr("self_fixing_engineer.arbiter.policy.core.LLMClient", mock_llm_class)
 
         result, reason = await policy_engine.should_auto_learn(
             "test", "key", "user", "test_value"
@@ -799,7 +799,7 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_full_workflow(self, minimal_arbiter, arbiter_config):
         """Tests complete initialization and usage workflow."""
-        with patch("arbiter.policy.core.get_config", return_value=arbiter_config):
+        with patch("self_fixing_engineer.arbiter.policy.core.get_config", return_value=arbiter_config):
             await reset_policy_engine()
             initialize_policy_engine(minimal_arbiter)
 
@@ -829,7 +829,7 @@ class TestIntegration:
             audit_calls.append((args, kwargs))
 
         # Mock the audit_log function at the module level
-        monkeypatch.setattr("arbiter.policy.core.audit_log", mock_audit)
+        monkeypatch.setattr("self_fixing_engineer.arbiter.policy.core.audit_log", mock_audit)
 
         # Make requests that trigger auditing
         await policy_engine.should_auto_learn("test", "key", "user", {})
@@ -894,7 +894,7 @@ class TestStress:
 
 def test_all_public_apis_exported():
     """Verifies all expected public APIs are available."""
-    from arbiter.policy import core
+    from self_fixing_engineer.arbiter.policy import core
 
     expected_exports = [
         "PolicyEngine",
@@ -914,7 +914,7 @@ def test_all_public_apis_exported():
 
 def test_metrics_registered():
     """Verifies metrics are properly initialized."""
-    from arbiter.policy import metrics
+    from self_fixing_engineer.arbiter.policy import metrics
 
     assert hasattr(metrics, "policy_decision_total")
     assert hasattr(metrics, "policy_file_reload_count")

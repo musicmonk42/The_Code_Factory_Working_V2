@@ -25,9 +25,9 @@ from self_fixing_engineer.arbiter.arbiter_growth.exceptions import (
     CircuitBreakerOpenError,
     RateLimitError,
 )
-from arbiter.arbiter_growth.idempotency import IdempotencyStore
-from arbiter.arbiter_growth.metrics import GROWTH_ANOMALY_SCORE, GROWTH_EVENTS
-from arbiter.arbiter_growth.models import GrowthEvent
+from self_fixing_engineer.arbiter.arbiter_growth.idempotency import IdempotencyStore
+from self_fixing_engineer.arbiter.arbiter_growth.metrics import GROWTH_ANOMALY_SCORE, GROWTH_EVENTS
+from self_fixing_engineer.arbiter.arbiter_growth.models import GrowthEvent
 from pybreaker import CircuitBreakerListener
 
 
@@ -77,12 +77,12 @@ async def mock_config_store():
             "rate_limit_tokens": 10,
             "rate_limit_refill_rate": 10,
             "global.schema_version": 1.0,
-            "arbiter.max_pending_operations": 1000,
+            "self_fixing_engineer.arbiter.max_pending_operations": 1000,
             "security.idempotency_salt": "test_salt",
-            "arbiter.flush_interval_min": 5,
-            "arbiter.flush_interval_max": 60,
-            "arbiter.evolution_cycle_interval_seconds": 3600,
-            "arbiter.snapshot_interval_events": 100,
+            "self_fixing_engineer.arbiter.flush_interval_min": 5,
+            "self_fixing_engineer.arbiter.flush_interval_max": 60,
+            "self_fixing_engineer.arbiter.evolution_cycle_interval_seconds": 3600,
+            "self_fixing_engineer.arbiter.snapshot_interval_events": 100,
             "anomaly_detection.max_skill_improvement": 0.5,
         }.get(key, default)
         return value
@@ -138,7 +138,7 @@ async def mock_storage_backend(tmp_path):
 @pytest.fixture
 def mock_knowledge_graph(mock_config_store):
     """Provides a mock knowledge graph."""
-    from arbiter.arbiter_growth.arbiter_growth_manager import Neo4jKnowledgeGraph
+    from self_fixing_engineer.arbiter.arbiter_growth.arbiter_growth_manager import Neo4jKnowledgeGraph
 
     mock = AsyncMock(spec=Neo4jKnowledgeGraph)
     mock.add_fact = AsyncMock()
@@ -148,7 +148,7 @@ def mock_knowledge_graph(mock_config_store):
 @pytest.fixture
 def mock_feedback_manager(mock_config_store):
     """Provides a mock feedback manager."""
-    from arbiter.arbiter_growth.arbiter_growth_manager import LoggingFeedbackManager
+    from self_fixing_engineer.arbiter.arbiter_growth.arbiter_growth_manager import LoggingFeedbackManager
 
     mock = AsyncMock(spec=LoggingFeedbackManager)
     mock.record_feedback = AsyncMock()

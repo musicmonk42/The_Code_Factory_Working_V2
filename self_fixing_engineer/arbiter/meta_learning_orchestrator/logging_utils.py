@@ -269,7 +269,7 @@ if __name__ == "__main__":
     test_logger.addHandler(handler)
 
     # Use centralized OpenTelemetry configuration
-    from arbiter.otel_config import get_tracer
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
 
     tracer = get_tracer(__name__)
 

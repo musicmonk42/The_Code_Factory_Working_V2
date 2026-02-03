@@ -22,7 +22,7 @@ import json
 import logging
 import sys
 
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from sqlalchemy import (
     CheckConstraint,
     Column,

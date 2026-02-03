@@ -9,16 +9,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from arbiter.models.audit_ledger_client import AuditLedgerClient
-from arbiter.models.merkle_tree import MerkleTree
+from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditLedgerClient
+from self_fixing_engineer.arbiter.models.merkle_tree import MerkleTree
 
 # Import modules to be tested
-from arbiter.models.multi_modal_schemas import ImageAnalysisResult
-from arbiter.models.postgres_client import PostgresClient
-from arbiter.models.redis_client import RedisClient
+from self_fixing_engineer.arbiter.models.multi_modal_schemas import ImageAnalysisResult
+from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient
+from self_fixing_engineer.arbiter.models.redis_client import RedisClient
 
 # Import the centralized tracer configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from asyncpg.exceptions import PostgresError
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic import ValidationError
@@ -162,7 +162,7 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
     mock_audit.__aenter__ = mocker.AsyncMock(return_value=mock_audit)
     mock_audit.__aexit__ = mocker.AsyncMock()
     mocker.patch(
-        "arbiter.models.audit_ledger_client.AuditLedgerClient", return_value=mock_audit
+        "self_fixing_engineer.arbiter.models.audit_ledger_client.AuditLedgerClient", return_value=mock_audit
     )
 
     yield

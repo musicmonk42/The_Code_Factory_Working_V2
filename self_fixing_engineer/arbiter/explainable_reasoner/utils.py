@@ -15,10 +15,10 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, ParamSpec, Union
 
-from arbiter.explainable_reasoner.reasoner_config import ReasonerConfig, SensitiveValue
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_config import ReasonerConfig, SensitiveValue
 
 # Import ReasonerError and ReasonerErrorCode for consistent error handling
-from arbiter.explainable_reasoner.reasoner_errors import (
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors import (
     ReasonerError,
     ReasonerErrorCode,
 )
@@ -61,7 +61,7 @@ except ImportError:
 
 # Conditional import for MultiModalData and schemas
 try:
-    from arbiter.models.multi_modal_schemas import (
+    from self_fixing_engineer.arbiter.models.multi_modal_schemas import (
         AudioAnalysisResult,
         ImageAnalysisResult,
         MultiModalAnalysisResult,
@@ -72,7 +72,7 @@ try:
     MULTI_MODAL_SCHEMAS_AVAILABLE = True
 except ImportError:
     _utils_logger.debug(
-        "arbiter.models.multi_modal_schemas not found; using dummy MultiModalData/Schemas."
+        "self_fixing_engineer.arbiter.models.multi_modal_schemas not found; using dummy MultiModalData/Schemas."
     )
 
     # Dummy MultiModalData if schema not available

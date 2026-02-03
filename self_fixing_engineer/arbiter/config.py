@@ -63,14 +63,14 @@ def _get_tracer():
         return _tracer_cache
 
     try:
-        from arbiter.otel_config import get_tracer
+        from self_fixing_engineer.arbiter.otel_config import get_tracer
 
         _tracer_cache = get_tracer(__name__)
         return _tracer_cache
     except Exception:
         # Import NoOpTracer if available, otherwise create a minimal one
         try:
-            from arbiter.otel_config import NoOpTracer
+            from self_fixing_engineer.arbiter.otel_config import NoOpTracer
 
             _tracer_cache = NoOpTracer()
             return _tracer_cache
@@ -90,7 +90,7 @@ def _get_tracer():
 
 # Mock/Plausholder imports for a self-contained fix
 try:
-    from arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
     from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
@@ -722,7 +722,7 @@ class ArbiterConfig(BaseSettings):
                         os.makedirs(db_dir, exist_ok=True)
 
                 # Import safe_makedirs from utils to handle malformed paths
-                from arbiter.utils import safe_makedirs
+                from self_fixing_engineer.arbiter.utils import safe_makedirs
 
                 instance.PLUGIN_DIR, _ = safe_makedirs(instance.PLUGIN_DIR, "./plugins")
                 instance.REPORTS_DIRECTORY, _ = safe_makedirs(

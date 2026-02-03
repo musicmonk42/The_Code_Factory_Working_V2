@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
 import pytest
-from arbiter.plugins.llm_client import APIError, LLMClientError, TimeoutError
+from self_fixing_engineer.arbiter.plugins.llm_client import APIError, LLMClientError, TimeoutError
 
 # Import the adapter and related exceptions
-from arbiter.plugins.ollama_adapter import AuthError, OllamaAdapter, RateLimitError
+from self_fixing_engineer.arbiter.plugins.ollama_adapter import AuthError, OllamaAdapter, RateLimitError
 
 
 class TestOllamaAdapter:
@@ -37,7 +37,7 @@ class TestOllamaAdapter:
     @pytest.fixture
     async def adapter(self, valid_settings):
         """Creates an OllamaAdapter instance with mocked LLMClient."""
-        with patch("arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.model = "llama3"
@@ -67,7 +67,7 @@ class TestOllamaAdapter:
 
     def test_init_with_valid_settings(self, valid_settings):
         """Test successful initialization with valid settings."""
-        with patch("arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
 
@@ -93,7 +93,7 @@ class TestOllamaAdapter:
         """Test initialization uses default model when not specified."""
         settings = {}
 
-        with patch("arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
 
@@ -114,7 +114,7 @@ class TestOllamaAdapter:
         """Test initialization with minimal settings uses defaults."""
         settings = {"LLM_MODEL": "mistral"}
 
-        with patch("arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
 
@@ -338,7 +338,7 @@ class TestOllamaAdapter:
     @pytest.mark.asyncio
     async def test_async_context_manager(self, valid_settings):
         """Test async context manager functionality."""
-        with patch("arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock()
@@ -351,7 +351,7 @@ class TestOllamaAdapter:
     @pytest.mark.asyncio
     async def test_context_manager_with_exception(self, valid_settings):
         """Test context manager handles exceptions properly."""
-        with patch("arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.ollama_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock()

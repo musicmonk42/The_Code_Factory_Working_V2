@@ -101,7 +101,7 @@ sys.modules["aiokafka"].structs.TopicPartition = tuple
 
 # Mock arbiter.otel_config for centralized OpenTelemetry configuration
 create_module_stub(
-    "arbiter.otel_config",
+    "self_fixing_engineer.arbiter.otel_config",
     {
         "get_tracer": lambda name: MagicMock(
             start_as_current_span=MagicMock(

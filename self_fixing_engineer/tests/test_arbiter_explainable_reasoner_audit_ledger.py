@@ -12,8 +12,8 @@ import httpx
 import pytest
 
 # Import the module under test
-from arbiter.explainable_reasoner.audit_ledger import AuditLedgerClient
-from arbiter.explainable_reasoner.reasoner_errors import (
+from self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger import AuditLedgerClient
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors import (
     ReasonerError,
     ReasonerErrorCode,
 )
@@ -27,7 +27,7 @@ test_logger = logging.getLogger(__name__)
 @pytest.fixture
 def mock_structlog():
     """Mock structlog to capture log calls."""
-    with patch("arbiter.explainable_reasoner.audit_ledger._logger") as mock_logger:
+    with patch("self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger._logger") as mock_logger:
         # Make sure bind returns the logger itself for chaining
         mock_logger.bind.return_value = mock_logger
         yield mock_logger
@@ -49,14 +49,14 @@ def mock_metrics():
     """Mock METRICS to avoid real increments/observations."""
     with (
         patch(
-            "arbiter.explainable_reasoner.audit_ledger.AUDIT_SEND_LATENCY"
+            "self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.AUDIT_SEND_LATENCY"
         ) as mock_latency,
-        patch("arbiter.explainable_reasoner.audit_ledger.AUDIT_ERRORS") as mock_errors,
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.AUDIT_ERRORS") as mock_errors,
         patch(
-            "arbiter.explainable_reasoner.audit_ledger.AUDIT_BATCH_SIZE"
+            "self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.AUDIT_BATCH_SIZE"
         ) as mock_batch,
         patch(
-            "arbiter.explainable_reasoner.audit_ledger.AUDIT_RATE_LIMIT_HITS"
+            "self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.AUDIT_RATE_LIMIT_HITS"
         ) as mock_rate_limit,
     ):
 
@@ -77,9 +77,9 @@ def mock_metrics():
 def audit_client(mock_structlog):
     """Fixture for AuditLedgerClient instance with specific retry settings."""
     with (
-        patch("arbiter.explainable_reasoner.audit_ledger.pybreaker") as mock_breaker,
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.pybreaker") as mock_breaker,
         patch(
-            "arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"
+            "self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"
         ) as mock_client_class,
     ):
 
@@ -116,8 +116,8 @@ def audit_client(mock_structlog):
 def test_init_success(mock_structlog):
     """Tests successful initialization of the client."""
     with (
-        patch("arbiter.explainable_reasoner.audit_ledger.pybreaker"),
-        patch("arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.pybreaker"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"),
     ):
         client = AuditLedgerClient(
             ledger_url="https://test-ledger.com/audit",
@@ -267,7 +267,7 @@ async def test_log_event_success(audit_client, mock_httpx_client, mock_structlog
 
         # Mock datetime for a consistent timestamp and hash
         fixed_now = datetime(2023, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        with patch("arbiter.explainable_reasoner.audit_ledger.datetime") as mock_dt:
+        with patch("self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.datetime") as mock_dt:
             mock_dt.now.return_value = fixed_now
             mock_dt.fromisoformat = datetime.fromisoformat
             success = await audit_client.log_event(event_type, details, operator)
@@ -319,7 +319,7 @@ async def test_log_event_unhandled_exception(audit_client, mock_structlog):
 @pytest.mark.asyncio
 async def test_log_event_invalid_params():
     """Tests that log_event validates parameters."""
-    with patch("arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"):
+    with patch("self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"):
         client = AuditLedgerClient()
 
         # Test empty event_type
@@ -402,7 +402,7 @@ async def test_health_check_failure(audit_client, mock_httpx_client):
 async def test_health_check_with_endpoint():
     """Tests health check with specific health endpoint."""
     with patch(
-        "arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"
+        "self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"
     ) as mock_client_class:
         mock_client = AsyncMock()
         mock_client.is_closed = False
@@ -435,7 +435,7 @@ async def test_rotate_key(audit_client, mock_httpx_client):
 @pytest.mark.asyncio
 async def test_rotate_key_invalid():
     """Tests that rotate_key validates the new key."""
-    with patch("arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"):
+    with patch("self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"):
         client = AuditLedgerClient()
 
         with pytest.raises(ValueError, match="New key must be a non-empty string"):
@@ -463,7 +463,7 @@ def test_init_default_values():
     """Tests that the client can be initialized with default values."""
     with (
         patch.dict(os.environ, {}, clear=True),
-        patch("arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"),
     ):
         client = AuditLedgerClient()
         assert client.ledger_url == "https://localhost:8080/audit"

@@ -11,10 +11,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from arbiter.explainable_reasoner.reasoner_config import ReasonerConfig, SensitiveValue
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_config import ReasonerConfig, SensitiveValue
 
 # Import the module under test
-from arbiter.explainable_reasoner.utils import (
+from self_fixing_engineer.arbiter.explainable_reasoner.utils import (
     _format_multimodal_for_prompt,
     _rule_based_fallback,
     _sanitize_context,
@@ -29,9 +29,9 @@ def mock_dependencies():
     """Mocks dependencies that are not the focus of the tests."""
     with (
         patch(
-            "arbiter.explainable_reasoner.metrics.get_or_create_metric"
+            "self_fixing_engineer.arbiter.explainable_reasoner.metrics.get_or_create_metric"
         ) as mock_get_metric,
-        patch("arbiter.explainable_reasoner.utils._utils_logger") as mock_logger,
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.utils._utils_logger") as mock_logger,
     ):
 
         # Configure metric mock
@@ -56,8 +56,8 @@ def mock_dependencies():
 @pytest.fixture
 def mock_redis():
     """Mock aioredis for rate limiting tests."""
-    with patch("arbiter.explainable_reasoner.utils.REDIS_AVAILABLE", True):
-        with patch("arbiter.explainable_reasoner.utils.aioredis") as mock_aioredis:
+    with patch("self_fixing_engineer.arbiter.explainable_reasoner.utils.REDIS_AVAILABLE", True):
+        with patch("self_fixing_engineer.arbiter.explainable_reasoner.utils.aioredis") as mock_aioredis:
             mock_client = AsyncMock()
             mock_client.eval = AsyncMock(return_value=0)  # No wait time
             mock_aioredis.Redis = MagicMock(return_value=mock_client)
@@ -67,7 +67,7 @@ def mock_redis():
 @pytest.fixture
 def dummy_multimodal_obj():
     """Provides a multimodal data object."""
-    from arbiter.explainable_reasoner.utils import MultiModalData
+    from self_fixing_engineer.arbiter.explainable_reasoner.utils import MultiModalData
 
     return MultiModalData(
         data_type="image",

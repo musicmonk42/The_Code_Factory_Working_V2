@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 
 # Assuming all modules are in a discoverable path
-from arbiter.arbiter_growth.config_store import ConfigStore, TokenBucketRateLimiter
+from self_fixing_engineer.arbiter.arbiter_growth.config_store import ConfigStore, TokenBucketRateLimiter
 
 # --- Fixtures ---
 
@@ -90,7 +90,7 @@ async def config_store_with_fallback(tmp_path, mocker):
         return mocker.AsyncMock()  # noqa: F821 - pytest fixture
 
     # We patch aiofiles.open where it is *used*
-    patch_target = "arbiter.arbiter_growth.config_store.aiofiles.open"
+    patch_target = "self_fixing_engineer.arbiter.arbiter_growth.config_store.aiofiles.open"
     with patch(patch_target, side_effect=open_side_effect):
         with patch("etcd3.client", side_effect=Exception("etcd fail")):
             # Also mock os.path.exists
@@ -352,7 +352,7 @@ async def test_fallback_corrupted(
     # 5. We need to mock os.path.exists as well for this isolated test
     with patch("os.path.exists", return_value=True):
         # Patch where the code *under test* uses it
-        patch_target = "arbiter.arbiter_growth.config_store.aiofiles.open"
+        patch_target = "self_fixing_engineer.arbiter.arbiter_growth.config_store.aiofiles.open"
         with patch(patch_target, side_effect=open_side_effect):
             with caplog.at_level(logging.ERROR):
                 await store._load_from_fallback()
@@ -402,7 +402,7 @@ async def test_fallback_corrupted(tmp_path, mocker, caplog):
             return mock_checksum_file
         return mocker.AsyncMock()
 
-    patch_target = "arbiter.arbiter_growth.config_store.aiofiles.open"
+    patch_target = "self_fixing_engineer.arbiter.arbiter_growth.config_store.aiofiles.open"
     with patch(patch_target, side_effect=open_side_effect):
         with patch("etcd3.client", side_effect=Exception("etcd fail")):
             with patch("os.path.exists", return_value=True):

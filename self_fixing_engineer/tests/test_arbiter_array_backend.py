@@ -29,7 +29,7 @@ def _import_backend():
     from importlib.util import module_from_spec, spec_from_file_location
     from pathlib import Path
 
-    candidates = ("arbiter.arbiter_array_backend", "arbiter_array_backend")
+    candidates = ("self_fixing_engineer.arbiter.arbiter_array_backend", "arbiter_array_backend")
     for name in candidates:
         try:
             return importlib.import_module(name)

@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone
 
 import pytest
-from arbiter.arbiter_growth.models import (
+from self_fixing_engineer.arbiter.arbiter_growth.models import (
     ArbiterState,
     AuditLog,
     Base,

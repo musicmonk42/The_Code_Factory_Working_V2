@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import Mock
 
 # Import the module to test
-from arbiter.logging_utils import (
+from self_fixing_engineer.arbiter.logging_utils import (
     AuditLogger,
     LogLevel,
     PIIRedactorFilter,
@@ -579,7 +579,7 @@ class TestLoggingContext(unittest.TestCase):
 
     def test_logging_context_basic(self):
         """Test basic logging context."""
-        from arbiter.logging_utils import _context
+        from self_fixing_engineer.arbiter.logging_utils import _context
 
         with logging_context(user_id="123", request_id="abc"):
             self.assertEqual(_context.security_context["user_id"], "123")
@@ -590,7 +590,7 @@ class TestLoggingContext(unittest.TestCase):
 
     def test_nested_logging_context(self):
         """Test nested logging contexts."""
-        from arbiter.logging_utils import _context
+        from self_fixing_engineer.arbiter.logging_utils import _context
 
         with logging_context(user_id="123"):
             self.assertEqual(_context.security_context["user_id"], "123")
@@ -605,7 +605,7 @@ class TestLoggingContext(unittest.TestCase):
 
     def test_logging_context_with_exception(self):
         """Test logging context cleanup on exception."""
-        from arbiter.logging_utils import _context
+        from self_fixing_engineer.arbiter.logging_utils import _context
 
         try:
             with logging_context(user_id="123"):
@@ -690,7 +690,7 @@ class TestConfigureLogging(unittest.TestCase):
             configure_logging(audit_file=audit_file)
 
             # Audit logger should be configured
-            audit_logger = logging.getLogger("arbiter.audit")
+            audit_logger = logging.getLogger("self_fixing_engineer.arbiter.audit")
             self.assertTrue(len(audit_logger.handlers) > 0)
 
             # Close audit logger handlers

@@ -325,7 +325,7 @@ async def test_kafka_save_snapshot(kafka_backend, mock_kafka_producer):
     # Verify producer was called
     mock_kafka_producer.send_and_wait.assert_awaited_once()
     call_args = mock_kafka_producer.send_and_wait.call_args
-    assert call_args[0][0] == "arbiter.test_arbiter.snapshots"
+    assert call_args[0][0] == "self_fixing_engineer.arbiter.test_arbiter.snapshots"
 
     # Verify the message structure
     sent_payload = call_args[0][1]

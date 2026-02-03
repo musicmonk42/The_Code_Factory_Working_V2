@@ -61,7 +61,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 # OpenTelemetry: only acquire tracer; assume provider is set elsewhere
 try:
     from opentelemetry import trace
-    from arbiter.otel_config import get_tracer_safe
+    from self_fixing_engineer.arbiter.otel_config import get_tracer_safe
 except Exception:  # pragma: no cover - tracing optional
 
     class _NoOpTracer:  # minimal no-op
@@ -153,7 +153,7 @@ except Exception as e:  # pragma: no cover
 # --- SQLAlchemy ORM (optional DB sync) ---
 try:
     # Prefer project-wide Base if available to share metadata
-    from arbiter.agent_state import Base as _ProjectBase  # type: ignore
+    from self_fixing_engineer.arbiter.agent_state import Base as _ProjectBase  # type: ignore
 except Exception:  # pragma: no cover - fallback to local Base
     _ProjectBase = None
 
@@ -334,7 +334,7 @@ class PolicyManager:
         if db_url and Base is not None:
             try:
                 # project-specific client should provide async get_session()
-                from arbiter.postgres_client import PostgresClient  # type: ignore
+                from self_fixing_engineer.arbiter.postgres_client import PostgresClient  # type: ignore
 
                 self.db_client = PostgresClient(db_url)
             except Exception as e:  # pragma: no cover - optional
@@ -630,7 +630,7 @@ class PolicyManager:
         Implemented lazy to avoid hard dependency.
         """
         try:
-            from arbiter.permission_manager import PermissionManager  # type: ignore
+            from self_fixing_engineer.arbiter.permission_manager import PermissionManager  # type: ignore
         except Exception as e:
             raise RuntimeError(
                 "PermissionManager not available in this environment"

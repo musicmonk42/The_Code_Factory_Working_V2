@@ -10,10 +10,10 @@ import pytest
 import pytest_asyncio
 
 # Import centralized OpenTelemetry configuration for testing
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 
 # Import the MerkleTree client and its exceptions from the correct module
-from arbiter.models.merkle_tree import (
+from self_fixing_engineer.arbiter.models.merkle_tree import (
     MERKLE_OPS_TOTAL,
     MERKLE_TREE_DEPTH,
     MERKLE_TREE_SIZE,

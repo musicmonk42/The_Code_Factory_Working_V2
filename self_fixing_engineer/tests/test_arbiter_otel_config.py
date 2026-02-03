@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Import the module under test
-from arbiter.otel_config import (
+from self_fixing_engineer.arbiter.otel_config import (
     CollectorEndpoint,
     Environment,
     NoOpSpan,
@@ -439,7 +439,7 @@ class TestResourceCreation:
         config = OpenTelemetryConfig.get_instance()
 
         # Mock Resource class
-        with patch("arbiter.otel_config.Resource") as mock_resource:
+        with patch("self_fixing_engineer.arbiter.otel_config.Resource") as mock_resource:
             mock_resource.create.return_value = MagicMock()
 
             config._create_resource()
@@ -462,7 +462,7 @@ class TestResourceCreation:
         """Test resource creation includes Kubernetes metadata."""
         config = OpenTelemetryConfig.get_instance()
 
-        with patch("arbiter.otel_config.Resource") as mock_resource:
+        with patch("self_fixing_engineer.arbiter.otel_config.Resource") as mock_resource:
             mock_resource.create.return_value = MagicMock()
 
             config._create_resource()

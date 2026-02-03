@@ -37,7 +37,7 @@ import httpx
 import numpy as np
 from aiohttp import ClientSession
 from aiolimiter import AsyncLimiter
-from arbiter.metrics import (
+from self_fixing_engineer.arbiter.metrics import (
     get_or_create_counter,
     get_or_create_gauge,
     get_or_create_summary,
@@ -255,19 +255,19 @@ def _init_sentry():
 # Type checking imports - only used for type hints, not at runtime
 # Use string forward references in annotations (e.g., Optional["HumanInLoop"])
 if TYPE_CHECKING:
-    from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+    from self_fixing_engineer.arbiter.human_loop import HumanInLoop, HumanInLoopConfig
 
 # Assuming these are available in the project structure
 try:
-    from arbiter.agent_state import AgentState as AgentStateModel
-    from arbiter.agent_state import Base
-    from arbiter.config import ArbiterConfig
-    from arbiter.feedback import FeedbackManager
+    from self_fixing_engineer.arbiter.agent_state import AgentState as AgentStateModel
+    from self_fixing_engineer.arbiter.agent_state import Base
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.feedback import FeedbackManager
 
     # REMOVED: from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
     # Using TYPE_CHECKING and lazy import to avoid circular dependencies
-    from arbiter.monitoring import Monitor as BaseMonitor
-    from arbiter.utils import get_system_metrics_async
+    from self_fixing_engineer.arbiter.monitoring import Monitor as BaseMonitor
+    from self_fixing_engineer.arbiter.utils import get_system_metrics_async
 
     ARBITER_PACKAGE_AVAILABLE = True
 except ImportError as e:
@@ -285,7 +285,7 @@ except ImportError as e:
     get_system_metrics_async = None
 
 
-from arbiter.arbiter_plugin_registry import PluginBase, PlugInKind
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import PluginBase, PlugInKind
 
 # REMOVED: from arbiter.arbiter_plugin_registry import registry as PLUGIN_REGISTRY
 # Replaced with lazy getter to avoid import-time initialization overhead
@@ -304,7 +304,7 @@ def _get_plugin_registry():
     Returns:
         PluginRegistry: The singleton plugin registry instance
     """
-    from arbiter.arbiter_plugin_registry import get_registry
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import get_registry
 
     return get_registry()
 
@@ -329,7 +329,7 @@ except ImportError as e:
 
 
 try:
-    from arbiter.models.postgres_client import PostgresClient
+    from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient
 except ImportError as e:
     logging.debug(f"Optional dependency missing: {e} (PostgresClient)")
 
@@ -357,7 +357,7 @@ except ImportError as e:
 
 
 try:
-    from arbiter.plugins.multi_modal_plugin import MultiModalPlugin
+    from self_fixing_engineer.arbiter.plugins.multi_modal_plugin import MultiModalPlugin
 except ImportError as e:
     logging.debug(f"Optional dependency missing: {e} (MultiModalPlugin)")
 
@@ -368,7 +368,7 @@ except ImportError as e:
 
 
 try:
-    from arbiter.models.knowledge_graph_db import Neo4jKnowledgeGraph
+    from self_fixing_engineer.arbiter.models.knowledge_graph_db import Neo4jKnowledgeGraph
 except ImportError as e:
     logging.debug(f"Optional dependency missing: {e} (Neo4jKnowledgeGraph)")
 
@@ -396,7 +396,7 @@ except ImportError as e:
 
 
 try:
-    from arbiter.codebase_analyzer import CodebaseAnalyzer as CodeAnalyzer
+    from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer as CodeAnalyzer
 except ImportError as e:
     logging.debug(f"Optional dependency missing: {e} (CodebaseAnalyzer)")
 
@@ -1040,12 +1040,12 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     # Import safe_makedirs from utils to handle malformed paths
-    from arbiter.utils import safe_makedirs
+    from self_fixing_engineer.arbiter.utils import safe_makedirs
 
     log_dir = os.getenv("REPORTS_DIRECTORY", "./reports")
     log_dir, _ = safe_makedirs(log_dir, "./reports")
     handler = RotatingFileHandler(
-        os.path.join(log_dir, "arbiter.log"),
+        os.path.join(log_dir, "self_fixing_engineer.arbiter.log"),
         maxBytes=50 * 1024 * 1024,  # 50MB
         backupCount=10,
     )
@@ -1470,7 +1470,7 @@ class Arbiter:
         # Lazy import to avoid circular dependencies
         if ARBITER_PACKAGE_AVAILABLE:
             try:
-                from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+                from self_fixing_engineer.arbiter.human_loop import HumanInLoop, HumanInLoopConfig
             except ImportError:
                 HumanInLoop = None
                 HumanInLoopConfig = None

@@ -42,7 +42,7 @@ import time
 from typing import Any, Dict, Optional, Tuple, Type, Union
 
 # Use centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary
 from tenacity import (
     retry,

@@ -12,10 +12,10 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 # Assuming these are available from the arbiter package root
-from arbiter.plugins.multi_modal_config import MultiModalConfig
+from self_fixing_engineer.arbiter.plugins.multi_modal_config import MultiModalConfig
 
 # Initialize logger early before any usage
-logger = logging.getLogger("arbiter.plugins.multi_modal_plugin")
+logger = logging.getLogger("self_fixing_engineer.arbiter.plugins.multi_modal_plugin")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()

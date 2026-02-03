@@ -148,7 +148,7 @@ async def orchestrator(mocker: MockerFixture, tmp_path):
 
     # Mock the sub-modules - just mock to do nothing, let orchestrator handle counter
     mocker.patch(
-        "arbiter.meta_learning_orchestrator.orchestrator.Ingestor.ingest_learning_record",
+        "self_fixing_engineer.arbiter.meta_learning_orchestrator.orchestrator.Ingestor.ingest_learning_record",
         new_callable=mocker.AsyncMock,
     )
 
@@ -165,16 +165,16 @@ async def orchestrator(mocker: MockerFixture, tmp_path):
         }
     )
     mocker.patch(
-        "arbiter.meta_learning_orchestrator.orchestrator.Trainer.trigger_model_training_and_deployment",
+        "self_fixing_engineer.arbiter.meta_learning_orchestrator.orchestrator.Trainer.trigger_model_training_and_deployment",
         mocker.AsyncMock(return_value=mock_trainer_result),
     )
 
     mocker.patch(
-        "arbiter.meta_learning_orchestrator.orchestrator.AuditUtils.add_audit_event",
+        "self_fixing_engineer.arbiter.meta_learning_orchestrator.orchestrator.AuditUtils.add_audit_event",
         mocker.AsyncMock(),
     )
     mocker.patch(
-        "arbiter.meta_learning_orchestrator.orchestrator.AuditUtils.validate_audit_chain",
+        "self_fixing_engineer.arbiter.meta_learning_orchestrator.orchestrator.AuditUtils.validate_audit_chain",
         mocker.AsyncMock(
             return_value={
                 "is_valid": True,
@@ -184,24 +184,24 @@ async def orchestrator(mocker: MockerFixture, tmp_path):
         ),
     )
     mocker.patch(
-        "arbiter.meta_learning_orchestrator.orchestrator.MetaLearningOrchestrator._cleanup_s3_data_lake",
+        "self_fixing_engineer.arbiter.meta_learning_orchestrator.orchestrator.MetaLearningOrchestrator._cleanup_s3_data_lake",
         mocker.AsyncMock(),
     )
     # Don't mock _cleanup_local_data_lake for the cleanup test
     mocker.patch(
-        "arbiter.meta_learning_orchestrator.orchestrator.MetaLearningOrchestrator._acquire_leader_lock",
+        "self_fixing_engineer.arbiter.meta_learning_orchestrator.orchestrator.MetaLearningOrchestrator._acquire_leader_lock",
         mocker.AsyncMock(
             return_value=(True, {"instance_id": str(uuid.uuid4()), "token": 12345})
         ),
     )
     mocker.patch(
-        "arbiter.meta_learning_orchestrator.orchestrator.MetaLearningOrchestrator._verify_leadership_and_fencing",
+        "self_fixing_engineer.arbiter.meta_learning_orchestrator.orchestrator.MetaLearningOrchestrator._verify_leadership_and_fencing",
         mocker.AsyncMock(return_value=True),
     )
 
     # Mock the background task creation to prevent infinite loops
     mocker.patch(
-        "arbiter.meta_learning_orchestrator.orchestrator.create_task_with_supervision",
+        "self_fixing_engineer.arbiter.meta_learning_orchestrator.orchestrator.create_task_with_supervision",
         side_effect=lambda coro, name, **kwargs: asyncio.create_task(asyncio.sleep(0)),
     )
 

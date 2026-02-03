@@ -4,7 +4,7 @@ import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from arbiter.explorer import (
+from self_fixing_engineer.arbiter.explorer import (
     ArbiterExplorer,
     ExperimentExecutionError,
     MockLogDB,

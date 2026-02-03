@@ -10,7 +10,7 @@ import pytest
 import pytest_asyncio
 
 # Use centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -84,7 +84,7 @@ async def setup_env(mocker: MockerFixture, tmp_path):
 async def audit_utils(setup_env, tmp_path):
     """Fixture for AuditUtils with mocked dependencies."""
     # Import here to ensure module-level variables are patched
-    from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 
     # Create AuditUtils with explicit parameters for tests
     audit_utils = AuditUtils(
@@ -135,7 +135,7 @@ async def test_initialization_success(audit_utils):
 async def test_initialization_no_encryption_key(mocker: MockerFixture, tmp_path):
     """Test initialization without encryption key."""
     import arbiter.meta_learning_orchestrator.audit_utils as audit_module
-    from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 
     # Temporarily clear the module-level variable
     original_key = audit_module.AUDIT_ENCRYPTION_KEY
@@ -156,7 +156,7 @@ async def test_initialization_no_encryption_key(mocker: MockerFixture, tmp_path)
 @pytest.mark.asyncio
 async def test_initialization_no_signing_keys(mocker: MockerFixture, caplog, tmp_path):
     """Test initialization without signing keys."""
-    from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 
     # Temporarily clear the signing keys
     mocker.patch.dict(
@@ -260,7 +260,7 @@ async def test_add_audit_event_kafka_fallback(mocker: MockerFixture, tmp_path, c
 async def test_add_audit_event_no_encryption(mocker: MockerFixture, tmp_path):
     """Test adding an audit event without encryption."""
     import arbiter.meta_learning_orchestrator.audit_utils as audit_module
-    from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 
     original_key = audit_module.AUDIT_ENCRYPTION_KEY
     audit_module.AUDIT_ENCRYPTION_KEY = None
@@ -382,7 +382,7 @@ async def test_validate_audit_chain_missing_file(audit_utils, tmp_path):
 @pytest.mark.asyncio
 async def test_log_rotation(setup_env, tmp_path):
     """Test log rotation when file size exceeds limit."""
-    from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 
     # Create a new AuditUtils with very small rotation size
     small_audit_utils = AuditUtils(

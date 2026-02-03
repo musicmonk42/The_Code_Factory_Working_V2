@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 
 # Assuming all modules are in a discoverable path
-from arbiter.arbiter_growth.idempotency import (
+from self_fixing_engineer.arbiter.arbiter_growth.idempotency import (
     IDEMPOTENCY_HITS_TOTAL,
     IdempotencyStore,
     IdempotencyStoreError,
@@ -186,7 +186,7 @@ async def test_start_success(set_env_redis_url, caplog):
     mock_redis_client.ping = AsyncMock(return_value=True)
 
     with patch(
-        "arbiter.arbiter_growth.idempotency.redis.from_url",
+        "self_fixing_engineer.arbiter.arbiter_growth.idempotency.redis.from_url",
         return_value=mock_redis_client,
     ):
         with patch("redis.asyncio.from_url", return_value=mock_redis_client):
@@ -205,7 +205,7 @@ async def test_start_idempotent(set_env_redis_url):
     mock_redis_client.ping = AsyncMock(return_value=True)
 
     with patch(
-        "arbiter.arbiter_growth.idempotency.redis.from_url",
+        "self_fixing_engineer.arbiter.arbiter_growth.idempotency.redis.from_url",
         return_value=mock_redis_client,
     ) as mock_from_url:
         await store.start()
@@ -234,7 +234,7 @@ async def test_start_retry_logic(set_env_redis_url):
     mock_redis_client.ping = AsyncMock(side_effect=ping_side_effect)
 
     with patch(
-        "arbiter.arbiter_growth.idempotency.redis.from_url",
+        "self_fixing_engineer.arbiter.arbiter_growth.idempotency.redis.from_url",
         return_value=mock_redis_client,
     ):
         return True  # Success on third attempt
@@ -256,7 +256,7 @@ async def test_start_fails_after_max_retries(set_env_redis_url, caplog):
     mock_redis_client.ping = AsyncMock(side_effect=RedisError("Persistent failure"))
 
     with patch(
-        "arbiter.arbiter_growth.idempotency.redis.from_url",
+        "self_fixing_engineer.arbiter.arbiter_growth.idempotency.redis.from_url",
         return_value=mock_redis_client,
     ):
         with pytest.raises(IdempotencyStoreError, match="Failed to connect to Redis"):
@@ -365,7 +365,7 @@ async def test_cluster_mode_initialization(set_env_redis_url):
     mock_cluster.ping = AsyncMock(return_value=True)
 
     with patch(
-        "arbiter.arbiter_growth.idempotency.RedisCluster.from_url",
+        "self_fixing_engineer.arbiter.arbiter_growth.idempotency.RedisCluster.from_url",
         return_value=mock_cluster,
     ) as mock_from_url:
         await store.start()

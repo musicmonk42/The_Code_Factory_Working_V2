@@ -19,7 +19,7 @@ from sqlalchemy.orm import declarative_base
 
 # Import the centralized tracer configuration
 try:
-    from arbiter.otel_config import get_tracer
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
 
     tracer = get_tracer("monitor")
 except ImportError:
@@ -39,10 +39,10 @@ except ImportError:
 
 # Mock/Placeholder imports for a self-contained fix
 try:
-    from arbiter.agent_state import Base
-    from arbiter.config import ArbiterConfig
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter.postgres_client import PostgresClient
+    from self_fixing_engineer.arbiter.agent_state import Base
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
     from arbiter_plugin_registry import PlugInKind, get_registry
 
     # Lazy getter for registry to avoid import-time initialization
@@ -221,7 +221,7 @@ class Monitor:
         Checks if a user role has a specific permission.
         """
         try:
-            from arbiter import PermissionManager
+            from self_fixing_engineer.arbiter import PermissionManager
 
             permission_mgr = PermissionManager(self.config)
             return permission_mgr.check_permission(role, permission)

@@ -26,34 +26,34 @@ import numpy as np  # Using numpy for array-based prioritization
 import redis.asyncio as redis
 
 # SFE Core AI System Imports
-from arbiter.arbiter import Arbiter
+from self_fixing_engineer.arbiter.arbiter import Arbiter
 
 # SFE Engine Shared Components
-from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
-from arbiter.arena import ArbiterArena
-from arbiter.bug_manager import BugManager
-from arbiter.config import ArbiterConfig
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
+from self_fixing_engineer.arbiter.arena import ArbiterArena
+from self_fixing_engineer.arbiter.bug_manager import BugManager
+from self_fixing_engineer.arbiter.config import ArbiterConfig
 
 # from arbiter.knowledge_graph import KnowledgeGraph
-from arbiter.explainable_reasoner import ExplainableReasoner
-from arbiter.feedback import FeedbackManager
+from self_fixing_engineer.arbiter.explainable_reasoner import ExplainableReasoner
+from self_fixing_engineer.arbiter.feedback import FeedbackManager
 
 # REMOVED: from arbiter.human_loop import HumanInLoop
 # Using lazy import to avoid circular dependencies
-from arbiter.monitoring import Monitor
-from arbiter.policy import PolicyEngine
-from arbiter.utils import get_system_metrics_async
+from self_fixing_engineer.arbiter.monitoring import Monitor
+from self_fixing_engineer.arbiter.policy import PolicyEngine
+from self_fixing_engineer.arbiter.utils import get_system_metrics_async
 from circuitbreaker import circuit
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import WebSocket, WebSocketDisconnect
 
 # Type checking imports - only used for type hints, not at runtime
 if TYPE_CHECKING:
-    from arbiter.human_loop import HumanInLoop
+    from self_fixing_engineer.arbiter.human_loop import HumanInLoop
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from arbiter.arbiter_array_backend import ConcreteArrayBackend as ArrayBackend
-from arbiter.metrics import (
+from self_fixing_engineer.arbiter.arbiter_array_backend import ConcreteArrayBackend as ArrayBackend
+from self_fixing_engineer.arbiter.metrics import (
     get_or_create_counter,
     get_or_create_gauge,
     get_or_create_histogram,
@@ -380,7 +380,7 @@ class DecisionOptimizer:
             else None
         )
         # Lazy import to avoid circular dependencies
-        from arbiter.human_loop import HumanInLoop
+        from self_fixing_engineer.arbiter.human_loop import HumanInLoop
 
         self.human_in_loop: Optional[HumanInLoop] = (
             sfe_core_engine.human_in_loop

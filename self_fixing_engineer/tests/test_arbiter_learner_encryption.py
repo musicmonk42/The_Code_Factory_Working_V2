@@ -5,7 +5,7 @@ import os
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from arbiter.learner.encryption import (
+from self_fixing_engineer.arbiter.learner.encryption import (
     ArbiterConfig,
     decrypt_value,
     encrypt_value,

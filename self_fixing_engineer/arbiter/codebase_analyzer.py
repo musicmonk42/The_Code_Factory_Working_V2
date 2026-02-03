@@ -28,9 +28,9 @@ from tenacity import (
 )
 
 try:
-    from arbiter.arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind
-    from arbiter.arbiter_plugin_registry import register as arbiter_register
-    from arbiter.arbiter_plugin_registry import registry as arbiter_registry
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import register as arbiter_register
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import registry as arbiter_registry
 except ImportError:
     # Create mock versions
     def arbiter_register(kind, name, version, author):
@@ -50,11 +50,11 @@ except ImportError:
 
 # Mock/Plausholder imports for a self-contained fix
 try:
-    from arbiter import PermissionManager
-    from arbiter.config import ArbiterConfig
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter.otel_config import get_tracer
-    from arbiter.postgres_client import PostgresClient
+    from self_fixing_engineer.arbiter import PermissionManager
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
+    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
     from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 

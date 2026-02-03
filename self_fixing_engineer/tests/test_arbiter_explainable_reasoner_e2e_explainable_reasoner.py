@@ -34,44 +34,44 @@ def mock_external_deps():
     """Mocks all external services and libraries to isolate the reasoner package logic."""
     with (
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.TRANSFORMERS_AVAILABLE",
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.TRANSFORMERS_AVAILABLE",
             True,
         ),
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.pipeline"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.pipeline"
         ) as mock_pipeline,
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.AutoModelForCausalLM"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.AutoModelForCausalLM"
         ) as mock_model,
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.AutoTokenizer"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.AutoTokenizer"
         ) as mock_tokenizer,
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.pybreaker"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.pybreaker"
         ) as mock_breaker,
-        patch("arbiter.explainable_reasoner.explainable_reasoner.jwt") as mock_jwt,
-        patch("arbiter.explainable_reasoner.explainable_reasoner.JWT_AVAILABLE", True),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.jwt") as mock_jwt,
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.JWT_AVAILABLE", True),
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.LLMAdapterFactory"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.LLMAdapterFactory"
         ) as mock_adapter_factory,
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.AuditLedgerClient"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.AuditLedgerClient"
         ) as mock_audit,
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.tracemalloc"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.tracemalloc"
         ) as mock_tracemalloc,
-        patch("arbiter.explainable_reasoner.adapters.httpx.AsyncClient"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.adapters.httpx.AsyncClient"),
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner._sanitize_context"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner._sanitize_context"
         ) as mock_sanitize,
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner._simple_text_sanitize"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner._simple_text_sanitize"
         ) as mock_text_sanitize,
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner._format_multimodal_for_prompt"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner._format_multimodal_for_prompt"
         ) as mock_format,
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.get_or_create_metric"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.get_or_create_metric"
         ) as mock_get_metric,
     ):
 
@@ -233,7 +233,7 @@ async def plugin(prod_config):
     os.environ["JWT_ISS"] = "reasoner-iss"
 
     with patch(
-        "arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env",
+        "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env",
         return_value=prod_config,
     ):
         plugin_instance = ExplainableReasonerPlugin()
@@ -374,7 +374,7 @@ async def test_e2e_plugin_rbac_and_admin_tasks(plugin):
     """Tests the plugin's Role-Based Access Control for sensitive operations."""
     # Mock the jwt module for this test
     with patch(
-        "arbiter.explainable_reasoner.explainable_reasoner.jwt"
+        "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.jwt"
     ) as mock_jwt_module:
         # Create a proper exception class for InvalidTokenError
         mock_jwt_module.InvalidTokenError = type("InvalidTokenError", (Exception,), {})
@@ -489,7 +489,7 @@ def test_e2e_metrics_exposition():
     """Ensures that metrics can be generated for a Prometheus scraper."""
     # Initialize some metrics to ensure they exist
     with patch(
-        "arbiter.explainable_reasoner.metrics.METRICS",
+        "self_fixing_engineer.arbiter.explainable_reasoner.metrics.METRICS",
         {
             "reasoner_requests_total": MagicMock(_name="reasoner_requests_total"),
             "reasoner_prompt_size_bytes": MagicMock(_name="reasoner_prompt_size_bytes"),
@@ -499,7 +499,7 @@ def test_e2e_metrics_exposition():
         },
     ):
         with patch(
-            "arbiter.explainable_reasoner.metrics.generate_latest"
+            "self_fixing_engineer.arbiter.explainable_reasoner.metrics.generate_latest"
         ) as mock_generate:
             # Mock the metrics content
             mock_content = b"""# HELP reasoner_requests_total Total requests

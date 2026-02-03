@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 # Fix the import path - should import from the learner module, not tests
-from arbiter.learner.fuzzy import (
+from self_fixing_engineer.arbiter.learner.fuzzy import (
     _learn_batch_with_retry,
     fuzzy_parser_failure_total,
     load_parser_priorities,
@@ -71,7 +71,7 @@ class TestLoadParserPriorities:
 
         with patch("builtins.open", return_value=mock_file):
             with patch(
-                "arbiter.learner.fuzzy.os.getenv", return_value="test_priorities.json"
+                "self_fixing_engineer.arbiter.learner.fuzzy.os.getenv", return_value="test_priorities.json"
             ):
                 load_parser_priorities()
 
@@ -82,7 +82,7 @@ class TestLoadParserPriorities:
         import arbiter.learner.fuzzy as fuzzy_module
 
         with patch("builtins.open", side_effect=FileNotFoundError):
-            with patch("arbiter.learner.fuzzy.os.getenv", return_value="missing.json"):
+            with patch("self_fixing_engineer.arbiter.learner.fuzzy.os.getenv", return_value="missing.json"):
                 load_parser_priorities()
 
                 assert (
@@ -95,7 +95,7 @@ class TestLoadParserPriorities:
         mock_file.__enter__.return_value.read.return_value = "invalid json {"
 
         with patch("builtins.open", return_value=mock_file):
-            with patch("arbiter.learner.fuzzy.os.getenv", return_value="invalid.json"):
+            with patch("self_fixing_engineer.arbiter.learner.fuzzy.os.getenv", return_value="invalid.json"):
                 with pytest.raises(json.JSONDecodeError):
                     load_parser_priorities()
 
@@ -144,7 +144,7 @@ class TestLearnBatchWithRetry:
 
         facts = [{"domain": "test", "key": "key1", "value": "value1"}]
 
-        with patch("arbiter.learner.fuzzy.os.getenv", return_value="3"):
+        with patch("self_fixing_engineer.arbiter.learner.fuzzy.os.getenv", return_value="3"):
             result = await _learn_batch_with_retry(mock_learner, facts, None, "test")
 
             assert len(result) == 1
@@ -173,7 +173,7 @@ class TestProcessUnstructuredData:
         )
         mock_learner.fuzzy_parser_hooks = [parser]
 
-        with patch("arbiter.learner.fuzzy.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.fuzzy.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             result = await process_unstructured_data(
@@ -205,7 +205,7 @@ class TestProcessUnstructuredData:
             ]
         )
 
-        with patch("arbiter.learner.fuzzy.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.fuzzy.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0, 1.0, 2.0]
 
             result = await process_unstructured_data(
@@ -238,7 +238,7 @@ class TestProcessUnstructuredData:
         fuzzy_module.PARSER_PRIORITIES["LowPriorityParser"] = 5
         fuzzy_module.PARSER_PRIORITIES["HighPriorityParser"] = 10
 
-        with patch("arbiter.learner.fuzzy.time"):
+        with patch("self_fixing_engineer.arbiter.learner.fuzzy.time"):
             await process_unstructured_data(learner=mock_learner, text="Test text")
 
             # Both should be called (parallel execution)
@@ -308,8 +308,8 @@ class TestProcessUnstructuredData:
         slow_parser = MockFuzzyParser(delay=10)  # 10 second delay
         mock_learner.fuzzy_parser_hooks = [slow_parser]
 
-        with patch("arbiter.learner.fuzzy.PARSER_TIMEOUT_SECONDS", 0.1):
-            with patch("arbiter.learner.fuzzy.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.fuzzy.PARSER_TIMEOUT_SECONDS", 0.1):
+            with patch("self_fixing_engineer.arbiter.learner.fuzzy.time") as mock_time:
                 mock_time.perf_counter.side_effect = [1.0, 2.0]
 
                 with patch.object(fuzzy_parser_failure_total, "labels") as mock_metric:
@@ -334,7 +334,7 @@ class TestProcessUnstructuredData:
         failing_parser = MockFuzzyParser(should_fail=True)
         mock_learner.fuzzy_parser_hooks = [failing_parser]
 
-        with patch("arbiter.learner.fuzzy.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.fuzzy.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             with patch.object(fuzzy_parser_failure_total, "labels") as mock_metric:
@@ -360,7 +360,7 @@ class TestProcessUnstructuredData:
         empty_parser = MockFuzzyParser(facts_to_return=[])
         mock_learner.fuzzy_parser_hooks = [empty_parser]
 
-        with patch("arbiter.learner.fuzzy.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.fuzzy.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             result = await process_unstructured_data(
@@ -387,11 +387,11 @@ class TestProcessUnstructuredData:
         mock_learner.fuzzy_parser_hooks = [parser]
         mock_learner.learn_batch = AsyncMock(side_effect=Exception("Learn failed"))
 
-        with patch("arbiter.learner.fuzzy.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.fuzzy.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             with patch(
-                "arbiter.learner.fuzzy.os.getenv", return_value="1"
+                "self_fixing_engineer.arbiter.learner.fuzzy.os.getenv", return_value="1"
             ):  # Only 1 retry
                 result = await process_unstructured_data(
                     learner=mock_learner, text="Test text"
@@ -490,7 +490,7 @@ class TestIntegration:
         # Test text with emails
         test_text = "Contact us at support@example.com or sales@example.org"
 
-        with patch("arbiter.learner.fuzzy.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.fuzzy.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             result = await process_unstructured_data(

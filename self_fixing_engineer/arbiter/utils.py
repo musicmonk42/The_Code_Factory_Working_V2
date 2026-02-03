@@ -9,7 +9,7 @@ import psutil
 from aiolimiter import AsyncLimiter
 
 # Import centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import REGISTRY, Counter
 from tenacity import (
     retry,
@@ -21,7 +21,7 @@ from tenacity import (
 # Mock/Placeholder imports for a self-contained fix
 try:
     # FIXED: Correctly import PluginBase from the appropriate registry module
-    from arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
     from arbiter_plugin_registry import PluginBase, PlugInKind, registry
 except ImportError:
 

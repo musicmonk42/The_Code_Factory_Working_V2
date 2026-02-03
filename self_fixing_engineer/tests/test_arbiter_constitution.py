@@ -22,7 +22,7 @@ from unittest.mock import patch
 def _import_constitution():
     import importlib
 
-    candidates = ("arbiter.arbiter_constitution", "arbiter_constitution")
+    candidates = ("self_fixing_engineer.arbiter.arbiter_constitution", "arbiter_constitution")
     for name in candidates:
         try:
             return importlib.import_module(name)

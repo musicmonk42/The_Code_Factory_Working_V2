@@ -27,9 +27,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# The test file assumes 'arbiter.policy.config' is in the path.
+# The test file assumes 'self_fixing_engineer.arbiter.policy.config' is in the path.
 # For standalone execution, we might need to adjust sys.path, but for a pytest run from the project root, this is fine.
-from arbiter.policy.config import ArbiterConfig, get_config
+from self_fixing_engineer.arbiter.policy.config import ArbiterConfig, get_config
 from pydantic import SecretStr, ValidationError
 
 ########## Type Validation and Field Defaults ##########
@@ -208,11 +208,11 @@ def test_singleton_thread_safety(monkeypatch):
     # Reset for test
     with (
         patch("redis.asyncio.Redis.from_url"),
-        patch("arbiter.policy.config._instance", None),
+        patch("self_fixing_engineer.arbiter.policy.config._instance", None),
     ):
 
         # Access the private lock on the module to ensure it's reset
-        from arbiter.policy import config as config_module
+        from self_fixing_engineer.arbiter.policy import config as config_module
 
         config_module._instance = None
 
@@ -279,7 +279,7 @@ def test_public_api_symbols():
     os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
 
     with patch("redis.asyncio.Redis.from_url"):
-        from arbiter.policy.config import ArbiterConfig, get_config
+        from self_fixing_engineer.arbiter.policy.config import ArbiterConfig, get_config
 
         assert callable(get_config)
         assert isinstance(get_config(), ArbiterConfig)

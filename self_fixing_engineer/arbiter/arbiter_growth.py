@@ -11,7 +11,7 @@ from typing import Awaitable, Callable, Dict, List, Optional, Protocol, Union
 import aiofiles
 import redis.asyncio as redis
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from cryptography.fernet import Fernet
 from etcd3 import client as etcd_client
 from kazoo.client import KazooClient
@@ -391,7 +391,7 @@ class ContextAwareCallable:
         token = attach(ctx)
         try:
             with tracer.start_as_current_span(
-                "queued_operation", attributes={"arbiter.id": self._arbiter_id}
+                "queued_operation", attributes={"self_fixing_engineer.arbiter.id": self._arbiter_id}
             ):
                 GROWTH_OPERATION_QUEUE_LATENCY.labels(arbiter=self._arbiter_id).observe(
                     datetime.now(timezone.utc).timestamp() - self.queued_time
@@ -1097,7 +1097,7 @@ class KafkaStorageBackend:
     # or a dedicated topic for state snapshots, often compressed.
     # For this interface, we'll model it as a separate topic.
     async def load(self, arbiter_id: str) -> Optional[Dict[str, Any]]:
-        snapshot_topic = f"arbiter.{arbiter_id}.snapshots"
+        snapshot_topic = f"self_fixing_engineer.arbiter.{arbiter_id}.snapshots"
         # To load the *latest* snapshot, we'd read from the end of the topic.
         # This requires a consumer. A simpler approach for loading is to use the AdminClient
         # or consume from the topic's end, but Kafka is not optimized for "read latest record by key" like Redis/DB.
@@ -1191,7 +1191,7 @@ class KafkaStorageBackend:
             return None
 
     async def save(self, arbiter_id: str, data: Dict[str, Any]) -> None:
-        snapshot_topic = f"arbiter.{arbiter_id}.snapshots"
+        snapshot_topic = f"self_fixing_engineer.arbiter.{arbiter_id}.snapshots"
 
         # Prepare data for Avro serialization, handling encryption
         save_data_avro = data.copy()
@@ -1234,7 +1234,7 @@ class KafkaStorageBackend:
     )
     @tracer.start_as_current_span("kafka_save_event")
     async def save_event(self, arbiter_id: str, event: Dict[str, Any]) -> None:
-        event_topic = f"arbiter.{arbiter_id}.events"
+        event_topic = f"self_fixing_engineer.arbiter.{arbiter_id}.events"
 
         event_data_avro = event.copy()
         event_data_avro["arbiter_id"] = arbiter_id  # Ensure arbiter_id is in the record
@@ -1283,7 +1283,7 @@ class KafkaStorageBackend:
     async def load_events(
         self, arbiter_id: str, from_offset: Union[int, str] = 0
     ) -> List[Dict[str, Any]]:
-        event_topic = f"arbiter.{arbiter_id}.events"
+        event_topic = f"self_fixing_engineer.arbiter.{arbiter_id}.events"
         events_with_offsets = []
 
         consumer_group_id = f"arbiter-event-loader-{arbiter_id}-{uuid.uuid4().hex[:8]}"
@@ -1418,7 +1418,7 @@ class KafkaStorageBackend:
         previous_hash: str,
     ) -> str:
         # Kafka for audit logs implies a topic specifically for audit events.
-        audit_topic = f"arbiter.{arbiter_id}.audit_logs"
+        audit_topic = f"self_fixing_engineer.arbiter.{arbiter_id}.audit_logs"
         timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
         details_str = json.dumps(details, sort_keys=True)
         current_hash = hashlib.sha256(
@@ -1461,7 +1461,7 @@ class KafkaStorageBackend:
         logger.warning(
             "Kafka get_last_audit_hash is a placeholder and inefficient for real-time lookup. Use a queryable DB for audit chain head."
         )
-        audit_topic = f"arbiter.{arbiter_id}.audit_logs"
+        audit_topic = f"self_fixing_engineer.arbiter.{arbiter_id}.audit_logs"
         last_hash = "genesis_hash"
 
         consumer_group_id = f"audit-hash-reader-{arbiter_id}-{uuid.uuid4().hex[:8]}"
@@ -1522,7 +1522,7 @@ class KafkaStorageBackend:
         logger.info(
             f"Loading all audit logs for {arbiter_id} from Kafka. This might take time for large topics."
         )
-        audit_topic = f"arbiter.{arbiter_id}.audit_logs"
+        audit_topic = f"self_fixing_engineer.arbiter.{arbiter_id}.audit_logs"
         all_logs = []
 
         consumer_group_id = f"audit-log-reader-{arbiter_id}-{uuid.uuid4().hex[:8]}"
@@ -1783,7 +1783,7 @@ class ArbiterGrowthManager:
         would involve a production-grade MLOps pipeline.
         """
         with tracer.start_as_current_span(
-            "arbiter_evolution_cycle", attributes={"arbiter.id": self.arbiter}
+            "arbiter_evolution_cycle", attributes={"self_fixing_engineer.arbiter.id": self.arbiter}
         ):
             logger.info(f"Starting evolution cycle for arbiter: {self.arbiter}")
 
@@ -2001,7 +2001,7 @@ class ArbiterGrowthManager:
         This ensures the arbiter's state is consistent.
         """
         with tracer.start_as_current_span(
-            "load_state_and_replay_events", attributes={"arbiter.id": self.arbiter}
+            "load_state_and_replay_events", attributes={"self_fixing_engineer.arbiter.id": self.arbiter}
         ):
             logger.info(
                 f"Loading state and replaying events for arbiter: {self.arbiter}"
@@ -2365,7 +2365,7 @@ class ArbiterGrowthManager:
         """
         with tracer.start_as_current_span(
             "record_growth_event_api",
-            attributes={"event.type": event_type, "arbiter.id": self.arbiter},
+            attributes={"event.type": event_type, "self_fixing_engineer.arbiter.id": self.arbiter},
         ):
 
             async def operation():

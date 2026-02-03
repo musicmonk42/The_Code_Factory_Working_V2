@@ -40,7 +40,7 @@ if missing:
 
 def setup_module():
     """Module-wide setup (call once at app start)."""
-    logger.info("arbiter.learner module initialized", version=__version__)
+    logger.info("self_fixing_engineer.arbiter.learner module initialized", version=__version__)
 
 
 from .audit import CircuitBreaker

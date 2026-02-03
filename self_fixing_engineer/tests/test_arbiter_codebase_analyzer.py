@@ -12,12 +12,12 @@ from typer.testing import CliRunner
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Import centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 
 # Initialize tracer using centralized config
 tracer = get_tracer(__name__)
 
-from arbiter.codebase_analyzer import (
+from self_fixing_engineer.arbiter.codebase_analyzer import (
     MYPY_AVAILABLE,
     RADON_AVAILABLE,
     CodebaseAnalyzer,
@@ -61,8 +61,8 @@ def mock_config_file(temp_dir):
 @pytest.fixture(autouse=True)
 def mock_metrics():
     with (
-        patch("arbiter.codebase_analyzer.analyzer_ops_total") as mock_ops,
-        patch("arbiter.codebase_analyzer.analyzer_errors_total") as mock_errors,
+        patch("self_fixing_engineer.arbiter.codebase_analyzer.analyzer_ops_total") as mock_ops,
+        patch("self_fixing_engineer.arbiter.codebase_analyzer.analyzer_errors_total") as mock_errors,
     ):
         mock_ops.labels.return_value.inc = MagicMock()
         mock_errors.labels.return_value.inc = MagicMock()
@@ -82,7 +82,7 @@ def mock_metrics():
     ],
 )
 def test_conditional_imports(dep, flag, caplog):
-    with patch(f"arbiter.codebase_analyzer.{flag}", False):
+    with patch(f"self_fixing_engineer.arbiter.codebase_analyzer.{flag}", False):
         # We need a way to reliably test this. A simple patch on the global is not enough
         # as the check happens at module import time. This test might be fragile.
         # A better approach would be to test the logic that uses these flags.
@@ -306,7 +306,7 @@ def test_generate_junit_xml_report():
 # Test CLI scan command
 def test_cli_scan():
     runner = CliRunner()
-    with patch("arbiter.codebase_analyzer.CodebaseAnalyzer") as mock_analyzer_class:
+    with patch("self_fixing_engineer.arbiter.codebase_analyzer.CodebaseAnalyzer") as mock_analyzer_class:
         mock_instance = MagicMock()
         mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
         mock_instance.__aexit__ = AsyncMock()
@@ -325,7 +325,7 @@ def test_cli_scan():
 # Test CLI tools command
 def test_cli_tools():
     runner = CliRunner()
-    with patch("arbiter.codebase_analyzer.CodebaseAnalyzer") as mock_analyzer_class:
+    with patch("self_fixing_engineer.arbiter.codebase_analyzer.CodebaseAnalyzer") as mock_analyzer_class:
         mock_instance = MagicMock()
         mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
         mock_instance.__aexit__ = AsyncMock()
@@ -403,29 +403,29 @@ def test_idempotent_metric_registration():
         k: v
         for k, v in sys.modules.items()
         if "codebase_analyzer" in k
-        or "arbiter.codebase_analyzer" in k
+        or "self_fixing_engineer.arbiter.codebase_analyzer" in k
         or "prometheus" in k
     }
 
     try:
         # Remove the module from cache to force re-import
-        for key in ["codebase_analyzer", "arbiter.codebase_analyzer"]:
+        for key in ["codebase_analyzer", "self_fixing_engineer.arbiter.codebase_analyzer"]:
             if key in sys.modules:
                 del sys.modules[key]
 
         # First import using absolute path as per existing pattern
-        from arbiter import codebase_analyzer as ca1
+        from self_fixing_engineer.arbiter import codebase_analyzer as ca1
 
         assert hasattr(ca1, "analyzer_ops_total")
         assert hasattr(ca1, "analyzer_errors_total")
 
         # Remove from cache again
-        for key in ["codebase_analyzer", "arbiter.codebase_analyzer"]:
+        for key in ["codebase_analyzer", "self_fixing_engineer.arbiter.codebase_analyzer"]:
             if key in sys.modules:
                 del sys.modules[key]
 
         # Second import - this should use idempotent registration
-        from arbiter import codebase_analyzer as ca2
+        from self_fixing_engineer.arbiter import codebase_analyzer as ca2
 
         assert hasattr(ca2, "analyzer_ops_total")
         assert hasattr(ca2, "analyzer_errors_total")
@@ -442,7 +442,7 @@ def test_idempotent_metric_registration():
         # Restore original modules to avoid side effects
         for key in list(sys.modules.keys()):
             if (
-                "codebase_analyzer" in key or "arbiter.codebase_analyzer" in key
+                "codebase_analyzer" in key or "self_fixing_engineer.arbiter.codebase_analyzer" in key
             ) and key not in original_modules:
                 del sys.modules[key]
         sys.modules.update(original_modules)
@@ -450,7 +450,7 @@ def test_idempotent_metric_registration():
 
 def test_create_dummy_metric():
     """Test that _create_dummy_metric returns a functional no-op metric."""
-    from arbiter.codebase_analyzer import _create_dummy_metric
+    from self_fixing_engineer.arbiter.codebase_analyzer import _create_dummy_metric
 
     dummy = _create_dummy_metric()
 
@@ -477,7 +477,7 @@ def test_create_dummy_metric():
 
 def test_get_or_create_metric():
     """Test that _get_or_create_metric handles duplicate registration gracefully."""
-    from arbiter.codebase_analyzer import _get_or_create_metric
+    from self_fixing_engineer.arbiter.codebase_analyzer import _get_or_create_metric
     from prometheus_client import Counter, Gauge, REGISTRY
 
     # Create a unique metric name to avoid conflicts with other tests

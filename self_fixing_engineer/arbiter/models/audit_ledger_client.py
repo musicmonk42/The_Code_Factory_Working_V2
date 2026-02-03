@@ -157,7 +157,7 @@ import boto3
 
 # Sentry for Error Reporting
 import sentry_sdk
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from botocore.exceptions import ClientError
 
 # OpenTelemetry Tracing - Use centralized configuration

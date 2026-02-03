@@ -31,7 +31,7 @@ import sentry_sdk
 from aiobreaker import CircuitBreaker
 
 # Import centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from cryptography.fernet import Fernet, InvalidToken
 from langchain_core.language_models.base import BaseLanguageModel
 from opentelemetry import trace

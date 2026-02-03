@@ -72,9 +72,9 @@ def setup_langchain_mocks():
 setup_langchain_mocks()
 
 # Mock other problematic modules
-sys.modules["arbiter.models"] = MagicMock()
-sys.modules["arbiter.models.redis_client"] = MagicMock()
-sys.modules["arbiter.models.audit_ledger_client"] = MagicMock()
+sys.modules["self_fixing_engineer.arbiter.models"] = MagicMock()
+sys.modules["self_fixing_engineer.arbiter.models.redis_client"] = MagicMock()
+sys.modules["self_fixing_engineer.arbiter.models.audit_ledger_client"] = MagicMock()
 sys.modules["redis"] = MagicMock()
 sys.modules["redis.asyncio"] = MagicMock()
 sys.modules["asyncpg"] = MagicMock()
@@ -107,27 +107,27 @@ from self_fixing_engineer.arbiter.knowledge_graph.core import (
 @pytest.fixture(autouse=True)
 def mock_all_external_services():
     """Automatically mock all external services for all tests"""
-    with patch("arbiter.knowledge_graph.core.ChatOpenAI") as mock_openai:
-        with patch("arbiter.knowledge_graph.core.RedisClient") as mock_redis:
-            with patch("arbiter.knowledge_graph.core.PostgresClient") as mock_postgres:
+    with patch("self_fixing_engineer.arbiter.knowledge_graph.core.ChatOpenAI") as mock_openai:
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.core.RedisClient") as mock_redis:
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.core.PostgresClient") as mock_postgres:
                 with patch(
-                    "arbiter.knowledge_graph.core.AuditLedgerClient"
+                    "self_fixing_engineer.arbiter.knowledge_graph.core.AuditLedgerClient"
                 ) as mock_audit:
                     with patch(
-                        "arbiter.knowledge_graph.core.DefaultMultiModalProcessor"
+                        "self_fixing_engineer.arbiter.knowledge_graph.core.DefaultMultiModalProcessor"
                     ) as mock_mm:
                         with patch(
-                            "arbiter.knowledge_graph.core.DefaultPromptStrategy"
+                            "self_fixing_engineer.arbiter.knowledge_graph.core.DefaultPromptStrategy"
                         ) as mock_prompt:
                             with patch(
-                                "arbiter.knowledge_graph.core.load_persona_dict",
+                                "self_fixing_engineer.arbiter.knowledge_graph.core.load_persona_dict",
                                 return_value={
                                     "default": "Test persona",
                                     "expert": "Expert persona",
                                 },
                             ):
                                 with patch(
-                                    "arbiter.knowledge_graph.core.AGENT_METRICS",
+                                    "self_fixing_engineer.arbiter.knowledge_graph.core.AGENT_METRICS",
                                     {
                                         "meta_learning_corrections_logged_total": MagicMock(
                                             inc=MagicMock()
@@ -310,10 +310,10 @@ class TestMetaLearning:
             ml = MetaLearning()
 
         with patch(
-            "arbiter.knowledge_graph.core.Config.MAX_META_LEARNING_CORRECTIONS", 5
+            "self_fixing_engineer.arbiter.knowledge_graph.core.Config.MAX_META_LEARNING_CORRECTIONS", 5
         ):
             with patch(
-                "arbiter.knowledge_graph.core.Config.MAX_CORRECTION_ENTRY_SIZE", 1000
+                "self_fixing_engineer.arbiter.knowledge_graph.core.Config.MAX_CORRECTION_ENTRY_SIZE", 1000
             ):
                 # Log corrections
                 ml.log_correction("input1", "response1", "corrected1")
@@ -336,7 +336,7 @@ class TestMetaLearning:
         with patch("builtins.open", side_effect=FileNotFoundError):
             ml = MetaLearning()
 
-        with patch("arbiter.knowledge_graph.core.Config.MAX_CORRECTION_ENTRY_SIZE", 10):
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.core.Config.MAX_CORRECTION_ENTRY_SIZE", 10):
             # This should be skipped due to size
             ml.log_correction(
                 "very long input", "very long response", "very long correction"
@@ -348,7 +348,7 @@ class TestMetaLearning:
         with patch("builtins.open", side_effect=FileNotFoundError):
             ml = MetaLearning()
 
-        with patch("arbiter.knowledge_graph.core.Config.MIN_RECORDS_FOR_TRAINING", 2):
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.core.Config.MIN_RECORDS_FOR_TRAINING", 2):
             # Add enough corrections to trigger training
             ml.corrections = [
                 ("input1", "response1", "corrected1"),
@@ -364,7 +364,7 @@ class TestMetaLearning:
         with patch("builtins.open", side_effect=FileNotFoundError):
             ml = MetaLearning()
 
-        with patch("arbiter.knowledge_graph.core.Config.MIN_RECORDS_FOR_TRAINING", 10):
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.core.Config.MIN_RECORDS_FOR_TRAINING", 10):
             # Not enough corrections for training
             ml.corrections = [("input1", "response1", "corrected1")]
 
@@ -472,7 +472,7 @@ class TestCollaborativeAgent:
     async def test_agent_save_state(self, mock_llm_config, mock_all_external_services):
         """Test saving agent state"""
         # Ensure messages_to_dict is properly mocked
-        with patch("arbiter.knowledge_graph.core.messages_to_dict", return_value=[]):
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.core.messages_to_dict", return_value=[]):
             with patch("builtins.open", side_effect=FileNotFoundError):
                 agent = CollaborativeAgent(
                     agent_id="test_agent",
@@ -526,7 +526,7 @@ class TestCollaborativeAgent:
 
             # For Python 3.10, we need to mock the compatibility wrapper instead
             # Mock the async_timeout function from core module
-            with patch("arbiter.knowledge_graph.core.async_timeout") as mock_timeout:
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.core.async_timeout") as mock_timeout:
                 # Make the context manager raise TimeoutError when entered
                 mock_context = AsyncMock()
                 mock_context.__aenter__.side_effect = asyncio.TimeoutError()
@@ -635,7 +635,7 @@ class TestFactoryFunctions:
     @pytest.mark.asyncio
     async def test_get_or_create_agent_default(self, mock_all_external_services):
         """Test get_or_create_agent with default parameters"""
-        with patch("arbiter.knowledge_graph.core.InMemoryStateBackend") as mock_backend:
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.core.InMemoryStateBackend") as mock_backend:
             mock_backend_instance = AsyncMock()
             mock_backend.return_value = mock_backend_instance
 
@@ -650,10 +650,10 @@ class TestFactoryFunctions:
     async def test_get_or_create_agent_with_redis(self, mock_all_external_services):
         """Test get_or_create_agent with Redis backend"""
         with patch(
-            "arbiter.knowledge_graph.core.Config.REDIS_URL", "redis://localhost:6379"
+            "self_fixing_engineer.arbiter.knowledge_graph.core.Config.REDIS_URL", "redis://localhost:6379"
         ):
             with patch(
-                "arbiter.knowledge_graph.core.RedisStateBackend"
+                "self_fixing_engineer.arbiter.knowledge_graph.core.RedisStateBackend"
             ) as mock_redis_backend:
                 mock_backend_instance = AsyncMock()
                 mock_redis_backend.return_value = mock_backend_instance
@@ -668,12 +668,12 @@ class TestFactoryFunctions:
     async def test_get_or_create_agent_with_postgres(self, mock_all_external_services):
         """Test get_or_create_agent with Postgres backend"""
         with patch(
-            "arbiter.knowledge_graph.core.Config.POSTGRES_DB_URL",
+            "self_fixing_engineer.arbiter.knowledge_graph.core.Config.POSTGRES_DB_URL",
             "postgresql://localhost/testdb",
         ):
-            with patch("arbiter.knowledge_graph.core.Config.REDIS_URL", None):
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.core.Config.REDIS_URL", None):
                 with patch(
-                    "arbiter.knowledge_graph.core.PostgresStateBackend"
+                    "self_fixing_engineer.arbiter.knowledge_graph.core.PostgresStateBackend"
                 ) as mock_pg_backend:
                     mock_backend_instance = AsyncMock()
                     mock_pg_backend.return_value = mock_backend_instance
@@ -695,7 +695,7 @@ class TestFactoryFunctions:
         mock_agent.language = "en"
 
         with patch(
-            "arbiter.knowledge_graph.core.get_or_create_agent", return_value=mock_agent
+            "self_fixing_engineer.arbiter.knowledge_graph.core.get_or_create_agent", return_value=mock_agent
         ):
             # Create a mock LLM object with __class__.__name__
             mock_llm = MagicMock()
@@ -722,7 +722,7 @@ class TestUtilityFunctions:
         }
 
         with patch(
-            "arbiter.knowledge_graph.core._sanitize_user_input",
+            "self_fixing_engineer.arbiter.knowledge_graph.core._sanitize_user_input",
             side_effect=lambda x: f"sanitized_{x}",
         ):
             result = get_transcript(memory)

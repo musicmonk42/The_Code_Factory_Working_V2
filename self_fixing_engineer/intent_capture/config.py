@@ -93,7 +93,7 @@ except ImportError:
     PROMETHEUS_AVAILABLE = False
 
 # Import centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 
 # --- Initial Setup ---
 load_dotenv(override=True)

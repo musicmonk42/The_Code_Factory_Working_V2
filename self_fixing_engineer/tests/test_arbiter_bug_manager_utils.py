@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Fixed imports to use absolute paths from the project root
-from arbiter.bug_manager.utils import (
+from self_fixing_engineer.arbiter.bug_manager.utils import (
     BugManagerError,
     NotificationError,
     RemediationError,
@@ -26,7 +26,7 @@ from arbiter.bug_manager.utils import (
 @pytest.fixture
 def mock_logger():
     """Fixture to patch the logger in the utils module."""
-    with patch("arbiter.bug_manager.utils.logger") as mock_log:
+    with patch("self_fixing_engineer.arbiter.bug_manager.utils.logger") as mock_log:
         yield mock_log
 
 

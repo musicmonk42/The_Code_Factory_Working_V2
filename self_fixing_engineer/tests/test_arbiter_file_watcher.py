@@ -6,7 +6,7 @@ import arbiter.file_watcher as file_watcher_module
 import pytest
 import yaml
 from aiolimiter import AsyncLimiter
-from arbiter.file_watcher import (
+from self_fixing_engineer.arbiter.file_watcher import (
     AlerterConfig,
     CodeChangeHandler,
     Config,
@@ -149,7 +149,7 @@ def test_load_config_with_env(mock_yaml_config, temp_dir, mock_env):
     config_path.write_text(mock_yaml_config)
 
     # Mock os.makedirs to avoid directory creation issues
-    with patch("arbiter.file_watcher.os.makedirs"):
+    with patch("self_fixing_engineer.arbiter.file_watcher.os.makedirs"):
         config = load_config_with_env(str(config_path))
         assert config.watch.folder == "test_folder"  # Env override
         assert config.watch.extensions == [".py"]
@@ -158,7 +158,7 @@ def test_load_config_with_env(mock_yaml_config, temp_dir, mock_env):
 # Test load_config_with_env no file
 def test_load_config_no_file():
     # Mock os.makedirs to avoid directory creation issues
-    with patch("arbiter.file_watcher.os.makedirs"):
+    with patch("self_fixing_engineer.arbiter.file_watcher.os.makedirs"):
         # Create minimal config without file
         config = load_config_with_env(None)
         # Should have defaults
@@ -305,10 +305,10 @@ async def test_notify_changes(valid_config):
     file_watcher_module.config = valid_config
     file_watcher_module.email_limiter = AsyncLimiter(1, 1)
 
-    with patch("arbiter.file_watcher.send_email_alert", new_callable=AsyncMock):
-        with patch("arbiter.file_watcher.send_slack_alert", new_callable=AsyncMock):
+    with patch("self_fixing_engineer.arbiter.file_watcher.send_email_alert", new_callable=AsyncMock):
+        with patch("self_fixing_engineer.arbiter.file_watcher.send_slack_alert", new_callable=AsyncMock):
             with patch(
-                "arbiter.file_watcher.send_pagerduty_alert", new_callable=AsyncMock
+                "self_fixing_engineer.arbiter.file_watcher.send_pagerduty_alert", new_callable=AsyncMock
             ):
                 await notify_changes("file.py", "diff", "summary", {"success": True})
                 # These are called but may fail, which is handled
@@ -324,9 +324,9 @@ async def test_process_file(valid_config, temp_dir):
     test_file = temp_dir / "test.py"
     test_file.write_text("test code")
 
-    with patch("arbiter.file_watcher.summarize_code_changes", return_value="summary"):
-        with patch("arbiter.file_watcher.deploy_code", return_value={"success": True}):
-            with patch("arbiter.file_watcher.notify_changes"):
+    with patch("self_fixing_engineer.arbiter.file_watcher.summarize_code_changes", return_value="summary"):
+        with patch("self_fixing_engineer.arbiter.file_watcher.deploy_code", return_value={"success": True}):
+            with patch("self_fixing_engineer.arbiter.file_watcher.notify_changes"):
                 result = await process_file(str(test_file))
                 assert result is not None
                 assert result["file"] == str(test_file)
@@ -390,8 +390,8 @@ def test_cli_run(temp_dir, mock_yaml_config):
     config_path.write_text(mock_yaml_config)
 
     # Mock both asyncio.run and os.makedirs to avoid filesystem issues
-    with patch("arbiter.file_watcher.asyncio.run") as mock_run:
-        with patch("arbiter.file_watcher.os.makedirs"):
+    with patch("self_fixing_engineer.arbiter.file_watcher.asyncio.run") as mock_run:
+        with patch("self_fixing_engineer.arbiter.file_watcher.os.makedirs"):
             runner = CliRunner()
             result = runner.invoke(app, ["run", "--config", str(config_path)])
             assert result.exit_code == 0
@@ -404,8 +404,8 @@ def test_cli_batch(temp_dir, mock_yaml_config):
     config_path.write_text(mock_yaml_config)
 
     # Mock both asyncio.run and os.makedirs to avoid filesystem issues
-    with patch("arbiter.file_watcher.asyncio.run") as mock_run:
-        with patch("arbiter.file_watcher.os.makedirs"):
+    with patch("self_fixing_engineer.arbiter.file_watcher.asyncio.run") as mock_run:
+        with patch("self_fixing_engineer.arbiter.file_watcher.os.makedirs"):
             runner = CliRunner()
             result = runner.invoke(app, ["batch", "--config", str(config_path)])
 

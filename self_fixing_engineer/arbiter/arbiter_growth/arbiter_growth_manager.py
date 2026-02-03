@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Protocol
 
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from opentelemetry.context import attach, detach
 from opentelemetry.propagate import extract, inject
 from pybreaker import CircuitBreaker, CircuitBreakerError
@@ -164,7 +164,7 @@ class ContextAwareCallable:
         token = attach(ctx)
         try:
             with tracer.start_as_current_span(
-                "queued_operation", attributes={"arbiter.id": self._arbiter_id}
+                "queued_operation", attributes={"self_fixing_engineer.arbiter.id": self._arbiter_id}
             ):
                 GROWTH_OPERATION_QUEUE_LATENCY.labels(arbiter=self._arbiter_id).observe(
                     datetime.now(timezone.utc).timestamp() - self.queued_time
@@ -207,7 +207,7 @@ class ArbiterGrowthManager:
         # --- Sourced from Config ---
         self.SCHEMA_VERSION = self.config_store.get("global.schema_version", 1.0)
         self.MAX_PENDING_OPERATIONS = self.config_store.get(
-            "arbiter.max_pending_operations", 1000
+            "self_fixing_engineer.arbiter.max_pending_operations", 1000
         )
         self._idempotency_salt = self.config_store.get(
             "security.idempotency_salt", os.urandom(16).hex()
@@ -330,8 +330,8 @@ class ArbiterGrowthManager:
         """Periodically saves a snapshot of the state if it's dirty."""
         while self._running:
             try:
-                min_interval = self.config_store.get("arbiter.flush_interval_min", 5)
-                max_interval = self.config_store.get("arbiter.flush_interval_max", 60)
+                min_interval = self.config_store.get("self_fixing_engineer.arbiter.flush_interval_min", 5)
+                max_interval = self.config_store.get("self_fixing_engineer.arbiter.flush_interval_max", 60)
 
                 logger.debug(
                     f"Arbiter '{self.arbiter}' queue size: {self._pending_operations.qsize()}"
@@ -358,7 +358,7 @@ class ArbiterGrowthManager:
         while self._running:
             try:
                 interval = self.config_store.get(
-                    "arbiter.evolution_cycle_interval_seconds", 3600
+                    "self_fixing_engineer.arbiter.evolution_cycle_interval_seconds", 3600
                 )
                 await asyncio.sleep(interval)
                 await self._run_evolution_cycle()
@@ -376,7 +376,7 @@ class ArbiterGrowthManager:
     async def _run_evolution_cycle(self) -> None:
         """Contains the logic for an arbiter's self-improvement cycle."""
         with tracer.start_as_current_span(
-            "arbiter_evolution_cycle", attributes={"arbiter.id": self.arbiter}
+            "arbiter_evolution_cycle", attributes={"self_fixing_engineer.arbiter.id": self.arbiter}
         ):
             logger.info(f"Starting evolution cycle for arbiter: {self.arbiter}")
             # In a real system, this would trigger MLOps pipelines, etc.
@@ -559,7 +559,7 @@ class ArbiterGrowthManager:
     async def _save_if_dirty(self, force: bool = False) -> None:
         """Saves a snapshot if the state is dirty and conditions are met."""
         snapshot_interval = await self.config_store.get_config(
-            "arbiter.snapshot_interval_events", 100
+            "self_fixing_engineer.arbiter.snapshot_interval_events", 100
         )
         if self._dirty and (
             force or self._event_count_since_snapshot >= snapshot_interval

@@ -3,14 +3,14 @@ import logging
 from typing import Any, Dict
 
 # Import the centralized tracer configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import REGISTRY, Counter
 
 # Mock/Placeholder imports for a self-contained fix
 try:
-    from arbiter import PermissionManager
-    from arbiter.config import ArbiterConfig
-    from arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter import PermissionManager
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
     from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
@@ -131,18 +131,18 @@ class PluginRegistry(metaclass=PluginRegistryMeta):
     # Define the original plugin data
     __ORIGINAL_PLUGINS = {
         # Core AI and benchmarking plugins
-        "benchmarking": "arbiter.benchmarking_engine.BenchmarkingEnginePlugin",
-        "explainable_reasoner": "arbiter.explainable_reasoner.ExplainableReasonerPlugin",
-        "generate_tests": "arbiter.generate_tests.GenerateTestsPlugin",
+        "benchmarking": "self_fixing_engineer.arbiter.benchmarking_engine.BenchmarkingEnginePlugin",
+        "explainable_reasoner": "self_fixing_engineer.arbiter.explainable_reasoner.ExplainableReasonerPlugin",
+        "generate_tests": "self_fixing_engineer.arbiter.generate_tests.GenerateTestsPlugin",
         # World and agent interaction plugins (function-based)
-        "world": "arbiter.plugins.world_plugin",
-        "gossip": "arbiter.plugins.gossip_plugin",
-        "chat": "arbiter.plugins.chat_plugin",
-        "craft": "arbiter.plugins.craft_plugin",
+        "world": "self_fixing_engineer.arbiter.plugins.world_plugin",
+        "gossip": "self_fixing_engineer.arbiter.plugins.gossip_plugin",
+        "chat": "self_fixing_engineer.arbiter.plugins.chat_plugin",
+        "craft": "self_fixing_engineer.arbiter.plugins.craft_plugin",
         # Universal package manager (future development)
-        # "universal_manager": "arbiter.upm.plugin.UniversalManagerPlugin",
+        # "universal_manager": "self_fixing_engineer.arbiter.upm.plugin.UniversalManagerPlugin",
         # Semantic code refactoring (future development)
-        # "semantic_refactor": "arbiter.semantic_refactor.plugin.SemanticRefactorPlugin",
+        # "semantic_refactor": "self_fixing_engineer.arbiter.semantic_refactor.plugin.SemanticRefactorPlugin",
     }
 
     # Create an immutable version

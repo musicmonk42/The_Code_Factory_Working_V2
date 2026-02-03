@@ -11,15 +11,15 @@ import httpx
 # Structured logging
 import structlog
 import tenacity
-from arbiter.explainable_reasoner.metrics import get_or_create_metric
-from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
+from self_fixing_engineer.arbiter.explainable_reasoner.metrics import get_or_create_metric
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_config import SensitiveValue
 
 # Real internal imports (enforce)
-from arbiter.explainable_reasoner.reasoner_errors import (
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors import (
     ReasonerError,
     ReasonerErrorCode,
 )
-from arbiter.explainable_reasoner.utils import redact_pii
+from self_fixing_engineer.arbiter.explainable_reasoner.utils import redact_pii
 from prometheus_client import Counter, Histogram
 from pydantic import HttpUrl, ValidationError
 

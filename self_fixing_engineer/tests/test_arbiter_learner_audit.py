@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 # Import the classes and functions to test
-from arbiter.learner.audit import (
+from self_fixing_engineer.arbiter.learner.audit import (
     CircuitBreaker,
     MerkleTree,
     persist_knowledge,
@@ -23,7 +23,7 @@ class TestCircuitBreaker:
     @pytest.fixture
     def circuit_breaker(self):
         """Create a CircuitBreaker instance for testing."""
-        with patch("arbiter.learner.audit.circuit_breaker_state"):
+        with patch("self_fixing_engineer.arbiter.learner.audit.circuit_breaker_state"):
             cb = CircuitBreaker(
                 failure_threshold=3, cooldown_seconds=1, name="test_breaker"
             )
@@ -206,7 +206,7 @@ class TestPersistKnowledge:
     async def test_persist_knowledge_success(self, mock_db, mock_circuit_breaker):
         """Test successful knowledge persistence."""
         with patch(
-            "arbiter.learner.audit.audit_log", new_callable=AsyncMock
+            "self_fixing_engineer.arbiter.learner.audit.audit_log", new_callable=AsyncMock
         ) as mock_audit_log:
             value_with_metadata = {
                 "value": "test_value",
@@ -249,8 +249,8 @@ class TestPersistKnowledge:
         """Test persistence when circuit breaker is open."""
         mock_circuit_breaker.can_proceed = AsyncMock(return_value=False)
 
-        with patch("arbiter.learner.audit.audit_log") as mock_audit_log:
-            with patch("arbiter.learner.audit.learn_error_counter") as mock_counter:
+        with patch("self_fixing_engineer.arbiter.learner.audit.audit_log") as mock_audit_log:
+            with patch("self_fixing_engineer.arbiter.learner.audit.learn_error_counter") as mock_counter:
                 mock_counter.labels = Mock(return_value=Mock(inc=Mock()))
 
                 value_with_metadata = {
@@ -286,7 +286,7 @@ class TestPersistKnowledge:
         """Test handling of database failure."""
         mock_db.save_agent_knowledge = AsyncMock(side_effect=Exception("DB Error"))
 
-        with patch("arbiter.learner.audit.learn_error_counter") as mock_counter:
+        with patch("self_fixing_engineer.arbiter.learner.audit.learn_error_counter") as mock_counter:
             mock_counter.labels = Mock(return_value=Mock(inc=Mock()))
 
             value_with_metadata = {
@@ -329,7 +329,7 @@ class TestPersistKnowledge:
         )
 
         with patch(
-            "arbiter.learner.audit.audit_log", new_callable=AsyncMock
+            "self_fixing_engineer.arbiter.learner.audit.audit_log", new_callable=AsyncMock
         ) as mock_audit_log:
             value_with_metadata = {
                 "value": "test_value",
@@ -421,7 +421,7 @@ class TestPersistKnowledgeBatch:
     ):
         """Test successful batch persistence."""
         with patch(
-            "arbiter.learner.audit.audit_log", new_callable=AsyncMock
+            "self_fixing_engineer.arbiter.learner.audit.audit_log", new_callable=AsyncMock
         ) as mock_audit_log:
             await persist_knowledge_batch(
                 db=mock_db,
@@ -448,8 +448,8 @@ class TestPersistKnowledgeBatch:
         """Test batch persistence when circuit breaker is open."""
         mock_circuit_breaker.can_proceed = AsyncMock(return_value=False)
 
-        with patch("arbiter.learner.audit.audit_log") as mock_audit_log:
-            with patch("arbiter.learner.audit.learn_error_counter") as mock_counter:
+        with patch("self_fixing_engineer.arbiter.learner.audit.audit_log") as mock_audit_log:
+            with patch("self_fixing_engineer.arbiter.learner.audit.learn_error_counter") as mock_counter:
                 mock_counter.labels = Mock(return_value=Mock(inc=Mock()))
 
                 await persist_knowledge_batch(

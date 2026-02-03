@@ -25,8 +25,8 @@ def setup_env(mocker: MockerFixture):
         mocker.patch.dict(os.environ, {key: value})
 
     # Force reload of the metrics module to pick up new env vars
-    if "arbiter.meta_learning_orchestrator.metrics" in sys.modules:
-        del sys.modules["arbiter.meta_learning_orchestrator.metrics"]
+    if "self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics" in sys.modules:
+        del sys.modules["self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics"]
 
     yield
 
@@ -38,7 +38,7 @@ def setup_env(mocker: MockerFixture):
 @pytest.fixture
 def metric_registry():
     """Fixture for MetricRegistry instance."""
-    from arbiter.meta_learning_orchestrator.metrics import MetricRegistry
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics import MetricRegistry
 
     return MetricRegistry()
 
@@ -66,7 +66,7 @@ def test_get_or_create_metric_internal(
     metric_class, name, doc, labelnames, buckets, caplog
 ):
     """Test _get_or_create_metric_internal creates metrics correctly."""
-    from arbiter.meta_learning_orchestrator.metrics import (
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics import (
         _get_or_create_metric_internal,
     )
 
@@ -94,7 +94,7 @@ def test_get_or_create_metric_internal(
 )
 def test_get_or_create_metric_type_mismatch(metric_class, name, doc, caplog):
     """Test _get_or_create_metric_internal handles type mismatches."""
-    from arbiter.meta_learning_orchestrator.metrics import (
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics import (
         _get_or_create_metric_internal,
     )
 
@@ -135,7 +135,7 @@ def test_metric_registry_global_labels(metric_registry):
 
 def get_metrics_for_test():
     """Helper function to import metrics when needed."""
-    from arbiter.meta_learning_orchestrator.metrics import (
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics import (
         ML_AUDIT_EVENTS_TOTAL,
         ML_AUDIT_HASH_MISMATCH,
         ML_AUDIT_SIGNATURE_MISMATCH,
@@ -210,7 +210,7 @@ def test_metric_operations(metric_idx):
 
 def test_histogram_metrics(metric_registry):
     """Test histogram metrics observe values correctly."""
-    from arbiter.meta_learning_orchestrator.metrics import ML_TRAINING_LATENCY
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics import ML_TRAINING_LATENCY
 
     with ML_TRAINING_LATENCY.time():
         import time
@@ -241,7 +241,7 @@ def test_histogram_metrics(metric_registry):
 def test_histogram_buckets(metric_name):
     """Test histogram metrics work with buckets."""
     # Import the specific metric
-    from arbiter.meta_learning_orchestrator import metrics
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator import metrics
 
     metric = getattr(metrics, metric_name)
 
@@ -271,8 +271,8 @@ def test_metrics_with_no_env_vars(mocker: MockerFixture):
     mocker.patch.dict(os.environ, {}, clear=True)
 
     # Force reload of the metrics module
-    if "arbiter.meta_learning_orchestrator.metrics" in sys.modules:
-        del sys.modules["arbiter.meta_learning_orchestrator.metrics"]
+    if "self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics" in sys.modules:
+        del sys.modules["self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics"]
 
     import arbiter.meta_learning_orchestrator.metrics as metrics_module
 
@@ -333,7 +333,7 @@ def test_invalid_label_names(metric_registry, caplog):
 
 def test_metrics_exposition_format():
     """Test metrics are correctly formatted in Prometheus exposition format."""
-    from arbiter.meta_learning_orchestrator.metrics import (
+    from self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics import (
         ML_AUDIT_EVENTS_TOTAL,
         ML_CURRENT_MODEL_VERSION,
         ML_EVALUATION_LATENCY,

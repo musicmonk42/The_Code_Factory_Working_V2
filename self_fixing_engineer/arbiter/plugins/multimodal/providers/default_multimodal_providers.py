@@ -46,7 +46,7 @@ except ImportError:
     )
 
 # Import the abstract interfaces that these concrete processors implement
-from arbiter.plugins.multimodal.interface import (
+from self_fixing_engineer.arbiter.plugins.multimodal.interface import (
     AudioProcessor,
     ConfigurationError,
     ImageProcessor,

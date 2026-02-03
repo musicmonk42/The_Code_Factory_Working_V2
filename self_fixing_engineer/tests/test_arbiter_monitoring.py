@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Import from the arbiter package where monitoring.py is located
-from arbiter.monitoring import LogFormat, Monitor
+from self_fixing_engineer.arbiter.monitoring import LogFormat, Monitor
 
 
 @pytest.fixture
@@ -205,7 +205,7 @@ def test_log_rotation(monitor, tmp_log_file):
 def test_json_write_limit(monitor, caplog):
     monitor.format = LogFormat.JSON
     # Mock the JSON_LOG_WRITE_LIMIT to a small value for testing
-    with patch("arbiter.monitoring.JSON_LOG_WRITE_LIMIT", 2):
+    with patch("self_fixing_engineer.arbiter.monitoring.JSON_LOG_WRITE_LIMIT", 2):
         for i in range(3):
             monitor.log_action({"type": f"action_{i}"})
         # Check that an error was logged about JSON format being inefficient

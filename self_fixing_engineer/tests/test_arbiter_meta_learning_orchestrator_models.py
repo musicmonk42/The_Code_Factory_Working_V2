@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 
 # Import the models and custom exceptions
-from arbiter.meta_learning_orchestrator.models import (
+from self_fixing_engineer.arbiter.meta_learning_orchestrator.models import (
     DataIngestionError,
     DeploymentStatus,
     EventType,

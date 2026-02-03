@@ -9,7 +9,7 @@ import pytest
 from aiohttp import ClientError
 
 # Import the module to be tested
-from arbiter.bug_manager.remediations import (
+from self_fixing_engineer.arbiter.bug_manager.remediations import (
     BugFixerRegistry,
     MLRemediationError,
     MLRemediationModel,

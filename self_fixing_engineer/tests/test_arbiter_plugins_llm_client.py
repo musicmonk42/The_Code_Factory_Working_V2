@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 # Import the client and related exceptions
-from arbiter.plugins.llm_client import (
+from self_fixing_engineer.arbiter.plugins.llm_client import (
     APIError,
     CircuitBreakerOpenError,
     InputValidationError,
@@ -154,7 +154,7 @@ class TestLLMClient:
     @pytest.mark.asyncio
     async def test_generate_text_invalid_prompt(self):
         """Test generate_text with invalid prompt."""
-        with patch("arbiter.plugins.llm_client.AsyncOpenAI"):
+        with patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncOpenAI"):
             client = LLMClient("openai", "test-key", "gpt-4")
 
             with pytest.raises(InputValidationError, match="Prompt must be"):
@@ -166,7 +166,7 @@ class TestLLMClient:
     @pytest.mark.asyncio
     async def test_generate_text_invalid_max_tokens(self):
         """Test generate_text with invalid max_tokens."""
-        with patch("arbiter.plugins.llm_client.AsyncOpenAI"):
+        with patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncOpenAI"):
             client = LLMClient("openai", "test-key", "gpt-4")
 
             with pytest.raises(InputValidationError, match="max_tokens must be"):
@@ -175,7 +175,7 @@ class TestLLMClient:
     @pytest.mark.asyncio
     async def test_generate_text_invalid_temperature(self):
         """Test generate_text with invalid temperature."""
-        with patch("arbiter.plugins.llm_client.AsyncOpenAI"):
+        with patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncOpenAI"):
             client = LLMClient("openai", "test-key", "gpt-4")
 
             with pytest.raises(InputValidationError, match="Temperature must be"):
@@ -185,7 +185,7 @@ class TestLLMClient:
 
     def test_sanitize_prompt(self):
         """Test PII sanitization in prompts."""
-        with patch("arbiter.plugins.llm_client.AsyncOpenAI"):
+        with patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncOpenAI"):
             client = LLMClient("openai", "test-key", "gpt-4")
 
             # Test email masking
@@ -209,7 +209,7 @@ class TestLLMClient:
     @pytest.mark.asyncio
     async def test_circuit_breaker_opens_after_threshold(self):
         """Test circuit breaker opens after failure threshold."""
-        with patch("arbiter.plugins.llm_client.AsyncOpenAI") as mock_openai:
+        with patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create.side_effect = Exception("API Error")
@@ -230,7 +230,7 @@ class TestLLMClient:
 
     def test_circuit_breaker_half_open_after_timeout(self):
         """Test circuit breaker enters half-open state after timeout."""
-        with patch("arbiter.plugins.llm_client.AsyncOpenAI"):
+        with patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncOpenAI"):
             client = LLMClient("openai", "test-key", "gpt-4")
             client.circuit_breaker_state = "open"
             client.circuit_breaker_last_failure_time = time.monotonic() - 301
@@ -245,7 +245,7 @@ class TestLLMClient:
     @pytest.mark.asyncio
     async def test_openai_generate_success(self):
         """Test successful OpenAI text generation."""
-        with patch("arbiter.plugins.llm_client.AsyncOpenAI") as mock_openai:
+        with patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
 
@@ -261,7 +261,7 @@ class TestLLMClient:
     @pytest.mark.asyncio
     async def test_anthropic_generate_success(self):
         """Test successful Anthropic text generation."""
-        with patch("arbiter.plugins.llm_client.AsyncAnthropic") as mock_anthropic:
+        with patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncAnthropic") as mock_anthropic:
             mock_client = AsyncMock()
             mock_anthropic.return_value = mock_client
 
@@ -278,7 +278,7 @@ class TestLLMClient:
     async def test_ollama_generate_success(self):
         """Test successful Ollama text generation."""
         with patch(
-            "arbiter.plugins.llm_client.LLMClient._get_ollama_session"
+            "self_fixing_engineer.arbiter.plugins.llm_client.LLMClient._get_ollama_session"
         ) as mock_session:
             mock_session_obj = AsyncMock()
             mock_session.return_value = mock_session_obj
@@ -306,7 +306,7 @@ class TestLLMClient:
     @pytest.mark.asyncio
     async def test_aclose_session_openai(self):
         """Test closing OpenAI session."""
-        with patch("arbiter.plugins.llm_client.AsyncOpenAI") as mock_openai:
+        with patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
 
@@ -318,7 +318,7 @@ class TestLLMClient:
     @pytest.mark.asyncio
     async def test_aclose_session_anthropic(self):
         """Test closing Anthropic session."""
-        with patch("arbiter.plugins.llm_client.AsyncAnthropic") as mock_anthropic:
+        with patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncAnthropic") as mock_anthropic:
             mock_client = AsyncMock()
             mock_anthropic.return_value = mock_client
 
@@ -357,9 +357,9 @@ class TestLoadBalancedLLMClient:
     def mock_providers(self):
         """Mock the LLMClient initialization for all providers."""
         with (
-            patch("arbiter.plugins.llm_client.AsyncOpenAI"),
-            patch("arbiter.plugins.llm_client.AsyncAnthropic"),
-            patch("arbiter.plugins.llm_client.genai"),
+            patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncOpenAI"),
+            patch("self_fixing_engineer.arbiter.plugins.llm_client.AsyncAnthropic"),
+            patch("self_fixing_engineer.arbiter.plugins.llm_client.genai"),
         ):
             yield
 

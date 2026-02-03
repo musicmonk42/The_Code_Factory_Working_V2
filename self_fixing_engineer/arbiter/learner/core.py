@@ -55,7 +55,7 @@ from .metrics import (
     retrieve_hit_miss,
 )
 from .validation import validate_data
-from arbiter.otel_config import get_tracer_safe
+from self_fixing_engineer.arbiter.otel_config import get_tracer_safe
 
 # Use structlog for structured logging
 logger = structlog.get_logger(__name__)
@@ -64,12 +64,12 @@ logger = structlog.get_logger(__name__)
 tracer = get_tracer_safe(__name__)
 meter = metrics.get_meter(__name__)
 
-# Handle the missing 'arbiter.audit_log' dependency gracefully.
+# Handle the missing 'self_fixing_engineer.arbiter.audit_log' dependency gracefully.
 try:
-    from arbiter.audit_log import AuditLogger, audit_log, verify_audit_chain
+    from self_fixing_engineer.arbiter.audit_log import AuditLogger, audit_log, verify_audit_chain
 except ImportError:
     logger.warning(
-        "Failed to import 'arbiter.audit_log'. Using dummy fallbacks. "
+        "Failed to import 'self_fixing_engineer.arbiter.audit_log'. Using dummy fallbacks. "
         "Ensure the module is installed/available in production."
     )
 

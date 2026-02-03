@@ -11,7 +11,7 @@ import pytest_asyncio
 
 # Import metrics directly from the module
 # Import the FeatureStoreClient - fix the import path
-from arbiter.models.feature_store_client import (
+from self_fixing_engineer.arbiter.models.feature_store_client import (
     FS_CALLS_ERRORS,
     FS_CALLS_TOTAL,
     FS_REDACTIONS_TOTAL,
@@ -20,7 +20,7 @@ from arbiter.models.feature_store_client import (
 )
 
 # Import centralized OpenTelemetry configuration for testing
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pytest_mock import MockerFixture
 
@@ -57,7 +57,7 @@ async def setup_env(mocker: MockerFixture):
 @pytest.fixture(scope="module")
 def test_tracer():
     """Create tracer for tests - deferred to fixture to avoid collection overhead."""
-    from arbiter.otel_config import get_tracer, get_tracer_safe
+    from self_fixing_engineer.arbiter.otel_config import get_tracer, get_tracer_safe
     try:
         return get_tracer(__name__)
     except:
@@ -134,14 +134,14 @@ async def feature_client(mocker: MockerFixture):
 
         # Patch FeatureStore at the correct location
         mocker.patch(
-            "arbiter.models.feature_store_client.FeatureStore", return_value=mock_fs
+            "self_fixing_engineer.arbiter.models.feature_store_client.FeatureStore", return_value=mock_fs
         )
 
         # Mock audit and postgres clients
         mocker.patch(
-            "arbiter.models.feature_store_client.AUDIT_LEDGER_AVAILABLE", False
+            "self_fixing_engineer.arbiter.models.feature_store_client.AUDIT_LEDGER_AVAILABLE", False
         )
-        mocker.patch("arbiter.models.feature_store_client.POSTGRES_AVAILABLE", False)
+        mocker.patch("self_fixing_engineer.arbiter.models.feature_store_client.POSTGRES_AVAILABLE", False)
 
         client = FeatureStoreClient()
         yield client
@@ -216,11 +216,11 @@ async def test_connect_failure(mocker: MockerFixture):
     from feast.errors import FeastProviderError
 
     mocker.patch(
-        "arbiter.models.feature_store_client.FeatureStore",
+        "self_fixing_engineer.arbiter.models.feature_store_client.FeatureStore",
         side_effect=FeastProviderError("Connection failed"),
     )
-    mocker.patch("arbiter.models.feature_store_client.AUDIT_LEDGER_AVAILABLE", False)
-    mocker.patch("arbiter.models.feature_store_client.POSTGRES_AVAILABLE", False)
+    mocker.patch("self_fixing_engineer.arbiter.models.feature_store_client.AUDIT_LEDGER_AVAILABLE", False)
+    mocker.patch("self_fixing_engineer.arbiter.models.feature_store_client.POSTGRES_AVAILABLE", False)
 
     client = FeatureStoreClient()
     with pytest.raises(ConnectionError, match="Failed to connect to Feast"):
@@ -507,15 +507,15 @@ async def test_retry_on_connect_failure(mocker: MockerFixture):
     mock_fs.list_feature_views.return_value = []
 
     mocker.patch(
-        "arbiter.models.feature_store_client.FeatureStore",
+        "self_fixing_engineer.arbiter.models.feature_store_client.FeatureStore",
         side_effect=[
             FeastProviderError("Connect failed"),
             FeastProviderError("Connect failed"),
             mock_fs,
         ],
     )
-    mocker.patch("arbiter.models.feature_store_client.AUDIT_LEDGER_AVAILABLE", False)
-    mocker.patch("arbiter.models.feature_store_client.POSTGRES_AVAILABLE", False)
+    mocker.patch("self_fixing_engineer.arbiter.models.feature_store_client.AUDIT_LEDGER_AVAILABLE", False)
+    mocker.patch("self_fixing_engineer.arbiter.models.feature_store_client.POSTGRES_AVAILABLE", False)
 
     client = FeatureStoreClient()
     await client.connect()

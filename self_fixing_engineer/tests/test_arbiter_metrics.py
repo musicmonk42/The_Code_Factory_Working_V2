@@ -18,7 +18,7 @@ from prometheus_client import (
 
 # PATCH: Resolve metaclass conflict between starlette and aiohttp
 starlette.testclient.WebSocketTestSession = None
-from arbiter.metrics import (
+from self_fixing_engineer.arbiter.metrics import (
     _metrics_logger,
     get_or_create_counter,
     get_or_create_gauge,
@@ -61,7 +61,7 @@ def test_multiprocess_mode(mock_logger):
     import importlib
 
     # Store current module if it exists
-    metrics_module = sys.modules.get("arbiter.metrics")
+    metrics_module = sys.modules.get("self_fixing_engineer.arbiter.metrics")
     try:
         # Force reload
         if metrics_module:
@@ -278,7 +278,7 @@ def test_metric_registration_time(mock_time):
     mock_time.side_effect = [0, 1.0]
 
     # Mock the METRIC_REGISTRATION_TIME histogram
-    with patch("arbiter.metrics.METRIC_REGISTRATION_TIME") as mock_metric:
+    with patch("self_fixing_engineer.arbiter.metrics.METRIC_REGISTRATION_TIME") as mock_metric:
         mock_labels = MagicMock()
         mock_metric.labels.return_value = mock_labels
 
@@ -295,11 +295,11 @@ def test_metric_registration_time(mock_time):
 
 # Alternative approach for testing metric registration time
 def test_metric_registration_time_alternative():
-    with patch("arbiter.metrics.time") as mock_time:
+    with patch("self_fixing_engineer.arbiter.metrics.time") as mock_time:
         mock_time.side_effect = [0, 1.0]
 
         # Mock the entire METRIC_REGISTRATION_TIME to avoid label issues
-        with patch("arbiter.metrics.METRIC_REGISTRATION_TIME") as mock_metric:
+        with patch("self_fixing_engineer.arbiter.metrics.METRIC_REGISTRATION_TIME") as mock_metric:
             # Set up the mock to handle any label configuration
             mock_labels = Mock()
             mock_metric.labels = Mock(return_value=mock_labels)

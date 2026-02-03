@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Import the module under test
-from arbiter.explainable_reasoner.metrics import (
+from self_fixing_engineer.arbiter.explainable_reasoner.metrics import (
     METRICS,
     METRICS_NAMESPACE,
     get_metrics_content,
@@ -30,7 +30,7 @@ test_logger = logging.getLogger(__name__)
 @pytest.fixture(autouse=True)
 def mock_structlog():
     """Mock structlog to capture log calls."""
-    with patch("arbiter.explainable_reasoner.metrics._metrics_logger") as mock_logger:
+    with patch("self_fixing_engineer.arbiter.explainable_reasoner.metrics._metrics_logger") as mock_logger:
         mock_logger.info = MagicMock()
         mock_logger.error = MagicMock()
         mock_logger.warning = MagicMock()
@@ -43,7 +43,7 @@ def clean_registry():
     """Provides a clean, isolated CollectorRegistry for specific tests."""
     registry = CollectorRegistry()
     # Also patch the global registry used by the MUT's functions
-    with patch("arbiter.explainable_reasoner.metrics.METRICS_REGISTRY", new=registry):
+    with patch("self_fixing_engineer.arbiter.explainable_reasoner.metrics.METRICS_REGISTRY", new=registry):
         yield registry
 
 
@@ -69,11 +69,11 @@ def test_initialize_with_multiproc_success_real_dir(mock_structlog):
         with (
             patch.dict(os.environ, {"PROMETHEUS_MULTIPROC_DIR": str(multiproc_dir)}),
             patch(
-                "arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR",
+                "self_fixing_engineer.arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR",
                 str(multiproc_dir),
             ),
             patch(
-                "arbiter.explainable_reasoner.metrics.multiprocess"
+                "self_fixing_engineer.arbiter.explainable_reasoner.metrics.multiprocess"
             ) as mock_multiprocess,
         ):
 
@@ -97,10 +97,10 @@ def test_initialize_with_multiproc_permission_error(mock_structlog):
         with (
             patch.dict(os.environ, {"PROMETHEUS_MULTIPROC_DIR": str(multiproc_dir)}),
             patch(
-                "arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR",
+                "self_fixing_engineer.arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR",
                 str(multiproc_dir),
             ),
-            patch("arbiter.explainable_reasoner.metrics.Path") as mock_path_class,
+            patch("self_fixing_engineer.arbiter.explainable_reasoner.metrics.Path") as mock_path_class,
         ):
 
             # Mock Path to raise PermissionError on mkdir
@@ -121,7 +121,7 @@ def test_initialize_with_multiproc_mkdir_exception(mock_structlog):
 
     # Patch the global variable to have the fake path
     with patch(
-        "arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR", fake_dir
+        "self_fixing_engineer.arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR", fake_dir
     ):
         initialize_metrics()
 
@@ -134,9 +134,9 @@ def test_initialize_no_multiproc_dir(mock_structlog):
     """Tests initialization without the multiproc env var set."""
     # Patch the global variable to be None
     with (
-        patch("arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR", None),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR", None),
         patch(
-            "arbiter.explainable_reasoner.metrics.ProcessCollector"
+            "self_fixing_engineer.arbiter.explainable_reasoner.metrics.ProcessCollector"
         ) as mock_process_collector,
     ):
 
@@ -229,7 +229,7 @@ def test_get_metrics_content_success(clean_registry):
 def test_get_metrics_content_failure(mock_structlog):
     """Test metrics exposition failure handling."""
     with patch(
-        "arbiter.explainable_reasoner.metrics.generate_latest",
+        "self_fixing_engineer.arbiter.explainable_reasoner.metrics.generate_latest",
         side_effect=Exception("Exposition fail"),
     ):
         content = get_metrics_content()

@@ -7,10 +7,10 @@ import pytest
 import pytest_asyncio
 
 # Import the client and its exceptions
-from arbiter.models.redis_client import ConnectionError, DataError, RedisClient
+from self_fixing_engineer.arbiter.models.redis_client import ConnectionError, DataError, RedisClient
 
 # Import the centralized tracer configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pytest_mock import MockerFixture
 
@@ -566,7 +566,7 @@ class TestSecurityAndValidation:
     def test_key_redaction_in_logs(self, caplog):
         """Test that keys are redacted in logs."""
         caplog.set_level(logging.DEBUG)
-        from arbiter.models.redis_client import _redact_key
+        from self_fixing_engineer.arbiter.models.redis_client import _redact_key
 
         key = "sensitive_key_12345"
         redacted = _redact_key(key)

@@ -4,7 +4,7 @@ import os
 from unittest.mock import Mock, patch
 
 import pytest
-from arbiter.learner.metrics import (
+from self_fixing_engineer.arbiter.learner.metrics import (
     _get_or_create_metric,
     audit_events_total,
     audit_failure_total,
@@ -124,8 +124,8 @@ class TestGetOrCreateMetric:
         mock_registry._names_to_collectors = {"mismatched_metric": existing_counter}
         mock_registry.unregister = Mock()
 
-        with patch("arbiter.learner.metrics.REGISTRY", mock_registry):
-            with patch("arbiter.learner.metrics.Histogram") as MockHistogram:
+        with patch("self_fixing_engineer.arbiter.learner.metrics.REGISTRY", mock_registry):
+            with patch("self_fixing_engineer.arbiter.learner.metrics.Histogram") as MockHistogram:
                 mock_histogram = Mock(spec=Histogram)
                 MockHistogram.return_value = mock_histogram
 

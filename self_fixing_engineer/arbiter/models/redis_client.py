@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 import redis.asyncio as aioredis
 
 # Import centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from opentelemetry import trace
 
 # Prometheus Metrics

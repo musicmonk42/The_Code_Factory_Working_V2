@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 
 # Import the centralized tracer configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # Import from the correct module
@@ -80,7 +80,7 @@ async def setup_env(mocker: MockerFixture):
 @pytest.fixture(scope="module")
 def test_tracer():
     """Create tracer for tests - deferred to fixture to avoid collection overhead."""
-    from arbiter.otel_config import get_tracer, get_tracer_safe
+    from self_fixing_engineer.arbiter.otel_config import get_tracer, get_tracer_safe
     try:
         return get_tracer(__name__)
     except:
