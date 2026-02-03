@@ -14,7 +14,7 @@ from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, TopicPartition
 from aiokafka.errors import KafkaError
 from cryptography.fernet import Fernet, InvalidToken
 from opentelemetry import trace
-from arbiter.otel_config import get_tracer_safe
+from self_fixing_engineer.arbiter.otel_config import get_tracer_safe
 from prometheus_client import REGISTRY, Histogram
 from pybreaker import CircuitBreaker, CircuitBreakerError
 from redis.exceptions import RedisError
@@ -692,7 +692,7 @@ class KafkaStorageBackend:
         }
 
     def _topic(self, arbiter_id: str, topic_type: str) -> str:
-        return f"arbiter.{arbiter_id}.{topic_type}"
+        return f"self_fixing_engineer.arbiter.{arbiter_id}.{topic_type}"
 
     @_wrap_exception("Kafka")
     async def start(self):

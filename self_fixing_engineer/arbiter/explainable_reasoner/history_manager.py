@@ -18,7 +18,7 @@ from .reasoner_errors import ReasonerError, ReasonerErrorCode
 
 # Conditional import for MultiModalData and schemas
 try:
-    from arbiter.models.multi_modal_schemas import (
+    from self_fixing_engineer.arbiter.models.multi_modal_schemas import (
         AudioAnalysisResult,
         ImageAnalysisResult,
         MultiModalAnalysisResult,
@@ -32,7 +32,7 @@ except ImportError:
 
     logger = logging.getLogger(__name__)
     logger.debug(
-        "arbiter.models.multi_modal_schemas not found; using dummy MultiModalData/Schemas."
+        "self_fixing_engineer.arbiter.models.multi_modal_schemas not found; using dummy MultiModalData/Schemas."
     )
 
     class MultiModalData(BaseModel):

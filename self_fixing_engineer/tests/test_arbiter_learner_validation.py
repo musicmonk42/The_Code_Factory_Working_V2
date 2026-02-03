@@ -7,7 +7,7 @@ import tempfile
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from arbiter.learner.validation import (
+from self_fixing_engineer.arbiter.learner.validation import (
     SCHEMA_CACHE_TTL_SECONDS,
     DomainNotFoundError,
     register_validation_hook,
@@ -50,7 +50,7 @@ class TestValidateData:
             "TestDomain": {"schema": sample_schema, "version": "1.0"}
         }
 
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             result = await validate_data(
@@ -68,7 +68,7 @@ class TestValidateData:
             "TestDomain": {"schema": sample_schema, "version": "1.0"}
         }
 
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             with patch.object(validation_failure_total, "labels") as mock_metric:
@@ -96,7 +96,7 @@ class TestValidateData:
 
         mock_learner.validation_hooks = {"TestDomain": custom_validator}
 
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             # Provide enough mock values for both calls (2 per call)
             mock_time.perf_counter.side_effect = [1.0, 2.0, 3.0, 4.0]
 
@@ -119,7 +119,7 @@ class TestValidateData:
 
         mock_learner.validation_hooks = {"TestDomain": async_validator}
 
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             result = await validate_data(mock_learner, "TestDomain", {"valid": True})
@@ -140,7 +140,7 @@ class TestValidateData:
         }
         mock_learner.validation_hooks = {"TestDomain": custom_validator}
 
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0, 3.0, 4.0]
 
             # Passes schema but fails hook (age < 18)
@@ -174,7 +174,7 @@ class TestValidateData:
     @pytest.mark.asyncio
     async def test_validate_domain_not_found(self, mock_learner):
         """Test validation when domain has no schema or hook."""
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             with pytest.raises(
@@ -192,7 +192,7 @@ class TestValidateData:
             }
         }
 
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             with patch(
@@ -214,7 +214,7 @@ class TestValidateData:
 
         mock_learner.validation_hooks = {"TestDomain": failing_hook}
 
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             result = await validate_data(mock_learner, "TestDomain", {"data": "test"})
@@ -332,7 +332,7 @@ class TestReloadSchemas:
     @pytest.mark.asyncio
     async def test_reload_schemas_success(self, mock_learner, temp_schema_dir):
         """Test successful schema reload from directory."""
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             await reload_schemas(mock_learner, temp_schema_dir)
@@ -359,7 +359,7 @@ class TestReloadSchemas:
             with open(os.path.join(tmpdir, "Invalid.json"), "w") as f:
                 f.write("invalid json {")
 
-            with patch("arbiter.learner.validation.time") as mock_time:
+            with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
                 mock_time.perf_counter.side_effect = [1.0, 2.0]
 
                 await reload_schemas(mock_learner, tmpdir)
@@ -377,7 +377,7 @@ class TestReloadSchemas:
             with open(os.path.join(tmpdir, "BadSchema.json"), "w") as f:
                 json.dump(invalid_schema, f)
 
-            with patch("arbiter.learner.validation.time") as mock_time:
+            with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
                 mock_time.perf_counter.side_effect = [1.0, 2.0]
 
                 with patch(
@@ -392,7 +392,7 @@ class TestReloadSchemas:
     @pytest.mark.asyncio
     async def test_reload_schemas_directory_not_found(self, mock_learner):
         """Test handling of non-existent directory."""
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             # Provide enough values for retry attempts
             mock_time.perf_counter.return_value = 1.0
 
@@ -402,7 +402,7 @@ class TestReloadSchemas:
 
                 # Disable permission check so it reaches the exists check
                 with patch(
-                    "arbiter.learner.validation.SCHEMA_DIR_PERMISSION_CHECK", False
+                    "self_fixing_engineer.arbiter.learner.validation.SCHEMA_DIR_PERMISSION_CHECK", False
                 ):
                     with patch("os.path.exists", return_value=False):
                         # When directory doesn't exist, function should return normally
@@ -414,7 +414,7 @@ class TestReloadSchemas:
     @pytest.mark.asyncio
     async def test_reload_schemas_permission_denied(self, mock_learner):
         """Test handling of permission denied error."""
-        with patch("arbiter.learner.validation.SCHEMA_DIR_PERMISSION_CHECK", True):
+        with patch("self_fixing_engineer.arbiter.learner.validation.SCHEMA_DIR_PERMISSION_CHECK", True):
             with patch("os.access", return_value=False):
                 # The function should raise OSError on permission denied
                 # But it's wrapped with retry, which will retry 3 times and wrap in RetryError
@@ -432,7 +432,7 @@ class TestReloadSchemas:
 
         mock_learner.event_hooks["on_schema_reload"] = [sync_hook, async_hook]
 
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             await reload_schemas(mock_learner, temp_schema_dir)
@@ -446,7 +446,7 @@ class TestReloadSchemas:
         """Test that Redis failure doesn't break schema reload."""
         mock_learner.redis.setex = AsyncMock(side_effect=Exception("Redis error"))
 
-        with patch("arbiter.learner.validation.time") as mock_time:
+        with patch("self_fixing_engineer.arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
             # Should not raise, just log warning
@@ -462,7 +462,7 @@ class TestReloadSchemas:
             with patch("os.access", return_value=True):
                 # Always fail with OSError to test retry logic
                 with patch("os.listdir", side_effect=OSError("Temporary failure")):
-                    with patch("arbiter.learner.validation.SCHEMA_RELOAD_RETRIES", 2):
+                    with patch("self_fixing_engineer.arbiter.learner.validation.SCHEMA_RELOAD_RETRIES", 2):
                         # Should raise RetryError after 2 retries (wrapping the OSError)
                         with pytest.raises(RetryError) as exc_info:
                             await reload_schemas(mock_learner, "/test/dir")

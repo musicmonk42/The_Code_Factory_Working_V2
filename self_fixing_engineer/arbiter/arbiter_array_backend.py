@@ -46,7 +46,7 @@ import aiofiles
 
 # ---------- FIX: Added missing critical imports ----------
 import numpy as np
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from cryptography.fernet import Fernet, InvalidToken
 from prometheus_client import REGISTRY
 from prometheus_client import Counter as PCounter
@@ -207,7 +207,7 @@ except ImportError:
 
 
 # Logging setup
-logger = logging.getLogger("arbiter.array_backend")
+logger = logging.getLogger("self_fixing_engineer.arbiter.array_backend")
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 if not logger.handlers:
     handler = logging.StreamHandler()

@@ -4,7 +4,7 @@ import os
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from arbiter.plugins.multi_modal_plugin import (
+from self_fixing_engineer.arbiter.plugins.multi_modal_plugin import (
     AuditLogger,
     CacheManager,
     InputValidator,
@@ -121,7 +121,7 @@ class TestCacheManager:
         config.port = 6379
 
         with patch(
-            "arbiter.plugins.multi_modal_plugin.redis.asyncio.Redis"
+            "self_fixing_engineer.arbiter.plugins.multi_modal_plugin.redis.asyncio.Redis"
         ) as mock_redis:
             mock_redis_instance = AsyncMock()
             mock_redis.return_value = mock_redis_instance
@@ -141,7 +141,7 @@ class TestCacheManager:
         config.host = "localhost"
         config.port = 6379
 
-        with patch("arbiter.plugins.multi_modal_plugin.redis") as mock_redis_module:
+        with patch("self_fixing_engineer.arbiter.plugins.multi_modal_plugin.redis") as mock_redis_module:
             mock_redis = AsyncMock()
             mock_redis_module.asyncio.Redis.return_value = mock_redis
             mock_redis.ping.return_value = True
@@ -257,7 +257,7 @@ class TestMultiModalPlugin:
     async def plugin(self, base_config):
         """Creates and initializes a MultiModalPlugin instance."""
         with patch(
-            "arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor"
+            "self_fixing_engineer.arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor"
         ) as mock_get:
             mock_processor = AsyncMock()
             mock_processor.process.return_value = ProcessingResult(
@@ -353,7 +353,7 @@ class TestMultiModalPlugin:
             "ttl_seconds": 60,
         }
 
-        with patch("arbiter.plugins.multi_modal_plugin.redis") as mock_redis_module:
+        with patch("self_fixing_engineer.arbiter.plugins.multi_modal_plugin.redis") as mock_redis_module:
             mock_redis = AsyncMock()
             mock_redis_module.asyncio.Redis.return_value = mock_redis
             mock_redis.ping.return_value = True
@@ -362,7 +362,7 @@ class TestMultiModalPlugin:
             mock_redis.get.return_value = None
 
             with patch(
-                "arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor"
+                "self_fixing_engineer.arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor"
             ) as mock_get:
                 mock_processor = AsyncMock()
                 mock_processor.process.return_value = ProcessingResult(
@@ -391,7 +391,7 @@ class TestMultiModalPlugin:
     def test_get_supported_providers(self, plugin):
         """Test getting supported providers for a modality."""
         with patch(
-            "arbiter.plugins.multi_modal_plugin.PluginRegistry.get_supported_providers"
+            "self_fixing_engineer.arbiter.plugins.multi_modal_plugin.PluginRegistry.get_supported_providers"
         ) as mock_get:
             mock_get.return_value = ["provider1", "provider2"]
 
@@ -411,7 +411,7 @@ class TestMultiModalPlugin:
     @pytest.mark.asyncio
     async def test_context_manager(self, base_config):
         """Test async context manager."""
-        with patch("arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor"):
+        with patch("self_fixing_engineer.arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor"):
             async with MultiModalPlugin(base_config) as plugin:
                 assert plugin is not None
             # Should have called stop() on exit

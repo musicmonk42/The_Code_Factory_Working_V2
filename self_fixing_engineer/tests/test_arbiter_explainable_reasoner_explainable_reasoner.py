@@ -29,43 +29,43 @@ def mock_dependencies():
     """Mocks all external and internal dependencies for the reasoner."""
     patches = [
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.TRANSFORMERS_AVAILABLE",
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.TRANSFORMERS_AVAILABLE",
             True,
         ),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.pipeline"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.AutoModelForCausalLM"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.AutoTokenizer"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.jwt"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.JWT_AVAILABLE", True),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.pybreaker"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.trace"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.pipeline"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.AutoModelForCausalLM"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.AutoTokenizer"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.jwt"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.JWT_AVAILABLE", True),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.pybreaker"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.trace"),
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.PromptStrategyFactory"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.PromptStrategyFactory"
         ),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.SQLiteHistoryManager"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.SQLiteHistoryManager"),
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.PostgresHistoryManager"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.PostgresHistoryManager"
         ),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.RedisHistoryManager"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.AuditLedgerClient"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.LLMAdapterFactory"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.get_or_create_metric"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.RedisHistoryManager"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.AuditLedgerClient"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.LLMAdapterFactory"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.get_or_create_metric"),
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.aioredis", create=True
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.aioredis", create=True
         ),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.asyncpg", create=True),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.tracemalloc"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.asyncpg", create=True),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.tracemalloc"),
         # Add prometheus metric mocks
-        patch("arbiter.explainable_reasoner.explainable_reasoner.Gauge"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.Counter"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.Histogram"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.Gauge"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.Counter"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.Histogram"),
         # Mock tracer
-        patch("arbiter.explainable_reasoner.explainable_reasoner.tracer"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.tracer"),
         # Mock the _sanitize_context function - FIX: Accept 2 arguments
-        patch("arbiter.explainable_reasoner.explainable_reasoner._sanitize_context"),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner._sanitize_context"),
         # Mock _simple_text_sanitize
         patch(
-            "arbiter.explainable_reasoner.explainable_reasoner._simple_text_sanitize"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner._simple_text_sanitize"
         ),
     ]
 
@@ -247,7 +247,7 @@ def mock_config():
 async def reasoner_instance(mock_config):
     """Fixture for an initialized ExplainableReasoner instance."""
     with patch(
-        "arbiter.explainable_reasoner.explainable_reasoner._format_multimodal_for_prompt"
+        "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner._format_multimodal_for_prompt"
     ) as mock_format:
         # Configure utility mocks
         mock_format.return_value = "formatted_multimodal"
@@ -481,7 +481,7 @@ async def test_shutdown_success(reasoner_instance):
 @pytest.mark.asyncio
 async def test_plugin_initialize():
     with patch(
-        "arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
+        "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
     ) as mock_from_env:
         mock_from_env.return_value = ReasonerConfig(
             mock_mode=True, jwt_secret_key=SensitiveValue("test_key")
@@ -495,7 +495,7 @@ async def test_plugin_initialize():
 @pytest.mark.asyncio
 async def test_plugin_execute_explain():
     with patch(
-        "arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
+        "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
     ) as mock_from_env:
         mock_from_env.return_value = ReasonerConfig(
             mock_mode=True, jwt_secret_key=SensitiveValue("test_key")
@@ -518,7 +518,7 @@ async def test_plugin_execute_explain():
 @pytest.mark.asyncio
 async def test_plugin_execute_invalid_action():
     with patch(
-        "arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
+        "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
     ) as mock_from_env:
         mock_from_env.return_value = ReasonerConfig(
             mock_mode=True, jwt_secret_key=SensitiveValue("test_key")
@@ -538,7 +538,7 @@ async def test_plugin_execute_rbac_success():
     # Mock ReasonerErrorCode to have PERMISSION_DENIED
     with patch.object(ReasonerErrorCode, "PERMISSION_DENIED", "PERMISSION_DENIED"):
         with patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
         ) as mock_from_env:
             mock_from_env.return_value = ReasonerConfig(
                 mock_mode=True, jwt_secret_key=SensitiveValue("test_key")
@@ -549,7 +549,7 @@ async def test_plugin_execute_rbac_success():
 
             # Mock jwt module properly
             with patch(
-                "arbiter.explainable_reasoner.explainable_reasoner.jwt"
+                "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.jwt"
             ) as mock_jwt:
                 # Setup decode to return admin role
                 mock_jwt.decode.return_value = {"role": "admin", "exp": 9999999999}
@@ -594,7 +594,7 @@ async def test_plugin_execute_rbac_failure():
     # Mock ReasonerErrorCode to have PERMISSION_DENIED
     with patch.object(ReasonerErrorCode, "PERMISSION_DENIED", "PERMISSION_DENIED"):
         with patch(
-            "arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
+            "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
         ) as mock_from_env:
             mock_from_env.return_value = ReasonerConfig(
                 mock_mode=True, jwt_secret_key=SensitiveValue("test_key")
@@ -604,7 +604,7 @@ async def test_plugin_execute_rbac_failure():
             await plugin.initialize()
 
             with patch(
-                "arbiter.explainable_reasoner.explainable_reasoner.jwt"
+                "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.jwt"
             ) as mock_jwt:
                 mock_jwt.decode.return_value = {
                     "role": "user",
@@ -635,7 +635,7 @@ async def test_plugin_execute_rbac_failure():
 async def test_plugin_execute_rbac_invalid_token():
     """Test RBAC with invalid JWT token."""
     with patch(
-        "arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
+        "self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.ReasonerConfig.from_env"
     ) as mock_from_env:
         mock_from_env.return_value = ReasonerConfig(
             mock_mode=True, jwt_secret_key=SensitiveValue("test_key")
@@ -644,7 +644,7 @@ async def test_plugin_execute_rbac_invalid_token():
         plugin = ExplainableReasonerPlugin()
         await plugin.initialize()
 
-        with patch("arbiter.explainable_reasoner.explainable_reasoner.jwt") as mock_jwt:
+        with patch("self_fixing_engineer.arbiter.explainable_reasoner.explainable_reasoner.jwt") as mock_jwt:
             # Create InvalidTokenError exception class
             class InvalidTokenError(Exception):
                 pass

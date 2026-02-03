@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Fixed imports - using the actual metric names from feedback.py
-from arbiter.feedback import SQLiteClient  # Import SQLiteClient for testing
-from arbiter.feedback import FeedbackManager, _get_or_create_metric, logger
+from self_fixing_engineer.arbiter.feedback import SQLiteClient  # Import SQLiteClient for testing
+from self_fixing_engineer.arbiter.feedback import FeedbackManager, _get_or_create_metric, logger
 from prometheus_client import REGISTRY, Counter
 
 

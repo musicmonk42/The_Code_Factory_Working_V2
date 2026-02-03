@@ -10,8 +10,8 @@ import pytest
 from aiohttp import ClientError
 
 # Import the module to be tested
-from arbiter.bug_manager import notifications
-from arbiter.bug_manager.notifications import (
+from self_fixing_engineer.arbiter.bug_manager import notifications
+from self_fixing_engineer.arbiter.bug_manager.notifications import (
     CircuitBreaker,
     CircuitBreakerOpenError,
     NotificationError,
@@ -175,7 +175,7 @@ class TestNotificationService:
     @pytest.mark.asyncio
     async def test_notify_email_with_tenacity_retry(self, notification_service):
         with patch(
-            "arbiter.bug_manager.notifications.aiosmtplib.SMTP"
+            "self_fixing_engineer.arbiter.bug_manager.notifications.aiosmtplib.SMTP"
         ) as mock_smtp_class:
             mock_smtp_instance = AsyncMock()
             mock_smtp_instance.send_message.side_effect = [

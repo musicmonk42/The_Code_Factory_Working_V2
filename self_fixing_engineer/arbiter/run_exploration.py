@@ -22,10 +22,10 @@ from tenacity import (
 
 # Mock/Plausholder imports for a self-contained fix
 try:
-    from arbiter.arbiter import Arbiter
-    from arbiter.arena import ArbiterArena
-    from arbiter.config import ArbiterConfig as Settings
-    from arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.arbiter import Arbiter
+    from self_fixing_engineer.arbiter.arena import ArbiterArena
+    from self_fixing_engineer.arbiter.config import ArbiterConfig as Settings
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
     from arbiter_plugin_registry import PlugInKind, registry
     from opentelemetry import trace
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter

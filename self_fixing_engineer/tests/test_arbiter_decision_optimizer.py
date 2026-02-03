@@ -38,11 +38,11 @@ if "envs.evolution" not in sys.modules or isinstance(sys.modules.get("envs.evolu
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
 
 # Mock all dependencies
-from arbiter.config import ArbiterConfig
-from arbiter.decision_optimizer import Agent, DecisionOptimizer, Task, safe_serialize
+from self_fixing_engineer.arbiter.config import ArbiterConfig
+from self_fixing_engineer.arbiter.decision_optimizer import Agent, DecisionOptimizer, Task, safe_serialize
 
 
 def _restore_original_modules():
@@ -187,7 +187,7 @@ async def test_allocate_resources_simple(optimizer):
     ]
 
     with patch(
-        "arbiter.decision_optimizer.get_system_metrics_async",
+        "self_fixing_engineer.arbiter.decision_optimizer.get_system_metrics_async",
         AsyncMock(return_value={"cpu_percent": 50}),
     ):
         assignments = await optimizer.allocate_resources(agents, tasks)

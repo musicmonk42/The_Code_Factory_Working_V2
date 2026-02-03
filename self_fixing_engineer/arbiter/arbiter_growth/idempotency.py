@@ -4,7 +4,7 @@ from typing import Optional, Union
 
 import redis.asyncio as redis
 from opentelemetry import trace
-from arbiter.otel_config import get_tracer_safe
+from self_fixing_engineer.arbiter.otel_config import get_tracer_safe
 from prometheus_client import REGISTRY, Counter
 from redis.asyncio.cluster import RedisCluster
 from redis.exceptions import RedisError

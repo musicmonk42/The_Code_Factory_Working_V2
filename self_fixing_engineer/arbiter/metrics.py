@@ -19,7 +19,7 @@ from prometheus_client import (
 
 # Mock/Placeholder imports for a self-contained fix
 try:
-    from arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
     from arbiter_plugin_registry import PlugInKind, PluginBase, registry
 except ImportError:
 
@@ -54,12 +54,12 @@ except ImportError:
 
 
 # Use centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 
 tracer = get_tracer(__name__)
 
 # --- Logging Setup ---
-_metrics_logger = logging.getLogger("arbiter.metrics")
+_metrics_logger = logging.getLogger("self_fixing_engineer.arbiter.metrics")
 if not _metrics_logger.hasHandlers():
     handler = logging.StreamHandler()
     formatter = logging.Formatter(

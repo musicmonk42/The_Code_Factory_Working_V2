@@ -18,8 +18,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from arbiter.policy.config import ArbiterConfig
-from arbiter.policy.policy_manager import (
+from self_fixing_engineer.arbiter.policy.config import ArbiterConfig
+from self_fixing_engineer.arbiter.policy.policy_manager import (
     DomainRule,
     LLMRules,
     PolicyConfig,
@@ -418,7 +418,7 @@ async def test_check_permission_available():
     mock_module.PermissionManager.return_value = mock_pm_instance
 
     # Mock the import statement that happens inside check_permission
-    with patch.dict("sys.modules", {"arbiter.permission_manager": mock_module}):
+    with patch.dict("sys.modules", {"self_fixing_engineer.arbiter.permission_manager": mock_module}):
         result = await manager.check_permission("admin", "write")
 
         assert result

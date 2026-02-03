@@ -4,7 +4,7 @@ import logging
 import pytest
 
 # Assuming all modules are in a discoverable path
-from arbiter.arbiter_growth.exceptions import (
+from self_fixing_engineer.arbiter.arbiter_growth.exceptions import (
     ArbiterGrowthError,
     AuditChainTamperedError,
     CircuitBreakerOpenError,

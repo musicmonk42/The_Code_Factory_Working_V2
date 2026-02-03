@@ -24,11 +24,11 @@ def _create_package_mock(name):
 _ORIGINAL_MODULES = {}
 # NOTE: Removed fastapi and aiohttp from _MOCKED_MODULE_NAMES as they should not be mocked
 _MOCKED_MODULE_NAMES = [
-    "arbiter.config",
-    "arbiter.arena",
-    "arbiter.arbiter",
+    "self_fixing_engineer.arbiter.config",
+    "self_fixing_engineer.arbiter.arena",
+    "self_fixing_engineer.arbiter.arbiter",
     "arbiter_plugin_registry",
-    "arbiter.logging_utils",
+    "self_fixing_engineer.arbiter.logging_utils",
     "sqlalchemy.ext.asyncio",
     "opentelemetry",
     "opentelemetry.sdk.trace",
@@ -66,11 +66,11 @@ def _safe_mock_module(name, mock_obj=None):
     sys.modules[name] = mock_obj if mock_obj else MagicMock()
 
 
-_safe_mock_module("arbiter.config")
-_safe_mock_module("arbiter.arena")
-_safe_mock_module("arbiter.arbiter")
+_safe_mock_module("self_fixing_engineer.arbiter.config")
+_safe_mock_module("self_fixing_engineer.arbiter.arena")
+_safe_mock_module("self_fixing_engineer.arbiter.arbiter")
 _safe_mock_module("arbiter_plugin_registry")
-_safe_mock_module("arbiter.logging_utils")
+_safe_mock_module("self_fixing_engineer.arbiter.logging_utils")
 _safe_mock_module("sqlalchemy.ext.asyncio")
 _safe_mock_module("opentelemetry", _create_package_mock("opentelemetry"))
 _safe_mock_module(
@@ -136,10 +136,10 @@ sys.modules["aiofiles"] = aiofiles_mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Force reload the module to get our mocked dependencies
-if "arbiter.run_exploration" in sys.modules:
-    del sys.modules["arbiter.run_exploration"]
+if "self_fixing_engineer.arbiter.run_exploration" in sys.modules:
+    del sys.modules["self_fixing_engineer.arbiter.run_exploration"]
 
-from arbiter.run_exploration import (
+from self_fixing_engineer.arbiter.run_exploration import (
     load_config,
     load_plugins,
     main,
@@ -379,7 +379,7 @@ async def test_run_agentic_workflow_success(
     mock_config["results_summary_file"] = "results.json"
 
     # Mock tracer
-    with patch("arbiter.run_exploration.tracer"):
+    with patch("self_fixing_engineer.arbiter.run_exploration.tracer"):
         with pytest.raises(SystemExit) as exc:
             await run_agentic_workflow(mock_config)
 
@@ -414,7 +414,7 @@ async def test_run_agentic_workflow_with_errors(
     mock_config["num_arbiters"] = 1
     mock_config["agent_tasks"] = [{"task": 1}]
 
-    with patch("arbiter.run_exploration.tracer"):
+    with patch("self_fixing_engineer.arbiter.run_exploration.tracer"):
         with pytest.raises(SystemExit) as exc:
             await run_agentic_workflow(mock_config)
 
@@ -451,7 +451,7 @@ async def test_main_no_args(mock_event, mock_workflow, mock_health, mock_setup):
 
     # Patch load_config at module level for main function
     with patch(
-        "arbiter.run_exploration.load_config", new_callable=AsyncMock
+        "self_fixing_engineer.arbiter.run_exploration.load_config", new_callable=AsyncMock
     ) as mock_load:
         mock_load.return_value = {"log_file": "test.log", "health_port": 8080}
 
@@ -481,7 +481,7 @@ async def test_main_with_config_file(mock_health, mock_setup):
 
         # Patch load_config at module level
         with patch(
-            "arbiter.run_exploration.load_config", new_callable=AsyncMock
+            "self_fixing_engineer.arbiter.run_exploration.load_config", new_callable=AsyncMock
         ) as mock_load:
             mock_load.return_value = {"log_file": "test.log", "health_port": 8080}
 
@@ -499,7 +499,7 @@ async def test_main_unhandled_exception(caplog):
     """Test main function with unhandled exception."""
     # Patch load_config to raise an exception
     with patch(
-        "arbiter.run_exploration.load_config", new_callable=AsyncMock
+        "self_fixing_engineer.arbiter.run_exploration.load_config", new_callable=AsyncMock
     ) as mock_load:
         mock_load.side_effect = Exception("Config error")
 

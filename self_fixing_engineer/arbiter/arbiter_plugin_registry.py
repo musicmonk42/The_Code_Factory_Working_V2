@@ -51,7 +51,7 @@ except ImportError:
 
 # Mock imports for a self-contained fix
 try:
-    from arbiter import PermissionManager
+    from self_fixing_engineer.arbiter import PermissionManager
 
     from .config import ArbiterConfig
     from .logging_utils import PIIRedactorFilter
@@ -76,7 +76,7 @@ except ImportError:
 
 
 try:
-    from arbiter.audit_log import emit_audit_event
+    from self_fixing_engineer.arbiter.audit_log import emit_audit_event
 except ImportError:
 
     async def emit_audit_event(event_type, data):

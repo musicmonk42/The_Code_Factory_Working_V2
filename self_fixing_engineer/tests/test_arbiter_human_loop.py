@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Import the actual classes from human_loop.py
-from arbiter.human_loop import (
+from self_fixing_engineer.arbiter.human_loop import (
     SECRET_SALT,
     DummyDBClient,
     FeedbackManager,
@@ -177,8 +177,8 @@ async def test_request_approval_timeout(hil):
 async def test_send_email_notification(hil):
     """Test email notification sending"""
     # Properly mock aiosmtplib
-    with patch("arbiter.human_loop.AIOSMTPLIB_AVAILABLE", True):
-        with patch("arbiter.human_loop.aiosmtplib.SMTP") as mock_smtp_class:
+    with patch("self_fixing_engineer.arbiter.human_loop.AIOSMTPLIB_AVAILABLE", True):
+        with patch("self_fixing_engineer.arbiter.human_loop.aiosmtplib.SMTP") as mock_smtp_class:
             mock_smtp = AsyncMock()
             mock_smtp_class.return_value = mock_smtp
             mock_smtp.__aenter__.return_value = mock_smtp

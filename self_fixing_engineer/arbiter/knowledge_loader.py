@@ -9,7 +9,7 @@ import threading
 from copy import deepcopy
 from typing import Any, Dict, Optional, Union
 
-from arbiter.arbiter_plugin_registry import PlugInKind, register
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, register
 
 logger = logging.getLogger(__name__)
 

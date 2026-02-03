@@ -12,13 +12,13 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 # Import from the correct module path
-from arbiter.knowledge_graph.multimodal import (
+from self_fixing_engineer.arbiter.knowledge_graph.multimodal import (
     PDF_PROCESSING_AVAILABLE,
     VIDEO_PROCESSING_AVAILABLE,
     DefaultMultiModalProcessor,
     MultiModalProcessor,
 )
-from arbiter.knowledge_graph.utils import AgentCoreException, AgentErrorCode
+from self_fixing_engineer.arbiter.knowledge_graph.utils import AgentCoreException, AgentErrorCode
 
 
 class TestMultiModalProcessor:
@@ -51,7 +51,7 @@ class TestDefaultMultiModalProcessor:
     @pytest.fixture
     def mock_config(self):
         """Fixture for mock Config"""
-        with patch("arbiter.knowledge_graph.multimodal.Config") as mock_config:
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.Config") as mock_config:
             mock_config.REDIS_URL = None
             mock_config.MAX_MM_DATA_SIZE_MB = 100
             mock_config.CACHE_EXPIRATION_SECONDS = 3600
@@ -81,7 +81,7 @@ class TestDefaultMultiModalProcessor:
     @pytest.fixture
     def mock_metrics(self):
         """Fixture for mock metrics"""
-        with patch("arbiter.knowledge_graph.multimodal.AGENT_METRICS") as mock_metrics:
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.AGENT_METRICS") as mock_metrics:
             mock_metric = Mock()
             mock_metric.labels.return_value.inc = Mock()
             mock_metrics.__getitem__.return_value = mock_metric
@@ -91,7 +91,7 @@ class TestDefaultMultiModalProcessor:
     def mock_audit(self):
         """Fixture for mock audit ledger client"""
         with patch(
-            "arbiter.knowledge_graph.multimodal.audit_ledger_client"
+            "self_fixing_engineer.arbiter.knowledge_graph.multimodal.audit_ledger_client"
         ) as mock_audit:
             mock_audit.log_event = AsyncMock()
             yield mock_audit
@@ -99,7 +99,7 @@ class TestDefaultMultiModalProcessor:
     def test_processor_initialization_no_libraries(self, mock_logger, mock_config):
         """Test processor initialization when optional libraries are not available"""
         with patch.multiple(
-            "arbiter.knowledge_graph.multimodal",
+            "self_fixing_engineer.arbiter.knowledge_graph.multimodal",
             IMAGE_PROCESSING_AVAILABLE=False,
             AUDIO_PROCESSING_AVAILABLE=False,
             VIDEO_PROCESSING_AVAILABLE=False,
@@ -123,7 +123,7 @@ class TestDefaultMultiModalProcessor:
 
     def test_processor_initialization_with_redis(self, mock_logger):
         """Test processor initialization with Redis configuration"""
-        with patch("arbiter.knowledge_graph.multimodal.Config") as mock_config:
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.Config") as mock_config:
             mock_config.REDIS_URL = "redis://localhost:6379/0"
             mock_config.MAX_MM_DATA_SIZE_MB = 100
             mock_config.CACHE_EXPIRATION_SECONDS = 3600
@@ -136,8 +136,8 @@ class TestDefaultMultiModalProcessor:
 
     def test_processor_initialization_with_transformers(self, mock_logger, mock_config):
         """Test processor initialization with transformers available"""
-        with patch("arbiter.knowledge_graph.multimodal.TRANSFORMERS_AVAILABLE", True):
-            with patch("arbiter.knowledge_graph.multimodal.pipeline") as mock_pipeline:
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.TRANSFORMERS_AVAILABLE", True):
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.pipeline") as mock_pipeline:
                 mock_pipeline.return_value = Mock()
                 DefaultMultiModalProcessor(mock_logger)
 
@@ -170,7 +170,7 @@ class TestDefaultMultiModalProcessor:
         }
 
         with patch(
-            "arbiter.knowledge_graph.multimodal.async_with_retry",
+            "self_fixing_engineer.arbiter.knowledge_graph.multimodal.async_with_retry",
             AsyncMock(return_value=json.dumps(cached_result)),
         ):
             item = mock_multimodal_data("image", test_data)
@@ -248,7 +248,7 @@ class TestDefaultMultiModalProcessor:
     ):
         """Test successful image processing"""
         with patch(
-            "arbiter.knowledge_graph.multimodal.IMAGE_PROCESSING_AVAILABLE", True
+            "self_fixing_engineer.arbiter.knowledge_graph.multimodal.IMAGE_PROCESSING_AVAILABLE", True
         ):
             processor = DefaultMultiModalProcessor(mock_logger)
             processor._image_processing_available = True
@@ -258,7 +258,7 @@ class TestDefaultMultiModalProcessor:
             item = mock_multimodal_data("image", test_image_data)
 
             # Mock Image from the multimodal module (where it's imported)
-            with patch("arbiter.knowledge_graph.multimodal.Image") as mock_image_module:
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.Image") as mock_image_module:
                 mock_image = Mock()
                 mock_image.size = (1920, 1080)
                 mock_image.mode = "RGB"
@@ -300,7 +300,7 @@ class TestDefaultMultiModalProcessor:
     ):
         """Test successful audio processing"""
         with patch(
-            "arbiter.knowledge_graph.multimodal.AUDIO_PROCESSING_AVAILABLE", True
+            "self_fixing_engineer.arbiter.knowledge_graph.multimodal.AUDIO_PROCESSING_AVAILABLE", True
         ):
             processor = DefaultMultiModalProcessor(mock_logger)
             processor._audio_processing_available = True
@@ -309,7 +309,7 @@ class TestDefaultMultiModalProcessor:
             item = mock_multimodal_data("audio", test_audio_data)
 
             # Mock pydub from the multimodal module
-            with patch("arbiter.knowledge_graph.multimodal.pydub") as mock_pydub:
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.pydub") as mock_pydub:
                 mock_audio = Mock()
                 mock_audio.__len__ = Mock(return_value=5000)  # 5 seconds
                 mock_pydub.AudioSegment.from_file.return_value = mock_audio
@@ -331,7 +331,7 @@ class TestDefaultMultiModalProcessor:
     ):
         """Test successful video processing - skipped if moviepy not available"""
         with patch(
-            "arbiter.knowledge_graph.multimodal.VIDEO_PROCESSING_AVAILABLE", True
+            "self_fixing_engineer.arbiter.knowledge_graph.multimodal.VIDEO_PROCESSING_AVAILABLE", True
         ):
             processor = DefaultMultiModalProcessor(mock_logger)
             processor._video_processing_available = True
@@ -341,7 +341,7 @@ class TestDefaultMultiModalProcessor:
 
             # Mock VideoFileClip from the multimodal module
             with patch(
-                "arbiter.knowledge_graph.multimodal.VideoFileClip"
+                "self_fixing_engineer.arbiter.knowledge_graph.multimodal.VideoFileClip"
             ) as mock_video_clip:
                 mock_clip = MagicMock()
                 mock_clip.duration = 30.5
@@ -349,7 +349,7 @@ class TestDefaultMultiModalProcessor:
                 mock_video_clip.return_value.__enter__.return_value = mock_clip
 
                 # Mock Image from multimodal module
-                with patch("arbiter.knowledge_graph.multimodal.Image"):
+                with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.Image"):
                     processor.image_captioner = Mock()
                     processor.image_captioner.return_value = [
                         {"generated_text": "First frame"}
@@ -403,7 +403,7 @@ class TestDefaultMultiModalProcessor:
         self, mock_logger, mock_config, mock_multimodal_data
     ):
         """Test successful PDF file processing - skipped if PyPDF2 not available"""
-        with patch("arbiter.knowledge_graph.multimodal.PDF_PROCESSING_AVAILABLE", True):
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.PDF_PROCESSING_AVAILABLE", True):
             processor = DefaultMultiModalProcessor(mock_logger)
             processor._pdf_processing_available = True
 
@@ -412,7 +412,7 @@ class TestDefaultMultiModalProcessor:
 
             # Mock PdfReader from the multimodal module
             with patch(
-                "arbiter.knowledge_graph.multimodal.PdfReader"
+                "self_fixing_engineer.arbiter.knowledge_graph.multimodal.PdfReader"
             ) as mock_pdf_reader:
                 mock_reader = Mock()
                 mock_page = Mock()
@@ -444,7 +444,7 @@ class TestDefaultMultiModalProcessor:
         item = mock_multimodal_data("text_file", test_text.encode("utf-8"))
 
         with patch(
-            "arbiter.knowledge_graph.multimodal.async_with_retry",
+            "self_fixing_engineer.arbiter.knowledge_graph.multimodal.async_with_retry",
             AsyncMock(side_effect=[None, None]),
         ):
             result = await processor.summarize(item)
@@ -484,7 +484,7 @@ class TestIntegration:
         """Test the full processing pipeline with multiple data types"""
         logger = Mock()
 
-        with patch("arbiter.knowledge_graph.multimodal.Config") as mock_config:
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.Config") as mock_config:
             mock_config.REDIS_URL = None
             mock_config.MAX_MM_DATA_SIZE_MB = 100
             mock_config.CACHE_EXPIRATION_SECONDS = 3600
@@ -510,7 +510,7 @@ class TestIntegration:
         """Test concurrent processing of multiple items"""
         logger = Mock()
 
-        with patch("arbiter.knowledge_graph.multimodal.Config") as mock_config:
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.Config") as mock_config:
             mock_config.REDIS_URL = None
             mock_config.MAX_MM_DATA_SIZE_MB = 100
             mock_config.CACHE_EXPIRATION_SECONDS = 3600
@@ -548,7 +548,7 @@ class TestErrorCases:
         logger = Mock()
 
         # Test that processor initializes even when Redis is unavailable
-        with patch("arbiter.knowledge_graph.multimodal.Config") as mock_config:
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.Config") as mock_config:
             mock_config.REDIS_URL = None  # No Redis URL provided
             mock_config.MAX_MM_DATA_SIZE_MB = 100
             mock_config.CACHE_EXPIRATION_SECONDS = 3600
@@ -563,7 +563,7 @@ class TestErrorCases:
         """Test handling of audit logging failures"""
         logger = Mock()
 
-        with patch("arbiter.knowledge_graph.multimodal.Config") as mock_config:
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.Config") as mock_config:
             mock_config.REDIS_URL = None
             mock_config.MAX_MM_DATA_SIZE_MB = 100
 
@@ -575,7 +575,7 @@ class TestErrorCases:
             item.data = b"test"
 
             with patch(
-                "arbiter.knowledge_graph.multimodal.audit_ledger_client"
+                "self_fixing_engineer.arbiter.knowledge_graph.multimodal.audit_ledger_client"
             ) as mock_audit:
                 mock_audit.log_event = AsyncMock(side_effect=Exception("Audit failed"))
 

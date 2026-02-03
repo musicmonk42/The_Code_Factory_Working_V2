@@ -25,7 +25,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 # Import centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 from pydantic import (
     BaseModel,

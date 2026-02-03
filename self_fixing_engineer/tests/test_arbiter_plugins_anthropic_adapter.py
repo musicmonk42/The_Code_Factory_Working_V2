@@ -7,8 +7,8 @@ import anthropic
 import pytest
 
 # Import the adapter and related exceptions
-from arbiter.plugins.anthropic_adapter import AnthropicAdapter
-from arbiter.plugins.llm_client import (
+from self_fixing_engineer.arbiter.plugins.anthropic_adapter import AnthropicAdapter
+from self_fixing_engineer.arbiter.plugins.llm_client import (
     APIError,
     AuthError,
     CircuitBreakerOpenError,
@@ -38,7 +38,7 @@ class TestAnthropicAdapter:
     @pytest.fixture
     async def adapter(self, valid_settings):
         """Creates an AnthropicAdapter instance with mocked LLMClient."""
-        with patch("arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.model = "claude-3-sonnet-20240229"
@@ -51,7 +51,7 @@ class TestAnthropicAdapter:
 
     def test_init_with_valid_settings(self, valid_settings):
         """Test successful initialization with valid settings."""
-        with patch("arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
 
@@ -72,7 +72,7 @@ class TestAnthropicAdapter:
 
     def test_init_with_none_client(self, valid_settings):
         """Test initialization fails when LLMClient returns None."""
-        with patch("arbiter.plugins.anthropic_adapter.LLMClient", return_value=None):
+        with patch("self_fixing_engineer.arbiter.plugins.anthropic_adapter.LLMClient", return_value=None):
             with pytest.raises(ValueError, match="Failed to initialize LLMClient"):
                 AnthropicAdapter(valid_settings)
 
@@ -296,7 +296,7 @@ class TestAnthropicAdapter:
     @pytest.mark.asyncio
     async def test_async_context_manager(self, valid_settings):
         """Test async context manager functionality."""
-        with patch("arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock()
@@ -309,7 +309,7 @@ class TestAnthropicAdapter:
     @pytest.mark.asyncio
     async def test_context_manager_handles_close_error(self, valid_settings):
         """Test that context manager handles errors during session close."""
-        with patch("arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock(
@@ -326,10 +326,10 @@ class TestAnthropicAdapter:
         """Test that metrics are recorded on successful generation."""
         with (
             patch(
-                "arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds"
+                "self_fixing_engineer.arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds"
             ) as mock_latency,
             patch(
-                "arbiter.plugins.anthropic_adapter.anthropic_call_success_total"
+                "self_fixing_engineer.arbiter.plugins.anthropic_adapter.anthropic_call_success_total"
             ) as mock_success,
         ):
 
@@ -344,10 +344,10 @@ class TestAnthropicAdapter:
         """Test that metrics are recorded on failed generation."""
         with (
             patch(
-                "arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds"
+                "self_fixing_engineer.arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds"
             ) as mock_latency,
             patch(
-                "arbiter.plugins.anthropic_adapter.anthropic_call_errors_total"
+                "self_fixing_engineer.arbiter.plugins.anthropic_adapter.anthropic_call_errors_total"
             ) as mock_errors,
         ):
 

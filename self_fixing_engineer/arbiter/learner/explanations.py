@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import structlog
 from opentelemetry import trace
-from arbiter.otel_config import get_tracer_safe
+from self_fixing_engineer.arbiter.otel_config import get_tracer_safe
 from prometheus_client import Counter, Histogram
 from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 

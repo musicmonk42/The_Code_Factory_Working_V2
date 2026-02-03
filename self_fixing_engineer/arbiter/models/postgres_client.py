@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 import asyncpg
 
 # Import centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from asyncpg import exceptions as asyncpg_exceptions
 from asyncpg.pool import Pool
 from opentelemetry.trace import Status, StatusCode

@@ -9,8 +9,8 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 
 # Import the module to be tested
-from arbiter.bug_manager import bug_manager
-from arbiter.bug_manager.bug_manager import (
+from self_fixing_engineer.arbiter.bug_manager import bug_manager
+from self_fixing_engineer.arbiter.bug_manager.bug_manager import (
     BugManager,
     BugManagerArena,
     RateLimiter,
@@ -39,13 +39,13 @@ def mock_settings():
 async def mock_dependencies():
     """Mocks all external and internal dependencies for the BugManager."""
     with (
-        patch("arbiter.bug_manager.bug_manager.apply_settings_validation"),
+        patch("self_fixing_engineer.arbiter.bug_manager.bug_manager.apply_settings_validation"),
         patch(
-            "arbiter.bug_manager.bug_manager.NotificationService"
+            "self_fixing_engineer.arbiter.bug_manager.bug_manager.NotificationService"
         ) as mock_notification_service,
-        patch("arbiter.bug_manager.bug_manager.AuditLogManager") as mock_audit_manager,
-        patch("arbiter.bug_manager.bug_manager.MLRemediationModel") as mock_ml_model,
-        patch("arbiter.bug_manager.bug_manager.BugFixerRegistry") as mock_bug_fixer,
+        patch("self_fixing_engineer.arbiter.bug_manager.bug_manager.AuditLogManager") as mock_audit_manager,
+        patch("self_fixing_engineer.arbiter.bug_manager.bug_manager.MLRemediationModel") as mock_ml_model,
+        patch("self_fixing_engineer.arbiter.bug_manager.bug_manager.BugFixerRegistry") as mock_bug_fixer,
     ):
 
         # Create proper mock instance for AuditLogManager
@@ -277,7 +277,7 @@ class TestBugManagerArena:
         """Tests that report() schedules a task on an already running loop."""
         # The test itself runs in an event loop
         with patch(
-            "arbiter.bug_manager.bug_manager.BugManager.report", new_callable=AsyncMock
+            "self_fixing_engineer.arbiter.bug_manager.bug_manager.BugManager.report", new_callable=AsyncMock
         ) as mock_super_report:
             # Disable notifications to avoid settings validation errors on default settings
             arena = BugManagerArena(settings=Settings(ENABLED_NOTIFICATION_CHANNELS=()))
@@ -294,7 +294,7 @@ class TestBugManagerArena:
     @pytest.mark.asyncio
     async def test_report_with_no_loop(self):
         with patch(
-            "arbiter.bug_manager.bug_manager.BugManager.report", new_callable=AsyncMock
+            "self_fixing_engineer.arbiter.bug_manager.bug_manager.BugManager.report", new_callable=AsyncMock
         ):
             with patch("asyncio.get_running_loop", side_effect=RuntimeError):
                 with patch("asyncio.run") as mock_asyncio_run:

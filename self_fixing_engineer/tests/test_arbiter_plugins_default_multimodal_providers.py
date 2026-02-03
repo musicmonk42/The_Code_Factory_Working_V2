@@ -3,12 +3,12 @@ import base64
 from unittest.mock import Mock, patch
 
 import pytest
-from arbiter.plugins.multimodal.interface import (
+from self_fixing_engineer.arbiter.plugins.multimodal.interface import (
     ConfigurationError,
     MultiModalException,
     ProviderNotAvailableError,
 )
-from arbiter.plugins.multimodal.providers.default_multimodal_providers import (
+from self_fixing_engineer.arbiter.plugins.multimodal.providers.default_multimodal_providers import (
     DefaultAudioProcessor,
     DefaultAudioProcessorConfig,
     DefaultImageProcessor,
@@ -188,7 +188,7 @@ class TestDefaultImageProcessor:
         """Create a DefaultImageProcessor instance."""
         config = {"mock_min_latency_ms": 1, "mock_max_latency_ms": 2, "max_size_mb": 10}
         with patch(
-            "arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
+            "self_fixing_engineer.arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
             get_or_create,
         ):
             return DefaultImageProcessor(config)
@@ -282,7 +282,7 @@ class TestDefaultAudioProcessor:
         """Create a DefaultAudioProcessor instance."""
         config = {"mock_min_latency_ms": 1, "mock_max_latency_ms": 2, "max_size_mb": 20}
         with patch(
-            "arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
+            "self_fixing_engineer.arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
             get_or_create,
         ):
             return DefaultAudioProcessor(config)
@@ -339,7 +339,7 @@ class TestDefaultVideoProcessor:
             "max_size_mb": 100,
         }
         with patch(
-            "arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
+            "self_fixing_engineer.arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
             get_or_create,
         ):
             return DefaultVideoProcessor(config)
@@ -395,7 +395,7 @@ class TestDefaultTextProcessor:
             "max_length": 1000,
         }
         with patch(
-            "arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
+            "self_fixing_engineer.arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
             get_or_create,
         ):
             return DefaultTextProcessor(config)
@@ -459,7 +459,7 @@ def get_or_create(metric):
 def mock_metrics():
     """Auto-use fixture to mock metrics."""
     with patch(
-        "arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
+        "self_fixing_engineer.arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
         get_or_create,
     ):
         yield

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Import the module under test
-from arbiter.explainable_reasoner.reasoner_errors import (
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors import (
     ReasonerError,
     ReasonerErrorCode,
 )
@@ -20,7 +20,7 @@ from arbiter.explainable_reasoner.reasoner_errors import (
 @pytest.fixture(autouse=True)
 def mock_logger():
     """Mock logger to capture calls."""
-    with patch("arbiter.explainable_reasoner.reasoner_errors.logger") as mock_log:
+    with patch("self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors.logger") as mock_log:
         mock_log.error = MagicMock()
         mock_log.critical = MagicMock()
         mock_log.warning = MagicMock()
@@ -32,9 +32,9 @@ def mock_logger():
 def mock_sentry():
     """Mock sentry_sdk for capture_exception."""
     with (
-        patch("arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", True),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", True),
         patch(
-            "arbiter.explainable_reasoner.reasoner_errors.sentry_sdk"
+            "self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors.sentry_sdk"
         ) as mock_sentry_sdk,
     ):
         mock_scope = MagicMock()
@@ -151,8 +151,8 @@ def test_reasoner_error_sentry_capture(mock_sentry, mock_logger):
 def test_sentry_not_captured_no_dsn(mock_logger):
     """Test that Sentry is not used when DSN is not configured."""
     with (
-        patch("arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", True),
-        patch("arbiter.explainable_reasoner.reasoner_errors.sentry_sdk") as mock_sentry,
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", True),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors.sentry_sdk") as mock_sentry,
         patch.dict(os.environ, {}, clear=True),
     ):
 
@@ -163,8 +163,8 @@ def test_sentry_not_captured_no_dsn(mock_logger):
 def test_sentry_not_available(mock_logger):
     """Test behavior when Sentry is not installed."""
     with (
-        patch("arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", False),
-        patch("arbiter.explainable_reasoner.reasoner_errors.sentry_sdk") as mock_sentry,
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors.SENTRY_AVAILABLE", False),
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors.sentry_sdk") as mock_sentry,
     ):
 
         ReasonerError("No sentry", ReasonerErrorCode.GENERIC_ERROR)

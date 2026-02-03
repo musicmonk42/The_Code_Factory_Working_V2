@@ -6,13 +6,13 @@ import pytest
 import pytest_asyncio
 
 # Import the filters - assuming the PIIRedactorFilter is the correct name
-from arbiter.meta_learning_orchestrator.logging_utils import (
+from self_fixing_engineer.arbiter.meta_learning_orchestrator.logging_utils import (
     LogCorrelationFilter,
     PIIRedactorFilter,
 )
 
 # Use centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from opentelemetry.trace import SpanContext, TraceFlags, TraceState
 from pytest_mock import MockerFixture
 

@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from arbiter.learner.audit import CircuitBreaker
+from self_fixing_engineer.arbiter.learner.audit import CircuitBreaker
 
 # Import the classes to test
-from arbiter.learner.core import LearnerArbiterHelper, Learner
-from arbiter.learner.encryption import ArbiterConfig
+from self_fixing_engineer.arbiter.learner.core import LearnerArbiterHelper, Learner
+from self_fixing_engineer.arbiter.learner.encryption import ArbiterConfig
 from cryptography.fernet import Fernet
 
 
@@ -19,8 +19,8 @@ class TestLearnerArbiterHelper:
     def test_arbiter_helper_initialization(self):
         """Test LearnerArbiterHelper initialization."""
         # Mock both BugManager and Neo4jKnowledgeGraph
-        with patch("arbiter.learner.core.BugManager") as mock_bug_manager:
-            with patch("arbiter.learner.core.Neo4jKnowledgeGraph") as mock_neo4j:
+        with patch("self_fixing_engineer.arbiter.learner.core.BugManager") as mock_bug_manager:
+            with patch("self_fixing_engineer.arbiter.learner.core.Neo4jKnowledgeGraph") as mock_neo4j:
                 mock_bug_manager.return_value = Mock()
                 mock_neo4j.return_value = Mock()
 
@@ -88,17 +88,17 @@ class TestLearner:
     @pytest.fixture
     async def learner(self, mock_arbiter, mock_redis, mock_db):
         """Create a Learner instance with mocked dependencies."""
-        with patch("arbiter.learner.core.PostgresClient") as mock_postgres:
+        with patch("self_fixing_engineer.arbiter.learner.core.PostgresClient") as mock_postgres:
             mock_postgres.return_value = mock_db
 
-            with patch("arbiter.learner.core.LLMClient"):
-                with patch("arbiter.learner.core.AuditLogger") as mock_audit:
+            with patch("self_fixing_engineer.arbiter.learner.core.LLMClient"):
+                with patch("self_fixing_engineer.arbiter.learner.core.AuditLogger") as mock_audit:
                     mock_audit_instance = AsyncMock()
                     mock_audit_instance.log_event = AsyncMock()
                     mock_audit.from_environment.return_value = mock_audit_instance
 
                     with patch(
-                        "arbiter.learner.core.get_meta_learning_data_store"
+                        "self_fixing_engineer.arbiter.learner.core.get_meta_learning_data_store"
                     ) as mock_meta:
                         mock_meta_store = AsyncMock()
                         mock_meta_store.connect = AsyncMock()
@@ -121,10 +121,10 @@ class TestLearner:
 
     def test_learner_initialization(self, mock_arbiter, mock_redis):
         """Test Learner initialization."""
-        with patch("arbiter.learner.core.PostgresClient"):
-            with patch("arbiter.learner.core.LLMClient"):
-                with patch("arbiter.learner.core.AuditLogger"):
-                    with patch("arbiter.learner.core.get_meta_learning_data_store"):
+        with patch("self_fixing_engineer.arbiter.learner.core.PostgresClient"):
+            with patch("self_fixing_engineer.arbiter.learner.core.LLMClient"):
+                with patch("self_fixing_engineer.arbiter.learner.core.AuditLogger"):
+                    with patch("self_fixing_engineer.arbiter.learner.core.get_meta_learning_data_store"):
                         ArbiterConfig.ENCRYPTION_KEYS = {"v1": Fernet.generate_key()}
 
                         learner = Learner(mock_arbiter, mock_redis)
@@ -142,20 +142,20 @@ class TestLearner:
     @pytest.mark.asyncio
     async def test_learn_new_thing_success(self, learner):
         """Test successful learning of new knowledge."""
-        with patch("arbiter.learner.core.should_auto_learn") as mock_policy:
+        with patch("self_fixing_engineer.arbiter.learner.core.should_auto_learn") as mock_policy:
             mock_policy.return_value = (True, None)
 
-            with patch("arbiter.learner.core.validate_data") as mock_validate:
+            with patch("self_fixing_engineer.arbiter.learner.core.validate_data") as mock_validate:
                 mock_validate.return_value = {
                     "is_valid": True,
                     "reason_code": "success",
                 }
 
-                with patch("arbiter.learner.core.generate_explanation") as mock_explain:
+                with patch("self_fixing_engineer.arbiter.learner.core.generate_explanation") as mock_explain:
                     mock_explain.return_value = "Test explanation"
 
                     with patch(
-                        "arbiter.learner.core.persist_knowledge"
+                        "self_fixing_engineer.arbiter.learner.core.persist_knowledge"
                     ) as mock_persist:
                         mock_persist.return_value = None
 
@@ -193,7 +193,7 @@ class TestLearner:
     @pytest.mark.asyncio
     async def test_learn_new_thing_policy_blocked(self, learner):
         """Test learning blocked by policy."""
-        with patch("arbiter.learner.core.should_auto_learn") as mock_policy:
+        with patch("self_fixing_engineer.arbiter.learner.core.should_auto_learn") as mock_policy:
             mock_policy.return_value = (False, "blocked_by_policy")
 
             result = await learner.learn_new_thing(
@@ -209,10 +209,10 @@ class TestLearner:
     @pytest.mark.asyncio
     async def test_learn_new_thing_validation_failed(self, learner):
         """Test learning with validation failure."""
-        with patch("arbiter.learner.core.should_auto_learn") as mock_policy:
+        with patch("self_fixing_engineer.arbiter.learner.core.should_auto_learn") as mock_policy:
             mock_policy.return_value = (True, None)
 
-            with patch("arbiter.learner.core.validate_data") as mock_validate:
+            with patch("self_fixing_engineer.arbiter.learner.core.validate_data") as mock_validate:
                 mock_validate.return_value = {
                     "is_valid": False,
                     "reason_code": "schema_validation_failed",
@@ -237,20 +237,20 @@ class TestLearner:
             {"domain": "TestDomain", "key": "key2", "value": {"data": "value2"}},
         ]
 
-        with patch("arbiter.learner.core.should_auto_learn") as mock_policy:
+        with patch("self_fixing_engineer.arbiter.learner.core.should_auto_learn") as mock_policy:
             mock_policy.return_value = (True, None)
 
-            with patch("arbiter.learner.core.validate_data") as mock_validate:
+            with patch("self_fixing_engineer.arbiter.learner.core.validate_data") as mock_validate:
                 mock_validate.return_value = {
                     "is_valid": True,
                     "reason_code": "success",
                 }
 
-                with patch("arbiter.learner.core.generate_explanation") as mock_explain:
+                with patch("self_fixing_engineer.arbiter.learner.core.generate_explanation") as mock_explain:
                     mock_explain.return_value = "Batch explanation"
 
                     with patch(
-                        "arbiter.learner.core.persist_knowledge_batch"
+                        "self_fixing_engineer.arbiter.learner.core.persist_knowledge_batch"
                     ) as mock_persist:
                         mock_persist.return_value = None
 
@@ -274,10 +274,10 @@ class TestLearner:
             {"domain": "TestDomain", "key": "key3", "value": None},  # Invalid value
         ]
 
-        with patch("arbiter.learner.core.should_auto_learn") as mock_policy:
+        with patch("self_fixing_engineer.arbiter.learner.core.should_auto_learn") as mock_policy:
             mock_policy.return_value = (True, None)
 
-            with patch("arbiter.learner.core.validate_data") as mock_validate:
+            with patch("self_fixing_engineer.arbiter.learner.core.validate_data") as mock_validate:
                 mock_validate.side_effect = [
                     {"is_valid": True, "reason_code": "success"},
                     {
@@ -292,7 +292,7 @@ class TestLearner:
                     },
                 ]
 
-                with patch("arbiter.learner.core.generate_explanation") as mock_explain:
+                with patch("self_fixing_engineer.arbiter.learner.core.generate_explanation") as mock_explain:
                     mock_explain.return_value = "Explanation"
 
                     # Since persist_knowledge_batch is failing, we need to set write_to_disk=False
@@ -457,18 +457,18 @@ class TestLearner:
         ArbiterConfig.ENCRYPTED_DOMAINS = ["SecretDomain"]
 
         try:
-            with patch("arbiter.learner.core.should_auto_learn") as mock_policy:
+            with patch("self_fixing_engineer.arbiter.learner.core.should_auto_learn") as mock_policy:
                 mock_policy.return_value = (True, None)
 
-                with patch("arbiter.learner.core.validate_data") as mock_validate:
+                with patch("self_fixing_engineer.arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
                     with patch(
-                        "arbiter.learner.core.generate_explanation"
+                        "self_fixing_engineer.arbiter.learner.core.generate_explanation"
                     ) as mock_explain:
                         mock_explain.return_value = "Encrypted explanation"
 
-                        with patch("arbiter.learner.core.persist_knowledge"):
+                        with patch("self_fixing_engineer.arbiter.learner.core.persist_knowledge"):
                             result = await learner.learn_new_thing(
                                 domain="SecretDomain",
                                 key="secret_key",
@@ -490,7 +490,7 @@ class TestLearner:
     @pytest.mark.asyncio
     async def test_self_audit_task(self, learner):
         """Test self-audit background task."""
-        with patch("arbiter.learner.core.verify_audit_chain") as mock_verify:
+        with patch("self_fixing_engineer.arbiter.learner.core.verify_audit_chain") as mock_verify:
             mock_verify.return_value = True
 
             # Start self-audit
@@ -511,14 +511,14 @@ class TestLearner:
         learner.event_hooks["pre_learn"].append(pre_learn_hook)
         learner.event_hooks["post_learn"].append(post_learn_hook)
 
-        with patch("arbiter.learner.core.should_auto_learn") as mock_policy:
+        with patch("self_fixing_engineer.arbiter.learner.core.should_auto_learn") as mock_policy:
             mock_policy.return_value = (True, None)
 
-            with patch("arbiter.learner.core.validate_data") as mock_validate:
+            with patch("self_fixing_engineer.arbiter.learner.core.validate_data") as mock_validate:
                 mock_validate.return_value = {"is_valid": True}
 
-                with patch("arbiter.learner.core.generate_explanation"):
-                    with patch("arbiter.learner.core.persist_knowledge"):
+                with patch("self_fixing_engineer.arbiter.learner.core.generate_explanation"):
+                    with patch("self_fixing_engineer.arbiter.learner.core.persist_knowledge"):
                         await learner.learn_new_thing(
                             domain="TestDomain",
                             key="test_key",
@@ -537,13 +537,13 @@ class TestLearner:
         learner.db_circuit_breaker.is_open = True
         learner.db_circuit_breaker.can_proceed = AsyncMock(return_value=False)
 
-        with patch("arbiter.learner.core.should_auto_learn") as mock_policy:
+        with patch("self_fixing_engineer.arbiter.learner.core.should_auto_learn") as mock_policy:
             mock_policy.return_value = (True, None)
 
-            with patch("arbiter.learner.core.validate_data") as mock_validate:
+            with patch("self_fixing_engineer.arbiter.learner.core.validate_data") as mock_validate:
                 mock_validate.return_value = {"is_valid": True}
 
-                with patch("arbiter.learner.core.generate_explanation"):
+                with patch("self_fixing_engineer.arbiter.learner.core.generate_explanation"):
                     result = await learner.learn_new_thing(
                         domain="TestDomain",
                         key="test_key",

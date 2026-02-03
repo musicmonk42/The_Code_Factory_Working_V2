@@ -32,10 +32,10 @@ _MOCKED_MODULE_NAMES = [
     "opentelemetry.instrumentation.requests",
     "opentelemetry.propagate",
     "opentelemetry.metrics",
-    "arbiter.config",
-    "arbiter.message_queue_service",
-    "arbiter.bug_manager",
-    "arbiter.logging_utils",
+    "self_fixing_engineer.arbiter.config",
+    "self_fixing_engineer.arbiter.message_queue_service",
+    "self_fixing_engineer.arbiter.bug_manager",
+    "self_fixing_engineer.arbiter.logging_utils",
     "arbiter_plugin_registry",
 ]
 
@@ -205,20 +205,20 @@ class MockArbiterConfig:
 # Mock arbiter.config module
 mock_config_module = MagicMock()
 mock_config_module.ArbiterConfig = MockArbiterConfig
-sys.modules["arbiter.config"] = mock_config_module
+sys.modules["self_fixing_engineer.arbiter.config"] = mock_config_module
 
 # Mock other arbiter modules
-sys.modules["arbiter.message_queue_service"] = MagicMock()
-sys.modules["arbiter.message_queue_service"].MessageQueueService = AsyncMock
-sys.modules["arbiter.message_queue_service"].MessageQueueServiceError = Exception
-sys.modules["arbiter.message_queue_service"].SerializationError = Exception
-sys.modules["arbiter.message_queue_service"].DecryptionError = Exception
+sys.modules["self_fixing_engineer.arbiter.message_queue_service"] = MagicMock()
+sys.modules["self_fixing_engineer.arbiter.message_queue_service"].MessageQueueService = AsyncMock
+sys.modules["self_fixing_engineer.arbiter.message_queue_service"].MessageQueueServiceError = Exception
+sys.modules["self_fixing_engineer.arbiter.message_queue_service"].SerializationError = Exception
+sys.modules["self_fixing_engineer.arbiter.message_queue_service"].DecryptionError = Exception
 
-sys.modules["arbiter.bug_manager"] = MagicMock()
-sys.modules["arbiter.bug_manager"].AuditLogManager = AsyncMock
+sys.modules["self_fixing_engineer.arbiter.bug_manager"] = MagicMock()
+sys.modules["self_fixing_engineer.arbiter.bug_manager"].AuditLogManager = AsyncMock
 
-sys.modules["arbiter.logging_utils"] = MagicMock()
-sys.modules["arbiter.logging_utils"].PIIRedactorFilter = MagicMock
+sys.modules["self_fixing_engineer.arbiter.logging_utils"] = MagicMock()
+sys.modules["self_fixing_engineer.arbiter.logging_utils"].PIIRedactorFilter = MagicMock
 
 sys.modules["arbiter_plugin_registry"] = MagicMock()
 sys.modules["arbiter_plugin_registry"].registry = MagicMock()

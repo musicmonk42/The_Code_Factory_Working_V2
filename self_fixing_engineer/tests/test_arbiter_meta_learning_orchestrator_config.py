@@ -4,7 +4,7 @@ import os
 import pytest
 
 # Import the MetaLearningConfig class
-from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
+from self_fixing_engineer.arbiter.meta_learning_orchestrator.config import MetaLearningConfig
 from cryptography.fernet import Fernet
 from pydantic import ValidationError
 from pytest_mock import MockerFixture

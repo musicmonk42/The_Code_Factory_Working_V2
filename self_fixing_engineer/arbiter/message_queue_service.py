@@ -155,9 +155,9 @@ MQ_CONNECTION_STATUS = _get_or_create_metric(
 
 # --- Logger Setup ---
 try:
-    from arbiter import PermissionManager
-    from arbiter.config import ArbiterConfig
-    from arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter import PermissionManager
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
     from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 

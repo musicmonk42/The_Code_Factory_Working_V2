@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Type, Union
 
 # Internal imports for metrics and utils
-from arbiter.explainable_reasoner.metrics import METRICS
-from arbiter.explainable_reasoner.utils import (
+from self_fixing_engineer.arbiter.explainable_reasoner.metrics import METRICS
+from self_fixing_engineer.arbiter.explainable_reasoner.utils import (
     _format_multimodal_for_prompt,
     _simple_text_sanitize,
 )
@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 # Conditional import for MultiModalData and schemas
 try:
-    from arbiter.models.multi_modal_schemas import (
+    from self_fixing_engineer.arbiter.models.multi_modal_schemas import (
         AudioAnalysisResult,
         ImageAnalysisResult,
         MultiModalAnalysisResult,
@@ -27,7 +27,7 @@ try:
     MULTI_MODAL_SCHEMAS_AVAILABLE = True
 except ImportError:
     logging.getLogger(__name__).debug(
-        "arbiter.models.multi_modal_schemas not found; using dummy MultiModalData/Schemas."
+        "self_fixing_engineer.arbiter.models.multi_modal_schemas not found; using dummy MultiModalData/Schemas."
     )
 
     # Dummy MultiModalData if schema not available
@@ -115,7 +115,7 @@ except ImportError:
 if not MULTI_MODAL_SCHEMAS_AVAILABLE and os.getenv("ENV", "dev").lower() == "prod":
     _prompt_strategy_logger.error("multi_modal_schemas_missing_in_production")
     raise ImportError(
-        "The 'arbiter.models.multi_modal_schemas' package is required for production environment."
+        "The 'self_fixing_engineer.arbiter.models.multi_modal_schemas' package is required for production environment."
     )
 
 

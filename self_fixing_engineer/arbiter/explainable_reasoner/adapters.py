@@ -13,15 +13,15 @@ import httpx
 
 # Structured logging
 import structlog
-from arbiter.explainable_reasoner.metrics import METRICS
-from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
+from self_fixing_engineer.arbiter.explainable_reasoner.metrics import METRICS
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_config import SensitiveValue
 
 # Real internal imports (enforce)
-from arbiter.explainable_reasoner.reasoner_errors import (
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors import (
     ReasonerError,
     ReasonerErrorCode,
 )
-from arbiter.explainable_reasoner.utils import redact_pii
+from self_fixing_engineer.arbiter.explainable_reasoner.utils import redact_pii
 from prometheus_client import REGISTRY, Counter, Histogram
 from pydantic import BaseModel, Field, HttpUrl, ValidationError
 
@@ -46,7 +46,7 @@ except ImportError:
     _logger.warning("pybreaker missing; circuit breakers disabled")
 
 # Moved import here to resolve circular dependency
-from arbiter.explainable_reasoner.metrics import get_or_create_metric
+from self_fixing_engineer.arbiter.explainable_reasoner.metrics import get_or_create_metric
 
 # Define metrics dynamically
 # Create metrics with duplicate check

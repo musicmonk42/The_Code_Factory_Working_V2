@@ -31,7 +31,7 @@ def mock_imports():
 
     def custom_import(name, *args, **kwargs):
         # Intercept config imports
-        if name == "arbiter.config" or name == "config":
+        if name == "self_fixing_engineer.arbiter.config" or name == "config":
             import types
 
             mock_config = types.ModuleType(name)
@@ -53,7 +53,7 @@ def mock_imports():
             return mock_config
 
         # Intercept otel_config imports
-        if name == "arbiter.otel_config":
+        if name == "self_fixing_engineer.arbiter.otel_config":
             import types
 
             mock_otel = types.ModuleType(name)

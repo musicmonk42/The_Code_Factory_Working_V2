@@ -6,11 +6,11 @@ import os
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-from arbiter.learner.audit import CircuitBreaker
+from self_fixing_engineer.arbiter.learner.audit import CircuitBreaker
 
 # Import all the modules we're testing
-from arbiter.learner.core import LearnerArbiterHelper, Learner
-from arbiter.learner.encryption import ArbiterConfig
+from self_fixing_engineer.arbiter.learner.core import LearnerArbiterHelper, Learner
+from self_fixing_engineer.arbiter.learner.encryption import ArbiterConfig
 from cryptography.fernet import Fernet
 
 
@@ -30,7 +30,7 @@ class TestEndToEndLearner:
     @pytest.fixture(autouse=True)
     def patch_audit_log_module(self):
         """Patch the audit_log module functions and classes."""
-        with patch("arbiter.learner.audit.audit_log") as mock_audit_func:
+        with patch("self_fixing_engineer.arbiter.learner.audit.audit_log") as mock_audit_func:
             # Make audit_log a callable async function
             async def mock_log_event(*args, **kwargs):
                 return None
@@ -38,7 +38,7 @@ class TestEndToEndLearner:
             mock_audit_func.side_effect = mock_log_event
 
             # Also patch the TamperEvidentLogger to handle _get_trace_ids
-            with patch("arbiter.audit_log.TamperEvidentLogger") as mock_logger_class:
+            with patch("self_fixing_engineer.arbiter.audit_log.TamperEvidentLogger") as mock_logger_class:
                 instance = AsyncMock()
                 instance._get_trace_ids = Mock(return_value=("trace-123", "span-456"))
                 instance.emit_audit_event = AsyncMock()
@@ -46,7 +46,7 @@ class TestEndToEndLearner:
                 mock_logger_class.return_value = instance
 
                 # Patch the singleton instance
-                with patch("arbiter.audit_log.audit_logger", instance):
+                with patch("self_fixing_engineer.arbiter.audit_log.audit_logger", instance):
                     yield
 
     @pytest.fixture(autouse=True)
@@ -78,52 +78,52 @@ class TestEndToEndLearner:
         patches = []
 
         # Patch the metrics module itself to avoid global labels issue
-        with patch("arbiter.learner.metrics.GLOBAL_LABELS", {}):
+        with patch("self_fixing_engineer.arbiter.learner.metrics.GLOBAL_LABELS", {}):
             # Patch all metric instances
             metrics_to_patch = [
-                ("arbiter.learner.core", "learn_counter", DummyCounter()),
-                ("arbiter.learner.core", "learn_error_counter", DummyCounter()),
-                ("arbiter.learner.core", "forget_counter", DummyCounter()),
-                ("arbiter.learner.core", "retrieve_hit_miss", DummyCounter()),
-                ("arbiter.learner.core", "learn_duration_seconds", DummyHistogram()),
-                ("arbiter.learner.core", "forget_duration_seconds", DummyHistogram()),
-                ("arbiter.learner.audit", "circuit_breaker_state", DummyGauge()),
-                ("arbiter.learner.audit", "learn_error_counter", DummyCounter()),
+                ("self_fixing_engineer.arbiter.learner.core", "learn_counter", DummyCounter()),
+                ("self_fixing_engineer.arbiter.learner.core", "learn_error_counter", DummyCounter()),
+                ("self_fixing_engineer.arbiter.learner.core", "forget_counter", DummyCounter()),
+                ("self_fixing_engineer.arbiter.learner.core", "retrieve_hit_miss", DummyCounter()),
+                ("self_fixing_engineer.arbiter.learner.core", "learn_duration_seconds", DummyHistogram()),
+                ("self_fixing_engineer.arbiter.learner.core", "forget_duration_seconds", DummyHistogram()),
+                ("self_fixing_engineer.arbiter.learner.audit", "circuit_breaker_state", DummyGauge()),
+                ("self_fixing_engineer.arbiter.learner.audit", "learn_error_counter", DummyCounter()),
                 (
-                    "arbiter.learner.validation",
+                    "self_fixing_engineer.arbiter.learner.validation",
                     "validation_success_total",
                     DummyCounter(),
                 ),
                 (
-                    "arbiter.learner.validation",
+                    "self_fixing_engineer.arbiter.learner.validation",
                     "validation_failure_total",
                     DummyCounter(),
                 ),
-                ("arbiter.learner.validation", "schema_reload_total", DummyCounter()),
+                ("self_fixing_engineer.arbiter.learner.validation", "schema_reload_total", DummyCounter()),
                 (
-                    "arbiter.learner.validation",
+                    "self_fixing_engineer.arbiter.learner.validation",
                     "schema_reload_latency_seconds",
                     DummyHistogram(),
                 ),
                 (
-                    "arbiter.learner.validation",
+                    "self_fixing_engineer.arbiter.learner.validation",
                     "validation_latency_seconds",
                     DummyHistogram(),
                 ),
                 (
-                    "arbiter.learner.explanations",
+                    "self_fixing_engineer.arbiter.learner.explanations",
                     "explanation_llm_latency_seconds",
                     DummyHistogram(),
                 ),
                 (
-                    "arbiter.learner.explanations",
+                    "self_fixing_engineer.arbiter.learner.explanations",
                     "explanation_llm_failure_total",
                     DummyCounter(),
                 ),
-                ("arbiter.learner.fuzzy", "fuzzy_parser_success_total", DummyCounter()),
-                ("arbiter.learner.fuzzy", "fuzzy_parser_failure_total", DummyCounter()),
+                ("self_fixing_engineer.arbiter.learner.fuzzy", "fuzzy_parser_success_total", DummyCounter()),
+                ("self_fixing_engineer.arbiter.learner.fuzzy", "fuzzy_parser_failure_total", DummyCounter()),
                 (
-                    "arbiter.learner.fuzzy",
+                    "self_fixing_engineer.arbiter.learner.fuzzy",
                     "fuzzy_parser_latency_seconds",
                     DummyHistogram(),
                 ),
@@ -150,7 +150,7 @@ class TestEndToEndLearner:
     @pytest.fixture(autouse=True)
     def patch_time_functions(self):
         """Patch time functions to return deterministic values."""
-        with patch("arbiter.learner.validation.time.perf_counter", return_value=1.0):
+        with patch("self_fixing_engineer.arbiter.learner.validation.time.perf_counter", return_value=1.0):
             with patch("time.time", return_value=1234567890.0):
                 with patch("time.monotonic", return_value=1.0):
                     yield
@@ -159,10 +159,10 @@ class TestEndToEndLearner:
     def patch_arbiter_config(self):
         """Patch ArbiterConfig to use short intervals for testing."""
         with patch(
-            "arbiter.learner.core.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS", 0.1
+            "self_fixing_engineer.arbiter.learner.core.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS", 0.1
         ):
             with patch(
-                "arbiter.learner.encryption.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS",
+                "self_fixing_engineer.arbiter.learner.encryption.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS",
                 0.1,
             ):
                 yield
@@ -221,8 +221,8 @@ class TestEndToEndLearner:
         mock_db.transaction = lambda: MockTransaction()
 
         # Create Arbiter and Learner with properly mocked bug_manager
-        with patch("arbiter.learner.core.BugManager") as mock_bug_manager:
-            with patch("arbiter.learner.core.Neo4jKnowledgeGraph") as mock_neo4j:
+        with patch("self_fixing_engineer.arbiter.learner.core.BugManager") as mock_bug_manager:
+            with patch("self_fixing_engineer.arbiter.learner.core.Neo4jKnowledgeGraph") as mock_neo4j:
                 bug_manager_instance = Mock()
                 bug_manager_instance.bug_detected = (
                     AsyncMock()
@@ -232,24 +232,24 @@ class TestEndToEndLearner:
                 arbiter_helper = LearnerArbiterHelper()
                 arbiter_helper.bug_manager = bug_manager_instance  # Ensure it's set
 
-        with patch("arbiter.learner.core.PostgresClient") as mock_postgres:
+        with patch("self_fixing_engineer.arbiter.learner.core.PostgresClient") as mock_postgres:
             mock_postgres.return_value = mock_db
 
-            with patch("arbiter.learner.core.LLMClient") as mock_llm:
+            with patch("self_fixing_engineer.arbiter.learner.core.LLMClient") as mock_llm:
                 mock_llm_instance = AsyncMock()
                 mock_llm_instance.generate_text = AsyncMock(
                     return_value="Generated explanation"
                 )
                 mock_llm.return_value = mock_llm_instance
 
-                with patch("arbiter.learner.core.AuditLogger") as mock_audit:
+                with patch("self_fixing_engineer.arbiter.learner.core.AuditLogger") as mock_audit:
                     mock_audit_instance = AsyncMock()
                     mock_audit_instance.log_event = AsyncMock()
                     mock_audit_instance.add_entry = AsyncMock()
                     mock_audit.from_environment.return_value = mock_audit_instance
 
                     with patch(
-                        "arbiter.learner.core.get_meta_learning_data_store"
+                        "self_fixing_engineer.arbiter.learner.core.get_meta_learning_data_store"
                     ) as mock_meta:
                         mock_meta_store = AsyncMock()
                         mock_meta_store.connect = AsyncMock()
@@ -307,13 +307,13 @@ class TestEndToEndLearner:
         try:
             # 1. Learn new fact
             with patch(
-                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
+                "self_fixing_engineer.arbiter.learner.core.should_auto_learn", return_value=(True, None)
             ):
-                with patch("arbiter.learner.core.validate_data") as mock_validate:
+                with patch("self_fixing_engineer.arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
                     with patch(
-                        "arbiter.learner.core.generate_explanation"
+                        "self_fixing_engineer.arbiter.learner.core.generate_explanation"
                     ) as mock_explain:
                         mock_explain.return_value = "New fact learned"
 
@@ -336,13 +336,13 @@ class TestEndToEndLearner:
 
             # 3. Update the fact
             with patch(
-                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
+                "self_fixing_engineer.arbiter.learner.core.should_auto_learn", return_value=(True, None)
             ):
-                with patch("arbiter.learner.core.validate_data") as mock_validate:
+                with patch("self_fixing_engineer.arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
                     with patch(
-                        "arbiter.learner.core.generate_explanation"
+                        "self_fixing_engineer.arbiter.learner.core.generate_explanation"
                     ) as mock_explain:
                         mock_explain.return_value = "Fact updated"
 
@@ -415,10 +415,10 @@ class TestEndToEndLearner:
             ]
 
             with patch(
-                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
+                "self_fixing_engineer.arbiter.learner.core.should_auto_learn", return_value=(True, None)
             ):
                 with patch(
-                    "arbiter.learner.core.generate_explanation",
+                    "self_fixing_engineer.arbiter.learner.core.generate_explanation",
                     return_value="Batch explanation",
                 ):
                     results = await learner.learn_batch(
@@ -457,13 +457,13 @@ class TestEndToEndLearner:
             }
 
             with patch(
-                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
+                "self_fixing_engineer.arbiter.learner.core.should_auto_learn", return_value=(True, None)
             ):
-                with patch("arbiter.learner.core.validate_data") as mock_validate:
+                with patch("self_fixing_engineer.arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
                     with patch(
-                        "arbiter.learner.core.generate_explanation"
+                        "self_fixing_engineer.arbiter.learner.core.generate_explanation"
                     ) as mock_explain:
                         mock_explain.return_value = "Sensitive data stored"
 

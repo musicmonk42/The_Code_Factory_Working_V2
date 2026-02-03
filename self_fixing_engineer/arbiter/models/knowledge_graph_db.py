@@ -40,7 +40,7 @@ except (ImportError, ModuleNotFoundError):
 
 # Import the no-op tracer for fallback
 try:
-    from arbiter.otel_config import NoOpTracer
+    from self_fixing_engineer.arbiter.otel_config import NoOpTracer
 except ImportError:
     # Define locally if otel_config is not available
     from contextlib import nullcontext

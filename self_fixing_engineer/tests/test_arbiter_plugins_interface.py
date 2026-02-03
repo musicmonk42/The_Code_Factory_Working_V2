@@ -2,7 +2,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from arbiter.plugins.multimodal.interface import (
+from self_fixing_engineer.arbiter.plugins.multimodal.interface import (
     AnalysisResultType,
     AudioAnalysisResult,
     AudioProcessor,
@@ -408,7 +408,7 @@ def get_or_create(metric):
 @pytest.fixture(autouse=True)
 def mock_metrics():
     """Auto-use fixture to mock metrics."""
-    with patch("arbiter.plugins.multimodal.interface.get_or_create", get_or_create):
+    with patch("self_fixing_engineer.arbiter.plugins.multimodal.interface.get_or_create", get_or_create):
         yield
 
 

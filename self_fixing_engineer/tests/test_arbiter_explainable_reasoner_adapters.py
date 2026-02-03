@@ -13,7 +13,7 @@ import httpx
 import pytest
 
 # Import the module under test
-from arbiter.explainable_reasoner.adapters import (
+from self_fixing_engineer.arbiter.explainable_reasoner.adapters import (
     AnthropicAdapter,
     GeminiAPIAdapter,
     LLMAdapter,
@@ -21,8 +21,8 @@ from arbiter.explainable_reasoner.adapters import (
     OpenAIGPTAdapter,
     retry,
 )
-from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
-from arbiter.explainable_reasoner.reasoner_errors import ReasonerError
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_config import SensitiveValue
+from self_fixing_engineer.arbiter.explainable_reasoner.reasoner_errors import ReasonerError
 
 # Setup logging for tests
 logging.basicConfig(level=logging.DEBUG)
@@ -60,12 +60,12 @@ def mock_metrics():
     """Mock METRICS to avoid real increments and allow for assertions."""
     with (
         patch(
-            "arbiter.explainable_reasoner.adapters.INFERENCE_LATENCY"
+            "self_fixing_engineer.arbiter.explainable_reasoner.adapters.INFERENCE_LATENCY"
         ) as mock_latency,
-        patch("arbiter.explainable_reasoner.adapters.INFERENCE_ERRORS") as mock_errors,
-        patch("arbiter.explainable_reasoner.adapters.STREAM_CHUNKS") as mock_chunks,
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.adapters.INFERENCE_ERRORS") as mock_errors,
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.adapters.STREAM_CHUNKS") as mock_chunks,
         patch(
-            "arbiter.explainable_reasoner.adapters.HEALTH_CHECK_ERRORS"
+            "self_fixing_engineer.arbiter.explainable_reasoner.adapters.HEALTH_CHECK_ERRORS"
         ) as mock_health,
     ):
 
@@ -253,7 +253,7 @@ async def test_openai_adapter_get_client(mock_sensitive_value):
     )
 
     with patch(
-        "arbiter.explainable_reasoner.adapters.httpx.AsyncClient"
+        "self_fixing_engineer.arbiter.explainable_reasoner.adapters.httpx.AsyncClient"
     ) as mock_client_class:
         mock_client = AsyncMock()
         mock_client.is_closed = False

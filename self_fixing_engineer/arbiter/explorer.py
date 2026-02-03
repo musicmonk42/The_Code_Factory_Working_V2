@@ -33,11 +33,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Mock/Plausholder imports for a self-contained fix
 try:
-    from arbiter import PermissionManager
-    from arbiter.config import ArbiterConfig
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter.otel_config import get_tracer
-    from arbiter.postgres_client import PostgresClient
+    from self_fixing_engineer.arbiter import PermissionManager
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
+    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
     from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 

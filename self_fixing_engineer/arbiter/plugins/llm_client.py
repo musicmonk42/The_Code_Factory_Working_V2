@@ -30,7 +30,7 @@ import openai
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 from opentelemetry import trace
-from arbiter.otel_config import get_tracer_safe
+from self_fixing_engineer.arbiter.otel_config import get_tracer_safe
 from prometheus_client import (
     REGISTRY,
     Counter,

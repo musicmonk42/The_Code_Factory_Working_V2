@@ -15,7 +15,7 @@ from prometheus_client import REGISTRY
 def ensure_templates_loaded():
     """Ensure templates are properly loaded from the test file."""
     import arbiter.learner.explanations as exp_module
-    from arbiter.learner.explanations import (
+    from self_fixing_engineer.arbiter.learner.explanations import (
         EXPLANATION_PROMPT_TEMPLATES,
         _load_prompt_templates,
     )
@@ -33,7 +33,7 @@ def ensure_templates_loaded():
 
 
 # Import after defining helper
-from arbiter.learner.explanations import (
+from self_fixing_engineer.arbiter.learner.explanations import (
     EXPLANATION_PROMPT_TEMPLATES,
     _generate_text_with_retry,
     _load_prompt_templates,
@@ -41,7 +41,7 @@ from arbiter.learner.explanations import (
     get_explanation_quality_report,
     record_explanation_quality,
 )
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from opentelemetry import trace
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
@@ -134,7 +134,7 @@ def mock_arbiter_config(mocker):
     mock_config.ENCRYPTION_KEYS = {"v1": Fernet.generate_key()}
     mock_config.ENCRYPTED_DOMAINS = ["FinancialData"]
     mock_config.REDIS_URL = "redis://localhost:6379"
-    mocker.patch("arbiter.policy.config.ArbiterConfig", return_value=mock_config)
+    mocker.patch("self_fixing_engineer.arbiter.policy.config.ArbiterConfig", return_value=mock_config)
 
 
 @pytest.fixture

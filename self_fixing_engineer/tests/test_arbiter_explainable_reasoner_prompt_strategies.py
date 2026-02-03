@@ -9,10 +9,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Import the module under test
-from arbiter.explainable_reasoner.prompt_strategies import (
+from self_fixing_engineer.arbiter.explainable_reasoner.prompt_strategies import (
     _truncate_context,  # Import the module-level helper
 )
-from arbiter.explainable_reasoner.prompt_strategies import (
+from self_fixing_engineer.arbiter.explainable_reasoner.prompt_strategies import (
     ConcisePromptStrategy,
     DefaultPromptStrategy,
     PromptStrategy,
@@ -27,17 +27,17 @@ from arbiter.explainable_reasoner.prompt_strategies import (
 def mock_dependencies():
     with (
         patch(
-            "arbiter.explainable_reasoner.metrics.get_or_create_metric"
+            "self_fixing_engineer.arbiter.explainable_reasoner.metrics.get_or_create_metric"
         ) as mock_get_metric,
         patch(
-            "arbiter.explainable_reasoner.prompt_strategies._simple_text_sanitize"
+            "self_fixing_engineer.arbiter.explainable_reasoner.prompt_strategies._simple_text_sanitize"
         ) as mock_sanitize,
         patch(
-            "arbiter.explainable_reasoner.prompt_strategies._format_multimodal_for_prompt"
+            "self_fixing_engineer.arbiter.explainable_reasoner.prompt_strategies._format_multimodal_for_prompt"
         ) as mock_format,
-        patch("arbiter.explainable_reasoner.prompt_strategies.trace") as mock_trace,
+        patch("self_fixing_engineer.arbiter.explainable_reasoner.prompt_strategies.trace") as mock_trace,
         patch(
-            "arbiter.explainable_reasoner.prompt_strategies._prompt_strategy_logger"
+            "self_fixing_engineer.arbiter.explainable_reasoner.prompt_strategies._prompt_strategy_logger"
         ) as mock_module_logger,
     ):
 

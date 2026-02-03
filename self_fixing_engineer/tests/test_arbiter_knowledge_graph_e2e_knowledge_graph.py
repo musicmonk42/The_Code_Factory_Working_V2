@@ -18,7 +18,7 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
 
 import pytest
-from arbiter.knowledge_graph.config import (
+from self_fixing_engineer.arbiter.knowledge_graph.config import (
     MetaLearningConfig,
     MultiModalData,
     SensitiveValue,
@@ -26,7 +26,7 @@ from arbiter.knowledge_graph.config import (
 )
 
 # Import knowledge_graph components
-from arbiter.knowledge_graph.core import (
+from self_fixing_engineer.arbiter.knowledge_graph.core import (
     AgentTeam,
     CollaborativeAgent,
     InMemoryStateBackend,
@@ -34,12 +34,12 @@ from arbiter.knowledge_graph.core import (
     RedisStateBackend,
     get_or_create_agent,
 )
-from arbiter.knowledge_graph.multimodal import DefaultMultiModalProcessor
-from arbiter.knowledge_graph.prompt_strategies import (
+from self_fixing_engineer.arbiter.knowledge_graph.multimodal import DefaultMultiModalProcessor
+from self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies import (
     ConcisePromptStrategy,
     DefaultPromptStrategy,
 )
-from arbiter.knowledge_graph.utils import (
+from self_fixing_engineer.arbiter.knowledge_graph.utils import (
     AgentCoreException,
     AgentErrorCode,
     AuditLedgerClient,
@@ -104,9 +104,9 @@ class TestKnowledgeGraphE2EWorkflow:
         env_vars, tmp_path = setup_environment  # Remove await here
 
         with patch.dict(os.environ, env_vars):
-            with patch("arbiter.knowledge_graph.core.ChatOpenAI") as mock_llm:
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.core.ChatOpenAI") as mock_llm:
                 with patch(
-                    "arbiter.knowledge_graph.config.load_persona_dict"
+                    "self_fixing_engineer.arbiter.knowledge_graph.config.load_persona_dict"
                 ) as mock_personas:
                     mock_personas.return_value = {
                         "default": "Knowledge Graph Assistant",
@@ -162,7 +162,7 @@ class TestKnowledgeGraphE2EWorkflow:
                 )
 
                 with patch(
-                    "arbiter.knowledge_graph.multimodal.audit_ledger_client"
+                    "self_fixing_engineer.arbiter.knowledge_graph.multimodal.audit_ledger_client"
                 ) as mock_audit:
                     mock_audit.log_event = AsyncMock()
 
@@ -182,13 +182,13 @@ class TestKnowledgeGraphE2EWorkflow:
             )
 
             with patch(
-                "arbiter.knowledge_graph.multimodal.audit_ledger_client"
+                "self_fixing_engineer.arbiter.knowledge_graph.multimodal.audit_ledger_client"
             ) as mock_audit:
                 mock_audit.log_event = AsyncMock()
 
                 # Mock the pydub AudioSegment to avoid ffmpeg dependency
                 with patch(
-                    "arbiter.knowledge_graph.multimodal.pydub.AudioSegment"
+                    "self_fixing_engineer.arbiter.knowledge_graph.multimodal.pydub.AudioSegment"
                 ) as mock_audio:
                     mock_segment = Mock()
                     mock_segment.__len__ = Mock(return_value=1000)  # 1 second
@@ -215,7 +215,7 @@ class TestKnowledgeGraphE2EWorkflow:
         env_vars, tmp_path = setup_environment  # Remove await here
 
         with patch.dict(os.environ, env_vars):
-            with patch("arbiter.knowledge_graph.core.ChatOpenAI") as mock_llm:
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.core.ChatOpenAI") as mock_llm:
                 # Setup mock LLM
                 mock_llm_instance = AsyncMock()
                 mock_response = Mock()
@@ -335,7 +335,7 @@ class TestKnowledgeGraphE2EWorkflow:
             assert loaded == test_state
 
             # Test Redis Backend (mocked)
-            with patch("arbiter.knowledge_graph.core.RedisClient") as mock_redis:
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.core.RedisClient") as mock_redis:
                 mock_client = AsyncMock()
                 mock_redis.return_value = mock_client
                 mock_client.set = AsyncMock()
@@ -371,7 +371,7 @@ class TestKnowledgeGraphE2EWorkflow:
 
             # Test training (with enough data)
             with patch(
-                "arbiter.knowledge_graph.core.Config.MIN_RECORDS_FOR_TRAINING", 3
+                "self_fixing_engineer.arbiter.knowledge_graph.core.Config.MIN_RECORDS_FOR_TRAINING", 3
             ):
                 ml.train_model()
                 # Model should be trained now
@@ -427,7 +427,7 @@ class TestKnowledgeGraphE2EWorkflow:
             item = MultiModalData(data_type="image", data=large_data)
 
             with patch(
-                "arbiter.knowledge_graph.multimodal.audit_ledger_client"
+                "self_fixing_engineer.arbiter.knowledge_graph.multimodal.audit_ledger_client"
             ) as mock_audit:
                 mock_audit.log_event = AsyncMock()
                 result = await processor.summarize(item)
@@ -455,7 +455,7 @@ class TestKnowledgeGraphE2EWorkflow:
         env_vars, tmp_path = setup_environment  # Remove await here
 
         with patch.dict(os.environ, env_vars):
-            with patch("arbiter.knowledge_graph.core.ChatOpenAI") as mock_llm_class:
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.core.ChatOpenAI") as mock_llm_class:
                 # Setup comprehensive mocks
                 mock_llm = AsyncMock()
                 mock_response = Mock()
@@ -499,7 +499,7 @@ class TestKnowledgeGraphE2EWorkflow:
 
                 # Execute prediction
                 with patch(
-                    "arbiter.knowledge_graph.core.AGENT_METRICS"
+                    "self_fixing_engineer.arbiter.knowledge_graph.core.AGENT_METRICS"
                 ) as mock_metrics:
                     result = await agent.predict(
                         user_input="Analyze this knowledge graph",
@@ -551,7 +551,7 @@ class TestKnowledgeGraphPerformance:
     @pytest.mark.asyncio
     async def test_concurrent_agent_operations(self):
         """Test concurrent agent operations"""
-        with patch("arbiter.knowledge_graph.core.ChatOpenAI"):
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.core.ChatOpenAI"):
             agents = []
 
             # Create multiple agents
@@ -649,7 +649,7 @@ class TestKnowledgeGraphSecurity:
         }
 
         with patch(
-            "arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS",
+            "self_fixing_engineer.arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS",
             ["password", "ssn"],
         ):
             sanitized = await _sanitize_context(context)

@@ -160,8 +160,8 @@ RedisClient = None
 
 # Try short path first (works when self_fixing_engineer is in sys.path)
 try:
-    from arbiter.models.audit_ledger_client import AuditLedgerClient
-    from arbiter.models.redis_client import RedisClient
+    from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditLedgerClient
+    from self_fixing_engineer.arbiter.models.redis_client import RedisClient
 except ImportError:
     pass
 
@@ -193,7 +193,7 @@ if AuditLedgerClient is None or RedisClient is None:
     AuditLedgerClient = DummyAuditLedgerClient
 
 from opentelemetry import trace
-from arbiter.otel_config import get_tracer_safe
+from self_fixing_engineer.arbiter.otel_config import get_tracer_safe
 
 tracer = get_tracer_safe(__name__)
 

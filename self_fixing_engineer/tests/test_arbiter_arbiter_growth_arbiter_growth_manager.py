@@ -23,8 +23,8 @@ from self_fixing_engineer.arbiter.arbiter_growth.exceptions import (
     OperationQueueFullError,
     RateLimitError,
 )
-from arbiter.arbiter_growth.metrics import GROWTH_ANOMALY_SCORE, GROWTH_SAVE_ERRORS
-from arbiter.arbiter_growth.models import GrowthEvent
+from self_fixing_engineer.arbiter.arbiter_growth.metrics import GROWTH_ANOMALY_SCORE, GROWTH_SAVE_ERRORS
+from self_fixing_engineer.arbiter.arbiter_growth.models import GrowthEvent
 from pybreaker import CircuitBreakerListener
 
 
@@ -71,12 +71,12 @@ def mock_config_store():
             "rate_limit_refill_rate": 10,
             "rate_limit_timeout": 30.0,
             "global.schema_version": 1.0,
-            "arbiter.max_pending_operations": 1000,
+            "self_fixing_engineer.arbiter.max_pending_operations": 1000,
             "security.idempotency_salt": "test_salt",
-            "arbiter.flush_interval_min": 5,
-            "arbiter.flush_interval_max": 60,
-            "arbiter.evolution_cycle_interval_seconds": 3600,
-            "arbiter.snapshot_interval_events": 100,
+            "self_fixing_engineer.arbiter.flush_interval_min": 5,
+            "self_fixing_engineer.arbiter.flush_interval_max": 60,
+            "self_fixing_engineer.arbiter.evolution_cycle_interval_seconds": 3600,
+            "self_fixing_engineer.arbiter.snapshot_interval_events": 100,
             "anomaly_detection.max_skill_improvement": 0.5,
             "anomaly_threshold": 0.95,
         }.get(key, default)
@@ -113,7 +113,7 @@ def mock_storage_backend():
 @pytest.fixture
 def mock_knowledge_graph(mock_config_store):
     """Provides a mock Neo4jKnowledgeGraph."""
-    from arbiter.arbiter_growth.arbiter_growth_manager import Neo4jKnowledgeGraph
+    from self_fixing_engineer.arbiter.arbiter_growth.arbiter_growth_manager import Neo4jKnowledgeGraph
 
     mock = AsyncMock(spec=Neo4jKnowledgeGraph)
     mock.add_fact = AsyncMock()
@@ -123,7 +123,7 @@ def mock_knowledge_graph(mock_config_store):
 @pytest.fixture
 def mock_feedback_manager(mock_config_store):
     """Provides a mock FeedbackManager."""
-    from arbiter.arbiter_growth.arbiter_growth_manager import LoggingFeedbackManager
+    from self_fixing_engineer.arbiter.arbiter_growth.arbiter_growth_manager import LoggingFeedbackManager
 
     mock = AsyncMock(spec=LoggingFeedbackManager)
     mock.record_feedback = AsyncMock()
@@ -567,7 +567,7 @@ async def test_snapshot_interval(
             "rate_limit_tokens": 200,  # Increase to allow many operations
             "rate_limit_refill_rate": 100,
             "rate_limit_timeout": 30.0,
-            "arbiter.snapshot_interval_events": 100,
+            "self_fixing_engineer.arbiter.snapshot_interval_events": 100,
         }.get(key, default)
     )
 

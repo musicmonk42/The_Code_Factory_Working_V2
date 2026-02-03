@@ -92,7 +92,7 @@ def test_dependency_flags_set_correctly():
 def test_audit_logger_fallback_when_missing():
     """audit_logger should default to dummy if import fails."""
     # Fix: The test needs to patch the existence of the module `arbiter.audit_log`.
-    with patch.dict(sys.modules, {"arbiter": MagicMock(), "arbiter.audit_log": None}):
+    with patch.dict(sys.modules, {"arbiter": MagicMock(), "self_fixing_engineer.arbiter.audit_log": None}):
         runtime._load_and_check_deps()
         assert hasattr(runtime.audit_logger, "log_event")
 

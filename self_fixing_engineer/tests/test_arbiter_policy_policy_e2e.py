@@ -4,7 +4,7 @@ import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from arbiter.policy.core import (
+from self_fixing_engineer.arbiter.policy.core import (
     get_policy_engine_instance,
     initialize_policy_engine,
     reset_policy_engine,
@@ -62,8 +62,8 @@ def mock_config(monkeypatch):
     mock_config.get_api_key_for_provider = MagicMock(return_value="dummy_key")
 
     # Patch get_config to return our mock
-    monkeypatch.setattr("arbiter.policy.core.get_config", lambda: mock_config)
-    monkeypatch.setattr("arbiter.policy.config.get_config", lambda: mock_config)
+    monkeypatch.setattr("self_fixing_engineer.arbiter.policy.core.get_config", lambda: mock_config)
+    monkeypatch.setattr("self_fixing_engineer.arbiter.policy.config.get_config", lambda: mock_config)
 
     # Clean up temp files on test completion
     yield mock_config
@@ -114,11 +114,11 @@ async def test_end_to_end_policy_lifecycle(monkeypatch, tmp_path, mock_config):
         else __builtins__.isinstance
     )
 
-    with patch("arbiter.policy.core.isinstance") as mock_isinstance:
+    with patch("self_fixing_engineer.arbiter.policy.core.isinstance") as mock_isinstance:
         # Make isinstance return True for ArbiterConfig check, use original for others
         def isinstance_side_effect(obj, cls):
             # Import here to avoid circular import
-            from arbiter.policy.config import ArbiterConfig
+            from self_fixing_engineer.arbiter.policy.config import ArbiterConfig
 
             if cls == ArbiterConfig:
                 return True
@@ -132,10 +132,10 @@ async def test_end_to_end_policy_lifecycle(monkeypatch, tmp_path, mock_config):
 
     # Patch external dependencies
     with (
-        patch("arbiter.policy.core.audit_log", new_callable=AsyncMock) as mock_audit,
-        patch("arbiter.policy.core.LLMClient") as mock_llm,
+        patch("self_fixing_engineer.arbiter.policy.core.audit_log", new_callable=AsyncMock) as mock_audit,
+        patch("self_fixing_engineer.arbiter.policy.core.LLMClient") as mock_llm,
         patch(
-            "arbiter.policy.core.is_llm_policy_circuit_breaker_open", return_value=False
+            "self_fixing_engineer.arbiter.policy.core.is_llm_policy_circuit_breaker_open", return_value=False
         ),
     ):
 
@@ -183,7 +183,7 @@ async def test_end_to_end_policy_lifecycle(monkeypatch, tmp_path, mock_config):
 
         # Test 4: Simulate circuit breaker open
         with patch(
-            "arbiter.policy.core.is_llm_policy_circuit_breaker_open", return_value=True
+            "self_fixing_engineer.arbiter.policy.core.is_llm_policy_circuit_breaker_open", return_value=True
         ):
             result, reason = await should_auto_learn("test", "key", "user", "value")
             assert (

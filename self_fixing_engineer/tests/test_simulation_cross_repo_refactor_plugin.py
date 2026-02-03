@@ -14,7 +14,7 @@ import pytest
 try:
     # We now mock the import of the audit log module to resolve the warning.
     # The actual plugin import will succeed, and the mock will be in place.
-    sys.modules["arbiter.audit_log"] = MagicMock()
+    sys.modules["self_fixing_engineer.arbiter.audit_log"] = MagicMock()
     from simulation.plugins import cross_repo_refactor_plugin
     from simulation.plugins.cross_repo_refactor_plugin import (
         GITPYTHON_AVAILABLE,

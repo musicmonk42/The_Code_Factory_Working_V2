@@ -61,21 +61,21 @@ class TestArbiterArena:
     def test_arena_initialization(self, mock_config, mock_db_engine):
         """Test that arena can be initialized with mocked dependencies."""
         # Mock the HumanInLoopConfig to avoid Pydantic validation
-        with patch("arbiter.arena.HumanInLoopConfig") as mock_hitl_config:
+        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig") as mock_hitl_config:
             mock_hitl_config.return_value = MagicMock()
 
             # Mock HumanInLoop class
-            with patch("arbiter.arena.HumanInLoop") as mock_hitl:
+            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop") as mock_hitl:
                 mock_hitl.return_value = MagicMock()
 
                 # Mock the Arbiter class to avoid its initialization issues
-                with patch("arbiter.arena.Arbiter") as mock_arbiter_class:
+                with patch("self_fixing_engineer.arbiter.arena.Arbiter") as mock_arbiter_class:
                     mock_arbiter_instance = MagicMock()
                     mock_arbiter_instance.name = "MockArbiter"
                     mock_arbiter_class.return_value = mock_arbiter_instance
 
                     # Import here after patching
-                    from arbiter.arena import ArbiterArena
+                    from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     # Create arena
                     arena = ArbiterArena(
@@ -99,10 +99,10 @@ class TestArbiterArena:
     @pytest.mark.asyncio
     async def test_arena_context_manager(self, mock_config, mock_db_engine):
         """Test arena works as an async context manager."""
-        with patch("arbiter.arena.HumanInLoopConfig"):
-            with patch("arbiter.arena.HumanInLoop"):
-                with patch("arbiter.arena.Arbiter"):
-                    from arbiter.arena import ArbiterArena
+        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig"):
+            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop"):
+                with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
+                    from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
 
@@ -120,10 +120,10 @@ class TestArbiterArena:
     @pytest.mark.asyncio
     async def test_register_and_remove_arbiter(self, mock_config, mock_db_engine):
         """Test registering and removing arbiters from arena."""
-        with patch("arbiter.arena.HumanInLoopConfig"):
-            with patch("arbiter.arena.HumanInLoop"):
-                with patch("arbiter.arena.Arbiter"):
-                    from arbiter.arena import ArbiterArena
+        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig"):
+            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop"):
+                with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
+                    from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
 
@@ -142,10 +142,10 @@ class TestArbiterArena:
     @pytest.mark.asyncio
     async def test_get_random_arbiter(self, mock_config, mock_db_engine):
         """Test getting a random arbiter from the arena."""
-        with patch("arbiter.arena.HumanInLoopConfig"):
-            with patch("arbiter.arena.HumanInLoop"):
-                with patch("arbiter.arena.Arbiter"):
-                    from arbiter.arena import ArbiterArena
+        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig"):
+            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop"):
+                with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
+                    from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
 
@@ -167,15 +167,15 @@ class TestArbiterArena:
         """Test that webhooks are sent correctly."""
         mock_config.WEBHOOK_URL = "http://example.com/webhook"
 
-        with patch("arbiter.arena.HumanInLoopConfig"):
-            with patch("arbiter.arena.HumanInLoop"):
-                with patch("arbiter.arena.Arbiter"):
-                    from arbiter.arena import ArbiterArena
+        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig"):
+            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop"):
+                with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
+                    from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
 
                     # Mock aiohttp session - patch in the module where it's used
-                    with patch("arbiter.arena.aiohttp.ClientSession") as mock_session:
+                    with patch("self_fixing_engineer.arbiter.arena.aiohttp.ClientSession") as mock_session:
                         mock_response = AsyncMock()
                         mock_response.status = 200
                         mock_session.return_value.__aenter__.return_value.post.return_value.__aenter__.return_value = (
@@ -189,10 +189,10 @@ class TestArbiterArena:
 
     def test_setup_routes(self, mock_config, mock_db_engine):
         """Test that FastAPI routes are set up correctly."""
-        with patch("arbiter.arena.HumanInLoopConfig"):
-            with patch("arbiter.arena.HumanInLoop"):
-                with patch("arbiter.arena.Arbiter"):
-                    from arbiter.arena import ArbiterArena
+        with patch("self_fixing_engineer.arbiter.arena.HumanInLoopConfig"):
+            with patch("self_fixing_engineer.arbiter.arena.HumanInLoop"):
+                with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
+                    from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
                     arena._setup_routes()
@@ -210,63 +210,63 @@ class TestExtractSqliteDbFile:
 
     def test_relative_path_with_dot_slash(self):
         """Test extracting path from relative URL with ./"""
-        from arbiter.arena import _extract_sqlite_db_file
+        from self_fixing_engineer.arbiter.arena import _extract_sqlite_db_file
 
         result = _extract_sqlite_db_file("sqlite:///./omnicore.db")
         assert result == "./omnicore.db"
 
     def test_relative_path_without_dot_slash(self):
         """Test extracting path from relative URL without ./"""
-        from arbiter.arena import _extract_sqlite_db_file
+        from self_fixing_engineer.arbiter.arena import _extract_sqlite_db_file
 
         result = _extract_sqlite_db_file("sqlite:///omnicore.db")
         assert result == "omnicore.db"
 
     def test_absolute_path(self):
         """Test extracting path from absolute URL."""
-        from arbiter.arena import _extract_sqlite_db_file
+        from self_fixing_engineer.arbiter.arena import _extract_sqlite_db_file
 
         result = _extract_sqlite_db_file("sqlite:////tmp/omnicore.db")
         assert result == "/tmp/omnicore.db"
 
     def test_absolute_path_nested(self):
         """Test extracting nested absolute path."""
-        from arbiter.arena import _extract_sqlite_db_file
+        from self_fixing_engineer.arbiter.arena import _extract_sqlite_db_file
 
         result = _extract_sqlite_db_file("sqlite:////var/data/db/omnicore.db")
         assert result == "/var/data/db/omnicore.db"
 
     def test_sqlite_aiosqlite_dialect(self):
         """Test extracting path from sqlite+aiosqlite URL."""
-        from arbiter.arena import _extract_sqlite_db_file
+        from self_fixing_engineer.arbiter.arena import _extract_sqlite_db_file
 
         result = _extract_sqlite_db_file("sqlite+aiosqlite:///./test.db")
         assert result == "./test.db"
 
     def test_non_sqlite_url_unchanged(self):
         """Test that non-SQLite URLs are returned unchanged."""
-        from arbiter.arena import _extract_sqlite_db_file
+        from self_fixing_engineer.arbiter.arena import _extract_sqlite_db_file
 
         result = _extract_sqlite_db_file("postgresql://user:pass@localhost/db")
         assert result == "postgresql://user:pass@localhost/db"
 
     def test_mysql_url_unchanged(self):
         """Test that MySQL URLs are returned unchanged."""
-        from arbiter.arena import _extract_sqlite_db_file
+        from self_fixing_engineer.arbiter.arena import _extract_sqlite_db_file
 
         result = _extract_sqlite_db_file("mysql://user:pass@localhost/db")
         assert result == "mysql://user:pass@localhost/db"
 
     def test_relative_path_in_subdirectory(self):
         """Test extracting relative path in a subdirectory."""
-        from arbiter.arena import _extract_sqlite_db_file
+        from self_fixing_engineer.arbiter.arena import _extract_sqlite_db_file
 
         result = _extract_sqlite_db_file("sqlite:///./data/omnicore.db")
         assert result == "./data/omnicore.db"
 
     def test_simple_filename(self):
         """Test extracting a simple filename without path."""
-        from arbiter.arena import _extract_sqlite_db_file
+        from self_fixing_engineer.arbiter.arena import _extract_sqlite_db_file
 
         result = _extract_sqlite_db_file("sqlite:///mydb.db")
         assert result == "mydb.db"

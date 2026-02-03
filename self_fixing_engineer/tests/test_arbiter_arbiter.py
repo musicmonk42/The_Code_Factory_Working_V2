@@ -27,7 +27,7 @@ from sqlalchemy.orm import declarative_base
 Base = declarative_base()
 
 # Import arbiter module - it should handle its own optional dependencies gracefully
-from arbiter import arbiter
+from self_fixing_engineer.arbiter import arbiter
 
 # ===== TEST FIXTURES =====
 
@@ -147,7 +147,7 @@ def test_available_classes():
 async def test_minimal_arbiter_creation(test_config, mock_engine):
     """Test creating an Arbiter instance with minimal parameters."""
     # Patch PostgresClient at the correct import path
-    with patch("arbiter.models.postgres_client.PostgresClient") as mock_pg_class:
+    with patch("self_fixing_engineer.arbiter.models.postgres_client.PostgresClient") as mock_pg_class:
         mock_pg_client = MagicMock()
         mock_pg_client.connect = AsyncMock()
         mock_pg_client.disconnect = AsyncMock()
@@ -156,11 +156,11 @@ async def test_minimal_arbiter_creation(test_config, mock_engine):
         mock_pg_class.return_value = mock_pg_client
 
         # Mock MultiModalPlugin to avoid initialization issues
-        with patch("arbiter.arbiter.MultiModalPlugin") as mock_multimodal:
+        with patch("self_fixing_engineer.arbiter.arbiter.MultiModalPlugin") as mock_multimodal:
             mock_multimodal.return_value = MagicMock()
 
             # Mock Neo4jKnowledgeGraph to avoid Neo4j connection issues
-            with patch("arbiter.arbiter.Neo4jKnowledgeGraph") as mock_neo4j:
+            with patch("self_fixing_engineer.arbiter.arbiter.Neo4jKnowledgeGraph") as mock_neo4j:
                 mock_neo4j.return_value = MagicMock()
 
                 # Try to create an Arbiter instance
@@ -241,20 +241,20 @@ async def test_arbiter_with_mocked_dependencies(
 ):
     """Test Arbiter with fully mocked dependencies."""
     # PostgresClient is imported within arbiter.py, so patch it there
-    with patch("arbiter.arbiter.PostgresClient", return_value=mock_db_client):
+    with patch("self_fixing_engineer.arbiter.arbiter.PostgresClient", return_value=mock_db_client):
         # Mock the Fernet class to avoid encryption issues
-        with patch("arbiter.arbiter.Fernet") as mock_fernet_class:
+        with patch("self_fixing_engineer.arbiter.arbiter.Fernet") as mock_fernet_class:
             mock_fernet = MagicMock()
             mock_fernet.encrypt.return_value.decode.return_value = "encrypted"
             mock_fernet.decrypt.return_value.decode.return_value = "[]"
             mock_fernet_class.return_value = mock_fernet
 
             # Mock MultiModalPlugin to avoid initialization issues
-            with patch("arbiter.arbiter.MultiModalPlugin") as mock_multimodal:
+            with patch("self_fixing_engineer.arbiter.arbiter.MultiModalPlugin") as mock_multimodal:
                 mock_multimodal.return_value = MagicMock()
 
                 # Mock Neo4jKnowledgeGraph to avoid Neo4j connection issues
-                with patch("arbiter.arbiter.Neo4jKnowledgeGraph") as mock_neo4j:
+                with patch("self_fixing_engineer.arbiter.arbiter.Neo4jKnowledgeGraph") as mock_neo4j:
                     mock_neo4j.return_value = MagicMock()
 
                     try:

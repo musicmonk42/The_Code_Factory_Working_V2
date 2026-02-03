@@ -24,7 +24,7 @@ class TestConfigIntegration:
     async def test_all_parsers_loadable(self):
         """Test that all parsers in config can be loaded."""
         # Mock the load_parser_priorities function
-        with patch("arbiter.learner.fuzzy.load_parser_priorities"):
+        with patch("self_fixing_engineer.arbiter.learner.fuzzy.load_parser_priorities"):
             # Mock the PARSER_PRIORITIES that would be loaded
             mock_priorities = {
                 "SecurityEventParser": {"priority": 1000, "enabled": True},
@@ -34,14 +34,14 @@ class TestConfigIntegration:
 
             with patch.dict(
                 "sys.modules",
-                {"arbiter.learner.fuzzy": MagicMock(PARSER_PRIORITIES=mock_priorities)},
+                {"self_fixing_engineer.arbiter.learner.fuzzy": MagicMock(PARSER_PRIORITIES=mock_priorities)},
             ):
-                from arbiter.learner.fuzzy import load_parser_priorities
+                from self_fixing_engineer.arbiter.learner.fuzzy import load_parser_priorities
 
                 load_parser_priorities()
 
                 # Import after loading
-                from arbiter.learner.fuzzy import PARSER_PRIORITIES
+                from self_fixing_engineer.arbiter.learner.fuzzy import PARSER_PRIORITIES
 
                 # Verify the config loaded
                 assert len(PARSER_PRIORITIES) > 0
@@ -58,17 +58,17 @@ class TestConfigIntegration:
         }
 
         # Mock the module and its contents
-        with patch("arbiter.learner.explanations._load_prompt_templates"):
+        with patch("self_fixing_engineer.arbiter.learner.explanations._load_prompt_templates"):
             with patch.dict(
                 "sys.modules",
                 {
-                    "arbiter.learner.explanations": MagicMock(
+                    "self_fixing_engineer.arbiter.learner.explanations": MagicMock(
                         EXPLANATION_PROMPT_TEMPLATES=mock_templates,
                         generate_explanation=self._mock_generate_explanation,
                     )
                 },
             ):
-                from arbiter.learner.explanations import (
+                from self_fixing_engineer.arbiter.learner.explanations import (
                     EXPLANATION_PROMPT_TEMPLATES,
                     _load_prompt_templates,
                     generate_explanation,
@@ -126,15 +126,15 @@ class TestConfigIntegration:
 
             # Mock the parser system using this config
             with patch(
-                "arbiter.learner.fuzzy.PARSER_PRIORITIES",
+                "self_fixing_engineer.arbiter.learner.fuzzy.PARSER_PRIORITIES",
                 config_data["parser_priorities"],
             ):
                 with patch(
-                    "arbiter.learner.fuzzy.process_unstructured_data"
+                    "self_fixing_engineer.arbiter.learner.fuzzy.process_unstructured_data"
                 ) as mock_process:
                     mock_process.return_value = {"extracted": "data"}
 
-                    from arbiter.learner.fuzzy import process_unstructured_data
+                    from self_fixing_engineer.arbiter.learner.fuzzy import process_unstructured_data
 
                     # Test processing with the config
                     result = await process_unstructured_data(
@@ -163,11 +163,11 @@ class TestConfigIntegration:
 
             # Mock the template system
             with patch(
-                "arbiter.learner.explanations.EXPLANATION_PROMPT_TEMPLATES",
+                "self_fixing_engineer.arbiter.learner.explanations.EXPLANATION_PROMPT_TEMPLATES",
                 config_data["templates"],
             ):
                 # Verify templates are usable
-                from arbiter.learner.explanations import EXPLANATION_PROMPT_TEMPLATES
+                from self_fixing_engineer.arbiter.learner.explanations import EXPLANATION_PROMPT_TEMPLATES
 
                 for template_key in ["new_fact", "updated_fact", "unchanged_fact"]:
                     if template_key in EXPLANATION_PROMPT_TEMPLATES:

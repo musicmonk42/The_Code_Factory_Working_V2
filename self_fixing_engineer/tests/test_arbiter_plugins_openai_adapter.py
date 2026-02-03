@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import openai
 import pytest
-from arbiter.plugins.llm_client import LLMClientError
+from self_fixing_engineer.arbiter.plugins.llm_client import LLMClientError
 
 # Import the adapter and related exceptions
-from arbiter.plugins.openai_adapter import (
+from self_fixing_engineer.arbiter.plugins.openai_adapter import (
     APIError,
     AuthError,
     OpenAIAdapter,
@@ -44,7 +44,7 @@ class TestOpenAIAdapter:
     @pytest.fixture
     async def adapter(self, valid_settings):
         """Creates an OpenAIAdapter instance with mocked LLMClient."""
-        with patch("arbiter.plugins.openai_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.model = "gpt-4o-mini"
@@ -74,7 +74,7 @@ class TestOpenAIAdapter:
 
     def test_init_with_valid_settings(self, valid_settings):
         """Test successful initialization with valid settings."""
-        with patch("arbiter.plugins.openai_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient") as mock_client:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
 
@@ -106,7 +106,7 @@ class TestOpenAIAdapter:
         """Test initialization with minimal settings uses defaults."""
         settings = {"OPENAI_API_KEY": "test-key"}
 
-        with patch("arbiter.plugins.openai_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient") as mock_client:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
 
@@ -335,7 +335,7 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_async_context_manager(self, valid_settings):
         """Test async context manager functionality."""
-        with patch("arbiter.plugins.openai_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock()
@@ -348,7 +348,7 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_context_manager_with_exception(self, valid_settings):
         """Test context manager handles exceptions properly."""
-        with patch("arbiter.plugins.openai_adapter.LLMClient") as mock_client:
+        with patch("self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock()

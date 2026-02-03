@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
-from arbiter.utils import (
+from self_fixing_engineer.arbiter.utils import (
     check_service_health,
     get_system_metrics,
     get_system_metrics_async,
@@ -204,7 +204,7 @@ async def test_check_service_health_invalid_url(mock_get_session):
 
 
 # Tests for path validation utilities
-from arbiter.utils import is_valid_directory_path, safe_makedirs
+from self_fixing_engineer.arbiter.utils import is_valid_directory_path, safe_makedirs
 
 
 @pytest.mark.parametrize(

@@ -12,9 +12,9 @@ import pytest
 from aiohttp import ClientError
 
 # Import the module to be tested
-from arbiter.bug_manager import audit_log
-from arbiter.bug_manager.audit_log import AuditLogManager
-from arbiter.bug_manager.utils import AuditLogError
+from self_fixing_engineer.arbiter.bug_manager import audit_log
+from self_fixing_engineer.arbiter.bug_manager.audit_log import AuditLogManager
+from self_fixing_engineer.arbiter.bug_manager.utils import AuditLogError
 
 # --- Fixtures ---
 

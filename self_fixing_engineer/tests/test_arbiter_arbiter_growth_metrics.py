@@ -2,8 +2,8 @@ import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
-from arbiter.arbiter_growth.config_store import ConfigStore
-from arbiter.arbiter_growth.metrics import get_or_create_metric
+from self_fixing_engineer.arbiter.arbiter_growth.config_store import ConfigStore
+from self_fixing_engineer.arbiter.arbiter_growth.metrics import get_or_create_metric
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
 # --- Fixtures ---

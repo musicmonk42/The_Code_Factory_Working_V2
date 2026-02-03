@@ -32,7 +32,7 @@ asyncio.create_task = mock_create_task
 
 try:
     # Now safe to import
-    from arbiter.policy.circuit_breaker import (
+    from self_fixing_engineer.arbiter.policy.circuit_breaker import (
         CircuitBreakerState,
         InMemoryBreakerStateManager,
         _breaker_states,
@@ -235,7 +235,7 @@ class TestBreakerStateManagement:
     @pytest.mark.asyncio
     async def test_provider_limit(self, mock_config, cleanup_states):
         # Temporarily set max providers to a small number
-        with patch("arbiter.policy.circuit_breaker._MAX_PROVIDERS", 3):
+        with patch("self_fixing_engineer.arbiter.policy.circuit_breaker._MAX_PROVIDERS", 3):
             # Create up to the limit
             for i in range(3):
                 await get_breaker_state(f"provider_{i}", mock_config)
@@ -251,7 +251,7 @@ class TestCircuitBreakerLogic:
     @pytest.mark.asyncio
     async def test_breaker_closed_initially(self, mock_config, cleanup_states):
         with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
+            "self_fixing_engineer.arbiter.policy.circuit_breaker.get_config", return_value=mock_config
         ):
             is_open = await is_llm_policy_circuit_breaker_open(
                 "test_provider", mock_config
@@ -261,7 +261,7 @@ class TestCircuitBreakerLogic:
     @pytest.mark.asyncio
     async def test_breaker_opens_after_threshold(self, mock_config, cleanup_states):
         with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
+            "self_fixing_engineer.arbiter.policy.circuit_breaker.get_config", return_value=mock_config
         ):
             provider = "test_provider"
 
@@ -276,7 +276,7 @@ class TestCircuitBreakerLogic:
     @pytest.mark.asyncio
     async def test_breaker_half_open_after_timeout(self, mock_config, cleanup_states):
         with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
+            "self_fixing_engineer.arbiter.policy.circuit_breaker.get_config", return_value=mock_config
         ):
             provider = "test_provider"
             mock_config.LLM_API_BACKOFF_MAX_SECONDS = 0.01  # Very short for testing
@@ -295,7 +295,7 @@ class TestCircuitBreakerLogic:
     @pytest.mark.asyncio
     async def test_breaker_resets_on_success(self, mock_config, cleanup_states):
         with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
+            "self_fixing_engineer.arbiter.policy.circuit_breaker.get_config", return_value=mock_config
         ):
             provider = "test_provider"
 
@@ -324,7 +324,7 @@ class TestCircuitBreakerLogic:
     @pytest.mark.asyncio
     async def test_exponential_backoff(self, mock_config, cleanup_states):
         with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
+            "self_fixing_engineer.arbiter.policy.circuit_breaker.get_config", return_value=mock_config
         ):
             provider = "test_provider"
             mock_config.LLM_API_BACKOFF_MAX_SECONDS = 100
@@ -349,7 +349,7 @@ class TestCircuitBreakerLogic:
     async def test_failure_count_cap(self, mock_config, cleanup_states):
         """Test that failure count is capped at 1000. This is a slow test."""
         with patch(
-            "arbiter.policy.circuit_breaker.get_config", return_value=mock_config
+            "self_fixing_engineer.arbiter.policy.circuit_breaker.get_config", return_value=mock_config
         ):
             provider = "test_provider"
 

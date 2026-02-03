@@ -330,7 +330,7 @@ class PIIRedactorFilter(logging.Filter):
 
     def _audit_redaction(self, record: logging.LogRecord, original: str, redacted: str):
         """Create audit trail of redaction."""
-        audit_logger = logging.getLogger("arbiter.audit.redaction")
+        audit_logger = logging.getLogger("self_fixing_engineer.arbiter.audit.redaction")
         if audit_logger.handlers:  # Only log if audit logger is configured
             audit_logger.info(
                 "PII redacted",
@@ -431,7 +431,7 @@ class AuditLogger:
     Specialized logger for audit trails with guaranteed delivery.
     """
 
-    def __init__(self, name: str = "arbiter.audit", log_file: Optional[str] = None):
+    def __init__(self, name: str = "self_fixing_engineer.arbiter.audit", log_file: Optional[str] = None):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(LogLevel.AUDIT.value)
         self.logger.propagate = False

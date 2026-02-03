@@ -1,20 +1,20 @@
 from unittest.mock import patch
 
 import pytest
-from arbiter.plugin_config import SANDBOXED_PLUGINS, PluginRegistry
+from self_fixing_engineer.arbiter.plugin_config import SANDBOXED_PLUGINS, PluginRegistry
 
 
 # Fixture to provide the expected plugin dictionary
 @pytest.fixture
 def expected_plugins():
     return {
-        "benchmarking": "arbiter.benchmarking_engine.BenchmarkingEnginePlugin",
-        "explainable_reasoner": "arbiter.explainable_reasoner.ExplainableReasonerPlugin",
-        "generate_tests": "arbiter.generate_tests.GenerateTestsPlugin",
-        "world": "arbiter.plugins.world_plugin",
-        "gossip": "arbiter.plugins.gossip_plugin",
-        "chat": "arbiter.plugins.chat_plugin",
-        "craft": "arbiter.plugins.craft_plugin",
+        "benchmarking": "self_fixing_engineer.arbiter.benchmarking_engine.BenchmarkingEnginePlugin",
+        "explainable_reasoner": "self_fixing_engineer.arbiter.explainable_reasoner.ExplainableReasonerPlugin",
+        "generate_tests": "self_fixing_engineer.arbiter.generate_tests.GenerateTestsPlugin",
+        "world": "self_fixing_engineer.arbiter.plugins.world_plugin",
+        "gossip": "self_fixing_engineer.arbiter.plugins.gossip_plugin",
+        "chat": "self_fixing_engineer.arbiter.plugins.chat_plugin",
+        "craft": "self_fixing_engineer.arbiter.plugins.craft_plugin",
     }
 
 
@@ -49,7 +49,7 @@ def test_validate_valid():
 @patch.object(
     PluginRegistry,
     "_PLUGINS",
-    {1: "arbiter.test.TestPlugin", "valid": "arbiter.test.ValidPlugin"},
+    {1: "self_fixing_engineer.arbiter.test.TestPlugin", "valid": "self_fixing_engineer.arbiter.test.ValidPlugin"},
 )
 def test_validate_invalid_key_type():
     with pytest.raises(
@@ -62,7 +62,7 @@ def test_validate_invalid_key_type():
 @patch.object(
     PluginRegistry,
     "_PLUGINS",
-    {"valid_key": 123, "another_key": "arbiter.test.ValidPlugin"},
+    {"valid_key": 123, "another_key": "self_fixing_engineer.arbiter.test.ValidPlugin"},
 )
 def test_validate_invalid_value_type():
     with pytest.raises(
@@ -127,8 +127,8 @@ def test_expected_plugins_present(expected_plugins):
     PluginRegistry,
     "_PLUGINS",
     {
-        "benchmarking": "arbiter.benchmarking_engine.BenchmarkingEnginePlugin",
-        "BENCHMARKING": "arbiter.other_engine.OtherPlugin",  # Duplicate in different case
+        "benchmarking": "self_fixing_engineer.arbiter.benchmarking_engine.BenchmarkingEnginePlugin",
+        "BENCHMARKING": "self_fixing_engineer.arbiter.other_engine.OtherPlugin",  # Duplicate in different case
     },
 )
 def test_no_duplicate_keys_insensitive():

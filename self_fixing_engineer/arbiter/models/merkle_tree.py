@@ -124,7 +124,7 @@ except ImportError:
 
 
 # OpenTelemetry Tracing - Using centralized configuration
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from opentelemetry.trace import Status, StatusCode
 
 tracer = get_tracer(__name__)

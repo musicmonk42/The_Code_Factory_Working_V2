@@ -13,9 +13,9 @@ from email.mime.text import MIMEText
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 import aiohttp  # For Slack notifications
-from arbiter.arbiter_plugin_registry import PlugInKind, register
-from arbiter.arbiter_plugin_registry import registry as arbiter_registry
-from arbiter.otel_config import get_tracer
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, register
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import registry as arbiter_registry
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -45,7 +45,7 @@ except ImportError:
 
 # Assume these exist in arbiter/metrics.py
 try:
-    from arbiter.metrics import get_or_create_counter
+    from self_fixing_engineer.arbiter.metrics import get_or_create_counter
 
     METRICS_AVAILABLE = True
 except ImportError:
@@ -69,7 +69,7 @@ if not globals().get("_HUMAN_LOOP_IMPORTING"):
 
 # --- Corrected models.db_clients import block ---
 try:
-    from arbiter.models.db_clients import DummyDBClient, PostgresClient, SQLiteClient
+    from self_fixing_engineer.arbiter.models.db_clients import DummyDBClient, PostgresClient, SQLiteClient
 
     DB_CLIENTS_AVAILABLE = True
 except ImportError:
@@ -324,8 +324,8 @@ tracer = get_tracer(__name__)
 
 # --- Logger Setup ---
 try:
-    from arbiter.agent_state import Base
-    from arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.agent_state import Base
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
     from arbiter_plugin_registry import PlugInKind as MockPlugInKind
     from arbiter_plugin_registry import registry as mock_registry
 except ImportError:
@@ -744,7 +744,7 @@ class HumanInLoop:
         else:
             # Import FeedbackManager here to avoid circular imports at module level
             try:
-                from arbiter.feedback import FeedbackManager as RealFeedbackManager
+                from self_fixing_engineer.arbiter.feedback import FeedbackManager as RealFeedbackManager
             except ImportError:
                 # Use the fallback FeedbackManager defined in this module
                 RealFeedbackManager = FeedbackManager
@@ -777,8 +777,8 @@ class HumanInLoop:
         """Checks if a user role has a specific permission."""
         # Lazy import to avoid circular dependency
         try:
-            from arbiter.arbiter import PermissionManager
-            from arbiter.config import ArbiterConfig
+            from self_fixing_engineer.arbiter.arbiter import PermissionManager
+            from self_fixing_engineer.arbiter.config import ArbiterConfig
 
             permission_mgr = PermissionManager(ArbiterConfig())
             return permission_mgr.check_permission(role, permission)

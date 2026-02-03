@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 import yaml
-from arbiter.plugins.multi_modal_config import (
+from self_fixing_engineer.arbiter.plugins.multi_modal_config import (
     AuditLogConfig,
     CacheConfig,
     CircuitBreakerConfig,

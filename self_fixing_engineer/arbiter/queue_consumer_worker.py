@@ -22,10 +22,10 @@ logger = logging.getLogger("queue_consumer_worker")
 # --- SFE Core Imports and Mock Fallback ---
 SFE_CORE_AVAILABLE = False
 try:
-    from arbiter.bug_manager import AuditLogManager
-    from arbiter.config import ArbiterConfig as Settings
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter.message_queue_service import (
+    from self_fixing_engineer.arbiter.bug_manager import AuditLogManager
+    from self_fixing_engineer.arbiter.config import ArbiterConfig as Settings
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
+    from self_fixing_engineer.arbiter.message_queue_service import (
         DecryptionError,
         MessageQueueService,
         MessageQueueServiceError,

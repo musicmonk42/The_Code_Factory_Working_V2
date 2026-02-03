@@ -3,11 +3,11 @@ import logging
 from unittest.mock import AsyncMock
 
 import pytest
-from arbiter.arbiter_growth.exceptions import ArbiterGrowthError
-from arbiter.arbiter_growth.models import ArbiterState, GrowthEvent
+from self_fixing_engineer.arbiter.arbiter_growth.exceptions import ArbiterGrowthError
+from self_fixing_engineer.arbiter.arbiter_growth.models import ArbiterState, GrowthEvent
 
 # Assuming all modules are in a discoverable path
-from arbiter.arbiter_growth.plugins import PluginHook
+from self_fixing_engineer.arbiter.arbiter_growth.plugins import PluginHook
 
 
 # Fixture for capturing logs

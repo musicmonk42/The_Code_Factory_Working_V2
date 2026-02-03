@@ -173,19 +173,19 @@ def mock_web3_dependencies(mocker: MockerFixture):
 
     mock_async_web3.return_value = mock_web3_instance
 
-    mocker.patch("arbiter.models.audit_ledger_client.AsyncWeb3", mock_async_web3)
+    mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client.AsyncWeb3", mock_async_web3)
     mocker.patch(
-        "arbiter.models.audit_ledger_client.AsyncWebsocketProvider",
+        "self_fixing_engineer.arbiter.models.audit_ledger_client.AsyncWebsocketProvider",
         mock_async_websocket_provider,
     )
-    mocker.patch("arbiter.models.audit_ledger_client.Account", mock_account)
-    mocker.patch("arbiter.models.audit_ledger_client.ETHEREUM_AVAILABLE", True)
+    mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client.Account", mock_account)
+    mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client.ETHEREUM_AVAILABLE", True)
 
     def mock_checksum(addr):
         return addr
 
     mocker.patch(
-        "arbiter.models.audit_ledger_client.to_checksum_address",
+        "self_fixing_engineer.arbiter.models.audit_ledger_client.to_checksum_address",
         mock_checksum,
         create=True,
     )
@@ -213,7 +213,7 @@ async def audit_client(mock_web3_dependencies, mocker: MockerFixture):
     mocker.patch("tenacity.retry", no_retry)
 
     # Now import after patching
-    from arbiter.models.audit_ledger_client import AuditLedgerClient
+    from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditLedgerClient
 
     # For methods already decorated, we need to access __wrapped__ if it exists
     original_connect = (
@@ -248,7 +248,7 @@ class TestAuditLedgerClientInit:
 
     def test_init_with_valid_config(self, mock_web3_dependencies):
         """Test successful initialization with valid configuration"""
-        from arbiter.models.audit_ledger_client import AuditLedgerClient
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditLedgerClient
 
         client = AuditLedgerClient(dlt_type="ethereum")
         assert client.dlt_type == "ethereum"
@@ -263,7 +263,7 @@ class TestAuditLedgerClientInit:
         """Test initialization with invalid ABI JSON - should handle gracefully in development"""
         mocker.patch.dict(os.environ, {"ETHEREUM_CONTRACT_ABI_JSON": "[invalid_json"})
 
-        from arbiter.models.audit_ledger_client import AuditLedgerClient
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditLedgerClient
 
         client = AuditLedgerClient(dlt_type="ethereum")
         assert client.contract_abi is None
@@ -282,7 +282,7 @@ class TestAuditLedgerClientInit:
             },
         )
 
-        from arbiter.models.audit_ledger_client import AuditLedgerClient
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditLedgerClient
 
         with pytest.raises(
             ValueError, match="must be valid JSON for Ethereum DLT in production"
@@ -295,7 +295,7 @@ class TestAuditLedgerClientInit:
         """Test initialization fails with missing required environment variables"""
         mocker.patch.dict(os.environ, {"AUDIT_LEDGER_URL": ""}, clear=False)
 
-        from arbiter.models.audit_ledger_client import AuditLedgerClient
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditLedgerClient
 
         with pytest.raises(
             ValueError, match="AUDIT_LEDGER_URL must be a WebSocket URL"
@@ -310,7 +310,7 @@ class TestAuditLedgerClientInit:
             os.environ, {"APP_ENV": "production", "USE_SECRETS_MANAGER": "false"}
         )
 
-        from arbiter.models.audit_ledger_client import AuditLedgerClient, DLTError
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditLedgerClient, DLTError
 
         with pytest.raises(DLTError, match="Secrets Manager must be enabled"):
             AuditLedgerClient(dlt_type="ethereum")
@@ -343,7 +343,7 @@ class TestAuditLedgerClientConnection:
     @pytest.mark.asyncio
     async def test_connect_failure(self, audit_client, mock_web3_dependencies):
         """Test connection failure handling"""
-        from arbiter.models.audit_ledger_client import DLTConnectionError
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import DLTConnectionError
 
         mock_web3_dependencies["web3"].is_connected.return_value = False
 
@@ -410,7 +410,7 @@ class TestAuditLedgerClientEventLogging:
     @pytest.mark.asyncio
     async def test_log_event_not_connected(self, audit_client):
         """Test logging event when not connected raises error"""
-        from arbiter.models.audit_ledger_client import DLTTransactionError
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import DLTTransactionError
 
         with pytest.raises(
             DLTTransactionError, match="Failed to log DLT event to ethereum"
@@ -450,7 +450,7 @@ class TestAuditLedgerClientEventLogging:
         self, audit_client, mock_web3_dependencies
     ):
         """Test handling of transaction failure"""
-        from arbiter.models.audit_ledger_client import DLTTransactionError
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import DLTTransactionError
 
         await audit_client.connect()
 
@@ -506,7 +506,7 @@ class TestAuditLedgerClientBatchOperations:
         self, audit_client, mock_web3_dependencies
     ):
         """Test batch logging when not supported by contract"""
-        from arbiter.models.audit_ledger_client import AuditEvent, DLTUnsupportedError
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditEvent, DLTUnsupportedError
 
         await audit_client.connect()
 
@@ -562,7 +562,7 @@ class TestAuditLedgerClientRetryMechanism:
         self, audit_client, mock_web3_dependencies
     ):
         """Test that connect would retry on connection failure (disabled for tests)"""
-        from arbiter.models.audit_ledger_client import DLTConnectionError
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import DLTConnectionError
 
         mock_web3_dependencies["web3"].is_connected.return_value = False
 
@@ -591,7 +591,7 @@ class TestAuditLedgerClientUnsupportedDLT:
 
         mocker.patch("tenacity.retry", no_retry)
 
-        from arbiter.models.audit_ledger_client import (
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import (
             AuditLedgerClient,
             DLTConnectionError,
         )
@@ -631,7 +631,7 @@ class TestAuditLedgerClientGasManagement:
     @pytest.mark.asyncio
     async def test_gas_cap_enforcement(self, audit_client, mock_web3_dependencies):
         """Test that gas price cap is enforced"""
-        from arbiter.models.audit_ledger_client import DLTTransactionError
+        from self_fixing_engineer.arbiter.models.audit_ledger_client import DLTTransactionError
 
         await audit_client.connect()
 
@@ -695,7 +695,7 @@ class TestAuditLedgerClientSecretManagement:
             },
         )
 
-        mock_boto3 = mocker.patch("arbiter.models.audit_ledger_client.boto3")
+        mock_boto3 = mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client.boto3")
         mock_client = MagicMock()
         mock_client.get_secret_value.return_value = {
             "SecretString": "0xsecret_key_from_aws"
