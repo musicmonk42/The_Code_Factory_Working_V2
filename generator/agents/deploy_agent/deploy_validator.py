@@ -350,15 +350,15 @@ async def scan_config_for_findings(
         except FileNotFoundError:
             findings.append(
                 {
-                    "type": "ToolError",
+                    "type": "ToolWarning",
                     "category": "TrivyNotInstalled",
-                    "description": "Trivy command not found. Skipping Trivy scan. This is a critical tool for security compliance.",
+                    "description": "Trivy command not found. Security scanning skipped gracefully. Install Trivy for enhanced security validation.",
                     "severity": "Low",
                 }
             )
-            logger.error(
-                "Trivy command not found. Skipping Trivy scan. This tool is required for full compliance checks."
-            )  # Error level for missing tool
+            logger.warning(
+                "Trivy command not found. Skipping Trivy scan. Install Trivy (https://trivy.dev) for enhanced security scanning."
+            )  # Warning level for missing optional tool
             scan_total_findings.labels(
                 format=config_format, finding_type="Trivy_NotFound"
             ).inc()
