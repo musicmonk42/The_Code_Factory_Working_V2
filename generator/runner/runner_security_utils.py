@@ -123,17 +123,18 @@ def _add_custom_recognizers(analyzer_engine):
         
         # HIGH: Add CARDINAL recognizer to redact numbers that might be sensitive
         # Matches standalone numbers (card IDs, account numbers, etc.)
+        # Using 8+ digits to avoid false positives with dates, ports, etc.
         cardinal_patterns = [
             Pattern(
                 name="cardinal_number",
-                regex=r"\b\d{4,}\b",  # Numbers with 4+ digits (likely sensitive IDs)
+                regex=r"\b\d{8,}\b",  # Numbers with 8+ digits (account numbers, IDs)
                 score=0.3,
             ),
         ]
         cardinal_recognizer = PatternRecognizer(
             supported_entity="CARDINAL",
             patterns=cardinal_patterns,
-            context=["id", "number", "account", "card"],
+            context=["id", "number", "account", "card", "ssn"],  # More specific context
         )
         analyzer_engine.registry.add_recognizer(cardinal_recognizer)
         

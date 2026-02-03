@@ -601,7 +601,7 @@ PII_ENTITIES:
    ```bash
    # Generate a 256-bit Fernet key
    python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"
-   # Example output: 3q2+7w==5t6y7u8i9o0p1a2s3d4f5g6h7j8k9l0z1x2c3v4b5n6m7,8.9/0
+   # Example output: zJfK8vN2xQ4wR7tY9uP1aS3dF5gH6jK8lM0nB1vC2xZ=
    ```
 
 2. **Store the key in your secrets manager:**
