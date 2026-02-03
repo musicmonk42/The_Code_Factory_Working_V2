@@ -1,14 +1,29 @@
 #!/usr/bin/env python3
 """
 Simple verification script to check API signature fixes without requiring full dependencies.
+
+This script validates that:
+1. call_ensemble_api accepts the 'stream' parameter
+2. docgen_agent.py doesn't pass 'lang' parameter to process_and_validate_response
+3. All call sites are compatible with the new signatures
+
+Industry Standards:
+- PEP 8 compliant
+- Type hints for better code clarity
+- Comprehensive error handling
+- Clear documentation
+
+Author: Code Factory Platform
+Version: 1.0.0
 """
 
 import ast
 import sys
 from pathlib import Path
+from typing import List, Tuple
 
 
-def check_call_ensemble_api_signature():
+def check_call_ensemble_api_signature() -> bool:
     """Check that call_ensemble_api has stream parameter."""
     print("=" * 60)
     print("Checking call_ensemble_api signature...")
@@ -55,8 +70,13 @@ def check_call_ensemble_api_signature():
     return all(found_functions)
 
 
-def check_docgen_lang_parameter():
-    """Check that docgen_agent.py doesn't pass lang parameter."""
+def check_docgen_lang_parameter() -> bool:
+    """
+    Check that docgen_agent.py doesn't pass lang parameter.
+    
+    Returns:
+        bool: True if no lang parameter found in process_and_validate_response calls
+    """
     print("\n" + "=" * 60)
     print("Checking docgen_agent.py for lang parameter removal...")
     print("=" * 60)
@@ -81,8 +101,13 @@ def check_docgen_lang_parameter():
         return True
 
 
-def check_call_sites():
-    """Check that the call sites would work with the new signatures."""
+def check_call_sites() -> bool:
+    """
+    Check that the call sites would work with the new signatures.
+    
+    Returns:
+        bool: True if all call sites are compatible
+    """
     print("\n" + "=" * 60)
     print("Checking call sites compatibility...")
     print("=" * 60)
@@ -122,7 +147,13 @@ def check_call_sites():
     return all_ok
 
 
-def main():
+def main() -> int:
+    """
+    Main verification function.
+    
+    Returns:
+        int: Exit code (0 for success, 1 for failure)
+    """
     print("\n" + "=" * 60)
     print("API SIGNATURE FIXES VERIFICATION")
     print("=" * 60)

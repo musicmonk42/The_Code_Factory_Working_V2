@@ -387,10 +387,22 @@ class LLMClient:
                 "LLMPluginManager does not have _load_task attribute. Skipping initialization wait."
             )
 
-        for name in self.manager.list_providers():
+        available_providers = self.manager.list_providers()
+        for name in available_providers:
             metrics.LLM_PROVIDER_HEALTH.labels(provider=name).set(1)
+        
         self._is_initialized.set()
-        logger.info("LLMClient initialization complete")
+        
+        # Provide clear startup messaging about provider availability
+        if available_providers:
+            logger.info(
+                f"LLMClient initialization complete. Available providers: {', '.join(available_providers)}"
+            )
+        else:
+            logger.warning(
+                "LLMClient initialization complete but NO providers are available. "
+                "Please check API key configuration (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, etc.)"
+            )
 
     async def count_tokens(self, text: str, model: str) -> int:
         if not HAS_TIKTOKEN:

@@ -264,10 +264,16 @@ CHECKPOINT_BACKEND_TYPE: fs, s3, or fabric for checkpoints
 
 API Keys:
 
+⚠️ **Provider Availability**: At least one LLM provider API key is required for the system to function. If multiple keys are provided, the system will use the configured default provider. Missing API keys for a provider will cause that provider to fail to load, but the system will continue with available providers.
+
 GROK_API_KEY: xAI Grok API key
-OPENAI_API_KEY: OpenAI API key
+OPENAI_API_KEY: OpenAI API key (recommended for best compatibility)
 GOOGLE_API_KEY: Google Gemini API key
 ANTHROPIC_API_KEY: Anthropic Claude API key
+
+Example startup messages:
+- ✓ Success: "LLMClient initialization complete. Available providers: openai, claude"
+- ⚠ Warning: "LLMClient initialization complete but NO providers are available. Please check API key configuration"
 
 Observability:
 

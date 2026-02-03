@@ -161,6 +161,17 @@ def _load_presidio_engine() -> bool:
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
             _PRESIDIO_NLP_MODE = True  # Full NLP mode available
+            
+            # Suppress non-critical Presidio warnings for unmapped entities
+            # These warnings clutter logs but don't affect functionality
+            presidio_logger = logging.getLogger("presidio_analyzer")
+            presidio_logger.addFilter(
+                lambda record: not any(
+                    entity in record.getMessage()
+                    for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped"]
+                )
+            )
+            
             logger.info(
                 f"Presidio analyzer loaded successfully with {model_name} model (full NLP mode)"
             )
@@ -181,6 +192,16 @@ def _load_presidio_engine() -> bool:
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
             _PRESIDIO_NLP_MODE = False  # Degraded to regex-only mode
+            
+            # Suppress non-critical Presidio warnings
+            presidio_logger = logging.getLogger("presidio_analyzer")
+            presidio_logger.addFilter(
+                lambda record: not any(
+                    entity in record.getMessage()
+                    for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped"]
+                )
+            )
+            
             logger.info("Presidio running in REGEX-ONLY mode (NLP unavailable)")
             return True
 
@@ -198,6 +219,15 @@ def _load_presidio_engine() -> bool:
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
             _PRESIDIO_NLP_MODE = False  # Degraded to regex-only mode
+            
+            # Suppress non-critical Presidio warnings
+            presidio_logger = logging.getLogger("presidio_analyzer")
+            presidio_logger.addFilter(
+                lambda record: not any(
+                    entity in record.getMessage()
+                    for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped"]
+                )
+            )
             logger.info("Presidio running in REGEX-ONLY mode (NLP failed to load)")
             return True
 
