@@ -103,16 +103,6 @@ async def agent(temp_repo_module):
         
         await agent._init_db()
         yield agent
-        
-        # Cleanup tasks
-        try:
-            tasks = [t for t in asyncio.all_tasks() if not t.done()]
-            for task in tasks:
-                task.cancel()
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
-        except Exception:
-            pass
 
 
 @pytest.fixture
