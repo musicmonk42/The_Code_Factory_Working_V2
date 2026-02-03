@@ -110,7 +110,10 @@ class TestPluginService:
         # Import INSIDE test to avoid collection-time failures
         from omnicore_engine.engines import PluginService
 
-        service = PluginService(mock_dependencies["registry"])
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"]
+        )
         await service.start_subscriptions()
         assert service.plugin_registry == mock_dependencies["registry"]
         assert service.message_bus is not None
@@ -121,7 +124,10 @@ class TestPluginService:
         """Test handling arbiter bug events"""
         from omnicore_engine.engines import PluginService
 
-        service = PluginService(mock_dependencies["registry"])
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"]
+        )
         await service.start_subscriptions()
 
         with patch("omnicore_engine.engines.BugManager") as mock_bug_manager:
@@ -142,7 +148,10 @@ class TestPluginService:
         """Test handling SHIF request with file path"""
         from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
 
-        service = PluginService(mock_dependencies["registry"])
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"]
+        )
         await service.start_subscriptions()
 
         # Setup mock import fixer engine
@@ -167,7 +176,10 @@ class TestPluginService:
         """Test handling SHIF request with code string"""
         from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
 
-        service = PluginService(mock_dependencies["registry"])
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"]
+        )
         await service.start_subscriptions()
 
         mock_fixer = Mock()
@@ -190,7 +202,10 @@ class TestPluginService:
         """Test handling SHIF request when engine not registered"""
         from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
 
-        service = PluginService(mock_dependencies["registry"])
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"]
+        )
         await service.start_subscriptions()
         ENGINE_REGISTRY.clear()
 
@@ -208,7 +223,10 @@ class TestPluginService:
         """Test handling SHIF request when fixer raises error"""
         from omnicore_engine.engines import ENGINE_REGISTRY, PluginService
 
-        service = PluginService(mock_dependencies["registry"])
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"]
+        )
         await service.start_subscriptions()
 
         mock_fixer = Mock()
@@ -230,7 +248,10 @@ class TestPluginService:
         """Test getting companies list"""
         from omnicore_engine.engines import PluginService
 
-        service = PluginService(mock_dependencies["registry"])
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"]
+        )
         await service.start_subscriptions()
 
         mock_fetcher = AsyncMock(return_value=["Company1", "Company2"])
@@ -247,7 +268,10 @@ class TestPluginService:
         """Test getting companies when plugin not registered"""
         from omnicore_engine.engines import PluginService
 
-        service = PluginService(mock_dependencies["registry"])
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"]
+        )
         await service.start_subscriptions()
         mock_dependencies["registry"].get.return_value = None
 
@@ -260,7 +284,10 @@ class TestPluginService:
         """Test getting ESG report"""
         from omnicore_engine.engines import PluginService
 
-        service = PluginService(mock_dependencies["registry"])
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"]
+        )
         await service.start_subscriptions()
 
         mock_fetcher = AsyncMock(return_value={"score": 85})
@@ -277,7 +304,10 @@ class TestPluginService:
         """Test running simulation"""
         from omnicore_engine.engines import PluginService
 
-        service = PluginService(mock_dependencies["registry"])
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"]
+        )
         await service.start_subscriptions()
 
         mock_simulator = AsyncMock(return_value={"results": "simulation data"})

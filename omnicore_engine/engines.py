@@ -368,9 +368,9 @@ logger = logging.getLogger(__name__)
 
 
 class PluginService:
-    def __init__(self, plugin_registry):
+    def __init__(self, plugin_registry, message_bus=None):
         self.plugin_registry = plugin_registry
-        self.message_bus = ShardedMessageBus(
+        self.message_bus = message_bus or ShardedMessageBus(
             config=settings, db=Database(settings.DB_PATH)
         )
         self.logger = logging.getLogger("PluginService")
@@ -398,7 +398,7 @@ class PluginService:
             "generator:testgen_request", self.handle_testgen_request
         )
         await self.message_bus.subscribe(
-            "generator:docgen_request", self.handle_docegen_request
+            "generator:docgen_request", self.handle_docgen_request
         )
         await self.message_bus.subscribe(
             "workflow:sfe_to_generator", self.handle_sfe_to_generator
