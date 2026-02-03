@@ -191,23 +191,30 @@ async def _trigger_pipeline_background(
         
         logger.info(f"[Pipeline] Full pipeline completed for job {job_id}: {result}")
         
-        # Step 3: Update job status based on pipeline result
+        # Step 3: Update job status based on pipeline result with graceful degradation
         pipeline_status = result.get("status", "unknown") if result else "unknown"
+        stages_completed = result.get("stages_completed", []) if result else []
         
-        if pipeline_status == "completed":
+        # NEW: Always set to COMPLETED if ANY code was generated (codegen stage succeeded)
+        # This enables partial downloads and graceful degradation
+        if "codegen" in stages_completed or pipeline_status == "completed":
             job.status = JobStatus.COMPLETED
             job.current_stage = JobStage.COMPLETED
             job.completed_at = datetime.now(timezone.utc)
             job.updated_at = datetime.now(timezone.utc)
+            
+            # Mark as partial completion if pipeline didn't fully complete
+            is_partial = pipeline_status != "completed"
+            job.metadata["partial_completion"] = is_partial
+            job.metadata["completed_stages"] = stages_completed
             
             # Store pipeline results in metadata
             if result and isinstance(result, dict):
                 output_path = result.get("output_path")
                 if output_path:
                     job.metadata["output_path"] = output_path
-                stages_completed = result.get("stages_completed", [])
-                if stages_completed:
-                    job.metadata["stages_completed"] = stages_completed
+                if result.get("message"):
+                    job.metadata["pipeline_message"] = result.get("message")
             
             # Scan job directory for generated output files
             from pathlib import Path
@@ -223,40 +230,77 @@ async def _trigger_pipeline_background(
                 logger.info(f"[Pipeline] Found {len(output_files)} output files for job {job_id}")
             
             job.metadata["pipeline_completed_at"] = datetime.now(timezone.utc).isoformat()
-            logger.info(f"[Pipeline] Job {job_id} marked as COMPLETED successfully")
             
-        elif pipeline_status == "failed":
-            job.status = JobStatus.FAILED
-            job.updated_at = datetime.now(timezone.utc)
-            job.metadata["error"] = result.get("message", "Pipeline failed")
-            job.metadata["stages_completed"] = result.get("stages_completed", [])
-            logger.warning(f"[Pipeline] Job {job_id} marked as FAILED: {result.get('message')}")
+            if is_partial:
+                logger.info(
+                    f"[Pipeline] Job {job_id} marked as COMPLETED with partial results "
+                    f"(stages: {', '.join(stages_completed)})"
+                )
+            else:
+                logger.info(f"[Pipeline] Job {job_id} marked as COMPLETED successfully")
             
         else:
-            # Unexpected status - treat as error but mark completed to avoid stuck state
-            job.status = JobStatus.COMPLETED
-            job.current_stage = JobStage.COMPLETED
-            job.completed_at = datetime.now(timezone.utc)
+            # No code generated at all - mark as failed
+            job.status = JobStatus.FAILED
             job.updated_at = datetime.now(timezone.utc)
-            job.metadata["pipeline_status"] = pipeline_status
-            job.metadata["pipeline_result"] = str(result)
+            job.metadata["error"] = result.get("message", "Code generation failed - no code produced")
+            job.metadata["stages_completed"] = stages_completed
             logger.warning(
-                f"[Pipeline] Job {job_id} completed with unexpected status '{pipeline_status}'. "
-                f"Marking as COMPLETED to avoid stuck state."
+                f"[Pipeline] Job {job_id} marked as FAILED: no code was generated "
+                f"(completed stages: {', '.join(stages_completed) if stages_completed else 'none'})"
             )
             
     except Exception as e:
         logger.error(f"[Pipeline] Critical error for job {job_id}: {e}", exc_info=True)
         
-        # Update job status to FAILED on critical error
+        # Update job status - try to mark as COMPLETED if files exist
         if job_id in jobs_db:
             job = jobs_db[job_id]
-            job.status = JobStatus.FAILED
-            job.updated_at = datetime.now(timezone.utc)
-            job.metadata["error"] = str(e)
-            job.metadata["error_type"] = type(e).__name__
-            job.metadata["pipeline_failed_at"] = datetime.now(timezone.utc).isoformat()
-            logger.info(f"[Pipeline] Job {job_id} marked as FAILED due to critical error: {e}")
+            
+            # Check if code files were generated before the error
+            from pathlib import Path
+            job_dir = Path(f"./uploads/{job_id}")
+            has_code_files = False
+            
+            if job_dir.exists():
+                # Check for Python, JavaScript, TypeScript, Java, etc. code files
+                code_extensions = ['.py', '.js', '.ts', '.tsx', '.jsx', '.java', '.go', '.rs', '.cpp', '.c', '.h']
+                for ext in code_extensions:
+                    if any(job_dir.rglob(f'*{ext}')):
+                        has_code_files = True
+                        break
+            
+            if has_code_files:
+                # Mark as COMPLETED with partial results
+                job.status = JobStatus.COMPLETED
+                job.current_stage = JobStage.COMPLETED
+                job.completed_at = datetime.now(timezone.utc)
+                job.updated_at = datetime.now(timezone.utc)
+                job.metadata["partial_completion"] = True
+                job.metadata["error"] = str(e)
+                job.metadata["error_type"] = type(e).__name__
+                job.metadata["pipeline_failed_at"] = datetime.now(timezone.utc).isoformat()
+                
+                # Scan for output files
+                output_files = []
+                for file_path in job_dir.rglob('*'):
+                    if file_path.is_file():
+                        rel_path = str(file_path.relative_to(job_dir))
+                        output_files.append(rel_path)
+                job.output_files = output_files
+                
+                logger.info(
+                    f"[Pipeline] Job {job_id} marked as COMPLETED despite error - "
+                    f"code files were generated ({len(output_files)} files)"
+                )
+            else:
+                # No code generated - mark as failed
+                job.status = JobStatus.FAILED
+                job.updated_at = datetime.now(timezone.utc)
+                job.metadata["error"] = str(e)
+                job.metadata["error_type"] = type(e).__name__
+                job.metadata["pipeline_failed_at"] = datetime.now(timezone.utc).isoformat()
+                logger.info(f"[Pipeline] Job {job_id} marked as FAILED due to critical error: {e}")
 
 
 @router.post("/llm/configure")
