@@ -20,6 +20,7 @@ import importlib.util  # Added for ValidatorRegistry plugin loading
 import json
 import os
 import re  # Added for pattern matching
+import shutil  # For tool availability checks
 import sys  # Added for ValidatorRegistry
 import tempfile  # For temporary files and directories
 import time
@@ -259,94 +260,111 @@ async def scan_config_for_findings(
             async with aiofiles.open(temp_config_path, mode="w", encoding="utf-8") as f:
                 await f.write(config_text)
 
-            trivy_command = [
-                "trivy",
-                "config",
-                "--format",
-                "json",  # Request JSON output for easy parsing
-                "--severity",
-                "CRITICAL,HIGH",  # Focus on high severity issues
-                "--quiet",  # Suppress verbose output
-                str(temp_config_path),
-            ]
-
-            process = await asyncio.create_subprocess_exec(
-                *trivy_command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                limit=1024
-                * 1024,  # Set a buffer limit to prevent very large outputs from hanging
-            )
-            stdout, stderr = await process.communicate()
-
-            if process.returncode in [0, 1]:  # 0 means no issues, 1 means issues found
-                trivy_output_str = stdout.decode("utf-8").strip()
-                if trivy_output_str:
-                    try:
-                        trivy_results = json.loads(trivy_output_str)
-                        for result_section in trivy_results.get("Results", []):
-                            # Trivy can find 'Misconfigurations', 'Vulnerabilities', etc.
-                            for misconfig in result_section.get(
-                                "Misconfigurations", []
-                            ):
-                                findings.append(
-                                    {
-                                        "type": "Misconfiguration_Trivy",
-                                        "category": misconfig.get("Type", "N/A"),
-                                        "description": misconfig.get(
-                                            "Title", "No Title"
-                                        )
-                                        + ": "
-                                        + misconfig.get("Description", ""),
-                                        "severity": misconfig.get(
-                                            "Severity", "Unknown"
-                                        ),
-                                    }
-                                )
-                                scan_total_findings.labels(
-                                    format=config_format, finding_type="Trivy_Misconfig"
-                                ).inc()
-                            for vuln in result_section.get("Vulnerabilities", []):
-                                findings.append(
-                                    {
-                                        "type": "Vulnerability_Trivy",
-                                        "category": vuln.get("VulnerabilityID", "N/A"),
-                                        "description": vuln.get("Title", "No Title"),
-                                        "severity": vuln.get("Severity", "Unknown"),
-                                    }
-                                )
-                                scan_total_findings.labels(
-                                    format=config_format,
-                                    finding_type="Trivy_Vulnerability",
-                                ).inc()
-                    except json.JSONDecodeError:
-                        findings.append(
-                            {
-                                "type": "ToolError_Trivy",
-                                "category": "OutputParse",
-                                "description": "Trivy produced invalid JSON output.",
-                                "severity": "Medium",
-                            }
-                        )
-                        scan_total_findings.labels(
-                            format=config_format, finding_type="Trivy_ParseError"
-                        ).inc()
-                if stderr:
-                    logger.warning(
-                        f"Trivy stderr for scan_config: {stderr.decode('utf-8').strip()}"
-                    )
-            else:
+            # FIX: Check if trivy is available before attempting to use it
+            if not shutil.which("trivy"):
                 findings.append(
                     {
-                        "type": "ToolError_Trivy",
-                        "category": "Execution",
-                        "description": f"Trivy command failed with exit code {process.returncode}: {stderr.decode('utf-8').strip()}",
-                        "severity": "High",
+                        "type": "ToolWarning",
+                        "category": "TrivyNotInstalled",
+                        "description": "Trivy command not found. Security scanning skipped gracefully. Install Trivy for enhanced security validation.",
+                        "severity": "Low",
                     }
                 )
+                logger.warning(
+                    "Trivy command not found. Skipping Trivy scan. Install Trivy (https://trivy.dev) for enhanced security scanning."
+                )
                 scan_total_findings.labels(
-                    format=config_format, finding_type="Trivy_ExecError"
+                    format=config_format, finding_type="Trivy_NotFound"
                 ).inc()
+            else:
+                trivy_command = [
+                    "trivy",
+                    "config",
+                    "--format",
+                    "json",  # Request JSON output for easy parsing
+                    "--severity",
+                    "CRITICAL,HIGH",  # Focus on high severity issues
+                    "--quiet",  # Suppress verbose output
+                    str(temp_config_path),
+                ]
+
+                process = await asyncio.create_subprocess_exec(
+                    *trivy_command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    limit=1024
+                    * 1024,  # Set a buffer limit to prevent very large outputs from hanging
+                )
+                stdout, stderr = await process.communicate()
+
+                if process.returncode in [0, 1]:  # 0 means no issues, 1 means issues found
+                    trivy_output_str = stdout.decode("utf-8").strip()
+                    if trivy_output_str:
+                        try:
+                            trivy_results = json.loads(trivy_output_str)
+                            for result_section in trivy_results.get("Results", []):
+                                # Trivy can find 'Misconfigurations', 'Vulnerabilities', etc.
+                                for misconfig in result_section.get(
+                                    "Misconfigurations", []
+                                ):
+                                    findings.append(
+                                        {
+                                            "type": "Misconfiguration_Trivy",
+                                            "category": misconfig.get("Type", "N/A"),
+                                            "description": misconfig.get(
+                                                "Title", "No Title"
+                                            )
+                                            + ": "
+                                            + misconfig.get("Description", ""),
+                                            "severity": misconfig.get(
+                                                "Severity", "Unknown"
+                                            ),
+                                        }
+                                    )
+                                    scan_total_findings.labels(
+                                        format=config_format, finding_type="Trivy_Misconfig"
+                                    ).inc()
+                                for vuln in result_section.get("Vulnerabilities", []):
+                                    findings.append(
+                                        {
+                                            "type": "Vulnerability_Trivy",
+                                            "category": vuln.get("VulnerabilityID", "N/A"),
+                                            "description": vuln.get("Title", "No Title"),
+                                            "severity": vuln.get("Severity", "Unknown"),
+                                        }
+                                    )
+                                    scan_total_findings.labels(
+                                        format=config_format,
+                                        finding_type="Trivy_Vulnerability",
+                                    ).inc()
+                        except json.JSONDecodeError:
+                            findings.append(
+                                {
+                                    "type": "ToolError_Trivy",
+                                    "category": "OutputParse",
+                                    "description": "Trivy produced invalid JSON output.",
+                                    "severity": "Medium",
+                                }
+                            )
+                            scan_total_findings.labels(
+                                format=config_format, finding_type="Trivy_ParseError"
+                            ).inc()
+                    if stderr:
+                        logger.warning(
+                            f"Trivy stderr for scan_config: {stderr.decode('utf-8').strip()}"
+                        )
+                else:
+                    findings.append(
+                        {
+                            "type": "ToolError_Trivy",
+                            "category": "Execution",
+                            "description": f"Trivy command failed with exit code {process.returncode}: {stderr.decode('utf-8').strip()}",
+                            "severity": "High",
+                        }
+                    )
+                    scan_total_findings.labels(
+                        format=config_format, finding_type="Trivy_ExecError"
+                    ).inc()
         except FileNotFoundError:
             findings.append(
                 {
@@ -442,52 +460,67 @@ class DockerValidator(Validator):
                 ) as f:
                     await f.write(config_content)
 
-                # 1. Docker Build Test
-                build_proc = await asyncio.create_subprocess_exec(
-                    "docker",
-                    "build",
-                    "-f",
-                    str(dockerfile_path),
-                    "--no-cache",
-                    ".",
-                    cwd=temp_dir_path,  # Set cwd to temp_dir_path for build context
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await build_proc.communicate()
-
-                report["build_output"] = stdout.decode("utf-8") + stderr.decode("utf-8")
-                if build_proc.returncode == 0:
-                    report["build_status"] = "success"
-                else:
-                    report["build_status"] = "failed"
+                # FIX: Check if Docker is available before attempting to use it
+                if not shutil.which("docker"):
+                    logger.warning("Docker tool not found. Skipping Docker build test.")
+                    report["build_status"] = "skipped"
                     report["lint_issues"].append(
-                        f"Dockerfile failed to build: {stderr.decode('utf-8').strip()}"
+                        "Docker tool not available. Install docker to enable build validation."
                     )
-                    issue_total_found.labels(
-                        target=target_type, issue_type_category="BuildError"
-                    ).inc()
-
-                # 2. Lint with Hadolint
-                try:
-                    hadolint_proc = await asyncio.create_subprocess_exec(
-                        "hadolint",
+                else:
+                    # 1. Docker Build Test
+                    build_proc = await asyncio.create_subprocess_exec(
+                        "docker",
+                        "build",
+                        "-f",
                         str(dockerfile_path),
+                        "--no-cache",
+                        ".",
+                        cwd=temp_dir_path,  # Set cwd to temp_dir_path for build context
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                     )
-                    lint_stdout, lint_stderr = await hadolint_proc.communicate()
-                    # FIX: Only add lint issues when hadolint actually reports problems (returncode != 0)
-                    # When returncode is 0, hadolint found no issues, so don't add output to lint_issues
-                    if hadolint_proc.returncode != 0:
-                        lint_output_lines = (
-                            lint_stdout.decode().splitlines()
-                            + lint_stderr.decode().splitlines()
-                        )
-                        report["lint_issues"].extend(
-                            [line for line in lint_output_lines if line.strip()]
+                    stdout, stderr = await build_proc.communicate()
+
+                    report["build_output"] = stdout.decode("utf-8") + stderr.decode("utf-8")
+                    if build_proc.returncode == 0:
+                        report["build_status"] = "success"
+                    else:
+                        report["build_status"] = "failed"
+                        report["lint_issues"].append(
+                            f"Dockerfile failed to build: {stderr.decode('utf-8').strip()}"
                         )
                         issue_total_found.labels(
+                            target=target_type, issue_type_category="BuildError"
+                        ).inc()
+
+                # 2. Lint with Hadolint
+                # FIX: Check if hadolint is available before attempting to use it
+                if not shutil.which("hadolint"):
+                    logger.warning("Hadolint tool not found. Skipping Dockerfile linting.")
+                    report["lint_issues"].append(
+                        "Hadolint tool not available. Install hadolint to enable Dockerfile linting."
+                    )
+                else:
+                    try:
+                        hadolint_proc = await asyncio.create_subprocess_exec(
+                            "hadolint",
+                            str(dockerfile_path),
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                        lint_stdout, lint_stderr = await hadolint_proc.communicate()
+                        # FIX: Only add lint issues when hadolint actually reports problems (returncode != 0)
+                        # When returncode is 0, hadolint found no issues, so don't add output to lint_issues
+                        if hadolint_proc.returncode != 0:
+                            lint_output_lines = (
+                                lint_stdout.decode().splitlines()
+                                + lint_stderr.decode().splitlines()
+                            )
+                            report["lint_issues"].extend(
+                                [line for line in lint_output_lines if line.strip()]
+                            )
+                            issue_total_found.labels(
                             target=target_type, issue_type_category="HadolintLint"
                         ).inc(len(lint_output_lines))
                     # FIX: Set lint_status based on hadolint results

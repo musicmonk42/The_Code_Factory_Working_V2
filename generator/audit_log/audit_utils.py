@@ -57,12 +57,33 @@ log_action = _lazy_log_action
 # Optional dependency: Presidio for ML-based PII detection
 try:
     from presidio_analyzer import AnalyzerEngine
+    from presidio_analyzer.nlp_engine import NlpEngineProvider
     from presidio_anonymizer import AnonymizerEngine
 
     PRESIDIO_AVAILABLE = True
+    
+    # FIX: Configure Presidio to ignore unwanted entity types that cause log spam
+    # (CARDINAL, ORDINAL, WORK_OF_ART, PRODUCT)
+    configuration = {
+        "nlp_engine_name": "spacy",
+        "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
+        "ner_model_configuration": {
+            "labels_to_ignore": ["CARDINAL", "ORDINAL", "WORK_OF_ART", "PRODUCT"]
+        }
+    }
+    
     # FIX: Specify supported_languages to avoid warnings about non-English recognizers
-    analyzer = AnalyzerEngine(supported_languages=["en"])
+    nlp_engine_provider = NlpEngineProvider(nlp_configuration=configuration)
+    nlp_engine = nlp_engine_provider.create_engine()
+    analyzer = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=["en"])
     anonymizer = AnonymizerEngine()
+    
+    # FIX: Set presidio logger to ERROR level to reduce log spam
+    presidio_logger = logging.getLogger("presidio-analyzer")
+    presidio_logger.setLevel(logging.ERROR)
+    presidio_anonymizer_logger = logging.getLogger("presidio-anonymizer")
+    presidio_anonymizer_logger.setLevel(logging.ERROR)
+    
 except (ImportError, OSError):
     PRESIDIO_AVAILABLE = False
     AnalyzerEngine = None

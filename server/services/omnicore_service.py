@@ -1612,9 +1612,24 @@ class OmniCoreService:
                 requirements={"scan_types": scan_types, "auto_fix": auto_fix},
             )
             
-            # Extract results
+            # Extract results with type checking
             issues_found = len(critique_result.get("issues", []))
-            issues_fixed = len(critique_result.get("fixes_applied", []))
+            
+            # FIX: Handle both list and boolean return types for fixes_applied
+            # Some code paths in critique_agent return boolean, others return list
+            fixes_applied_raw = critique_result.get("fixes_applied", [])
+            if isinstance(fixes_applied_raw, bool):
+                # Boolean indicates whether fixes were applied (True/False)
+                issues_fixed = 1 if fixes_applied_raw else 0
+            elif isinstance(fixes_applied_raw, list):
+                # List contains the actual fixes that were applied
+                issues_fixed = len(fixes_applied_raw)
+            else:
+                # Defensive fallback for unexpected types
+                logger.warning(
+                    f"Unexpected type for fixes_applied: {type(fixes_applied_raw)}. Defaulting to 0."
+                )
+                issues_fixed = 0
             
             # Write critique report
             output_dir = repo_path / "reports"
