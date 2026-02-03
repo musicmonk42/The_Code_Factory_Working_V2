@@ -185,6 +185,7 @@ except ImportError as _logging_init_err:
 # REMOVED THE "if not TESTING:" CONDITION THAT WAS BREAKING IMPORTS
 try:
     from .runner_core import run_stress_tests, run_tests_in_sandbox, run_tests
+    from .runner_mutation import mutation_test, property_based_test
 except ImportError as e:
     import logging
 
@@ -222,6 +223,14 @@ except ImportError as e:
             "This functionality requires proper installation of the runner module."
         )
 
+    async def mutation_test(*args, **kwargs):
+        _logger.warning("mutation_test called but runner_mutation is not available")
+        raise NotImplementedError("mutation_test is not available.")
+
+    async def property_based_test(*args, **kwargs):
+        _logger.warning("property_based_test called but runner_mutation is not available")
+        raise NotImplementedError("property_based_test is not available.")
+
 
 __all__ = [
     "TESTING",
@@ -238,6 +247,8 @@ __all__ = [
     "run_tests_in_sandbox",  # NEW: Export for testgen_validator
     "run_stress_tests",  # NEW: Export for testgen_validator
     "run_tests",  # NEW: Export for critique_agent
+    "mutation_test",  # NEW: Export for mutation testing
+    "property_based_test",  # NEW: Export for property-based testing
     "runner_metrics",  # NEW: Export for metrics module access
 ]
 
