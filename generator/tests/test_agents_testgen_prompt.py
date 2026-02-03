@@ -83,6 +83,31 @@ def mock_add_provenance():
         yield mock
 
 
+@pytest.fixture
+def fresh_testgen_imports(mock_chromadb):
+    """Provide fresh imports of testgen_prompt classes that use the mocked chromadb.
+    
+    This fixture ensures that MultiVectorDBManager and related classes are imported
+    after the chromadb mock is in place, preventing ImportError for missing chromadb.
+    """
+    from generator.agents.testgen_agent.testgen_prompt import (
+        MultiVectorDBManager,
+        AdvancedTemplateTracker,
+        AdaptivePromptDirector,
+        DefaultPromptBuilder,
+        AgenticPromptBuilder,
+        build_agentic_prompt,
+    )
+    return {
+        "MultiVectorDBManager": MultiVectorDBManager,
+        "AdvancedTemplateTracker": AdvancedTemplateTracker,
+        "AdaptivePromptDirector": AdaptivePromptDirector,
+        "DefaultPromptBuilder": DefaultPromptBuilder,
+        "AgenticPromptBuilder": AgenticPromptBuilder,
+        "build_agentic_prompt": build_agentic_prompt,
+    }
+
+
 # ============================================================================
 # Test: Text Sanitization
 # ============================================================================
@@ -155,11 +180,9 @@ class TestTextSanitization:
 class TestMultiVectorDBManager:
     """Test RAG functionality with vector database"""
 
-    def test_initialization(self, mock_chromadb):
+    def test_initialization(self, fresh_testgen_imports):
         """Manager should initialize with all collections"""
-        # Import the class fresh to use patched chromadb
-        from generator.agents.testgen_agent.testgen_prompt import MultiVectorDBManager as MVDBManager
-        
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
         manager = MVDBManager()
 
         assert manager.client is not None
@@ -170,10 +193,9 @@ class TestMultiVectorDBManager:
         assert "historical_failures" in manager.collections
 
     @pytest.mark.asyncio
-    async def test_add_files(self, mock_chromadb, mock_add_provenance):
+    async def test_add_files(self, fresh_testgen_imports, mock_add_provenance):
         """Should add files to collection"""
-        from generator.agents.testgen_agent.testgen_prompt import MultiVectorDBManager as MVDBManager
-        
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
         manager = MVDBManager()
         files = {"test.py": "def test(): pass"}
 
@@ -185,10 +207,9 @@ class TestMultiVectorDBManager:
         mock_add_provenance.assert_called()
 
     @pytest.mark.asyncio
-    async def test_add_files_invalid_collection(self, mock_chromadb):
+    async def test_add_files_invalid_collection(self, fresh_testgen_imports):
         """Should raise error for invalid collection"""
-        from generator.agents.testgen_agent.testgen_prompt import MultiVectorDBManager as MVDBManager
-        
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
         manager = MVDBManager()
         files = {"test.py": "code"}
 
@@ -196,10 +217,9 @@ class TestMultiVectorDBManager:
             await manager.add_files("invalid", files)
 
     @pytest.mark.asyncio
-    async def test_query_relevant_context(self, mock_chromadb, mock_add_provenance):
+    async def test_query_relevant_context(self, fresh_testgen_imports, mock_add_provenance):
         """Should query and return context from collections"""
-        from generator.agents.testgen_agent.testgen_prompt import MultiVectorDBManager as MVDBManager
-        
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
         manager = MVDBManager()
 
         results = await manager.query_relevant_context(
@@ -211,10 +231,9 @@ class TestMultiVectorDBManager:
         manager.collections["codebase"].query.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_query_multiple_collections(self, mock_chromadb, mock_add_provenance):
+    async def test_query_multiple_collections(self, fresh_testgen_imports, mock_add_provenance):
         """Should query multiple collections"""
-        from generator.agents.testgen_agent.testgen_prompt import MultiVectorDBManager as MVDBManager
-        
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
         manager = MVDBManager()
 
         results = await manager.query_relevant_context(
@@ -225,12 +244,13 @@ class TestMultiVectorDBManager:
         assert "tests" in results
 
     @pytest.mark.asyncio
-    async def test_close(self, mock_chromadb, mock_add_provenance):
+    async def test_close(self, fresh_testgen_imports, mock_add_provenance):
         """Should clear resources on close"""
-        from generator.agents.testgen_agent.testgen_prompt import MultiVectorDBManager as MVDBManager
-        
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
         manager = MVDBManager()
         await manager.close()
+
+        assert len(manager.collections) == 0
 
         assert len(manager.collections) == 0
 
@@ -272,14 +292,11 @@ class TestAdvancedTemplateTracker:
 class TestAdaptivePromptDirector:
     """Test dynamic prompt routing"""
 
-    def test_initialization(self, mock_chromadb, temp_dir):
+    def test_initialization(self, fresh_testgen_imports, temp_dir):
         """Director should initialize with required dependencies"""
-        # Import fresh to use patched chromadb
-        from generator.agents.testgen_agent.testgen_prompt import (
-            MultiVectorDBManager as MVDBManager,
-            AdvancedTemplateTracker as ATTracker,
-            AdaptivePromptDirector as APDirector,
-        )
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
+        ATTracker = fresh_testgen_imports["AdvancedTemplateTracker"]
+        APDirector = fresh_testgen_imports["AdaptivePromptDirector"]
         
         tracker_dir = temp_dir / "tracker"
         tracker_dir.mkdir()
@@ -302,15 +319,12 @@ class TestAdaptivePromptDirector:
 class TestPromptBuilders:
     """Test prompt builder classes"""
 
-    def test_default_builder_init(self, mock_chromadb, temp_dir):
+    def test_default_builder_init(self, fresh_testgen_imports, temp_dir):
         """DefaultPromptBuilder should initialize with director"""
-        # Import fresh to use patched chromadb
-        from generator.agents.testgen_agent.testgen_prompt import (
-            MultiVectorDBManager as MVDBManager,
-            AdvancedTemplateTracker as ATTracker,
-            AdaptivePromptDirector as APDirector,
-            DefaultPromptBuilder as DPBuilder,
-        )
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
+        ATTracker = fresh_testgen_imports["AdvancedTemplateTracker"]
+        APDirector = fresh_testgen_imports["AdaptivePromptDirector"]
+        DPBuilder = fresh_testgen_imports["DefaultPromptBuilder"]
         
         tracker_dir = temp_dir / "tracker"
         tracker_dir.mkdir()
@@ -324,15 +338,12 @@ class TestPromptBuilders:
         assert builder is not None
 
     @pytest.mark.asyncio
-    async def test_default_builder_build(self, mock_chromadb, temp_dir):
+    async def test_default_builder_build(self, fresh_testgen_imports, temp_dir):
         """DefaultPromptBuilder should build prompts"""
-        # Import fresh to use patched chromadb
-        from generator.agents.testgen_agent.testgen_prompt import (
-            MultiVectorDBManager as MVDBManager,
-            AdvancedTemplateTracker as ATTracker,
-            AdaptivePromptDirector as APDirector,
-            DefaultPromptBuilder as DPBuilder,
-        )
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
+        ATTracker = fresh_testgen_imports["AdvancedTemplateTracker"]
+        APDirector = fresh_testgen_imports["AdaptivePromptDirector"]
+        DPBuilder = fresh_testgen_imports["DefaultPromptBuilder"]
         
         tracker_dir = temp_dir / "tracker"
         tracker_dir.mkdir()
@@ -380,10 +391,9 @@ class TestHelperFunctions:
     """Test module helper functions"""
 
     @pytest.mark.asyncio
-    async def test_build_agentic_prompt_handles_missing_templates(self, mock_chromadb, temp_dir):
+    async def test_build_agentic_prompt_handles_missing_templates(self, fresh_testgen_imports, temp_dir):
         """Should handle missing templates gracefully"""
-        # Import fresh to use patched chromadb
-        from generator.agents.testgen_agent.testgen_prompt import build_agentic_prompt as bap
+        bap = fresh_testgen_imports["build_agentic_prompt"]
         
         # Create empty template directory
         template_dir = temp_dir / "templates"
