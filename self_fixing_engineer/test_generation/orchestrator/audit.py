@@ -32,7 +32,7 @@ _logger = logging.getLogger(LOGGER_NAME)
 
 # Arbiter (external) audit logger availability probe
 try:
-    from arbiter.audit_log import audit_logger as arbiter_audit
+    from self_fixing_engineer.arbiter.audit_log import audit_logger as arbiter_audit
 
     AUDIT_LOGGER_AVAILABLE = True
 except ImportError:

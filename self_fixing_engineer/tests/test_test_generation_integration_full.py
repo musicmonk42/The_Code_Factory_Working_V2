@@ -41,21 +41,21 @@ async def test_full_cli_run_with_mocked_agents(tmp_path, runner):
     # We patch all dependencies of _generate_async, but we DON'T patch _generate_async itself.
     with (
         patch(
-            "test_generation.gen_agent.cli.run_dependency_check",
+            "self_fixing_engineer.test_generation.gen_agent.cli.run_dependency_check",
             new=AsyncMock(return_value=None),
         ),
         patch(
-            "test_generation.gen_agent.cli.init_llm",
+            "self_fixing_engineer.test_generation.gen_agent.cli.init_llm",
             new=AsyncMock(return_value=MagicMock()),
         ),
         patch(
-            "test_generation.gen_agent.cli.ensure_session_file",
+            "self_fixing_engineer.test_generation.gen_agent.cli.ensure_session_file",
             new=AsyncMock(return_value=mocked_session_state),
         ),
-        patch("test_generation.gen_agent.graph.build_graph", return_value=object()),
-        patch("test_generation.gen_agent.graph.invoke_graph", new=fake_invoke_graph),
+        patch("self_fixing_engineer.test_generation.gen_agent.graph.build_graph", return_value=object()),
+        patch("self_fixing_engineer.test_generation.gen_agent.graph.invoke_graph", new=fake_invoke_graph),
         patch(
-            "test_generation.gen_agent.io_utils.append_to_feedback_log", new=AsyncMock()
+            "self_fixing_engineer.test_generation.gen_agent.io_utils.append_to_feedback_log", new=AsyncMock()
         ) as mock_append,
         patch("sys.exit") as mock_exit,
     ):  # Prevent actual sys.exit calls
@@ -132,17 +132,17 @@ async def test_graph_with_real_agent_mocks(tmp_path):
     from test_generation.gen_agent import graph as real_graph
 
     with (
-        patch("test_generation.gen_agent.graph.planner_agent", fake_planner),
-        patch("test_generation.gen_agent.graph.generator_agent", fake_generator),
-        patch("test_generation.gen_agent.graph.judge_agent", fake_judge),
-        patch("test_generation.gen_agent.graph.refiner_agent", fake_refiner),
+        patch("self_fixing_engineer.test_generation.gen_agent.graph.planner_agent", fake_planner),
+        patch("self_fixing_engineer.test_generation.gen_agent.graph.generator_agent", fake_generator),
+        patch("self_fixing_engineer.test_generation.gen_agent.graph.judge_agent", fake_judge),
+        patch("self_fixing_engineer.test_generation.gen_agent.graph.refiner_agent", fake_refiner),
         patch(
-            "test_generation.gen_agent.graph.adaptive_test_executor_agent",
+            "self_fixing_engineer.test_generation.gen_agent.graph.adaptive_test_executor_agent",
             fake_executor,
         ),
-        patch("test_generation.gen_agent.graph.security_agent", fake_security),
-        patch("test_generation.gen_agent.graph.performance_agent", fake_perf),
-        patch("test_generation.gen_agent.graph.init_llm", return_value=None),
+        patch("self_fixing_engineer.test_generation.gen_agent.graph.security_agent", fake_security),
+        patch("self_fixing_engineer.test_generation.gen_agent.graph.performance_agent", fake_perf),
+        patch("self_fixing_engineer.test_generation.gen_agent.graph.init_llm", return_value=None),
     ):
 
         g = real_graph.build_graph(llm=None)

@@ -87,12 +87,12 @@ def orchestrator(project: Path, monkeypatch):
         return Mock()
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.GenerationOrchestrator._load_component",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.GenerationOrchestrator._load_component",
         mock_load_component,
     )
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.aiofiles.open", mock_aiofiles_open
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.aiofiles.open", mock_aiofiles_open
     )
 
     @asynccontextmanager
@@ -100,41 +100,41 @@ def orchestrator(project: Path, monkeypatch):
         yield "/dummy/venv"
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.temporary_env",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.temporary_env",
         mock_temporary_env_context,
     )
 
     monkeypatch.setattr("shutil.move", Mock())
-    monkeypatch.setattr("test_generation.orchestrator.orchestrator.shutil.move", Mock())
+    monkeypatch.setattr("self_fixing_engineer.test_generation.orchestrator.orchestrator.shutil.move", Mock())
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.os.path.getsize",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.os.path.getsize",
         Mock(return_value=1),
     )
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.cleanup_path_safe", AsyncMock()
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.cleanup_path_safe", AsyncMock()
     )
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.audit_event", AsyncMock()
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.audit_event", AsyncMock()
     )
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
         AsyncMock(return_value=(True, 10.0, "Passed")),
     )
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator._write_sarif_atomically",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator._write_sarif_atomically",
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.compare_files",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.compare_files",
         Mock(return_value=True),
     )
 
     # FIX: Patch the compliance report generation function to prevent it from executing real code
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.generate_compliance_report",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.generate_compliance_report",
         AsyncMock(),
     )
 
@@ -195,7 +195,7 @@ async def test_stub_initialization(project: Path, monkeypatch):
         raise InitializationError("Failed to load")
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.GenerationOrchestrator._load_component",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.GenerationOrchestrator._load_component",
         mock_load_component_failing,
     )
 
@@ -250,7 +250,7 @@ async def test_jira_integration(orchestrator, project: Path, monkeypatch):
     (project / test_path).write_text("def test_dummy(): assert False")
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
         AsyncMock(return_value=(False, 0.0, "Failed")),
     )
 
@@ -280,13 +280,13 @@ async def test_compliance_reporting(orchestrator, project: Path, monkeypatch):
     (project / test_path).write_text("def test_dummy(): assert True")
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
         AsyncMock(return_value=(True, 10.0, "Passed")),
     )
 
     mock_compliance = AsyncMock()
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.generate_compliance_report",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.generate_compliance_report",
         mock_compliance,
     )
 

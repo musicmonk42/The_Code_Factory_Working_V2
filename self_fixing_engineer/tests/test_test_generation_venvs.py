@@ -28,7 +28,7 @@ import pytest
 
 def _import_venvs():
     # Fix: Correct the import path to match the project structure
-    return importlib.import_module("test_generation.orchestrator.venvs")
+    return importlib.import_module("self_fixing_engineer.test_generation.orchestrator.venvs")
 
 
 @pytest.fixture(autouse=True)
@@ -40,8 +40,8 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture
 def venvs(monkeypatch: pytest.MonkeyPatch):
     # Reload to reset globals between tests
-    if "test_generation.orchestrator.venvs" in sys.modules:
-        del sys.modules["test_generation.orchestrator.venvs"]
+    if "self_fixing_engineer.test_generation.orchestrator.venvs" in sys.modules:
+        del sys.modules["self_fixing_engineer.test_generation.orchestrator.venvs"]
     return _import_venvs()
 
 

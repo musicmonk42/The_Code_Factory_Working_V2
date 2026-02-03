@@ -20,9 +20,9 @@ from typing import Any, Dict, Optional
 # Configure module logger
 logger = logging.getLogger(__name__)
 
-# Try to import from arbiter.config if it exists
+# Try to import from self_fixing_engineer.arbiter.config if it exists
 try:
-    from arbiter.config import ArbiterConfig
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
 
     _has_arbiter_config = True
 except ImportError:
@@ -151,7 +151,7 @@ class GlobalConfigManager:
     @classmethod
     def _load_config(cls) -> ConfigWrapper:
         """
-        Load configuration from arbiter.config or create minimal fallback config.
+        Load configuration from self_fixing_engineer.arbiter.config or create minimal fallback config.
 
         This method attempts to load the full ArbiterConfig, falling back to
         a minimal environment-based configuration if that fails.

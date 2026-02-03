@@ -23,12 +23,12 @@ class SFEPlatform:
 
         try:
             # Import and initialize config
-            from arbiter.config import ArbiterConfig
+            from self_fixing_engineer.arbiter.config import ArbiterConfig
 
             config = ArbiterConfig.initialize()
 
             # Start the arena in the main process
-            from arbiter.arena import run_arena_async
+            from self_fixing_engineer.arbiter.arena import run_arena_async
 
             print("✓ Configuration loaded")
             print(f"  - Database: {config.DATABASE_URL}")
@@ -112,7 +112,7 @@ async def check_status():
     print("\nChecking system status...")
 
     try:
-        from arbiter.config import ArbiterConfig
+        from self_fixing_engineer.arbiter.config import ArbiterConfig
 
         config = ArbiterConfig.initialize()
         print("✓ Configuration loaded")
@@ -162,7 +162,7 @@ async def simple_scan() -> None:
     print("\nStarting simplified codebase scan...")
 
     try:
-        from arbiter.codebase_analyzer import CodebaseAnalyzer
+        from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer
 
         # Use the package directory instead of hardcoded path
         import os

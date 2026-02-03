@@ -17,13 +17,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Mock all SIEM modules before importing
-sys.modules["simulation.plugins.siem_base"] = MagicMock()
-sys.modules["simulation.plugins.siem_factory"] = MagicMock()
-sys.modules["simulation.plugins.siem_generic_clients"] = MagicMock()
-sys.modules["simulation.plugins.siem_aws_clients"] = MagicMock()
-sys.modules["simulation.plugins.siem_azure_clients"] = MagicMock()
-sys.modules["simulation.plugins.siem_gcp_clients"] = MagicMock()
-sys.modules["simulation.plugins.siem_main"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.plugins.siem_base"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.plugins.siem_factory"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.plugins.siem_generic_clients"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.plugins.siem_aws_clients"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.plugins.siem_azure_clients"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.plugins.siem_gcp_clients"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.plugins.siem_main"] = MagicMock()
 
 
 # Mock exception classes

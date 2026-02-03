@@ -7,15 +7,15 @@ from unittest.mock import AsyncMock, patch
 import click
 import pytest
 from click.testing import CliRunner
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     DLTClientConfigurationError,
     DLTClientError,
     _base_logger,
 )
-from simulation.plugins.dlt_clients.dlt_factory import DLTFactory
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_factory import DLTFactory
 
 # Import the CLI and core components
-from simulation.plugins.dlt_clients.dlt_main import cli
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_main import cli
 
 
 @pytest.fixture(autouse=True)
@@ -63,11 +63,11 @@ def mock_factory(mocker, mock_dlt_client):
     )
     # Mock alert_operator to avoid actual alerts during tests
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_main.alert_operator", new=AsyncMock()
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_main.alert_operator", new=AsyncMock()
     )
     # Mock scrub_secrets to just return the input unchanged
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
     )
     return mock_dlt_client
 
@@ -296,7 +296,7 @@ def test_cli_invalid_json_in_config(mocker, tmp_path):
         DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"]
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
     )
 
     invalid_json_file = tmp_path / "invalid.json"
@@ -336,10 +336,10 @@ def test_cli_dlt_client_configuration_error(mocker, mock_config_file):
         ),
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_main.alert_operator", new=AsyncMock()
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_main.alert_operator", new=AsyncMock()
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
     )
 
     runner = CliRunner()
@@ -372,7 +372,7 @@ def test_cli_dlt_client_error(mocker, mock_config_file):
         DLTFactory, "get_dlt_client", new=AsyncMock(return_value=mock_client)
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
     )
 
     runner = CliRunner()
@@ -397,7 +397,7 @@ def test_cli_write_checkpoint_invalid_metadata(
         DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"]
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
     )
 
     runner = CliRunner()
@@ -433,7 +433,7 @@ def test_cli_verbose_flag(mock_factory, mock_config_file):
     Test that the verbose flag enables debug logging.
     """
     runner = CliRunner()
-    with patch("simulation.plugins.dlt_clients.dlt_main._base_logger") as mock_logger:
+    with patch("self_fixing_engineer.simulation.plugins.dlt_clients.dlt_main._base_logger") as mock_logger:
         result = runner.invoke(
             cli,
             [

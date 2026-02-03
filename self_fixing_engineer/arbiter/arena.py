@@ -74,11 +74,11 @@ from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer
 from self_fixing_engineer.arbiter.config import ArbiterConfig
 from self_fixing_engineer.arbiter.feedback import FeedbackManager
 
-# REMOVED: from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+# REMOVED: from self_fixing_engineer.arbiter.human_loop import HumanInLoop, HumanInLoopConfig
 # Using lazy import to avoid circular dependencies
 from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
 
-# NEW: Import metric creation helpers from arbiter.metrics
+# NEW: Import metric creation helpers from self_fixing_engineer.arbiter.metrics
 from self_fixing_engineer.arbiter.metrics import get_or_create_counter, get_or_create_gauge
 from self_fixing_engineer.arbiter.monitoring import Monitor
 from self_fixing_engineer.arbiter.otel_config import get_tracer
@@ -167,7 +167,7 @@ arena_errors_total = get_or_create_prom_counter(
 )
 
 # Fixed: Removed duplicate _metrics_lock and get_or_create_counter/gauge definitions (lines 129-157)
-# The functions are already imported from arbiter.metrics and wrapped above
+# The functions are already imported from self_fixing_engineer.arbiter.metrics and wrapped above
 
 
 def require_auth(func: Callable) -> Callable:

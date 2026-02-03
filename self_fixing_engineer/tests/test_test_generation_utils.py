@@ -407,7 +407,7 @@ async def test_run_pytest_and_coverage_success(temp_project_root, mock_config):
         patch("os.path.exists", return_value=True),
         patch("asyncio.create_subprocess_exec") as mock_exec,
         patch(
-            "test_generation.utils.parse_coverage_delta", AsyncMock(return_value=80.0)
+            "self_fixing_engineer.test_generation.utils.parse_coverage_delta", AsyncMock(return_value=80.0)
         ),
     ):
         mock_process = AsyncMock()
@@ -463,7 +463,7 @@ async def test_run_jest_and_coverage_success(temp_project_root, mock_config):
         patch("os.path.exists", return_value=True),
         patch("asyncio.create_subprocess_exec") as mock_exec,
         patch(
-            "test_generation.utils.parse_coverage_delta", AsyncMock(return_value=75.0)
+            "self_fixing_engineer.test_generation.utils.parse_coverage_delta", AsyncMock(return_value=75.0)
         ),
     ):
         mock_process = AsyncMock()
@@ -501,7 +501,7 @@ async def test_run_junit_and_coverage_success(temp_project_root, mock_config):
         patch("os.path.exists", return_value=True),
         patch("asyncio.create_subprocess_exec") as mock_exec,
         patch(
-            "test_generation.utils.parse_coverage_delta", AsyncMock(return_value=85.0)
+            "self_fixing_engineer.test_generation.utils.parse_coverage_delta", AsyncMock(return_value=85.0)
         ),
     ):
         mock_process = AsyncMock()
@@ -621,7 +621,7 @@ async def test_monitor_and_prioritize_uncovered_code(
         f.write(xml_content)
 
     with patch(
-        "test_generation.utils.scan_for_uncovered_code_from_xml",
+        "self_fixing_engineer.test_generation.utils.scan_for_uncovered_code_from_xml",
         return_value=["module1"],
     ):
         targets = await monitor_and_prioritize_uncovered_code(
@@ -648,7 +648,7 @@ async def test_monitor_and_prioritize_uncovered_code_policy_denied(
         return_value=(False, "Policy denied")
     )
     with patch(
-        "test_generation.utils.scan_for_uncovered_code_from_xml",
+        "self_fixing_engineer.test_generation.utils.scan_for_uncovered_code_from_xml",
         return_value=["module1"],
     ):
         targets = await monitor_and_prioritize_uncovered_code(

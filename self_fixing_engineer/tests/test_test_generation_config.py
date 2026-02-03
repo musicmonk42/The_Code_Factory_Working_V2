@@ -22,7 +22,7 @@ if str(MODULE_ROOT) not in sys.path:
 
 import importlib
 
-config = importlib.import_module("test_generation.orchestrator.config")
+config = importlib.import_module("self_fixing_engineer.test_generation.orchestrator.config")
 
 
 # -----------------------------

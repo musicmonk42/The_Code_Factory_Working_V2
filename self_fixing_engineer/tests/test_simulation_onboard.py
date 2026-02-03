@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Import the onboard module from the correct path
-import simulation.plugins.onboard as onboard_module
+import self_fixing_engineer.simulation.plugins.onboard as onboard_module
 from cryptography.fernet import Fernet
-from simulation.plugins.onboard import (
+from self_fixing_engineer.simulation.plugins.onboard import (
     _generate_secure_config,
     _get_user_input,
     _load_secure_config,
@@ -67,23 +67,23 @@ def mock_external_dependencies():
     # Create patches list that we'll apply
     patches = [
         # Don't mock os.makedirs - we need real directories to be created
-        patch("simulation.plugins.onboard.MESH_ADAPTER_AVAILABLE", True),
-        patch("simulation.plugins.onboard.CHECKPOINT_AVAILABLE", True),
-        patch("simulation.plugins.onboard.vault_available", True),
-        patch("simulation.plugins.onboard.crypto_available", True),
-        patch("simulation.plugins.onboard.prometheus_available", True),
-        patch("simulation.plugins.onboard.tenacity_available", True),
+        patch("self_fixing_engineer.simulation.plugins.onboard.MESH_ADAPTER_AVAILABLE", True),
+        patch("self_fixing_engineer.simulation.plugins.onboard.CHECKPOINT_AVAILABLE", True),
+        patch("self_fixing_engineer.simulation.plugins.onboard.vault_available", True),
+        patch("self_fixing_engineer.simulation.plugins.onboard.crypto_available", True),
+        patch("self_fixing_engineer.simulation.plugins.onboard.prometheus_available", True),
+        patch("self_fixing_engineer.simulation.plugins.onboard.tenacity_available", True),
         patch(
-            "simulation.plugins.onboard.aiofiles_available", False
+            "self_fixing_engineer.simulation.plugins.onboard.aiofiles_available", False
         ),  # Use sync file operations
-        patch("simulation.plugins.onboard.requests.post"),
+        patch("self_fixing_engineer.simulation.plugins.onboard.requests.post"),
         (
-            patch("simulation.plugins.onboard.hvac.Client")
+            patch("self_fixing_engineer.simulation.plugins.onboard.hvac.Client")
             if hasattr(onboard_module, "hvac")
             else None
         ),
-        patch("simulation.plugins.onboard.subprocess.run"),
-        patch("simulation.plugins.onboard.webbrowser.open"),
+        patch("self_fixing_engineer.simulation.plugins.onboard.subprocess.run"),
+        patch("self_fixing_engineer.simulation.plugins.onboard.webbrowser.open"),
     ]
 
     # Filter out None patches
@@ -139,17 +139,17 @@ def mock_filesystem():
         os.makedirs(ci_dir, exist_ok=True)
 
         with (
-            patch("simulation.plugins.onboard.script_dir", temp_path),
-            patch("simulation.plugins.onboard.CONFIG_DIR", configs_dir),
-            patch("simulation.plugins.onboard.PLUGINS_DIR", plugins_dir),
-            patch("simulation.plugins.onboard.RESULTS_DIR", results_dir),
-            patch("simulation.plugins.onboard.CI_DIR", ci_dir),
+            patch("self_fixing_engineer.simulation.plugins.onboard.script_dir", temp_path),
+            patch("self_fixing_engineer.simulation.plugins.onboard.CONFIG_DIR", configs_dir),
+            patch("self_fixing_engineer.simulation.plugins.onboard.PLUGINS_DIR", plugins_dir),
+            patch("self_fixing_engineer.simulation.plugins.onboard.RESULTS_DIR", results_dir),
+            patch("self_fixing_engineer.simulation.plugins.onboard.CI_DIR", ci_dir),
             patch(
-                "simulation.plugins.onboard.SECURE_CONFIG_PATH",
+                "self_fixing_engineer.simulation.plugins.onboard.SECURE_CONFIG_PATH",
                 configs_dir / "secure.json",
             ),
             patch(
-                "simulation.plugins.onboard.SECURE_KEY_PATH", configs_dir / "secure.key"
+                "self_fixing_engineer.simulation.plugins.onboard.SECURE_KEY_PATH", configs_dir / "secure.key"
             ),
         ):
 
@@ -190,9 +190,9 @@ async def test_onboarding_wizard_full_flow(
     """
     with (
         patch("builtins.input", side_effect=mock_user_input),
-        patch("simulation.plugins.onboard.print_status") as mock_print_status,
-        patch("simulation.plugins.onboard._non_interactive", return_value=False),
-        patch("simulation.plugins.onboard._check_existing_configs"),
+        patch("self_fixing_engineer.simulation.plugins.onboard.print_status") as mock_print_status,
+        patch("self_fixing_engineer.simulation.plugins.onboard._non_interactive", return_value=False),
+        patch("self_fixing_engineer.simulation.plugins.onboard._check_existing_configs"),
     ):
 
         args = argparse.Namespace(
@@ -234,7 +234,7 @@ async def test_safe_mode_profile_generation(
     mock_filesystem, mock_external_dependencies
 ):
     """Test the --safe mode to ensure local-only config is generated."""
-    with patch("simulation.plugins.onboard.print_status"):
+    with patch("self_fixing_engineer.simulation.plugins.onboard.print_status"):
         await _safe_mode_profile()
 
     config_path = mock_filesystem["temp_path"] / "configs" / "config.json"
@@ -266,7 +266,7 @@ async def test_run_health_checks_with_failures(
         "checkpoint_backend": {"type": "fs", "dir": "./checkpoints"},
     }
 
-    with patch("simulation.plugins.onboard.print_status") as mock_print_status:
+    with patch("self_fixing_engineer.simulation.plugins.onboard.print_status") as mock_print_status:
         await _run_health_checks(mock_config)
 
         # Verify that an error message was printed for the failed check
@@ -287,8 +287,8 @@ async def test_reset_to_safe_mode(mock_filesystem, mock_external_dependencies):
     dummy_config.write_text("{}")
 
     with (
-        patch("simulation.plugins.onboard.print_status"),
-        patch("simulation.plugins.onboard._non_interactive", return_value=True),
+        patch("self_fixing_engineer.simulation.plugins.onboard.print_status"),
+        patch("self_fixing_engineer.simulation.plugins.onboard._non_interactive", return_value=True),
     ):
         await _reset_to_safe_mode()
 
@@ -310,10 +310,10 @@ def test_generate_secure_config_local_encrypted(
 ):
     """Test local secret encryption and storage."""
     with (
-        patch("simulation.plugins.onboard.print_status"),
-        patch("simulation.plugins.onboard.crypto_available", True),
-        patch("simulation.plugins.onboard.Fernet") as mock_fernet,
-        patch("simulation.plugins.onboard._read_or_create_key") as mock_read_key,
+        patch("self_fixing_engineer.simulation.plugins.onboard.print_status"),
+        patch("self_fixing_engineer.simulation.plugins.onboard.crypto_available", True),
+        patch("self_fixing_engineer.simulation.plugins.onboard.Fernet") as mock_fernet,
+        patch("self_fixing_engineer.simulation.plugins.onboard._read_or_create_key") as mock_read_key,
     ):
 
         # Mock Fernet to return a predictable encrypted value
@@ -364,8 +364,8 @@ def test_load_secure_config_local_decrypted(
         f.write(key)
 
     with (
-        patch("simulation.plugins.onboard.crypto_available", True),
-        patch("simulation.plugins.onboard.print_status"),
+        patch("self_fixing_engineer.simulation.plugins.onboard.crypto_available", True),
+        patch("self_fixing_engineer.simulation.plugins.onboard.print_status"),
     ):
         loaded_secrets = _load_secure_config()
         assert loaded_secrets["TEST_SECRET"] == "my-test-secret"
@@ -401,7 +401,7 @@ def plugin_health():
     with open(plugin_path, "w") as f:
         f.write(plugin_content)
 
-    with patch("simulation.plugins.onboard.print_status") as mock_print_status:
+    with patch("self_fixing_engineer.simulation.plugins.onboard.print_status") as mock_print_status:
         _run_basic_onboarding_tests()
 
         # Check that tests passed
@@ -415,7 +415,7 @@ def plugin_health():
 
 def test_get_user_input_non_interactive():
     """Test that non-interactive mode returns defaults."""
-    with patch("simulation.plugins.onboard._non_interactive", return_value=True):
+    with patch("self_fixing_engineer.simulation.plugins.onboard._non_interactive", return_value=True):
         result = _get_user_input("Test prompt", default="default_value")
         assert result == "default_value"
 

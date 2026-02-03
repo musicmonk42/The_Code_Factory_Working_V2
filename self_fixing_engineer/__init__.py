@@ -31,7 +31,7 @@ __all__ = ["__version__"]
 # --- Module Aliasing for Backwards Compatibility ---
 # This must be done BEFORE any submodule imports to prevent duplicate module loading.
 # Many internal modules use relative imports like 'from simulation.xyz import ...'
-# or 'from arbiter.xyz import ...', which need to resolve to the full package path.
+# or 'from self_fixing_engineer.arbiter.xyz import ...', which need to resolve to the full package path.
 
 # Define modules to alias for backwards compatibility
 _MODULE_ALIASES = [

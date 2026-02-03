@@ -73,7 +73,7 @@ async def test_build_graph_with_langgraph_available():
 
     # Fix: Correct the mock target from `LangGraphStateGraph` to `StateGraph`.
     with patch(
-        "test_generation.gen_agent.graph.StateGraph", return_value=fake_state_graph
+        "self_fixing_engineer.test_generation.gen_agent.graph.StateGraph", return_value=fake_state_graph
     ):
         g = graph.build_graph(llm=MagicMock())
         assert g == "compiled_graph"
@@ -85,42 +85,42 @@ async def test_build_graph_with_langgraph_available():
 async def test_build_graph_without_langgraph_falls_back():
     """Should build fallback sequential runner if LangGraph not available."""
     # Fix: The `LANGGRAPH_AVAILABLE` flag is now defined in graph.py and can be patched.
-    with patch("test_generation.gen_agent.graph.LANGGRAPH_AVAILABLE", False):
+    with patch("self_fixing_engineer.test_generation.gen_agent.graph.LANGGRAPH_AVAILABLE", False):
         g = graph.build_graph(llm=MagicMock())
         assert asyncio.iscoroutinefunction(g.ainvoke)
         # Run fallback with mocked agents
         state = {}
         with (
             patch(
-                "test_generation.gen_agent.graph.planner_agent",
+                "self_fixing_engineer.test_generation.gen_agent.graph.planner_agent",
                 AsyncMock(return_value=state),
             ),
             patch(
-                "test_generation.gen_agent.graph.generator_agent",
+                "self_fixing_engineer.test_generation.gen_agent.graph.generator_agent",
                 AsyncMock(return_value=state),
             ),
             patch(
-                "test_generation.gen_agent.graph.judge_agent",
+                "self_fixing_engineer.test_generation.gen_agent.graph.judge_agent",
                 AsyncMock(return_value=state),
             ),
             patch(
-                "test_generation.gen_agent.graph.refiner_agent",
+                "self_fixing_engineer.test_generation.gen_agent.graph.refiner_agent",
                 AsyncMock(return_value=state),
             ),
             patch(
-                "test_generation.gen_agent.graph.adaptive_test_executor_agent",
+                "self_fixing_engineer.test_generation.gen_agent.graph.adaptive_test_executor_agent",
                 AsyncMock(return_value=state),
             ),
             patch(
-                "test_generation.gen_agent.graph.security_agent",
+                "self_fixing_engineer.test_generation.gen_agent.graph.security_agent",
                 AsyncMock(return_value=state),
             ),
             patch(
-                "test_generation.gen_agent.graph.performance_agent",
+                "self_fixing_engineer.test_generation.gen_agent.graph.performance_agent",
                 AsyncMock(return_value=state),
             ),
             patch(
-                "test_generation.gen_agent.graph._decide_to_refine",
+                "self_fixing_engineer.test_generation.gen_agent.graph._decide_to_refine",
                 return_value="execute",
             ),
         ):

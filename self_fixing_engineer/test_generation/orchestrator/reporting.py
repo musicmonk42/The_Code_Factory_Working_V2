@@ -143,7 +143,7 @@ logger = logging.getLogger(__name__)
 # --- CRITICAL DEPENDENCY CHECK ---
 # This is a hard failure on import if critical dependencies are missing.
 try:
-    from arbiter.audit_log import audit_logger
+    from self_fixing_engineer.arbiter.audit_log import audit_logger
 
     AUDIT_LOGGER_AVAILABLE = True
 except ImportError:

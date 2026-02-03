@@ -76,7 +76,7 @@ def orchestrator(project: Path, monkeypatch):
         return AsyncMock()
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.GenerationOrchestrator._load_component",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.GenerationOrchestrator._load_component",
         mock_load_component,
     )
 
@@ -85,25 +85,25 @@ def orchestrator(project: Path, monkeypatch):
         yield "/dummy/venv"
 
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.temporary_env",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.temporary_env",
         mock_temporary_env_context,
     )
 
     # FIX: Patch the awaited functions at the correct module level
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
         AsyncMock(return_value=(True, 10.0, "Passed")),
     )
-    monkeypatch.setattr("test_generation.orchestrator.orchestrator.shutil.move", Mock())
-    monkeypatch.setattr("test_generation.orchestrator.orchestrator.os.makedirs", Mock())
+    monkeypatch.setattr("self_fixing_engineer.test_generation.orchestrator.orchestrator.shutil.move", Mock())
+    monkeypatch.setattr("self_fixing_engineer.test_generation.orchestrator.orchestrator.os.makedirs", Mock())
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.aiofiles.open", mock_aiofiles_open
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.aiofiles.open", mock_aiofiles_open
     )
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.cleanup_path_safe", AsyncMock()
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.cleanup_path_safe", AsyncMock()
     )
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator._write_sarif_atomically", AsyncMock()
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator._write_sarif_atomically", AsyncMock()
     )
 
     return GenerationOrchestrator(config, str(project), "tests")
@@ -131,7 +131,7 @@ async def test_quarantine_on_failing_test(orchestrator, project: Path, monkeypat
     test_path = sanitize_path("atco_artifacts/generated/test_module1.py", str(project))
     (project / test_path).write_text("def test_dummy(): assert True")
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
         AsyncMock(return_value=(False, 0.0, "Test failed")),
     )
     result = await orchestrator.integrate_and_validate_generated_tests(gen_summary)
@@ -152,7 +152,7 @@ async def test_quarantine_on_low_coverage(orchestrator, project: Path, monkeypat
     test_path = sanitize_path("atco_artifacts/generated/test_module1.py", str(project))
     (project / test_path).write_text("def test_dummy(): assert True")
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
         AsyncMock(return_value=(True, 0.0, "Passed")),
     )
     result = await orchestrator.integrate_and_validate_generated_tests(gen_summary)
@@ -179,7 +179,7 @@ async def test_quarantine_on_security_issues(orchestrator, project: Path, monkey
     )
     monkeypatch.setattr(orchestrator, "security_scanner", mock_scanner)
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
         AsyncMock(return_value=(True, 10.0, "Passed")),
     )
     result = await orchestrator.integrate_and_validate_generated_tests(gen_summary)
@@ -210,7 +210,7 @@ async def test_quarantine_on_low_mutation_score(
         "min_score_for_integration": 50.0,
     }
     monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
+        "self_fixing_engineer.test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
         AsyncMock(return_value=(True, 10.0, "Passed")),
     )
     result = await orchestrator.integrate_and_validate_generated_tests(gen_summary)

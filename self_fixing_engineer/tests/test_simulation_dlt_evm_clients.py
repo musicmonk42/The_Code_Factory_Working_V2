@@ -16,13 +16,13 @@ except ImportError:
 if not WEB3_AVAILABLE:
     pytest.skip("web3 library not installed - skipping EVM client tests", allow_module_level=True)
 
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     SECRETS_MANAGER,
     DLTClientConfigurationError,
     DLTClientValidationError,
     _base_logger,
 )
-from simulation.plugins.dlt_clients.dlt_evm_clients import EthereumClientWrapper
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_evm_clients import EthereumClientWrapper
 
 
 # A mock off-chain client that can be passed to the DLT client
@@ -111,10 +111,10 @@ def mock_web3_provider(mocker):
     mock_w3.eth.contract = MagicMock(return_value=mock_contract)
 
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_evm_clients.Web3", return_value=mock_w3
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_evm_clients.Web3", return_value=mock_w3
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_evm_clients.HTTPProvider",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_evm_clients.HTTPProvider",
         return_value=MagicMock(),
     )
     return mock_w3
@@ -201,7 +201,7 @@ async def test_evm_init_failure_private_key_source_in_prod(mock_off_chain, mocke
     """
     Test that initialization fails in production mode if a private key is provided directly.
     """
-    mocker.patch("simulation.plugins.dlt_clients.dlt_evm_clients.PRODUCTION_MODE", True)
+    mocker.patch("self_fixing_engineer.simulation.plugins.dlt_clients.dlt_evm_clients.PRODUCTION_MODE", True)
     mocker.patch("os.path.exists", return_value=True)
     mocker.patch("builtins.open", mocker.mock_open(read_data="[]"))
 
@@ -234,7 +234,7 @@ async def test_evm_init_secrets_backend_unavailable(
     mocker.patch("os.path.exists", return_value=True)
     mocker.patch("builtins.open", mocker.mock_open(read_data="[]"))
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_evm_clients.AWS_SECRETS_AVAILABLE", False
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_evm_clients.AWS_SECRETS_AVAILABLE", False
     )
 
     # Set environment to avoid validation error

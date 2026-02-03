@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
-from simulation.parallel import (
+from self_fixing_engineer.simulation.parallel import (
     ParallelConfig,
     ProgressReporter,
     RayRLlibConcurrencyTuner,
@@ -33,7 +33,7 @@ except ImportError:
     PYDANTIC_AVAILABLE = False
 
 try:
-    from simulation.parallel import (
+    from self_fixing_engineer.simulation.parallel import (
         KUBERNETES_AVAILABLE,
         PROMETHEUS_AVAILABLE,
         RLLIB_AVAILABLE,
@@ -104,7 +104,7 @@ def test_get_or_create_metric_success():
 
 def test_parallel_config_load_success(temp_yaml_file, mock_config_data, monkeypatch):
     """Test successful loading of ParallelConfig."""
-    monkeypatch.setattr("simulation.parallel.PYDANTIC_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel.PYDANTIC_AVAILABLE", True)
     with open(temp_yaml_file, "w") as f:
         yaml.dump(mock_config_data, f)
     config = ParallelConfig.load_from_yaml(str(temp_yaml_file))
@@ -143,10 +143,10 @@ async def test_ray_rllib_concurrency_tuner_init_success(
 
     # RLlib available, tuner enabled, gymnasium available
     mock_rl_tuner_config.enabled = True
-    monkeypatch.setattr("simulation.parallel.Policy", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel.Policy", MagicMock())
 
     # Patch gymnasium import inside the function to avoid ModuleNotFoundError
-    with patch("simulation.parallel.gymnasium.spaces", MagicMock()):
+    with patch("self_fixing_engineer.simulation.parallel.gymnasium.spaces", MagicMock()):
         tuner = RayRLlibConcurrencyTuner(mock_rl_tuner_config)
         assert tuner.policy is not None
 
@@ -233,16 +233,16 @@ async def test_execute_local_asyncio_success():
 @pytest.mark.asyncio
 async def test_execute_kubernetes_success(monkeypatch):
     """Test successful Kubernetes execution."""
-    monkeypatch.setattr("simulation.parallel.K8S_AVAILABLE", True)
-    monkeypatch.setattr("simulation.parallel.k8s_client.V1Job", MagicMock())
-    monkeypatch.setattr("simulation.parallel.k8s_client.V1JobSpec", MagicMock())
-    monkeypatch.setattr("simulation.parallel.k8s_client.V1PodTemplateSpec", MagicMock())
-    monkeypatch.setattr("simulation.parallel.k8s_client.V1PodSpec", MagicMock())
-    monkeypatch.setattr("simulation.parallel.k8s_client.V1Container", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel.K8S_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel.k8s_client.V1Job", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel.k8s_client.V1JobSpec", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel.k8s_client.V1PodTemplateSpec", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel.k8s_client.V1PodSpec", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel.k8s_client.V1Container", MagicMock())
     monkeypatch.setattr(
-        "simulation.parallel.k8s_config.load_incluster_config", MagicMock()
+        "self_fixing_engineer.simulation.parallel.k8s_config.load_incluster_config", MagicMock()
     )
-    monkeypatch.setattr("simulation.parallel.k8s_config.load_kube_config", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel.k8s_config.load_kube_config", MagicMock())
 
     mock_batch_v1 = MagicMock()
     status_obj = MagicMock(succeeded=1, failed=None, conditions=None)
@@ -258,10 +258,10 @@ async def test_execute_kubernetes_success(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "simulation.parallel.k8s_client.CoreV1Api", MagicMock(return_value=mock_core_v1)
+        "self_fixing_engineer.simulation.parallel.k8s_client.CoreV1Api", MagicMock(return_value=mock_core_v1)
     )
     monkeypatch.setattr(
-        "simulation.parallel.k8s_client.BatchV1Api",
+        "self_fixing_engineer.simulation.parallel.k8s_client.BatchV1Api",
         MagicMock(return_value=mock_batch_v1),
     )
 
@@ -280,7 +280,7 @@ async def test_execute_kubernetes_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_execute_aws_batch_success(monkeypatch):
     """Test successful AWS Batch execution."""
-    monkeypatch.setattr("simulation.parallel.BOTO3_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel.BOTO3_AVAILABLE", True)
 
     mock_batch_client = MagicMock()
     mock_batch_client.submit_job.return_value = {"jobId": "test_job_id"}
@@ -321,14 +321,14 @@ async def test_run_parallel_simulations_success(monkeypatch):
     mock_global_config.max_local_workers = 2
 
     monkeypatch.setattr(
-        "simulation.parallel.GLOBAL_PARALLEL_CONFIG", mock_global_config
+        "self_fixing_engineer.simulation.parallel.GLOBAL_PARALLEL_CONFIG", mock_global_config
     )
     monkeypatch.setattr(
-        "simulation.parallel._parallel_backends",
+        "self_fixing_engineer.simulation.parallel._parallel_backends",
         {"local_asyncio": execute_local_asyncio},
     )
     monkeypatch.setattr(
-        "simulation.parallel._backend_availability", {"local_asyncio": True}
+        "self_fixing_engineer.simulation.parallel._backend_availability", {"local_asyncio": True}
     )
 
     async def sim_func(config):
@@ -341,6 +341,6 @@ async def test_run_parallel_simulations_success(monkeypatch):
 
 def test_run_parallel_simulations_no_backends(monkeypatch):
     """Test no available backends."""
-    monkeypatch.setattr("simulation.parallel._backend_availability", {})
+    monkeypatch.setattr("self_fixing_engineer.simulation.parallel._backend_availability", {})
     with pytest.raises(RuntimeError):
         asyncio.run(run_parallel_simulations(MagicMock(), [{}]))

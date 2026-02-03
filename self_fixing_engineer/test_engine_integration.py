@@ -24,7 +24,7 @@ class TestEngineIntegration:
     def test_arbiter_class_exists(self):
         """Test that Arbiter class exists."""
         try:
-            from arbiter.arbiter import Arbiter
+            from self_fixing_engineer.arbiter.arbiter import Arbiter
 
             assert Arbiter is not None, "Arbiter class should exist"
         except ImportError as e:
@@ -91,7 +91,7 @@ class TestEngineConfiguration:
     def test_arbiter_config_can_load(self):
         """Test that ArbiterConfig can be loaded."""
         try:
-            from arbiter.config import ArbiterConfig
+            from self_fixing_engineer.arbiter.config import ArbiterConfig
 
             # Test basic import, not actual initialization which needs env vars
             assert ArbiterConfig is not None
@@ -105,7 +105,7 @@ class TestArbiterIntegration:
     def test_arbiter_has_message_queue_service_param(self):
         """Test that Arbiter __init__ accepts message_queue_service parameter."""
         try:
-            from arbiter.arbiter import Arbiter
+            from self_fixing_engineer.arbiter.arbiter import Arbiter
             import inspect
 
             # Check that __init__ has message_queue_service parameter
@@ -119,7 +119,7 @@ class TestArbiterIntegration:
     def test_arbiter_has_event_handlers(self):
         """Test that Arbiter has all required event handler methods."""
         try:
-            from arbiter.arbiter import Arbiter
+            from self_fixing_engineer.arbiter.arbiter import Arbiter
 
             required_handlers = [
                 "_on_bug_detected",
@@ -141,7 +141,7 @@ class TestArbiterIntegration:
     def test_arbiter_has_event_receiver_setup(self):
         """Test that Arbiter has setup_event_receiver method."""
         try:
-            from arbiter.arbiter import Arbiter
+            from self_fixing_engineer.arbiter.arbiter import Arbiter
 
             assert hasattr(
                 Arbiter, "setup_event_receiver"
@@ -153,7 +153,7 @@ class TestArbiterIntegration:
     async def test_event_handler_accepts_data(self):
         """Test that event handlers can accept data dictionaries."""
         try:
-            from arbiter.arbiter import Arbiter
+            from self_fixing_engineer.arbiter.arbiter import Arbiter
             from unittest.mock import AsyncMock, MagicMock
 
             # Create a minimal mock Arbiter instance
@@ -187,7 +187,7 @@ class TestArenaIntegration:
     def test_arena_has_event_distribution_route(self):
         """Test that Arena sets up /events endpoint."""
         try:
-            from arbiter.arena import ArbiterArena
+            from self_fixing_engineer.arbiter.arena import ArbiterArena
 
             # Check that _setup_routes exists (it sets up the endpoint)
             assert hasattr(
@@ -199,7 +199,7 @@ class TestArenaIntegration:
     def test_arena_injects_dependencies(self):
         """Test that Arena injects MessageQueueService and DecisionOptimizer."""
         try:
-            from arbiter.arena import ArbiterArena
+            from self_fixing_engineer.arbiter.arena import ArbiterArena
             import inspect
 
             # Check _initialize_arbiters method exists
@@ -225,7 +225,7 @@ class TestMessageQueueServiceIntegration:
     def test_message_queue_service_can_be_imported(self):
         """Test that MessageQueueService can be imported."""
         try:
-            from arbiter.message_queue_service import MessageQueueService
+            from self_fixing_engineer.arbiter.message_queue_service import MessageQueueService
 
             assert (
                 MessageQueueService is not None
@@ -236,7 +236,7 @@ class TestMessageQueueServiceIntegration:
     def test_message_queue_service_has_subscribe(self):
         """Test that MessageQueueService has subscribe method."""
         try:
-            from arbiter.message_queue_service import MessageQueueService
+            from self_fixing_engineer.arbiter.message_queue_service import MessageQueueService
 
             assert hasattr(
                 MessageQueueService, "subscribe"
@@ -251,7 +251,7 @@ class TestDecisionOptimizerIntegration:
     def test_decision_optimizer_can_be_imported(self):
         """Test that DecisionOptimizer can be imported."""
         try:
-            from arbiter.decision_optimizer import DecisionOptimizer
+            from self_fixing_engineer.arbiter.decision_optimizer import DecisionOptimizer
 
             assert (
                 DecisionOptimizer is not None
@@ -262,7 +262,7 @@ class TestDecisionOptimizerIntegration:
     def test_decision_optimizer_accepts_arena(self):
         """Test that DecisionOptimizer can be initialized with arena parameter."""
         try:
-            from arbiter.decision_optimizer import DecisionOptimizer
+            from self_fixing_engineer.arbiter.decision_optimizer import DecisionOptimizer
             import inspect
 
             # Check __init__ signature
@@ -280,7 +280,7 @@ class TestGeneratorIntegration:
     def test_arbiter_has_generator_engine(self):
         """Test that Arbiter has generator_engine attribute."""
         try:
-            from arbiter.arbiter import Arbiter
+            from self_fixing_engineer.arbiter.arbiter import Arbiter
             import inspect
 
             # Check Arbiter __init__ processes generator engine
@@ -294,7 +294,7 @@ class TestGeneratorIntegration:
     def test_generator_output_handler_has_direct_integration(self):
         """Test that _on_generator_output uses generator_engine directly."""
         try:
-            from arbiter.arbiter import Arbiter
+            from self_fixing_engineer.arbiter.arbiter import Arbiter
             import inspect
 
             # Check _on_generator_output method includes direct generator integration
@@ -311,7 +311,7 @@ class TestGeneratorIntegration:
     def test_arena_creates_generator_engine(self):
         """Test that Arena creates and injects generator engine."""
         try:
-            from arbiter.arena import ArbiterArena
+            from self_fixing_engineer.arbiter.arena import ArbiterArena
             import inspect
 
             # Check _initialize_arbiters creates generator engine
@@ -351,7 +351,7 @@ class TestEngineMetrics:
     def test_arbiter_metrics_configured(self):
         """Test that arbiter has metrics helpers."""
         try:
-            from arbiter.metrics import get_or_create_counter, get_or_create_gauge
+            from self_fixing_engineer.arbiter.metrics import get_or_create_counter, get_or_create_gauge
 
             assert callable(get_or_create_counter)
             assert callable(get_or_create_gauge)
@@ -404,7 +404,7 @@ class TestEngineArchitecture:
         """Test that engines have error handling."""
         # Check that custom exceptions are defined
         try:
-            from arbiter.config import ConfigError
+            from self_fixing_engineer.arbiter.config import ConfigError
 
             assert issubclass(ConfigError, Exception)
         except ImportError:

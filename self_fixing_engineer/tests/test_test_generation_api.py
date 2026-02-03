@@ -44,26 +44,26 @@ def mock_dependencies(monkeypatch):
     """Mocks external dependencies like LLM, graph, and Flask extensions."""
     # Mock LLM and Graph functions
     monkeypatch.setattr(
-        "test_generation.gen_agent.api.runtime_init_llm",
+        "self_fixing_engineer.test_generation.gen_agent.api.runtime_init_llm",
         MagicMock(return_value=MagicMock()),
     )
     monkeypatch.setattr(
-        "test_generation.gen_agent.api.build_graph", MagicMock(return_value=MagicMock())
+        "self_fixing_engineer.test_generation.gen_agent.api.build_graph", MagicMock(return_value=MagicMock())
     )
     # Use AsyncMock for invoke_graph to handle its async nature
     monkeypatch.setattr(
-        "test_generation.gen_agent.api.invoke_graph",
+        "self_fixing_engineer.test_generation.gen_agent.api.invoke_graph",
         AsyncMock(side_effect=_mock_invoke_graph),
     )
     monkeypatch.setattr(
-        "test_generation.gen_agent.api.get_swaggerui_blueprint",
+        "self_fixing_engineer.test_generation.gen_agent.api.get_swaggerui_blueprint",
         MagicMock(return_value=MagicMock()),
     )
-    monkeypatch.setattr("test_generation.gen_agent.api.audit_logger", MagicMock())
-    monkeypatch.setattr("test_generation.gen_agent.api.AUDIT_LOGGER_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.gen_agent.api.audit_logger", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.test_generation.gen_agent.api.AUDIT_LOGGER_AVAILABLE", True)
 
     # Mock Flask extensions to control their behavior
-    monkeypatch.setattr("test_generation.gen_agent.api.CORS", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.test_generation.gen_agent.api.CORS", MagicMock())
     mock_limiter = MagicMock()
     mock_limiter_instance = MagicMock()
     mock_limiter.return_value = mock_limiter_instance
@@ -78,7 +78,7 @@ def mock_dependencies(monkeypatch):
 
     mock_limiter_instance.limit.return_value.side_effect = mock_decorator_with_name
 
-    monkeypatch.setattr("test_generation.gen_agent.api.JWTManager", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.test_generation.gen_agent.api.JWTManager", MagicMock())
 
     # Correctly mock jwt_required to behave like a decorator
     def mock_jwt_required_decorator():
@@ -92,11 +92,11 @@ def mock_dependencies(monkeypatch):
         return decorator
 
     monkeypatch.setattr(
-        "test_generation.gen_agent.api.jwt_required", mock_jwt_required_decorator
+        "self_fixing_engineer.test_generation.gen_agent.api.jwt_required", mock_jwt_required_decorator
     )
 
     monkeypatch.setattr(
-        "test_generation.gen_agent.api.get_remote_address", lambda: "127.0.0.1"
+        "self_fixing_engineer.test_generation.gen_agent.api.get_remote_address", lambda: "127.0.0.1"
     )
 
     return {
@@ -137,7 +137,7 @@ class TestFunctional:
             "spec_format": "gherkin",
         }
         with patch(
-            "test_generation.gen_agent.api._generate_tests_logic",
+            "self_fixing_engineer.test_generation.gen_agent.api._generate_tests_logic",
             new_callable=AsyncMock,
         ) as mock_logic:
             mock_logic.return_value = {"test_code": "test code"}
@@ -186,12 +186,12 @@ class TestFunctional:
 class TestSecurity:
     def test_no_jwt_required_when_disabled(self, client, mock_dependencies):
         """The endpoint should be open when JWTManager is None."""
-        with patch("test_generation.gen_agent.api.JWT_AVAILABLE", False):
+        with patch("self_fixing_engineer.test_generation.gen_agent.api.JWT_AVAILABLE", False):
             # Re-create app with JWT disabled to test the logic branch in create_app
             app_no_jwt = create_app({"SECRET_KEY": "a", "JWT_SECRET_KEY": "b"})
             app_no_jwt.testing = True
             with patch(
-                "test_generation.gen_agent.api._generate_tests_logic",
+                "self_fixing_engineer.test_generation.gen_agent.api._generate_tests_logic",
                 new_callable=AsyncMock,
             ) as mock_logic:
                 mock_logic.return_value = {"test_code": "test code"}
@@ -209,8 +209,8 @@ class TestSecurity:
     def test_jwt_required_when_enabled(self, client, mock_dependencies):
         """Unauthorized requests should return 401 when JWT is enabled."""
         with (
-            patch("test_generation.gen_agent.api.JWT_AVAILABLE", True),
-            patch("test_generation.gen_agent.api.jwt_required") as mock_jwt_required,
+            patch("self_fixing_engineer.test_generation.gen_agent.api.JWT_AVAILABLE", True),
+            patch("self_fixing_engineer.test_generation.gen_agent.api.jwt_required") as mock_jwt_required,
         ):
 
             def mock_decorator_return():
@@ -254,9 +254,9 @@ def test_production_jwt_requirement(monkeypatch, env, jwt_available):
     Tests that create_app raises a RuntimeError if JWT is not available in production.
     """
     monkeypatch.setitem(os.environ, "ENV", env)
-    monkeypatch.setattr("test_generation.gen_agent.api.JWT_AVAILABLE", jwt_available)
-    monkeypatch.setattr("test_generation.gen_agent.api.runtime_init_llm", MagicMock())
-    monkeypatch.setattr("test_generation.gen_agent.api.build_graph", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.test_generation.gen_agent.api.JWT_AVAILABLE", jwt_available)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.gen_agent.api.runtime_init_llm", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.test_generation.gen_agent.api.build_graph", MagicMock())
 
     if env == "prod" and not jwt_available:
         with pytest.raises(
@@ -271,7 +271,7 @@ def test_production_jwt_requirement(monkeypatch, env, jwt_available):
         """Verify OWASP headers are set in production mode."""
         with (
             patch.dict(os.environ, {"ENV": "prod"}),
-            patch("test_generation.gen_agent.api.serve_api"),
+            patch("self_fixing_engineer.test_generation.gen_agent.api.serve_api"),
         ):
             app = create_app({"SECRET_KEY": "a", "JWT_SECRET_KEY": "b"})
             app.testing = True
@@ -293,8 +293,8 @@ class TestOperational:
     def test_rate_limiting_enforced(self, client, mock_dependencies):
         """Verify rate limiting returns a 429 status code."""
         with (
-            patch("test_generation.gen_agent.api.LIMITER_AVAILABLE", True),
-            patch("test_generation.gen_agent.api.Limiter") as mock_limiter_class,
+            patch("self_fixing_engineer.test_generation.gen_agent.api.LIMITER_AVAILABLE", True),
+            patch("self_fixing_engineer.test_generation.gen_agent.api.Limiter") as mock_limiter_class,
         ):
 
             mock_limiter_instance = Mock()
@@ -334,7 +334,7 @@ class TestOperational:
         """Verify CORS headers are set based on environment variable."""
         with (
             patch.dict(os.environ, {"CORS_ORIGINS": "https://test-origin.com"}),
-            patch("test_generation.gen_agent.api.CORS") as mock_cors,
+            patch("self_fixing_engineer.test_generation.gen_agent.api.CORS") as mock_cors,
         ):
             app = create_app({"SECRET_KEY": "a", "JWT_SECRET_KEY": "b"})
             app.testing = True
@@ -357,11 +357,11 @@ class TestFailurePath:
     def test_llm_init_failure(self, client, mock_dependencies):
         """Verify a failure in init_llm() leads to a 503 response."""
         with patch(
-            "test_generation.gen_agent.api.runtime_init_llm",
+            "self_fixing_engineer.test_generation.gen_agent.api.runtime_init_llm",
             side_effect=Exception("LLM connection failed."),
         ):
             with patch(
-                "test_generation.gen_agent.api.logging.Logger.error"
+                "self_fixing_engineer.test_generation.gen_agent.api.logging.Logger.error"
             ) as mock_log:
                 # The create_app call must be inside the patch block
                 app = create_app({"SECRET_KEY": "a", "JWT_SECRET_KEY": "b"})
@@ -395,7 +395,7 @@ class TestFailurePath:
         """
         # Patch the logic layer to simulate a timeout condition
         with patch(
-            "test_generation.gen_agent.api._generate_tests_logic",
+            "self_fixing_engineer.test_generation.gen_agent.api._generate_tests_logic",
             new_callable=AsyncMock,
             side_effect=asyncio.TimeoutError,
         ):

@@ -34,11 +34,11 @@ from self_fixing_engineer.arbiter.arena import ArbiterArena
 from self_fixing_engineer.arbiter.bug_manager import BugManager
 from self_fixing_engineer.arbiter.config import ArbiterConfig
 
-# from arbiter.knowledge_graph import KnowledgeGraph
+# from self_fixing_engineer.arbiter.knowledge_graph import KnowledgeGraph
 from self_fixing_engineer.arbiter.explainable_reasoner import ExplainableReasoner
 from self_fixing_engineer.arbiter.feedback import FeedbackManager
 
-# REMOVED: from arbiter.human_loop import HumanInLoop
+# REMOVED: from self_fixing_engineer.arbiter.human_loop import HumanInLoop
 # Using lazy import to avoid circular dependencies
 from self_fixing_engineer.arbiter.monitoring import Monitor
 from self_fixing_engineer.arbiter.policy import PolicyEngine

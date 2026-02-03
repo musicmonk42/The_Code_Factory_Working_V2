@@ -111,7 +111,7 @@ def llm_provider(valid_config_dict, monkeypatch):
     monkeypatch.setenv("ALLOWED_LLM_HOSTS", "api.example.com,api.backup.com")
 
     # Import after mocking
-    from simulation.plugins.custom_llm_provider_plugin import (
+    from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import (
         CustomLLMProvider,
         LLMConfig,
     )
@@ -128,7 +128,7 @@ class TestLLMConfiguration:
 
     def test_valid_llm_config(self, valid_config_dict):
         """Test that valid configuration passes validation."""
-        from simulation.plugins.custom_llm_provider_plugin import LLMConfig
+        from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import LLMConfig
 
         config = LLMConfig(**valid_config_dict)
         config.validate()  # Explicitly call validate
@@ -140,7 +140,7 @@ class TestLLMConfiguration:
     @pytest.mark.parametrize("invalid_temp", [-1.0, 2.1, 100])
     def test_invalid_temperature(self, valid_config_dict, invalid_temp):
         """Test that invalid temperatures are rejected."""
-        from simulation.plugins.custom_llm_provider_plugin import LLMConfig
+        from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import LLMConfig
 
         valid_config_dict["temperature"] = invalid_temp
         with pytest.raises(ValueError) as exc:
@@ -149,7 +149,7 @@ class TestLLMConfiguration:
 
     def test_https_enforced_in_production(self, valid_config_dict, monkeypatch):
         """Test that HTTPS is enforced in production mode."""
-        from simulation.plugins.custom_llm_provider_plugin import LLMConfig
+        from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import LLMConfig
 
         monkeypatch.setenv("PRODUCTION_MODE", "true")
         valid_config_dict["api_base_url"] = "http://api.example.com/v1/"
@@ -162,7 +162,7 @@ class TestLLMConfiguration:
         self, valid_config_dict, monkeypatch
     ):
         """Test that known hosts are enforced in production."""
-        from simulation.plugins.custom_llm_provider_plugin import LLMConfig
+        from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import LLMConfig
 
         monkeypatch.setenv("PRODUCTION_MODE", "true")
         monkeypatch.setenv("ALLOWED_LLM_HOSTS", "trusted.com")
@@ -182,7 +182,7 @@ class TestLLMConfiguration:
     )
     def test_invalid_int_params(self, valid_config_dict, field, value, error_msg):
         """Test validation of integer parameters."""
-        from simulation.plugins.custom_llm_provider_plugin import LLMConfig
+        from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import LLMConfig
 
         valid_config_dict[field] = value
         with pytest.raises(ValueError) as exc:
@@ -359,7 +359,7 @@ class TestCustomLLMProvider:
     @pytest.mark.asyncio
     async def test_plugin_health_reports_ok(self):
         """Test health check reports OK when service is healthy."""
-        from simulation.plugins.custom_llm_provider_plugin import plugin_health
+        from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import plugin_health
 
         # Test case with no session provided
         health = await plugin_health()
@@ -379,7 +379,7 @@ class TestCustomLLMProvider:
     @pytest.mark.asyncio
     async def test_plugin_health_handles_errors(self):
         """Test health check handles connection errors gracefully."""
-        from simulation.plugins.custom_llm_provider_plugin import plugin_health
+        from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import plugin_health
 
         mock_session = AsyncMock()
         mock_session.get = AsyncMock(
@@ -398,7 +398,7 @@ class TestPluginFunctions:
     @pytest.mark.asyncio
     async def test_generate_custom_llm_response_runs(self, monkeypatch):
         """Test the main generate function runs without error."""
-        from simulation.plugins.custom_llm_provider_plugin import (
+        from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import (
             CustomLLMProvider,
             generate_custom_llm_response,
         )
@@ -408,7 +408,7 @@ class TestPluginFunctions:
         mock_provider._acall = AsyncMock(return_value="Generated text")
 
         with patch(
-            "simulation.plugins.custom_llm_provider_plugin.CustomLLMProvider",
+            "self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin.CustomLLMProvider",
             return_value=mock_provider,
         ):
             from langchain_core.messages import HumanMessage
@@ -429,11 +429,11 @@ class TestPluginFunctions:
             call_count += 1
             return f"key-{call_count}"
 
-        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider
+        from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider
 
         # Patch the module-level function
         monkeypatch.setattr(
-            "simulation.plugins.custom_llm_provider_plugin.get_vault_key",
+            "self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin.get_vault_key",
             mock_get_vault_key,
         )
 
@@ -458,10 +458,10 @@ class TestPluginFunctions:
             call_count += 1
             raise Exception("Vault unavailable")
 
-        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider
+        from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider
 
         monkeypatch.setattr(
-            "simulation.plugins.custom_llm_provider_plugin.get_vault_key",
+            "self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin.get_vault_key",
             mock_failing_vault,
         )
 

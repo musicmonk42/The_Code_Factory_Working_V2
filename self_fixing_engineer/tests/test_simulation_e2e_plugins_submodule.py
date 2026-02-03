@@ -66,8 +66,8 @@ sys.path.insert(0, str(SIMULATION_DIR.parent))
 
 # Import after all mocking and environment setup is complete
 try:
-    from simulation.plugins import main_sim_runner, plugin_manager
-    from simulation.plugins.dlt_clients import dlt_base, dlt_factory
+    from self_fixing_engineer.simulation.plugins import main_sim_runner, plugin_manager
+    from self_fixing_engineer.simulation.plugins.dlt_clients import dlt_base, dlt_factory
 
     IMPORTS_SUCCESSFUL = True
 except Exception as e:

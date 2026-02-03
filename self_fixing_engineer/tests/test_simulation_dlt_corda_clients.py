@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientResponseError
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     SECRETS_MANAGER,
     BaseOffChainClient,
     DLTClientAuthError,
@@ -15,7 +15,7 @@ from simulation.plugins.dlt_clients.dlt_base import (
     DLTClientTransactionError,
     DLTClientValidationError,
 )
-from simulation.plugins.dlt_clients.dlt_corda_clients import CordaClientWrapper
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_corda_clients import CordaClientWrapper
 
 
 # A mock off-chain client that can be passed to the DLT client
@@ -65,7 +65,7 @@ def mock_aiohttp(mocker):
     # Mock the ClientSession constructor in the module where it's used
     # This needs to patch it where it's imported, not where it's defined
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_corda_clients.aiohttp.ClientSession",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_corda_clients.aiohttp.ClientSession",
         return_value=mock_session_instance,
     )
 
@@ -95,7 +95,7 @@ def mock_secrets_manager(mocker):
 def mock_scrub_secrets(mocker):
     """Mock scrub_secrets to simply return the input unchanged."""
     return mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_corda_clients.scrub_secrets",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_corda_clients.scrub_secrets",
         side_effect=lambda x: x,
     )
 
@@ -179,7 +179,7 @@ async def test_corda_init_production_mode_validation(
     Test production mode validation for RPC URL and credentials.
     """
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_corda_clients.PRODUCTION_MODE", is_prod
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_corda_clients.PRODUCTION_MODE", is_prod
     )
 
     # Configure the secrets manager mock for this specific test case

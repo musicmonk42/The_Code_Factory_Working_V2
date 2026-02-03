@@ -9,7 +9,7 @@ import aiohttp
 import tenacity
 from prometheus_client import REGISTRY, Counter, Histogram
 
-from .utils import (  # or from arbiter.bug_manager.utils import (
+from .utils import (  # or from self_fixing_engineer.arbiter.bug_manager.utils import (
     MLRemediationError,
     RemediationError,
     redact_pii,

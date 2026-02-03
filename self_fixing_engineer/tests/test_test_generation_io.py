@@ -78,7 +78,7 @@ async def test_auto_compress_when_threshold_exceeded(temp_dir):
 
     # Force compression AND bypass redaction so the payload is preserved
     with patch(
-        "test_generation.gen_agent.io_utils.redact_sensitive", side_effect=lambda x: x
+        "self_fixing_engineer.test_generation.gen_agent.io_utils.redact_sensitive", side_effect=lambda x: x
     ):
         await io_utils_mod.append_to_feedback_log(
             str(log_path),
@@ -100,7 +100,7 @@ async def test_append_respects_redaction(temp_dir):
     log_path = temp_dir / "feedback.jsonl"
     entry = {"api_key": "12345-secret"}
     with patch(
-        "test_generation.gen_agent.io_utils.redact_sensitive",
+        "self_fixing_engineer.test_generation.gen_agent.io_utils.redact_sensitive",
         return_value={"api_key": "[REDACTED]"},
     ) as mock_redact:
         await io_utils_mod.append_to_feedback_log(str(log_path), entry)
@@ -126,7 +126,7 @@ async def test_no_prometheus_duplicates(temp_dir):
     try:
         log_path = temp_dir / "test.jsonl"
         # Force metrics to be available for this test
-        with patch("test_generation.gen_agent.io_utils._PROM_OK", True):
+        with patch("self_fixing_engineer.test_generation.gen_agent.io_utils._PROM_OK", True):
             # Append a log entry to trigger metric instantiation
             await io_utils_mod.append_to_feedback_log(str(log_path), {})
 

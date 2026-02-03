@@ -17,7 +17,7 @@ sys.path.insert(0, parent_dir)
 # Now import from the correct module path
 # If aws_batch_runner_plugin.py is in simulation/plugins/
 try:
-    from simulation.plugins.aws_batch_runner_plugin import (
+    from self_fixing_engineer.simulation.plugins.aws_batch_runner_plugin import (
         AWS_AVAILABLE,
         JobConfig,
         plugin_health,
@@ -62,7 +62,7 @@ def mock_aws_clients():
     with (
         patch("boto3.Session") as mock_session,
         patch(
-            "simulation.plugins.aws_batch_runner_plugin._load_credentials_from_vault",
+            "self_fixing_engineer.simulation.plugins.aws_batch_runner_plugin._load_credentials_from_vault",
             new_callable=AsyncMock,
         ) as mock_load_vault,
     ):
@@ -91,7 +91,7 @@ def mock_aws_clients():
         }
 
         with patch(
-            "simulation.plugins.aws_batch_runner_plugin._session_has_real_creds",
+            "self_fixing_engineer.simulation.plugins.aws_batch_runner_plugin._session_has_real_creds",
             return_value=True,
         ):
             yield {
@@ -179,7 +179,7 @@ async def test_plugin_health_success(mock_aws_clients):
 async def test_plugin_health_no_credentials_error(mock_aws_clients):
     mock_aws_clients["mock_load_vault"].return_value = None
     with patch(
-        "simulation.plugins.aws_batch_runner_plugin._session_has_real_creds",
+        "self_fixing_engineer.simulation.plugins.aws_batch_runner_plugin._session_has_real_creds",
         return_value=False,
     ):
         result = await plugin_health()

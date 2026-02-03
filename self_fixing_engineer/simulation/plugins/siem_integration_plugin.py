@@ -224,7 +224,7 @@ except ImportError:
 
 # --- Centralized OpenTelemetry Imports ---
 try:
-    from arbiter.otel_config import get_tracer
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
     from opentelemetry import trace
 
     TRACER = get_tracer(__name__)

@@ -447,7 +447,7 @@ async def _get_llm_client() -> LLMClientWrapper:
         if not LANGCHAIN_AVAILABLE:
             # Try to degrade to generic client if available
             try:
-                from arbiter.plugins.llm_client import LLMClient
+                from self_fixing_engineer.arbiter.plugins.llm_client import LLMClient
 
                 generic_llm_client = LLMClient(
                     provider=LLM_PATCH_GEN_CONFIG.llm_provider_name,
@@ -507,7 +507,7 @@ async def _get_llm_client() -> LLMClientWrapper:
                 raise
     elif interface == "generic_llm_client":
         try:
-            from arbiter.plugins.llm_client import LLMClient
+            from self_fixing_engineer.arbiter.plugins.llm_client import LLMClient
 
             generic_llm_client = LLMClient(
                 provider=LLM_PATCH_GEN_CONFIG.llm_provider_name,
@@ -1058,7 +1058,7 @@ async def generate_security_patch(
     finally:
         # Audit logging (best-effort, scrubbed and truncated)
         try:
-            from arbiter.guardrails.audit_log import audit_log as global_audit_log
+            from self_fixing_engineer.arbiter.guardrails.audit_log import audit_log as global_audit_log
 
             scrubbed_vuln = _scrub_secrets(vulnerability_details)
             scrubbed_ctx = _scrub_secrets(context)

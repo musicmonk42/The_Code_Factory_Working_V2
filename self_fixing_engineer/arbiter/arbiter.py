@@ -264,7 +264,7 @@ try:
     from self_fixing_engineer.arbiter.config import ArbiterConfig
     from self_fixing_engineer.arbiter.feedback import FeedbackManager
 
-    # REMOVED: from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+    # REMOVED: from self_fixing_engineer.arbiter.human_loop import HumanInLoop, HumanInLoopConfig
     # Using TYPE_CHECKING and lazy import to avoid circular dependencies
     from self_fixing_engineer.arbiter.monitoring import Monitor as BaseMonitor
     from self_fixing_engineer.arbiter.utils import get_system_metrics_async
@@ -287,7 +287,7 @@ except ImportError as e:
 
 from self_fixing_engineer.arbiter.arbiter_plugin_registry import PluginBase, PlugInKind
 
-# REMOVED: from arbiter.arbiter_plugin_registry import registry as PLUGIN_REGISTRY
+# REMOVED: from self_fixing_engineer.arbiter.arbiter_plugin_registry import registry as PLUGIN_REGISTRY
 # Replaced with lazy getter to avoid import-time initialization overhead
 # REMOVED: from simulation.simulation_module import UnifiedSimulationModule
 # This import causes a circular dependency chain. Will be loaded lazily in __init__

@@ -14,7 +14,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Import the plugin - now using the correct module path
-from simulation.plugins.jest_runner_plugin import (
+from self_fixing_engineer.simulation.plugins.jest_runner_plugin import (
     _detect_package_manager,
     _get_package_version,
     _which,

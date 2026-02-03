@@ -21,7 +21,7 @@ def func2(y, z):
 def mock_logger(monkeypatch):
     """Mocks the logger to prevent console output during tests."""
     mock_log = Mock()
-    monkeypatch.setattr("test_generation.gen_plugins.logger", mock_log)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.gen_plugins.logger", mock_log)
     return mock_log
 
 
@@ -121,7 +121,7 @@ def test_ai_fallback_is_not_called_if_ai_succeeds():
     """
     mock_ai_tests = ["ai test 1", "ai test 2"]
     with patch(
-        "test_generation.gen_plugins._call_ai_for_tests", return_value=mock_ai_tests
+        "self_fixing_engineer.test_generation.gen_plugins._call_ai_for_tests", return_value=mock_ai_tests
     ):
         with patch.object(
             LANGUAGE_GENERATORS.get("python"), "generate", new=Mock()
@@ -138,7 +138,7 @@ def test_ai_fallback_is_called_if_ai_fails():
     Tests that the internal generator is called if the AI API fails.
     """
     mock_internal_tests = ["internal test 1", "internal test 2"]
-    with patch("test_generation.gen_plugins._call_ai_for_tests", return_value=[]):
+    with patch("self_fixing_engineer.test_generation.gen_plugins._call_ai_for_tests", return_value=[]):
         with patch.object(
             LANGUAGE_GENERATORS.get("python"),
             "generate",

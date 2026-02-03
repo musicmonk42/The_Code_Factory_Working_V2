@@ -94,7 +94,7 @@ async def test_generate_html_report_success(project: Path, monkeypatch):
 
     # Patch atomic_write to prevent actual file I/O
     with patch(
-        "test_generation.orchestrator.reporting.atomic_write", new_callable=AsyncMock
+        "self_fixing_engineer.test_generation.orchestrator.reporting.atomic_write", new_callable=AsyncMock
     ) as mock_atomic_write:
         report_path_str = await reporter.generate_html_report(
             overall_results, mock_policy_engine

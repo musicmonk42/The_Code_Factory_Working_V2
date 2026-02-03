@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from simulation.sandbox import (
+from self_fixing_engineer.simulation.sandbox import (
     AUDIT_LOG_FILE,
     ContainerValidationConfig,
     SandboxPolicy,
@@ -122,8 +122,8 @@ def test_container_validation_config_image_not_whitelist():
 def test_log_audit(mock_audit_log, monkeypatch):
     """Test logging an audit event."""
     audit_log, integrity_file = mock_audit_log
-    monkeypatch.setattr("simulation.sandbox.AUDIT_LOG_FILE", audit_log)
-    monkeypatch.setattr("simulation.sandbox.AUDIT_LOG_INTEGRITY_FILE", integrity_file)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.AUDIT_LOG_FILE", audit_log)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.AUDIT_LOG_INTEGRITY_FILE", integrity_file)
     log_audit({"event": "test"})
     with open(audit_log, "r") as f:
         logged = json.loads(f.read())
@@ -139,8 +139,8 @@ def test_verify_audit_log_integrity_recent(mock_glob, mock_audit_log, monkeypatc
     """Test audit log integrity verification with a recent integrity file."""
     audit_log, integrity_file = mock_audit_log
     monkeypatch.setenv("SANDBOX_AUDIT_HMAC_KEY", "test_key")
-    monkeypatch.setattr("simulation.sandbox.AUDIT_LOG_FILE", audit_log)
-    monkeypatch.setattr("simulation.sandbox.AUDIT_LOG_INTEGRITY_FILE", integrity_file)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.AUDIT_LOG_FILE", audit_log)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.AUDIT_LOG_INTEGRITY_FILE", integrity_file)
 
     with open(integrity_file, "w", encoding="utf-8") as f:
         json.dump({"last_verification_time": datetime.utcnow().isoformat()}, f)
@@ -155,8 +155,8 @@ def test_verify_audit_log_integrity_mismatch(mock_glob, mock_audit_log, monkeypa
     """Test audit log integrity verification with signature mismatch."""
     audit_log, integrity_file = mock_audit_log
     monkeypatch.setenv("SANDBOX_AUDIT_HMAC_KEY", "test_key")
-    monkeypatch.setattr("simulation.sandbox.AUDIT_LOG_FILE", audit_log)
-    monkeypatch.setattr("simulation.sandbox.AUDIT_LOG_INTEGRITY_FILE", integrity_file)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.AUDIT_LOG_FILE", audit_log)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.AUDIT_LOG_INTEGRITY_FILE", integrity_file)
     with open(audit_log, "w", encoding="utf-8") as f:
         f.write(json.dumps({"event": {"event": "test"}, "signature": "invalid"}) + "\n")
     assert not verify_audit_log_integrity()
@@ -168,9 +168,9 @@ def test_verify_audit_log_integrity_mismatch(mock_glob, mock_audit_log, monkeypa
 @pytest.mark.asyncio
 async def test_cleanup_sandbox_docker(monkeypatch):
     """Test cleanup of Docker sandbox."""
-    monkeypatch.setattr("simulation.sandbox.DOCKER_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.DOCKER_AVAILABLE", True)
     monkeypatch.setattr(
-        "simulation.sandbox.docker.from_env",
+        "self_fixing_engineer.simulation.sandbox.docker.from_env",
         MagicMock(
             return_value=MagicMock(
                 containers=MagicMock(
@@ -192,9 +192,9 @@ async def test_cleanup_sandbox_docker(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_in_docker_sandbox_success(monkeypatch):
     """Test successful Docker sandbox execution."""
-    monkeypatch.setattr("simulation.sandbox.DOCKER_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.DOCKER_AVAILABLE", True)
     monkeypatch.setattr(
-        "simulation.sandbox.docker.from_env",
+        "self_fixing_engineer.simulation.sandbox.docker.from_env",
         MagicMock(
             return_value=MagicMock(
                 containers=MagicMock(
@@ -219,9 +219,9 @@ async def test_run_in_docker_sandbox_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_in_podman_sandbox_success(monkeypatch):
     """Test successful Podman sandbox execution."""
-    monkeypatch.setattr("simulation.sandbox.PODMAN_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.PODMAN_AVAILABLE", True)
     monkeypatch.setattr(
-        "simulation.sandbox.podman.Client",
+        "self_fixing_engineer.simulation.sandbox.podman.Client",
         MagicMock(
             return_value=MagicMock(
                 containers=MagicMock(
@@ -246,10 +246,10 @@ async def test_run_in_podman_sandbox_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_deploy_to_kubernetes_success(monkeypatch):
     """Test successful Kubernetes deployment."""
-    monkeypatch.setattr("simulation.sandbox.KUBERNETES_AVAILABLE", True)
-    monkeypatch.setattr("simulation.sandbox.kube_config.load_kube_config", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.KUBERNETES_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.kube_config.load_kube_config", MagicMock())
     monkeypatch.setattr(
-        "simulation.sandbox.client.CoreV1Api",
+        "self_fixing_engineer.simulation.sandbox.client.CoreV1Api",
         MagicMock(
             return_value=MagicMock(
                 read_namespaced_pod_status=MagicMock(
@@ -265,7 +265,7 @@ async def test_deploy_to_kubernetes_success(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "simulation.sandbox.client.BatchV1Api",
+        "self_fixing_engineer.simulation.sandbox.client.BatchV1Api",
         MagicMock(
             return_value=MagicMock(
                 create_namespaced_job=MagicMock(),
@@ -296,7 +296,7 @@ async def test_run_in_local_process_sandbox_success(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "simulation.sandbox.client.BatchV1Api",
+        "self_fixing_engineer.simulation.sandbox.client.BatchV1Api",
         MagicMock(
             return_value=MagicMock(
                 create_namespaced_job=MagicMock(),
@@ -317,9 +317,9 @@ async def test_run_in_local_process_sandbox_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_burst_to_cloud_aws_success(monkeypatch):
     """Test successful cloud burst to AWS."""
-    monkeypatch.setattr("simulation.sandbox.AWS_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.AWS_AVAILABLE", True)
     monkeypatch.setattr(
-        "simulation.sandbox.boto3.client",
+        "self_fixing_engineer.simulation.sandbox.boto3.client",
         MagicMock(
             return_value=MagicMock(
                 submit_job=MagicMock(return_value={"jobId": "test_id"})
@@ -337,9 +337,9 @@ async def test_burst_to_cloud_aws_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_chaos_experiment_success(monkeypatch):
     """Test successful chaos experiment run."""
-    monkeypatch.setattr("simulation.sandbox.GREMLIN_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.GREMLIN_AVAILABLE", True)
     monkeypatch.setattr(
-        "simulation.sandbox.gremlin.GremlinClient", MagicMock(return_value=MagicMock())
+        "self_fixing_engineer.simulation.sandbox.gremlin.GremlinClient", MagicMock(return_value=MagicMock())
     )
     monkeypatch.setenv("GREMLIN_TEAM_ID", "test")
     monkeypatch.setenv("GREMLIN_API_KEY", "test")
@@ -354,7 +354,7 @@ async def test_run_chaos_experiment_success(monkeypatch):
 async def test_run_in_sandbox_success(monkeypatch):
     """Test successful sandbox execution."""
     mock_backend = AsyncMock(return_value={"status": "COMPLETED"})
-    with patch.dict("simulation.sandbox._sandbox_backends", {"docker": mock_backend}):
+    with patch.dict("self_fixing_engineer.simulation.sandbox._sandbox_backends", {"docker": mock_backend}):
         result = await run_in_sandbox("docker", ["echo", "test"], "/tmp")
         assert result["status"] == "COMPLETED"
 
@@ -362,10 +362,10 @@ async def test_run_in_sandbox_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_in_sandbox_no_backends(monkeypatch):
     """Test sandbox execution with no backends available."""
-    monkeypatch.setattr("simulation.sandbox.DOCKER_AVAILABLE", False)
-    monkeypatch.setattr("simulation.sandbox.PODMAN_AVAILABLE", False)
-    monkeypatch.setattr("simulation.sandbox.KUBERNETES_AVAILABLE", False)
-    monkeypatch.setattr("simulation.sandbox.SECCOMP_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.DOCKER_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.PODMAN_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.KUBERNETES_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.SECCOMP_AVAILABLE", False)
     result = await run_in_sandbox("docker", ["echo", "test"], "/tmp")
     assert result["status"] == "ERROR"
 
@@ -386,9 +386,9 @@ def test_get_audit_hmac_key_env(monkeypatch):
 @pytest.mark.asyncio
 async def test_check_external_services_async_success(monkeypatch):
     """Test successful external services check."""
-    monkeypatch.setattr("simulation.sandbox.DOCKER_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.DOCKER_AVAILABLE", True)
     monkeypatch.setattr(
-        "simulation.sandbox.docker.from_env",
+        "self_fixing_engineer.simulation.sandbox.docker.from_env",
         MagicMock(return_value=MagicMock(ping=MagicMock())),
     )
     await check_external_services_async()  # No exception raised
@@ -400,7 +400,7 @@ async def test_check_external_services_async_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_periodic_external_service_check(monkeypatch):
     """Test periodic external service check."""
-    monkeypatch.setattr("simulation.sandbox.check_external_services_async", AsyncMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.check_external_services_async", AsyncMock())
     task = asyncio.create_task(_periodic_external_service_check(interval_seconds=1))
     await asyncio.sleep(2)
     task.cancel()
@@ -412,11 +412,11 @@ async def test_periodic_external_service_check(monkeypatch):
 @pytest.mark.asyncio
 async def test_start_background_tasks(monkeypatch):
     """Test starting background tasks."""
-    monkeypatch.setattr("simulation.sandbox.check_external_services_async", AsyncMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.check_external_services_async", AsyncMock())
     monkeypatch.setattr(
-        "simulation.sandbox._periodic_external_service_check", AsyncMock()
+        "self_fixing_engineer.simulation.sandbox._periodic_external_service_check", AsyncMock()
     )
     monkeypatch.setattr(
-        "simulation.sandbox._periodic_audit_log_verification", AsyncMock()
+        "self_fixing_engineer.simulation.sandbox._periodic_audit_log_verification", AsyncMock()
     )
     await _start_background_tasks()

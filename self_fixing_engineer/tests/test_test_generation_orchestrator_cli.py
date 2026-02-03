@@ -61,7 +61,7 @@ async def test_main_config_loading(project: Path, monkeypatch):
 
     mock_monitor = AsyncMock(return_value=[])
     monkeypatch.setattr(
-        "test_generation.utils.monitor_and_prioritize_uncovered_code", mock_monitor
+        "self_fixing_engineer.test_generation.utils.monitor_and_prioritize_uncovered_code", mock_monitor
     )
 
     mock_orchestrator = Mock()
@@ -72,15 +72,15 @@ async def test_main_config_loading(project: Path, monkeypatch):
         return_value={"summary": {}}
     )
     monkeypatch.setattr(
-        "test_generation.orchestrator.cli.GenerationOrchestrator", mock_orchestrator
+        "self_fixing_engineer.test_generation.orchestrator.cli.GenerationOrchestrator", mock_orchestrator
     )
 
     mock_audit = AsyncMock()
-    monkeypatch.setattr("test_generation.orchestrator.audit.audit_event", mock_audit)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.orchestrator.audit.audit_event", mock_audit)
 
     mock_event_bus = Mock()
     mock_event_bus.return_value.publish = AsyncMock()
-    monkeypatch.setattr("test_generation.orchestrator.cli.EventBus", mock_event_bus)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.orchestrator.cli.EventBus", mock_event_bus)
 
     mock_exit = Mock()
     monkeypatch.setattr("sys.exit", mock_exit)
@@ -101,7 +101,7 @@ def test_make_run_id(monkeypatch):
 
 def test_graceful_shutdown(monkeypatch):
     mock_log = Mock()
-    monkeypatch.setattr("test_generation.orchestrator.cli.log", mock_log)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.orchestrator.cli.log", mock_log)
 
     with pytest.raises(SystemExit) as exc:
         graceful_shutdown(signal.SIGINT, None)
@@ -180,7 +180,7 @@ async def test_cli_args(monkeypatch):
         return_value={"summary": {}}
     )
     monkeypatch.setattr(
-        "test_generation.orchestrator.cli.GenerationOrchestrator", mock_orchestrator
+        "self_fixing_engineer.test_generation.orchestrator.cli.GenerationOrchestrator", mock_orchestrator
     )
 
     # Await the main function, which returns the coroutine to be executed by the test runner.

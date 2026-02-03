@@ -140,7 +140,7 @@ class LearningRecord(BaseModel):
 class LearnerArbiterHelper:
     """
     Helper class for Learner's internal use.
-    NOTE: This is NOT the main Arbiter class from arbiter.py.
+    NOTE: This is NOT the main Arbiter class from self_fixing_engineer.arbiter.py.
 
     This lightweight helper manages state and dependencies specifically for the Learner module:
     - Maintains a memory dictionary for knowledge storage

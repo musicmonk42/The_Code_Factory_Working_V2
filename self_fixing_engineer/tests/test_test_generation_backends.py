@@ -254,7 +254,7 @@ def test_jest_llm_backend_init_no_langchain(
     monkeypatch, mock_config, temp_project_root
 ):
     """Test initialization fails if langchain-openai is not available."""
-    monkeypatch.setattr("test_generation.backends.LANGCHAIN_OPENAI_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.backends.LANGCHAIN_OPENAI_AVAILABLE", False)
     with pytest.raises(ImportError, match="langchain-openai must be installed"):
         JestLLMBackend(mock_config, temp_project_root)
 

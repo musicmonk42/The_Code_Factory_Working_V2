@@ -226,7 +226,7 @@ sys.modules["arbiter_plugin_registry"].PlugInKind = MagicMock()
 sys.modules["arbiter_plugin_registry"].PlugInKind.CORE_SERVICE = "core_service"
 
 # Now import the actual module - it should work with proper mocks
-import arbiter.queue_consumer_worker as queue_consumer_worker
+import self_fixing_engineer.arbiter.queue_consumer_worker as queue_consumer_worker
 
 # After import, we need to ensure the module state is correct
 # Since SFE_CORE_AVAILABLE will be True (imports succeeded), we need to mock accordingly

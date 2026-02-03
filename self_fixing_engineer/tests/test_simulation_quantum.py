@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Import all necessary components for testing
-from simulation.quantum import (
+from self_fixing_engineer.simulation.quantum import (
     ForecastFailureTrendParams,
     QuantumPluginAPI,
     QuantumRLAgent,
@@ -38,17 +38,17 @@ def cleanup_backend_pool():
 @pytest.mark.asyncio
 async def test_get_or_create_metric_success(monkeypatch):
     """Test successful creation of a metric."""
-    monkeypatch.setattr("simulation.quantum.PROMETHEUS_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.PROMETHEUS_AVAILABLE", True)
 
     # Reload the module to apply the monkeypatch for global variables
     import importlib
 
-    import simulation.quantum
+    import self_fixing_engineer.simulation.quantum as simulation_quantum
 
-    importlib.reload(simulation.quantum)
+    importlib.reload(simulation_quantum)
 
-    metric = simulation.quantum.get_or_create_metric(
-        simulation.quantum.Histogram, "test_hist", "Test histogram"
+    metric = simulation_quantum.get_or_create_metric(
+        simulation_quantum.Histogram, "test_hist", "Test histogram"
     )
     assert metric._name == "test_hist"
 
@@ -56,16 +56,16 @@ async def test_get_or_create_metric_success(monkeypatch):
 # --- Tests for check_any_backend_available ---
 def test_check_any_backend_available_success(monkeypatch):
     """Test successful backend availability check."""
-    monkeypatch.setattr("simulation.quantum.QISKIT_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.QISKIT_AVAILABLE", True)
     check_any_backend_available()  # No exception raised
 
 
 def test_check_any_backend_available_failure(monkeypatch):
     """Test failure when no backends available."""
-    monkeypatch.setattr("simulation.quantum.QISKIT_AVAILABLE", False)
-    monkeypatch.setattr("simulation.quantum.DWAVE_AVAILABLE", False)
-    monkeypatch.setattr("simulation.quantum.SCIPY_AVAILABLE", False)
-    monkeypatch.setattr("simulation.quantum.DEAP_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.QISKIT_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.DWAVE_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.SCIPY_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.DEAP_AVAILABLE", False)
     with pytest.raises(RuntimeError):
         check_any_backend_available()
 
@@ -82,7 +82,7 @@ async def test_alert_operator(caplog):
 @pytest.mark.asyncio
 async def test_load_quantum_credentials_success(monkeypatch):
     """Test successful loading of quantum credentials."""
-    monkeypatch.setattr("simulation.quantum.BOTO3_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.BOTO3_AVAILABLE", True)
     mock_boto_client = MagicMock()
     mock_boto_client.get_secret_value = MagicMock(
         return_value={"SecretString": '{"token": "fake_token"}'}
@@ -96,12 +96,12 @@ async def test_load_quantum_credentials_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_load_quantum_credentials_failure(monkeypatch):
     """Test failure to load quantum credentials."""
-    monkeypatch.setattr("simulation.quantum.BOTO3_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.BOTO3_AVAILABLE", False)
 
     # Re-instantiate credential_manager to apply the monkeypatch
-    from simulation.quantum import CredentialManager
+    from self_fixing_engineer.simulation.quantum import CredentialManager
 
-    monkeypatch.setattr("simulation.quantum.credential_manager", CredentialManager())
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.credential_manager", CredentialManager())
 
     with pytest.raises(RuntimeError):
         await load_quantum_credentials("dwave")
@@ -111,9 +111,9 @@ async def test_load_quantum_credentials_failure(monkeypatch):
 @pytest.mark.asyncio
 async def test_check_backend_health_qiskit_success(monkeypatch):
     """Test successful health check for Qiskit backend."""
-    monkeypatch.setattr("simulation.quantum.QISKIT_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.QISKIT_AVAILABLE", True)
     monkeypatch.setattr(
-        "simulation.quantum.backend_client_pool.get_client",
+        "self_fixing_engineer.simulation.quantum.backend_client_pool.get_client",
         AsyncMock(return_value=MagicMock(status=MagicMock(return_value=True))),
     )
     assert await check_backend_health("qiskit")
@@ -122,9 +122,9 @@ async def test_check_backend_health_qiskit_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_check_backend_health_dwave_success(monkeypatch):
     """Test successful health check for D-Wave backend."""
-    monkeypatch.setattr("simulation.quantum.DWAVE_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.DWAVE_AVAILABLE", True)
     monkeypatch.setattr(
-        "simulation.quantum.backend_client_pool.get_client",
+        "self_fixing_engineer.simulation.quantum.backend_client_pool.get_client",
         AsyncMock(
             return_value=MagicMock(
                 sampler=MagicMock(
@@ -179,10 +179,10 @@ async def test_forecast_failure_trend_params_validation_failure():
 @pytest.mark.asyncio
 async def test_run_quantum_mutation_success(monkeypatch):
     """Test successful quantum mutation with Qiskit."""
-    monkeypatch.setattr("simulation.quantum.QISKIT_AVAILABLE", True)
-    monkeypatch.setattr("simulation.quantum.QuantumCircuit", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.QISKIT_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.QuantumCircuit", MagicMock())
     monkeypatch.setattr(
-        "simulation.quantum.backend_client_pool.get_client",
+        "self_fixing_engineer.simulation.quantum.backend_client_pool.get_client",
         AsyncMock(
             return_value=MagicMock(
                 run=MagicMock(
@@ -200,9 +200,9 @@ async def test_run_quantum_mutation_success(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "simulation.quantum.transpile", MagicMock(return_value=MagicMock())
+        "self_fixing_engineer.simulation.quantum.transpile", MagicMock(return_value=MagicMock())
     )
-    monkeypatch.setattr("simulation.quantum.audit_logger", AsyncMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.audit_logger", AsyncMock())
 
     with patch("os.path.isfile", return_value=True):
         result = await run_quantum_mutation("./examples/test.py", "qiskit")
@@ -214,11 +214,11 @@ async def test_run_quantum_mutation_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_quantum_mutation_no_backend(monkeypatch):
     """Test quantum mutation with no backend available."""
-    monkeypatch.setattr("simulation.quantum.QISKIT_AVAILABLE", False)
-    monkeypatch.setattr("simulation.quantum.DWAVE_AVAILABLE", False)
-    monkeypatch.setattr("simulation.quantum.SCIPY_AVAILABLE", False)
-    monkeypatch.setattr("simulation.quantum.DEAP_AVAILABLE", False)
-    monkeypatch.setattr("simulation.quantum.audit_logger", AsyncMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.QISKIT_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.DWAVE_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.SCIPY_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.DEAP_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.audit_logger", AsyncMock())
 
     with patch("os.path.isfile", return_value=True):
         result = await run_quantum_mutation("./examples/test.py")
@@ -230,10 +230,10 @@ async def test_run_quantum_mutation_no_backend(monkeypatch):
 @pytest.mark.asyncio
 async def test_quantum_forecast_failure_success(monkeypatch):
     """Test successful quantum forecast with Qiskit."""
-    monkeypatch.setattr("simulation.quantum.QISKIT_AVAILABLE", True)
-    monkeypatch.setattr("simulation.quantum.QuantumCircuit", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.QISKIT_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.QuantumCircuit", MagicMock())
     monkeypatch.setattr(
-        "simulation.quantum.backend_client_pool.get_client",
+        "self_fixing_engineer.simulation.quantum.backend_client_pool.get_client",
         AsyncMock(
             return_value=MagicMock(
                 run=MagicMock(
@@ -251,9 +251,9 @@ async def test_quantum_forecast_failure_success(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "simulation.quantum.transpile", MagicMock(return_value=MagicMock())
+        "self_fixing_engineer.simulation.quantum.transpile", MagicMock(return_value=MagicMock())
     )
-    monkeypatch.setattr("simulation.quantum.audit_logger", AsyncMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.audit_logger", AsyncMock())
 
     result = await quantum_forecast_failure([1.0, 2.0, 3.0])
 
@@ -264,7 +264,7 @@ async def test_quantum_forecast_failure_success(monkeypatch):
 # --- Tests for QuantumRLAgent ---
 def test_quantum_rl_agent_init_success(monkeypatch):
     """Test successful initialization of QuantumRLAgent."""
-    monkeypatch.setattr("simulation.quantum.TORCH_RL_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.TORCH_RL_AVAILABLE", True)
     monkeypatch.setattr("torch.nn.Module", MagicMock())
     monkeypatch.setattr("torch.nn.Linear", MagicMock())
     monkeypatch.setattr("torch.nn.Sequential", MagicMock())
@@ -278,7 +278,7 @@ def test_quantum_rl_agent_init_success(monkeypatch):
 
 def test_quantum_rl_agent_init_failure(monkeypatch):
     """Test failure to initialize QuantumRLAgent without Torch."""
-    monkeypatch.setattr("simulation.quantum.TORCH_RL_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.TORCH_RL_AVAILABLE", False)
     with pytest.raises(RuntimeError):
         QuantumRLAgent(10, 5)
 
@@ -286,8 +286,8 @@ def test_quantum_rl_agent_init_failure(monkeypatch):
 # --- Tests for QuantumPluginAPI ---
 def test_quantum_plugin_api_get_available_backends(monkeypatch):
     """Test getting available backends from QuantumPluginAPI."""
-    monkeypatch.setattr("simulation.quantum.QISKIT_AVAILABLE", True)
-    monkeypatch.setattr("simulation.quantum.DWAVE_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.QISKIT_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.DWAVE_AVAILABLE", True)
     api = QuantumPluginAPI()
     backends = api.get_available_backends()
     assert "qiskit" in backends
@@ -298,7 +298,7 @@ def test_quantum_plugin_api_get_available_backends(monkeypatch):
 async def test_quantum_plugin_api_perform_quantum_operation(monkeypatch):
     """Test performing quantum operation via QuantumPluginAPI."""
     monkeypatch.setattr(
-        "simulation.quantum.run_quantum_mutation",
+        "self_fixing_engineer.simulation.quantum.run_quantum_mutation",
         AsyncMock(return_value={"status": "COMPLETED"}),
     )
     api = QuantumPluginAPI()

@@ -53,7 +53,7 @@ def reload_console(monkeypatch: pytest.MonkeyPatch):
 
     def _reload():
         # Use the full, correct import path for the module under test.
-        mod = importlib.import_module("test_generation.orchestrator.console")
+        mod = importlib.import_module("self_fixing_engineer.test_generation.orchestrator.console")
         # Ensure module-level console instance is cleared before reloading
         mod.console = None
         return importlib.reload(mod)
@@ -69,7 +69,7 @@ class TestLoggingInitialization:
         self, monkeypatch: pytest.MonkeyPatch, caplog
     ):
         # FIX: The module is now properly reloaded by the fixture, so we don't need to do it here.
-        console = importlib.import_module("test_generation.orchestrator.console")
+        console = importlib.import_module("self_fixing_engineer.test_generation.orchestrator.console")
 
         # Force dictConfig to raise
         def boom(_):
@@ -243,7 +243,7 @@ class TestGlyphMapping:
         )
         monkeypatch.setattr(sys, "stdout", ascii_out)
         console = importlib.reload(
-            importlib.import_module("test_generation.orchestrator.console")
+            importlib.import_module("self_fixing_engineer.test_generation.orchestrator.console")
         )
 
         console.fallback_to_basic_logging()
@@ -259,7 +259,7 @@ class TestGlyphMapping:
         )
         monkeypatch.setattr(sys, "stdout", utf_out)
         console = importlib.reload(
-            importlib.import_module("test_generation.orchestrator.console")
+            importlib.import_module("self_fixing_engineer.test_generation.orchestrator.console")
         )
 
         console.fallback_to_basic_logging()
@@ -315,7 +315,7 @@ def test_fallback_logging():
     """
     Tests that fallback logging is correctly configured and logs messages.
     """
-    console = importlib.import_module("test_generation.orchestrator.console")
+    console = importlib.import_module("self_fixing_engineer.test_generation.orchestrator.console")
     console.fallback_to_basic_logging()
 
     # We can't use caplog directly because fallback logging uses basicConfig.

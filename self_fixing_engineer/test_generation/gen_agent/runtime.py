@@ -360,7 +360,7 @@ def _load_and_check_deps() -> None:
     PSUTIL_AVAILABLE = _check_module("psutil")
 
     try:
-        from arbiter.audit_log import audit_logger as al
+        from self_fixing_engineer.arbiter.audit_log import audit_logger as al
 
         audit_logger = al
         AUDIT_LOGGER_AVAILABLE = True
