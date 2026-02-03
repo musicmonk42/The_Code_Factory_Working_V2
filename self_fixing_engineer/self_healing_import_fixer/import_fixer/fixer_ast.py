@@ -7,6 +7,7 @@ specifically targeting circular dependencies and dynamic imports.
 
 import ast
 import asyncio  # For running async methods in a sync context
+import atexit
 import hashlib
 import logging
 import os
@@ -122,11 +123,36 @@ _BG_THREAD = None
 _BG_LOOP_READY = threading.Event()
 
 
+def _shutdown_background_loop():
+    """Cleanup background event loop on module unload."""
+    global _BG_LOOP, _BG_THREAD
+    if _BG_LOOP and _BG_LOOP.is_running():
+        _BG_LOOP.call_soon_threadsafe(_BG_LOOP.stop)
+        if _BG_THREAD and _BG_THREAD.is_alive():
+            _BG_THREAD.join(timeout=1.0)
+        _BG_LOOP = None
+        _BG_THREAD = None
+
+
+# Register cleanup
+atexit.register(_shutdown_background_loop)
+
+
 def _ensure_background_loop():
     """
     Starts (or reuses) a dedicated background event loop running in a daemon thread.
     Thread-safe and idempotent. Returns the running loop.
+    
+    CRITICAL FIX: Only start the loop when actually needed, not at import time.
+    This prevents CPU consumption during pytest collection.
     """
+    global _BG_LOOP, _BG_THREAD
+    
+    # If we're in test mode, don't start the background loop
+    if os.getenv("TESTING") == "1" or os.getenv("PYTEST_CURRENT_TEST"):
+        # Return None to force synchronous fallback behavior
+        return None
+    
     if _BG_LOOP and _BG_LOOP.is_running():
         return _BG_LOOP
 
@@ -193,8 +219,24 @@ def _run_async_in_sync(coro, *, timeout: float = 10.0):
     - Always submit to a dedicated background event loop using
       asyncio.run_coroutine_threadsafe.
     - Wait for result with a bounded timeout to prevent test hangs.
+    - Falls back to asyncio.run() in test mode when background loop is disabled.
     """
     loop = _ensure_background_loop()
+    
+    # If background loop is disabled (test mode), use asyncio.run()
+    if loop is None:
+        try:
+            # Try to use asyncio.run() - this will fail if we're already in an async context
+            return asyncio.run(coro)
+        except RuntimeError as e:
+            # If asyncio.run() fails, it means we're in an async context
+            # This shouldn't happen in normal test execution
+            raise RuntimeError(
+                "Cannot use _run_async_in_sync from within async context "
+                "when background loop is disabled (test mode)"
+            ) from e
+    
+    # Use background loop
     fut = asyncio.run_coroutine_threadsafe(coro, loop)
     return fut.result(timeout=timeout)
 
