@@ -913,7 +913,7 @@ async def build_semantic_critique_prompt(
     except Exception:
         pass
 
-    log_action(
+    await log_action(
         "CritiquePromptBuilt",
         {
             "op_id": op_id,

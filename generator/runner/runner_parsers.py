@@ -103,7 +103,7 @@ class ParserInfo(BaseModel):
         return self
 
 
-class TestCaseResult(BaseModel):
+class TestCaseResultModel(BaseModel):
     """Schema for an individual test case result."""
 
     name: str = Field(..., description="Name of the test case.")
@@ -132,12 +132,12 @@ class TestCaseResult(BaseModel):
             status = str(status).lower()
             allowed = {"passed", "failed", "error", "skipped"}
             if status not in allowed:
-                raise ValueError(f"Invalid status for TestCaseResult: {status}")
+                raise ValueError(f"Invalid status for TestCaseResultModel: {status}")
             values["status"] = status
         return values
 
 
-class TestReportSchema(BaseModel):
+class TestReportModel(BaseModel):
     """Formal schema for parsed test report results."""
 
     model_config = {"populate_by_name": True}
@@ -154,7 +154,7 @@ class TestReportSchema(BaseModel):
     pass_rate: float = Field(
         0.0, description="Pass rate (passed_tests / total_tests), from 0.0 to 1.0."
     )
-    test_cases: List[TestCaseResult] = Field(
+    test_cases: List[TestCaseResultModel] = Field(
         default_factory=list, description="List of individual test case results."
     )
     raw_output_summary: str = Field(
@@ -167,7 +167,7 @@ class TestReportSchema(BaseModel):
     )  # Metadata about the parsing process
 
     @model_validator(mode="after")
-    def calculate_derived_fields(self) -> "TestReportSchema":
+    def calculate_derived_fields(self) -> "TestReportModel":
         # FIX: Added validation check from test_schema_validation
         if self.passed_tests > self.total_tests:
             raise ValueError(
@@ -179,6 +179,11 @@ class TestReportSchema(BaseModel):
         passed = self.passed_tests
         self.pass_rate = passed / total if total > 0 else 0.0
         return self
+
+
+# Backward compatibility aliases
+TestCaseResult = TestCaseResultModel
+TestReportSchema = TestReportModel
 
 
 class CoverageDetail(BaseModel):
