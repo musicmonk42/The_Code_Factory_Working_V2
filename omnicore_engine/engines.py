@@ -398,7 +398,7 @@ class PluginService:
             "generator:testgen_request", self.handle_testgen_request
         )
         await self.message_bus.subscribe(
-            "generator:docgen_request", self.handle_docegen_request
+            "generator:docgen_request", self.handle_docgen_request
         )
         await self.message_bus.subscribe(
             "workflow:sfe_to_generator", self.handle_sfe_to_generator
