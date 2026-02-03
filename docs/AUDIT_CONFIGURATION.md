@@ -66,6 +66,73 @@ For production deployments, use a secrets manager:
 
 ### Cryptographic Provider Settings
 
+#### `AUDIT_CRYPTO_MODE` (NEW - Security Critical)
+- **Type**: String
+- **Options**: `"software"`, `"hsm"`, `"dev"`, `"disabled"`
+- **Default**: `"software"` (changed from `"disabled"` for security)
+- **Environment**: `AUDIT_CRYPTO_MODE`
+- **Description**: Controls cryptographic signing mode for audit logs
+- **Security Impact**: CRITICAL - Determines audit log integrity guarantees
+- **Production**: MUST be `"software"` or `"hsm"` (validated at startup)
+
+**⚠️ CRITICAL SECURITY WARNING:**
+- **As of 2026-02-03**: Default changed from `"disabled"` to `"software"` to prevent security breaches
+- **Production environments**: Setting `AUDIT_CRYPTO_MODE=disabled` will **BLOCK STARTUP** with a ConfigurationError
+- **Audit log integrity**: Disabled mode provides NO cryptographic signatures, violating compliance requirements
+- **Regulatory impact**: Disabled crypto violates ISO 27001, SOC 2, NIST SP 800-53, GDPR Article 32
+
+**Mode Details:**
+- `"software"` (RECOMMENDED): Uses software-based cryptographic signatures with KMS-encrypted keys
+  - Requires: `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` environment variable
+  - Provides: Ed25519/RSA/ECDSA signatures for audit log integrity
+  - Compliance: Meets most regulatory requirements
+  
+- `"hsm"` (HIGHEST SECURITY): Uses Hardware Security Module for tamper-resistant signatures
+  - Requires: HSM configuration (PKCS#11 library, slot ID, PIN)
+  - Provides: Maximum security, FIPS 140-2 compliance
+  - Compliance: Required for highest security environments
+  
+- `"dev"` (DEVELOPMENT ONLY): Uses dummy keys for local development
+  - Requires: `AUDIT_LOG_DEV_MODE=true`
+  - Security: NO REAL SECURITY - for testing only
+  - Production: NEVER use in production
+  
+- `"disabled"` (DEPRECATED - NOT FOR PRODUCTION): No cryptographic signing
+  - **Blocked in production** by automatic validation
+  - Security: NO SECURITY - audit logs have no integrity guarantees
+  - Use case: Only for initial deployment setup, immediately migrate to `software` or `hsm`
+  - Migration: See "Migrating from Disabled Crypto" below
+
+**Migration from Disabled Crypto:**
+
+If you're upgrading from a version with `AUDIT_CRYPTO_MODE=disabled`:
+
+1. **Generate encryption key:**
+   ```bash
+   python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"
+   ```
+
+2. **Set environment variables:**
+   ```bash
+   export AUDIT_CRYPTO_MODE=software
+   export AUDIT_CRYPTO_PROVIDER_TYPE=software
+   export AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64=<your-generated-key>
+   ```
+
+3. **Store key securely** (AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault)
+
+4. **Restart application** - startup validation will verify configuration
+
+5. **Verify integrity:**
+   ```bash
+   python generator/audit_log/validate_config.py --strict
+   ```
+
+For existing deployments that need to temporarily bypass validation (NOT RECOMMENDED):
+- Set `APP_ENV=development` or `PYTHON_ENV=development` (disables production checks)
+- Or set `AUDIT_LOG_DEV_MODE=true` (disables all security)
+- **CRITICAL**: This should ONLY be used during migration, not in production
+
 #### `PROVIDER_TYPE`
 - **Type**: String
 - **Options**: `"software"`, `"hsm"`

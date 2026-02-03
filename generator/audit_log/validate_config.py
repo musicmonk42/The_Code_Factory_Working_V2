@@ -197,6 +197,21 @@ class ConfigValidator:
             crypto_mode = config.get("CRYPTO_MODE", "full")
             if crypto_mode != "full":
                 self.add_error(f"CRYPTO_MODE must be 'full' in production. Got: '{crypto_mode}'")
+            
+            # NEW: Validate AUDIT_CRYPTO_MODE for production
+            # This validates the environment variable-based config used by audit_crypto_factory
+            audit_crypto_mode = os.getenv("AUDIT_CRYPTO_MODE", "software").lower()
+            if audit_crypto_mode == "disabled":
+                self.add_error(
+                    "AUDIT_CRYPTO_MODE cannot be 'disabled' in production. "
+                    "Use 'software' or 'hsm' for cryptographic audit log signatures. "
+                    "Refer to docs/AUDIT_CONFIGURATION.md for migration guide."
+                )
+            elif audit_crypto_mode not in ["software", "hsm"]:
+                self.add_warning(
+                    f"AUDIT_CRYPTO_MODE='{audit_crypto_mode}' is not a standard production value. "
+                    "Recommended: 'software' or 'hsm'"
+                )
 
     def validate_compliance(self, config: Dict[str, Any]):
         """Validate compliance settings"""

@@ -49,19 +49,28 @@ else:
     os.environ.setdefault("APP_ENV", "test")
 
 # AUDIT CRYPTO CONFIGURATION
+# SECURITY UPDATE: Default crypto mode is now "software" (secure by default)
+# In test/dev environments without secrets, the factory will use dev mode automatically
+# 
 # Allow audit crypto initialization to fail gracefully if secrets are not configured
 # This prevents the server from crashing on startup when secrets are not yet configured
 # Set to "0" once AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is properly configured
 os.environ.setdefault("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "1")
 
-# Set audit crypto mode to allow startup without full cryptographic secrets
-# Options: "full" (requires secrets), "dev" (uses dummy keys), "disabled" (no crypto signing)
-# FIX: Enable crypto mode ("full") when secrets are properly configured
-# If AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is set, use "full" mode, otherwise "disabled"
-if os.environ.get("AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64"):
-    os.environ.setdefault("AUDIT_CRYPTO_MODE", "full")
-else:
-    os.environ.setdefault("AUDIT_CRYPTO_MODE", "disabled")
+# Set audit crypto mode - new default is "software" (cryptographically secure)
+# Options: "software" (default, requires secrets), "dev" (uses dummy keys), "disabled" (no crypto)
+# NOTE: Production environments will enforce "software" or "hsm" mode (disabled is blocked)
+# 
+# Behavior:
+# - With secrets configured: Uses software mode with real crypto
+# - Without secrets in production: Triggers validation error at startup (secure by default)
+# - Without secrets in dev/test: Factory automatically uses dev mode
+# 
+# To temporarily allow startup in production without secrets (NOT RECOMMENDED):
+# - Explicitly set AUDIT_CRYPTO_MODE=disabled (will log critical security warning)
+# - See AUDIT_CONFIGURATION.md for migration guide
+os.environ.setdefault("AUDIT_CRYPTO_MODE", "software")
+
 
 # INJECT SIGNING KEY (Required for Production Audit Logging)
 # This prevents the "CRITICAL - FATAL: log_audit_event" crash

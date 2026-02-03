@@ -246,8 +246,12 @@ def _is_crypto_disabled() -> bool:
     """
     Returns True when audit crypto is explicitly disabled.
     This allows the application to start without any crypto provider initialization.
+    
+    Security Note:
+        Default mode is now "software" (secure by default).
+        "disabled" mode is only allowed in development/test environments.
     """
-    audit_crypto_mode = os.getenv("AUDIT_CRYPTO_MODE", "").lower()
+    audit_crypto_mode = os.getenv("AUDIT_CRYPTO_MODE", "software").lower()
     return audit_crypto_mode == "disabled"
 
 
@@ -278,6 +282,74 @@ def _is_test_or_dev_mode() -> bool:
     if app_env in ("development", "dev", "local"):
         return True
     return False
+
+
+# --- Production Crypto Validation ---
+def _validate_production_crypto():
+    """
+    Enforce crypto requirements in production environments.
+    
+    Validates that cryptographic signing is enabled in production to ensure
+    audit log integrity and regulatory compliance.
+    
+    Raises:
+        ConfigurationError: If AUDIT_CRYPTO_MODE=disabled in production environment
+    
+    Compliance:
+        - ISO 27001 A.12.6.1: Technical vulnerability management
+        - SOC 2 CC6.1: Logical and physical access controls
+        - NIST SP 800-53 SI-2: Flaw remediation
+        - GDPR Article 32: Security of processing (audit logs)
+    """
+    # Skip validation in test/dev environments
+    if _is_test_or_dev_mode():
+        return
+    
+    # Check if running in production
+    env = os.getenv("PYTHON_ENV", "").lower()
+    app_env = os.getenv("APP_ENV", "").lower()
+    is_production = env == "production" or app_env == "production"
+    
+    if not is_production:
+        return
+    
+    # Get crypto mode (with new default of "software")
+    crypto_mode = os.getenv("AUDIT_CRYPTO_MODE", "software").lower()
+    
+    # Block disabled mode in production
+    if crypto_mode == "disabled":
+        error_msg = (
+            "CRITICAL SECURITY ERROR: AUDIT_CRYPTO_MODE=disabled is not allowed in production. "
+            "Audit logs require cryptographic signatures for integrity and regulatory compliance. "
+            "\n\nTo fix this, set one of the following:\n"
+            "  - AUDIT_CRYPTO_MODE=software (with AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64)\n"
+            "  - AUDIT_CRYPTO_MODE=hsm (with HSM configuration)\n"
+            "\nFor development/testing only, you can:\n"
+            "  - Set AUDIT_CRYPTO_MODE=dev with AUDIT_LOG_DEV_MODE=true\n"
+            "  - Set APP_ENV=development or PYTHON_ENV=development\n"
+            "\nRefer to docs/AUDIT_CONFIGURATION.md for migration guide."
+        )
+        logger.critical(
+            error_msg,
+            extra={
+                "operation": "production_crypto_validation",
+                "env": env,
+                "app_env": app_env,
+                "crypto_mode": crypto_mode,
+                "severity": "CRITICAL",
+            }
+        )
+        raise ConfigurationError(error_msg)
+    
+    # Log successful validation
+    logger.info(
+        f"Production crypto validation passed: AUDIT_CRYPTO_MODE={crypto_mode}",
+        extra={
+            "operation": "production_crypto_validation",
+            "crypto_mode": crypto_mode,
+            "status": "validated"
+        }
+    )
 
 
 # --- Configuration Management ---
@@ -860,7 +932,14 @@ class NoOpCryptoProvider(CryptoProvider):
         self.logger.debug("NoOpCryptoProvider.rotate_key called (no-op)")
         return self.key_id
 
-    async def close(self):
+    def close(self):
+        """
+        Synchronous close method for NoOpCryptoProvider.
+        
+        Since NoOpCryptoProvider performs no I/O operations and has no resources
+        to release, there's no need for async. Making this synchronous eliminates
+        the "coroutine was never awaited" warning during shutdown.
+        """
         self.logger.debug("NoOpCryptoProvider.close called (no-op)")
         pass
 
@@ -1898,6 +1977,10 @@ def _register_signal_handlers() -> None:
 
 # Register handlers at module load time
 _register_signal_handlers()
+
+# Validate production crypto configuration at module load time
+# This ensures production environments cannot start with disabled crypto
+_validate_production_crypto()
 
 
 # --- Global Crypto Provider Factory Instance ---
