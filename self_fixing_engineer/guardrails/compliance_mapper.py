@@ -135,16 +135,24 @@ class ComplianceEnforcementError(Exception):
                 f"ACTION_BLOCKED_BY_COMPLIANCE: Action '{action_name}' blocked by control '{control_tag}': {message}"
             )
         )
-        asyncio.create_task(
-            _log_to_central_audit(
-                "action_blocked",
-                {
-                    "action_name": action_name,
-                    "control_tag": control_tag,
-                    "message": message,
-                },
+        try:
+            # Try to get a running event loop; if there is one, schedule the async task
+            asyncio.get_running_loop()  # Verify loop exists
+            asyncio.create_task(
+                _log_to_central_audit(
+                    "action_blocked",
+                    {
+                        "action_name": action_name,
+                        "control_tag": control_tag,
+                        "message": message,
+                    },
+                )
             )
-        )
+        except RuntimeError:
+            # No running event loop - just log without the async audit
+            logger.debug(
+                "No running event loop; skipping async audit log for action blocked."
+            )
 
 
 # P2: Dependencies - Documenting required packages
@@ -377,7 +385,15 @@ def _audit_log_gap(message: str, details: Optional[Dict[str, Any]] = None):
     logger.warning(sanitize_log(f"AUDIT_LOG_COMPLIANCE_GAP: {json.dumps(log_entry)}"))
     if PROMETHEUS_AVAILABLE:
         self_healing_compliance_gap_alerts_total.inc()
-    asyncio.create_task(_log_to_central_audit("compliance_gap_alert", log_entry))
+    try:
+        # Try to get a running event loop; if there is one, schedule the async task
+        asyncio.get_running_loop()  # Verify loop exists
+        asyncio.create_task(_log_to_central_audit("compliance_gap_alert", log_entry))
+    except RuntimeError:
+        # No running event loop - just log without the async audit
+        logger.debug(
+            "No running event loop; skipping async audit log for compliance gap."
+        )
 
 
 def generate_report(config_path: str) -> Tuple[Dict[str, List[str]], bool]:
