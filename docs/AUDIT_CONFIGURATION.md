@@ -589,6 +589,94 @@ PII_ENTITIES:
 
 ## Migration Guide
 
+### CRITICAL: Migrating from "disabled" to "software" Audit Crypto Mode (2026-02-03)
+
+**Context**: The default `AUDIT_CRYPTO_MODE` has been changed from `"disabled"` to `"software"` to enforce cryptographic signing of audit logs and prevent security breaches.
+
+**Impact**: Existing deployments with `AUDIT_CRYPTO_MODE=disabled` will fail to start in production environments.
+
+**Migration Steps**:
+
+1. **Generate a secure encryption key:**
+   ```bash
+   # Generate a 256-bit Fernet key
+   python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"
+   # Example output: 3q2+7w==5t6y7u8i9o0p1a2s3d4f5g6h7j8k9l0z1x2c3v4b5n6m7,8.9/0
+   ```
+
+2. **Store the key in your secrets manager:**
+   ```bash
+   # AWS Secrets Manager
+   aws secretsmanager create-secret \
+     --name audit-crypto-master-key \
+     --secret-string "$(python -c 'import base64, os; print(base64.b64encode(os.urandom(32)).decode())')"
+   
+   # Google Cloud Secret Manager
+   echo -n "$(python -c 'import base64, os; print(base64.b64encode(os.urandom(32)).decode())')" | \
+     gcloud secrets create audit-crypto-master-key --data-file=-
+   
+   # HashiCorp Vault
+   vault kv put secret/audit-crypto-master-key \
+     value="$(python -c 'import base64, os; print(base64.b64encode(os.urandom(32)).decode())')"
+   ```
+
+3. **Set the environment variable:**
+   ```bash
+   # In Railway/Heroku/Cloud Run:
+   export AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64="<your-generated-key>"
+   
+   # In Kubernetes:
+   kubectl create secret generic audit-crypto-key \
+     --from-literal=master-key="<your-generated-key>"
+   
+   # In .env file (development only - DO NOT commit to version control):
+   AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64=<your-generated-key>
+   ```
+
+4. **Update AUDIT_CRYPTO_MODE:**
+   ```bash
+   # Set in your deployment environment
+   export AUDIT_CRYPTO_MODE=software
+   
+   # Or in .env file:
+   AUDIT_CRYPTO_MODE=software
+   ```
+
+5. **Set AUDIT_CRYPTO_ALLOW_INIT_FAILURE to 0 (production):**
+   ```bash
+   # In production, ensure crypto initialization is required
+   export AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0
+   ```
+
+6. **Restart the application:**
+   - Verify startup logs show: `Cryptographic configuration validated successfully`
+   - Ensure no `CRITICAL SECURITY ERROR: AUDIT_CRYPTO_MODE=disabled` messages
+   - Check audit logs for valid hash chains (no `HASH_CHAIN_BROKEN` errors)
+
+7. **Verify audit log integrity:**
+   ```bash
+   # Check audit log has cryptographic signatures
+   tail -n 10 audit_trail.log | grep -E "signature|hash_chain"
+   ```
+
+**Rollback Plan** (emergency only):
+```bash
+# Temporarily allow disabled mode in non-production only
+export AUDIT_CRYPTO_MODE=dev
+export AUDIT_LOG_DEV_MODE=true
+export AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1
+# WARNING: This is a security risk - only use for emergency recovery
+```
+
+**Production Validation Checklist**:
+- [ ] Encryption key generated and stored securely
+- [ ] `AUDIT_CRYPTO_MODE=software` set in environment
+- [ ] `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` configured
+- [ ] `AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0` in production
+- [ ] Startup logs show successful crypto validation
+- [ ] Audit logs contain cryptographic signatures
+- [ ] No `HASH_CHAIN_BROKEN` errors in logs
+
 ### From Environment Variables to Config Files
 
 1. **Inventory current environment variables:**
