@@ -596,6 +596,37 @@ class FeedbackManager:
             logger.error(f"Failed to add user feedback: {e}", exc_info=True)
             feedback_errors_total.labels(component="add_user_feedback_db_error").inc()
 
+    async def record_feedback(
+        self,
+        user_id: str,
+        feedback_type: Any = None,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Records feedback from the CLI or other sources.
+        
+        This is a compatibility method that wraps add_user_feedback for CLI integration.
+        
+        Args:
+            user_id: The user ID associated with the feedback.
+            feedback_type: The type of feedback (optional, can be None).
+            details: Additional details about the feedback event.
+        """
+        feedback_entry = {
+            "user_id": user_id,
+            "feedback_type": str(feedback_type) if feedback_type else "general",
+            "details": details or {},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "type": "cli_feedback",
+        }
+        try:
+            await self.db_client.save_feedback_entry(feedback_entry)
+            feedback_ops_total.labels(operation="record_feedback").inc()
+            last_feedback_timestamp.set(datetime.now(timezone.utc).timestamp())
+            logger.debug(f"CLI feedback recorded for user {user_id}")
+        except Exception as e:
+            logger.error(f"Failed to record CLI feedback: {e}", exc_info=True)
+            feedback_errors_total.labels(component="record_feedback_db_error").inc()
+
     async def _purge_metrics_and_sync_loop(self):
         """
         Background task to periodically sync data to the flat log file and purge old metrics.

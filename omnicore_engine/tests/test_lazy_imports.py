@@ -31,7 +31,7 @@ class TestLazyImports:
         
         registry = get_plugin_registry()
         assert registry is not None
-        assert hasattr(registry, 'register_plugin')
+        assert hasattr(registry, 'register')
 
     def test_plugin_registry_in_all(self):
         """Test that plugin_registry is in __all__."""

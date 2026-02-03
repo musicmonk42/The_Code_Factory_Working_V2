@@ -168,9 +168,7 @@ except ImportError:
 
 # FeedbackManager mock - module doesn't exist
 try:
-    from arbiter.feedback import FeedbackManager
-
-    FeedbackType = None  # Define if needed
+    from arbiter.feedback import FeedbackManager, FeedbackType
 except ImportError:
     logger.warning(
         "FeedbackManager module not found. Feedback features will be unavailable."
@@ -188,7 +186,16 @@ except ImportError:
         async def log_error(self, *args, **kwargs):
             pass
 
-    FeedbackType = None
+    # Fallback FeedbackType class for when arbiter.feedback is not available
+    class FeedbackType:
+        """Fallback enumeration of feedback types"""
+        BUG_REPORT = "bug_report"
+        FEATURE_REQUEST = "feature_request"
+        GENERAL = "general"
+        APPROVAL = "approval"
+        DENIAL = "denial"
+        IMPROVEMENT = "improvement"
+        ISSUE = "issue"
 
 # Prometheus metrics
 try:
