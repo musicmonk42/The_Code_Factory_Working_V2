@@ -237,7 +237,14 @@ class DistributedRateLimiter:
 
 # --- Circuit Breaker ---
 class CircuitBreaker:
-    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
+    def __init__(self, failure_threshold: int = 10, timeout: int = 300):
+        """
+        Initialize circuit breaker with production-grade settings.
+        
+        Args:
+            failure_threshold: Number of failures before circuit opens (default: 10, was 5)
+            timeout: Seconds to wait before trying half-open state (default: 300, was 60)
+        """
         self.failure_threshold = failure_threshold
         self.timeout = timeout
         self.failure_count: Dict[str, int] = {}
@@ -546,13 +553,32 @@ class LLMClient:
         results = []
         tasks = []
 
+        # Validate models list before processing
+        if not models:
+            raise LLMError("Empty models list provided to ensemble API")
+
         # Create tasks for all models
         for m in models:
+            # FIX: Add defensive .get() with fallback for provider and model keys
+            provider = m.get("provider")
+            model = m.get("model")
+            
+            # Skip malformed model configurations with warning
+            if not provider or not model:
+                logger.warning(
+                    f"Skipping malformed model configuration (missing provider or model): {m}"
+                )
+                continue
+            
             tasks.append(
                 self.call_llm_api(
-                    prompt, model=m["model"], provider=m["provider"], **kwargs
+                    prompt, model=model, provider=provider, **kwargs
                 )
             )
+
+        # Ensure at least one valid model exists before proceeding
+        if not tasks:
+            raise LLMError("No valid model configurations found in ensemble API call")
 
         # Run all calls in parallel
         task_results = await asyncio.gather(*tasks, return_exceptions=True)

@@ -229,6 +229,21 @@ RUN curl -sfL -o /tmp/trivy.tar.gz "https://github.com/aquasecurity/trivy/releas
     rm /tmp/trivy.tar.gz && \
     trivy --version
 
+# Install Hadolint for Dockerfile linting (deployment validation)
+# Hadolint is optional for deploy agent linting functionality
+# Using direct binary download for simplicity
+ARG HADOLINT_VERSION=2.12.0
+ARG HADOLINT_SHA256=56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010
+RUN curl -sfL -o /usr/local/bin/hadolint "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" && \
+    echo "${HADOLINT_SHA256}  /usr/local/bin/hadolint" | sha256sum -c - && \
+    chmod +x /usr/local/bin/hadolint && \
+    hadolint --version
+
+# Note: Docker-in-Docker is NOT installed by default for security reasons
+# If deployment validation requires docker build testing inside containers,
+# use Docker socket mounting: docker run -v /var/run/docker.sock:/var/run/docker.sock
+# Or install docker.io package at runtime if needed (not recommended for production)
+
 # Create non-root user with restricted shell for security
 # Using specific UID/GID to prevent privilege escalation attacks
 # Following CIS Docker Benchmark 4.1 - Create a user for the container

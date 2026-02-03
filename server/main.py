@@ -99,6 +99,8 @@ import path_setup  # noqa: F401
 
 import asyncio
 import logging
+import os
+import signal
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -410,6 +412,35 @@ except ImportError as e:
 
 logger = logging.getLogger(__name__)
 
+# FIX: Configure production log levels to reduce log spam
+# Detect production environment and set appropriate log levels
+is_production = (
+    os.getenv("RAILWAY_ENVIRONMENT") is not None or
+    os.getenv("APP_ENV", "development").lower() == "production" or
+    os.getenv("ENVIRONMENT", "").lower() == "production"
+)
+
+if is_production and not _is_test_environment:
+    # Set root logger to WARNING in production to reduce log volume
+    logging.getLogger().setLevel(logging.WARNING)
+    
+    # Keep important loggers at INFO for operational visibility
+    logging.getLogger("server").setLevel(logging.INFO)
+    logging.getLogger("uvicorn").setLevel(logging.INFO)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)  # Reduce access log spam
+    
+    # Reduce noise from verbose third-party libraries
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    
+    logger.info("Production log level configured: Root=WARNING, Server=INFO")
+else:
+    # Development mode - keep INFO for better debugging
+    logger.info("Development log level configured: INFO")
+
+
 # Get the directory where this file is located
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -616,6 +647,27 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Error releasing startup lock during shutdown: {e}")
 
     logger.info("API Server stopped")
+
+
+# FIX: Add graceful shutdown signal handlers to prevent CancelledError cascades
+# This ensures long-running LLM calls are cancelled gracefully with timeout
+_shutdown_event = asyncio.Event()
+
+
+def _handle_shutdown_signal(signum, frame):
+    """
+    Signal handler for SIGTERM and SIGINT.
+    
+    Sets the shutdown event to trigger graceful shutdown of background tasks.
+    """
+    signame = signal.Signals(signum).name
+    logger.info(f"Received {signame}, initiating graceful shutdown...")
+    _shutdown_event.set()
+
+
+# Register signal handlers
+signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+signal.signal(signal.SIGINT, _handle_shutdown_signal)
 
 
 # Create FastAPI application

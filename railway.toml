@@ -7,7 +7,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "python server/run.py --host 0.0.0.0 --workers 1 --log-level debug"
+startCommand = "python server/run.py --host 0.0.0.0 --workers 1 --log-level info"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
