@@ -26,10 +26,31 @@ from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
-# Import arbiter module - it should handle its own optional dependencies gracefully
-from self_fixing_engineer.arbiter import arbiter
+# Import arbiter module lazily to avoid expensive initialization during collection
+# The arbiter module is imported inside test functions/fixtures when needed
+arbiter = None
+
+
+def get_arbiter_module():
+    """Lazy import of arbiter module."""
+    global arbiter
+    if arbiter is None:
+        from self_fixing_engineer.arbiter import arbiter as _arbiter
+        arbiter = _arbiter
+    return arbiter
+
 
 # ===== TEST FIXTURES =====
+
+
+@pytest.fixture(autouse=True)
+def lazy_load_arbiter():
+    """
+    Fixture that ensures arbiter module is loaded before tests run.
+    This avoids loading during collection phase which can cause timeouts.
+    """
+    get_arbiter_module()
+    yield
 
 
 def generate_fernet_key():

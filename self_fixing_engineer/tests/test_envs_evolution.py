@@ -477,7 +477,7 @@ class TestGeneticOptimizer:
 class TestWithoutDEAP:
     """Test behavior when DEAP is not available"""
 
-    @patch("evolution.DEAP_AVAILABLE", False)
+    @patch("self_fixing_engineer.envs.evolution.DEAP_AVAILABLE", False)
     def test_optimizer_without_deap(self):
         """Test that optimizer raises error without DEAP"""
         with pytest.raises(ImportError, match="DEAP library required"):
@@ -534,7 +534,7 @@ class TestSandboxing:
         """Test that sandboxed evaluation checks environment"""
         # Get the correct path to evolution.py
         evolution_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "evolution.py"
+            os.path.dirname(os.path.dirname(__file__)), "envs", "evolution.py"
         )
 
         result = subprocess.run(
@@ -551,7 +551,7 @@ class TestSandboxing:
 
         # Get the correct path to evolution.py
         evolution_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "evolution.py"
+            os.path.dirname(os.path.dirname(__file__)), "envs", "evolution.py"
         )
 
         process = subprocess.Popen(
