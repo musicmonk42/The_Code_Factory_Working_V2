@@ -166,17 +166,17 @@ except ImportError:
             return True, "Mock Policy: Always allowed"
 
 
-# FeedbackManager mock - module doesn't exist
+# FeedbackManager and FeedbackType from arbiter.feedback
+# Both classes are expected to exist together in the arbiter.feedback module
 try:
-    from arbiter.feedback import FeedbackManager
-
-    FeedbackType = None  # Define if needed
-except ImportError:
+    from arbiter.feedback import FeedbackManager, FeedbackType
+except ImportError as e:
     logger.warning(
-        "FeedbackManager module not found. Feedback features will be unavailable."
+        f"FeedbackManager module not found ({e}). Feedback features will be unavailable."
     )
 
     class FeedbackManager:
+        """Fallback FeedbackManager when arbiter.feedback is not available."""
         def __init__(self, *args, **kwargs):
             pass
 
@@ -188,7 +188,16 @@ except ImportError:
         async def log_error(self, *args, **kwargs):
             pass
 
-    FeedbackType = None
+    # Fallback FeedbackType class for when arbiter.feedback is not available
+    class FeedbackType:
+        """Fallback enumeration of feedback types when arbiter.feedback is not available."""
+        BUG_REPORT = "bug_report"
+        FEATURE_REQUEST = "feature_request"
+        GENERAL = "general"
+        APPROVAL = "approval"
+        DENIAL = "denial"
+        IMPROVEMENT = "improvement"
+        ISSUE = "issue"
 
 # Prometheus metrics
 try:
