@@ -224,11 +224,11 @@ class TestCoverageValidator:
         return CoverageValidator()
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
+        "generator.agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
@@ -259,11 +259,11 @@ class TestCoverageValidator:
         mock_run_tests.assert_called_once()
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
+        "generator.agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
@@ -292,11 +292,11 @@ class TestCoverageValidator:
         assert "low coverage" in result["issues"].lower()
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
+        "generator.agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
@@ -324,11 +324,11 @@ class TestMutationValidator:
         return MutationValidator()
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
+        "generator.agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
     )
     @pytest.mark.asyncio
     async def test_validate_success(
@@ -352,11 +352,11 @@ class TestMutationValidator:
         assert result["mutation_score"] == 80.0
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
+        "generator.agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
     )
     @pytest.mark.asyncio
     async def test_validate_unsupported_language(
@@ -380,11 +380,11 @@ class TestMutationValidator:
         assert result["mutation_score"] == 0.0
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
+        "generator.agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
     )
     @pytest.mark.asyncio
     async def test_validate_timeout(
@@ -406,11 +406,11 @@ class TestMutationValidator:
         )
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
+        "generator.agents.testgen_agent.testgen_validator.mutation_test", new_callable=AsyncMock
     )
     @pytest.mark.asyncio
     async def test_validate_with_human_review(
@@ -450,11 +450,11 @@ class TestPropertyBasedValidator:
         return PropertyBasedValidator()
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.property_based_test",
+        "generator.agents.testgen_agent.testgen_validator.property_based_test",
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
@@ -485,7 +485,7 @@ def test_reverse_property(s):
         assert "all properties passed" in result["issues"].lower()
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch("subprocess.run")
@@ -517,11 +517,11 @@ def test_buggy_property(x):
         assert "property-based tests failed" in result["issues"].lower()
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.property_based_test",
+        "generator.agents.testgen_agent.testgen_validator.property_based_test",
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
@@ -547,11 +547,11 @@ def test_buggy_property(x):
         assert "property-based tests failed" in result["issues"].lower()
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.property_based_test",
+        "generator.agents.testgen_agent.testgen_validator.property_based_test",
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
@@ -582,11 +582,11 @@ class TestStressPerformanceValidator:
         return StressPerformanceValidator()
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.run_stress_tests",
+        "generator.agents.testgen_agent.testgen_validator.run_stress_tests",
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
@@ -614,11 +614,11 @@ class TestStressPerformanceValidator:
         assert result["crashes_detected"] is False
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.run_stress_tests",
+        "generator.agents.testgen_agent.testgen_validator.run_stress_tests",
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
@@ -646,11 +646,11 @@ class TestStressPerformanceValidator:
         assert result["avg_response_time_ms"] == 1500.0
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.run_stress_tests",
+        "generator.agents.testgen_agent.testgen_validator.run_stress_tests",
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
@@ -689,11 +689,11 @@ class TestStressPerformanceValidator:
         assert kwargs["config"] == custom_config
 
     @patch(
-        "agents.testgen_agent.testgen_validator._save_files_async",
+        "generator.agents.testgen_agent.testgen_validator._save_files_async",
         new_callable=AsyncMock,
     )
     @patch(
-        "agents.testgen_agent.testgen_validator.run_stress_tests",
+        "generator.agents.testgen_agent.testgen_validator.run_stress_tests",
         new_callable=AsyncMock,
     )
     @pytest.mark.asyncio
@@ -719,7 +719,7 @@ class TestValidatorRegistry:
     @pytest.fixture
     def registry(self):
         """Create a ValidatorRegistry instance for testing."""
-        with patch("agents.testgen_agent.testgen_validator.Observer"):
+        with patch("generator.agents.testgen_agent.testgen_validator.Observer"):
             return ValidatorRegistry()
 
     def test_init(self, registry):
@@ -826,11 +826,11 @@ class TestEdgeCases:
         validator = CoverageValidator()
 
         with patch(
-            "agents.testgen_agent.testgen_validator._save_files_async",
+            "generator.agents.testgen_agent.testgen_validator._save_files_async",
             new_callable=AsyncMock,
         ):
             with patch(
-                "agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
+                "generator.agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
                 new_callable=AsyncMock,
             ) as mock_run:
                 mock_run.return_value = {
@@ -859,11 +859,11 @@ class TestEdgeCases:
         test_files = {"test.xyz": "some test"}
 
         with patch(
-            "agents.testgen_agent.testgen_validator._save_files_async",
+            "generator.agents.testgen_agent.testgen_validator._save_files_async",
             new_callable=AsyncMock,
         ):
             with patch(
-                "agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
+                "generator.agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
                 new_callable=AsyncMock,
             ) as mock_run:
                 mock_run.return_value = {
@@ -902,11 +902,11 @@ class TestCompliance:
         validator = CoverageValidator()
 
         with patch(
-            "agents.testgen_agent.testgen_validator._save_files_async",
+            "generator.agents.testgen_agent.testgen_validator._save_files_async",
             new_callable=AsyncMock,
         ):
             with patch(
-                "agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
+                "generator.agents.testgen_agent.testgen_validator.run_tests_in_sandbox",
                 new_callable=AsyncMock,
             ) as mock_run:
                 mock_run.return_value = {
@@ -937,7 +937,7 @@ class TestIntegration:
     async def test_full_validation_pipeline(self):
         """Test the complete validation pipeline with multiple strategies."""
         with patch(
-            "agents.testgen_agent.testgen_validator.VALIDATORS"
+            "generator.agents.testgen_agent.testgen_validator.VALIDATORS"
         ) as mock_validators:
             # Mock all validators
             coverage_validator = Mock()
@@ -984,7 +984,7 @@ class TestIntegration:
     async def test_error_handling_throughout_pipeline(self):
         """Test error handling across the entire validation pipeline."""
         with patch(
-            "agents.testgen_agent.testgen_validator.VALIDATORS"
+            "generator.agents.testgen_agent.testgen_validator.VALIDATORS"
         ) as mock_validators:
             # Mock validator that raises an exception
             failing_validator = Mock()
