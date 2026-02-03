@@ -219,7 +219,7 @@ class TestGeneratorPluginWrapper:
         repo_path = str(test_repository)
         ambiguities = []
 
-        with freeze_time("2025-09-01T12:00:00Z"):
+        with freeze_time("2025-09-01T12:00:00Z", ignore=["transformers"]):
             result = await run_generator_workflow(
                 requirements=requirements,
                 config=config,

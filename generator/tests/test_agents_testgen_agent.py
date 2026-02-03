@@ -416,7 +416,8 @@ class TestTextSanitization:
 class TestAgentCreation:
     """Test TestgenAgent creation and basic functionality."""
 
-    def test_agent_initialization(self):
+    @pytest.mark.asyncio
+    async def test_agent_initialization(self):
         """Test TestgenAgent can be initialized."""
         mocks = setup_comprehensive_mocking()
 
@@ -425,6 +426,9 @@ class TestAgentCreation:
                 from generator.agents.testgen_agent.testgen_agent import TestgenAgent
 
                 agent = TestgenAgent(temp_dir)
+                # Wait for any async initialization tasks to complete
+                if agent._init_task is not None:
+                    await agent._init_task
                 assert agent.repo_path == Path(temp_dir)
                 print("✅ TestgenAgent creation working")
 

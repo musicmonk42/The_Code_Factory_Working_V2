@@ -88,7 +88,17 @@ if "aiohttp" not in sys.modules or isinstance(sys.modules.get("aiohttp"), MagicM
     sys.modules["aiohttp.web_request"] = mock_aiohttp.web_request
     sys.modules["aiohttp.web_response"] = mock_aiohttp.web_response
 
-sys.modules["tiktoken"] = MagicMock()
+# --- Save the original tiktoken module if it was previously imported ---
+_original_tiktoken = sys.modules.get("tiktoken")
+
+# --- Mock tiktoken to avoid network calls during testing ---
+mock_tiktoken = MagicMock()
+mock_encoding = MagicMock()
+mock_encoding.encode.return_value = [1, 2, 3, 4, 5]  # Return mock tokens
+mock_encoding.decode.return_value = "decoded text"
+mock_tiktoken.get_encoding.return_value = mock_encoding
+mock_tiktoken.encoding_for_model.return_value = mock_encoding
+sys.modules["tiktoken"] = mock_tiktoken
 # NOTE: Don't mock aiofiles as it's a real installed package needed by subsequent tests
 
 # Import the actual code
@@ -107,6 +117,14 @@ from agents.docgen_agent import (
 
 # Now this import will succeed and LLMError will be our mock type
 from runner.runner_errors import LLMError
+
+# --- Restore the original tiktoken module after imports ---
+# This prevents pollution of the module for other test files
+if _original_tiktoken is not None:
+    sys.modules["tiktoken"] = _original_tiktoken
+else:
+    # If tiktoken wasn't originally imported, remove the mock so it can be imported fresh
+    del sys.modules["tiktoken"]
 
 # =============================================================================
 # FIXTURES
