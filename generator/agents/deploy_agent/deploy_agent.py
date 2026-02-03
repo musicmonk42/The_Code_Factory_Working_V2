@@ -1030,7 +1030,10 @@ Respond in plain prose only (no JSON / no code fences).
                 except nx.NetworkXUnfeasible as e:
                     msg = f"Cycle in target dependencies: {e}"
                     span.set_status(Status(StatusCode.ERROR, msg))
-                    raise RunnerError(msg)
+                    raise RunnerError(
+                        error_code="DEPENDENCY_CYCLE",
+                        detail=msg
+                    )
 
                 # generation per target
                 for t in order:
@@ -1124,7 +1127,8 @@ Respond in plain prose only (no JSON / no code fences).
                                 ):
                                     VALIDATION_ERRORS.labels(run_type=t).inc()
                                     raise RunnerError(
-                                        f"Config validation failed for {t}"
+                                        error_code="VALIDATION_FAILED",
+                                        detail=f"Config validation failed for {t}"
                                     )
 
                                 configs[t] = handled["final_config_output"]
