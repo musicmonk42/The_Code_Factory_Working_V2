@@ -222,7 +222,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # TRIVY_VERSION can be overridden at build time to pin a specific version
 # When changing TRIVY_VERSION, update TRIVY_SHA256 from trivy_<version>_checksums.txt
 ARG TRIVY_VERSION=0.69.0
-ARG TRIVY_SHA256=00cbb63facb18469288e7f41b578a6187c88ab8cce8d9434b71eb7adcaf07d6f
+ARG TRIVY_SHA256=fff5813d6888fa6f8bd40042a08c4f072b3e65aec9f13dd9ab1d7b26146ad046
 RUN curl -sfL -o /tmp/trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" && \
     echo "${TRIVY_SHA256}  /tmp/trivy.tar.gz" | sha256sum -c - && \
     tar xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy && \
