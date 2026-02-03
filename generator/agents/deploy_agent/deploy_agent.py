@@ -20,7 +20,15 @@ import aiohttp
 import aiosqlite  # <-- FIX: Add aiosqlite import
 import networkx as nx
 import prometheus_client
-import tiktoken
+
+# Defensive import for tiktoken
+try:
+    import tiktoken
+    HAS_TIKTOKEN = True
+except ImportError:
+    HAS_TIKTOKEN = False
+    tiktoken = None
+
 from fastapi import FastAPI, HTTPException
 from opentelemetry.trace import Status, StatusCode
 from pydantic import BaseModel
@@ -559,7 +567,12 @@ class DeployAgent:
         add_provenance_sync("provenance", {"run_id": self.run_id, "agent": "DeployAgent"})
 
         self.history: List[Dict[str, Any]] = []
-        self.tokenizer = tiktoken.get_encoding("cl100k_base")
+        # Only initialize tokenizer if tiktoken is available and not in test mode
+        # (tiktoken tries to download encoding files from the internet during initialization)
+        if HAS_TIKTOKEN and not os.getenv("TESTING"):
+            self.tokenizer = tiktoken.get_encoding("cl100k_base")
+        else:
+            self.tokenizer = None
 
         # --- FIX 2: Instantiate the agent with paths based on repo_path ---
         template_dir = self.repo_path / "deploy_templates"
