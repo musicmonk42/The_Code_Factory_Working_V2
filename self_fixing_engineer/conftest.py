@@ -28,6 +28,9 @@ os.environ["NO_MONITORING"] = "1"
 os.environ["DISABLE_TELEMETRY"] = "1"
 os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
 os.environ["SKIP_IMPORT_TIME_VALIDATION"] = "1"
+# Set PYTEST_COLLECTING to prevent expensive arbiter module initialization
+# during test collection phase (helps prevent CI CPU timeouts)
+os.environ["PYTEST_COLLECTING"] = "1"
 
 # ---- Mock HuggingFace Transformers Pipeline ----
 try:
@@ -85,6 +88,21 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "heavy: mark test as heavy/resource-intensive (skipped by default)"
     )
+
+
+def pytest_collection_finish(session):
+    """
+    Called after collection is complete, before tests start running.
+    Clear PYTEST_COLLECTING so that actual test runs can load components.
+    """
+    os.environ.pop("PYTEST_COLLECTING", None)
+    # Now trigger component loading for arbiter if it's been imported
+    try:
+        from self_fixing_engineer.arbiter import _load_components, _components_loaded
+        if not _components_loaded:
+            _load_components()
+    except ImportError:
+        pass
 
 
 @pytest.fixture(scope="function", autouse=True)

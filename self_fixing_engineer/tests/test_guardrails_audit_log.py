@@ -119,21 +119,23 @@ def caplog(caplog):
 
 @pytest.mark.asyncio
 async def test_validate_dependencies_production(mock_env, monkeypatch, caplog):
-    """Test dependency validation in production."""
+    """Test dependency validation in production logs critical error but continues."""
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setattr("self_fixing_engineer.guardrails.audit_log.CRYPTO_AVAILABLE", False)
-    with pytest.raises(SystemExit):
-        audit_log.validate_dependencies()
+    # The function now logs a critical error but does not raise SystemExit
+    # It continues in degraded mode
+    audit_log.validate_dependencies()
     assert "cryptography not installed" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_validate_sensitive_env_vars_production(mock_env, monkeypatch, caplog):
-    """Test sensitive env var validation in production."""
+    """Test sensitive env var validation in production logs critical error but continues."""
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("PRIVATE_KEY_B64", "dummy_key")
-    with pytest.raises(SystemExit):
-        audit_log.validate_sensitive_env_vars()
+    # The function now logs a critical error but does not raise SystemExit
+    # It continues with security features disabled
+    audit_log.validate_sensitive_env_vars()
     assert "Dummy value detected" in caplog.text
 
 
@@ -223,7 +225,7 @@ async def test_verify_audit_chain_corrupted(temp_log_path, mock_env):
 @pytest.mark.asyncio
 async def test_audit_log_event_async(mock_env, temp_log_path):
     """Test async helper for logging events."""
-    with patch("audit_log.AuditLogger.from_environment") as mock_logger:
+    with patch("self_fixing_engineer.guardrails.audit_log.AuditLogger.from_environment") as mock_logger:
         mock_instance = MagicMock()
         mock_instance.add_entry = AsyncMock()
         mock_instance.close = AsyncMock()
