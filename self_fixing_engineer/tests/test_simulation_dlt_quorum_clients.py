@@ -48,12 +48,12 @@ except ImportError:
 
 
 # Import base classes that don't depend on web3
-from simulation.plugins.dlt_clients.dlt_base import SECRETS_MANAGER, BaseOffChainClient
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import SECRETS_MANAGER, BaseOffChainClient
 
 # Only import Quorum-specific modules if web3 is available
 if WEB3_AVAILABLE:
     try:
-        from simulation.plugins.dlt_clients.dlt_quorum_clients import (
+        from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_quorum_clients import (
             AWSSecretsBackend,
             AzureKeyVaultBackend,
             GCPSecretManagerBackend,

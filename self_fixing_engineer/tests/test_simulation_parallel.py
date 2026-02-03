@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
-from simulation.parallel import (
+from self_fixing_engineer.simulation.parallel import (
     ParallelConfig,
     ProgressReporter,
     RayRLlibConcurrencyTuner,
@@ -33,7 +33,7 @@ except ImportError:
     PYDANTIC_AVAILABLE = False
 
 try:
-    from simulation.parallel import (
+    from self_fixing_engineer.simulation.parallel import (
         KUBERNETES_AVAILABLE,
         PROMETHEUS_AVAILABLE,
         RLLIB_AVAILABLE,

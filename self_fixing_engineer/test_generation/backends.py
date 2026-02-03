@@ -113,7 +113,7 @@ except Exception:
 
 # Audit logger. This is a critical dependency.
 try:
-    from arbiter.audit_log import audit_logger
+    from self_fixing_engineer.arbiter.audit_log import audit_logger
 
     AUDIT_LOGGER_AVAILABLE = True
 except Exception as e:

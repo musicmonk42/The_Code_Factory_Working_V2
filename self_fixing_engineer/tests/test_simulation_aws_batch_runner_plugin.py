@@ -17,7 +17,7 @@ sys.path.insert(0, parent_dir)
 # Now import from the correct module path
 # If aws_batch_runner_plugin.py is in simulation/plugins/
 try:
-    from simulation.plugins.aws_batch_runner_plugin import (
+    from self_fixing_engineer.simulation.plugins.aws_batch_runner_plugin import (
         AWS_AVAILABLE,
         JobConfig,
         plugin_health,

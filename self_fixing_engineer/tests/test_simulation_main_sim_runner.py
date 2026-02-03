@@ -104,7 +104,7 @@ sys.modules["simulation.agentic"] = MagicMock()
 
 # Now we can safely import the module under test
 try:
-    from simulation.plugins.main_sim_runner import (
+    from self_fixing_engineer.simulation.plugins.main_sim_runner import (
         _execute_remotely,
         _plugin_register_adapter,
         _registered_plugin_entrypoints,

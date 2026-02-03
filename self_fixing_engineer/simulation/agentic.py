@@ -111,7 +111,7 @@ except ImportError:
     )
 
 if opentelemetry:
-    from arbiter.otel_config import get_tracer
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
 
     tracer = get_tracer(__name__)
 else:

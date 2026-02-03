@@ -1,8 +1,8 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-# Fix: Import from arbiter.file_watcher instead of file_watcher
-import arbiter.file_watcher as file_watcher_module
+# Fix: Import from self_fixing_engineer.arbiter.file_watcher instead of file_watcher
+import self_fixing_engineer.arbiter.file_watcher as file_watcher_module
 import pytest
 import yaml
 from aiolimiter import AsyncLimiter

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientResponseError
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     SECRETS_MANAGER,
     BaseOffChainClient,
     DLTClientAuthError,
@@ -15,7 +15,7 @@ from simulation.plugins.dlt_clients.dlt_base import (
     DLTClientTransactionError,
     DLTClientValidationError,
 )
-from simulation.plugins.dlt_clients.dlt_corda_clients import CordaClientWrapper
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_corda_clients import CordaClientWrapper
 
 
 # A mock off-chain client that can be passed to the DLT client

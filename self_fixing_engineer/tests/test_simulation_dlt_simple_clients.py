@@ -13,14 +13,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import ValidationError
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     DLTClientConfigurationError,
     DLTClientTransactionError,
     DLTClientValidationError,
 )
 
 # Import the module under test
-from simulation.plugins.dlt_clients.dlt_simple_clients import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_simple_clients import (
     PLUGIN_MANIFEST,
     SimpleDLTClient,
     SimpleDLTConfig,

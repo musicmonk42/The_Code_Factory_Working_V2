@@ -6,14 +6,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from botocore.exceptions import ClientError as BotoClientError
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     SECRETS_MANAGER,
     DLTClientConfigurationError,
     DLTClientError,
     DLTClientValidationError,
     _base_logger,
 )
-from simulation.plugins.dlt_clients.dlt_offchain_clients import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_offchain_clients import (
     AzureBlobOffChainClient,
     GcsOffChainClient,
     InMemoryOffChainClient,

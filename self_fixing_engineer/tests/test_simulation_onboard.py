@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Import the onboard module from the correct path
-import simulation.plugins.onboard as onboard_module
+import self_fixing_engineer.simulation.plugins.onboard as onboard_module
 from cryptography.fernet import Fernet
-from simulation.plugins.onboard import (
+from self_fixing_engineer.simulation.plugins.onboard import (
     _generate_secure_config,
     _get_user_input,
     _load_secure_config,

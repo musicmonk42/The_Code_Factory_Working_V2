@@ -102,7 +102,7 @@ sys.modules["dwave.system"] = mock_dwave_system
 try:
     import simulation.core as core
     from simulation import agentic, explain, parallel, quantum, runners, sandbox
-    from simulation.plugins import plugin_manager
+    from self_fixing_engineer.simulation.plugins import plugin_manager
 except ImportError as e:
     print(f"Warning: Could not import simulation modules: {e}")
     # Create minimal mocks for testing

@@ -660,9 +660,12 @@ class RedactingFormatter(logging.Formatter):
         return message
 
 
+# Create a stream handler for the module logger with redacting formatter
+log_handler = logging.StreamHandler()
 log_handler.setFormatter(
     RedactingFormatter("%(asctime)s - %(levelname)s - %(correlation_id)s - %(message)s")
 )
+logger.addHandler(log_handler)
 
 
 @correlated

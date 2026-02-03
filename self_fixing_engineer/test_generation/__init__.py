@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 try:
     arbiter_audit_log = importlib.import_module("arbiter.audit_log")
     sys.modules[__name__ + ".audit_log"] = arbiter_audit_log
-    from arbiter.audit_log import audit_logger
+    from self_fixing_engineer.arbiter.audit_log import audit_logger
 except Exception as e:
     logger.debug(
         "Arbiter audit_log import failed (%s); using stub audit_logger.",

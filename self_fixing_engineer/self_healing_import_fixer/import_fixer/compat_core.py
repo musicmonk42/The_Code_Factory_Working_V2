@@ -383,7 +383,7 @@ def get_tracer(name: str):
     
     # Lazy-load the real tracer on first use after startup
     try:
-        from arbiter.otel_config import get_tracer as _arbiter_get_tracer
+        from self_fixing_engineer.arbiter.otel_config import get_tracer as _arbiter_get_tracer
         _real_get_tracer = _arbiter_get_tracer
         return _arbiter_get_tracer(name)
     except (ImportError, ModuleNotFoundError):

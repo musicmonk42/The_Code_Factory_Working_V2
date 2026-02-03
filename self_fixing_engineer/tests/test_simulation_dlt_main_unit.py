@@ -7,15 +7,15 @@ from unittest.mock import AsyncMock, patch
 import click
 import pytest
 from click.testing import CliRunner
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     DLTClientConfigurationError,
     DLTClientError,
     _base_logger,
 )
-from simulation.plugins.dlt_clients.dlt_factory import DLTFactory
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_factory import DLTFactory
 
 # Import the CLI and core components
-from simulation.plugins.dlt_clients.dlt_main import cli
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_main import cli
 
 
 @pytest.fixture(autouse=True)

@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, mock_open
 import pytest
 
 # Import the main file under test
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     AuditManager,
     CircuitBreaker,
     DLTClientCircuitBreakerError,

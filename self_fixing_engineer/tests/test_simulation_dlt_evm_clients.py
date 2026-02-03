@@ -16,13 +16,13 @@ except ImportError:
 if not WEB3_AVAILABLE:
     pytest.skip("web3 library not installed - skipping EVM client tests", allow_module_level=True)
 
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     SECRETS_MANAGER,
     DLTClientConfigurationError,
     DLTClientValidationError,
     _base_logger,
 )
-from simulation.plugins.dlt_clients.dlt_evm_clients import EthereumClientWrapper
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_evm_clients import EthereumClientWrapper
 
 
 # A mock off-chain client that can be passed to the DLT client

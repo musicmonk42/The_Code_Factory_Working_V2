@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 import pytest
 
 # Import the plugin using the correct module path
-from simulation.plugins.model_deployment_plugin import (
+from self_fixing_engineer.simulation.plugins.model_deployment_plugin import (
     ModelDeploymentPlugin,
     ModelDeploymentStrategy,
 )

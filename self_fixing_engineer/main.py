@@ -465,8 +465,8 @@ _arbiter_instance = None  # Global instance, initialized during startup
 def _init_arbiter():
     """Initialize the Arbiter AI core engine for the SFE platform."""
     try:
-        from arbiter.arbiter import Arbiter
-        from arbiter.config import ArbiterConfig
+        from self_fixing_engineer.arbiter.arbiter import Arbiter
+        from self_fixing_engineer.arbiter.config import ArbiterConfig
         from sqlalchemy.ext.asyncio import create_async_engine
 
         # Get configuration

@@ -9,7 +9,7 @@ from prometheus_client import CollectorRegistry
 from pydantic import ValidationError
 
 # Use absolute import path assuming tests are run from the project root
-from simulation.plugins.siem_integration_plugin import (
+from self_fixing_engineer.simulation.plugins.siem_integration_plugin import (
     SIEM_EVENTS_SENT_TOTAL,
     SIEM_SEND_ERRORS_TOTAL,
     GenericSIEMIntegrationPlugin,
@@ -304,7 +304,7 @@ async def test_send_siem_event_backend_disabled(mock_external_dependencies):
         assert send_result["success"] is False
         assert "is temporarily disabled" in send_result["reason"]
         mock_enqueue.assert_called_once()
-        from simulation.plugins.siem_integration_plugin import SIEM_SEND_ERRORS_TOTAL
+        from self_fixing_engineer.simulation.plugins.siem_integration_plugin import SIEM_SEND_ERRORS_TOTAL
 
         assert (
             SIEM_SEND_ERRORS_TOTAL.labels(

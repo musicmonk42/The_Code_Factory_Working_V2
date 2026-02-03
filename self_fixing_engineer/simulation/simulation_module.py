@@ -612,13 +612,13 @@ class ExplainableReasonerPlugin:
 
         # Try to import real plugin
         try:
-            from arbiter.explainable_reasoner import (
+            from self_fixing_engineer.arbiter.explainable_reasoner import (
                 ExplainableReasonerPlugin as RealPlugin,
             )
 
             self._real_plugin = RealPlugin()
             logger.info(
-                "Using real ExplainableReasonerPlugin from arbiter.explainable_reasoner"
+                "Using real ExplainableReasonerPlugin from self_fixing_engineer.arbiter.explainable_reasoner"
             )
         except ImportError as e:
             logger.warning(

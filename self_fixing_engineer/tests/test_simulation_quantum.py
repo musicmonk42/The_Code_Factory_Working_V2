@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Import all necessary components for testing
-from simulation.quantum import (
+from self_fixing_engineer.simulation.quantum import (
     ForecastFailureTrendParams,
     QuantumPluginAPI,
     QuantumRLAgent,
@@ -99,7 +99,7 @@ async def test_load_quantum_credentials_failure(monkeypatch):
     monkeypatch.setattr("simulation.quantum.BOTO3_AVAILABLE", False)
 
     # Re-instantiate credential_manager to apply the monkeypatch
-    from simulation.quantum import CredentialManager
+    from self_fixing_engineer.simulation.quantum import CredentialManager
 
     monkeypatch.setattr("simulation.quantum.credential_manager", CredentialManager())
 

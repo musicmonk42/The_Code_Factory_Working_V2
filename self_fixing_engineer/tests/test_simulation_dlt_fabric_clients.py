@@ -4,11 +4,11 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     SECRETS_MANAGER,
     DLTClientValidationError,
 )
-from simulation.plugins.dlt_clients.dlt_fabric_clients import FabricClientWrapper
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_fabric_clients import FabricClientWrapper
 
 
 # A mock off-chain client that can be passed to the DLT client

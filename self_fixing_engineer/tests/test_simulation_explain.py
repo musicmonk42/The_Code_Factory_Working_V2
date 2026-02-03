@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import pytest_asyncio
-from simulation.explain import (
+from self_fixing_engineer.simulation.explain import (
     ExplainableReasoner,
     ExplainableReasonerPlugin,
     ExplanationResult,

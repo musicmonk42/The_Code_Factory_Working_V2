@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import yaml
-from simulation.core import (
+from self_fixing_engineer.simulation.core import (
     KUBERNETES_AVAILABLE,
     CircuitBreaker,
     NotificationManager,
@@ -78,7 +78,7 @@ def mock_args():
 
 def test_load_config_success(mock_config_yaml, monkeypatch):
     """Test successful loading and validation of config."""
-    monkeypatch.setattr("simulation.core.PYDANTIC_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.core.PYDANTIC_AVAILABLE", True)
     config = load_config(mock_config_yaml)
     assert "jobs" in config
     assert config["jobs"][0]["name"] == "test_job"
@@ -92,7 +92,7 @@ def test_load_config_file_not_found(monkeypatch):
 
 def test_load_config_no_pydantic(mock_config_yaml, monkeypatch):
     """Test config loading without Pydantic."""
-    monkeypatch.setattr("simulation.core.PYDANTIC_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.core.PYDANTIC_AVAILABLE", False)
     config = load_config(mock_config_yaml)
     assert "jobs" in config
 
@@ -102,7 +102,7 @@ def test_load_config_no_pydantic(mock_config_yaml, monkeypatch):
 
 def test_load_rbac_policy_success(mock_rbac_yaml, monkeypatch):
     """Test successful loading and validation of RBAC policy."""
-    monkeypatch.setattr("simulation.core.PYDANTIC_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.core.PYDANTIC_AVAILABLE", True)
     rbac = load_rbac_policy(mock_rbac_yaml)
     assert "roles" in rbac
     assert rbac["roles"][0]["name"] == "admin"
@@ -120,7 +120,7 @@ def test_load_rbac_policy_file_not_found(monkeypatch):
 def test_get_user_roles(monkeypatch):
     """Test getting user roles from RBAC policy."""
     monkeypatch.setattr(
-        "simulation.core.RBAC_POLICY", {"user_roles": {"test_user": ["admin"]}}
+        "self_fixing_engineer.simulation.core.RBAC_POLICY", {"user_roles": {"test_user": ["admin"]}}
     )
     roles = get_user_roles("test_user")
     assert roles == ["admin"]
@@ -132,7 +132,7 @@ def test_get_user_roles(monkeypatch):
 def test_get_role_permissions(monkeypatch):
     """Test getting role permissions from RBAC policy."""
     monkeypatch.setattr(
-        "simulation.core.RBAC_POLICY",
+        "self_fixing_engineer.simulation.core.RBAC_POLICY",
         {"roles": [{"name": "admin", "permissions": [{"action": "run:*"}]}]},
     )
     permissions = get_role_permissions("admin")
@@ -144,9 +144,9 @@ def test_get_role_permissions(monkeypatch):
 
 def test_check_permission_granted(monkeypatch):
     """Test permission granted for user role."""
-    monkeypatch.setattr("simulation.core.CURRENT_USER", "test_user")
+    monkeypatch.setattr("self_fixing_engineer.simulation.core.CURRENT_USER", "test_user")
     monkeypatch.setattr(
-        "simulation.core.RBAC_POLICY",
+        "self_fixing_engineer.simulation.core.RBAC_POLICY",
         {
             "user_roles": {"test_user": ["admin"]},
             "roles": [
@@ -159,9 +159,9 @@ def test_check_permission_granted(monkeypatch):
 
 def test_check_permission_denied(monkeypatch):
     """Test permission denied for user."""
-    monkeypatch.setattr("simulation.core.CURRENT_USER", "test_user")
+    monkeypatch.setattr("self_fixing_engineer.simulation.core.CURRENT_USER", "test_user")
     monkeypatch.setattr(
-        "simulation.core.RBAC_POLICY", {"user_roles": {"test_user": []}}
+        "self_fixing_engineer.simulation.core.RBAC_POLICY", {"user_roles": {"test_user": []}}
     )
     assert not check_permission("run:agent", "*")
 
@@ -252,7 +252,7 @@ def test_execute_remotely_success():
 
 def test_execute_remotely_failure(monkeypatch):
     """Test remote execution failure."""
-    monkeypatch.setattr("simulation.core.KUBERNETES_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.core.KUBERNETES_AVAILABLE", False)
     result = execute_remotely({"name": "test"}, "kubernetes")
     assert result["status"] == "ERROR"
 
@@ -263,10 +263,10 @@ def test_execute_remotely_failure(monkeypatch):
 def test_run_job_success(monkeypatch):
     """Test successful job run."""
     monkeypatch.setattr(
-        "simulation.core.check_permission", MagicMock(return_value=True)
+        "self_fixing_engineer.simulation.core.check_permission", MagicMock(return_value=True)
     )
     monkeypatch.setattr(
-        "simulation.core.run_agent", MagicMock(return_value={"status": "success"})
+        "self_fixing_engineer.simulation.core.run_agent", MagicMock(return_value={"status": "success"})
     )
     result = run_job({"name": "test", "enabled": True, "agentic": False})
     assert result["status"] == "success"
@@ -283,7 +283,7 @@ def test_run_job_disabled():
 
 def test_watch_mode_success(monkeypatch):
     """Test watch mode with watchdog."""
-    monkeypatch.setattr("simulation.core.WATCHDOG_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.core.WATCHDOG_AVAILABLE", True)
     monkeypatch.setattr("watchdog.observers.Observer", MagicMock())
     monkeypatch.setattr("watchdog.events.FileSystemEventHandler", MagicMock())
     with pytest.raises(KeyboardInterrupt):
@@ -292,7 +292,7 @@ def test_watch_mode_success(monkeypatch):
 
 def test_watch_mode_no_watchdog(monkeypatch):
     """Test watch mode without watchdog."""
-    monkeypatch.setattr("simulation.core.WATCHDOG_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.core.WATCHDOG_AVAILABLE", False)
     with pytest.raises(SystemExit):
         watch_mode(["file.txt"], lambda: None)
 
@@ -304,13 +304,13 @@ def test_watch_mode_no_watchdog(monkeypatch):
 async def test_main_success(mock_args, monkeypatch):
     """Test main function with successful execution."""
     monkeypatch.setattr(
-        "simulation.core.APP_CONFIG", {"jobs": [{"name": "test", "enabled": True}]}
+        "self_fixing_engineer.simulation.core.APP_CONFIG", {"jobs": [{"name": "test", "enabled": True}]}
     )
     monkeypatch.setattr(
-        "simulation.core.run_job", MagicMock(return_value={"status": "success"})
+        "self_fixing_engineer.simulation.core.run_job", MagicMock(return_value={"status": "success"})
     )
     monkeypatch.setattr(
-        "simulation.core.check_permission", MagicMock(return_value=True)
+        "self_fixing_engineer.simulation.core.check_permission", MagicMock(return_value=True)
     )
     await main(mock_args)
 

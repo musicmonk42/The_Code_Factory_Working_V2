@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from simulation.sandbox import (
+from self_fixing_engineer.simulation.sandbox import (
     AUDIT_LOG_FILE,
     ContainerValidationConfig,
     SandboxPolicy,

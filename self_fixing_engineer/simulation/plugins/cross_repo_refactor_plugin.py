@@ -218,7 +218,7 @@ try:
     # Corrected import to resolve the 'SFE AuditLogger not found' warning
     # The file path is also relative to the project root, so we need to
     # import from 'arbiter.audit_log'
-    from arbiter.audit_log import TamperEvidentLogger as SFE_AuditLogger
+    from self_fixing_engineer.arbiter.audit_log import TamperEvidentLogger as SFE_AuditLogger
 
     _sfe_audit_logger = SFE_AuditLogger()
 except ImportError:

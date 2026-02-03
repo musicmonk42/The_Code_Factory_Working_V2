@@ -311,7 +311,7 @@ except Exception as e:  # <-- FIX: Broadened to catch OS/DLL loading errors.
 
 # --- IMPORT THE CANONICAL AUDIT LOGGER ---
 try:
-    from arbiter.audit_log import audit_logger
+    from self_fixing_engineer.arbiter.audit_log import audit_logger
 
     AUDIT_LOGGER_AVAILABLE = True
 except Exception as e:

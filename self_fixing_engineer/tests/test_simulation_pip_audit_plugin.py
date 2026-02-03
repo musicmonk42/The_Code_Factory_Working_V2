@@ -12,10 +12,10 @@ from prometheus_client import CollectorRegistry
 from pydantic import ValidationError
 
 # Import the plugin from the correct path
-from simulation.plugins.pip_audit_plugin import (
+from self_fixing_engineer.simulation.plugins.pip_audit_plugin import (
     TransientScanError,  # Import the custom exception for testing
 )
-from simulation.plugins.pip_audit_plugin import (
+from self_fixing_engineer.simulation.plugins.pip_audit_plugin import (
     PipAuditConfig,
     _load_config,
     _validate_safe_args,

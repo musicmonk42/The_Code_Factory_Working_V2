@@ -12,7 +12,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 sys.path.insert(0, PROJECT_ROOT)
 
 # --- Import the module under test ---
-from simulation.plugins.cloud_logging_integrations import (
+from self_fixing_engineer.simulation.plugins.cloud_logging_integrations import (
     AzureMonitorLogger,
     CloudLoggingAuthError,
     CloudLoggingConfigurationError,

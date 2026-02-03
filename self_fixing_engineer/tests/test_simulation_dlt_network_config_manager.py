@@ -14,7 +14,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 # Import the module dynamically after setting environment variables
-import simulation.plugins.dlt_network_config_manager as dlt_module
+import self_fixing_engineer.simulation.plugins.dlt_network_config_manager as dlt_module
 
 
 @pytest.fixture

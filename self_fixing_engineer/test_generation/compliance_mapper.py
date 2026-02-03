@@ -46,7 +46,7 @@ from test_generation.utils import maybe_await
 # - Fall back to arbiter.audit_log.audit_logger if available
 # - Otherwise, degrade gracefully with a warning
 try:
-    from arbiter.audit_log import audit_logger as _arbiter_audit_logger
+    from self_fixing_engineer.arbiter.audit_log import audit_logger as _arbiter_audit_logger
 except Exception:
     _arbiter_audit_logger = None
 
