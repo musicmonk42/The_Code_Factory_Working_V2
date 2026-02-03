@@ -87,6 +87,8 @@ def gen_plugin(data):
 @pytest.mark.asyncio
 async def test_self_fixing_engineer_plugin_execution():
     """Test that the plugin registry can handle directory loading gracefully."""
+    from omnicore_engine.plugin_registry import PluginRegistry
+    
     registry = PluginRegistry()
 
     # Load from a non-existent directory should not raise an error
