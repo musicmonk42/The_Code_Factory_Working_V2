@@ -379,16 +379,17 @@ class PluginService:
     async def start_subscriptions(self):
         """Start async subscriptions - must be called from async context"""
         if self._subscriptions_started:
+            self.logger.debug("Subscriptions already started, skipping")
             return
-        
+
         # Subscribe to a channel for a bug detected by the Arbiter
         await self.message_bus.subscribe("arbiter:bug_detected", self.handle_arbiter_bug)
-        
+
         # Subscribe to a channel for self-healing import fixer requests
         await self.message_bus.subscribe(
             "shif:fix_import_request", self.handle_shif_request
         )
-        
+
         # Subscribe to generator channels
         await self.message_bus.subscribe(
             "generator:codegen_request", self.handle_codegen_request
@@ -397,12 +398,12 @@ class PluginService:
             "generator:testgen_request", self.handle_testgen_request
         )
         await self.message_bus.subscribe(
-            "generator:docgen_request", self.handle_docgen_request
+            "generator:docgen_request", self.handle_docegen_request
         )
         await self.message_bus.subscribe(
             "workflow:sfe_to_generator", self.handle_sfe_to_generator
         )
-        
+
         self._subscriptions_started = True
         self.logger.info("PluginService subscriptions started")
 
