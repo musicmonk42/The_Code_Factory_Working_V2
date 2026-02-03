@@ -227,16 +227,19 @@ def _run_async_in_sync(coro, *, timeout: float = 10.0):
     if loop is None:
         try:
             # Check if there's already a running loop
-            asyncio.get_running_loop()
-            # If we're already in an async context, this is an error
+            running_loop = asyncio.get_running_loop()
+            # If we get here without exception, we're in an async context
             raise RuntimeError("Cannot use _run_async_in_sync from within async context in test mode")
         except RuntimeError as e:
-            if "no running event loop" in str(e).lower():
-                # No running loop, safe to use asyncio.run()
-                return asyncio.run(coro)
-            else:
-                # Already in async context
+            # Check if this is the "no running event loop" error by checking the message content
+            # or if it's our custom error message
+            if "Cannot use _run_async_in_sync" in str(e):
+                # This is our custom error, re-raise it
                 raise
+            else:
+                # This is the "no running event loop" error from get_running_loop()
+                # Safe to use asyncio.run()
+                return asyncio.run(coro)
     
     # Use background loop
     fut = asyncio.run_coroutine_threadsafe(coro, loop)
