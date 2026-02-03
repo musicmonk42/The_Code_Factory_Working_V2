@@ -688,10 +688,24 @@ class AdaptivePromptDirector:
         """
         contexts = {}
         try:
-            commits = subprocess.check_output(
-                ["git", "-C", repo_path, "log", "--oneline", "-n", "5"]
-            ).decode()
-            contexts["recent_commits"] = commits
+            # First check if we're in a git repository
+            git_check = subprocess.run(
+                ["git", "-C", repo_path, "rev-parse", "--git-dir"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            
+            if git_check.returncode == 0:
+                # We're in a git repo, proceed with git log
+                commits = subprocess.check_output(
+                    ["git", "-C", repo_path, "log", "--oneline", "-n", "5"],
+                    timeout=10,
+                ).decode()
+                contexts["recent_commits"] = commits
+            else:
+                logger.debug(f"Not a git repository: {repo_path}")
+                contexts["recent_commits"] = "Not a git repository."
         except Exception as e:
             logger.debug(f"No git history available: {e}")
             contexts["recent_commits"] = "No git history available."
