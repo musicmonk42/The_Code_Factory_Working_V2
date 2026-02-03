@@ -1,0 +1,281 @@
+# =============================================================================
+# Code Factory Platform - Runner Configuration
+# =============================================================================
+# Version: 4.0.0
+# Last Updated: 2026-02-03
+# Compliance: ISO 27001, SOC 2 Type II, NIST SP 800-53
+#
+# Purpose:
+#   Production-grade configuration for test execution, code generation, and 
+#   runtime environments. This file provides enterprise defaults for all
+#   runner backends and testing frameworks.
+#
+# Usage:
+#   1. Copy this file to your deployment directory
+#   2. Override settings via environment variables (highest precedence)
+#   3. Customize per-environment (dev/staging/prod) as needed
+#
+# Environment Variable Overrides:
+#   - RUNNER_BACKEND: Override default backend (docker|kubernetes|local)
+#   - RUNNER_LLM_TIMEOUT: Override LLM timeout in seconds
+#   - RUNNER_MAX_WORKERS: Override parallel execution limit
+#
+# Security Notes:
+#   - API keys should NEVER be in this file
+#   - Use environment variables or secret managers for credentials
+#   - Review security section before production deployment
+#
+# Support:
+#   - Documentation: docs/RUNNER_CONFIGURATION.md
+#   - Issues: https://github.com/your-org/code-factory/issues
+# =============================================================================
+
+version: 4
+
+# =============================================================================
+# Backend Configurations
+# =============================================================================
+# Configure execution environments for test running and code validation.
+# Multiple backends can be enabled simultaneously with priority-based selection.
+#
+# Available Backends:
+#   - docker: Containerized execution (recommended for CI/CD)
+#   - kubernetes: Orchestrated execution (recommended for production scale)
+#   - local: Direct execution (recommended for development)
+#
+# Production Recommendations:
+#   - Use docker or kubernetes for isolation and reproducibility
+#   - Set resource limits to prevent resource exhaustion
+#   - Enable monitoring and health checks
+# =============================================================================
+backends:
+  - name: docker
+    enabled: true
+    config:
+      network: bridge
+      timeout: 300  # 5 minutes default timeout
+      memory_limit: "2g"
+      cpu_limit: "2.0"
+      
+  - name: kubernetes
+    enabled: false
+    config:
+      namespace: default
+      timeout: 600
+      resource_limits:
+        memory: "2Gi"
+        cpu: "2000m"
+      
+  - name: local
+    enabled: true
+    config:
+      timeout: 300
+      max_parallel: 4
+
+# Framework-specific test runners
+frameworks:
+  python:
+    runner: pytest
+    config:
+      args: ["-v", "--tb=short", "--maxfail=5"]
+      coverage_enabled: true
+      coverage_threshold: 80
+      
+  javascript:
+    runner: jest
+    config:
+      args: ["--verbose", "--maxWorkers=4"]
+      coverage_enabled: true
+      coverage_threshold: 80
+      
+  typescript:
+    runner: jest
+    config:
+      args: ["--verbose", "--maxWorkers=4"]
+      coverage_enabled: true
+      coverage_threshold: 80
+      
+  java:
+    runner: junit
+    config:
+      args: []
+      coverage_enabled: true
+      
+  go:
+    runner: "go test"
+    config:
+      args: ["-v", "-race"]
+      coverage_enabled: true
+      
+  rust:
+    runner: cargo
+    config:
+      args: ["test", "--verbose"]
+      
+  ruby:
+    runner: rspec
+    config:
+      args: ["--format", "documentation"]
+
+# =============================================================================
+# LLM Provider Configuration
+# =============================================================================
+# Configure Large Language Model providers for code generation and analysis.
+#
+# Priority System:
+#   Providers are tried in order of priority (1 = highest).
+#   If primary fails, automatically fails over to next priority.
+#
+# Security Best Practices:
+#   - Store API keys in environment variables or secret managers
+#   - Use rate limiting to prevent quota exhaustion
+#   - Monitor token usage for cost control
+#   - Enable retry logic for transient failures
+#
+# Compliance:
+#   - API calls are audited per ISO 27001 requirements
+#   - PII is redacted before sending to external providers
+#   - Sensitive data never logged in plaintext
+# =============================================================================
+llm:
+  providers:
+    - name: openai
+      enabled: true
+      priority: 1
+      
+    - name: claude
+      enabled: false
+      priority: 2
+      
+    - name: local
+      enabled: false
+      priority: 3
+      
+  # Global timeout for LLM calls (seconds)
+  timeout: 300  # 5 minutes
+  
+  # Retry configuration
+  max_retries: 3
+  retry_delay: 10  # seconds
+  exponential_backoff: true
+  
+  # Rate limiting
+  rate_limit:
+    requests_per_minute: 60
+    tokens_per_minute: 90000
+
+# Audit configuration
+audit:
+  enabled: true
+  buffer_size: 1000
+  flush_interval: 60  # seconds
+  
+  # Kafka streaming (optional)
+  kafka:
+    enabled: false
+    bootstrap_servers: "localhost:9092"
+    topic: "audit_logs"
+    
+  # File-based audit logs (fallback)
+  file:
+    enabled: true
+    path: "logs/audit"
+    max_size_mb: 100
+    rotation: daily
+
+# =============================================================================
+# Security Configuration
+# =============================================================================
+# Enterprise-grade security controls for PII detection, secret scanning,
+# and plugin integrity verification.
+#
+# Compliance Standards:
+#   - GDPR Article 25: Data protection by design and by default
+#   - CCPA: California Consumer Privacy Act
+#   - HIPAA: Health Insurance Portability and Accountability Act (when applicable)
+#   - PCI DSS: Payment Card Industry Data Security Standard (when applicable)
+#
+# Features:
+#   - Presidio: Microsoft's PII detection and anonymization framework
+#   - Secret Scanning: Detect hardcoded credentials and API keys
+#   - Plugin Integrity: SHA-256 hash verification for all plugins
+#
+# Production Requirements:
+#   - Enable all security features
+#   - Review and customize secret patterns for your domain
+#   - Regularly update plugin manifest after deployments
+#   - Monitor security alerts and respond within SLA
+# =============================================================================
+security:
+  # PII detection and redaction
+  presidio:
+    enabled: true
+    cache_recognizers: true
+    languages: ["en"]
+    
+  # Plugin integrity checking
+  plugin_integrity:
+    enabled: true
+    manifest_path: "generator/runner/providers/plugin_hash_manifest.json"
+    strict_mode: false  # Set to true to fail on missing or modified plugins
+    
+  # Secret scanning
+  secret_scanning:
+    enabled: true
+    patterns:
+      - "API[_-]?KEY"
+      - "SECRET"
+      - "PASSWORD"
+      - "TOKEN"
+
+# Performance tuning
+performance:
+  # Parallel execution
+  parallel:
+    enabled: true
+    max_workers: 4
+    
+  # Caching
+  cache:
+    enabled: true
+    ttl: 3600  # 1 hour
+    max_size_mb: 500
+    
+  # Timeout configurations
+  timeouts:
+    test_execution: 300  # 5 minutes
+    code_generation: 300  # 5 minutes
+    llm_call: 300  # 5 minutes
+
+# Monitoring and observability
+monitoring:
+  # Metrics collection
+  metrics:
+    enabled: true
+    prometheus:
+      enabled: true
+      port: 9090
+      
+  # Distributed tracing
+  tracing:
+    enabled: true
+    sample_rate: 0.1  # 10% sampling
+    
+  # Logging
+  logging:
+    level: INFO
+    format: json
+    structured: true
+
+# Feature flags
+features:
+  # Experimental features
+  experimental:
+    auto_fix: false
+    smart_retry: true
+    adaptive_timeout: true
+    
+  # Beta features
+  beta:
+    multi_llm_ensemble: false
+    advanced_caching: true

@@ -737,10 +737,46 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-# Configure CORS
+# Configure CORS with sensible defaults
+# In production, set ALLOWED_ORIGINS environment variable to specific domains
+# Example: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+_is_production = (
+    os.getenv("APP_ENV", "").lower() == "production" or 
+    os.getenv("PYTHON_ENV", "").lower() == "production" or
+    not _is_test_environment
+)
+
+# Get allowed origins from environment
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "")
+if allowed_origins_str:
+    ALLOWED_ORIGINS = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
+else:
+    # Use sensible defaults based on environment
+    if _is_production:
+        # In production, default to localhost for health checks
+        # User MUST set ALLOWED_ORIGINS for actual clients
+        ALLOWED_ORIGINS = ["http://localhost:8080"]
+        logger.warning(
+            "CORS_ORIGINS not configured in production! "
+            "Set ALLOWED_ORIGINS environment variable to allow specific domains. "
+            "Currently only allowing localhost health checks."
+        )
+    else:
+        # In development, allow common local development ports
+        ALLOWED_ORIGINS = [
+            "http://localhost:3000",
+            "http://localhost:8080",
+            "http://localhost:5173",  # Vite default
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:8080",
+            "http://127.0.0.1:5173",
+        ]
+
+logger.info(f"CORS enabled for origins: {ALLOWED_ORIGINS}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

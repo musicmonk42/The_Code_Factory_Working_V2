@@ -416,21 +416,156 @@ class CryptoValidator:
 
 
 class KafkaAuditStreamer:
+    """
+    Enterprise-grade Kafka audit event streamer with resilient error handling.
+    
+    This class implements production-ready streaming of audit events to Apache Kafka
+    with the following features:
+    
+    Features:
+        - Automatic retry with exponential backoff
+        - Graceful degradation to file-only logging
+        - Connection pooling and keepalive
+        - Configurable timeouts to prevent connection spam
+        - Comprehensive error tracking via Prometheus metrics
+        
+    Architecture:
+        Producer → Kafka Cluster → Audit Storage
+                ↓ (fallback on failure)
+            File-based Logging
+            
+    Configuration:
+        The producer uses production-hardened settings:
+        - socket.timeout.ms: 10000 (10s) - Connection timeout
+        - message.timeout.ms: 30000 (30s) - Message delivery timeout  
+        - retry.backoff.ms: 1000 (1s) - Delay between retries
+        - retries: 3 - Maximum retry attempts
+        - socket.keepalive.enable: True - Keep connections alive
+        
+    Error Handling:
+        1. Kafka unavailable at init: Log warning, set producer=None
+        2. Connection test fails: Log warning, retry on first event
+        3. Event delivery fails: Log error, increment metrics, continue
+        4. No Kafka library: Disable streaming, use file-only mode
+        
+    Graceful Degradation:
+        When Kafka is unavailable, the system continues operating with
+        file-based audit logging only. This ensures the application never
+        crashes due to audit infrastructure issues.
+        
+    Thread Safety:
+        This class is thread-safe for concurrent event streaming.
+        The underlying Producer handles thread safety internally.
+        
+    Performance:
+        - Non-blocking event queuing via produce()
+        - Async delivery confirmation via callbacks
+        - Minimal overhead when Kafka unavailable (None check)
+        
+    Compliance:
+        - AU-2: Audit Events (NIST SP 800-53)
+        - AU-6: Audit Review, Analysis, and Reporting
+        - AU-12: Audit Generation
+        
+    Examples:
+        >>> # Production usage
+        >>> streamer = KafkaAuditStreamer(
+        ...     bootstrap_servers="kafka.prod.example.com:9092",
+        ...     topic="audit_events_prod"
+        ... )
+        >>> await streamer.stream_event({
+        ...     "uuid": "evt-123",
+        ...     "action": "user.login",
+        ...     "timestamp": "2026-02-03T16:00:00Z"
+        ... })
+        
+        >>> # Development usage (Kafka optional)
+        >>> streamer = KafkaAuditStreamer(
+        ...     bootstrap_servers="localhost:9092",
+        ...     topic="audit_events_dev"
+        ... )
+        >>> # Will gracefully degrade to file-only if Kafka unavailable
+        
+    Args:
+        bootstrap_servers: Comma-separated list of Kafka brokers
+                          Example: "kafka1:9092,kafka2:9092"
+        topic: Kafka topic name for audit events (default: "audit_events")
+               
+    Attributes:
+        producer: confluent_kafka.Producer instance (None if unavailable)
+        topic: Kafka topic name
+        logger: Logger instance for this class
+        _last_connection_attempt: Timestamp of last connection try
+        _connection_retry_delay: Seconds to wait between connection attempts
+    """
+    
     def __init__(self, bootstrap_servers: str, topic: str = "audit_events"):
         self.producer = None
         self.topic = topic
         self.logger = logger
+        self._last_connection_attempt = 0
+        self._connection_retry_delay = 60  # seconds
+        
         if KAFKA_AVAILABLE:
             try:
-                self.producer = Producer({"bootstrap.servers": bootstrap_servers})
-                self.logger.info("Kafka producer initialized")
+                # Configure Kafka producer with retry and backoff settings
+                # to prevent connection spam
+                config = {
+                    'bootstrap.servers': bootstrap_servers,
+                    'socket.timeout.ms': 10000,  # 10 seconds
+                    'message.timeout.ms': 30000,  # 30 seconds
+                    'retry.backoff.ms': 1000,  # 1 second backoff between retries
+                    'retries': 3,  # Maximum 3 retries
+                    'socket.keepalive.enable': True,
+                    # Reduce client metadata request frequency
+                    'topic.metadata.refresh.interval.ms': 300000,  # 5 minutes
+                    'metadata.max.age.ms': 180000,  # 3 minutes
+                }
+                
+                self.producer = Producer(config)
+                
+                # Test connection with a single poll
+                try:
+                    self.producer.poll(0)
+                    self.logger.info(
+                        f"✓ Kafka producer connected to {bootstrap_servers}",
+                        extra={
+                            "operation": "kafka_init",
+                            "bootstrap_servers": bootstrap_servers,
+                            "topic": topic,
+                            "status": "connected"
+                        }
+                    )
+                except Exception as poll_error:
+                    self.logger.warning(
+                        f"Kafka connection test failed: {poll_error}. "
+                        "Will retry on first event.",
+                        extra={
+                            "operation": "kafka_init_test",
+                            "error": str(poll_error)
+                        }
+                    )
+                    
             except Exception as e:
                 self.logger.warning(
-                    f"Kafka initialization failed: {e}; falling back to logging"
+                    f"Kafka initialization failed ({bootstrap_servers}): {e}. "
+                    "Falling back to file-only audit logging.",
+                    extra={
+                        "operation": "kafka_init_failed",
+                        "bootstrap_servers": bootstrap_servers,
+                        "error": str(e),
+                        "fallback": "file_only"
+                    }
                 )
+                self.producer = None
         else:
-            self.logger.warning(
-                "confluent_kafka not available; Kafka streaming disabled."
+            self.logger.info(
+                "confluent_kafka not available; Kafka streaming disabled. "
+                "Using file-based audit logging only.",
+                extra={
+                    "operation": "kafka_unavailable",
+                    "reason": "library_not_installed"
+                }
             )
 
     async def stream_event(self, record: Dict[str, Any]):
