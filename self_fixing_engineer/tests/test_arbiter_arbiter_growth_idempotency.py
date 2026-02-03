@@ -11,33 +11,21 @@ from self_fixing_engineer.arbiter.arbiter_growth.idempotency import (
     IdempotencyStore,
     IdempotencyStoreError,
 )
-from opentelemetry import trace  # Added for the tracer fixture
-
-# FIX: Added imports to set up a real OpenTelemetry context for tests
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+from opentelemetry import trace
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 # --- Fixtures ---
 
 
-# This is the original, correct fixture.
-# It will work once conftest.py is fixed.
+# The tracer fixture now just returns a tracer from the global provider
+# set up in conftest.py by setup_opentelemetry_tracer
 @pytest.fixture(scope="session")
 def tracer():
     """
-    Provides a REAL OpenTelemetry tracer for tests.
-    This sets up a minimal provider to ensure trace.get_current_span() works.
+    Provides a tracer for tests.
+    The OpenTelemetry provider is already set up globally in conftest.py.
     """
-    # Set up a simple provider and processor to make tracing work
-    provider = TracerProvider()
-    processor = SimpleSpanProcessor(ConsoleSpanExporter())
-    provider.add_span_processor(processor)
-
-    # Set this as the global provider for the test session
-    trace.set_tracer_provider(provider)
-
     return trace.get_tracer("test.idempotency")
 
 
