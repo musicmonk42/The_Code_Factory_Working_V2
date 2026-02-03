@@ -59,6 +59,10 @@ SIGNING_ENABLED = (
     and os.getenv("TESTING") != "1"
     and os.getenv("PYTEST_CURRENT_TEST") is None
 )
+
+# Also check if crypto mode is disabled
+CRYPTO_MODE = os.getenv("AUDIT_CRYPTO_MODE", "").lower()
+
 try:
     if SIGNING_ENABLED:
         # NOTE: Assuming generator.audit_log is installed and available in the environment
@@ -70,7 +74,19 @@ try:
             CryptoOperationError,
         )
 
-        logging.getLogger(__name__).info("Secure audit log signing ENABLED.")
+        # Log accurate status based on AUDIT_CRYPTO_MODE
+        if CRYPTO_MODE == "disabled":
+            logging.getLogger(__name__).warning(
+                "Audit log crypto imports loaded, but AUDIT_CRYPTO_MODE=disabled. "
+                "Signatures will use NoOpCryptoProvider (no actual cryptographic signing)."
+            )
+        elif CRYPTO_MODE == "":
+            logging.getLogger(__name__).warning(
+                "Audit log crypto imports loaded, but AUDIT_CRYPTO_MODE not set. "
+                "Crypto provider will be determined at runtime."
+            )
+        else:
+            logging.getLogger(__name__).info("Secure audit log signing ENABLED (AUDIT_CRYPTO_MODE=%s).", CRYPTO_MODE)
     else:
         raise ImportError("Crypto disabled in DEV/TEST")
 except Exception:

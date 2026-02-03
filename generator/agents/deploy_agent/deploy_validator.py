@@ -521,47 +521,47 @@ class DockerValidator(Validator):
                                 [line for line in lint_output_lines if line.strip()]
                             )
                             issue_total_found.labels(
-                            target=target_type, issue_type_category="HadolintLint"
-                        ).inc(len(lint_output_lines))
-                    # FIX: Set lint_status based on hadolint results
-                    if hadolint_proc.returncode == 0:
-                        report["lint_status"] = "success"
-                    else:
-                        report["lint_status"] = (
-                            "warning"
-                            if report["build_status"] == "success"
-                            else "failed"
-                        )
-                    if (
-                        hadolint_proc.returncode != 0
-                        and report["build_status"] == "success"
-                    ):
-                        report["build_status"] = "lint_warning"
+                                target=target_type, issue_type_category="HadolintLint"
+                            ).inc(len(lint_output_lines))
+                        # FIX: Set lint_status based on hadolint results
+                        if hadolint_proc.returncode == 0:
+                            report["lint_status"] = "success"
+                        else:
+                            report["lint_status"] = (
+                                "warning"
+                                if report["build_status"] == "success"
+                                else "failed"
+                            )
+                        if (
+                            hadolint_proc.returncode != 0
+                            and report["build_status"] == "success"
+                        ):
+                            report["build_status"] = "lint_warning"
 
-                except FileNotFoundError:
-                    report["lint_issues"].append(
-                        "Hadolint not found. Skipping linting."
-                    )
-                    report["lint_status"] = (
-                        "skipped"  # FIX: Set status when tool not found
-                    )
-                    logger.warning(
-                        "Hadolint command not found. Please install hadolint for comprehensive Dockerfile linting."
-                    )
-                    issue_total_found.labels(
-                        target=target_type, issue_type_category="HadolintNotFound"
-                    ).inc()
-                except Exception as e:
-                    report["lint_issues"].append(
-                        f"Error during Hadolint execution: {e}"
-                    )
-                    report["lint_status"] = "error"  # FIX: Set status on error
-                    logger.error(
-                        "Error during Hadolint execution: %s", e, exc_info=True
-                    )
-                    issue_total_found.labels(
-                        target=target_type, issue_type_category="HadolintError"
-                    ).inc()
+                    except FileNotFoundError:
+                        report["lint_issues"].append(
+                            "Hadolint not found. Skipping linting."
+                        )
+                        report["lint_status"] = (
+                            "skipped"  # FIX: Set status when tool not found
+                        )
+                        logger.warning(
+                            "Hadolint command not found. Please install hadolint for comprehensive Dockerfile linting."
+                        )
+                        issue_total_found.labels(
+                            target=target_type, issue_type_category="HadolintNotFound"
+                        ).inc()
+                    except Exception as e:
+                        report["lint_issues"].append(
+                            f"Error during Hadolint execution: {e}"
+                        )
+                        report["lint_status"] = "error"  # FIX: Set status on error
+                        logger.error(
+                            "Error during Hadolint execution: %s", e, exc_info=True
+                        )
+                        issue_total_found.labels(
+                            target=target_type, issue_type_category="HadolintError"
+                        ).inc()
 
                 # 3. Security Findings
                 # --- FIX: Pass DANGEROUS_CONFIG_PATTERNS to the imported function ---
