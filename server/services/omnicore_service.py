@@ -688,7 +688,16 @@ class OmniCoreService:
             
             try:
                 result = await self._dispatch_generator_action(job_id, action, payload)
-                logger.info(f"Task Completed: Job {job_id} action {action} finished successfully")
+                # CRITICAL FIX: Check actual result status before logging success
+                # Don't log "finished successfully" if the job actually failed
+                result_status = result.get("status", "unknown")
+                if result_status in ["completed", "success", "acknowledged"]:
+                    logger.info(f"Task Completed: Job {job_id} action {action} finished successfully")
+                elif result_status in ["failed", "error"]:
+                    logger.error(f"Task Failed: Job {job_id} action {action} failed: {result.get('message', 'Unknown error')}")
+                else:
+                    logger.warning(f"Task Status: Job {job_id} action {action} finished with status: {result_status}")
+                
                 return {
                     "job_id": job_id,
                     "routed": True,
