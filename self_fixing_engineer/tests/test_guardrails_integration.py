@@ -9,7 +9,7 @@ import yaml
 
 # Fix import paths for both modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import audit_log
+from guardrails import audit_log
 from guardrails.compliance_mapper import (
     ComplianceEnforcementError,
     _log_to_central_audit,
@@ -74,8 +74,11 @@ async def test_integration_generate_report_with_gaps(temp_config_and_log, monkey
     monkeypatch.setenv("AUDIT_LOG_PATH", log_path)
 
     # Mock audit_log_event_async to avoid actual file writes
-    with patch("compliance_mapper.audit_log_event_async") as mock_audit:
-        mock_audit.return_value = asyncio.coroutine(lambda: None)()
+    async def mock_coro():
+        return None
+
+    with patch("guardrails.compliance_mapper.audit_log_event_async") as mock_audit:
+        mock_audit.return_value = mock_coro()
         gaps, all_enforced = generate_report(config_path)
         assert not all_enforced
         assert "AC-2" in gaps["required_but_not_enforced"]
@@ -95,6 +98,9 @@ async def test_integration_main_cli_in_production(
     )  # Use development to avoid production checks
     monkeypatch.setenv("CREW_CONFIG_PATH", config_path)
     monkeypatch.setenv("AUDIT_LOG_PATH", log_path)
+
+    # Clear sys.argv to avoid argparse issues with pytest args
+    monkeypatch.setattr("sys.argv", ["compliance_mapper"])
 
     with pytest.raises(SystemExit) as exc:
         main_cli()
@@ -119,11 +125,15 @@ async def test_integration_health_check_with_audit(temp_config_and_log, monkeypa
         health = health_check()
         assert health["config_path_exists"] is False
 
-        # Mock the audit function to avoid actual file operations
-        with patch("compliance_mapper.audit_log_event_async") as mock_audit:
-            mock_audit.return_value = asyncio.coroutine(lambda: None)()
-            await _log_to_central_audit("health_check_failure", health)
-            mock_audit.assert_called_once()
+        # Mock the audit function and set AUDIT_LOG_AVAILABLE to True to ensure it's called
+        async def mock_coro(*args, **kwargs):
+            return None
+
+        with patch("guardrails.compliance_mapper.AUDIT_LOG_AVAILABLE", True):
+            with patch("guardrails.compliance_mapper.audit_log_event_async") as mock_audit:
+                mock_audit.return_value = mock_coro()
+                await _log_to_central_audit("health_check_failure", health)
+                mock_audit.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -133,8 +143,11 @@ async def test_concurrent_report_generation(temp_config_and_log, monkeypatch):
     monkeypatch.setenv("AUDIT_LOG_PATH", log_path)
 
     # Mock audit functions to avoid file I/O
-    with patch("compliance_mapper.audit_log_event_async") as mock_audit:
-        mock_audit.return_value = asyncio.coroutine(lambda: None)()
+    async def mock_coro():
+        return None
+
+    with patch("guardrails.compliance_mapper.audit_log_event_async") as mock_audit:
+        mock_audit.return_value = mock_coro()
 
         async def run_report():
             return generate_report(config_path)
@@ -155,7 +168,7 @@ async def test_audit_chain_creation(temp_config_and_log, monkeypatch):
     monkeypatch.setenv("AUDIT_LOG_PATH", log_path)
 
     # Disable aiofiles to force sync writes
-    monkeypatch.setattr("audit_log.aiofiles", None)
+    monkeypatch.setattr("guardrails.audit_log.aiofiles", None)
 
     # Create an audit logger and add some entries
     logger = audit_log.AuditLogger(log_path=log_path)
