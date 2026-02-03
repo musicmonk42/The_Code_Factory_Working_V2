@@ -459,7 +459,8 @@ class TestPromptResponseValidationFlow:
         assert len(prompt) > 0
 
         # Step 2: Get LLM response (mocked)
-        llm_response = mock_llm_calls["agent_llm"]()["content"]
+        llm_call_result = mock_llm_calls["agent_llm"]()
+        llm_response = llm_call_result["content"]
 
         # Step 3: Handle response
         with patch(

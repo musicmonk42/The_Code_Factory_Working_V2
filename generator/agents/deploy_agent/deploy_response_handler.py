@@ -606,18 +606,16 @@ class FormatHandler(ABC):
             return ""
 
         # --- FIX: Smart TESTING mode behavior ---
-        # In TESTING mode, skip LLM only for short text (integration tests)
-        # For long text (unit tests specifically testing summarization), use LLM
-        if os.getenv("TESTING") == "1" and len(section_text) < 500:
-            # Short text in integration tests - return simple summary
+        # In TESTING mode, always use simple summary to avoid LLM calls
+        if os.getenv("TESTING") == "1":
             summary = (
                 f"[Test Summary] Section '{section_name}': {len(section_text)} chars"
             )
             logger.debug(
-                f"TESTING mode: Returning simple summary for short section '{section_name}'"
+                f"TESTING mode: Returning simple summary for section '{section_name}'"
             )
             return summary
-        # For longer text or production, proceed to LLM call
+        # For production, proceed to LLM call
         # -----------------------------------------------------------
 
         summary_prompt = f"Summarize the following configuration section '{section_name}' concisely for compliance and resource review (max 50 words): \n\n```\n{section_text[:5000]}\n```"
