@@ -488,13 +488,13 @@ async def download_partial_results(job_id: str):
     **Errors:**
     - 404: Job not found or no files available
     
-    **TODO**: Add authentication in production:
-    ```python
-    # Check if in development mode
-    if not os.getenv("DEVELOPMENT_MODE", "false").lower() == "true":
-        # Require authentication
-        raise HTTPException(status_code=403, detail="This endpoint requires authentication")
-    ```
+    **TODO**: Add authentication in production.
+    Example implementation:
+        
+        # Check if in development mode
+        if not os.getenv("DEVELOPMENT_MODE", "false").lower() == "true":
+            # Require authentication
+            raise HTTPException(status_code=403, detail="This endpoint requires authentication")
     """
     from fastapi.responses import FileResponse
     from pathlib import Path

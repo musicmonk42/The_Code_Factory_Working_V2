@@ -2510,7 +2510,7 @@ function displayClarificationQuestion(question, index) {
     
     addClarifierMessage(
         'assistant',
-        `**Question ${index + 1}/${total}** (Category: ${category})\n\n${questionText}`,
+        `Question ${index + 1}/${total} (Category: ${category})\n\n${questionText}`,
         'Clarification Needed'
     );
 }
