@@ -415,11 +415,12 @@ class TestConfigInspection:
     @pytest.mark.asyncio
     async def test_detect_ethical_drift_high_impact(self, supervisor):
         """Test ethical drift detection with high knowledge graph impact"""
-        call_count = [0]
+        call_count = 0
         
         async def mock_rate_limited_op(func, *args, **kwargs):
-            call_count[0] += 1
-            if call_count[0] == 1:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
                 # First call is to policy_engine.should_auto_learn
                 return (True, "Allowed")
             else:
@@ -592,17 +593,8 @@ class TestSupervisorLifecycle:
             mock_settings.SUPERVISOR_PERFORMANCE_THRESHOLD = 0.7
 
             supervisor = MetaSupervisor(interval=60)
-            # Mock _rate_limited_operation to track calls
-            save_models_called = [False]
-            original_rate_limited_op = supervisor._rate_limited_operation
-            
-            async def mock_rate_limited_op(func, *args, **kwargs):
-                if func == supervisor.save_models:
-                    save_models_called[0] = True
-                    return None
-                return await original_rate_limited_op(func, *args, **kwargs)
-            
-            supervisor._rate_limited_operation = AsyncMock(side_effect=mock_rate_limited_op)
+            # Mock _rate_limited_operation to bypass rate limiting
+            supervisor._rate_limited_operation = AsyncMock(return_value=None)
             supervisor.save_models = Mock()
             supervisor.explainer = Mock()
             supervisor.explainer.explain = AsyncMock(
