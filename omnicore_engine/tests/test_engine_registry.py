@@ -483,6 +483,7 @@ class TestOmniCoreOmega:
         mock_components["message_bus"].initialize = AsyncMock()
         mock_components["simulation_engine"].initialize = AsyncMock()
         mock_components["crew_manager"].start_all = AsyncMock()
+        mock_components["plugin_service"].start_subscriptions = AsyncMock()
 
         with patch.object(omega, "_initialize_arbiters") as mock_init_arbiters:
             await omega.initialize_asset_data()
@@ -507,6 +508,7 @@ class TestOmniCoreOmega:
             side_effect=Exception("DB Error")
         )
         mock_components["crew_manager"].start_all = AsyncMock()
+        mock_components["plugin_service"].start_subscriptions = AsyncMock()
 
         with patch.object(omega, "_initialize_arbiters"):
             await omega.initialize_asset_data()
