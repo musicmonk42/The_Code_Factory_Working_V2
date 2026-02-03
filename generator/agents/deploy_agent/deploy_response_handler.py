@@ -1021,11 +1021,27 @@ class MarkdownHandler(FormatHandler):
     Minimal validation for documentation content.
     """
 
-    def parse(self, content: str) -> dict:
+    def normalize(self, raw: str) -> dict:
         """Parse markdown content into a simple structure."""
-        return {"content": content, "type": "markdown"}
+        return {"content": raw.strip(), "type": "markdown"}
 
-    def validate(self, data: dict) -> list:
+    def convert(self, data: dict, to_format: str) -> str:
+        """Convert markdown data to specified format."""
+        if to_format == "markdown":
+            return data.get("content", "")
+        elif to_format == "text":
+            return data.get("content", "")
+        else:
+            raise ValueError(f"MarkdownHandler cannot convert to format: {to_format}")
+
+    def extract_sections(self, data: dict) -> Dict[str, str]:
+        """Extract sections from markdown content."""
+        content = data.get("content", "")
+        # Simple section extraction based on headers
+        sections = {"documentation": content}
+        return sections
+
+    def lint(self, data: dict) -> List[str]:
         """Validate markdown documentation content."""
         issues = []
         if not data or not data.get("content"):
