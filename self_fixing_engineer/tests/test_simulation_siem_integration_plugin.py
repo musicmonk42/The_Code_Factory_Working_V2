@@ -57,7 +57,7 @@ def mock_external_dependencies():
     mock_registry = {"splunk": mock_splunk_client, "elastic": mock_elastic_client}
 
     # Use absolute paths for patching targets
-    plugin_path = "simulation.plugins.siem_integration_plugin"
+    plugin_path = "self_fixing_engineer.simulation.plugins.siem_integration_plugin"
 
     with (
         patch(f"{plugin_path}.SIEM_CLIENTS_AVAILABLE", True),

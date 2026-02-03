@@ -37,8 +37,8 @@ def utils_module(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("PROVENANCE_LOG_PATH", str(prov_file))
 
     # Ensure we import fresh
-    if "simulation.utils" in sys.modules:
-        del sys.modules["simulation.utils"]
+    if "self_fixing_engineer.simulation.utils" in sys.modules:
+        del sys.modules["self_fixing_engineer.simulation.utils"]
 
     import simulation.utils as utils  # noqa: WPS433
 
@@ -62,8 +62,8 @@ def test_metrics_safe_on_reload(monkeypatch, tmp_path):
     monkeypatch.setenv("PROVENANCE_LOG_PATH", str(prov_file))
 
     # First import
-    if "simulation.utils" in sys.modules:
-        del sys.modules["simulation.utils"]
+    if "self_fixing_engineer.simulation.utils" in sys.modules:
+        del sys.modules["self_fixing_engineer.simulation.utils"]
     import simulation.utils as utils  # noqa
 
     # Reload a couple times; should not raise

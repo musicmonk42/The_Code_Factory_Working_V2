@@ -47,7 +47,7 @@ def test_cli_loads_config_file(runner, temp_config_file):
 
     # Patch the async generator used by the command so we don't run deep logic
     with patch(
-        "test_generation.gen_agent.cli._generate_async", new=check_env_and_succeed
+        "self_fixing_engineer.test_generation.gen_agent.cli._generate_async", new=check_env_and_succeed
     ):
         result = runner.invoke(
             cli.cli,
@@ -70,7 +70,7 @@ async def test_run_async_command_graceful_shutdown():
             raise
 
     with patch(
-        "test_generation.gen_agent.cli.install_default_handlers"
+        "self_fixing_engineer.test_generation.gen_agent.cli.install_default_handlers"
     ) as mock_install:
         # Run the command and let it install its signal handler
         task = asyncio.create_task(cli._run_async_command(fake_main()))
@@ -98,10 +98,10 @@ def test_cli_generate_command_runs(runner, tmp_path):
 
     # Prevent the passed coroutine from being awaited/executed; return 0 immediately
     with patch(
-        "test_generation.gen_agent.cli._run_async_command",
+        "self_fixing_engineer.test_generation.gen_agent.cli._run_async_command",
         new=AsyncMock(return_value=0),
     ) as run_mock:
-        with patch("test_generation.gen_agent.cli._generate_async", new=async_mock):
+        with patch("self_fixing_engineer.test_generation.gen_agent.cli._generate_async", new=async_mock):
             # NOTE: group options must precede the subcommand
             result = runner.invoke(
                 cli.cli,
@@ -128,7 +128,7 @@ def test_cli_handles_missing_yaml_dependency(runner, temp_config_file):
     Using --config-file without PyYAML should error nicely and exit with code 1.
     With the production CLI, this is a ClickException, so we assert on exit code and message.
     """
-    with patch("test_generation.gen_agent.cli.yaml", None):
+    with patch("self_fixing_engineer.test_generation.gen_agent.cli.yaml", None):
         result = runner.invoke(
             cli.cli,
             ["--config-file", str(temp_config_file), "generate", "--session", "test"],
@@ -158,7 +158,7 @@ async def test_graceful_shutdown_logs_message(caplog):
         )  # A task that does nothing, just to keep the command alive.
 
     with patch(
-        "test_generation.gen_agent.cli.install_default_handlers"
+        "self_fixing_engineer.test_generation.gen_agent.cli.install_default_handlers"
     ) as mock_install:
         with caplog.at_level(logging.WARNING):
             # Start the command, which will install the real handler via our mock
@@ -190,7 +190,7 @@ async def test_feedback_async_command(runner, tmp_path):
 
     # Mock the underlying asynchronous function call
     with patch(
-        "test_generation.gen_agent.cli.summarize_feedback",
+        "self_fixing_engineer.test_generation.gen_agent.cli.summarize_feedback",
         new=AsyncMock(return_value={"total_runs": 1}),
     ):
         result = runner.invoke(

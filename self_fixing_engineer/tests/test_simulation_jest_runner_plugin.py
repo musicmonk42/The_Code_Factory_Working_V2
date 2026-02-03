@@ -32,7 +32,7 @@ def mock_node_in_path():
     """Mocks the `which`/`where` command to find Node and package managers."""
     with (
         patch(
-            "simulation.plugins.jest_runner_plugin._which", new=AsyncMock()
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._which", new=AsyncMock()
         ) as mock_which,
         patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
         patch("os.path.exists", return_value=True),
@@ -113,7 +113,7 @@ async def test_plugin_health_success(mock_node_in_path):
 async def test_plugin_health_npx_not_found():
     """Test `plugin_health` returns 'degraded' when npx is not found."""
     with patch(
-        "simulation.plugins.jest_runner_plugin._which", new=AsyncMock()
+        "self_fixing_engineer.simulation.plugins.jest_runner_plugin._which", new=AsyncMock()
     ) as mock_which:
 
         async def which_side_effect(cmd):
@@ -146,7 +146,7 @@ async def test_plugin_health_npx_not_found():
 async def test_detect_package_manager():
     """Test `_detect_package_manager` correctly finds available managers."""
     with patch(
-        "simulation.plugins.jest_runner_plugin._which", new=AsyncMock()
+        "self_fixing_engineer.simulation.plugins.jest_runner_plugin._which", new=AsyncMock()
     ) as mock_which:
 
         async def which_async(cmd):
@@ -178,19 +178,19 @@ async def test_run_jest_tests_success_full_workflow(mock_temp_jest_project):
     """
     with (
         patch(
-            "simulation.plugins.jest_runner_plugin._which",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._which",
             new=AsyncMock(return_value="/usr/bin/npx"),
         ),
         patch(
-            "simulation.plugins.jest_runner_plugin._get_package_version",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._get_package_version",
             new=AsyncMock(return_value="29.5.0"),
         ),
         patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
         patch("shutil.copy2") as mock_copy2,
         patch("shutil.copyfile"),
-        patch("simulation.plugins.jest_runner_plugin._copytree_compat"),
+        patch("self_fixing_engineer.simulation.plugins.jest_runner_plugin._copytree_compat"),
         patch(
-            "simulation.plugins.jest_runner_plugin._install_packages",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._install_packages",
             new=AsyncMock(return_value=(True, "")),
         ),
     ):
@@ -287,11 +287,11 @@ async def test_run_jest_tests_test_failure(mock_temp_jest_project):
     """Test `run_jest_tests` when the Jest report indicates a test failure."""
     with (
         patch(
-            "simulation.plugins.jest_runner_plugin._which",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._which",
             new=AsyncMock(return_value="/usr/bin/npx"),
         ),
         patch(
-            "simulation.plugins.jest_runner_plugin._get_package_version",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._get_package_version",
             new=AsyncMock(return_value="29.5.0"),
         ),
         patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
@@ -299,9 +299,9 @@ async def test_run_jest_tests_test_failure(mock_temp_jest_project):
         patch("os.makedirs"),
         patch("shutil.copy2"),
         patch("shutil.copyfile"),
-        patch("simulation.plugins.jest_runner_plugin._copytree_compat"),
+        patch("self_fixing_engineer.simulation.plugins.jest_runner_plugin._copytree_compat"),
         patch(
-            "simulation.plugins.jest_runner_plugin._install_packages",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._install_packages",
             new=AsyncMock(
                 return_value=(
                     False,
@@ -349,7 +349,7 @@ async def test_run_jest_tests_file_not_found():
     """Test that `run_jest_tests` returns an error if the test file is not found."""
     with (
         patch(
-            "simulation.plugins.jest_runner_plugin._which",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._which",
             new=AsyncMock(return_value="/usr/bin/npx"),
         ),
         patch("os.path.exists", return_value=False),
@@ -371,20 +371,20 @@ async def test_run_jest_tests_timeout():
     """Test that `run_jest_tests` handles timeouts properly."""
     with (
         patch(
-            "simulation.plugins.jest_runner_plugin._which",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._which",
             new=AsyncMock(return_value="/usr/bin/npx"),
         ),
         patch(
-            "simulation.plugins.jest_runner_plugin._get_package_version",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._get_package_version",
             new=AsyncMock(return_value="29.5.0"),
         ),
         patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
         patch("os.makedirs"),
         patch("shutil.copy2"),
         patch("shutil.copyfile"),
-        patch("simulation.plugins.jest_runner_plugin._copytree_compat"),
+        patch("self_fixing_engineer.simulation.plugins.jest_runner_plugin._copytree_compat"),
         patch(
-            "simulation.plugins.jest_runner_plugin._install_packages",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._install_packages",
             new=AsyncMock(return_value=(True, "")),
         ),
     ):
@@ -468,7 +468,7 @@ async def test_which_command():
     """Test `_which` command detection on different platforms."""
     # Mock _shutil_which to return None so it falls back to subprocess
     with patch(
-        "simulation.plugins.jest_runner_plugin._shutil_which", return_value=None
+        "self_fixing_engineer.simulation.plugins.jest_runner_plugin._shutil_which", return_value=None
     ):
 
         # Test on Windows
@@ -543,7 +543,7 @@ async def test_run_jest_tests_no_npx():
 
     with (
         patch(
-            "simulation.plugins.jest_runner_plugin._which",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._which",
             new=AsyncMock(return_value=None),
         ),
         patch.object(Path, "exists", mock_path_exists),
@@ -565,11 +565,11 @@ async def test_run_jest_tests_with_extra_args(mock_temp_jest_project):
     """Test run_jest_tests with extra Jest arguments."""
     with (
         patch(
-            "simulation.plugins.jest_runner_plugin._which",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._which",
             new=AsyncMock(return_value="/usr/bin/npx"),
         ),
         patch(
-            "simulation.plugins.jest_runner_plugin._get_package_version",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._get_package_version",
             new=AsyncMock(return_value="29.5.0"),
         ),
         patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
@@ -577,9 +577,9 @@ async def test_run_jest_tests_with_extra_args(mock_temp_jest_project):
         patch("os.makedirs"),
         patch("shutil.copy2"),
         patch("shutil.copyfile"),
-        patch("simulation.plugins.jest_runner_plugin._copytree_compat"),
+        patch("self_fixing_engineer.simulation.plugins.jest_runner_plugin._copytree_compat"),
         patch(
-            "simulation.plugins.jest_runner_plugin._install_packages",
+            "self_fixing_engineer.simulation.plugins.jest_runner_plugin._install_packages",
             new=AsyncMock(return_value=(True, "")),
         ),
     ):

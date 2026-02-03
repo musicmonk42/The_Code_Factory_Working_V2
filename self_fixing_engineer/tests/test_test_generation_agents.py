@@ -15,7 +15,7 @@ def mock_subprocess_exec_with_json_output():
     mock_proc.communicate.return_value = (b'{"results": "SECURITY REPORT"}', b"")
     mock_proc.returncode = 0
     with patch(
-        "test_generation.gen_agent.agents.asyncio.create_subprocess_exec",
+        "self_fixing_engineer.test_generation.gen_agent.agents.asyncio.create_subprocess_exec",
         return_value=mock_proc,
     ) as mock_exec:
         yield mock_exec
@@ -91,7 +91,7 @@ async def test_generator_agent_inserts_placeholder_on_empty():
 @pytest.mark.asyncio
 async def test_security_agent_skips_if_bandit_unavailable():
     """Security agent should skip if BANDIT_AVAILABLE is False."""
-    with patch("test_generation.gen_agent.agents.BANDIT_AVAILABLE", False):
+    with patch("self_fixing_engineer.test_generation.gen_agent.agents.BANDIT_AVAILABLE", False):
         state = {"code_under_test": "pass", "language": "python"}
         result = await agents.security_agent(state)
 
@@ -102,9 +102,9 @@ async def test_security_agent_skips_if_bandit_unavailable():
 async def test_security_agent_runs_bandit(mock_subprocess_exec_with_json_output):
     """Security agent should include report from mocked bandit subprocess."""
     with (
-        patch("test_generation.gen_agent.agents.BANDIT_AVAILABLE", True),
+        patch("self_fixing_engineer.test_generation.gen_agent.agents.BANDIT_AVAILABLE", True),
         patch(
-            "test_generation.gen_agent.agents.shutil.which",
+            "self_fixing_engineer.test_generation.gen_agent.agents.shutil.which",
             return_value="/usr/bin/bandit",
         ),
     ):
@@ -121,7 +121,7 @@ async def test_security_agent_runs_bandit(mock_subprocess_exec_with_json_output)
 @pytest.mark.asyncio
 async def test_performance_agent_skips_if_locust_unavailable():
     """Performance agent should skip if LOCUST_AVAILABLE is False."""
-    with patch("test_generation.gen_agent.agents.LOCUST_AVAILABLE", False):
+    with patch("self_fixing_engineer.test_generation.gen_agent.agents.LOCUST_AVAILABLE", False):
         state = {"code_under_test": "pass", "language": "python"}
         result = await agents.performance_agent(state)
 
@@ -131,9 +131,9 @@ async def test_performance_agent_skips_if_locust_unavailable():
 @pytest.mark.asyncio
 async def test_performance_agent_runs_locust():
     """Performance agent should generate performance script if available."""
-    with patch("test_generation.gen_agent.agents.LOCUST_AVAILABLE", True):
+    with patch("self_fixing_engineer.test_generation.gen_agent.agents.LOCUST_AVAILABLE", True):
         mock_run = AsyncMock(return_value="PERF SCRIPT")
-        with patch("test_generation.gen_agent.agents._run_locust", mock_run):
+        with patch("self_fixing_engineer.test_generation.gen_agent.agents._run_locust", mock_run):
             state = {"code_under_test": "pass", "language": "python"}
             result = await agents.performance_agent(state)
 
@@ -166,7 +166,7 @@ async def test_sanitization_fallback(monkeypatch):
     Tests that the generator agent correctly sanitizes input even when bleach is unavailable.
     This test verifies that the `_sanitize_input` fallback to `html.escape` is functioning.
     """
-    monkeypatch.setattr("test_generation.gen_agent.agents._BLEACH_OK", False)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.gen_agent.agents._BLEACH_OK", False)
 
     # Mock LLM to return a placeholder. The point of the test is to check the input to the LLM.
     mock_llm = AsyncMock()
@@ -182,14 +182,14 @@ async def test_sanitization_fallback(monkeypatch):
     # Patch the audit_logger to prevent errors
     with (
         patch(
-            "test_generation.gen_agent.agents.audit_logger.log_event",
+            "self_fixing_engineer.test_generation.gen_agent.agents.audit_logger.log_event",
             new_callable=AsyncMock,
         ),
-        patch("test_generation.gen_agent.agents.logger"),
+        patch("self_fixing_engineer.test_generation.gen_agent.agents.logger"),
     ):
 
         # We need to test what happens when the agent calls `_sanitize_input`.
-        with patch("test_generation.gen_agent.agents._sanitize_input") as mock_sanitize:
+        with patch("self_fixing_engineer.test_generation.gen_agent.agents._sanitize_input") as mock_sanitize:
             mock_sanitize.return_value = "&lt;script&gt;alert(1)&lt;/script&gt;"
 
             await agents.generator_agent(state, llm=mock_llm)

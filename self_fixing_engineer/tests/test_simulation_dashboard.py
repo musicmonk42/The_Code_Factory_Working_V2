@@ -22,7 +22,7 @@ def mock_streamlit():
     mock_st.tabs = MagicMock()
     mock_st.rerun = MagicMock()
     mock_st.stop = MagicMock()
-    with patch("simulation.dashboard.st_dash", new=mock_st):
+    with patch("self_fixing_engineer.simulation.dashboard.st_dash", new=mock_st):
         yield mock_st
 
 
@@ -56,7 +56,7 @@ def render_main_component(main):
         json.dump({"test_file": "session_1_tests", "status": "COMPLETED"}, f)
 
     # Patch Config class to use temporary directories
-    with patch("simulation.dashboard.Config") as mock_config:
+    with patch("self_fixing_engineer.simulation.dashboard.Config") as mock_config:
         mock_config.PLUGINS_DIR = plugins_dir
         mock_config.RESULTS_DIR = results_dir
         mock_config.CONFIG_DIR = configs_dir
@@ -70,9 +70,9 @@ def render_main_component(main):
 def mock_onboarding_backends():
     """Mocks backend-related imports for the onboarding wizard."""
     with (
-        patch("simulation.dashboard.ONBOARDING_BACKENDS_AVAILABLE", True),
-        patch("simulation.dashboard.MeshPubSub") as MockMeshPubSub,
-        patch("simulation.dashboard.CheckpointManager") as MockCheckpointManager,
+        patch("self_fixing_engineer.simulation.dashboard.ONBOARDING_BACKENDS_AVAILABLE", True),
+        patch("self_fixing_engineer.simulation.dashboard.MeshPubSub") as MockMeshPubSub,
+        patch("self_fixing_engineer.simulation.dashboard.CheckpointManager") as MockCheckpointManager,
     ):
 
         MockMeshPubSub.supported_backends.return_value = ["redis", "local"]
@@ -191,7 +191,7 @@ async def test_run_health_checks_gui_success(mock_onboarding_backends):
     }
 
     # The async function is called via run_async_streamlit
-    with patch("simulation.dashboard.st_dash") as mock_st_dash:
+    with patch("self_fixing_engineer.simulation.dashboard.st_dash") as mock_st_dash:
         mock_st_dash.session_state.plugin_manager_instance = MagicMock()
         await dashboard._run_health_checks_gui(mock_config)
 

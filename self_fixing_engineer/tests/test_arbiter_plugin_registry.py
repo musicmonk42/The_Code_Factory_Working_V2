@@ -64,9 +64,9 @@ def mock_app():
 def mock_test_generation_onboard():
     """Mock the test_generation.onboard module for tests."""
     onboard = MagicMock()
-    sys.modules["test_generation.onboard"] = onboard
+    sys.modules["self_fixing_engineer.test_generation.onboard"] = onboard
     yield
-    sys.modules.pop("test_generation.onboard", None)
+    sys.modules.pop("self_fixing_engineer.test_generation.onboard", None)
 
 
 @pytest.fixture(autouse=True)
@@ -97,9 +97,9 @@ def mock_test_generation_utils():
     """Mock the test_generation.utils module to provide __version__."""
     utils = MagicMock()
     utils.__version__ = "1.0.0"
-    sys.modules["test_generation.utils"] = utils
+    sys.modules["self_fixing_engineer.test_generation.utils"] = utils
     yield
-    sys.modules.pop("test_generation.utils", None)
+    sys.modules.pop("self_fixing_engineer.test_generation.utils", None)
 
 
 # Fixture to mock logger

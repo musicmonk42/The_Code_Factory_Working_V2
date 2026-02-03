@@ -222,7 +222,7 @@ def test_generate_correlation_id():
 async def test_correlated_decorator(caplog):
     """Test correlated decorator sets and clears correlation ID."""
     # Configure caplog to capture from the simulation.core logger
-    with caplog.at_level(logging.INFO, logger="simulation.core"):
+    with caplog.at_level(logging.INFO, logger="self_fixing_engineer.simulation.core"):
 
         @correlated
         def test_fn():

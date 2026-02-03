@@ -26,53 +26,53 @@ from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
 @pytest.fixture(autouse=True)
 def mock_external_deps(mocker):
     mocker.patch.object(os, "getenv", return_value="false")
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base._base_logger")
+    mocker.patch("self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base._base_logger")
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.alert_operator", new=AsyncMock()
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.alert_operator", new=AsyncMock()
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.time.time", return_value=1672531200.0
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.time.time", return_value=1672531200.0
     )
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.os.makedirs")
+    mocker.patch("self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.os.makedirs")
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=False
-    )
-    mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.os.path.dirname", return_value="."
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=False
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.os.path.abspath",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.os.path.dirname", return_value="."
+    )
+    mocker.patch(
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.os.path.abspath",
         side_effect=lambda x: f"/mock/path/{x}",
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.os.urandom",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.os.urandom",
         return_value=b"test-hmac-key-for-testing-only-123",
     )
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.json.dump")
+    mocker.patch("self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.json.dump")
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.json.load",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.json.load",
         return_value={
             "last_verified_entry_count": 0,
             "last_verification_time": "2025-01-01T00:00:00",
         },
     )
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.asyncio.create_task")
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.atexit.register")
+    mocker.patch("self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.asyncio.create_task")
+    mocker.patch("self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.atexit.register")
 
     # Mock Prometheus metrics to prevent real registration errors during tests
     namedtuple("MockCounter", ["labels", "inc"])
     namedtuple("MockHistogram", ["labels", "observe"])
     namedtuple("MockGauge", ["labels", "set"])
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.Counter",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.Counter",
         return_value=MagicMock(labels=MagicMock(return_value=MagicMock())),
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.Histogram",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.Histogram",
         return_value=MagicMock(labels=MagicMock(return_value=MagicMock())),
     )
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.Gauge",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.Gauge",
         return_value=MagicMock(labels=MagicMock(return_value=MagicMock())),
     )
 
@@ -106,7 +106,7 @@ async def test_circuit_breaker_trip_and_recovery(mocker):
 
     # Stage 3: Advance time and verify HALF_OPEN state
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.time.time", return_value=1672531202.0
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.time.time", return_value=1672531202.0
     )
     mock_operation.side_effect = None  # Reset mock for successful call
     mock_operation.return_value = "Success"
@@ -125,7 +125,7 @@ async def test_audit_manager_integrity_check_success(mocker):
     # Setup mock files
     mock_hmac_key = b"test-hmac-key-for-testing-only-123"
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base._get_dlt_audit_hmac_key",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base._get_dlt_audit_hmac_key",
         return_value=mock_hmac_key,
     )
 
@@ -144,7 +144,7 @@ async def test_audit_manager_integrity_check_success(mocker):
     mock_file = mock_open(read_data=json.dumps(signed_event) + "\n")
     mocker.patch("builtins.open", mock_file)
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=True
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=True
     )
 
     # Create AuditManager instance
@@ -164,7 +164,7 @@ async def test_audit_manager_integrity_check_failure(mocker):
     # Setup mock files
     mock_hmac_key = b"test-hmac-key-for-testing-only-123"
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base._get_dlt_audit_hmac_key",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base._get_dlt_audit_hmac_key",
         return_value=mock_hmac_key,
     )
 
@@ -180,12 +180,12 @@ async def test_audit_manager_integrity_check_failure(mocker):
     mock_file = mock_open(read_data=json.dumps(signed_event) + "\n")
     mocker.patch("builtins.open", mock_file)
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=True
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=True
     )
 
     # Mock logger
     mock_logger = MagicMock()
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base._base_logger", mock_logger)
+    mocker.patch("self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base._base_logger", mock_logger)
 
     # Create AuditManager instance
     am = AuditManager()

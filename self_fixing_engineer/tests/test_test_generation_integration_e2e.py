@@ -68,12 +68,12 @@ async def test_e2e_happy_and_quarantine_paths(project: Path, config, monkeypatch
     # Mock the function before the orchestrator is created and calls it
     mock_run_pytest = AsyncMock(return_value=(True, 10.0, "Passed"))
     monkeypatch.setattr(
-        "test_generation.utils.run_pytest_and_coverage", mock_run_pytest
+        "self_fixing_engineer.test_generation.utils.run_pytest_and_coverage", mock_run_pytest
     )
 
     # We must also mock venv creation, which is a dependency of run_pytest
     monkeypatch.setattr(
-        "test_generation.utils.create_and_install_venv",
+        "self_fixing_engineer.test_generation.utils.create_and_install_venv",
         AsyncMock(return_value=(True, "path/to/python")),
     )
 
@@ -120,7 +120,7 @@ async def test_e2e_happy_and_quarantine_paths(project: Path, config, monkeypatch
 async def test_e2e_cli_main(project: Path, config, monkeypatch):
     # Mock monitor_and_prioritize_uncovered_code to return a target
     monkeypatch.setattr(
-        "test_generation.utils.monitor_and_prioritize_uncovered_code",
+        "self_fixing_engineer.test_generation.utils.monitor_and_prioritize_uncovered_code",
         AsyncMock(
             return_value=[
                 {
@@ -135,17 +135,17 @@ async def test_e2e_cli_main(project: Path, config, monkeypatch):
 
     # We must mock the run_pytest function to prevent it from trying to run
     monkeypatch.setattr(
-        "test_generation.utils.run_pytest_and_coverage",
+        "self_fixing_engineer.test_generation.utils.run_pytest_and_coverage",
         AsyncMock(return_value=(True, 10.0, "Passed")),
     )
 
     monkeypatch.setattr(
-        "test_generation.utils.SecurityScanner.scan_test_file",
+        "self_fixing_engineer.test_generation.utils.SecurityScanner.scan_test_file",
         AsyncMock(return_value=(False, [], "NONE")),
     )
     # Standardize mock path for PRCreator
     monkeypatch.setattr(
-        "test_generation.utils.PRCreator.create_pr",
+        "self_fixing_engineer.test_generation.utils.PRCreator.create_pr",
         AsyncMock(return_value=(True, "http://pr")),
     )
 
@@ -154,7 +154,7 @@ async def test_e2e_cli_main(project: Path, config, monkeypatch):
     mock_orchestrator.run_pipeline = AsyncMock(return_value=None)
 
     with patch(
-        "test_generation.orchestrator.cli.GenerationOrchestrator",
+        "self_fixing_engineer.test_generation.orchestrator.cli.GenerationOrchestrator",
         return_value=mock_orchestrator,
     ):
         args = argparse.Namespace(

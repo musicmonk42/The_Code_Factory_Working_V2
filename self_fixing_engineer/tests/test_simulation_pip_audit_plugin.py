@@ -35,15 +35,15 @@ def mock_external_dependencies():
     """
     with (
         patch(
-            "simulation.plugins.pip_audit_plugin.asyncio.create_subprocess_exec"
+            "self_fixing_engineer.simulation.plugins.pip_audit_plugin.asyncio.create_subprocess_exec"
         ) as mock_subprocess_exec,
-        patch("simulation.plugins.pip_audit_plugin.Redis") as mock_redis,
+        patch("self_fixing_engineer.simulation.plugins.pip_audit_plugin.Redis") as mock_redis,
         patch(
-            "simulation.plugins.pip_audit_plugin._which",
+            "self_fixing_engineer.simulation.plugins.pip_audit_plugin._which",
             new=AsyncMock(return_value="/usr/bin/pip-audit"),
         ),
         patch(
-            "simulation.plugins.pip_audit_plugin._sfe_audit_logger.log", new=AsyncMock()
+            "self_fixing_engineer.simulation.plugins.pip_audit_plugin._sfe_audit_logger.log", new=AsyncMock()
         ) as mock_audit_log,
     ):
 
@@ -61,7 +61,7 @@ def mock_external_dependencies():
 
         # Use a fresh Prometheus registry for each test
         with patch(
-            "simulation.plugins.pip_audit_plugin.REGISTRY",
+            "self_fixing_engineer.simulation.plugins.pip_audit_plugin.REGISTRY",
             new=CollectorRegistry(auto_describe=True),
         ):
             yield {
@@ -84,10 +84,10 @@ def mock_filesystem():
 
         with (
             patch(
-                "simulation.plugins.pip_audit_plugin.os.getcwd",
+                "self_fixing_engineer.simulation.plugins.pip_audit_plugin.os.getcwd",
                 return_value=str(temp_path),
             ),
-            patch("simulation.plugins.pip_audit_plugin.Path") as mock_path,
+            patch("self_fixing_engineer.simulation.plugins.pip_audit_plugin.Path") as mock_path,
         ):
 
             # Make sure Path() object methods are also mocked
@@ -139,7 +139,7 @@ def test_load_config_from_env_override():
 
         with (
             patch.dict(os.environ, {"PIP_AUDIT_DEFAULT_SCAN_METHOD": "requirements"}),
-            patch("simulation.plugins.pip_audit_plugin.Path") as mock_path_cls,
+            patch("self_fixing_engineer.simulation.plugins.pip_audit_plugin.Path") as mock_path_cls,
         ):
             # Mock the Path class to return our test config path
             mock_path_instance = MagicMock()
@@ -183,7 +183,7 @@ async def test_plugin_health_success(mock_external_dependencies):
 async def test_plugin_health_cli_not_found():
     """Test that plugin_health returns 'error' when pip-audit is not found."""
     with patch(
-        "simulation.plugins.pip_audit_plugin._which", new=AsyncMock(return_value=None)
+        "self_fixing_engineer.simulation.plugins.pip_audit_plugin._which", new=AsyncMock(return_value=None)
     ):
         result = await plugin_health()
         assert result["status"] == "error"
@@ -303,7 +303,7 @@ async def test_scan_dependencies_timeout_persistent_failure(mock_external_depend
     # 1 (version) + 1 (freeze) + 1 (main scan fail) + 1 (retry freeze)
     # So we will set up our mocks for 4 calls and assert that count.
     with patch(
-        "simulation.plugins.pip_audit_plugin.PIP_AUDIT_CONFIG.retry_attempts", 1
+        "self_fixing_engineer.simulation.plugins.pip_audit_plugin.PIP_AUDIT_CONFIG.retry_attempts", 1
     ):
         mock_subprocess_exec.side_effect = [
             version_proc,  # Call 1: --version
@@ -336,7 +336,7 @@ async def test_scan_dependencies_timeout_persistent_failure(mock_external_depend
 @pytest.mark.asyncio
 async def test_scan_dependencies_requirements_file_not_found():
     """Test that a missing requirements file is correctly handled."""
-    with patch("simulation.plugins.pip_audit_plugin.Path") as mock_path_cls:
+    with patch("self_fixing_engineer.simulation.plugins.pip_audit_plugin.Path") as mock_path_cls:
         mock_path_instance = MagicMock()
         mock_path_instance.exists.return_value = False
         mock_path_cls.return_value = mock_path_instance

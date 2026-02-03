@@ -41,9 +41,9 @@ def aws_mocks():
     """A targeted fixture that only mocks AWS dependencies."""
     with (
         patch("boto3.client") as mock_boto3,
-        patch("simulation.plugins.cloud_logging_integrations.AWS_AVAILABLE", True),
+        patch("self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AWS_AVAILABLE", True),
         patch(
-            "simulation.plugins.cloud_logging_integrations.AWSClientError",
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AWSClientError",
             MockAWSClientError,
         ),
     ):
@@ -75,10 +75,10 @@ def gcp_mocks():
     """A targeted fixture that only mocks GCP dependencies."""
     with (
         patch(
-            "simulation.plugins.cloud_logging_integrations.gcp_logging_sdk.Client",
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.gcp_logging_sdk.Client",
             create=True,
         ) as mock_gcp_client,
-        patch("simulation.plugins.cloud_logging_integrations.GCP_AVAILABLE", True),
+        patch("self_fixing_engineer.simulation.plugins.cloud_logging_integrations.GCP_AVAILABLE", True),
     ):
 
         gcp_instance = MagicMock()
@@ -99,26 +99,26 @@ def azure_mocks():
     """A targeted fixture that only mocks Azure dependencies."""
     with (
         patch(
-            "simulation.plugins.cloud_logging_integrations.LogsQueryClient", create=True
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.LogsQueryClient", create=True
         ) as mock_query,
         patch(
-            "simulation.plugins.cloud_logging_integrations.DefaultAzureCredential",
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.DefaultAzureCredential",
             create=True,
         ) as mock_cred,
         patch(
-            "simulation.plugins.cloud_logging_integrations.LogsIngestionClient",
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.LogsIngestionClient",
             create=True,
         ) as mock_ingestion,
         patch(
-            "simulation.plugins.cloud_logging_integrations.AZURE_MONITOR_QUERY_AVAILABLE",
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AZURE_MONITOR_QUERY_AVAILABLE",
             True,
         ),
         patch(
-            "simulation.plugins.cloud_logging_integrations.AZURE_IDENTITY_AVAILABLE",
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AZURE_IDENTITY_AVAILABLE",
             True,
         ),
         patch(
-            "simulation.plugins.cloud_logging_integrations.AZURE_MONITOR_INGESTION_AVAILABLE",
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AZURE_MONITOR_INGESTION_AVAILABLE",
             True,
         ),
     ):
@@ -209,7 +209,7 @@ async def test_cw_logger_health_check_success(aws_mocks):
     config = {"aws_cloudwatch": {"log_group_name": "test-group"}}
 
     with patch(
-        "simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
         MockCloudWatchLogger,
     ):
         logger = MockCloudWatchLogger(config)
@@ -227,7 +227,7 @@ async def test_cw_logger_auth_error(aws_mocks):
     config = {"aws_cloudwatch": {"log_group_name": "test-group"}}
 
     with patch(
-        "simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
         MockCloudWatchLogger,
     ):
         logger = MockCloudWatchLogger(config)
@@ -247,7 +247,7 @@ async def test_cw_logger_other_error(aws_mocks):
     config = {"aws_cloudwatch": {"log_group_name": "test-group"}}
 
     with patch(
-        "simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
         MockCloudWatchLogger,
     ):
         logger = MockCloudWatchLogger(config)
@@ -270,7 +270,7 @@ async def test_cw_logger_flushes_batch(aws_mocks):
     }
 
     with patch(
-        "simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
         MockCloudWatchLogger,
     ):
         logger = MockCloudWatchLogger(config)
@@ -296,7 +296,7 @@ async def test_cw_logger_flush_rollback(aws_mocks):
     }
 
     with patch(
-        "simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
         MockCloudWatchLogger,
     ):
         logger = MockCloudWatchLogger(config)
@@ -327,7 +327,7 @@ async def test_cw_logger_query_logs(aws_mocks):
     config = {"aws_cloudwatch": {"log_group_name": "test-group"}}
 
     with patch(
-        "simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.CloudWatchLogger",
         MockCloudWatchLogger,
     ):
         logger = MockCloudWatchLogger(config)
@@ -385,7 +385,7 @@ async def test_gcp_logger_health_check_success(gcp_mocks):
     config = {"gcp_logging": {"project_id": "mock-project"}}
 
     with patch(
-        "simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger
     ):
         logger = MockGCPLogger(config)
         logger._client = gcp_mocks
@@ -400,7 +400,7 @@ async def test_gcp_logger_health_check_auth_error(gcp_mocks):
     config = {"gcp_logging": {"project_id": "mock-project"}}
 
     with patch(
-        "simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger
     ):
         logger = MockGCPLogger(config)
         logger._client = gcp_mocks
@@ -418,7 +418,7 @@ async def test_gcp_logger_flushes_batch(gcp_mocks):
     config = {"gcp_logging": {"project_id": "mock-project"}}
 
     with patch(
-        "simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger
     ):
         logger = MockGCPLogger(config)
         logger._client = gcp_mocks
@@ -491,7 +491,7 @@ def azure_config():
 @pytest.mark.timeout(5)
 async def test_azure_logger_health_check_success(azure_config, azure_mocks):
     with patch(
-        "simulation.plugins.cloud_logging_integrations.AzureMonitorLogger",
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AzureMonitorLogger",
         MockAzureLogger,
     ):
         logger = MockAzureLogger(azure_config)
@@ -505,7 +505,7 @@ async def test_azure_logger_health_check_success(azure_config, azure_mocks):
 @pytest.mark.timeout(5)
 async def test_azure_logger_health_check_auth_error(azure_config, azure_mocks):
     with patch(
-        "simulation.plugins.cloud_logging_integrations.AzureMonitorLogger",
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AzureMonitorLogger",
         MockAzureLogger,
     ):
         logger = MockAzureLogger(azure_config)
@@ -522,7 +522,7 @@ async def test_azure_logger_health_check_auth_error(azure_config, azure_mocks):
 @pytest.mark.timeout(5)
 async def test_azure_logger_flushes_batch(azure_config, azure_mocks):
     with patch(
-        "simulation.plugins.cloud_logging_integrations.AzureMonitorLogger",
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AzureMonitorLogger",
         MockAzureLogger,
     ):
         logger = MockAzureLogger(azure_config)
@@ -542,7 +542,7 @@ async def test_azure_logger_flushes_batch(azure_config, azure_mocks):
 @pytest.mark.timeout(5)
 async def test_azure_logger_auto_flushes_on_exit(azure_config, azure_mocks):
     with patch(
-        "simulation.plugins.cloud_logging_integrations.AzureMonitorLogger",
+        "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AzureMonitorLogger",
         MockAzureLogger,
     ):
         async with MockAzureLogger(azure_config) as logger:
@@ -559,18 +559,18 @@ async def test_azure_logger_auto_flushes_on_exit(azure_config, azure_mocks):
 
 def test_get_cloud_logger_factory_with_valid_config(azure_config):
     with (
-        patch("simulation.plugins.cloud_logging_integrations.AWS_AVAILABLE", True),
-        patch("simulation.plugins.cloud_logging_integrations.GCP_AVAILABLE", True),
+        patch("self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AWS_AVAILABLE", True),
+        patch("self_fixing_engineer.simulation.plugins.cloud_logging_integrations.GCP_AVAILABLE", True),
         patch(
-            "simulation.plugins.cloud_logging_integrations.AZURE_MONITOR_INGESTION_AVAILABLE",
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AZURE_MONITOR_INGESTION_AVAILABLE",
             True,
         ),
         patch(
-            "simulation.plugins.cloud_logging_integrations.AZURE_IDENTITY_AVAILABLE",
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AZURE_IDENTITY_AVAILABLE",
             True,
         ),
         patch(
-            "simulation.plugins.cloud_logging_integrations.AZURE_MONITOR_QUERY_AVAILABLE",
+            "self_fixing_engineer.simulation.plugins.cloud_logging_integrations.AZURE_MONITOR_QUERY_AVAILABLE",
             True,
         ),
     ):

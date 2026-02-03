@@ -408,7 +408,7 @@ class TestPluginFunctions:
         mock_provider._acall = AsyncMock(return_value="Generated text")
 
         with patch(
-            "simulation.plugins.custom_llm_provider_plugin.CustomLLMProvider",
+            "self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin.CustomLLMProvider",
             return_value=mock_provider,
         ):
             from langchain_core.messages import HumanMessage
@@ -433,7 +433,7 @@ class TestPluginFunctions:
 
         # Patch the module-level function
         monkeypatch.setattr(
-            "simulation.plugins.custom_llm_provider_plugin.get_vault_key",
+            "self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin.get_vault_key",
             mock_get_vault_key,
         )
 
@@ -461,7 +461,7 @@ class TestPluginFunctions:
         from self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider
 
         monkeypatch.setattr(
-            "simulation.plugins.custom_llm_provider_plugin.get_vault_key",
+            "self_fixing_engineer.simulation.plugins.custom_llm_provider_plugin.get_vault_key",
             mock_failing_vault,
         )
 

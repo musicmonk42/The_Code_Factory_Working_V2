@@ -179,7 +179,7 @@ def mock_temp_file(mocker, tmp_path):
     temp_file.write_text(json.dumps(mock_creds))
 
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_offchain_clients.create_temp_file",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_offchain_clients.create_temp_file",
         return_value=str(temp_file),
     )
     return str(temp_file)
@@ -439,7 +439,7 @@ async def test_ipfs_get_blob_success(mock_ipfs_client):
 def test_in_memory_client_forbidden_in_prod(mocker):
     """Test that InMemoryOffChainClient is forbidden in production mode."""
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_offchain_clients.PRODUCTION_MODE", True
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_offchain_clients.PRODUCTION_MODE", True
     )
     with pytest.raises(DLTClientConfigurationError):
         InMemoryOffChainClient({"in_memory": {}})
@@ -449,7 +449,7 @@ def test_in_memory_client_forbidden_in_prod(mocker):
 async def test_in_memory_save_and_get_blob_success(mocker):
     """Test successful save and get blob operation on the InMemory client."""
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_offchain_clients.PRODUCTION_MODE", False
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_offchain_clients.PRODUCTION_MODE", False
     )
     mock_config = {"in_memory": {"log_format": "json", "temp_file_ttl": 3600.0}}
     client = InMemoryOffChainClient(mock_config)

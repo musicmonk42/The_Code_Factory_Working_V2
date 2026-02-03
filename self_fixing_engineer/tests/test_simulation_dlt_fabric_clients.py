@@ -69,7 +69,7 @@ def mock_aiohttp_session(mocker):
 
     # Mock the ClientSession class in the fabric module
     mock_client_session = mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_fabric_clients.aiohttp.ClientSession"
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_fabric_clients.aiohttp.ClientSession"
     )
     mock_client_session.return_value = mock_session
 
@@ -81,7 +81,7 @@ def mock_fabric_sdk(mocker):
     """Mocks the Fabric SDK for SDK mode tests."""
     # Mock the import check
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_fabric_clients.FABRIC_NATIVE_AVAILABLE",
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_fabric_clients.FABRIC_NATIVE_AVAILABLE",
         True,
     )
 
@@ -100,13 +100,13 @@ def mock_fabric_sdk(mocker):
 
     # Mock the SDK classes
     mock_sdk_class = mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_fabric_clients.FabricSDKClient", create=True
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_fabric_clients.FabricSDKClient", create=True
     )
     mock_sdk_class.return_value = mock_client
 
     # Also mock the user class
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_fabric_clients.FabricUser", create=True
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_fabric_clients.FabricUser", create=True
     )
 
     return mock_client
@@ -145,7 +145,7 @@ async def test_fabric_sdk_mode_init_success(mock_off_chain, mock_fabric_sdk, moc
     """
     # Mock PRODUCTION_MODE to False to skip path validation
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_fabric_clients.PRODUCTION_MODE", False
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_fabric_clients.PRODUCTION_MODE", False
     )
 
     mock_config = {
@@ -278,7 +278,7 @@ async def test_health_check_sdk_mode_success(mock_off_chain, mock_fabric_sdk, mo
     """
     # Mock PRODUCTION_MODE to False to skip path validation
     mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_fabric_clients.PRODUCTION_MODE", False
+        "self_fixing_engineer.simulation.plugins.dlt_clients.dlt_fabric_clients.PRODUCTION_MODE", False
     )
 
     # Mock file operations for certificates

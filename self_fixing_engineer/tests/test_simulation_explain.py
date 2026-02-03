@@ -73,17 +73,17 @@ async def reasoner_with_shutdown(mock_config, mock_settings):
     """Fixture to create and properly shut down an ExplainableReasoner instance."""
     # Patch run_in_executor to work without a real model/tokenizer
     with (
-        patch("simulation.explain.AutoTokenizer.from_pretrained", MagicMock()),
-        patch("simulation.explain.AutoModelForCausalLM.from_pretrained", MagicMock()),
+        patch("self_fixing_engineer.simulation.explain.AutoTokenizer.from_pretrained", MagicMock()),
+        patch("self_fixing_engineer.simulation.explain.AutoModelForCausalLM.from_pretrained", MagicMock()),
         patch(
-            "simulation.explain.pipeline",
+            "self_fixing_engineer.simulation.explain.pipeline",
             MagicMock(
                 return_value=MagicMock(
                     tokenizer=MagicMock(pad_token_id=0, eos_token_id=1)
                 )
             ),
         ),
-        patch("simulation.explain.psutil.__spec__", MagicMock()),
+        patch("self_fixing_engineer.simulation.explain.psutil.__spec__", MagicMock()),
     ):
 
         reasoner = ExplainableReasoner(mock_settings, mock_config)

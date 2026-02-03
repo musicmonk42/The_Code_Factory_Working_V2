@@ -358,7 +358,7 @@ async def test_plugin_health_success():
     # Patch the environment variables needed for the health check to avoid warnings.
     with (
         patch(
-            "simulation.plugins.cross_repo_refactor_plugin.GITPYTHON_AVAILABLE", True
+            "self_fixing_engineer.simulation.plugins.cross_repo_refactor_plugin.GITPYTHON_AVAILABLE", True
         ),
         patch("asyncio.create_subprocess_exec") as mock_subprocess,
         patch.dict(
@@ -385,7 +385,7 @@ async def test_plugin_health_success():
 async def test_plugin_health_gitpython_missing():
     """Test health check when GitPython is not installed."""
     with patch(
-        "simulation.plugins.cross_repo_refactor_plugin.GITPYTHON_AVAILABLE", False
+        "self_fixing_engineer.simulation.plugins.cross_repo_refactor_plugin.GITPYTHON_AVAILABLE", False
     ):
         health = await plugin_health()
         assert health["status"] == "error"

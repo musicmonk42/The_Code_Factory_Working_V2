@@ -58,49 +58,49 @@ async def test_e2e_pipeline_full_success():
         # ----- Patch external dependencies -----
         with (
             patch(
-                "test_generation.utils.monitor_and_prioritize_uncovered_code",
+                "self_fixing_engineer.test_generation.utils.monitor_and_prioritize_uncovered_code",
                 AsyncMock(return_value=uncovered_targets),
             ) as mock_monitor,
             patch(
-                "test_generation.backends.BackendRegistry.get_backend"
+                "self_fixing_engineer.test_generation.backends.BackendRegistry.get_backend"
             ) as mock_get_backend,
             patch(
-                "test_generation.orchestrator.venvs.create_and_install_venv",  # Fix: Corrected mock path
+                "self_fixing_engineer.test_generation.orchestrator.venvs.create_and_install_venv",  # Fix: Corrected mock path
                 AsyncMock(return_value=(True, "/mock/venv/bin/python")),
             ) as mock_venv,
             patch(
-                "test_generation.orchestrator.orchestrator.run_pytest_and_coverage",  # Fix: Corrected mock path
+                "self_fixing_engineer.test_generation.orchestrator.orchestrator.run_pytest_and_coverage",  # Fix: Corrected mock path
                 AsyncMock(return_value=(True, 80.0, "SUCCESS")),
             ) as mock_pytest_cov,
             patch(
-                "test_generation.orchestrator.orchestrator.compare_files",  # Fix: Corrected mock path
+                "self_fixing_engineer.test_generation.orchestrator.orchestrator.compare_files",  # Fix: Corrected mock path
                 return_value=False,
             ) as mock_compare,
             patch(
-                "test_generation.orchestrator.orchestrator.backup_existing_test",  # Fix: Corrected mock path
+                "self_fixing_engineer.test_generation.orchestrator.orchestrator.backup_existing_test",  # Fix: Corrected mock path
                 AsyncMock(return_value="backup/path"),
             ) as mock_backup,
             patch(
-                "test_generation.orchestrator.orchestrator.generate_file_hash",  # Fix: Corrected mock path
+                "self_fixing_engineer.test_generation.orchestrator.orchestrator.generate_file_hash",  # Fix: Corrected mock path
                 return_value="mock_hash",
             ) as mock_hash,
             patch(
-                "test_generation.utils.SecurityScanner.scan_test_file",
+                "self_fixing_engineer.test_generation.utils.SecurityScanner.scan_test_file",
                 AsyncMock(return_value=(False, [], "NONE")),
             ) as mock_scan,
             patch(
-                "test_generation.orchestrator.reporting.HTMLReporter.generate_html_report",  # Fix: Corrected mock path
+                "self_fixing_engineer.test_generation.orchestrator.reporting.HTMLReporter.generate_html_report",  # Fix: Corrected mock path
                 new_callable=AsyncMock,  # Fix: HTMLReporter is an async function
                 return_value="sarif_reports/report.html",
             ) as mock_html_report,
             patch(
-                "test_generation.compliance_mapper.generate_report",  # Fix: Corrected mock path
+                "self_fixing_engineer.test_generation.compliance_mapper.generate_report",  # Fix: Corrected mock path
                 return_value=MagicMock(
                     issues=[], is_compliant=True
                 ),  # Fix: Return a mock object for the report
             ) as mock_compliance,
             patch(
-                "test_generation.orchestrator.audit.AuditLogger"  # Fix: Corrected mock path
+                "self_fixing_engineer.test_generation.orchestrator.audit.AuditLogger"  # Fix: Corrected mock path
             ) as mock_audit_logger_class,
             patch("builtins.open", mock_open(read_data=test_code)) as mock_file,
             patch("os.path.exists", return_value=True) as mock_exists,

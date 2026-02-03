@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, mock_open, patch
 import pytest
 
 # Suppress specific warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="simulation.registry")
+warnings.filterwarnings("ignore", category=UserWarning, module="self_fixing_engineer.simulation.registry")
 warnings.filterwarnings(
     "ignore",
     category=RuntimeWarning,
@@ -93,14 +93,14 @@ mock_otel.StatusCode = MagicMock()
 mock_otel.StatusCode.ERROR = "ERROR"
 mock_otel.StatusCode.OK = "OK"
 
-sys.modules["simulation.otel_config"] = mock_otel
+sys.modules["self_fixing_engineer.simulation.otel_config"] = mock_otel
 
 # Mock other simulation modules
-sys.modules["simulation.core"] = MagicMock()
-sys.modules["simulation.utils"] = MagicMock()
-sys.modules["simulation.dashboard"] = MagicMock()
-sys.modules["simulation.audit_log"] = MagicMock()
-sys.modules["simulation.agentic"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.core"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.utils"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.dashboard"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.audit_log"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.agentic"] = MagicMock()
 
 # Now we can safely import the module under test
 try:
@@ -260,7 +260,7 @@ class TestPluginDiscovery:
     def test_discover_plugins_empty_dir(self):
         """Test plugin discovery with empty directory."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch("simulation.plugins.main_sim_runner.current_dir", temp_dir):
+            with patch("self_fixing_engineer.simulation.plugins.main_sim_runner.current_dir", temp_dir):
                 with patch("glob.glob", return_value=[]):
                     discover_and_register_plugin_entrypoints()
                     # Should complete without error
@@ -372,7 +372,7 @@ class TestNotifications:
         """Test dry-run notification."""
         # The actual implementation uses main_runner_logger.info, not print
         with patch(
-            "simulation.plugins.main_sim_runner.main_runner_logger"
+            "self_fixing_engineer.simulation.plugins.main_sim_runner.main_runner_logger"
         ) as mock_logger:
             send_notification("test_event", "Test message", dry_run=True)
             mock_logger.info.assert_called_once_with(
@@ -448,7 +448,7 @@ class TestIntegration:
         """Test main function with help flag."""
         # Mock discover_and_register_plugin_entrypoints to prevent the coroutine warning
         with patch(
-            "simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"
+            "self_fixing_engineer.simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"
         ):
             with patch("sys.argv", ["main_sim_runner.py", "--help"]):
                 with pytest.raises(SystemExit) as exc_info:
@@ -461,11 +461,11 @@ class TestIntegration:
         """Test main function with validate flag."""
         # Mock discover_and_register_plugin_entrypoints to prevent the coroutine warning
         with patch(
-            "simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"
+            "self_fixing_engineer.simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"
         ):
             with patch("sys.argv", ["main_sim_runner.py", "--validate"]):
                 with patch(
-                    "simulation.plugins.main_sim_runner.validate_deployment_or_exit"
+                    "self_fixing_engineer.simulation.plugins.main_sim_runner.validate_deployment_or_exit"
                 ):
                     with pytest.raises(SystemExit):
                         main()

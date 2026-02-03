@@ -71,7 +71,7 @@ os.environ["TRACER_USE_DOCKER_SANDBOX"] = "false"
 # Mock the dashboard module
 mock_dashboard = Mock()
 mock_dashboard.STREAMLIT_AVAILABLE = False
-sys.modules["simulation.dashboard"] = mock_dashboard
+sys.modules["self_fixing_engineer.simulation.dashboard"] = mock_dashboard
 
 
 # Create a mock RLTunerConfig class
@@ -252,8 +252,8 @@ async def test_simulation_module_end_to_end(setup_test_environment):
 
     # Mock external services locally
     with (
-        patch("simulation.runners.process.os.execve", new=AsyncMock()),
-        patch("simulation.explain.psutil.__spec__", new=MagicMock()),
+        patch("self_fixing_engineer.simulation.runners.process.os.execve", new=AsyncMock()),
+        patch("self_fixing_engineer.simulation.explain.psutil.__spec__", new=MagicMock()),
     ):
 
         # Patch getpass.getuser to return test_user BEFORE loading configs

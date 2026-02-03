@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 # Mock the siem_base module before importing
-sys.modules["simulation.plugins.siem_base"] = MagicMock()
+sys.modules["self_fixing_engineer.simulation.plugins.siem_base"] = MagicMock()
 
 
 # Create mock exception classes

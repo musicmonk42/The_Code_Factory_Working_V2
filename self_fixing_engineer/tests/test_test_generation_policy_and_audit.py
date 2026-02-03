@@ -155,7 +155,7 @@ async def test_policy_engine_should_generate_tests_opa_enabled(
     engine.policy_client.enabled = True
 
     with patch(
-        "test_generation.policy_and_audit.aiohttp.ClientSession.post"
+        "self_fixing_engineer.test_generation.policy_and_audit.aiohttp.ClientSession.post"
     ) as mock_post:
         mock_response = AsyncMock()
         mock_response.json.return_value = {"result": True, "reason": "OPA allowed"}
@@ -177,7 +177,7 @@ async def test_policy_engine_should_generate_tests_opa_failure(
     engine.policy_client.enabled = True
 
     with patch(
-        "test_generation.policy_and_audit.aiohttp.ClientSession.post",
+        "self_fixing_engineer.test_generation.policy_and_audit.aiohttp.ClientSession.post",
         side_effect=Exception("OPA error"),
     ):
         allowed, reason = await engine.should_generate_tests("module.py", "python")
@@ -262,7 +262,7 @@ def test_audit_logger_init_success(temp_project_root):
 
 def test_audit_logger_init_no_dlt():
     """Test initialization fails without DLTLogger."""
-    with patch("test_generation.policy_and_audit.AUDIT_LOGGER_AVAILABLE", False):
+    with patch("self_fixing_engineer.test_generation.policy_and_audit.AUDIT_LOGGER_AVAILABLE", False):
         with pytest.raises(ImportError, match="DLT-enabled AuditLogger not available"):
             AuditLogger("audit.log")
 
@@ -332,7 +332,7 @@ async def test_event_bus_publish_critical_with_mq(mock_config):
 @pytest.mark.asyncio
 async def test_event_bus_publish_non_critical_no_aiohttp(mock_config, monkeypatch):
     """Test publishing non-critical event without AIOHTTP."""
-    monkeypatch.setattr("test_generation.policy_and_audit.AIOHTTP_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.policy_and_audit.AIOHTTP_AVAILABLE", False)
     bus = EventBus(config=mock_config)
     await bus.publish("non_critical", {"key": "value"})
     # No exception, just warning logged
@@ -397,7 +397,7 @@ async def test_event_bus_publish_metrics_failure(mock_config):
 
     with (
         patch(
-            "test_generation.policy_and_audit.aiohttp.ClientSession.post",
+            "self_fixing_engineer.test_generation.policy_and_audit.aiohttp.ClientSession.post",
             side_effect=Exception("Network error"),
         ),
         patch.object(bus.metrics_client, "notification_failures_total") as mock_counter,

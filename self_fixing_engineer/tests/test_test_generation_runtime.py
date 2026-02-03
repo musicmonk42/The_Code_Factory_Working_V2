@@ -35,7 +35,7 @@ def test_load_config_with_env_override(tmp_path):
     # Fix: Use a valid JSON string for the config file.
     config_path.write_text(json.dumps({"TEST_KEY": "file_value"}))
     with patch(
-        "test_generation.gen_agent.runtime.os.environ", {"ATCO_TEST_KEY": "env_value"}
+        "self_fixing_engineer.test_generation.gen_agent.runtime.os.environ", {"ATCO_TEST_KEY": "env_value"}
     ):
         cfg = runtime._load_config(config_file=config_path)
         assert cfg["TEST_KEY"] == "env_value"

@@ -17,7 +17,7 @@ async def test_metrics_available(monkeypatch):
     monkeypatch.setattr(
         "prometheus_client.Histogram", Mock(return_value=mock_histogram)
     )
-    monkeypatch.setattr("test_generation.orchestrator.metrics.METRICS_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.orchestrator.metrics.METRICS_AVAILABLE", True)
     generation_duration.labels(language="python").observe(1.0)
     assert mock_histogram.observe.called
 
@@ -25,7 +25,7 @@ async def test_metrics_available(monkeypatch):
 @pytest.mark.asyncio
 async def test_dummy_metrics_noop(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
-    monkeypatch.setattr("test_generation.orchestrator.metrics.METRICS_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.test_generation.orchestrator.metrics.METRICS_AVAILABLE", False)
     generation_duration.labels(language="python").observe(1.0)
     integration_success.inc()
     assert "Metrics disabled" in caplog.text
@@ -37,9 +37,9 @@ def test_no_duplicate_metrics():
     """
     # Force metrics to be available for this test
     # This requires patching the module-level variable
-    with patch("test_generation.orchestrator.metrics.METRICS_AVAILABLE", True):
+    with patch("self_fixing_engineer.test_generation.orchestrator.metrics.METRICS_AVAILABLE", True):
         with patch(
-            "test_generation.orchestrator.metrics.prometheus_client.Histogram"
+            "self_fixing_engineer.test_generation.orchestrator.metrics.prometheus_client.Histogram"
         ) as mock_histogram_class:
             # First call should instantiate the metric
             generation_duration.labels(language="python").observe(1.0)
