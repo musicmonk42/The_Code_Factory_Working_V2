@@ -21,6 +21,8 @@ class TestConsistentHashRing:
         """Set up test fixtures before each test."""
         self.nodes = ["node1", "node2", "node3"]
         self.ring = ConsistentHashRing(nodes=self.nodes, replicas=100)
+        
+        yield
 
     def test_initialization_with_nodes(self):
         """Test initialization with a list of nodes."""
