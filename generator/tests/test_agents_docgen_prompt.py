@@ -67,6 +67,32 @@ from generator.agents.docgen_agent.docgen_prompt import (
 # =============================================================================
 
 
+@pytest.fixture(autouse=True)
+def mock_scrub_text_passthrough():
+    """Mock scrub_text to return input unchanged for file content tests."""
+    # This prevents the Presidio mock from interfering with file content tests
+    with patch(
+        "generator.agents.docgen_agent.docgen_prompt.scrub_text",
+        side_effect=lambda x: x,  # Pass through the input unchanged
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def mock_tiktoken():
+    """Mock tiktoken to avoid network errors."""
+    mock_encoding = MagicMock()
+    mock_encoding.encode.return_value = [1, 2, 3]  # Return mock token list
+    with patch(
+        "generator.agents.docgen_agent.docgen_prompt.tiktoken.encoding_for_model",
+        return_value=mock_encoding,
+    ), patch(
+        "generator.agents.docgen_agent.docgen_prompt.tiktoken.get_encoding",
+        return_value=mock_encoding,
+    ):
+        yield
+
+
 @pytest.fixture
 def temp_repo():
     """Create a temporary repository for testing."""

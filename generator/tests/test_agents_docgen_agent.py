@@ -48,9 +48,14 @@ builtins.abstractabstractmethod = abstractmethod
 
 # --- Mock Presidio ---
 mock_analyzer = MagicMock()
-mock_anonymizer = MagicMock()
+mock_anonymizer = type(sys)("presidio_anonymizer")
+mock_anonymizer.AnonymizerEngine = MagicMock()
+mock_anonymizer_entities = type(sys)("presidio_anonymizer.entities")
+mock_anonymizer_entities.OperatorConfig = MagicMock()
 sys.modules["presidio_analyzer"] = mock_analyzer
 sys.modules["presidio_anonymizer"] = mock_anonymizer
+sys.modules["presidio_anonymizer.entities"] = mock_anonymizer_entities
+mock_anonymizer.entities = mock_anonymizer_entities
 
 # --- Mock Sphinx ---
 mock_sphinx = MagicMock()
@@ -84,7 +89,7 @@ if "aiohttp" not in sys.modules or isinstance(sys.modules.get("aiohttp"), MagicM
     sys.modules["aiohttp.web_response"] = mock_aiohttp.web_response
 
 sys.modules["tiktoken"] = MagicMock()
-sys.modules["aiofiles"] = MagicMock()
+# NOTE: Don't mock aiofiles as it's a real installed package needed by subsequent tests
 
 # Import the actual code
 from agents.docgen_agent import (
@@ -135,17 +140,13 @@ def mock_llm_calls():
         patch(
             "agents.docgen_agent.docgen_agent.call_llm_api", new_callable=AsyncMock
         ) as mock_llm,
-        patch(
-            "agents.docgen_agent.docgen_agent.call_ensemble_api", new_callable=AsyncMock
-        ) as mock_ensemble,
     ):
 
         mock_llm.return_value = {
             "content": "# Mocked LLM Docs",
             "usage": {"input_tokens": 10, "output_tokens": 5},
         }
-        mock_ensemble.return_value = mock_llm.return_value
-        yield {"llm": mock_llm, "ensemble": mock_ensemble}
+        yield {"llm": mock_llm}
 
 
 @pytest.fixture
@@ -180,9 +181,6 @@ def agent(temp_repo):
         patch("agents.docgen_agent.SphinxDocGenerator") as MockSphinxGen,
         patch("agents.docgen_agent.BatchProcessor") as MockBatchProcessor,
         patch("agents.docgen_agent.docgen_agent.call_llm_api", new_callable=AsyncMock),
-        patch(
-            "agents.docgen_agent.docgen_agent.call_ensemble_api", new_callable=AsyncMock
-        ),
     ):
 
         MockPromptAgent.return_value.get_doc_prompt = AsyncMock(
@@ -416,7 +414,8 @@ class TestDocgenAgent:
     async def test_gather_context(self, agent):
         """Test context gathering functionality."""
         target_file = "src/module.py"
-        file_content = "file content"
+        # The actual content from the temp_repo fixture
+        actual_file_content = "def hello(): pass"
         scrubbed_content = "scrubbed_content"
 
         # FIX: Patch the correct import path for scrub_text
@@ -431,7 +430,7 @@ class TestDocgenAgent:
         ):
 
             mock_file = AsyncMock()
-            mock_file.read.return_value = file_content
+            mock_file.read.return_value = actual_file_content
             mock_open.return_value.__aenter__.return_value = mock_file
 
             mock_stat = MagicMock()
@@ -446,7 +445,7 @@ class TestDocgenAgent:
             assert target_file in context["file_contents"]
             assert context["file_contents"][target_file] == scrubbed_content
             assert context["file_metadata"][target_file]["language"] == "python"
-            mock_scrub.assert_called_with(file_content)
+            mock_scrub.assert_called_with(actual_file_content)
 
     @pytest.mark.asyncio
     async def test_generate_documentation_non_streaming(self, agent, mock_llm_calls):
@@ -934,29 +933,17 @@ class TestPerformanceAndEdgeCases:
 
         large_content = "def function():\n    pass\n" * 1000
 
+        # Create the large file in the temp_repo
+        large_file_path = temp_repo / "large_file.py"
+        large_file_path.write_text(large_content)
+
         # FIX: Patch the correct import path for scrub_text
-        with (
-            patch("aiofiles.open") as mock_open,
-            patch(
-                "agents.docgen_agent.docgen_agent.scrub_text",
-                return_value=large_content,
-            ) as mock_scrub,
-            patch.object(Path, "is_file", return_value=True),
-        ):
-
-            mock_file = AsyncMock()
-            mock_file.read.return_value = large_content
-            mock_open.return_value.__aenter__.return_value = mock_file
-
+        with patch(
+            "agents.docgen_agent.docgen_agent.scrub_text",
+            return_value=large_content,
+        ) as mock_scrub:
             agent = DocgenAgent(repo_path=str(temp_repo))
-
-            mock_stat = MagicMock()
-            mock_stat.st_size = len(large_content)
-            mock_stat.st_mtime = datetime.now().timestamp()
-            mock_stat.st_mode = os_stat.S_IFREG
-
-            with patch.object(Path, "stat", return_value=mock_stat):
-                context = await agent._gather_context(["large_file.py"])
+            context = await agent._gather_context(["large_file.py"])
 
             assert "large_file.py" in context["file_contents"]
             assert len(context["file_contents"]["large_file.py"]) == len(large_content)
