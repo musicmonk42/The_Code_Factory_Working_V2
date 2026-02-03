@@ -274,8 +274,6 @@ Return only the corrected response with proper file names and code structure.
                 LLM_ERRORS_TOTAL.labels(
                     provider="testgen_response_handler",
                     model="gpt-4o",
-                    error_type=type(llm_error).__name__,
-                    task="auto_heal",
                 ).inc()
                 logger.error(
                     f"LLM auto-healing attempt {attempt + 1}/{MAX_HEAL_ATTEMPTS} failed: {llm_error}"
