@@ -9,6 +9,81 @@ import sys
 import os
 import importlib.machinery
 import importlib.util
+import threading
+from unittest.mock import MagicMock, Mock
+
+import pytest
+
+
+# ---- CRITICAL: Mock watchdog Observer BEFORE any imports ----
+# This prevents real observers from being created during test collection/execution
+class MockObserver:
+    """Mock Observer that doesn't create background threads."""
+    def __init__(self, *args, **kwargs):
+        self._handlers = {}
+        self._is_alive = False
+    
+    def schedule(self, handler, path, recursive=False):
+        self._handlers[path] = handler
+    
+    def unschedule(self, watch):
+        pass
+    
+    def unschedule_all(self):
+        self._handlers.clear()
+    
+    def start(self):
+        self._is_alive = True
+    
+    def stop(self):
+        self._is_alive = False
+    
+    def join(self, timeout=None):
+        pass
+    
+    def is_alive(self):
+        return self._is_alive
+
+
+class MockFileSystemEventHandler:
+    """Mock FileSystemEventHandler."""
+    def __init__(self, *args, **kwargs):
+        pass
+    
+    def on_created(self, event):
+        pass
+    
+    def on_modified(self, event):
+        pass
+    
+    def on_deleted(self, event):
+        pass
+    
+    def on_moved(self, event):
+        pass
+    
+    def on_any_event(self, event):
+        pass
+
+
+# Create mock watchdog modules
+_mock_watchdog_observers = MagicMock()
+_mock_watchdog_observers.Observer = MockObserver
+
+_mock_watchdog_events = MagicMock()
+_mock_watchdog_events.FileSystemEventHandler = MockFileSystemEventHandler
+_mock_watchdog_events.FileCreatedEvent = MagicMock
+_mock_watchdog_events.FileModifiedEvent = MagicMock
+_mock_watchdog_events.FileDeletedEvent = MagicMock
+_mock_watchdog_events.FileMovedEvent = MagicMock
+
+# Pre-register the mocks BEFORE any code imports watchdog
+# This ensures that when modules do `from watchdog.observers import Observer`,
+# they get our mock instead of the real one
+if os.environ.get("TESTING") == "1" or os.environ.get("PYTEST_CURRENT_TEST"):
+    sys.modules["watchdog.observers"] = _mock_watchdog_observers
+    sys.modules["watchdog.events"] = _mock_watchdog_events
+
 
 # Initialize prometheus_client stubs inline BEFORE importing root conftest
 # This ensures stubs exist before test files are imported
@@ -95,3 +170,50 @@ if root_dir not in sys.path:
 
 # This will trigger other initialization in the root conftest
 import conftest as root_conftest
+
+
+def _cleanup_watchdog_observers():
+    """
+    Clean up any leftover watchdog observers that may be blocking test completion.
+    
+    Watchdog observers run in background threads and can cause test timeouts
+    if not properly stopped. This function forcefully stops all observer threads.
+    """
+    try:
+        from watchdog.observers.api import BaseObserver
+        
+        # Find and stop all observer threads
+        for thread in threading.enumerate():
+            if isinstance(thread, BaseObserver):
+                try:
+                    thread.stop()
+                    thread.join(timeout=1.0)
+                except Exception:
+                    pass
+    except ImportError:
+        pass  # watchdog not installed or mocked
+    
+    # Also try to stop any threads that look like watchdog threads by name
+    for thread in threading.enumerate():
+        thread_name = thread.name.lower()
+        if 'observer' in thread_name or 'inotify' in thread_name or 'watchdog' in thread_name:
+            if hasattr(thread, 'stop'):
+                try:
+                    thread.stop()
+                    thread.join(timeout=1.0)
+                except Exception:
+                    pass
+
+
+@pytest.fixture(autouse=True)
+def cleanup_watchdog_after_test():
+    """Automatically clean up watchdog observers after each test."""
+    yield
+    _cleanup_watchdog_observers()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_watchdog_at_session_end():
+    """Clean up watchdog observers at the end of the test session."""
+    yield
+    _cleanup_watchdog_observers()
