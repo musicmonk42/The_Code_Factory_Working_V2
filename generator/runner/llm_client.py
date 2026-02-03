@@ -696,6 +696,8 @@ async def call_ensemble_api(
     models: List[Dict[str, str]],
     voting_strategy: str = "majority",
     config: Optional[RunnerConfig] = None,
+    stream: bool = False,
+    **kwargs,
 ) -> Dict[str, Any]:
     """
     Call ensemble LLM API with automatic config loading and graceful fallback.
@@ -705,6 +707,8 @@ async def call_ensemble_api(
         models: List of model configurations
         voting_strategy: Strategy for combining results
         config: Optional RunnerConfig. If None, will attempt to load from file with fallback to defaults.
+        stream: Whether to stream the response (default: False)
+        **kwargs: Additional parameters to forward to call_llm_api
     
     Returns:
         Ensemble LLM response dictionary
@@ -746,7 +750,7 @@ async def call_ensemble_api(
                         instance_id=f"fallback-{os.getpid()}"
                     )
             _async_client = LLMClient(config)
-    return await _async_client.call_ensemble_api(prompt, models, voting_strategy)
+    return await _async_client.call_ensemble_api(prompt, models, voting_strategy, stream=stream, **kwargs)
 
 
 async def shutdown_llm_client():
