@@ -51,7 +51,7 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
             }
             
             // Don't retry on 4xx errors (client errors)
-            if (error.message.includes('HTTP 4')) {
+            if (error.message.match(/HTTP 4\d{2}/)) {
                 throw error;
             }
             
