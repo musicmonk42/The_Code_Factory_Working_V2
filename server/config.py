@@ -284,6 +284,12 @@ class AgentConfig(BaseSettings):
         description="Use LLM-based clarifier instead of rule-based"
     )
     
+    # Docker Validation Configuration
+    docker_required: bool = Field(
+        default=False,
+        description="Require Docker for deployment validation. If False, Docker validation is skipped when Docker is unavailable."
+    )
+    
     # Storage Configuration
     upload_dir: Path = Field(
         default=Path("./uploads"),

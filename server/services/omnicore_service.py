@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from server.utils.agent_loader import get_agent_loader
+from server.storage import jobs_db
 
 logger = logging.getLogger(__name__)
 
@@ -1173,6 +1174,31 @@ class OmniCoreService:
                 if files_failed:
                     result_dict["files_failed"] = files_failed
                     result_dict["warning"] = f"{len(files_failed)} file(s) failed to write"
+                
+                # FIX: Update job.output_files immediately after writing files
+                # This ensures files appear in UI without waiting for pipeline completion
+                if job_id in jobs_db:
+                    job = jobs_db[job_id]
+                    # Store relative paths from uploads/{job_id}/ directory
+                    try:
+                        job_base = Path(f"./uploads/{job_id}")
+                        relative_files = []
+                        for file_path_str in generated_files:
+                            file_path = Path(file_path_str)
+                            if file_path.exists():
+                                rel_path = str(file_path.relative_to(job_base))
+                                relative_files.append(rel_path)
+                        job.output_files = relative_files
+                        job.updated_at = datetime.now(timezone.utc)
+                        logger.info(
+                            f"Updated job {job_id} with {len(relative_files)} output files",
+                            extra={"job_id": job_id, "files_count": len(relative_files)}
+                        )
+                    except Exception as update_error:
+                        logger.warning(
+                            f"Failed to update job.output_files for {job_id}: {update_error}",
+                            extra={"job_id": job_id, "error": str(update_error)}
+                        )
                 
                 return result_dict
                 
