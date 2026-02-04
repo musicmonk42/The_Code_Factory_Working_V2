@@ -283,6 +283,8 @@ async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_o
     # Decrypt to verify
     decrypted = ENCRYPTER.decrypt(base64.b64decode(result[0]))
     # Decompress based on the actual compression algorithm used
+    # Note: The backend uses zlib.compress() even when COMPRESSION_ALGO="gzip"
+    # This is a misnomer in the original code but we stay consistent with it
     if COMPRESSION_ALGO == "gzip":
         decompressed = zlib.decompress(decrypted).decode("utf-8")
     elif COMPRESSION_ALGO == "zstd":

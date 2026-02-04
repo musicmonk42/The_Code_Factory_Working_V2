@@ -142,6 +142,7 @@ if "prometheus_client" not in sys.modules:
         
         # Define Sample class for better readability
         class _Sample:
+            """Mock Prometheus sample representing a single metric data point."""
             def __init__(self, name, labels, value, timestamp=None):
                 self.name = name
                 self.labels = labels
@@ -150,6 +151,7 @@ if "prometheus_client" not in sys.modules:
         
         # Define Metric class for better readability  
         class _Metric:
+            """Mock Prometheus metric family containing multiple samples."""
             def __init__(self, name, documentation, metric_type, samples):
                 self.name = name
                 self.documentation = documentation
@@ -157,6 +159,7 @@ if "prometheus_client" not in sys.modules:
                 self.samples = samples
         
         class _MockCounter:
+            """Mock Prometheus Counter that tracks increments and supports label-based metrics."""
             def __init__(self, name, description, labelnames=(), *args, **kwargs):
                 self.name = name
                 self.description = description
@@ -200,6 +203,7 @@ if "prometheus_client" not in sys.modules:
                 return [metric]
         
         class _MockCounterChild:
+            """Child counter for a specific label combination."""
             def __init__(self, parent, label_key, label_values):
                 self.parent = parent
                 self.label_key = label_key
