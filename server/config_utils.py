@@ -182,7 +182,12 @@ class PlatformConfig:
         
         # API Keys
         available_api_keys: Set of available LLM API keys
+        available_providers: Set of available LLM provider names
         required_api_keys: Set of required API keys for production
+        
+        # Infrastructure
+        kafka_enabled: Whether Kafka is enabled
+        kafka_available: Whether Kafka connection is available
     """
     # Environment Detection
     is_production: bool = False
@@ -208,7 +213,12 @@ class PlatformConfig:
     
     # API Keys
     available_api_keys: Set[str] = field(default_factory=set)
+    available_providers: Set[str] = field(default_factory=set)
     required_api_keys: Set[str] = field(default_factory=set)
+    
+    # Infrastructure
+    kafka_enabled: bool = False
+    kafka_available: bool = False
     
     # Additional metadata
     startup_timeout: int = 90  # seconds
@@ -306,6 +316,11 @@ def get_config() -> PlatformConfig:
     config.parallel_agent_loading = os.getenv("PARALLEL_AGENT_LOADING", "1") == "1"
     config.lazy_load_ml = os.getenv("LAZY_LOAD_ML", "1") == "1"
     
+    # Kafka Configuration
+    config.kafka_enabled = os.getenv("KAFKA_ENABLED", "false").lower() in ("true", "1", "yes")
+    # kafka_available will be determined at runtime when connection is attempted
+    config.kafka_available = False  # Default to False, updated when connection succeeds
+    
     # Startup Configuration
     try:
         timeout_value = int(os.getenv("STARTUP_TIMEOUT", str(DEFAULT_STARTUP_TIMEOUT)))
@@ -326,18 +341,20 @@ def get_config() -> PlatformConfig:
     config.database_url = os.getenv("DATABASE_URL")
     config.redis_url = os.getenv("REDIS_URL")
     
-    # API Keys Detection
-    api_key_vars = [
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "GOOGLE_API_KEY",
-        "GEMINI_API_KEY",
-        "XAI_API_KEY",
-        "GROK_API_KEY",
-        "COHERE_API_KEY",
-    ]
+    # API Keys Detection with provider mapping
+    api_key_vars = {
+        "OPENAI_API_KEY": "OpenAI",
+        "ANTHROPIC_API_KEY": "Anthropic Claude",
+        "CLAUDE_API_KEY": "Anthropic Claude",
+        "GOOGLE_API_KEY": "Google Gemini",
+        "GEMINI_API_KEY": "Google Gemini",
+        "XAI_API_KEY": "xAI Grok",
+        "GROK_API_KEY": "xAI Grok",
+        "COHERE_API_KEY": "Cohere",
+    }
     
-    for key_var in api_key_vars:
+    available_providers = set()
+    for key_var, provider_name in api_key_vars.items():
         raw_key = os.getenv(key_var)
         if raw_key:
             # FIX: Sanitize API key values from Railway/cloud providers that may include
@@ -345,9 +362,13 @@ def get_config() -> PlatformConfig:
             sanitized_key = sanitize_env_value(raw_key)
             if sanitized_key:
                 config.available_api_keys.add(key_var)
+                available_providers.add(provider_name)
                 # Log if sanitization changed the value (indicates potential config issue)
                 if raw_key != sanitized_key:
                     logger.debug(f"API key {key_var} was sanitized (removed wrapping quotes/whitespace)")
+    
+    # Store available providers in config for display
+    config.available_providers = available_providers
     
     # Define required keys for production
     if config.is_production:
@@ -446,10 +467,28 @@ def log_configuration_summary(config: Optional[PlatformConfig] = None):
     else:
         logger.warning("  ✗ No LLM API keys configured")
     
-    # Connections
-    logger.info("\nConnections:")
+    # LLM Providers
+    logger.info("\nLLM Providers:")
+    if config.available_providers:
+        for provider in sorted(config.available_providers):
+            logger.info(f"  ✓ {provider} (AVAILABLE)")
+        
+        # List missing providers
+        all_providers = {"OpenAI", "Anthropic Claude", "Google Gemini", "xAI Grok", "Cohere"}
+        missing_providers = all_providers - config.available_providers
+        if missing_providers:
+            logger.info("\n  Missing (optional) providers:")
+            for provider in sorted(missing_providers):
+                logger.info(f"    ✗ {provider} (NOT CONFIGURED)")
+    else:
+        logger.warning("  ✗ No LLM providers configured")
+    
+    # Infrastructure
+    logger.info("\nInfrastructure:")
     logger.info(f"  Redis:    {'CONFIGURED' if config.redis_url else 'NOT CONFIGURED'}")
     logger.info(f"  Database: {'CONFIGURED' if config.database_url else 'NOT CONFIGURED'}")
+    logger.info(f"  Kafka:    {'ENABLED' if config.kafka_enabled else 'DISABLED'} "
+                f"({'AVAILABLE' if config.kafka_available else 'NOT TESTED' if config.kafka_enabled else 'N/A'})")
     
     logger.info("=" * 80)
 

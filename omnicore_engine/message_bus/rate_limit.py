@@ -228,7 +228,7 @@ class RateLimiter:
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
         if self._redis:
-            await self._redis.close()
+            await self._redis.aclose()
         logger.info("RateLimiter stopped.")
 
     async def _periodic_cleanup(self) -> None:

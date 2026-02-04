@@ -656,7 +656,7 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self._redis.close()
+        await self._redis.aclose()
         logger.info("Redis connection closed.")
 
     async def _check_connection(self):

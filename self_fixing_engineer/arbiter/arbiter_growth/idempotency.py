@@ -208,7 +208,7 @@ class IdempotencyStore:
 
         logger.info("Closing connection to IdempotencyStore Redis.")
         try:
-            await self.redis.close()
+            await self.redis.aclose()
             self.redis = None
         except RedisError as e:
             logger.warning(

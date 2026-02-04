@@ -777,7 +777,7 @@ async def _get_cached_patch(cache_key: str) -> Optional[Dict[str, Any]]:
     try:
         redis = Redis.from_url(LLM_PATCH_GEN_CONFIG.redis_cache_url)
         cached_result = await redis.get(cache_key)
-        await redis.close()
+        await redis.aclose()
         if cached_result:
             logger.info(f"Returning cached patch for key: {cache_key}")
             return json.loads(cached_result)
@@ -794,7 +794,7 @@ async def _cache_patch_result(cache_key: str, result: Dict[str, Any]):
         await redis.set(
             cache_key, json.dumps(result), ex=LLM_PATCH_GEN_CONFIG.redis_cache_ttl
         )
-        await redis.close()
+        await redis.aclose()
         logger.info(f"Cached patch for key: {cache_key}")
     except Exception as e:
         logger.error(f"Failed to set Redis cache: {e}")

@@ -42,10 +42,16 @@ SPACY_WARNING_IGNORE = "W007"
 PORT = "8080"
 
 # === Audit Crypto Configuration (REQUIRED for Railway deployment) ===
-# Disable audit crypto by default to prevent AWS/boto3 calls during startup
-# This ensures fast startup and no credential errors when AWS is not configured
-AUDIT_CRYPTO_MODE = "disabled"
+# SECURITY: Use "software" mode for production (cryptographically secure)
+# "disabled" mode is NOT RECOMMENDED for production but may be needed initially
+# Once secrets are configured, use "software" or "hsm"
+AUDIT_CRYPTO_MODE = "software"  # Changed from "disabled" to "software" for security
 AUDIT_CRYPTO_ALLOW_INIT_FAILURE = "1"
+
+# === Docker Configuration ===
+# Skip Docker validation in Railway (Docker daemon not available during deployment)
+SKIP_DOCKER_VALIDATION = "true"
+DOCKER_REQUIRED = "false"
 
 # =============================================================================
 # SECURITY - CRITICAL: SET THESE IN RAILWAY UI AS SECRETS

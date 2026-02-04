@@ -422,7 +422,7 @@ class ConcreteArrayBackend(ArrayBackend):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
+        await self.aclose()
 
     @retry(
         stop=stop_after_attempt(3),
@@ -522,11 +522,11 @@ class ConcreteArrayBackend(ArrayBackend):
         with self._tracer.start_as_current_span(f"array_close_{self.name}"):
             try:
                 if self._redis:
-                    await self._redis.close()
+                    await self._redis.aclose()
                     self._redis = None
                     logger.info({"event": "redis_connection_closed", "name": self.name})
                 if self._sqlite_pool:
-                    await self._sqlite_pool.close()
+                    await self._sqlite_pool.aclose()
                     self._sqlite_pool = None
                     logger.info(
                         {"event": "sqlite_connection_closed", "name": self.name}
@@ -1052,7 +1052,7 @@ class ConcreteArrayBackend(ArrayBackend):
 
         # Closing async resources should be done in an event loop
         async def _async_stop():
-            await self.close()
+            await self.aclose()
 
         try:
             loop = asyncio.get_running_loop()

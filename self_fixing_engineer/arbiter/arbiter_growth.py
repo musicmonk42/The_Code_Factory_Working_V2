@@ -444,7 +444,7 @@ class IdempotencyStore:
             return {"status": "unhealthy", "message": str(e)}
 
     async def stop(self):
-        await self.redis.close()
+        await self.redis.aclose()
 
     async def remember(self, key: str, ttl: int = 3600) -> None:
         """Stores a key to indicate an event has been processed."""
@@ -701,7 +701,7 @@ class RedisStreamsStorageBackend:
         await self.redis.ping()
 
     async def stop(self):
-        await self.redis.close()
+        await self.redis.aclose()
 
     async def ping(self) -> Dict[str, Any]:
         try:
