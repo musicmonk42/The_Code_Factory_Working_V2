@@ -863,8 +863,20 @@ class OmniCoreService:
         
         # Check if agent is available using service's own tracking
         if not self.agents_available.get('codegen', False) or self._codegen_func is None:
+            # FIX: Log exactly WHY agent is unavailable with more details
             error_msg = "Codegen agent not available"
-            logger.error(f"Codegen agent unavailable for job {job_id}: {error_msg}")
+            logger.error(
+                f"[CODEGEN] Agent unavailable for job {job_id}",
+                extra={
+                    "job_id": job_id,
+                    "error": error_msg,
+                    "agents_loaded": self._agents_loaded,
+                    "codegen_available": self.agents_available.get('codegen', False),
+                    "codegen_func_exists": self._codegen_func is not None,
+                    "available_agents": [k for k, v in self.agents_available.items() if v],
+                    "unavailable_agents": [k for k, v in self.agents_available.items() if not v],
+                }
+            )
             return {
                 "status": "error",
                 "message": f"Codegen agent not available: {error_msg}",
@@ -979,7 +991,42 @@ class OmniCoreService:
                 
                 # Validate result structure - industry standard
                 if not isinstance(result, dict):
+                    logger.error(
+                        f"[CODEGEN] Invalid result type: {type(result).__name__}",
+                        extra={"job_id": job_id, "result": str(result)[:200]}
+                    )
                     raise TypeError(f"Code generation must return dict, got {type(result).__name__}")
+                
+                # FIX: Check if result is empty (no files generated)
+                if len(result) == 0:
+                    logger.error(
+                        f"[CODEGEN] Empty result - no files generated",
+                        extra={"job_id": job_id}
+                    )
+                    return {
+                        "status": "error",
+                        "message": "Code generation returned zero files",
+                        "job_id": job_id,
+                    }
+                
+                # FIX: Check if result is an error response (single error.txt file)
+                if "error.txt" in result and len(result) == 1:
+                    error_content = result["error.txt"]
+                    logger.error(
+                        f"[CODEGEN] Generation failed with error",
+                        extra={"job_id": job_id, "error": error_content[:500]}
+                    )
+                    return {
+                        "status": "error",
+                        "message": error_content,
+                        "job_id": job_id,
+                    }
+                
+                # FIX: Log what we actually received from agent
+                logger.info(
+                    f"[CODEGEN] Received {len(result)} files from agent",
+                    extra={"job_id": job_id, "files": list(result.keys())}
+                )
                 
                 # Create output directory with security validation
                 # Prevent path traversal attacks - industry standard security
@@ -1024,11 +1071,43 @@ class OmniCoreService:
                             
                             # Write file with explicit encoding
                             file_path.write_text(content, encoding='utf-8')
+                            
+                            # FIX: Verify file was actually written
+                            if not file_path.exists():
+                                # File not found after write - this is a critical error
+                                logger.error(
+                                    f"[CODEGEN] ✗ File not found after write: {filename}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "file_name": filename,
+                                        "file_path": str(file_path),
+                                        "status": "failed"
+                                    }
+                                )
+                                files_failed.append({"filename": filename, "error": "file_not_found_after_write"})
+                                continue
+                            elif file_path.stat().st_size == 0:
+                                # File exists but is empty - also an error
+                                logger.error(
+                                    f"[CODEGEN] ✗ File is empty after write: {filename}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "file_name": filename,
+                                        "file_path": str(file_path),
+                                        "status": "failed"
+                                    }
+                                )
+                                files_failed.append({"filename": filename, "error": "file_empty_after_write"})
+                                continue
+                            
+                            # File verified successfully
                             generated_files.append(str(file_path))
                             total_bytes_written += len(content.encode('utf-8'))
                             
                             # Determine file type for metrics
                             file_ext = file_path.suffix.lstrip('.') or 'unknown'
+                            
+                            # File verified - continue with metrics
                             
                             # Record metrics
                             if METRICS_AVAILABLE:
@@ -1125,6 +1204,23 @@ class OmniCoreService:
                             "status": "warning"
                         }
                     )
+                
+                # FIX: Check if any files were successfully written
+                if len(generated_files) == 0:
+                    logger.error(
+                        f"[CODEGEN] Failed to write any code files to disk",
+                        extra={
+                            "job_id": job_id,
+                            "files_failed": files_failed,
+                            "status": "error"
+                        }
+                    )
+                    return {
+                        "status": "error",
+                        "message": "Failed to write any code files to disk",
+                        "files_failed": files_failed,
+                        "job_id": job_id,
+                    }
                 
                 # Calculate duration and record metrics
                 duration = time.time() - start_time
