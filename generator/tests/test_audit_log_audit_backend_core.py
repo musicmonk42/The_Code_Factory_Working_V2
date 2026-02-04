@@ -88,6 +88,7 @@ BackendNotFoundError = core.BackendNotFoundError
 CryptoInitializationError = core.CryptoInitializationError
 BACKEND_ERRORS = core.BACKEND_ERRORS
 BACKEND_TAMPER_DETECTION_FAILURES = core.BACKEND_TAMPER_DETECTION_FAILURES
+BACKEND_WRITES = core.BACKEND_WRITES
 retry_operation = core.retry_operation
 register_backend = core.register_backend
 get_backend = core.get_backend
@@ -333,7 +334,8 @@ async def test_retry_operation_respects_limits(monkeypatch):
     after = _counter_total_for_labels(
         BACKEND_ERRORS, backend="TestBackend", type="ValueError"
     )
-    assert after > before
+    # The counter increments on EACH attempt, so with 3 max attempts we expect 3 increments
+    assert after >= before + 3
 
 
 @pytest.mark.asyncio
