@@ -1263,7 +1263,7 @@ def shutdown_cleanup():
         except Exception as e:
             try:
                 logger.error(f"Error while closing PostgreSQL DB pool: {e}", exc_info=True)
-            except:
+            except Exception:
                 pass  # Logger may be closed
 
     # Clean up Redis connections
@@ -1285,12 +1285,12 @@ def shutdown_cleanup():
                     # Event loop creation failed - use sync fallback
                     try:
                         r.close(close_connection_pool=True)
-                    except:
+                    except Exception:
                         pass  # Best effort at exit
         except Exception as e:
             try:
                 logger.error(f"Error while closing Redis connections: {e}", exc_info=True)
-            except:
+            except Exception:
                 pass  # Best effort at exit
 
     # Clean up ML model from memory
@@ -1298,7 +1298,7 @@ def shutdown_cleanup():
         try:
             logger.info("Unloading Machine Learning model from memory.")
             del manager._embedding_model
-        except:
+        except Exception:
             pass
 
 
