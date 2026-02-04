@@ -1,136 +1,131 @@
-{# Base Code Generation Template #}
-{# This template provides structured instructions for generating code from specifications #}
+{# 
+Base Code Generation Template - Industry Standard
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
 
-You are an expert software engineer tasked with generating production-ready code.
+This template provides enterprise-grade instructions for LLM-based code generation.
+Uses Jinja2 template inheritance and macros for maintainability and consistency.
+
+Template Variables:
+- requirements: Dict containing specification details
+- target_language: Programming language for code generation
+- target_framework: Optional framework (e.g., "fastapi", "flask", "express")
+- state_summary: Current system state context
+- previous_feedback: Optional feedback from previous generation attempts
+- rag_context: Retrieved context from RAG system
+- best_practices: Language-specific best practices list
+- image_descriptions: Optional visual requirements
+- diagram_descriptions: Optional architecture diagrams
+#}
+
+{% import "_macros.jinja2" as macros %}
+
+# Code Generation Task
+
+You are an expert software engineer tasked with generating production-ready, enterprise-grade code.
 
 ## INPUT SPECIFICATION
 
-### Requirements:
-{{ requirements | tojson(indent=2) }}
+{{ macros.render_requirements(requirements) }}
 
-### Target Language: {{ target_language }}
+**Target Language**: {{ target_language }}
 {% if target_framework %}
-### Target Framework: {{ target_framework }}
+**Target Framework**: {{ target_framework }}
 {% endif %}
 
-### System State Summary:
+**System Context**:
 {{ state_summary }}
 
 {% if previous_feedback %}
-### Previous Feedback to Address:
-{{ previous_feedback }}
+{{ macros.render_context(previous_feedback, "Previous Feedback to Address") }}
 {% endif %}
 
 {% if rag_context %}
-### Relevant Context & Best Practices:
-{{ rag_context }}
+{{ macros.render_context(rag_context, "Retrieved Context & Best Practices") }}
 {% endif %}
 
 {% if best_practices %}
-### Language-Specific Best Practices:
-{% for practice in best_practices %}
-- {{ practice }}
-{% endfor %}
+{{ macros.render_best_practices(best_practices, "Industry Best Practices") }}
 {% endif %}
 
 {% if image_descriptions %}
-### Visual Requirements (from images):
-{{ image_descriptions }}
+{{ macros.render_context(image_descriptions, "Visual Requirements") }}
 {% endif %}
 
 {% if diagram_descriptions %}
-### Architecture Diagrams:
-{{ diagram_descriptions }}
+{{ macros.render_context(diagram_descriptions, "Architecture Diagrams") }}
 {% endif %}
 
-## TASK INSTRUCTIONS
+---
 
-### 1. Parse the Specification Carefully
+## TASK: GENERATE PRODUCTION-READY CODE
 
-Extract and implement ALL of the following from the requirements:
+{{ macros.render_spec_checklist(target_language) }}
 
-**API Endpoints/Functions**: Identify all endpoints, routes, or functions specified
-- HTTP methods (GET, POST, PUT, DELETE, etc.)
-- Path parameters and query parameters
-- Request/response models
+---
 
-**Data Models**: Create all data structures, classes, schemas mentioned
-- Field names and types
-- Validation rules
-- Relationships between models
+{{ macros.render_language_instructions(target_language, target_framework) }}
 
-**Business Logic**: Implement all specified behaviors
-- Calculations and transformations
-- Conditional logic
-- Error handling rules (e.g., division by zero, invalid input)
+---
 
-**Error Handling**: Implement comprehensive error handling
-- Input validation
-- Edge cases mentioned in spec
-- Appropriate error messages and status codes
+### Code Quality Standards
 
-**Configuration**: Include any configuration requirements
-- Dependencies and imports
-- Environment variables
-- Constants and settings
+Your generated code must meet these enterprise standards:
 
-### 2. Generate Complete, Production-Ready Code
+**Functionality**:
+- Implements ALL requirements from specification completely
+- No placeholders, TODOs, or stub implementations
+- All edge cases handled appropriately
+- All error conditions handled gracefully
 
-Your code must be:
-- **Functional**: Implements ALL requirements from the specification
-- **Complete**: No placeholders, TODOs, or incomplete sections
-- **Well-Structured**: Follows {{ target_language }} best practices
-- **Type-Safe**: Use type hints/annotations where applicable
-- **Documented**: Include docstrings for modules, classes, and functions
-- **Error-Resistant**: Handle edge cases and errors gracefully
+**Code Organization**:
+- Clear separation of concerns (MVC, layered architecture, etc.)
+- Logical file structure appropriate for {{ target_language }}
+- DRY principle - no code duplication
+- Single Responsibility Principle for functions/classes
 
-### 3. Multi-File Project Structure
+**Documentation**:
+- Module-level docstrings explaining purpose
+- Function/method docstrings with parameters and return values
+- Inline comments for complex logic
+- README with setup instructions and usage examples
 
-Organize code into logical files:
-- **main.py** or entry point file
-- **models.py** for data models/schemas  
-- **routes.py** or **api.py** for API endpoints (if applicable)
-- **utils.py** or **helpers.py** for utility functions
-- **requirements.txt** or dependency file
-- **README.md** with setup and usage instructions (optional but recommended)
+**Testing Considerations**:
+- Code structured to be testable
+- Dependencies injected rather than hard-coded
+- Pure functions where possible
+- Interfaces/abstractions for external dependencies
 
-### 4. Code Quality Requirements
+**Security**:
+- Input validation on all external inputs
+- SQL injection prevention (use parameterized queries)
+- XSS prevention (escape outputs)
+- No hardcoded secrets or credentials
+- Appropriate error messages (don't leak implementation details)
 
-- Use consistent naming conventions
-- Add inline comments for complex logic
-- Follow DRY (Don't Repeat Yourself) principle
-- Implement proper separation of concerns
-- Use design patterns appropriately
+**Performance**:
+- Efficient algorithms (consider time/space complexity)
+- Appropriate data structures
+- Connection pooling for database/external services
+- Avoid N+1 query problems
 
-### 5. Testing Considerations
+---
 
-Structure your code to be testable:
-- Separate concerns (business logic from I/O)
-- Use dependency injection where appropriate
-- Avoid tight coupling
-- Make functions pure where possible
+{{ macros.render_output_format(target_language, target_framework) }}
 
-## CRITICAL: Your response must be VALID JSON in this exact format:
+---
 
-```json
-{
-  "files": {
-    "main.py": "# Complete code here...",
-    "models.py": "# Model definitions here...",
-    "requirements.txt": "# Dependencies here...",
-    "README.md": "# Project documentation here..."
-  }
-}
-```
+## FINAL VERIFICATION
 
-**IMPORTANT RULES:**
+Before submitting your response:
 
-1. **JSON ONLY**: Your entire response must be valid JSON - nothing before or after
-2. **NO MARKDOWN**: Do not wrap the JSON in markdown code fences (```json)
-3. **NO EXPLANATIONS**: Do not include explanatory text outside the JSON
-4. **ALL FILES**: Include ALL necessary files for a complete, working project
-5. **COMPLETE CODE**: Every file must have complete, executable code (no placeholders)
-6. **PROPERLY ESCAPED**: Ensure all code strings are properly JSON-escaped
+1. ✓ Have you implemented EVERY feature from the requirements?
+2. ✓ Is your JSON properly formatted and escaped?
+3. ✓ Are all files complete with no placeholders?
+4. ✓ Does the code follow {{ target_language }} best practices?
+5. ✓ Is error handling comprehensive?
+6. ✓ Are all dependencies listed in requirements file?
+7. ✓ Is the README clear and complete?
 
-Double-check that you are implementing EVERY requirement from the specification.
-Verify that your JSON is valid before responding.
+**Generate the JSON now.**
+

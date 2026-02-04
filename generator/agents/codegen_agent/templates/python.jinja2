@@ -1,172 +1,303 @@
-{# Python-Specific Code Generation Template with FastAPI Support #}
+{# 
+Python-Specific Code Generation Template - Industry Standard
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
 
-You are an expert Python developer specializing in FastAPI applications.
+This template extends the base template with Python-specific instructions.
+Specializes in FastAPI, Flask, Django, and other Python frameworks.
 
-## INPUT SPECIFICATION
+Template Variables: (inherited from base.jinja2)
+- requirements, target_language, target_framework, state_summary, etc.
+#}
 
-### Requirements:
-{{ requirements | tojson(indent=2) }}
+{% extends "base.jinja2" %}
 
-### Target Language: Python{{ ' (Framework: ' + target_framework + ')' if target_framework else '' }}
+{% import "_macros.jinja2" as macros %}
 
-### System State Summary:
-{{ state_summary }}
+{# Override the base content with Python-specific enhancements #}
+{% block additional_instructions %}
 
-{% if previous_feedback %}
-### Previous Feedback to Address:
-{{ previous_feedback }}
-{% endif %}
+---
 
-{% if rag_context %}
-### Relevant Context & Best Practices:
-{{ rag_context }}
-{% endif %}
+## PYTHON EXPERTISE REQUIRED
 
-{% if best_practices %}
-### Python Best Practices to Follow:
-{% for practice in best_practices %}
-- {{ practice }}
-{% endfor %}
-{% endif %}
+You are a Senior Python Engineer with expertise in:
+- Modern Python 3.10+ features (match/case, structural pattern matching, type hints)
+- Async/await and asyncio for concurrent operations
+- FastAPI, Flask, Django frameworks
+- Pydantic for data validation
+- SQLAlchemy or other ORMs
+- pytest for testing
+- Industry-standard Python tooling (Black, Ruff, mypy)
 
-## TASK: Generate a Complete Python{% if target_framework %} {{ target_framework }}{% endif %} Application
+---
 
-### Step 1: Analyze the Specification
+## PYTHON CODE STANDARDS
 
-Extract from requirements:
-1. **API Endpoints**: All routes, HTTP methods, parameters
-2. **Data Models**: Request/response schemas, validation rules
-3. **Business Logic**: Operations, calculations, transformations
-4. **Error Handling**: Validation, edge cases (e.g., division by zero)
-5. **Dependencies**: Required packages
-
-### Step 2: Implement the Following Files
-
-#### main.py
-- FastAPI application instance
-- All API endpoint implementations
-- Error handlers
-- Application startup/shutdown events
-- Run configuration
-
-#### models.py  
-- Pydantic models for request/response validation
-- Proper type hints
-- Field validators
-- Example values in schema
-
-#### requirements.txt
-- FastAPI
-- Uvicorn
-- Pydantic
-- Any other dependencies needed
-
-#### README.md
-- Project description
-- Installation instructions
-- Usage examples
-- API endpoints documentation
-
-### Step 3: Python/FastAPI Specific Requirements
-
-**Code Style:**
-- Use type hints for all function parameters and return values
-- Follow PEP 8 naming conventions
-- Use f-strings for string formatting
-- Docstrings for all modules, classes, and functions
-
-**FastAPI Best Practices:**
-- Use Pydantic models for request/response validation
-- Include proper HTTP status codes
-- Add response_model to endpoints
-- Implement proper error handling with HTTPException
-- Use dependency injection where appropriate
-- Add OpenAPI tags for endpoint organization
-
-**Example FastAPI Endpoint Structure:**
+### Type Hints (REQUIRED)
 ```python
-from fastapi import FastAPI, HTTPException
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
-app = FastAPI(title="API Title", version="1.0.0")
+def process_data(
+    items: List[Dict[str, Any]], 
+    config: Optional[str] = None
+) -> Dict[str, int]:
+    \"\"\"Process data with full type annotations.\"\"\"
+    ...
+```
 
-class RequestModel(BaseModel):
-    field1: int
-    field2: float
+### Docstrings (Google Style)
+```python
+def calculate_total(values: List[float]) -> float:
+    \"\"\"
+    Calculate the sum of all values.
+    
+    Args:
+        values: List of numeric values to sum.
+        
+    Returns:
+        The total sum of all values.
+        
+    Raises:
+        ValueError: If values list is empty.
+        
+    Example:
+        >>> calculate_total([1.0, 2.0, 3.0])
+        6.0
+    \"\"\"
+    if not values:
+        raise ValueError("Cannot calculate total of empty list")
+    return sum(values)
+```
+
+### Error Handling
+```python
+# Specific exceptions, not bare except
+try:
+    result = risky_operation()
+except ValueError as e:
+    logger.error(f"Invalid value: {e}")
+    raise
+except ConnectionError as e:
+    logger.error(f"Connection failed: {e}")
+    # Implement retry or fallback
+```
+
+{% if target_framework == "fastapi" %}
+---
+
+## FASTAPI IMPLEMENTATION REQUIREMENTS
+
+### Project Structure
+```
+project/
+├── main.py           # FastAPI app instance and startup
+├── models.py         # Pydantic models for validation
+├── routes.py         # API endpoint implementations
+├── database.py       # Database connection (if needed)
+├── config.py         # Configuration management
+├── requirements.txt  # Dependencies
+└── README.md         # Documentation
+```
+
+### FastAPI Best Practices
+
+**1. Pydantic Models for Validation**
+```python
+from pydantic import BaseModel, Field, validator
+
+class CalculationRequest(BaseModel):
+    \"\"\"Request model for calculations.\"\"\"
+    operand1: float = Field(..., description="First operand")
+    operand2: float = Field(..., description="Second operand")
     
     class Config:
         json_schema_extra = {
-            "example": {"field1": 10, "field2": 5.0}
+            "example": {
+                "operand1": 10.5,
+                "operand2": 5.2
+            }
         }
 
-class ResponseModel(BaseModel):
+class CalculationResponse(BaseModel):
+    \"\"\"Response model for calculations.\"\"\"
     result: float
+    operation: str
+```
 
-@app.post("/endpoint", response_model=ResponseModel)
-async def endpoint_function(data: RequestModel):
-    """
-    Endpoint description.
+**2. Endpoint Implementation with Error Handling**
+```python
+from fastapi import FastAPI, HTTPException, status
+
+app = FastAPI(
+    title="{{ requirements.get('title', 'API') }}",
+    version="1.0.0",
+    description="{{ requirements.get('description', '') }}"
+)
+
+@app.post("/divide", response_model=CalculationResponse, tags=["arithmetic"])
+async def divide(data: CalculationRequest) -> CalculationResponse:
+    \"\"\"
+    Divide two numbers with error handling.
     
-    Args:
-        data: Request data
-        
-    Returns:
-        Response with result
-        
     Raises:
-        HTTPException: If validation fails
-    """
-    try:
-        # Implementation
-        result = data.field1 + data.field2
-        return ResponseModel(result=result)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        HTTPException: 400 if divisor is zero
+    \"\"\"
+    if data.operand2 == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Division by zero is not allowed"
+        )
+    
+    result = data.operand1 / data.operand2
+    return CalculationResponse(result=result, operation="divide")
 ```
 
-**Error Handling:**
-- Validate all inputs
-- Handle edge cases (division by zero, negative numbers where invalid, etc.)
-- Return appropriate HTTP status codes (400 for bad request, 500 for server error)
-- Include helpful error messages
+**3. Startup/Shutdown Events**
+```python
+@app.on_event("startup")
+async def startup_event():
+    \"\"\"Initialize resources on startup.\"\"\"
+    logger.info("Application starting...")
+    # Initialize database, cache, etc.
 
-**Testing Structure:**
-- Separate business logic from API layer for testability
-- Make functions pure where possible
-- Use dependency injection for external dependencies
-
-### Step 4: Implementation Checklist
-
-Before generating code, ensure you will include:
-- [ ] All specified endpoints with correct HTTP methods
-- [ ] All request/response models with validation
-- [ ] All business logic and calculations
-- [ ] Comprehensive error handling for all edge cases
-- [ ] Type hints on all functions
-- [ ] Docstrings for all public functions
-- [ ] Complete requirements.txt
-- [ ] Clear README.md with usage instructions
-
-## CRITICAL: Output Format
-
-Your response MUST be valid JSON in this exact format:
-
-```json
-{
-  "files": {
-    "main.py": "from fastapi import FastAPI...",
-    "models.py": "from pydantic import BaseModel...",  
-    "requirements.txt": "fastapi==0.104.1\\nuvicorn==0.24.0...",
-    "README.md": "# Project Title\\n\\n..."
-  }
-}
+@app.on_event("shutdown")
+async def shutdown_event():
+    \"\"\"Cleanup resources on shutdown.\"\"\"
+    logger.info("Application shutting down...")
+    # Close connections, cleanup
 ```
 
-**RULES:**
-1. **VALID JSON ONLY**: No text before or after the JSON
-2. **NO MARKDOWN FENCES**: Do not wrap in ```json``` fences
-3. **COMPLETE CODE**: Every file must be fully implemented (no TODOs or placeholders)
-4. **ALL REQUIREMENTS**: Implement EVERY feature from the specification
-5. **PROPER ESCAPING**: Escape all special characters in JSON strings (newlines as \\n, quotes as \\", etc.)
+**4. Error Handlers**
+```python
+from fastapi.responses import JSONResponse
 
-Verify you are implementing EVERY requirement before responding.
+@app.exception_handler(ValueError)
+async def value_error_handler(request, exc):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": str(exc)}
+    )
+```
+
+**5. Dependencies File**
+```
+# requirements.txt
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+python-dotenv==1.0.0
+```
+
+### MANDATORY for FastAPI:
+- ✓ Use Pydantic models for ALL request/response validation
+- ✓ Add response_model to ALL endpoints
+- ✓ Include proper HTTP status codes
+- ✓ Add tags for OpenAPI organization
+- ✓ Include example values in schema
+- ✓ Implement comprehensive error handling with HTTPException
+- ✓ Add docstrings to all endpoints
+- ✓ Use dependency injection for shared resources
+
+{% elif target_framework == "flask" %}
+---
+
+## FLASK IMPLEMENTATION REQUIREMENTS
+
+### Project Structure
+```
+project/
+├── app/
+│   ├── __init__.py   # Application factory
+│   ├── models.py     # Data models
+│   ├── routes.py     # Blueprints and routes
+│   └── config.py     # Configuration
+├── main.py           # Entry point
+├── requirements.txt
+└── README.md
+```
+
+### Flask Best Practices
+
+**1. Application Factory Pattern**
+```python
+from flask import Flask
+
+def create_app(config_name='development'):
+    \"\"\"Create and configure Flask application.\"\"\"
+    app = Flask(__name__)
+    app.config.from_object(f'config.{config_name}')
+    
+    # Register blueprints
+    from .routes import api_bp
+    app.register_blueprint(api_bp, url_prefix='/api')
+    
+    return app
+```
+
+**2. Blueprints for Organization**
+```python
+from flask import Blueprint, request, jsonify
+
+api_bp = Blueprint('api', __name__)
+
+@api_bp.route('/calculate', methods=['POST'])
+def calculate():
+    data = request.get_json()
+    # Implementation
+    return jsonify(result=...)
+```
+
+{% endif %}
+
+---
+
+## PYTHON IMPLEMENTATION CHECKLIST
+
+Verify your implementation includes:
+
+**Code Quality**:
+- [ ] All functions have type hints
+- [ ] All public functions have docstrings (Google style)
+- [ ] Using f-strings for all string formatting
+- [ ] Following PEP 8 naming conventions
+- [ ] Using context managers (with statements) for resources
+
+**Error Handling**:
+- [ ] Specific exception types (ValueError, TypeError, etc.)
+- [ ] Try/except blocks with specific exceptions
+- [ ] Appropriate error messages
+- [ ] Logging for errors and important events
+
+**Structure**:
+- [ ] Proper __init__.py files for packages
+- [ ] if __name__ == "__main__" guard for entry point
+- [ ] Separation of concerns (models, routes, utils, config)
+- [ ] Configuration management (not hardcoded values)
+
+**Dependencies**:
+- [ ] requirements.txt with specific versions
+- [ ] All imports at top of file, grouped properly
+- [ ] No unused imports
+
+{% endblock %}
+
+---
+
+{{ macros.render_output_format("python", target_framework) }}
+
+---
+
+## FINAL PYTHON VERIFICATION
+
+1. ✓ All code is Python 3.10+ compatible?
+2. ✓ Type hints on all function signatures?
+3. ✓ Docstrings follow Google style?
+4. ✓ Using async/await appropriately?
+5. ✓ Error handling is comprehensive?
+6. ✓ requirements.txt has all dependencies with versions?
+7. ✓ Following PEP 8 and modern Python practices?
+
+**Generate the complete JSON response now.**
+
