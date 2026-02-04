@@ -22,7 +22,6 @@ def mock_opentelemetry_context():
     with patch('opentelemetry.context.get_current') as mock_get_current, \
          patch('opentelemetry.context.attach') as mock_attach, \
          patch('opentelemetry.context.detach') as mock_detach:
-        
         # Create a mock context object with a get method
         mock_context = MagicMock()
         mock_context.get.return_value = None
