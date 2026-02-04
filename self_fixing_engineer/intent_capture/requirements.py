@@ -1264,7 +1264,8 @@ def shutdown_cleanup():
             try:
                 logger.error(f"Error while closing PostgreSQL DB pool: {e}", exc_info=True)
             except Exception:
-                pass  # Logger may be closed
+                import sys
+                print(f"ERROR: Failed to close PostgreSQL DB pool: {e}", file=sys.stderr)
 
     # Clean up Redis connections
     if REDIS_AVAILABLE:
@@ -1291,7 +1292,8 @@ def shutdown_cleanup():
             try:
                 logger.error(f"Error while closing Redis connections: {e}", exc_info=True)
             except Exception:
-                pass  # Best effort at exit
+                import sys
+                print(f"ERROR: Failed to close Redis connections: {e}", file=sys.stderr)
 
     # Clean up ML model from memory
     if ML_ENABLED and manager._embedding_model:
