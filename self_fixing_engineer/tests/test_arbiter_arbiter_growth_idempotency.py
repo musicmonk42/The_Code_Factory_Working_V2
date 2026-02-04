@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -19,8 +19,6 @@ from redis.exceptions import RedisError
 @pytest.fixture(autouse=True)
 def mock_opentelemetry_context():
     """Mock OpenTelemetry context to avoid initialization issues in tests."""
-    from unittest.mock import MagicMock
-    
     with patch('opentelemetry.context.get_current') as mock_get_current, \
          patch('opentelemetry.context.attach') as mock_attach, \
          patch('opentelemetry.context.detach') as mock_detach:
@@ -30,12 +28,7 @@ def mock_opentelemetry_context():
         mock_context.get.return_value = None
         mock_get_current.return_value = mock_context
         
-        yield {
-            'get_current': mock_get_current,
-            'attach': mock_attach,
-            'detach': mock_detach,
-            'context': mock_context
-        }
+        yield
 
 
 # --- Fixtures ---
