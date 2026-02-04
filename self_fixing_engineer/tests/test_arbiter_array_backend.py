@@ -11,11 +11,11 @@ Run:
   pytest -q arbiter/tests/test_arbiter_array_backend.py
 """
 
+from __future__ import annotations
+
 import os
 # Opt out of global mocking - these tests need real file I/O
 os.environ['PYTEST_NO_MOCK'] = '1'
-
-from __future__ import annotations
 
 import asyncio
 from pathlib import Path
