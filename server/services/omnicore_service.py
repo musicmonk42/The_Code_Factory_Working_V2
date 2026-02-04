@@ -2031,7 +2031,9 @@ class OmniCoreService:
                     }
             
             # 4. Deploy (if requested)
-            include_deployment = payload.get("include_deployment", False)
+            # FIX: Default to True since deployment is a core pipeline feature
+            # Users who don't want deployment should explicitly set include_deployment=False
+            include_deployment = payload.get("include_deployment", True)
             logger.info(f"[PIPELINE] Job {job_id} deployment check: include_deployment={include_deployment}, payload keys={list(payload.keys())}")
             
             if include_deployment:
