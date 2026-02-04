@@ -29,11 +29,59 @@ class MockAiofilesFile:
         self.path = path
         self.mode = mode
         self.encoding = encoding
+        self._lines_iterator = None
 
     async def write(self, data):
         # Actually write the file synchronously for testing
         with open(self.path, self.mode, encoding=self.encoding) as f:
             f.write(data)
+    
+    async def read(self):
+        """Read entire file content."""
+        try:
+            with open(self.path, 'r', encoding=self.encoding or 'utf-8') as f:
+                return f.read()
+        except FileNotFoundError:
+            return ""
+    
+    async def readlines(self):
+        """Read all lines from the file."""
+        try:
+            with open(self.path, 'r', encoding=self.encoding or 'utf-8') as f:
+                return f.readlines()
+        except FileNotFoundError:
+            return []
+    
+    async def writelines(self, lines):
+        """Write multiple lines to the file."""
+        with open(self.path, self.mode, encoding=self.encoding) as f:
+            f.writelines(lines)
+    
+    def fileno(self):
+        """Return file descriptor number (mocked for fsync operations)."""
+        return 1
+    
+    async def flush(self):
+        """Flush file buffer."""
+        pass
+    
+    def __aiter__(self):
+        """Support async iteration over lines."""
+        return self
+    
+    async def __anext__(self):
+        """Async iterator for reading lines."""
+        if self._lines_iterator is None:
+            try:
+                with open(self.path, 'r', encoding=self.encoding or 'utf-8') as f:
+                    self._lines_iterator = iter(f.readlines())
+            except FileNotFoundError:
+                raise StopAsyncIteration
+        
+        try:
+            return next(self._lines_iterator)
+        except StopIteration:
+            raise StopAsyncIteration
 
 
 class MockAiofilesContextManager:
