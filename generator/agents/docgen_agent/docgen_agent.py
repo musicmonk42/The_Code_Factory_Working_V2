@@ -1140,9 +1140,8 @@ class DocgenAgent:
                     if doc_content_str:
                         summary = await call_summarizer(
                             text=doc_content_str,
-                            summarizer_name="doc_critique",
+                            provider="doc_critique",
                             max_length=200,
-                            llm_model=llm_model,
                         )
                         ensemble_summary = await ensemble_summarizers(
                             text=doc_content_str,
@@ -1520,9 +1519,8 @@ class DocgenAgent:
                     # Use a shorter summary for streaming to avoid blocking
                     summary = await call_summarizer(
                         text=doc_content_str,
-                        summarizer_name="doc_critique",
+                        provider="doc_critique",
                         max_length=150,  # Shorter for stream
-                        llm_model=llm_model,
                     )
                 else:
                     summary = "No content to summarize."

@@ -572,15 +572,16 @@ class LintPlugin(ABC):
     ) -> Dict[str, Any]:
         if use_container:
             if not shutil.which("docker"):
-                # Capability check
-                logger.error(
-                    "Docker is not installed or not in PATH. Cannot run containerized linter."
+                # Capability check - gracefully skip containerized linting
+                logger.warning(
+                    f"Docker is not installed or not in PATH. Skipping containerized linting for {tool_name}."
                 )
                 return {
-                    "success": False,
+                    "success": True,  # Don't fail the job, just skip this check
                     "stdout": "",
-                    "stderr": "Docker not found",
-                    "returncode": 1,
+                    "stderr": "Docker not available - skipping containerized linting",
+                    "returncode": 0,
+                    "status": "skipped",
                 }
             if not container_image:
                 logger.error(

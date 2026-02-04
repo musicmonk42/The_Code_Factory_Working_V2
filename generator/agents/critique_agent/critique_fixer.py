@@ -577,11 +577,20 @@ async def security_check_fix(code_files: Dict[str, str], lang: str) -> bool:
             return False
 
         # 2. Comprehensive vulnerability scan via runner utility (Bandit, Semgrep, etc.)
-        result = await scan_for_vulnerabilities(code_files)
-        vulnerabilities = result.get("vulnerabilities", [])
-        if vulnerabilities:
-            logger.warning(f"Security vulnerabilities found: {vulnerabilities}")
-            return False
+        # scan_for_vulnerabilities expects a path, not a dict, so we need to write files to a temp dir
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Write code files to temp directory for scanning
+            for filename, content in code_files.items():
+                file_path = Path(temp_dir) / filename
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_text(content)
+            
+            # Now scan the temp directory (convert to str for consistency)
+            result = await scan_for_vulnerabilities(str(temp_dir), scan_type="code")
+            vulnerabilities_found = result.get("vulnerabilities_found", 0)
+            if vulnerabilities_found > 0:
+                logger.warning(f"Security vulnerabilities found: {vulnerabilities_found}")
+                return False
 
         return True
 

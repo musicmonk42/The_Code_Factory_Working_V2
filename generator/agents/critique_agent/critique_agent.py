@@ -718,12 +718,10 @@ class PythonCritiquePlugin(LanguageCritiquePlugin):
         timeout: int,
         config: CritiqueConfig,
     ) -> Dict[str, Any]:
+        # scan_for_vulnerabilities only accepts target and scan_type
         return await scan_for_vulnerabilities(
-            code_files,
             str(temp_dir),
-            tools,
-            timeout,
-            config,
+            scan_type="code"
         )
 
 
@@ -791,12 +789,10 @@ class JavaScriptCritiquePlugin(LanguageCritiquePlugin):
         timeout: int,
         config: CritiqueConfig,
     ) -> Dict[str, Any]:
+        # scan_for_vulnerabilities only accepts target and scan_type
         return await scan_for_vulnerabilities(
-            code_files,
             str(temp_dir),
-            tools,
-            timeout,
-            config,
+            scan_type="code"
         )
 
 
@@ -864,12 +860,10 @@ class GoCritiquePlugin(LanguageCritiquePlugin):
         timeout: int,
         config: CritiqueConfig,
     ) -> Dict[str, Any]:
+        # scan_for_vulnerabilities only accepts target and scan_type
         return await scan_for_vulnerabilities(
-            code_files,
             str(temp_dir),
-            tools,
-            timeout,
-            config,
+            scan_type="code"
         )
 
 
