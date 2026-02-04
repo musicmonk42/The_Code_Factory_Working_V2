@@ -136,15 +136,40 @@ function startJobsAutoRefresh() {
     // Stop any existing interval
     stopJobsAutoRefresh();
     
-    // Start new interval (refresh every 5 seconds)
-    jobsRefreshInterval = setInterval(async () => {
+    let refreshInterval = 5000; // Start with 5 seconds
+    
+    const refreshJobs = async () => {
         const jobsView = document.getElementById('jobs-view');
         if (jobsView && jobsView.classList.contains('active')) {
             await loadJobs();
+            
+            // Check if there are any running jobs to determine refresh rate
+            const jobsContainer = document.getElementById('jobs-list');
+            const runningJobs = jobsContainer.querySelectorAll('.status-running').length;
+            
+            // Adjust refresh interval based on activity
+            if (runningJobs > 0) {
+                // Active jobs - keep 5 second refresh
+                if (refreshInterval !== 5000) {
+                    refreshInterval = 5000;
+                    stopJobsAutoRefresh();
+                    jobsRefreshInterval = setInterval(refreshJobs, refreshInterval);
+                }
+            } else {
+                // No active jobs - slow down to 15 seconds
+                if (refreshInterval !== 15000) {
+                    refreshInterval = 15000;
+                    stopJobsAutoRefresh();
+                    jobsRefreshInterval = setInterval(refreshJobs, refreshInterval);
+                }
+            }
         }
-    }, 5000);
+    };
     
-    console.log('Jobs auto-refresh started (5s interval)');
+    // Start with initial interval
+    jobsRefreshInterval = setInterval(refreshJobs, refreshInterval);
+    
+    console.log('Jobs auto-refresh started (adaptive interval)');
 }
 
 function stopJobsAutoRefresh() {
@@ -522,11 +547,9 @@ async function loadJobs() {
         }
         
         container.innerHTML = '';
-        // Create job cards asynchronously
-        for (const job of data.jobs) {
-            const card = await createJobCard(job);
-            container.appendChild(card);
-        }
+        // Create job cards in parallel for better performance
+        const cards = await Promise.all(data.jobs.map(job => createJobCard(job)));
+        cards.forEach(card => container.appendChild(card));
     } catch (error) {
         console.error('Failed to load jobs:', error);
         container.innerHTML = '<p class="error">Failed to load jobs. Please try again.</p>';

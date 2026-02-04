@@ -1084,6 +1084,7 @@ async def dispatch_job_to_sfe(job_id: str):
             }
     except Exception as e:
         logger.error(f"Error dispatching job {job_id} to SFE: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to dispatch job to Self-Fixing Engineer. Please check server logs for details.")
+
 
 
