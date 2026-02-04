@@ -247,50 +247,102 @@ class DistributedRateLimiter:
 
 # --- Circuit Breaker ---
 class CircuitBreaker:
-    def __init__(self, failure_threshold: int = 10, timeout: int = 300):
+    def __init__(self, failure_threshold: int = 10, timeout: int = 300, recovery_threshold: int = 3):
         """
         Initialize circuit breaker with production-grade settings.
         
         Args:
             failure_threshold: Number of failures before circuit opens (default: 10, was 5)
             timeout: Seconds to wait before trying half-open state (default: 300, was 60)
+            recovery_threshold: Number of successful requests in half-open state before closing (default: 3)
         """
         self.failure_threshold = failure_threshold
         self.timeout = timeout
+        self.recovery_threshold = recovery_threshold
         self.failure_count: Dict[str, int] = {}
         self.last_failure: Dict[str, float] = {}
         self.state: Dict[str, str] = {}
+        self.success_count: Dict[str, int] = {}  # Track successes in half-open state
 
     def record_failure(self, provider: str):
         self.failure_count[provider] = self.failure_count.get(provider, 0) + 1
         self.last_failure[provider] = time.time()
+        
+        # Reset success count on failure
+        self.success_count[provider] = 0
+        
         if self.failure_count[provider] >= self.failure_threshold:
             if self.state.get(provider, "CLOSED") != "OPEN":
                 logger.warning(
-                    f"CircuitBreaker: Tripped to OPEN for provider {provider}"
+                    f"CircuitBreaker: Tripped to OPEN for provider {provider} "
+                    f"(failures: {self.failure_count[provider]}/{self.failure_threshold})"
                 )
             self.state[provider] = "OPEN"
             metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(1)
 
     def record_success(self, provider: str):
-        if self.state.get(provider) == "HALF-OPEN":
-            logger.info(f"CircuitBreaker: Reset to CLOSED for provider {provider}")
-        self.failure_count[provider] = 0
-        self.state[provider] = "CLOSED"
-        # FIX: Corrected indentation for metric update
-        metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(0)
+        current_state = self.state.get(provider, "CLOSED")
+        
+        if current_state == "HALF-OPEN":
+            # Track successes in half-open state
+            self.success_count[provider] = self.success_count.get(provider, 0) + 1
+            
+            # Only close circuit after enough successful requests
+            if self.success_count[provider] >= self.recovery_threshold:
+                logger.info(
+                    f"CircuitBreaker: Reset to CLOSED for provider {provider} "
+                    f"(successful requests: {self.success_count[provider]}/{self.recovery_threshold})"
+                )
+                self.failure_count[provider] = 0
+                self.success_count[provider] = 0
+                self.state[provider] = "CLOSED"
+                metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(0)
+            else:
+                logger.debug(
+                    f"CircuitBreaker: Provider {provider} still in HALF-OPEN state "
+                    f"(successful requests: {self.success_count[provider]}/{self.recovery_threshold})"
+                )
+        else:
+            # In CLOSED state, just reset failure count
+            self.failure_count[provider] = 0
+            self.success_count[provider] = 0
+            self.state[provider] = "CLOSED"
+            metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(0)
 
     async def allow_request(self, provider: str) -> bool:
-        if self.state.get(provider, "CLOSED") == "CLOSED":
+        current_state = self.state.get(provider, "CLOSED")
+        
+        if current_state == "CLOSED":
             return True
+            
+        if current_state == "HALF-OPEN":
+            # Allow limited requests in half-open state
+            return True
+            
+        # State is OPEN - check if timeout has elapsed
         if time.time() - self.last_failure.get(provider, 0) > self.timeout:
             self.state[provider] = "HALF-OPEN"
+            self.success_count[provider] = 0  # Reset success counter
             metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(0.5)
             logger.info(
-                f"CircuitBreaker: State for {provider} is now HALF-OPEN. Allowing trial request."
+                f"CircuitBreaker: State for {provider} is now HALF-OPEN. "
+                f"Allowing trial requests (need {self.recovery_threshold} successes to fully recover)."
             )
             return True
+            
         return False
+    
+    def get_state(self, provider: str) -> str:
+        """Get the current state of the circuit breaker for a provider."""
+        return self.state.get(provider, "CLOSED")
+    
+    def reset(self, provider: str):
+        """Manually reset the circuit breaker for a provider."""
+        self.failure_count[provider] = 0
+        self.success_count[provider] = 0
+        self.state[provider] = "CLOSED"
+        metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(0)
+        logger.info(f"CircuitBreaker: Manually reset to CLOSED for provider {provider}")
 
 
 # --- Unified LLM Client ---
@@ -432,6 +484,33 @@ class LLMClient:
                 f"Failed to count tokens using tiktoken: {e}. Falling back to word-based estimation."
             )
             return int(len(text.split()) * 1.3)
+    
+    def _get_fallback_providers(self, primary_provider: str) -> List[str]:
+        """
+        Get list of fallback providers to try when primary provider fails.
+        
+        Returns providers in order of preference, excluding the primary provider.
+        
+        Args:
+            primary_provider: The provider that failed
+            
+        Returns:
+            List of fallback provider names
+        """
+        # Define provider fallback hierarchy
+        # Priority: openai > grok > gemini > claude > local
+        all_providers = ["openai", "grok", "gemini", "claude", "local"]
+        
+        # Remove the primary provider from the list
+        fallback_providers = [p for p in all_providers if p != primary_provider]
+        
+        # Filter to only providers that have plugins loaded
+        available_fallbacks = [
+            p for p in fallback_providers 
+            if self.manager.get_provider(p) is not None
+        ]
+        
+        return available_fallbacks
 
     async def call_llm_api(
         self,
@@ -547,8 +626,37 @@ class LLMClient:
 
                     return stream_generator()
 
-            except (LLMError, ConfigurationError):
-                # Don't retry configuration errors or circuit breaker opens
+            except (LLMError, ConfigurationError) as e:
+                # Check if this is a circuit breaker error
+                if "Circuit breaker open" in str(e):
+                    # Try fallback providers
+                    fallback_providers = self._get_fallback_providers(provider)
+                    if fallback_providers and attempt == 0:  # Only try fallback on first attempt
+                        logger.warning(
+                            f"Circuit breaker open for {provider}. "
+                            f"Attempting fallback providers: {fallback_providers}"
+                        )
+                        for fallback_provider in fallback_providers:
+                            try:
+                                # Check if fallback provider is available
+                                if await self.circuit_breaker.allow_request(fallback_provider):
+                                    logger.info(f"Trying fallback provider: {fallback_provider}")
+                                    # Recursively call with fallback provider
+                                    return await self.call_llm_api(
+                                        prompt=prompt,
+                                        model=model,
+                                        stream=stream,
+                                        provider=fallback_provider,
+                                        max_retries=1,  # Limit retries for fallback
+                                        **kwargs
+                                    )
+                            except Exception as fallback_error:
+                                logger.warning(
+                                    f"Fallback provider {fallback_provider} also failed: {fallback_error}"
+                                )
+                                continue
+                
+                # No fallback succeeded or wasn't a circuit breaker error
                 metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
                 self.circuit_breaker.record_failure(provider)
                 raise

@@ -1,0 +1,198 @@
+{# 
+Jinja2 Macros Library for Code Generation Templates
+Industry Standard: Reusable macros for consistent prompt generation across all language templates
+#}
+
+{# Macro: Render requirement section with validation #}
+{% macro render_requirements(requirements) %}
+### Requirements Specification:
+{% if requirements is mapping %}
+{{ requirements | tojson(indent=2) }}
+{% else %}
+{{ requirements }}
+{% endif %}
+{% endmacro %}
+
+{# Macro: Render best practices section #}
+{% macro render_best_practices(practices, title="Best Practices") %}
+{% if practices %}
+### {{ title }}:
+{% for practice in practices %}
+- {{ practice }}
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
+{# Macro: Render context section with proper escaping #}
+{% macro render_context(context, title="Relevant Context") %}
+{% if context %}
+### {{ title }}:
+{{ context | safe }}
+{% endif %}
+{% endmacro %}
+
+{# Macro: Render output format instructions with language-specific examples #}
+{% macro render_output_format(language="python", framework=none) %}
+## CRITICAL OUTPUT FORMAT REQUIREMENTS
+
+Your response MUST be valid JSON in this exact structure:
+
+```json
+{
+  "files": {
+{% if language == "python" %}
+    "main.py": "# Entry point with complete implementation",
+    "models.py": "# Data models/schemas with validation",
+{% if framework == "fastapi" %}
+    "routes.py": "# API routes with proper error handling",
+{% endif %}
+    "utils.py": "# Utility functions if needed",
+    "requirements.txt": "# All dependencies with versions",
+    "README.md": "# Setup and usage documentation"
+{% elif language == "javascript" or language == "typescript" %}
+    "index.js": "// Entry point",
+    "models.js": "// Data models",
+    "routes.js": "// API routes",
+    "package.json": "// Dependencies",
+    "README.md": "// Documentation"
+{% elif language == "java" %}
+    "Main.java": "// Entry point",
+    "Model.java": "// Data models",
+    "Controller.java": "// API controllers",
+    "pom.xml": "// Dependencies",
+    "README.md": "// Documentation"
+{% else %}
+    "main.{{ language }}": "# Entry point",
+    "models.{{ language }}": "# Data models",
+    "README.md": "# Documentation"
+{% endif %}
+  }
+}
+```
+
+**MANDATORY RULES:**
+1. **PURE JSON**: Output ONLY the JSON - no text before or after
+2. **NO MARKDOWN FENCES**: Do not wrap in ```json``` or any code fences
+3. **COMPLETE CODE**: Every file must have complete, functional code (no TODOs, no placeholders)
+4. **PROPER ESCAPING**: Escape all special characters (\\n for newlines, \\" for quotes, \\\\ for backslashes)
+5. **VALID SYNTAX**: All code must be syntactically correct and executable
+6. **ALL REQUIREMENTS**: Implement EVERY feature from the specification
+{% endmacro %}
+
+{# Macro: Render spec parsing checklist #}
+{% macro render_spec_checklist(language="python") %}
+## SPECIFICATION PARSING CHECKLIST
+
+Before generating code, extract and verify you will implement:
+
+**API Layer** (if applicable):
+- [ ] All endpoints/routes with correct HTTP methods
+- [ ] All path parameters and query parameters  
+- [ ] Request/response models with validation
+- [ ] Proper HTTP status codes
+
+**Data Layer**:
+- [ ] All data models/classes/schemas mentioned
+- [ ] Field names, types, and constraints
+- [ ] Validation rules and relationships
+- [ ] Default values where specified
+
+**Business Logic**:
+- [ ] All calculations and transformations
+- [ ] All conditional logic and workflows
+- [ ] All state management requirements
+- [ ] All integration points
+
+**Error Handling**:
+- [ ] Input validation for all endpoints/functions
+- [ ] Edge case handling (e.g., division by zero, null values, empty arrays)
+- [ ] Appropriate error messages and codes
+- [ ] Graceful degradation where applicable
+
+**Quality Requirements**:
+- [ ] Type hints/annotations throughout
+- [ ] Docstrings for all public APIs
+- [ ] Logging for important operations
+- [ ] Configuration management
+- [ ] Security considerations (input sanitization, SQL injection prevention, etc.)
+
+**Dependencies & Config**:
+- [ ] All required libraries/packages
+- [ ] Version constraints where specified
+- [ ] Environment variables needed
+- [ ] Setup/installation instructions
+{% endmacro %}
+
+{# Macro: Render language-specific instructions #}
+{% macro render_language_instructions(language, framework=none) %}
+{% if language == "python" %}
+## Python-Specific Requirements
+
+**Code Style**:
+- Follow PEP 8 style guide
+- Use type hints (from typing import ...)
+- Use f-strings for formatting
+- Use dataclasses or Pydantic for data models
+
+**Structure**:
+- Use __init__.py for packages
+- Separate concerns (models, routes, utils, config)
+- Use if __name__ == "__main__" for entry points
+
+**Error Handling**:
+- Use specific exception types (ValueError, TypeError, etc.)
+- Implement custom exceptions where appropriate
+- Use try/except with specific exception handling
+
+{% if framework == "fastapi" %}
+**FastAPI Best Practices**:
+- Use Pydantic models for validation
+- Add response_model to endpoints
+- Use HTTPException for errors
+- Include OpenAPI tags and descriptions
+- Add example values to schemas
+{% elif framework == "flask" %}
+**Flask Best Practices**:
+- Use Blueprints for organization
+- Use application factory pattern
+- Separate config for different environments
+{% endif %}
+
+{% elif language == "javascript" or language == "typescript" %}
+## JavaScript/TypeScript Requirements
+
+**Code Style**:
+- Use ESLint and Prettier
+- Use const/let (never var)
+- Use async/await for promises
+- Use arrow functions appropriately
+
+**Structure**:
+- Use ES6 modules (import/export)
+- Separate concerns (models, routes, utils)
+- Use proper error handling middleware
+
+{% if framework %}
+**{{ framework|title }} Best Practices**:
+- Follow framework conventions
+- Use proper middleware chain
+- Implement error handling
+{% endif %}
+
+{% elif language == "java" %}
+## Java Requirements
+
+**Code Style**:
+- Follow Google Java Style Guide
+- Use proper access modifiers
+- Use interfaces and abstractions
+- Implement proper exception handling
+
+**Structure**:
+- Use package structure (com.company.project)
+- Separate layers (controller, service, repository)
+- Use dependency injection
+- Follow SOLID principles
+
+{% endif %}
+{% endmacro %}

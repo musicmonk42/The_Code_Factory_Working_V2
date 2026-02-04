@@ -217,6 +217,86 @@ class TestMultiVectorDBManager:
             await manager.add_files("invalid", files)
 
     @pytest.mark.asyncio
+    async def test_add_files_with_filename_in_id(self, fresh_testgen_imports, mock_add_provenance):
+        """Should generate IDs including filename to ensure uniqueness"""
+        import hashlib
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
+        manager = MVDBManager()
+        files = {"test1.py": "def test(): pass", "test2.py": "def test(): pass"}
+
+        await manager.add_files("codebase", files)
+
+        # Verify add was called
+        call_args = manager.collections["codebase"].add.call_args
+        ids = call_args[1]["ids"]
+        
+        # Verify that IDs are different even though content is the same
+        assert len(ids) == 2
+        assert ids[0] != ids[1]
+        
+        # Verify IDs are generated with filename included
+        expected_id1 = hashlib.sha256("test1.py:def test(): pass".encode()).hexdigest()
+        expected_id2 = hashlib.sha256("test2.py:def test(): pass".encode()).hexdigest()
+        assert expected_id1 in ids
+        assert expected_id2 in ids
+
+    @pytest.mark.asyncio
+    async def test_add_files_skips_existing_duplicates(self, fresh_testgen_imports, mock_add_provenance):
+        """Should detect and skip files that already exist in collection"""
+        import hashlib
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
+        manager = MVDBManager()
+        files = {"test.py": "def test(): pass"}
+        
+        # Mock the get method to return existing IDs
+        existing_id = hashlib.sha256("test.py:def test(): pass".encode()).hexdigest()
+        manager.collections["codebase"].get = MagicMock(
+            return_value={"ids": [existing_id]}
+        )
+
+        await manager.add_files("codebase", files)
+
+        # Verify get was called to check for existing IDs
+        manager.collections["codebase"].get.assert_called_once()
+        call_args = manager.collections["codebase"].get.call_args
+        assert "ids" in call_args[1]
+        assert existing_id in call_args[1]["ids"]
+        
+        # Verify add was NOT called since file already exists
+        manager.collections["codebase"].add.assert_not_called()
+        
+    @pytest.mark.asyncio
+    async def test_add_files_partial_duplicates(self, fresh_testgen_imports, mock_add_provenance):
+        """Should add only new files when some already exist"""
+        import hashlib
+        MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]
+        manager = MVDBManager()
+        files = {
+            "existing.py": "def existing(): pass",
+            "new.py": "def new(): pass"
+        }
+        
+        # Mock the get method to return one existing ID
+        existing_id = hashlib.sha256("existing.py:def existing(): pass".encode()).hexdigest()
+        manager.collections["codebase"].get = MagicMock(
+            return_value={"ids": [existing_id]}
+        )
+
+        await manager.add_files("codebase", files)
+
+        # Verify add was called with only the new file
+        call_args = manager.collections["codebase"].add.call_args
+        ids = call_args[1]["ids"]
+        documents = call_args[1]["documents"]
+        metadatas = call_args[1]["metadatas"]
+        
+        assert len(ids) == 1
+        assert len(documents) == 1
+        assert len(metadatas) == 1
+        assert documents[0] == "def new(): pass"
+        assert metadatas[0]["filename"] == "new.py"
+
+    @pytest.mark.asyncio
     async def test_query_relevant_context(self, fresh_testgen_imports, mock_add_provenance):
         """Should query and return context from collections"""
         MVDBManager = fresh_testgen_imports["MultiVectorDBManager"]

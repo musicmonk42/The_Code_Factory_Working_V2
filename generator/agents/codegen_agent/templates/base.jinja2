@@ -1,0 +1,131 @@
+{# 
+Base Code Generation Template - Industry Standard
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+This template provides enterprise-grade instructions for LLM-based code generation.
+Uses Jinja2 template inheritance and macros for maintainability and consistency.
+
+Template Variables:
+- requirements: Dict containing specification details
+- target_language: Programming language for code generation
+- target_framework: Optional framework (e.g., "fastapi", "flask", "express")
+- state_summary: Current system state context
+- previous_feedback: Optional feedback from previous generation attempts
+- rag_context: Retrieved context from RAG system
+- best_practices: Language-specific best practices list
+- image_descriptions: Optional visual requirements
+- diagram_descriptions: Optional architecture diagrams
+#}
+
+{% import "_macros.jinja2" as macros %}
+
+# Code Generation Task
+
+You are an expert software engineer tasked with generating production-ready, enterprise-grade code.
+
+## INPUT SPECIFICATION
+
+{{ macros.render_requirements(requirements) }}
+
+**Target Language**: {{ target_language }}
+{% if target_framework %}
+**Target Framework**: {{ target_framework }}
+{% endif %}
+
+**System Context**:
+{{ state_summary }}
+
+{% if previous_feedback %}
+{{ macros.render_context(previous_feedback, "Previous Feedback to Address") }}
+{% endif %}
+
+{% if rag_context %}
+{{ macros.render_context(rag_context, "Retrieved Context & Best Practices") }}
+{% endif %}
+
+{% if best_practices %}
+{{ macros.render_best_practices(best_practices, "Industry Best Practices") }}
+{% endif %}
+
+{% if image_descriptions %}
+{{ macros.render_context(image_descriptions, "Visual Requirements") }}
+{% endif %}
+
+{% if diagram_descriptions %}
+{{ macros.render_context(diagram_descriptions, "Architecture Diagrams") }}
+{% endif %}
+
+---
+
+## TASK: GENERATE PRODUCTION-READY CODE
+
+{{ macros.render_spec_checklist(target_language) }}
+
+---
+
+{{ macros.render_language_instructions(target_language, target_framework) }}
+
+---
+
+### Code Quality Standards
+
+Your generated code must meet these enterprise standards:
+
+**Functionality**:
+- Implements ALL requirements from specification completely
+- No placeholders, TODOs, or stub implementations
+- All edge cases handled appropriately
+- All error conditions handled gracefully
+
+**Code Organization**:
+- Clear separation of concerns (MVC, layered architecture, etc.)
+- Logical file structure appropriate for {{ target_language }}
+- DRY principle - no code duplication
+- Single Responsibility Principle for functions/classes
+
+**Documentation**:
+- Module-level docstrings explaining purpose
+- Function/method docstrings with parameters and return values
+- Inline comments for complex logic
+- README with setup instructions and usage examples
+
+**Testing Considerations**:
+- Code structured to be testable
+- Dependencies injected rather than hard-coded
+- Pure functions where possible
+- Interfaces/abstractions for external dependencies
+
+**Security**:
+- Input validation on all external inputs
+- SQL injection prevention (use parameterized queries)
+- XSS prevention (escape outputs)
+- No hardcoded secrets or credentials
+- Appropriate error messages (don't leak implementation details)
+
+**Performance**:
+- Efficient algorithms (consider time/space complexity)
+- Appropriate data structures
+- Connection pooling for database/external services
+- Avoid N+1 query problems
+
+---
+
+{{ macros.render_output_format(target_language, target_framework) }}
+
+---
+
+## FINAL VERIFICATION
+
+Before submitting your response:
+
+1. ✓ Have you implemented EVERY feature from the requirements?
+2. ✓ Is your JSON properly formatted and escaped?
+3. ✓ Are all files complete with no placeholders?
+4. ✓ Does the code follow {{ target_language }} best practices?
+5. ✓ Is error handling comprehensive?
+6. ✓ Are all dependencies listed in requirements file?
+7. ✓ Is the README clear and complete?
+
+**Generate the JSON now.**
+
