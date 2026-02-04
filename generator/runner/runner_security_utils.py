@@ -248,15 +248,24 @@ def _load_presidio_engine() -> bool:
             # HIGH: Add custom recognizers for API_KEY and CARDINAL entities
             _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
             
-            # Suppress non-critical Presidio warnings for unmapped entities and known patterns
+            # Suppress non-critical Presidio warnings for unmapped entities
             # These warnings clutter logs but don't affect functionality
+            # Only filter when entity type appears in an unmapped entity warning
             presidio_logger = logging.getLogger("presidio_analyzer")
-            presidio_logger.addFilter(
-                lambda record: not any(
-                    text in record.getMessage()
-                    for text in PRESIDIO_IGNORED_ENTITY_TYPES + PRESIDIO_LOG_FILTER_PATTERNS
-                )
-            )
+            
+            def presidio_log_filter(record):
+                """Filter out non-critical unmapped entity warnings from Presidio."""
+                message = record.getMessage()
+                
+                # Filter out unmapped entity warnings for known non-critical entity types
+                if "entity is not mapped" in message:
+                    if any(entity_type in message for entity_type in PRESIDIO_IGNORED_ENTITY_TYPES):
+                        return False
+                
+                # Allow all other messages through
+                return True
+            
+            presidio_logger.addFilter(presidio_log_filter)
             
             logger.info(
                 f"Presidio analyzer loaded successfully with {model_name} model (full NLP mode)"
