@@ -1422,13 +1422,15 @@ class OmniCoreService:
     
     async def _run_deploy(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute deployment configuration generation with timeout."""
+        logger.info(f"[DEPLOY] Starting deployment for job {job_id} with payload: {payload}")
+        
         # Ensure agents are loaded before use
         self._ensure_agents_loaded()
         
         # Check if agent is available using service's own tracking
         if not self.agents_available.get('deploy', False) or self._deploy_class is None:
             error_msg = "Deploy agent not available"
-            logger.warning(f"Deploy agent unavailable for job {job_id}: {error_msg}")
+            logger.error(f"[DEPLOY] Deploy agent unavailable for job {job_id}: {error_msg}")
             return {
                 "status": "error",
                 "message": f"Deploy agent not available: {error_msg}",
@@ -1464,11 +1466,13 @@ class OmniCoreService:
                 }
                 
                 # Run the deployment generation
-                logger.info(f"Running deploy agent for job {job_id}")
+                logger.info(f"[DEPLOY] Running deploy agent for job {job_id} with target={platform}")
                 deploy_result = await agent.run_deployment(target=platform, requirements=requirements)
+                logger.info(f"[DEPLOY] Deploy agent returned result with keys: {list(deploy_result.keys())}")
                 
                 # Extract generated config
                 configs = deploy_result.get("configs", {})
+                logger.info(f"[DEPLOY] Extracted configs: {list(configs.keys())}")
                 
                 if not configs:
                     logger.warning(f"Deploy agent returned no configurations for job {job_id}")
@@ -2027,19 +2031,26 @@ class OmniCoreService:
                     }
             
             # 4. Deploy (if requested)
-            if payload.get("include_deployment", False):
+            # FIX: Default to True since deployment is a core pipeline feature
+            # Users who don't want deployment should explicitly set include_deployment=False
+            include_deployment = payload.get("include_deployment", True)
+            logger.info(f"[PIPELINE] Job {job_id} deployment check: include_deployment={include_deployment}, payload keys={list(payload.keys())}")
+            
+            if include_deployment:
                 deploy_payload = {
                     "code_path": codegen_result.get("output_path"),
                     "platform": "docker",
                     "include_ci_cd": True,
                 }
-                logger.info(f"[PIPELINE] Job {job_id} starting step: deploy")
+                logger.info(f"[PIPELINE] Job {job_id} starting step: deploy with payload: {deploy_payload}")
                 deploy_result = await self._run_deploy(job_id, deploy_payload)
                 if deploy_result.get("status") == "completed":
                     stages_completed.append("deploy")
-                    logger.info(f"[PIPELINE] Job {job_id} completed step: deploy")
+                    logger.info(f"[PIPELINE] Job {job_id} completed step: deploy - files: {deploy_result.get('generated_files', [])}")
                 elif deploy_result.get("status") == "error":
                     logger.warning(f"[PIPELINE] Job {job_id} failed step: deploy - {deploy_result.get('message', 'Unknown error')} (continuing pipeline)")
+            else:
+                logger.info(f"[PIPELINE] Job {job_id} skipping deploy step (include_deployment={include_deployment})")
             
             # 5. Docgen (if requested)
             if payload.get("include_docs", False):

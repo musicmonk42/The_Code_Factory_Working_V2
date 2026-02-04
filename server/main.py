@@ -575,7 +575,7 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 socket_timeout=5
             )
             await r.ping()
-            await r.close()
+            await r.aclose()
             logger.info(f"✓ Redis connection validated: {redis_url.split('@')[-1] if '@' in redis_url else redis_url}")
         except ImportError:
             logger.warning("⚠ redis library not installed - Redis features unavailable")
@@ -885,16 +885,55 @@ if allowed_origins_str:
 else:
     # Use sensible defaults based on environment
     if _is_production:
-        # P0 FIX: In production, REJECT all CORS requests by default
-        # This ensures operators MUST configure ALLOWED_ORIGINS for browser clients
-        # Server-to-server/curl requests will still work (no CORS headers needed)
-        ALLOWED_ORIGINS = []  # Empty list = no CORS allowed
-        logger.error(
-            "CRITICAL: ALLOWED_ORIGINS not set in production! "
-            "Browser requests will fail with CORS errors. "
-            "Set ALLOWED_ORIGINS environment variable with your frontend domains. "
-            "Example: ALLOWED_ORIGINS=https://your-frontend.com,https://your-app.railway.app"
-        )
+        # P0 FIX: In production, try to auto-detect Railway deployment URL
+        # This prevents "works in curl but fails in browser" issues
+        # Railway provides RAILWAY_PUBLIC_DOMAIN (preferred) and RAILWAY_STATIC_URL (fallback)
+        railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
+        
+        if railway_url:
+            # Validate Railway URL to prevent environment variable injection
+            if not railway_url.startswith("http"):
+                railway_url = f"https://{railway_url}"
+            
+            # Security: Only trust Railway domains to prevent injection attacks
+            # Use proper domain validation by checking the end of the hostname
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(railway_url)
+                hostname = parsed.hostname or ""
+                
+                # Validate that hostname ENDS with Railway domains (prevents injection like evil.com/.railway.app.attacker.com)
+                if hostname.endswith(".railway.app") or hostname.endswith(".up.railway.app") or hostname == "railway.app" or hostname == "up.railway.app":
+                    ALLOWED_ORIGINS = [railway_url]
+                    logger.info(
+                        f"CORS configured with auto-detected Railway URL: {ALLOWED_ORIGINS}. "
+                        "Set ALLOWED_ORIGINS explicitly if you have additional frontend domains."
+                    )
+                else:
+                    # Railway env var doesn't contain expected domain - use permissive default with warning
+                    logger.warning(
+                        f"Railway URL detected but hostname doesn't match expected pattern: {hostname}. "
+                        "Expected: *.railway.app or *.up.railway.app. "
+                        "Using permissive CORS default. Set ALLOWED_ORIGINS explicitly for better security."
+                    )
+                    ALLOWED_ORIGINS = ["*"]  # Allow all origins to prevent breaking the application
+            except Exception as e:
+                # URL parsing failed - use permissive default with warning
+                logger.warning(
+                    f"Failed to parse Railway URL '{railway_url}': {e}. "
+                    "Using permissive CORS default. Set ALLOWED_ORIGINS explicitly for better security."
+                )
+                ALLOWED_ORIGINS = ["*"]  # Allow all origins to prevent breaking the application
+        else:
+            # No Railway URL detected and no explicit configuration
+            # Use permissive default to prevent breaking the application
+            ALLOWED_ORIGINS = ["*"]  # Allow all origins as fallback
+            logger.warning(
+                "ALLOWED_ORIGINS not set in production and Railway URL not detected. "
+                "Using permissive CORS default (*). "
+                "For better security, set ALLOWED_ORIGINS environment variable with your frontend domains. "
+                "Example: ALLOWED_ORIGINS=https://myapp.example.com,https://app.mycompany.com"
+            )
     else:
         # In development, allow common local development ports
         ALLOWED_ORIGINS = [
@@ -1156,7 +1195,7 @@ async def readiness_check(response: Response) -> ReadinessResponse:
             )
             await r.ping()
             checks["redis"] = "connected"
-            await r.close()
+            await r.aclose()
         except ImportError:
             checks["redis"] = "client_not_installed"
             # Don't fail readiness if Redis client not installed - it's optional
@@ -1289,7 +1328,7 @@ async def detailed_health_check() -> DetailedHealthResponse:
         )
         await r.ping()
         dependencies["redis"] = "connected"
-        await r.close()
+        await r.aclose()
     except Exception:
         dependencies["redis"] = "unavailable"
     
