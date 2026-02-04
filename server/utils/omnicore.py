@@ -20,7 +20,6 @@ class OmniCoreService:
     
     def __init__(self):
         self._omnicore_available = False
-        self._periodic_flush_task = None
         self._initialize()
     
     def _initialize(self):
@@ -41,6 +40,9 @@ class OmniCoreService:
         """
         Start periodic audit log flushing.
         
+        Note: The audit logger manages its own background tasks internally.
+        This method simply triggers the initialization.
+        
         Returns:
             bool: True if flush task started successfully, False otherwise.
         """
@@ -48,19 +50,13 @@ class OmniCoreService:
             logger.debug("Periodic audit flush not started - OmniCore not available")
             return False
         
-        # Don't start if already running
-        if self._periodic_flush_task and not self._periodic_flush_task.done():
-            logger.debug("Periodic audit flush already running")
-            return True
-        
         try:
             # Import audit functionality
             from generator.audit_log import audit_logger
             
             # Start periodic flush if audit logger is available
+            # Note: audit_logger.start_periodic_flush() creates and manages its own tasks
             if hasattr(audit_logger, 'start_periodic_flush'):
-                # Note: audit_logger.start_periodic_flush() typically creates its own task
-                # We just call it to initiate the process
                 await audit_logger.start_periodic_flush()
                 logger.info("Periodic audit flush started successfully")
                 return True
@@ -76,17 +72,13 @@ class OmniCoreService:
             return False
     
     async def stop(self):
-        """Stop periodic tasks and cleanup resources."""
-        # Note: The audit_logger typically manages its own tasks
-        # We just ensure we clean up our references
-        if self._periodic_flush_task and not self._periodic_flush_task.done():
-            try:
-                self._periodic_flush_task.cancel()
-                logger.debug("Periodic flush task cancelled")
-            except Exception as e:
-                logger.warning(f"Error stopping periodic flush task: {e}")
+        """
+        Stop and cleanup resources.
         
-        self._periodic_flush_task = None
+        Note: The audit logger manages its own task lifecycle.
+        This is provided for API consistency but currently doesn't need to do anything.
+        """
+        pass
 
 
 # Singleton instance
