@@ -461,6 +461,32 @@ MESSAGE_BUS_MESSAGE_AGE = _get_or_create_metric(
     buckets=(0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, float("inf")),
 )
 
+# Kafka-specific Metrics
+KAFKA_CONNECTION_FAILURES = _get_or_create_metric(
+    Counter,
+    "kafka_connection_failures_total",
+    "Total Kafka connection failures",
+    ["reason"],
+)
+KAFKA_FALLBACK_ACTIVATIONS = _get_or_create_metric(
+    Counter,
+    "kafka_fallback_activations_total",
+    "Total times Kafka fallback to local queue was activated",
+)
+KAFKA_HEALTH_CHECK_STATUS = _get_or_create_metric(
+    Gauge,
+    "kafka_health_check_status",
+    "Kafka health check status (1=healthy, 0=unhealthy)",
+)
+
+# LLM Circuit Breaker Metrics
+LLM_CIRCUIT_BREAKER_STATE = _get_or_create_metric(
+    Gauge,
+    "llm_circuit_breaker_open",
+    "LLM circuit breaker state (0=closed, 0.5=half-open, 1=open)",
+    ["provider"],
+)
+
 # Arbiter Metrics
 ARBITER_OPERATIONS = _get_or_create_metric(
     Counter,
