@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1717,8 +1718,147 @@ class OmniCoreService:
                     doc_filename = f"{doc_type}.md"
                 
                 doc_path = output_dir / doc_filename
-                async with aiofiles.open(doc_path, "w", encoding="utf-8") as f:
-                    await f.write(docs_output)
+                
+                # ✅ INDUSTRY STANDARD: Robust serialization with comprehensive type handling
+                # Supports multiple response formats from documentation agents:
+                # - Structured dict with 'content' or 'markdown' fields
+                # - Raw string content
+                # - Complex nested structures (serialized as JSON with metadata)
+                
+                start_write_time = time.time()
+                output_strategy = "unknown"
+                content_to_write = ""
+                
+                try:
+                    if isinstance(docs_output, dict):
+                        # Structured response - extract content intelligently
+                        if 'content' in docs_output:
+                            # Primary content field (standard convention)
+                            content_to_write = docs_output['content']
+                            output_strategy = "dict_content_field"
+                            
+                            # Validate content is string
+                            if not isinstance(content_to_write, str):
+                                logger.warning(
+                                    "Documentation content field is not a string, converting",
+                                    extra={
+                                        "job_id": job_id,
+                                        "content_type": type(content_to_write).__name__,
+                                        "doc_type": doc_type
+                                    }
+                                )
+                                content_to_write = str(content_to_write)
+                                
+                        elif 'markdown' in docs_output:
+                            # Alternative markdown field (some agents use this)
+                            content_to_write = docs_output['markdown']
+                            output_strategy = "dict_markdown_field"
+                            
+                            if not isinstance(content_to_write, str):
+                                logger.warning(
+                                    "Documentation markdown field is not a string, converting",
+                                    extra={
+                                        "job_id": job_id,
+                                        "markdown_type": type(content_to_write).__name__,
+                                        "doc_type": doc_type
+                                    }
+                                )
+                                content_to_write = str(content_to_write)
+                                
+                        elif 'text' in docs_output:
+                            # Some agents may use 'text' field
+                            content_to_write = str(docs_output['text'])
+                            output_strategy = "dict_text_field"
+                            
+                        else:
+                            # Unstructured dict - serialize as formatted JSON with metadata
+                            output_strategy = "dict_json_serialization"
+                            
+                            # Add metadata header for clarity
+                            metadata = {
+                                "generated_by": "docgen_agent",
+                                "job_id": job_id,
+                                "doc_type": doc_type,
+                                "timestamp": time.time(),
+                                "note": "Content was returned as unstructured dictionary"
+                            }
+                            
+                            serialized_output = {
+                                "metadata": metadata,
+                                "content": docs_output
+                            }
+                            
+                            content_to_write = json.dumps(serialized_output, indent=2, ensure_ascii=False)
+                            
+                            logger.info(
+                                "Serializing unstructured dict to JSON",
+                                extra={
+                                    "job_id": job_id,
+                                    "dict_keys": list(docs_output.keys()),
+                                    "doc_type": doc_type
+                                }
+                            )
+                    else:
+                        # Direct string or other type - convert to string
+                        output_strategy = "direct_string"
+                        content_to_write = str(docs_output)
+                    
+                    # Validate we have content to write
+                    if not content_to_write:
+                        logger.error(
+                            "Documentation output is empty after processing",
+                            extra={
+                                "job_id": job_id,
+                                "output_type": type(docs_output).__name__,
+                                "output_strategy": output_strategy,
+                                "doc_type": doc_type
+                            }
+                        )
+                        raise ValueError("Documentation content is empty - refusing to write empty file")
+                    
+                    # Write with proper encoding
+                    async with aiofiles.open(doc_path, "w", encoding="utf-8") as f:
+                        await f.write(content_to_write)
+                    
+                    # Verify file was written successfully
+                    if not doc_path.exists():
+                        raise IOError(f"File {doc_path} was not created successfully")
+                    
+                    file_size = doc_path.stat().st_size
+                    
+                    # Comprehensive logging for observability
+                    write_duration_ms = round((time.time() - start_write_time) * 1000, 2)
+                    
+                    logger.info(
+                        "Documentation written successfully",
+                        extra={
+                            "job_id": job_id,
+                            "doc_type": doc_type,
+                            "doc_path": str(doc_path),
+                            "output_type": type(docs_output).__name__,
+                            "output_strategy": output_strategy,
+                            "file_size_bytes": file_size,
+                            "content_length": len(content_to_write),
+                            "write_duration_ms": write_duration_ms,
+                            "has_content": bool(content_to_write)
+                        }
+                    )
+                    
+                except Exception as e:
+                    logger.error(
+                        "Failed to write documentation file",
+                        extra={
+                            "job_id": job_id,
+                            "doc_type": doc_type,
+                            "doc_path": str(doc_path),
+                            "output_type": type(docs_output).__name__,
+                            "output_strategy": output_strategy,
+                            "error": str(e),
+                            "error_type": type(e).__name__
+                        },
+                        exc_info=True
+                    )
+                    raise
                 
                 # [FIX] Add error handling for path resolution
                 try:

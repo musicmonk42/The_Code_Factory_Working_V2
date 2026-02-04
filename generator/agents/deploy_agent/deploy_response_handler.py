@@ -682,14 +682,119 @@ class DockerfileHandler(FormatHandler):
     __source__ = "built-in"
 
     def normalize(self, raw: str) -> List[str]:
-        """Normalizes Dockerfile raw string into a list of cleaned lines."""
+        """
+        Normalizes Dockerfile raw string into a list of cleaned lines.
+        
+        Industry-standard validation and sanitization:
+        - Removes shebang lines (common LLM error)
+        - Strips comments while preserving inline documentation
+        - Ensures FROM instruction is present and first
+        - Validates Dockerfile syntax constraints
+        - Provides structured logging for observability
+        
+        Args:
+            raw: Raw Dockerfile content from LLM or other source
+            
+        Returns:
+            List of normalized, valid Dockerfile instruction lines
+            
+        Raises:
+            ValueError: If input is invalid or cannot be normalized
+        """
         if not raw or not isinstance(raw, str):
             raise ValueError("Invalid raw Dockerfile content provided.")
-        return [
-            line.strip()
-            for line in raw.splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
+        
+        # Track normalization metrics
+        start_time = time.time()
+        
+        # ✅ INDUSTRY STANDARD: Comprehensive line filtering with categorization
+        lines = []
+        invalid_lines_removed = 0
+        shebangs_removed = 0
+        
+        for line_num, line in enumerate(raw.splitlines(), start=1):
+            stripped = line.strip()
+            
+            # Skip shebang lines (common LLM hallucination)
+            if stripped.startswith('#!'):
+                shebangs_removed += 1
+                logger.debug(
+                    "Removed shebang line from Dockerfile",
+                    extra={
+                        "line_number": line_num,
+                        "content": stripped[:50],
+                        "handler": "DockerfileHandler"
+                    }
+                )
+                continue
+            
+            # Skip comment lines (but preserve in-line comments if needed)
+            if stripped.startswith("#"):
+                continue
+            
+            # Skip empty lines
+            if not stripped:
+                continue
+            
+            # Validate line doesn't contain shell-specific syntax
+            if any(pattern in stripped for pattern in ['&&', '||']) and not stripped.upper().startswith('RUN'):
+                logger.warning(
+                    "Shell operator outside RUN instruction - may need RUN prefix",
+                    extra={
+                        "line_number": line_num,
+                        "content": stripped[:50],
+                        "handler": "DockerfileHandler"
+                    }
+                )
+            
+            lines.append(stripped)
+        
+        # ✅ INDUSTRY STANDARD: Strict FROM instruction validation
+        if not lines:
+            raise ValueError(
+                "Dockerfile normalization resulted in empty output. "
+                "Input may be completely invalid or consist only of comments."
+            )
+        
+        if not lines[0].upper().startswith('FROM'):
+            # Log detailed diagnostic before fixing
+            logger.warning(
+                "Dockerfile missing FROM instruction - adding default base image",
+                extra={
+                    "first_instruction": lines[0][:50],
+                    "total_lines": len(lines),
+                    "shebangs_removed": shebangs_removed,
+                    "handler": "DockerfileHandler"
+                }
+            )
+            
+            # Prepend industry-standard FROM instruction
+            # Using specific version tag (not :latest) per security best practices
+            lines.insert(0, 'FROM python:3.11-slim')
+        
+        # ✅ INDUSTRY STANDARD: Validate FROM instruction format
+        from_line = lines[0]
+        if not re.match(r'^FROM\s+[\w.\-/:]+(\s+AS\s+\w+)?$', from_line, re.IGNORECASE):
+            logger.warning(
+                "FROM instruction has unusual format, but allowing",
+                extra={"from_instruction": from_line, "handler": "DockerfileHandler"}
+            )
+        
+        # Log normalization metrics for observability
+        duration = time.time() - start_time
+        logger.info(
+            "Dockerfile normalized successfully",
+            extra={
+                "handler": "DockerfileHandler",
+                "input_lines": len(raw.splitlines()),
+                "output_lines": len(lines),
+                "shebangs_removed": shebangs_removed,
+                "duration_ms": round(duration * 1000, 2),
+                "has_from": lines[0].upper().startswith('FROM')
+            }
+        )
+        
+        return lines
 
     def convert(self, data: List[str], to_format: str) -> str:
         """Converts Dockerfile lines to a string or YAML representation."""
