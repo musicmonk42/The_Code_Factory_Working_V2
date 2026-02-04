@@ -96,41 +96,28 @@ def fresh_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def mock_aiofiles_properly():
-    """Mock aiofiles.open with proper async context manager support.
+def ensure_real_aiofiles():
+    """Ensure aiofiles is real, not mocked, for these tests.
     
-    This fixture overrides the global conftest.py mock of aiofiles,
-    which uses MagicMock and doesn't support async context managers.
-    The backend code uses 'async with aiofiles.open(...)' which requires
-    proper __aenter__ and __aexit__ implementations.
+    These tests require actual file I/O to test persistence.
+    Remove any mocks that may have been applied by conftest.
     """
     import sys
-    import aiofiles
-    from unittest.mock import AsyncMock, MagicMock, patch
     
-    # Only apply this mock if aiofiles is already mocked by conftest
-    # (i.e., if it's a MagicMock instance, not a real module)
-    if not isinstance(aiofiles, MagicMock):
-        # aiofiles is real, don't mock it
-        yield
-        return
+    # Remove any mocked aiofiles modules
+    mocked_modules = [key for key in sys.modules.keys() if 'aiofiles' in key]
+    for mod in mocked_modules:
+        if hasattr(sys.modules.get(mod), '_mock_name'):
+            # This is a mock, remove it
+            del sys.modules[mod]
     
-    with patch("aiofiles.open") as mock_open:
-        # Create async file mock
-        mock_file = AsyncMock()
-        mock_file.write = AsyncMock(return_value=None)
-        mock_file.read = AsyncMock(return_value="{}")
-        mock_file.flush = AsyncMock(return_value=None)
-        mock_file.fileno = lambda: 1  # For fsync calls in backend
-        
-        # Create async context manager
-        async_context = AsyncMock()
-        async_context.__aenter__ = AsyncMock(return_value=mock_file)
-        async_context.__aexit__ = AsyncMock(return_value=None)
-        
-        # Wire it up
-        mock_open.return_value = async_context
-        yield mock_file
+    # Re-import real aiofiles to ensure it's available
+    try:
+        import aiofiles
+    except ImportError:
+        pytest.skip("aiofiles not installed")
+    
+    yield
 
 
 @pytest.fixture
