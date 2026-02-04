@@ -142,10 +142,9 @@ def ensure_real_aiofiles():
         if isinstance(aiofiles.open, (MagicMock, Mock)) or hasattr(aiofiles.open, '_mock_name'):
             pytest.skip("aiofiles.open is mocked and cannot be unmocked - skipping persistence tests")
         
-        # Additional verification: check that aiofiles has the expected structure
-        if not hasattr(aiofiles, 'threadpool'):
-            # aiofiles might not be properly imported
-            pytest.skip("aiofiles module structure is invalid - cannot run persistence tests")
+        # Additional verification: check that aiofiles module is real (not a mock itself)
+        if isinstance(aiofiles, (MagicMock, Mock)) or hasattr(aiofiles, '_mock_name'):
+            pytest.skip("aiofiles module is still mocked - cannot run persistence tests")
             
     except Exception as e:
         # If verification fails for any reason, skip the tests
