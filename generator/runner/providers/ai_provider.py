@@ -66,7 +66,8 @@ class OpenAIProvider(LLMProvider):
         self.tokenizer_cache: Dict[str, Any] = {}  # Use Any to handle optional tiktoken
         self.custom_headers: Dict[str, str] = {}
         self.custom_endpoint: str = None
-        self.registered_models: set = {"gpt-3.5-turbo", "gpt-4", "gpt-4o"}
+        # Register default OpenAI models including gpt-4o-mini
+        self.registered_models: set = {"gpt-3.5-turbo", "gpt-4", "gpt-4o", "gpt-4o-mini"}
 
     def register_custom_headers(self, headers: Dict[str, str]):
         """
@@ -100,6 +101,7 @@ class OpenAIProvider(LLMProvider):
         if model not in self.tokenizer_cache:
             # Check for specific models, fallback to default
             if "gpt-4" in model or "gpt-3.5" in model or "gpt-4o" in model:
+                # gpt-4o-mini uses the same encoding as gpt-4o
                 encoding_name = "cl100k_base"
             else:
                 encoding_name = "p50k_base"  # Older models

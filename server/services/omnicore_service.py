@@ -2038,19 +2038,204 @@ class OmniCoreService:
                     logger.warning(f"[PIPELINE] Job {job_id} failed step: critique - {critique_result.get('message', 'Unknown error')} (continuing pipeline)")
             
             logger.info(f"[PIPELINE] Pipeline completed successfully for job {job_id}")
+            
+            # CRITICAL: Finalize job status and persist outputs
+            output_path = codegen_result.get("output_path")
+            await self._finalize_successful_job(
+                job_id=job_id,
+                output_path=output_path,
+                stages_completed=stages_completed
+            )
+            
             return {
                 "status": "completed",
                 "stages_completed": stages_completed,
-                "output_path": codegen_result.get("output_path"),
+                "output_path": output_path,
             }
             
         except Exception as e:
             logger.error(f"[PIPELINE] Job {job_id} FAILED with exception: {str(e)}", exc_info=True)
+            
+            # Finalize failed job
+            await self._finalize_failed_job(job_id, error=str(e))
+            
             return {
                 "status": "failed",
                 "message": str(e),
                 "error_type": type(e).__name__,
             }
+    
+    async def _finalize_successful_job(
+        self, 
+        job_id: str, 
+        output_path: Optional[str], 
+        stages_completed: List[str]
+    ) -> None:
+        """
+        Critical: Update job status to SUCCESS and persist outputs.
+        
+        This method finalizes a successfully completed job by:
+        - Updating job status to COMPLETED
+        - Setting completion timestamp
+        - Discovering and cataloging output artifacts
+        - Creating downloadable ZIP archive
+        - Triggering dispatch to Self-Fixing Engineer
+        
+        Args:
+            job_id: Unique job identifier
+            output_path: Path to generated output directory
+            stages_completed: List of successfully completed pipeline stages
+        """
+        try:
+            if job_id not in jobs_db:
+                logger.error(f"✗ Cannot finalize job {job_id}: not found in jobs_db")
+                return
+            
+            job = jobs_db[job_id]
+            job.status = JobStatus.COMPLETED
+            job.completed_at = datetime.now(timezone.utc)
+            job.metadata.update({
+                "stages_completed": stages_completed,
+                "output_path": output_path,
+            })
+            
+            # Discover and catalog output artifacts
+            if output_path:
+                output_dir = Path(output_path)
+                if output_dir.exists():
+                    artifacts = list(output_dir.rglob('*'))
+                    artifact_files = [f for f in artifacts if f.is_file()]
+                    
+                    # Generate artifact manifest
+                    job.output_files = [f.name for f in artifact_files]
+                    
+                    # Create downloadable ZIP (in background)
+                    zip_path = output_dir.parent / f"{job_id}_output.zip"
+                    await self._create_artifact_zip(artifact_files, zip_path, output_dir)
+                    
+                    logger.info(
+                        f"✓ Job {job_id} finalized: status=COMPLETED, files={len(artifact_files)}, "
+                        f"stages={', '.join(stages_completed)}"
+                    )
+                else:
+                    logger.warning(f"⚠ Job {job_id} output path {output_path} does not exist")
+            
+            # Trigger dispatch to Self-Fixing Engineer (non-blocking)
+            try:
+                await self._dispatch_to_sfe(job_id, output_path)
+            except Exception as dispatch_error:
+                # Don't fail job finalization if dispatch fails
+                logger.warning(f"⚠ SFE dispatch failed for job {job_id}: {dispatch_error}")
+                
+        except Exception as e:
+            logger.error(f"✗ Failed to finalize successful job {job_id}: {e}", exc_info=True)
+            # Don't raise - job is still successful even if finalization has issues
+    
+    async def _finalize_failed_job(self, job_id: str, error: str) -> None:
+        """
+        Update job status to FAILED and record error details.
+        
+        Args:
+            job_id: Unique job identifier
+            error: Error message describing the failure
+        """
+        try:
+            if job_id not in jobs_db:
+                logger.error(f"✗ Cannot finalize failed job {job_id}: not found in jobs_db")
+                return
+            
+            job = jobs_db[job_id]
+            job.status = JobStatus.FAILED
+            job.completed_at = datetime.now(timezone.utc)
+            job.metadata.update({
+                "error": error,
+                "failed_at": datetime.now(timezone.utc).isoformat(),
+            })
+            
+            logger.info(f"✓ Job {job_id} finalized with FAILED status: {error}")
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to finalize failed job {job_id}: {e}", exc_info=True)
+    
+    async def _create_artifact_zip(
+        self, 
+        files: List[Path], 
+        zip_path: Path,
+        base_dir: Path
+    ) -> None:
+        """
+        Bundle all outputs into single downloadable archive.
+        
+        Args:
+            files: List of file paths to include in archive
+            zip_path: Path where ZIP file should be created
+            base_dir: Base directory for computing relative paths
+        """
+        try:
+            import zipfile
+            
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for file_path in files:
+                    try:
+                        # Use relative path within archive
+                        arcname = file_path.relative_to(base_dir)
+                        zf.write(file_path, arcname=arcname)
+                    except Exception as file_error:
+                        logger.warning(f"⚠ Failed to add {file_path} to archive: {file_error}")
+            
+            logger.info(f"✓ Created artifact archive at {zip_path} with {len(files)} files")
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to create artifact ZIP: {e}", exc_info=True)
+            # Don't raise - ZIP creation failure shouldn't fail the job
+    
+    async def _dispatch_to_sfe(self, job_id: str, output_path: Optional[str]) -> None:
+        """
+        Dispatch completed job to Self-Fixing Engineer with fallback.
+        
+        Tries Kafka first, falls back to direct HTTP if Kafka unavailable.
+        
+        Args:
+            job_id: Unique job identifier
+            output_path: Path to generated outputs
+        """
+        try:
+            # Import here to avoid circular dependencies
+            from server.config import get_server_config
+            
+            config = get_server_config()
+            
+            # Try Kafka dispatch if enabled
+            if config.kafka_enabled:
+                try:
+                    # Check if Kafka producer is available
+                    if hasattr(self, 'kafka_producer') and self.kafka_producer:
+                        await self.kafka_producer.send(
+                            topic="sfe_jobs",
+                            value={"job_id": job_id, "output_path": output_path}
+                        )
+                        logger.info(f"✓ Dispatched job {job_id} to SFE via Kafka")
+                        return
+                except Exception as kafka_error:
+                    logger.warning(f"⚠ Kafka dispatch failed: {kafka_error}, trying fallback")
+            
+            # Fallback: Direct notification (if SFE URL configured)
+            sfe_url = os.getenv("SFE_URL")
+            if sfe_url:
+                import httpx
+                
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await client.post(
+                        f"{sfe_url}/api/jobs",
+                        json={"job_id": job_id, "source": "omnicore", "output_path": output_path}
+                    )
+                logger.info(f"✓ Dispatched job {job_id} to SFE via HTTP fallback")
+            else:
+                logger.info(f"ℹ SFE dispatch skipped for job {job_id} (no Kafka or SFE_URL configured)")
+                
+        except Exception as e:
+            logger.warning(f"⚠ Failed to dispatch job {job_id} to SFE: {e}")
+            # Don't raise - dispatch failure shouldn't fail the job
     
     async def _configure_llm(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Configure LLM provider."""
