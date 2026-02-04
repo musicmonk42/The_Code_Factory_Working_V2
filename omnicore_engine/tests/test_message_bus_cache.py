@@ -1,14 +1,9 @@
 # test_cache.py
 
 import concurrent.futures
-import sys
 import time
 import unittest
-from pathlib import Path
 from unittest.mock import patch
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from omnicore_engine.message_bus.cache import MessageCache
 
