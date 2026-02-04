@@ -10,6 +10,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 
@@ -36,6 +37,10 @@ from server.storage import jobs_db
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/generator", tags=["Generator"])
+
+# UUID validation pattern (RFC 4122)
+# Used for validating job IDs in API requests to prevent injection attacks
+UUID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
 
 
 def get_generator_service() -> GeneratorService:
@@ -216,15 +221,14 @@ async def _trigger_pipeline_background(
             finalized = await finalize_job_success(job_id, result)
             
             if finalized:
-                # Dispatch completion event to downstream systems
-                job_data = {
-                    "status": JobStatus.COMPLETED,
-                    "output_files": jobs_db[job_id].output_files,
-                    "completed_at": jobs_db[job_id].completed_at.isoformat() if jobs_db[job_id].completed_at else None,
-                }
-                await dispatch_job_completion(job_id, job_data)
-                
-                logger.info(f"[Pipeline] Job {job_id} finalized and dispatched successfully")
+                # NOTE: Dispatch to Self-Fixing Engineer is now MANUAL ONLY
+                # Users must explicitly click "Send to SFE" button in UI
+                # This prevents unwanted automatic processing and gives users control
+                # See endpoint: POST /generator/{job_id}/dispatch-to-sfe
+                logger.info(
+                    f"[Pipeline] Job {job_id} finalized successfully. "
+                    f"Ready for manual dispatch to Self-Fixing Engineer."
+                )
             else:
                 logger.error(f"[Pipeline] Failed to finalize job {job_id}")
             
@@ -1101,10 +1105,8 @@ async def dispatch_job_to_sfe(job_id: str):
             "message": "No dispatch methods available..."
         }
     """
-    # Input validation: Check job_id format (UUID)
-    import re
-    uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-    if not re.match(uuid_pattern, job_id.lower()):
+    # Input validation: Check job_id format (UUID) using module-level constant
+    if not UUID_PATTERN.match(job_id):
         logger.warning(
             f"Invalid job_id format received: {job_id[:20]}...",
             extra={"action": "dispatch_to_sfe", "error": "invalid_uuid"}
@@ -1156,7 +1158,6 @@ async def dispatch_job_to_sfe(job_id: str):
         )
     
     # Structured logging with correlation ID
-    from uuid import uuid4
     correlation_id = str(uuid4())
     
     logger.info(

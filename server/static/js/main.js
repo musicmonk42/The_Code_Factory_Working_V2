@@ -24,6 +24,16 @@ let isReconnecting = false;
 let reconnectTimeoutId = null;
 let wsEventHandlers = null; // Store event handlers for cleanup
 
+// Constants for validation and configuration
+// UUID validation pattern (RFC 4122) - used throughout for job ID validation
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Valid job status values - kept in sync with backend JobStatus enum
+const VALID_JOB_STATUSES = ['running', 'completed', 'failed', 'pending'];
+
+// Maximum concurrent file fetch requests to prevent server overload
+const MAX_CONCURRENT_FILE_FETCHES = 5;
+
 // Fetch wrapper with timeout and retry logic
 async function fetchWithRetry(url, options = {}, maxRetries = 3) {
     const timeout = options.timeout || 30000;
@@ -65,6 +75,41 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
             await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
         }
     }
+}
+
+/**
+ * Execute promises with concurrency limit to prevent server overload.
+ * 
+ * This implements a concurrency-limited Promise executor that ensures
+ * no more than `limit` promises execute simultaneously.
+ * 
+ * @async
+ * @function limitConcurrency
+ * @param {Array<Function>} tasks - Array of async functions to execute
+ * @param {number} limit - Maximum number of concurrent executions
+ * @returns {Promise<Array>} Results from all tasks
+ */
+async function limitConcurrency(tasks, limit) {
+    const results = [];
+    const executing = [];
+    
+    for (const [index, task] of tasks.entries()) {
+        const promise = task().then(result => {
+            results[index] = result;
+            executing.splice(executing.indexOf(promise), 1);
+            return result;
+        });
+        
+        results.push(promise);
+        executing.push(promise);
+        
+        if (executing.length >= limit) {
+            await Promise.race(executing);
+        }
+    }
+    
+    await Promise.all(results);
+    return results;
 }
 
 // Initialize application
@@ -635,9 +680,8 @@ async function loadJobs() {
         // Build URL with optional status filter
         let url = `${API_BASE}/jobs/`;
         if (statusFilter && statusFilter !== 'all') {
-            // Validate status filter to prevent injection
-            const validStatuses = ['running', 'completed', 'failed', 'pending'];
-            if (validStatuses.includes(statusFilter)) {
+            // Validate status filter to prevent injection using module constant
+            if (VALID_JOB_STATUSES.includes(statusFilter)) {
                 url += `?status=${encodeURIComponent(statusFilter)}`;
             }
         }
@@ -663,9 +707,10 @@ async function loadJobs() {
         
         container.innerHTML = '';
         
-        // Create job cards in parallel for better performance
-        // This prevents sequential blocking and improves perceived performance
-        const cards = await Promise.all(data.jobs.map(job => createJobCard(job)));
+        // Create job cards with concurrency limit to prevent server overload
+        // Limits file fetch requests while still rendering cards efficiently
+        const cardTasks = data.jobs.map(job => () => createJobCard(job));
+        const cards = await limitConcurrency(cardTasks, MAX_CONCURRENT_FILE_FETCHES);
         
         // Batch DOM updates for better performance
         const fragment = document.createDocumentFragment();
@@ -740,9 +785,8 @@ async function createJobCard(job) {
         return errorCard;
     }
     
-    // Validate job ID format (UUID) to prevent XSS
-    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidPattern.test(job.id)) {
+    // Validate job ID format (UUID) to prevent XSS using module constant
+    if (!UUID_PATTERN.test(job.id)) {
         console.error('Invalid job ID format:', job.id);
         const errorCard = document.createElement('div');
         errorCard.className = 'job-card error';
@@ -794,7 +838,8 @@ async function createJobCard(job) {
     // Use textContent and setAttribute to prevent XSS
     const jobIdShort = job.id.substring(0, 8);
     const createdDate = new Date(job.created_at);
-    const createdDateStr = isNaN(createdDate) ? 'Unknown' : createdDate.toLocaleString();
+    // Check for invalid date using getTime() which returns NaN for invalid dates
+    const createdDateStr = isNaN(createdDate.getTime()) ? 'Unknown' : createdDate.toLocaleString();
     
     card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: start;">
@@ -1737,9 +1782,8 @@ async function downloadJobFiles(jobId) {
  * @throws {Error} Logs error but provides user-friendly feedback via showError()
  */
 async function sendToSelfFixing(jobId) {
-    // Input validation: Validate job ID format (UUID)
-    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!jobId || !uuidPattern.test(jobId)) {
+    // Input validation: Validate job ID format (UUID) using module constant
+    if (!jobId || !UUID_PATTERN.test(jobId)) {
         console.error('Invalid job ID format for SFE dispatch:', jobId);
         showError('Invalid job ID format. Please try again.');
         return;
