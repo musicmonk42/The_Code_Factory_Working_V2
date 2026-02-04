@@ -235,12 +235,43 @@ Health Checks: Use GET /health to verify provider status.
 Circuit Breakers: Reset via provider’s reset_circuit() if disabled.
 Debugging: Use --test flag for unit tests or --server for API debugging.
 
+## LLM Circuit Breaker Behavior
+
+The system uses circuit breakers to protect against cascading failures when LLM providers become unavailable.
+
+**Circuit Breaker States:**
+- **CLOSED** (Normal): All requests pass through
+- **OPEN** (Failed): Requests fail immediately without calling provider
+- **HALF-OPEN** (Recovery): Test requests allowed to check if provider recovered
+
+**Configuration:**
+- Failure threshold: 10 consecutive failures trigger OPEN state
+- Recovery timeout: 300 seconds (5 minutes) before attempting recovery
+- Automatic recovery: System periodically retries in HALF-OPEN state
+
+**Monitoring:**
+- Check `llm_circuit_breaker_open` metric (0=closed, 0.5=half-open, 1=open)
+- Review `llm_errors_total` metric for failure patterns
+- Monitor circuit breaker logs for state transitions
+
+**Recovery Procedures:**
+1. **Automatic Recovery**: Circuit breaker automatically tests provider after timeout
+2. **Manual Recovery**: Restart the service to reset all circuit breakers
+3. **Provider Fallback**: Configure multiple providers to automatically switch on failure
+
+**Best Practices:**
+- Configure at least 2 LLM providers for high availability
+- Monitor circuit breaker metrics in production
+- Set alerts for prolonged OPEN states (>10 minutes)
+
 Common Issues
 
 Missing API Key: Ensure GROK_API_KEY, OPENAI_API_KEY, etc., are set.
 Local LLM Failure: Verify Ollama is running (curl http://localhost:11434).
 Validation Errors: Install hadolint and trivy for full validation.
 Template Not Found: Create deploy_templates/docker_default.jinja.
+Circuit Breaker Stuck Open: Wait for recovery timeout (5 min) or restart service.
+All Providers Failing: Check network connectivity and API key validity.
 
 📚 Contributing
 We welcome contributions! Please follow these steps:

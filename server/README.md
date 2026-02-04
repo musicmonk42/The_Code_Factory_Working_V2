@@ -332,9 +332,38 @@ export API_WORKERS=4
 export OMNICORE_MESSAGE_BUS_URL=redis://localhost:6379
 export OMNICORE_DB_URL=postgresql://localhost/omnicore
 
+# Kafka configuration (optional - for distributed message bus)
+export KAFKA_ENABLED=false  # Set to 'true' to enable Kafka
+export KAFKA_BOOTSTRAP_SERVERS=localhost:9092  # Comma-separated list
+export KAFKA_MAX_RETRIES=3  # Max connection retry attempts
+export KAFKA_RETRY_BACKOFF_MS=1000  # Backoff time between retries
+export KAFKA_CONNECTION_TIMEOUT_MS=5000  # Connection timeout
+
 # Storage configuration
 export UPLOAD_STORAGE_PATH=./uploads
 ```
+
+### Kafka Configuration Details
+
+The system supports optional Kafka integration for distributed message bus operations. When Kafka is unavailable or disabled, the system automatically falls back to a local in-memory queue.
+
+**Configuration Options:**
+- `KAFKA_ENABLED`: Enable/disable Kafka (default: `false`)
+- `KAFKA_BOOTSTRAP_SERVERS`: Kafka broker addresses (default: `localhost:9092`)
+- `KAFKA_MAX_RETRIES`: Maximum connection retry attempts (default: `3`, range: 0-10)
+- `KAFKA_RETRY_BACKOFF_MS`: Base backoff time for retries (default: `1000ms`, range: 100-30000)
+- `KAFKA_CONNECTION_TIMEOUT_MS`: Connection timeout (default: `5000ms`, range: 1000-60000)
+
+**Fallback Behavior:**
+- If Kafka is disabled or unreachable, the system uses local queues
+- No functionality is lost - all operations work with local queues
+- Connection failures are logged as warnings, not errors
+- Metrics track fallback activations for monitoring
+
+**Troubleshooting:**
+- Check Kafka health: Monitor `kafka_health_check_status` metric
+- Connection failures: Review `kafka_connection_failures_total` metric
+- Fallback usage: Track `kafka_fallback_activations_total` metric
 
 ## Deployment
 

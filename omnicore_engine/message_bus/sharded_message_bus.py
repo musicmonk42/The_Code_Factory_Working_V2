@@ -406,7 +406,7 @@ class ShardedMessageBus:
 
         # Resiliency components
         self.kafka_circuit = CircuitBreaker(
-            failure_threshold=getattr(self.config, "KAFKA_CIRCUIT_THRESHOLD", 5),
+            failure_threshold=getattr(self.config, "KAFKA_CIRCUIT_THRESHOLD", 3),
             recovery_timeout=getattr(self.config, "KAFKA_CIRCUIT_TIMEOUT", 60),
         )
         self.redis_circuit = CircuitBreaker(
@@ -415,11 +415,38 @@ class ShardedMessageBus:
         )
 
         # Integration components
-        self.kafka_bridge = (
-            KafkaBridge(self, self.config, self.kafka_circuit)
-            if getattr(self.config, "USE_KAFKA", False)
-            else None
-        )
+        # Check both KAFKA_ENABLED and USE_KAFKA flags (prefer KAFKA_ENABLED)
+        kafka_enabled = getattr(self.config, "KAFKA_ENABLED", getattr(self.config, "USE_KAFKA", False))
+        
+        if kafka_enabled:
+            # Create KafkaBridgeConfig from settings
+            try:
+                from omnicore_engine.message_bus.integrations.kafka_bridge import KafkaBridgeConfig
+                
+                kafka_config = KafkaBridgeConfig(
+                    bootstrap_servers=getattr(self.config, "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+                    client_id=getattr(self.config, "KAFKA_CLIENT_ID", "omnicore-engine"),
+                    group_id=getattr(self.config, "KAFKA_GROUP_ID", None),
+                    retries=getattr(self.config, "KAFKA_MAX_RETRIES", 5),
+                    retry_backoff_ms=getattr(self.config, "KAFKA_RETRY_BACKOFF_MS", 100),
+                    request_timeout_ms=getattr(self.config, "KAFKA_CONNECTION_TIMEOUT_MS", 30000),
+                    enable_metrics=getattr(self.config, "KAFKA_ENABLE_METRICS", True),
+                )
+                self.kafka_bridge = KafkaBridge(kafka_config, self.kafka_circuit)
+                logger.info("Kafka bridge initialized with config")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Kafka bridge: {e}. Continuing without Kafka.", exc_info=True)
+                self.kafka_bridge = None
+                # Import and update metrics
+                try:
+                    from omnicore_engine.metrics import KAFKA_CONNECTION_FAILURES, KAFKA_FALLBACK_ACTIVATIONS
+                    KAFKA_CONNECTION_FAILURES.labels(reason="initialization_failed").inc()
+                    KAFKA_FALLBACK_ACTIVATIONS.inc()
+                except ImportError:
+                    pass
+        else:
+            self.kafka_bridge = None
+            logger.info("Kafka bridge disabled - using local queue only")
         self.redis_bridge = (
             RedisBridge(self, self.config, self.redis_circuit)
             if getattr(self.config, "USE_REDIS", False)
@@ -467,10 +494,12 @@ class ShardedMessageBus:
         self.dispatcher_tasks = []
         self._dispatchers_started = False  # Track if dispatchers have been started
         self._start_dispatchers()
-        if self.kafka_bridge:
-            self.kafka_bridge.start()
-        if self.redis_bridge:
-            self.redis_bridge.start()
+        
+        # Note: Kafka and Redis bridges have async start() methods.
+        # They should be started when first used, not during __init__.
+        # The bridge objects are created but not started yet.
+        # Actual connection will happen lazily on first publish/subscribe.
+        
         if self.guardian:
             self.guardian.start()
 
@@ -491,6 +520,88 @@ class ShardedMessageBus:
             use_kafka=self.kafka_bridge is not None,
             use_redis=self.redis_bridge is not None,
         )
+
+    async def _check_kafka_health(self) -> bool:
+        """
+        Check if Kafka is reachable before initializing producers.
+        
+        Returns:
+            bool: True if Kafka is healthy, False otherwise
+        """
+        # Import here to avoid circular dependency
+        try:
+            from omnicore_engine.metrics import (
+                KAFKA_CONNECTION_FAILURES,
+                KAFKA_HEALTH_CHECK_STATUS,
+            )
+        except ImportError:
+            logger.warning("Unable to import Kafka metrics")
+            KAFKA_CONNECTION_FAILURES = None
+            KAFKA_HEALTH_CHECK_STATUS = None
+        
+        # If Kafka is not enabled in config, return False
+        kafka_enabled = getattr(self.config, "KAFKA_ENABLED", False)
+        if not kafka_enabled:
+            logger.info("Kafka is disabled in configuration - using local queue only")
+            if KAFKA_HEALTH_CHECK_STATUS:
+                KAFKA_HEALTH_CHECK_STATUS.set(0)
+            return False
+        
+        # Get Kafka configuration
+        bootstrap_servers = getattr(self.config, "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+        connection_timeout = getattr(self.config, "KAFKA_CONNECTION_TIMEOUT_MS", 5000) / 1000  # Convert to seconds
+        
+        # Try to connect to Kafka
+        try:
+            # Use aiokafka to test connection
+            import socket
+            import asyncio
+            
+            # Parse bootstrap servers (could be comma-separated)
+            servers = bootstrap_servers.split(',')
+            for server in servers:
+                try:
+                    host, port = server.strip().rsplit(':', 1)
+                    port = int(port)
+                    
+                    # Try to establish TCP connection
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(connection_timeout)
+                    result = sock.connect_ex((host, port))
+                    sock.close()
+                    
+                    if result == 0:
+                        logger.info(f"Kafka health check passed for {server}")
+                        if KAFKA_HEALTH_CHECK_STATUS:
+                            KAFKA_HEALTH_CHECK_STATUS.set(1)
+                        return True
+                    else:
+                        logger.debug(f"Kafka connection failed for {server} (error code: {result})")
+                except (ValueError, socket.error) as e:
+                    logger.debug(f"Error checking Kafka server {server}: {e}")
+                    continue
+            
+            # All servers failed
+            logger.warning(
+                f"Kafka health check failed - no servers reachable at {bootstrap_servers}. "
+                "Continuing with local queue only."
+            )
+            if KAFKA_CONNECTION_FAILURES:
+                KAFKA_CONNECTION_FAILURES.labels(reason="health_check_failed").inc()
+            if KAFKA_HEALTH_CHECK_STATUS:
+                KAFKA_HEALTH_CHECK_STATUS.set(0)
+            return False
+            
+        except Exception as e:
+            logger.warning(
+                f"Kafka health check error: {e}. Continuing with local queue only.",
+                exc_info=True
+            )
+            if KAFKA_CONNECTION_FAILURES:
+                KAFKA_CONNECTION_FAILURES.labels(reason="health_check_error").inc()
+            if KAFKA_HEALTH_CHECK_STATUS:
+                KAFKA_HEALTH_CHECK_STATUS.set(0)
+            return False
 
     async def _ensure_dispatchers_started(self) -> None:
         """

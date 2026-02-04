@@ -340,6 +340,34 @@ class ServerConfig(BaseSettings):
         description="Redis connection URL"
     )
     
+    # Kafka Configuration
+    kafka_enabled: bool = Field(
+        default=False,
+        description="Enable Kafka message bus (set to false for local-only operation)"
+    )
+    kafka_bootstrap_servers: str = Field(
+        default="localhost:9092",
+        description="Kafka bootstrap servers (comma-separated list)"
+    )
+    kafka_max_retries: int = Field(
+        default=3,
+        description="Maximum number of Kafka connection retry attempts",
+        ge=0,
+        le=10
+    )
+    kafka_retry_backoff_ms: int = Field(
+        default=1000,
+        description="Base backoff time in milliseconds for Kafka retry attempts",
+        ge=100,
+        le=30000
+    )
+    kafka_connection_timeout_ms: int = Field(
+        default=5000,
+        description="Kafka connection timeout in milliseconds",
+        ge=1000,
+        le=60000
+    )
+    
     @field_validator("app_env")
     @classmethod
     def validate_env(cls, v: str) -> str:

@@ -223,25 +223,44 @@ def _load_presidio_engine() -> bool:
         # MEDIUM: Support multilingual PII detection for Spanish, Italian, Polish
         # Try with configured model (default: small), fallback to regex-only
         # Using smaller models reduces memory footprint and startup time
-        configuration = {
-            "nlp_engine_name": "spacy",
-            "models": [
-                {"lang_code": "en", "model_name": model_name},
-                # Add multilingual models if available
+        # Start with English and try to add multilingual models if available
+        models_config = [{"lang_code": "en", "model_name": model_name}]
+        supported_langs = ["en"]
+        
+        # Try to detect if multilingual spaCy models are available
+        try:
+            import spacy
+            # Check for available multilingual models
+            multilang_models = [
                 {"lang_code": "es", "model_name": "es_core_news_sm"},
                 {"lang_code": "it", "model_name": "it_core_news_sm"},
                 {"lang_code": "pl", "model_name": "pl_core_news_sm"},
-            ],
+            ]
+            for model_config in multilang_models:
+                try:
+                    # Try to load the model to verify it exists
+                    spacy.load(model_config["model_name"])
+                    models_config.append(model_config)
+                    supported_langs.append(model_config["lang_code"])
+                    logger.debug(f"Added multilingual support for {model_config['lang_code']}")
+                except OSError:
+                    # Model not available, skip it
+                    logger.debug(f"Skipping {model_config['lang_code']} - model not available")
+        except Exception as e:
+            logger.debug(f"Could not check for multilingual models: {e}")
+        
+        configuration = {
+            "nlp_engine_name": "spacy",
+            "models": models_config,
         }
 
         try:
             # Attempt to create NLP engine with configured model
             provider = NlpEngineProvider(nlp_configuration=configuration)
             nlp_engine = provider.create_engine()
-            # HIGH: Support multilingual PII detection (en, es, it, pl)
-            # This enables detection of Spanish NIF, Italian fiscal codes, Polish PESEL, etc.
+            # Only enable languages for which we have working models
             _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(
-                nlp_engine=nlp_engine, supported_languages=["en", "es", "it", "pl"]
+                nlp_engine=nlp_engine, supported_languages=supported_langs
             )
             _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
             _PRESIDIO_AVAILABLE = True
@@ -261,11 +280,18 @@ def _load_presidio_engine() -> bool:
                 - "Entity CARDINAL is not mapped"
                 - "entity MONEY is not mapped"
                 - "PERCENT is not mapped"
+                - "Recognizer not added to registry because language is not supported"
                 
                 Case-insensitive with word boundaries to prevent false positives.
                 """
-                # Use compiled regex pattern for O(1) matching instead of O(n*m) loop
-                return not _presidio_filter_pattern.search(record.getMessage())
+                msg = record.getMessage()
+                # Filter unmapped entity warnings
+                if _presidio_filter_pattern.search(msg):
+                    return False
+                # Filter unsupported language warnings for recognizers
+                if "not added to registry because language is not supported" in msg.lower():
+                    return False
+                return True
             
             presidio_logger.addFilter(presidio_log_filter)
             
