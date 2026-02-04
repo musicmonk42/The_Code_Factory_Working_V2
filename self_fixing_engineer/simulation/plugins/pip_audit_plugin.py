@@ -553,7 +553,7 @@ async def _get_cached_result(cache_key: str) -> Optional[Dict[str, Any]]:
     finally:
         try:
             if redis:
-                await redis.close()
+                await redis.aclose()
         except Exception:
             pass
     return None
@@ -577,7 +577,7 @@ async def _cache_scan_result(cache_key: str, result: Dict[str, Any]):
     finally:
         try:
             if redis:
-                await redis.close()
+                await redis.aclose()
         except Exception:
             pass
 

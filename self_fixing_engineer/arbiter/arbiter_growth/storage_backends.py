@@ -173,7 +173,7 @@ class SQLiteStorageBackend:
             await session.rollback()
             raise
         finally:
-            await session.close()
+            await session.aclose()
 
     @_wrap_exception("SQLite")
     async def start(self):
@@ -447,7 +447,7 @@ class RedisStreamsStorageBackend:
 
     @_wrap_exception("Redis")
     async def stop(self):
-        await self.redis.close()
+        await self.redis.aclose()
         logger.info("Redis backend connection closed.")
 
     async def __aenter__(self):

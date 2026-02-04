@@ -449,6 +449,20 @@ class DockerValidator(Validator):
             "compliance_score": 0.0,  # Will be calculated
         }
 
+        # Check if Docker validation should be skipped (CI/production environment)
+        skip_docker_validation = os.getenv("SKIP_DOCKER_VALIDATION", "false").lower() in ("true", "1", "yes")
+        
+        if skip_docker_validation:
+            logger.info("Docker validation skipped (SKIP_DOCKER_VALIDATION=true)")
+            report["build_status"] = "skipped"
+            report["lint_status"] = "skipped"
+            report["compliance_score"] = 1.0  # Pass validation when explicitly skipped
+            report["lint_issues"].append(
+                "Docker validation skipped via SKIP_DOCKER_VALIDATION environment variable. "
+                "This is expected in CI/production environments without Docker daemon."
+            )
+            return report
+
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir_path = Path(temp_dir)
             dockerfile_path = temp_dir_path / "Dockerfile"

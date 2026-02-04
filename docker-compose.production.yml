@@ -160,10 +160,10 @@ services:
       - LAZY_LOAD_ML=1  # Lazy load ML libraries to reduce memory usage
       
       # ============================================
-      # Audit Crypto Configuration
-      # Set AUDIT_CRYPTO_MODE="full" when secrets are properly configured
+      # Audit Crypto Configuration (SECURITY UPDATE)
+      # Set AUDIT_CRYPTO_MODE="software" for production security
       # ============================================
-      - AUDIT_CRYPTO_MODE=${AUDIT_CRYPTO_MODE:-disabled}
+      - AUDIT_CRYPTO_MODE=${AUDIT_CRYPTO_MODE:-software}  # Changed from "disabled" to "software"
       - AUDIT_CRYPTO_ALLOW_INIT_FAILURE=${AUDIT_CRYPTO_ALLOW_INIT_FAILURE:-1}
       - AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64=${AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64:-}
       

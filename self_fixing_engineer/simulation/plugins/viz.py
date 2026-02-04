@@ -691,7 +691,7 @@ async def _get_cached_plot_data(cache_key: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Failed to retrieve from Redis cache: {e}", exc_info=True)
     finally:
         if redis:
-            await redis.close()
+            await redis.aclose()
 
     if PROMETHEUS_AVAILABLE:
         PLOT_CACHE_MISSES.inc()
@@ -716,7 +716,7 @@ async def _cache_plot_data(cache_key: str, data: Dict[str, Any]):
         logger.error(f"Failed to set Redis cache: {e}", exc_info=True)
     finally:
         if redis:
-            await redis.close()
+            await redis.aclose()
 
 
 # --- Batch Export API ---

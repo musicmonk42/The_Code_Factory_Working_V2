@@ -180,7 +180,7 @@ class CacheManager:
 
     async def close(self):
         if self.redis:
-            await self.redis.close()
+            await self.redis.aclose()
 
 
 # --- Rate Limiter ---
@@ -242,7 +242,7 @@ class DistributedRateLimiter:
 
     async def close(self):
         if self.redis:
-            await self.redis.close()
+            await self.redis.aclose()
 
 
 # --- Circuit Breaker ---
@@ -757,12 +757,12 @@ class LLMClient:
             return False
 
     async def close(self):
-        await self.cache.close()
-        await self.rate_limiter.close()
+        await self.cache.aclose()
+        await self.rate_limiter.aclose()
         for name, provider in self.manager.registry.items():
             if hasattr(provider, "close"):
                 try:
-                    await provider.close()
+                    await provider.aclose()
                 except Exception as e:
                     logger.error(f"Error closing provider {name}: {e}", exc_info=True)
 
@@ -928,7 +928,7 @@ async def call_ensemble_api(
 async def shutdown_llm_client():
     global _async_client
     if _async_client:
-        await _async_client.close()
+        await _async_client.aclose()
         _async_client = None
 
 

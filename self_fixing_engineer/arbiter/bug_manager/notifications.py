@@ -539,11 +539,11 @@ class NotificationService:
     async def shutdown(self):
         """Gracefully shuts down the service, closing all open connections."""
         if self._session and not self._session.closed:
-            await self._session.close()
+            await self._session.aclose()
         if self.circuit_breaker.redis:
-            await self.circuit_breaker.redis.close()
+            await self.circuit_breaker.redis.aclose()
         if self.rate_limiter.redis:
-            await self.rate_limiter.redis.close()
+            await self.rate_limiter.redis.aclose()
 
     async def _check_and_escalate(self, channel: str, message: str) -> None:
         """
