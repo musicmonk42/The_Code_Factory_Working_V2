@@ -274,6 +274,10 @@ async def test_stop_when_not_started(set_env_redis_url):
 @pytest.mark.asyncio
 async def test_concurrent_check_and_set(idempotency_store, mock_redis):
     """Tests that concurrent operations are handled correctly."""
+    # FIX: Capture baseline before test
+    false_before = IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get()
+    true_before = IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get()
+    
     # Simulate the first call succeeding and subsequent calls failing
     mock_redis.set.side_effect = [True] + [False] * 49
 
@@ -287,13 +291,9 @@ async def test_concurrent_check_and_set(idempotency_store, mock_redis):
     assert results.count(True) == 1
     assert results.count(False) == 49
 
-    # Verify metrics reflect the outcome
-    assert (
-        IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() == 1
-    )
-    assert (
-        IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get() == 49
-    )
+    # FIX: Assert on deltas, not absolute values
+    assert IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() - false_before == 1
+    assert IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get() - true_before == 49
     assert mock_redis.set.call_count == 50
 
 
