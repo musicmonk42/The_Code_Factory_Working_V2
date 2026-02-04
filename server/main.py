@@ -1148,11 +1148,11 @@ async def readiness_check(response: Response) -> ReadinessResponse:
     if redis_url:
         try:
             import redis.asyncio as aioredis
-            # Try to connect with short timeout
+            # Try to connect with timeout (1s for readiness check balance between speed and reliability)
             r = aioredis.Redis.from_url(
                 redis_url,
-                socket_connect_timeout=0.5,
-                socket_timeout=0.5
+                socket_connect_timeout=1.0,
+                socket_timeout=1.0
             )
             await r.ping()
             checks["redis"] = "connected"
@@ -1161,10 +1161,9 @@ async def readiness_check(response: Response) -> ReadinessResponse:
             checks["redis"] = "client_not_installed"
             # Don't fail readiness if Redis client not installed - it's optional
         except Exception as e:
-            checks["redis"] = f"error: {type(e).__name__}"
-            # Redis failure is warning-level, not blocking for readiness
-            # (some deployments run without Redis)
-            logger.warning(f"Redis health check failed: {e}")
+            # Redis is optional - show status but don't fail readiness
+            checks["redis"] = f"unavailable: {type(e).__name__}"
+            logger.warning(f"Redis health check failed (optional): {e}")
     else:
         checks["redis"] = "not_configured"
     
@@ -1183,10 +1182,19 @@ async def readiness_check(response: Response) -> ReadinessResponse:
             elif database_url.startswith("sqlite://"):
                 async_db_url = database_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
             
+            # Configure connection args with timeout based on database type
+            connect_args = {}
+            if "sqlite" in async_db_url:
+                connect_args = {"timeout": 2}
+            elif "asyncpg" in async_db_url:
+                # asyncpg uses 'command_timeout' for query timeout
+                connect_args = {"command_timeout": 2}
+            
             engine = create_async_engine(
                 async_db_url,
                 pool_pre_ping=True,
-                connect_args={"timeout": 1} if "sqlite" in async_db_url else {}
+                connect_args=connect_args,
+                pool_timeout=2,  # Time to wait for connection from pool
             )
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
@@ -1195,8 +1203,9 @@ async def readiness_check(response: Response) -> ReadinessResponse:
         except ImportError:
             checks["database"] = "driver_not_installed"
         except Exception as e:
-            checks["database"] = f"error: {type(e).__name__}"
-            logger.warning(f"Database health check failed: {e}")
+            # Database is optional - show status but don't fail readiness
+            checks["database"] = f"unavailable: {type(e).__name__}"
+            logger.warning(f"Database health check failed (optional): {e}")
     else:
         checks["database"] = "not_configured"
     

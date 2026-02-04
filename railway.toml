@@ -119,6 +119,13 @@ ENABLE_KAFKA = "0"
 # === CORS Configuration ===
 # CRITICAL: Set ALLOWED_ORIGINS for browser clients!
 # Without this, all browser requests will fail with CORS errors
+# 
+# DEPLOYMENT CHECKLIST: 
+# 1. Set this to your frontend domain(s) in Railway dashboard under Variables
+# 2. Example: ALLOWED_ORIGINS=https://your-app.railway.app,https://yourdomain.com
+# 3. Server-to-server/curl requests work without this setting
+#
+# Uncomment and set in Railway UI (not here, since this is a template):
 # ALLOWED_ORIGINS = "https://your-frontend.railway.app,https://your-custom-domain.com"
 
 # === Kafka Configuration (disabled by default - uses Redis Streams instead) ===
