@@ -415,7 +415,7 @@ class SphinxDocGenerator:
                 continue
 
             if in_code_block:
-                # RST requires 4-space indentation for code blocks (or 3, but 4 is standard)
+                # RST requires 4-space indentation for code blocks (standard)
                 # Handle already-indented lines to avoid double-indentation
                 if line:
                     rst_content += f"    {line}\n"
@@ -998,7 +998,7 @@ class DocgenAgent:
                 await self.sphinx_generator.build_sphinx_docs([rst_path])
             elif not is_valid:
                 logger.warning(
-                    f"Skipping Sphinx HTML build for {doc_type} due to validation errors"
+                    f"Skipping Sphinx HTML build for {doc_type} due to RST syntax validation failure"
                 )
 
             return rst_content
