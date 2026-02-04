@@ -617,16 +617,15 @@ async def list_job_files(job_id: str) -> JobFilesResponse:
     )
     if files:
         # Log first few files for debugging
-    # Log first few files for debugging
         sample_files = [f.path for f in files[:5]]
         logger.info(f"[FileDiscovery] Sample files: {', '.join(sample_files)}")
     
     # Provide download URL if job has files (don't gate on COMPLETED status)
-    # This allows progressive downloads during long pipelines
+    # This allows progressive downloads during long pipelines.
+    # Note: The download endpoint itself still enforces COMPLETED status check for safety.
     download_url = None
     if files:
         download_url = f"/api/jobs/{job_id}/download"
-        # Note: The download endpoint itself still enforces COMPLETED status check
     
     return JobFilesResponse(
         job_id=job_id,

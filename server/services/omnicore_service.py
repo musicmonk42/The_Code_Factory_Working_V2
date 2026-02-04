@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 import os
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -2172,8 +2173,6 @@ class OmniCoreService:
             base_dir: Base directory for computing relative paths
         """
         try:
-            import zipfile
-            
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 for file_path in files:
                     try:
@@ -2225,11 +2224,12 @@ class OmniCoreService:
                 import httpx
                 
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    await client.post(
+                    response = await client.post(
                         f"{sfe_url}/api/jobs",
                         json={"job_id": job_id, "source": "omnicore", "output_path": output_path}
                     )
-                logger.info(f"✓ Dispatched job {job_id} to SFE via HTTP fallback")
+                    response.raise_for_status()  # Raise exception for 4xx/5xx responses
+                logger.info(f"✓ Dispatched job {job_id} to SFE via HTTP fallback (status: {response.status_code})")
             else:
                 logger.info(f"ℹ SFE dispatch skipped for job {job_id} (no Kafka or SFE_URL configured)")
                 

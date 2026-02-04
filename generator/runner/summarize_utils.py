@@ -233,9 +233,10 @@ async def llm_summarize(
             return summary.strip()
 
         except ValueError as e:
-            # Model not registered - try next model
-            if "not registered" in str(e) and current_model != models_to_try[-1]:
-                logger.warning(f"Model {current_model} not registered, trying next model")
+            # Model not registered or validation error - try next model
+            error_msg = str(e).lower()
+            if ("not registered" in error_msg or "model" in error_msg) and current_model != models_to_try[-1]:
+                logger.warning(f"Model {current_model} unavailable ({e}), trying next model")
                 continue
             # Last model also failed - fall through to final fallback
             logger.error(f"All LLM models failed: {e}")
