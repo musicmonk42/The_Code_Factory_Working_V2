@@ -256,6 +256,12 @@ class TestMultiVectorDBManager:
 
         await manager.add_files("codebase", files)
 
+        # Verify get was called to check for existing IDs
+        manager.collections["codebase"].get.assert_called_once()
+        call_args = manager.collections["codebase"].get.call_args
+        assert "ids" in call_args[1]
+        assert existing_id in call_args[1]["ids"]
+        
         # Verify add was NOT called since file already exists
         manager.collections["codebase"].add.assert_not_called()
         

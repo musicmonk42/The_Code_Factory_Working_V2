@@ -185,8 +185,9 @@ class MultiVectorDBManager:
                 )
                 if result and 'ids' in result:
                     existing_ids = set(result['ids'])
-            except Exception:
-                pass  # If query fails, proceed with add
+            except Exception as query_error:
+                # If query fails (e.g., collection not ready), log and proceed with add
+                logger.debug(f"Could not query existing IDs in {collection_name}: {query_error}")
             
             # Filter out files with existing IDs
             new_ids = []
