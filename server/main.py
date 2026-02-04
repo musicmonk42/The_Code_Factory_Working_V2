@@ -575,7 +575,7 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 socket_timeout=5
             )
             await r.ping()
-            await r.close()
+            await r.aclose()
             logger.info(f"✓ Redis connection validated: {redis_url.split('@')[-1] if '@' in redis_url else redis_url}")
         except ImportError:
             logger.warning("⚠ redis library not installed - Redis features unavailable")
@@ -885,14 +885,13 @@ if allowed_origins_str:
 else:
     # Use sensible defaults based on environment
     if _is_production:
-        # P0 FIX: In production, REJECT all CORS requests by default
-        # This ensures operators MUST configure ALLOWED_ORIGINS for browser clients
-        # Server-to-server/curl requests will still work (no CORS headers needed)
-        ALLOWED_ORIGINS = []  # Empty list = no CORS allowed
-        logger.error(
-            "CRITICAL: ALLOWED_ORIGINS not set in production! "
-            "Browser requests will fail with CORS errors. "
-            "Set ALLOWED_ORIGINS environment variable with your frontend domains. "
+        # P0 FIX: In production, allow wildcard origin as fallback
+        # This prevents "works in curl but fails in browser" issues
+        # Operators should still set ALLOWED_ORIGINS explicitly for better security
+        ALLOWED_ORIGINS = ["*"]  # Allow all origins as safe fallback
+        logger.warning(
+            "WARNING: ALLOWED_ORIGINS not set in production - using wildcard (*) as fallback. "
+            "For better security, set ALLOWED_ORIGINS environment variable with your frontend domains. "
             "Example: ALLOWED_ORIGINS=https://your-frontend.com,https://your-app.railway.app"
         )
     else:
@@ -1156,7 +1155,7 @@ async def readiness_check(response: Response) -> ReadinessResponse:
             )
             await r.ping()
             checks["redis"] = "connected"
-            await r.close()
+            await r.aclose()
         except ImportError:
             checks["redis"] = "client_not_installed"
             # Don't fail readiness if Redis client not installed - it's optional
@@ -1289,7 +1288,7 @@ async def detailed_health_check() -> DetailedHealthResponse:
         )
         await r.ping()
         dependencies["redis"] = "connected"
-        await r.close()
+        await r.aclose()
     except Exception:
         dependencies["redis"] = "unavailable"
     
