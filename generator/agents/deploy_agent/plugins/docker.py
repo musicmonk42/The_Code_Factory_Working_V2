@@ -201,6 +201,9 @@ class DockerPlugin(TargetPlugin):
             # Generate language-specific Dockerfile
             dockerfile = self._generate_dockerfile(language, framework, target_files, context)
             
+            # ✅ FIX: Post-process Dockerfile to remove invalid syntax
+            dockerfile = self._fix_dockerfile_syntax(dockerfile)
+            
             # Generate docker-compose configuration
             docker_compose = self._generate_compose(language, framework, context)
             
@@ -249,6 +252,45 @@ class DockerPlugin(TargetPlugin):
                 "error_type": type(e).__name__,
                 "message": f"Docker configuration generation failed: {str(e)}"
             }
+    
+    def _fix_dockerfile_syntax(self, dockerfile_content: str) -> str:
+        """
+        Remove invalid syntax from generated Dockerfile.
+        
+        Fixes common issues:
+        - Removes shebang lines (#!/bin/bash, etc.)
+        - Ensures it starts with FROM instruction
+        - Removes empty bash-style comments
+        
+        Args:
+            dockerfile_content: Raw Dockerfile content
+            
+        Returns:
+            Fixed Dockerfile content
+        """
+        lines = dockerfile_content.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            stripped = line.strip()
+            # Skip shebang lines
+            if stripped.startswith('#!'):
+                logger.debug("Removing shebang line: %s", line)
+                continue
+            # Skip empty bash-style comments (just a # with nothing)
+            if stripped == '#':
+                continue
+            fixed_lines.append(line)
+        
+        result = '\n'.join(fixed_lines)
+        
+        # Ensure it starts with FROM
+        if not result.strip().startswith('FROM'):
+            logger.warning("Dockerfile missing FROM instruction, prepending default")
+            # Prepend a default FROM if missing
+            result = 'FROM python:3.11-slim\n' + result
+        
+        return result
     
     def _generate_dockerfile(
         self,

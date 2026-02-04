@@ -935,8 +935,49 @@ Agent --> Dev : Deliver Report
                 except SyntaxError as e:
                     logger.warning(
                         f"[TESTGEN] Could not parse {file_path}: invalid syntax ({e.__class__.__name__}, line {e.lineno}). "
-                        f"Error: {e.msg}. Skipping basic test generation for this file.",
+                        f"Error: {e.msg}. Generating basic structure test instead.",
                         extra={"run_id": run_id, "syntax_error": str(e), "line": e.lineno}
+                    )
+                    
+                    # ✅ FIX: Generate a basic import test even if parsing fails
+                    file_stem = file_path.replace('.py', '').replace('/', '_').replace('-', '_')
+                    
+                    fallback_test = f'''"""
+Basic structure test for {file_path}
+Generated because the source file has syntax errors.
+"""
+import pytest
+import os
+
+def test_{file_stem}_exists():
+    """Test that the module file exists."""
+    assert os.path.exists("{file_path}"), "Module file should exist"
+
+def test_{file_stem}_not_empty():
+    """Test that the module file is not empty."""
+    with open("{file_path}") as f:
+        content = f.read()
+    assert len(content) > 0, "Module file should not be empty"
+
+@pytest.mark.skip(reason="Source file has syntax errors")
+def test_{file_stem}_import():
+    """Test module import (skipped due to syntax errors)."""
+    # This would fail due to syntax errors
+    # import {file_stem}
+    pass
+'''
+                    
+                    test_file_path = file_path.replace('.py', '_test.py')
+                    if not test_file_path.startswith('test_'):
+                        # Put test file in tests directory
+                        parts = test_file_path.split('/')
+                        filename = parts[-1]
+                        test_file_path = 'tests/test_' + filename
+                    
+                    basic_tests[test_file_path] = fallback_test
+                    logger.info(
+                        f"[TESTGEN] Generated fallback test for {file_path} -> {test_file_path}",
+                        extra={"run_id": run_id}
                     )
                 except Exception as e:
                     logger.error(

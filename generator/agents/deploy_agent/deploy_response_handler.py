@@ -685,11 +685,28 @@ class DockerfileHandler(FormatHandler):
         """Normalizes Dockerfile raw string into a list of cleaned lines."""
         if not raw or not isinstance(raw, str):
             raise ValueError("Invalid raw Dockerfile content provided.")
-        return [
-            line.strip()
-            for line in raw.splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
+        
+        # ✅ FIX: Remove shebang lines before processing
+        lines = []
+        for line in raw.splitlines():
+            stripped = line.strip()
+            # Skip shebang lines (#!/bin/bash, etc.)
+            if stripped.startswith('#!'):
+                continue
+            # Skip comment lines
+            if stripped.startswith("#"):
+                continue
+            # Keep non-empty lines
+            if stripped:
+                lines.append(stripped)
+        
+        # Ensure first non-comment line is FROM instruction
+        if lines and not lines[0].upper().startswith('FROM'):
+            # If missing FROM, prepend a default
+            logger.warning("Dockerfile missing FROM instruction, prepending default")
+            lines.insert(0, 'FROM python:3.11-slim')
+        
+        return lines
 
     def convert(self, data: List[str], to_format: str) -> str:
         """Converts Dockerfile lines to a string or YAML representation."""

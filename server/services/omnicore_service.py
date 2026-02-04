@@ -1717,8 +1717,33 @@ class OmniCoreService:
                     doc_filename = f"{doc_type}.md"
                 
                 doc_path = output_dir / doc_filename
+                
+                # ✅ FIX: Handle both dict and string responses
                 async with aiofiles.open(doc_path, "w", encoding="utf-8") as f:
-                    await f.write(docs_output)
+                    if isinstance(docs_output, dict):
+                        # If dict, extract content or serialize to JSON
+                        if 'content' in docs_output:
+                            # Agent returned structured response with content field
+                            await f.write(docs_output['content'])
+                        elif 'markdown' in docs_output:
+                            # Agent returned structured response with markdown field
+                            await f.write(docs_output['markdown'])
+                        else:
+                            # Fallback: serialize entire dict as formatted JSON
+                            await f.write(json.dumps(docs_output, indent=2))
+                    else:
+                        # Agent returned string directly
+                        await f.write(str(docs_output))
+                
+                logger.info(
+                    f"Documentation written to {doc_path}",
+                    extra={
+                        "job_id": job_id,
+                        "doc_type": doc_type,
+                        "output_type": type(docs_output).__name__,
+                        "file_size": doc_path.stat().st_size if doc_path.exists() else 0
+                    }
+                )
                 
                 # [FIX] Add error handling for path resolution
                 try:
