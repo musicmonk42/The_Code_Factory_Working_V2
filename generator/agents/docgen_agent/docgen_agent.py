@@ -1145,12 +1145,11 @@ class DocgenAgent:
                         )
                         ensemble_summary = await ensemble_summarizers(
                             text=doc_content_str,
-                            summarizers=[
+                            providers=[
                                 "doc_critique",
                                 "default_summary",
-                            ],  # Use custom + built-in
+                            ],  # Use custom + built-in (fixed parameter name)
                             max_length=300,
-                            llm_model=llm_model,
                         )
                         logger.info(
                             "Generated documentation summaries.", extra=log_extra

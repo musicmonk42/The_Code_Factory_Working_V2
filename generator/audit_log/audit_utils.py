@@ -63,12 +63,20 @@ try:
     PRESIDIO_AVAILABLE = True
     
     # FIX: Configure Presidio to ignore unwanted entity types that cause log spam
-    # (CARDINAL, ORDINAL, WORK_OF_ART, PRODUCT)
+    # (CARDINAL, ORDINAL, WORK_OF_ART, PRODUCT, FAC, PERCENT, MONEY)
     configuration = {
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
         "ner_model_configuration": {
-            "labels_to_ignore": ["CARDINAL", "ORDINAL", "WORK_OF_ART", "PRODUCT"]
+            "labels_to_ignore": [
+                "CARDINAL",      # Numbers like "1", "two", "100"
+                "ORDINAL",       # Ordinals like "first", "second"
+                "WORK_OF_ART",   # Titles of books, songs, etc.
+                "PRODUCT",       # Product names
+                "FAC",           # Facilities like buildings, airports
+                "PERCENT",       # Percentages
+                "MONEY",         # Monetary values
+            ]
         }
     }
     
