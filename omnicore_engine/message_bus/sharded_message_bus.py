@@ -417,11 +417,36 @@ class ShardedMessageBus:
         # Integration components
         # Check both KAFKA_ENABLED and USE_KAFKA flags (prefer KAFKA_ENABLED)
         kafka_enabled = getattr(self.config, "KAFKA_ENABLED", getattr(self.config, "USE_KAFKA", False))
-        self.kafka_bridge = (
-            KafkaBridge(self, self.config, self.kafka_circuit)
-            if kafka_enabled
-            else None
-        )
+        
+        if kafka_enabled:
+            # Create KafkaBridgeConfig from settings
+            try:
+                from omnicore_engine.message_bus.integrations.kafka_bridge import KafkaBridgeConfig
+                
+                kafka_config = KafkaBridgeConfig(
+                    bootstrap_servers=getattr(self.config, "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+                    client_id=getattr(self.config, "KAFKA_CLIENT_ID", "omnicore-engine"),
+                    group_id=getattr(self.config, "KAFKA_GROUP_ID", None),
+                    retries=getattr(self.config, "KAFKA_MAX_RETRIES", 5),
+                    retry_backoff_ms=getattr(self.config, "KAFKA_RETRY_BACKOFF_MS", 100),
+                    request_timeout_ms=getattr(self.config, "KAFKA_CONNECTION_TIMEOUT_MS", 30000),
+                    enable_metrics=getattr(self.config, "KAFKA_ENABLE_METRICS", True),
+                )
+                self.kafka_bridge = KafkaBridge(kafka_config, self.kafka_circuit)
+                logger.info("Kafka bridge initialized with config")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Kafka bridge: {e}. Continuing without Kafka.", exc_info=True)
+                self.kafka_bridge = None
+                # Import and update metrics
+                try:
+                    from omnicore_engine.metrics import KAFKA_CONNECTION_FAILURES, KAFKA_FALLBACK_ACTIVATIONS
+                    KAFKA_CONNECTION_FAILURES.labels(reason="initialization_failed").inc()
+                    KAFKA_FALLBACK_ACTIVATIONS.inc()
+                except ImportError:
+                    pass
+        else:
+            self.kafka_bridge = None
+            logger.info("Kafka bridge disabled - using local queue only")
         self.redis_bridge = (
             RedisBridge(self, self.config, self.redis_circuit)
             if getattr(self.config, "USE_REDIS", False)
@@ -469,10 +494,12 @@ class ShardedMessageBus:
         self.dispatcher_tasks = []
         self._dispatchers_started = False  # Track if dispatchers have been started
         self._start_dispatchers()
-        if self.kafka_bridge:
-            self.kafka_bridge.start()
-        if self.redis_bridge:
-            self.redis_bridge.start()
+        
+        # Note: Kafka and Redis bridges have async start() methods.
+        # They should be started when first used, not during __init__.
+        # The bridge objects are created but not started yet.
+        # Actual connection will happen lazily on first publish/subscribe.
+        
         if self.guardian:
             self.guardian.start()
 
