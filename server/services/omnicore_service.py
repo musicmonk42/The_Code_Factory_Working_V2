@@ -1181,7 +1181,9 @@ class OmniCoreService:
                     job = jobs_db[job_id]
                     # Store relative paths from uploads/{job_id}/ directory
                     try:
-                        job_base = Path(f"./uploads/{job_id}")
+                        # Use upload_dir from config if available, otherwise default to ./uploads
+                        upload_dir = self.agent_config.upload_dir if self.agent_config else Path("./uploads")
+                        job_base = upload_dir / job_id
                         relative_files = []
                         for file_path_str in generated_files:
                             file_path = Path(file_path_str)

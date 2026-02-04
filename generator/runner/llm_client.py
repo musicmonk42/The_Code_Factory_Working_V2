@@ -78,6 +78,10 @@ if "TOKENIZERS_PARALLELISM" not in os.environ:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logger.debug("Set TOKENIZERS_PARALLELISM=false to prevent fork warnings")
 
+# Constants for retry logic
+DEFAULT_MAX_RETRIES = 3
+BASE_BACKOFF_SECONDS = 1.0
+
 
 # --- Secrets Management ---
 class SecretsManager:
@@ -437,7 +441,7 @@ class LLMClient:
         provider: Optional[
             Literal["openai", "claude", "grok", "gemini", "local"]
         ] = None,
-        max_retries: int = 3,
+        max_retries: int = DEFAULT_MAX_RETRIES,
         **kwargs,
     ) -> Dict[str, Any] | AsyncGenerator[str, None]:
         # Ensure initialization has started (lazy initialization for backward compatibility)
@@ -554,7 +558,7 @@ class LLMClient:
                 
                 # Retry with exponential backoff
                 if attempt < max_retries - 1:
-                    backoff_time = (2 ** attempt) * 1.0  # 1s, 2s, 4s
+                    backoff_time = (2 ** attempt) * BASE_BACKOFF_SECONDS
                     logger.warning(
                         f"LLM call failed (attempt {attempt + 1}/{max_retries}), "
                         f"retrying in {backoff_time}s: {e}"
