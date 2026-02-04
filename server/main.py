@@ -589,6 +589,56 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     logger.info("Platform initialization complete")
     logger.info("=" * 80)
     
+    # Validate Kafka configuration
+    try:
+        from server.services.dispatch_service import get_kafka_health_status
+        kafka_status = get_kafka_health_status()
+        
+        if kafka_status["enabled"]:
+            logger.info("=" * 80)
+            logger.info("VALIDATING KAFKA CONFIGURATION")
+            logger.info("=" * 80)
+            
+            bootstrap_servers = kafka_status.get("bootstrap_servers", "")
+            
+            # Check for localhost misconfiguration
+            if "localhost" in bootstrap_servers or "127.0.0.1" in bootstrap_servers:
+                logger.warning(
+                    f"⚠️  Kafka configured with localhost ({bootstrap_servers}). "
+                    "This will fail in containerized environments. "
+                    "Use service name (e.g., 'kafka:9092') or external URL."
+                )
+            
+            # Test connectivity with quick timeout
+            try:
+                # Try importing kafka-python
+                from kafka import KafkaProducer
+                
+                logger.info(f"Testing Kafka connectivity to {bootstrap_servers}...")
+                producer = KafkaProducer(
+                    bootstrap_servers=bootstrap_servers.split(","),
+                    request_timeout_ms=5000,
+                    api_version_auto_timeout_ms=3000,
+                )
+                producer.close()
+                logger.info(f"✓ Kafka connectivity validated: {bootstrap_servers}")
+                
+            except ImportError:
+                logger.warning(
+                    "kafka-python not installed. Kafka dispatch will not work. "
+                    "Install with: pip install kafka-python"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"❌ Kafka connectivity test failed: {e}. "
+                    "Continuing without Kafka (fallback dispatch will be used)"
+                )
+        else:
+            logger.info("Kafka is disabled (KAFKA_ENABLED=false)")
+            
+    except Exception as e:
+        logger.warning(f"Error during Kafka validation: {e}", exc_info=True)
+    
     # HIGH: Start periodic audit flush task now that event loop is running
     try:
         from server.utils.omnicore import get_omnicore_service
@@ -1137,6 +1187,23 @@ async def detailed_health_check() -> DetailedHealthResponse:
         dependencies["presidio"] = "installed"
     except ImportError:
         dependencies["presidio"] = "not_installed"
+    
+    # Check Kafka
+    try:
+        from server.services.dispatch_service import get_kafka_health_status
+        kafka_status = get_kafka_health_status()
+        
+        if kafka_status["enabled"]:
+            dependencies["kafka"] = {
+                "status": kafka_status["status"],
+                "bootstrap_servers": kafka_status["bootstrap_servers"],
+                "circuit_breaker_open": kafka_status.get("circuit_breaker_open", False),
+                "message": kafka_status.get("message", "")
+            }
+        else:
+            dependencies["kafka"] = "disabled"
+    except Exception as e:
+        dependencies["kafka"] = f"error: {str(e)}"
     
     # Check optional features
     optional_features = {}

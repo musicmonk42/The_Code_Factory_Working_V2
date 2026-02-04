@@ -29,6 +29,8 @@ from server.schemas import (
     TestgenRequest,
 )
 from server.services import GeneratorService
+from server.services.job_finalization import finalize_job_success, finalize_job_failure
+from server.services.dispatch_service import dispatch_job_completion
 from server.storage import jobs_db
 
 logger = logging.getLogger(__name__)
@@ -191,126 +193,48 @@ async def _trigger_pipeline_background(
         
         logger.info(f"[Pipeline] Full pipeline completed for job {job_id}: {result}")
         
-        # Step 3: Update job status based on pipeline result with graceful degradation
+        # Step 3: Finalize job immediately (CRITICAL - must happen before process exit)
+        # This ensures job status reaches SUCCESS and artifacts are persisted
         pipeline_status = result.get("status", "unknown") if result else "unknown"
         stages_completed = result.get("stages_completed", []) if result else []
         
-        # NEW: Always set to COMPLETED if ANY code was generated (codegen stage succeeded)
-        # This enables partial downloads and graceful degradation
+        # Check if ANY code was generated (codegen stage succeeded)
         if "codegen" in stages_completed or pipeline_status == "completed":
-            job.status = JobStatus.COMPLETED
-            job.current_stage = JobStage.COMPLETED
-            job.completed_at = datetime.now(timezone.utc)
-            job.updated_at = datetime.now(timezone.utc)
+            # SUCCESS: Finalize with success status
+            logger.info(f"[Pipeline] Finalizing successful job {job_id}")
             
-            # Mark as partial completion if pipeline didn't fully complete
-            is_partial = pipeline_status != "completed"
-            job.metadata["partial_completion"] = is_partial
-            job.metadata["completed_stages"] = stages_completed
+            # Call finalization service to persist status and manifest
+            finalized = await finalize_job_success(job_id, result)
             
-            # Store pipeline results in metadata
-            if result and isinstance(result, dict):
-                output_path = result.get("output_path")
-                if output_path:
-                    job.metadata["output_path"] = output_path
-                if result.get("message"):
-                    job.metadata["pipeline_message"] = result.get("message")
-            
-            # Scan job directory for generated output files
-            from pathlib import Path
-            job_dir = Path(f"./uploads/{job_id}")
-            if job_dir.exists():
-                output_files = []
-                for file_path in job_dir.rglob('*'):
-                    if file_path.is_file():
-                        # Store relative path from job directory
-                        rel_path = str(file_path.relative_to(job_dir))
-                        output_files.append(rel_path)
-                job.output_files = output_files
-                logger.info(
-                    f"[FileDiscovery] Found {len(output_files)} output files for job {job_id} in {job_dir}"
-                )
-                if output_files:
-                    # Log first few files for debugging
-                    sample_files = output_files[:5]
-                    logger.info(f"[FileDiscovery] Sample files: {', '.join(sample_files)}")
+            if finalized:
+                # Dispatch completion event to downstream systems
+                job_data = {
+                    "status": JobStatus.COMPLETED,
+                    "output_files": jobs_db[job_id].output_files,
+                    "completed_at": jobs_db[job_id].completed_at.isoformat() if jobs_db[job_id].completed_at else None,
+                }
+                await dispatch_job_completion(job_id, job_data)
+                
+                logger.info(f"[Pipeline] Job {job_id} finalized and dispatched successfully")
             else:
-                logger.warning(
-                    f"[FileDiscovery] Job directory {job_dir} does not exist - no output files found"
-                )
-            
-            job.metadata["pipeline_completed_at"] = datetime.now(timezone.utc).isoformat()
-            
-            if is_partial:
-                logger.info(
-                    f"[Pipeline] Job {job_id} marked as COMPLETED with partial results "
-                    f"(stages: {', '.join(stages_completed)})"
-                )
-            else:
-                logger.info(f"[Pipeline] Job {job_id} marked as COMPLETED successfully")
+                logger.error(f"[Pipeline] Failed to finalize job {job_id}")
             
         else:
-            # No code generated at all - mark as failed
-            job.status = JobStatus.FAILED
-            job.updated_at = datetime.now(timezone.utc)
-            job.metadata["error"] = result.get("message", "Code generation failed - no code produced")
-            job.metadata["stages_completed"] = stages_completed
+            # FAILURE: No code generated at all
             logger.warning(
-                f"[Pipeline] Job {job_id} marked as FAILED: no code was generated "
+                f"[Pipeline] Job {job_id} failed: no code was generated "
                 f"(completed stages: {', '.join(stages_completed) if stages_completed else 'none'})"
             )
+            
+            error = Exception(result.get("message", "Code generation failed - no code produced"))
+            await finalize_job_failure(job_id, error)
             
     except Exception as e:
         logger.error(f"[Pipeline] Critical error for job {job_id}: {e}", exc_info=True)
         
-        # Update job status - try to mark as COMPLETED if files exist
+        # Finalize job as failure
         if job_id in jobs_db:
-            job = jobs_db[job_id]
-            
-            # Check if code files were generated before the error
-            from pathlib import Path
-            job_dir = Path(f"./uploads/{job_id}")
-            has_code_files = False
-            
-            if job_dir.exists():
-                # Check for Python, JavaScript, TypeScript, Java, etc. code files
-                code_extensions = ['.py', '.js', '.ts', '.tsx', '.jsx', '.java', '.go', '.rs', '.cpp', '.c', '.h']
-                for ext in code_extensions:
-                    if any(job_dir.rglob(f'*{ext}')):
-                        has_code_files = True
-                        break
-            
-            if has_code_files:
-                # Mark as COMPLETED with partial results
-                job.status = JobStatus.COMPLETED
-                job.current_stage = JobStage.COMPLETED
-                job.completed_at = datetime.now(timezone.utc)
-                job.updated_at = datetime.now(timezone.utc)
-                job.metadata["partial_completion"] = True
-                job.metadata["error"] = str(e)
-                job.metadata["error_type"] = type(e).__name__
-                job.metadata["pipeline_failed_at"] = datetime.now(timezone.utc).isoformat()
-                
-                # Scan for output files
-                output_files = []
-                for file_path in job_dir.rglob('*'):
-                    if file_path.is_file():
-                        rel_path = str(file_path.relative_to(job_dir))
-                        output_files.append(rel_path)
-                job.output_files = output_files
-                
-                logger.info(
-                    f"[Pipeline] Job {job_id} marked as COMPLETED despite error - "
-                    f"code files were generated ({len(output_files)} files)"
-                )
-            else:
-                # No code generated - mark as failed
-                job.status = JobStatus.FAILED
-                job.updated_at = datetime.now(timezone.utc)
-                job.metadata["error"] = str(e)
-                job.metadata["error_type"] = type(e).__name__
-                job.metadata["pipeline_failed_at"] = datetime.now(timezone.utc).isoformat()
-                logger.info(f"[Pipeline] Job {job_id} marked as FAILED due to critical error: {e}")
+            await finalize_job_failure(job_id, e)
 
 
 @router.post("/llm/configure")

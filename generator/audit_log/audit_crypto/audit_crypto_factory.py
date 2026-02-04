@@ -1992,9 +1992,6 @@ def _register_signal_handlers() -> None:
     logger.debug("Registered SIGINT handler for graceful shutdown")
 
 
-# Register handlers at module load time
-_register_signal_handlers()
-
 # Validate production crypto configuration at module load time
 # This ensures production environments cannot start with disabled crypto
 _validate_production_crypto()
@@ -2002,7 +1999,12 @@ _validate_production_crypto()
 
 # --- Global Crypto Provider Factory Instance ---
 # This global instance provides convenient access to the configured CryptoProviderFactory.
+# CRITICAL: Must be defined BEFORE registering signal handlers
 crypto_provider_factory = CryptoProviderFactory()
+
+# Register handlers at module load time AFTER factory is initialized
+# This ensures shutdown_handler can reference crypto_provider_factory
+_register_signal_handlers()
 
 # --- Global Crypto Provider Instance (for backward compatibility or simple access) ---
 # This instance will be initialized once at module load time, with import-safe fallback.
