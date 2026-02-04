@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Code Factory platform now includes robust integration with generator agents that use LLM providers (OpenAI, Grok, Anthropic, Google) to perform code generation, test generation, deployment configuration, documentation generation, and security scanning.
+The Code Factory platform  includes robust integration with generator agents that use LLM providers (OpenAI, Grok, Anthropic, Google) to perform code generation, test generation, deployment configuration, documentation generation, and security scanning.
 
 ## Quick Start
 
