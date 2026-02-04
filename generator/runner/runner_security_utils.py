@@ -101,6 +101,14 @@ PRESIDIO_IGNORED_ENTITY_TYPES = [
     "ORDINAL",      # Ordinal numbers (1st, 2nd, etc.)
 ]
 
+# Compile regex pattern once for efficient log filtering
+# Matches: "Entity {TYPE} is not mapped", "entity {TYPE} is not mapped", or "{TYPE} is not mapped"
+# Uses word boundaries to prevent false matches in other contexts
+_presidio_filter_pattern = re.compile(
+    r'\b(' + '|'.join(PRESIDIO_IGNORED_ENTITY_TYPES) + r')\s+is\s+not\s+mapped\b',
+    re.IGNORECASE
+)
+
 
 def _add_custom_recognizers(analyzer_engine):
     """
@@ -244,31 +252,20 @@ def _load_presidio_engine() -> bool:
             
             # Suppress non-critical Presidio warnings for unmapped entities
             # These warnings clutter logs but don't affect functionality
-            # Only filter when entity type appears in specific Presidio warning format
             presidio_logger = logging.getLogger("presidio_analyzer")
             
             def presidio_log_filter(record):
                 """Filter out non-critical unmapped entity warnings from Presidio.
                 
-                Filters warnings that match the pattern: "Entity <TYPE> is not mapped"
-                where <TYPE> is a known non-critical entity type like CARDINAL, MONEY, etc.
+                Uses compiled regex for efficient filtering. Matches patterns like:
+                - "Entity CARDINAL is not mapped"
+                - "entity MONEY is not mapped"
+                - "PERCENT is not mapped"
+                
+                Case-insensitive with word boundaries to prevent false positives.
                 """
-                message = record.getMessage()
-                
-                # Check for Presidio's specific warning format to avoid false positives
-                # Pattern: "Entity <ENTITY_TYPE> is not mapped"
-                if "is not mapped" in message:
-                    # Use word boundaries to match exact entity type names
-                    # This prevents matching "LAW" in "The law requires" or "EVENT" in "event handler"
-                    for entity_type in PRESIDIO_IGNORED_ENTITY_TYPES:
-                        # Match "Entity <TYPE> is not mapped" or similar patterns from Presidio
-                        if f"Entity {entity_type} is not mapped" in message or \
-                           f"entity {entity_type} is not mapped" in message or \
-                           f"{entity_type} is not mapped" in message:
-                            return False
-                
-                # Allow all other messages through
-                return True
+                # Use compiled regex pattern for O(1) matching instead of O(n*m) loop
+                return not _presidio_filter_pattern.search(record.getMessage())
             
             presidio_logger.addFilter(presidio_log_filter)
             
