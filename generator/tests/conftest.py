@@ -140,6 +140,22 @@ if "prometheus_client" not in sys.modules:
                 
                 return None
         
+        # Define Sample class for better readability
+        class _Sample:
+            def __init__(self, name, labels, value, timestamp=None):
+                self.name = name
+                self.labels = labels
+                self.value = value
+                self.timestamp = timestamp
+        
+        # Define Metric class for better readability  
+        class _Metric:
+            def __init__(self, name, documentation, metric_type, samples):
+                self.name = name
+                self.documentation = documentation
+                self.type = metric_type
+                self.samples = samples
+        
         class _MockCounter:
             def __init__(self, name, description, labelnames=(), *args, **kwargs):
                 self.name = name
@@ -166,21 +182,21 @@ if "prometheus_client" not in sys.modules:
                 samples = []
                 for label_key, child in self._metrics.items():
                     # Create a sample object
-                    sample = type('Sample', (), {
-                        'name': self.name,
-                        'labels': dict(label_key) if label_key else {},
-                        'value': child._value,
-                        'timestamp': None
-                    })()
+                    sample = _Sample(
+                        name=self.name,
+                        labels=dict(label_key) if label_key else {},
+                        value=child._value,
+                        timestamp=None
+                    )
                     samples.append(sample)
                 
                 # Return a metric family
-                metric = type('Metric', (), {
-                    'name': self.name,
-                    'documentation': self.description,
-                    'type': 'counter',
-                    'samples': samples
-                })()
+                metric = _Metric(
+                    name=self.name,
+                    documentation=self.description,
+                    metric_type='counter',
+                    samples=samples
+                )
                 return [metric]
         
         class _MockCounterChild:
