@@ -1190,8 +1190,13 @@ class OmniCoreService:
                         for file_path_str in generated_files:
                             file_path = Path(file_path_str)
                             if file_path.exists():
-                                rel_path = str(file_path.relative_to(job_base))
-                                relative_files.append(rel_path)
+                                # [FIX] Add error handling for path resolution
+                                try:
+                                    rel_path = str(file_path.resolve().relative_to(job_base.resolve()))
+                                    relative_files.append(rel_path)
+                                except ValueError as e:
+                                    logger.warning(f"[CODEGEN] File {file_path} is outside job_base {job_base}, using filename only. Error: {e}")
+                                    relative_files.append(file_path.name)
                         job.output_files = relative_files
                         job.updated_at = datetime.now(timezone.utc)
                         logger.info(
@@ -1500,7 +1505,12 @@ class OmniCoreService:
                     async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
                         await f.write(config_content)
                     
-                    generated_files.append(str(file_path.relative_to(repo_path)))
+                    # [FIX] Add error handling for path resolution
+                    try:
+                        generated_files.append(str(file_path.resolve().relative_to(repo_path.resolve())))
+                    except ValueError as e:
+                        logger.warning(f"[DEPLOY] File {file_path} is outside repo_path {repo_path}, using absolute path. Error: {e}")
+                        generated_files.append(str(file_path))
                     logger.info(f"Generated deployment file: {file_path}")
                 
                 result = {
@@ -1569,7 +1579,12 @@ class OmniCoreService:
                 target_files = []
                 for file_path in repo_path.rglob("*.py"):
                     if not any(part.startswith('.') for part in file_path.parts):
-                        target_files.append(str(file_path.relative_to(repo_path)))
+                        # [FIX] Add error handling for path resolution
+                        try:
+                            target_files.append(str(file_path.resolve().relative_to(repo_path.resolve())))
+                        except ValueError as e:
+                            logger.warning(f"[DOCGEN] File {file_path} is outside repo_path {repo_path}, skipping. Error: {e}")
+                            continue
                 
                 if not target_files:
                     logger.warning(f"No Python files found in {code_path} for documentation generation")
@@ -1605,7 +1620,12 @@ class OmniCoreService:
                 async with aiofiles.open(doc_path, "w", encoding="utf-8") as f:
                     await f.write(docs_output)
                 
-                generated_docs.append(str(doc_path.relative_to(repo_path)))
+                # [FIX] Add error handling for path resolution
+                try:
+                    generated_docs.append(str(doc_path.resolve().relative_to(repo_path.resolve())))
+                except ValueError as e:
+                    logger.warning(f"[DOCGEN] Doc path {doc_path} is outside repo_path {repo_path}, using absolute path. Error: {e}")
+                    generated_docs.append(str(doc_path))
                 logger.info(f"Generated documentation file: {doc_path}")
                 
                 result = {
@@ -1674,7 +1694,12 @@ class OmniCoreService:
                 code_files = {}
                 for file_path in repo_path.rglob("*.py"):
                     if not any(part.startswith('.') for part in file_path.parts):
-                        rel_path = str(file_path.relative_to(repo_path))
+                        # [FIX] Add error handling for path resolution
+                        try:
+                            rel_path = str(file_path.resolve().relative_to(repo_path.resolve()))
+                        except ValueError as e:
+                            logger.warning(f"[CRITIQUE] File {file_path} is outside repo_path {repo_path}, skipping. Error: {e}")
+                            continue
                         try:
                             code_files[rel_path] = file_path.read_text(encoding="utf-8")
                         except Exception as e:
@@ -1726,12 +1751,19 @@ class OmniCoreService:
                 
                 logger.info(f"Generated critique report: {report_path}")
                 
+                # [FIX] Add error handling for path resolution
+                try:
+                    report_path_str = str(report_path.resolve().relative_to(repo_path.resolve()))
+                except ValueError as e:
+                    logger.warning(f"[CRITIQUE] Report path {report_path} is outside repo_path {repo_path}, using absolute path. Error: {e}")
+                    report_path_str = str(report_path)
+                
                 result = {
                     "status": "completed",
                     "issues_found": issues_found,
                     "issues_fixed": issues_fixed,
                     "scan_types": scan_types,
-                    "report_path": str(report_path.relative_to(repo_path)),
+                    "report_path": report_path_str,
                     "file_count": len(code_files),
                 }
                 
@@ -2177,8 +2209,13 @@ class OmniCoreService:
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 for file_path in files:
                     try:
+                        # [FIX] Add error handling for path resolution in zip archive
                         # Use relative path within archive
-                        arcname = file_path.relative_to(base_dir)
+                        try:
+                            arcname = file_path.resolve().relative_to(base_dir.resolve())
+                        except ValueError as e:
+                            logger.warning(f"[DOWNLOAD] File {file_path} is outside base_dir {base_dir}, using filename only. Error: {e}")
+                            arcname = file_path.name
                         zf.write(file_path, arcname=arcname)
                     except Exception as file_error:
                         logger.warning(f"⚠ Failed to add {file_path} to archive: {file_error}")

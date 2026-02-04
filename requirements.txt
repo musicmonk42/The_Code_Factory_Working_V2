@@ -308,6 +308,7 @@ pytesseract==0.3.13
 pytest==8.4.2
 pytest-asyncio==1.1.0
 pytest-benchmark==5.1.0
+pytest-cov==6.0.0
 pytest-mock==3.15.0
 pytest-xdist==3.5.0
 flaky==3.8.1

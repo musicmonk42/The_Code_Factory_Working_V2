@@ -252,6 +252,18 @@ def _load_presidio_engine() -> bool:
         configuration = {
             "nlp_engine_name": "spacy",
             "models": models_config,
+            # [FIX] Suppress noisy warnings for these entity types
+            "ner_model_configuration": {
+                "labels_to_ignore": [
+                    "CARDINAL",      # Numbers like "1", "two", "100"
+                    "ORDINAL",       # Ordinals like "first", "second"
+                    "WORK_OF_ART",   # Titles of books, songs, etc.
+                    "PRODUCT",       # Product names
+                    "FAC",           # Facilities like buildings, airports
+                    "PERCENT",       # Percentages
+                    "MONEY",         # Monetary values
+                ]
+            }
         }
 
         try:

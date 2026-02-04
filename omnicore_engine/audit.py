@@ -1131,9 +1131,12 @@ class ExplainAudit:
                 self.buffer.append(record)
                 AUDIT_BUFFER_SIZE_CURRENT.set(len(self.buffer))
 
-                self.safe_create_task(
-                    self.kafka_streamer.stream_event(record.model_dump())
-                )
+                # [FIX] Stream event to Kafka asynchronously with proper await handling
+                if self.kafka_streamer:
+                    async def _stream_event():
+                        await self.kafka_streamer.stream_event(record.model_dump())
+                    
+                    self.safe_create_task(_stream_event())
 
                 if len(self.buffer) >= self.buffer_size:
                     self.safe_create_task(self._flush_buffer())
