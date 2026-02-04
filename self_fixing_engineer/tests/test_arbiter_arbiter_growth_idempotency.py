@@ -274,9 +274,16 @@ async def test_stop_when_not_started(set_env_redis_url):
 @pytest.mark.asyncio
 async def test_concurrent_check_and_set(idempotency_store, mock_redis):
     """Tests that concurrent operations are handled correctly."""
-    # FIX: Capture baseline before test
-    false_before = IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get()
-    true_before = IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get()
+    # Capture baseline metrics before test
+    try:
+        false_before = IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get()
+    except (AttributeError, KeyError):
+        false_before = 0
+    
+    try:
+        true_before = IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get()
+    except (AttributeError, KeyError):
+        true_before = 0
     
     # Simulate the first call succeeding and subsequent calls failing
     mock_redis.set.side_effect = [True] + [False] * 49
@@ -291,9 +298,12 @@ async def test_concurrent_check_and_set(idempotency_store, mock_redis):
     assert results.count(True) == 1
     assert results.count(False) == 49
 
-    # FIX: Assert on deltas, not absolute values
-    assert IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() - false_before == 1
-    assert IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get() - true_before == 49
+    # Assert on deltas from baseline
+    false_after = IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get()
+    true_after = IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get()
+    
+    assert false_after - false_before == 1, f"Expected 1 miss, got {false_after - false_before}"
+    assert true_after - true_before == 49, f"Expected 49 hits, got {true_after - true_before}"
     assert mock_redis.set.call_count == 50
 
 
