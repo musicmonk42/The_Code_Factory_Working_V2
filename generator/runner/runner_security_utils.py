@@ -88,9 +88,9 @@ _PRESIDIO_NLP_MODE: bool = (
 # This module will no longer import or increment UTIL_ERRORS.
 
 
-# Presidio entities that generate unmapped warnings but don't affect functionality
-# These are filtered to prevent log clutter
-IGNORED_PRESIDIO_ENTITIES = [
+# Presidio entity types that generate unmapped warnings but don't affect functionality
+# These are filtered to prevent log clutter from known non-critical entity types
+PRESIDIO_IGNORED_ENTITY_TYPES = [
     "CARDINAL",     # Numbers/quantities
     "MONEY",        # Monetary values
     "PERCENT",      # Percentages
@@ -99,7 +99,12 @@ IGNORED_PRESIDIO_ENTITIES = [
     "EVENT",        # Named events
     "FAC",          # Facilities/buildings
     "ORDINAL",      # Ordinal numbers (1st, 2nd, etc.)
-    "is not mapped" # Generic unmapped warning text
+]
+
+# Message patterns to filter from Presidio logs
+# Using specific patterns to avoid inadvertently filtering legitimate messages
+PRESIDIO_LOG_FILTER_PATTERNS = [
+    "entity is not mapped",  # Specific pattern for unmapped entity warnings
 ]
 
 
@@ -243,13 +248,13 @@ def _load_presidio_engine() -> bool:
             # HIGH: Add custom recognizers for API_KEY and CARDINAL entities
             _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
             
-            # Suppress non-critical Presidio warnings for unmapped entities
+            # Suppress non-critical Presidio warnings for unmapped entities and known patterns
             # These warnings clutter logs but don't affect functionality
             presidio_logger = logging.getLogger("presidio_analyzer")
             presidio_logger.addFilter(
                 lambda record: not any(
-                    entity in record.getMessage()
-                    for entity in IGNORED_PRESIDIO_ENTITIES
+                    text in record.getMessage()
+                    for text in PRESIDIO_IGNORED_ENTITY_TYPES + PRESIDIO_LOG_FILTER_PATTERNS
                 )
             )
             
