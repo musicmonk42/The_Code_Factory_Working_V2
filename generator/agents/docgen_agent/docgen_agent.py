@@ -1519,7 +1519,7 @@ class DocgenAgent:
                 if doc_content_str:
                     # Use a shorter summary for streaming to avoid blocking
                     summary = await call_summarizer(
-                        content=doc_content_str,
+                        text=doc_content_str,
                         summarizer_name="doc_critique",
                         max_length=150,  # Shorter for stream
                         llm_model=llm_model,
