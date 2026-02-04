@@ -231,11 +231,14 @@ class ArbiterGrowthManager:
         self._evolution_task: Optional[asyncio.Task] = None
 
         # Initialize circuit breakers with proper listeners
+        # Tuned for production stability:
+        # - snapshot: fail_max=10 (increased from 5), reset_timeout=60
+        # - push_event: fail_max=10 (unchanged), reset_timeout=60 (increased from 30)
         self._snapshot_breaker = CircuitBreaker(
-            fail_max=5, reset_timeout=60, name=f"{self.arbiter}_snapshot"
+            fail_max=10, reset_timeout=60, name=f"{self.arbiter}_snapshot"
         )
         self._push_event_breaker = CircuitBreaker(
-            fail_max=10, reset_timeout=30, name=f"{self.arbiter}_push_event"
+            fail_max=10, reset_timeout=60, name=f"{self.arbiter}_push_event"
         )
         self._add_breaker_listeners()
 
