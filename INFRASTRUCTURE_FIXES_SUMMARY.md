@@ -196,7 +196,7 @@ SyntaxError: expected 'except' or 'finally' block (llm_client.py, line 486)
 ## Files Modified
 
 ### New Files Created:
-1. `server/utils/omnicore.py` (107 lines)
+1. `server/utils/omnicore.py` (105 lines)
    - OmniCore service integration utilities
    - Graceful degradation when OmniCore unavailable
    - Periodic audit flush support

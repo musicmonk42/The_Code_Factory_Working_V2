@@ -25,8 +25,8 @@ class OmniCoreService:
     def _initialize(self):
         """Initialize connection to OmniCore engine if available."""
         try:
-            # Try to import OmniCore engine
-            from omnicore_engine import engine
+            # Try to import OmniCore engine to check availability
+            import omnicore_engine.engine  # noqa: F401 - import used to verify availability
             self._omnicore_available = True
             logger.info("OmniCore engine available")
         except ImportError:
