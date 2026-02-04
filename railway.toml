@@ -107,12 +107,19 @@ LLM_TEMPERATURE = "0.7"
 DEFAULT_LLM_PROVIDER = "openai"
 
 # === Feature Flags ===
+# SECURITY: Disabled by default for powerful subsystems
+# Only enable features you actually use to reduce attack surface
 ENABLE_DATABASE = "1"
-ENABLE_HSM = "auto"
-ENABLE_FEATURE_STORE = "auto"
-ENABLE_LIBVIRT = "auto"
+ENABLE_HSM = "0"  # Set to "1" only if you have an actual HSM
+ENABLE_FEATURE_STORE = "0"  # Set to "1" only if you use Feast
+ENABLE_LIBVIRT = "0"  # Set to "1" only if you need virtualization
 ENABLE_REDIS = "1"
 ENABLE_KAFKA = "0"
+
+# === CORS Configuration ===
+# CRITICAL: Set ALLOWED_ORIGINS for browser clients!
+# Without this, all browser requests will fail with CORS errors
+# ALLOWED_ORIGINS = "https://your-frontend.railway.app,https://your-custom-domain.com"
 
 # === Kafka Configuration (disabled by default - uses Redis Streams instead) ===
 USE_KAFKA_INGESTION = "false"
@@ -136,13 +143,15 @@ USE_KAFKA_AUDIT = "false"
 ENABLE_STRUCTURED_LOGGING = "1"
 
 # === Observability ===
-# SENTRY_DSN = "https://your-sentry-dsn"
+# SENTRY_DSN = "https://your-sentry-dsn"  # Recommended for production error tracking
 # OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel-collector:4317"
 PROMETHEUS_PORT = "9090"
 # METRICS_PORT = "9090"
 
 # === Performance ===
 # Single worker for Railway deployment to ensure fast startup and reliable healthchecks
+# Set WEB_CONCURRENCY to increase workers if needed
+# WEB_CONCURRENCY = "1"
 WORKER_COUNT = "1"
 MAX_CONCURRENT_TASKS = "50"
 
