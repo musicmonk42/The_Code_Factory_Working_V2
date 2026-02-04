@@ -62,11 +62,14 @@ class FileBackend(LogBackend):
         try:
             async with aiofiles.open(self.wal_file, "a") as wal:
                 await wal.write(log_entry_for_wal)
-                await wal.flush()
+                # Flush if available
+                if hasattr(wal, 'flush'):
+                    await wal.flush()
                 # Ensure data is synced to disk for durability before atomic commit
-                await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: os.fsync(wal.fileno())
-                )
+                if hasattr(wal, 'fileno'):
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: os.fsync(wal.fileno())
+                    )
         except Exception as e:
             logger.error(
                 f"FileBackend WAL write failed for entry {prepared_entry.get('entry_id')}: {e}",

@@ -113,14 +113,112 @@ if "prometheus_client" not in sys.modules:
             def __init__(self, *args, **kwargs):
                 self._names_to_collectors = {}
                 self._collector_to_names = {}
-            def register(self, collector): pass
-            def unregister(self, collector): pass
-            def get_sample_value(self, *args, **kwargs): return None
+            
+            def register(self, collector): 
+                pass
+            
+            def unregister(self, collector): 
+                pass
+            
+            def get_sample_value(self, metric_name, labels=None):
+                """Get the value of a specific metric sample."""
+                # Find the collector by name
+                if metric_name not in self._names_to_collectors:
+                    return None
+                
+                collector = self._names_to_collectors[metric_name]
+                
+                # Collect samples from the collector
+                try:
+                    for metric in collector.collect():
+                        for sample in metric.samples:
+                            # Check if labels match
+                            if labels is None or sample.labels == labels:
+                                return sample.value
+                except (AttributeError, TypeError):
+                    pass
+                
+                return None
+        
+        # Define Sample class for better readability
+        class _Sample:
+            """Mock Prometheus sample representing a single metric data point."""
+            def __init__(self, name, labels, value, timestamp=None):
+                self.name = name
+                self.labels = labels
+                self.value = value
+                self.timestamp = timestamp
+        
+        # Define Metric class for better readability  
+        class _Metric:
+            """Mock Prometheus metric family containing multiple samples."""
+            def __init__(self, name, documentation, metric_type, samples):
+                self.name = name
+                self.documentation = documentation
+                self.type = metric_type
+                self.samples = samples
         
         class _MockCounter:
-            def __init__(self, *args, **kwargs): pass
-            def labels(self, *args, **kwargs): return self
-            def inc(self, *args, **kwargs): pass
+            """Mock Prometheus Counter that tracks increments and supports label-based metrics."""
+            def __init__(self, name, description, labelnames=(), *args, **kwargs):
+                self.name = name
+                self.description = description
+                self.labelnames = labelnames
+                self._metrics = {}  # Store metrics by label values
+            
+            def labels(self, **label_values):
+                # Create a unique key for this label combination
+                label_key = tuple(sorted(label_values.items()))
+                if label_key not in self._metrics:
+                    self._metrics[label_key] = _MockCounterChild(self, label_key, label_values)
+                return self._metrics[label_key]
+            
+            def inc(self, amount=1):
+                # For unlabeled counter
+                label_key = ()
+                if label_key not in self._metrics:
+                    self._metrics[label_key] = _MockCounterChild(self, label_key, {})
+                self._metrics[label_key].inc(amount)
+            
+            def collect(self):
+                # Return metrics in prometheus format
+                samples = []
+                for label_key, child in self._metrics.items():
+                    # Create a sample object
+                    sample = _Sample(
+                        name=self.name,
+                        labels=dict(label_key) if label_key else {},
+                        value=child._value,
+                        timestamp=None
+                    )
+                    samples.append(sample)
+                
+                # Return a metric family
+                metric = _Metric(
+                    name=self.name,
+                    documentation=self.description,
+                    metric_type='counter',
+                    samples=samples
+                )
+                return [metric]
+        
+        class _MockCounterChild:
+            """Child counter for a specific label combination."""
+            def __init__(self, parent, label_key, label_values):
+                self.parent = parent
+                self.label_key = label_key
+                self.label_values = label_values
+                self._value = 0
+            
+            def inc(self, amount=1):
+                self._value += amount
+            
+            def labels(self, **kwargs):
+                # If labels are called on child, create new child
+                return self.parent.labels(**kwargs)
+            
+            def collect(self):
+                return self.parent.collect()
         
         class _MockHistogram:
             DEFAULT_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0, float("inf"))
