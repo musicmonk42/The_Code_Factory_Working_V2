@@ -451,7 +451,7 @@ class LLMClient:
 
         if not await self.circuit_breaker.allow_request(provider):
             metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
-            raise LLMError("Circuit breaker open")
+            raise LLMError(f"[LLM_PROVIDER_ERROR] Circuit breaker open for provider '{provider}'")
 
         cache_key = hashlib.sha256(f"{prompt}:{model}:{provider}".encode()).hexdigest()
         cached = await self.cache.get(cache_key)
