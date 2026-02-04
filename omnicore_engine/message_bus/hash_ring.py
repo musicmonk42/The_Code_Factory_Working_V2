@@ -32,10 +32,15 @@ class ConsistentHashRing:
             "ConsistentHashRing initialized.", nodes=self.nodes, replicas=self.replicas
         )
 
-    def _get_lock(self) -> asyncio.Lock:
-        """Get or create the asyncio lock (lazy initialization)."""
+    def _get_lock(self) -> Optional[asyncio.Lock]:
+        """Get or create the asyncio lock (lazy initialization). Returns None if no event loop."""
         if self._lock is None:
-            self._lock = asyncio.Lock()
+            try:
+                asyncio.get_running_loop()
+                self._lock = asyncio.Lock()
+            except RuntimeError:
+                # No running event loop - likely in sync/test context
+                return None
         return self._lock
 
     def _add_node_sync(self, node: str) -> None:
@@ -63,7 +68,11 @@ class ConsistentHashRing:
 
     async def add_node_async(self, node: str) -> None:
         """Async-safe version of add_node."""
-        async with self._get_lock():
+        lock = self._get_lock()
+        if lock is not None:
+            async with lock:
+                self._add_node_sync(node)
+        else:
             self._add_node_sync(node)
 
     def _remove_node_sync(self, node: str) -> None:
@@ -88,7 +97,11 @@ class ConsistentHashRing:
 
     async def remove_node_async(self, node: str) -> None:
         """Async-safe version of remove_node."""
-        async with self._get_lock():
+        lock = self._get_lock()
+        if lock is not None:
+            async with lock:
+                self._remove_node_sync(node)
+        else:
             self._remove_node_sync(node)
 
     def _get_node_sync(self, key: str) -> str:
@@ -117,7 +130,11 @@ class ConsistentHashRing:
 
     async def get_node_async(self, key: str) -> str:
         """Async-safe version of get_node."""
-        async with self._get_lock():
+        lock = self._get_lock()
+        if lock is not None:
+            async with lock:
+                return self._get_node_sync(key)
+        else:
             return self._get_node_sync(key)
 
     def _hash(self, key: str) -> int:
