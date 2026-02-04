@@ -273,7 +273,7 @@ async def test_tamper_detection_flags_and_skips(
     assert results == []
 
     # Give scheduled tasks (send_alert via create_task) time to execute
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.5)  # Give async tasks more time to complete and increment metrics
 
     after = _counter_total_for_labels(
         BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
@@ -313,6 +313,10 @@ async def test_retry_operation_respects_limits(monkeypatch):
         )
 
     assert attempts["count"] == getattr(core, "RETRY_MAX_ATTEMPTS", 3)
+
+    # Give metrics time to be collected
+    await asyncio.sleep(0.2)
+
     after = _counter_total_for_labels(
         BACKEND_ERRORS, backend="TestBackend", type="ValueError"
     )

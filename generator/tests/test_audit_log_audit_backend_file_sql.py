@@ -288,8 +288,8 @@ async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_o
     if COMPRESSION_ALGO == "gzip":
         decompressed = zlib.decompress(decrypted).decode("utf-8")
     elif COMPRESSION_ALGO == "zstd":
-        import zstd
-        decompressed = zstd.decompress(decrypted).decode("utf-8")
+        import zstandard
+        decompressed = zstandard.decompress(decrypted).decode("utf-8")
     else:
         # No compression
         decompressed = decrypted.decode("utf-8")
