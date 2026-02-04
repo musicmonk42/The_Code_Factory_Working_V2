@@ -167,6 +167,7 @@ async def llm_summarize(
 ) -> str:
     """
     Summarizes text using the central LLM client (V2).
+    Includes model fallback logic for robustness.
     """
     if not text:
         return ""
@@ -187,47 +188,72 @@ async def llm_summarize(
     ---
     SUMMARY:
     """
+    
+    # Model fallback chain: prefer gpt-4o-mini, fallback to other available models
+    preferred_model = model
+    fallback_models = ["gpt-3.5-turbo", "gpt-4o", "gpt-4"]
+    models_to_try = [preferred_model] + [m for m in fallback_models if m != preferred_model]
 
-    try:
-        # [NEW] Call audit around LLM use
-        await log_audit_event(
-            action="summarize_llm_call",
-            data={
-                "model": model,
-                "text_length": len(text_to_summarize),
-                "context": context,
-            },
-        )
-
-        # Call the unified V2 LLM client
-        # Note: call_llm_api is from testgen_llm_call.py, which returns a dict
-        response_dict = await call_llm_api(
-            prompt=prompt,
-            model=model,
-            # --- THIS IS THE FIX ---
-            # The `task_type` argument is not supported by call_llm_api
-            # task_type="summarization" # <-- REMOVED
-        )
-
-        summary = response_dict.get("content", "")
-
-        # Fallback if content is empty
-        if not summary:
-            logger.warning(
-                f"LLM summarizer returned empty content for model {model}. Falling back to truncation."
+    for current_model in models_to_try:
+        try:
+            # [NEW] Call audit around LLM use
+            await log_audit_event(
+                action="summarize_llm_call",
+                data={
+                    "model": current_model,
+                    "text_length": len(text_to_summarize),
+                    "context": context,
+                },
             )
-            return text_to_summarize[:max_length]
 
-        return summary.strip()
+            # Call the unified V2 LLM client
+            # Note: call_llm_api is from testgen_llm_call.py, which returns a dict
+            response_dict = await call_llm_api(
+                prompt=prompt,
+                model=current_model,
+                # --- THIS IS THE FIX ---
+                # The `task_type` argument is not supported by call_llm_api
+                # task_type="summarization" # <-- REMOVED
+            )
 
-    except Exception as e:
-        logger.error(
-            f"LLM-based summarization failed: {e}. Falling back to simple truncation.",
-            exc_info=True,
-        )
-        UTIL_ERRORS.labels(func="llm_summarize", type=type(e).__name__).inc()
-        # Fallback to simple truncation on any error
-        return text_to_summarize[:max_length]
+            summary = response_dict.get("content", "")
+
+            # Fallback if content is empty
+            if not summary:
+                logger.warning(
+                    f"LLM summarizer returned empty content for model {current_model}. "
+                    f"Trying next model in fallback chain."
+                )
+                continue  # Try next model
+            
+            # Success - return summary
+            if current_model != preferred_model:
+                logger.info(f"✓ Summarization succeeded with fallback model {current_model}")
+            
+            return summary.strip()
+
+        except ValueError as e:
+            # Model not registered or validation error - try next model
+            error_msg = str(e).lower()
+            if ("not registered" in error_msg or "model" in error_msg) and current_model != models_to_try[-1]:
+                logger.warning(f"Model {current_model} unavailable ({e}), trying next model")
+                continue
+            # Last model also failed - fall through to final fallback
+            logger.error(f"All LLM models failed: {e}")
+            break
+        except Exception as e:
+            # Other errors - try next model
+            if current_model != models_to_try[-1]:
+                logger.warning(f"LLM call failed with model {current_model}: {e}, trying next model")
+                continue
+            # Last model also failed - fall through to final fallback
+            logger.error(f"All LLM models failed with error: {e}")
+            break
+    
+    # Ultimate fallback: simple truncation if all models fail
+    logger.warning("⚠ All LLM models failed, using truncation as ultimate fallback")
+    UTIL_ERRORS.labels(func="llm_summarize", type="all_models_failed").inc()
+    return text_to_summarize[:max_length]
 
 
 # --- END REFACTOR ---

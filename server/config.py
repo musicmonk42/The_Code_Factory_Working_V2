@@ -346,8 +346,12 @@ class ServerConfig(BaseSettings):
         description="Enable Kafka message bus (set to false for local-only operation)"
     )
     kafka_bootstrap_servers: str = Field(
-        default="localhost:9092",
+        default="kafka:9092",  # Changed from localhost:9092 for Docker Compose
         description="Kafka bootstrap servers (comma-separated list)"
+    )
+    kafka_required: bool = Field(
+        default=False,
+        description="Require Kafka to be available (if False, allows fallback when Kafka unavailable)"
     )
     kafka_max_retries: int = Field(
         default=3,
@@ -394,6 +398,17 @@ class ServerConfig(BaseSettings):
             )
             return "INFO"
         return v_upper
+    
+    @field_validator("kafka_bootstrap_servers")
+    @classmethod
+    def validate_kafka_host(cls, v: str) -> str:
+        """Validate Kafka bootstrap servers and warn about localhost usage."""
+        if v.startswith("localhost") or v.startswith("127.0.0.1"):
+            logger.warning(
+                "⚠️  Kafka configured with localhost - will fail in containers. "
+                "Set KAFKA_BOOTSTRAP_SERVERS=kafka:9092 for Docker Compose"
+            )
+        return v
     
     @property
     def is_production(self) -> bool:
