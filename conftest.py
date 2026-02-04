@@ -496,6 +496,14 @@ def _create_mock_module(name):
         def __exit__(self, *args):
             pass
 
+        async def __aenter__(self):
+            """Support for async context managers like aiofiles.open()."""
+            return self
+
+        async def __aexit__(self, *args):
+            """Support for async context managers like aiofiles.open()."""
+            pass
+
         def __class_getitem__(cls, item):
             """Support for generic type annotations like Type[str]."""
             return cls
