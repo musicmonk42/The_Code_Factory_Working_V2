@@ -806,6 +806,10 @@ def _initialize_optional_dependency_mocks():
     Initialize mocks for optional dependencies.
     Called from session-scoped fixture to defer expensive operations.
     """
+    # Allow tests to opt out of global mocking
+    if os.environ.get('PYTEST_NO_MOCK') == '1':
+        return
+    
     global _mocks_initialized
     if _mocks_initialized:
         return

@@ -13,6 +13,10 @@ Run:
 
 from __future__ import annotations
 
+import os
+# Opt out of global mocking - these tests need real file I/O
+os.environ['PYTEST_NO_MOCK'] = '1'
+
 import asyncio
 from pathlib import Path
 

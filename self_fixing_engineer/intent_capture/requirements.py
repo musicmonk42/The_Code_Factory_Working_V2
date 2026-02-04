@@ -1261,23 +1261,47 @@ def shutdown_cleanup():
             logger.info("Closing PostgreSQL connection pool.")
             asyncio.run(manager._db_pool.close())
         except Exception as e:
-            logger.error(f"Error while closing PostgreSQL DB pool: {e}", exc_info=True)
+            try:
+                logger.error(f"Error while closing PostgreSQL DB pool: {e}", exc_info=True)
+            except Exception:
+                import sys
+                print(f"ERROR: Failed to close PostgreSQL DB pool: {e}", file=sys.stderr)
 
     # Clean up Redis connections
     if REDIS_AVAILABLE:
         try:
             logger.info("Closing Redis connections.")
             redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-            # Create a temporary client instance just for closing the connections managed by the library's connection pool
             r = redis.Redis.from_url(redis_url)
-            asyncio.run(r.close())
+            
+            # FIX: Safe async cleanup with fallbacks
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(r.close())
+            except RuntimeError:
+                # No running loop - try to create one
+                try:
+                    asyncio.run(r.close())
+                except RuntimeError:
+                    # Event loop creation failed - use sync fallback
+                    try:
+                        r.close(close_connection_pool=True)
+                    except Exception:
+                        pass  # Best effort at exit
         except Exception as e:
-            logger.error(f"Error while closing Redis connections: {e}", exc_info=True)
+            try:
+                logger.error(f"Error while closing Redis connections: {e}", exc_info=True)
+            except Exception:
+                import sys
+                print(f"ERROR: Failed to close Redis connections: {e}", file=sys.stderr)
 
     # Clean up ML model from memory
     if ML_ENABLED and manager._embedding_model:
-        logger.info("Unloading Machine Learning model from memory.")
-        del manager._embedding_model
+        try:
+            logger.info("Unloading Machine Learning model from memory.")
+            del manager._embedding_model
+        except Exception:
+            pass
 
 
 # Register the cleanup function to be called upon program exit
