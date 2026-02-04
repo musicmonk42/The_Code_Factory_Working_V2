@@ -89,12 +89,11 @@ def test_init_with_custom_params(set_env_redis_url):
 
 
 @pytest.mark.asyncio
-async def test_check_and_set_miss(idempotency_store, mock_redis, tracer):
+async def test_check_and_set_miss(idempotency_store, mock_redis):
     """Tests the behavior of check_and_set on a cache miss (new key)."""
     mock_redis.set.return_value = True
 
-    with tracer.start_as_current_span("test-span"):
-        result = await idempotency_store.check_and_set("new_key")
+    result = await idempotency_store.check_and_set("new_key")
 
     assert result is True
     mock_redis.set.assert_awaited_with(
@@ -107,12 +106,11 @@ async def test_check_and_set_miss(idempotency_store, mock_redis, tracer):
 
 
 @pytest.mark.asyncio
-async def test_check_and_set_hit(idempotency_store, mock_redis, tracer):
+async def test_check_and_set_hit(idempotency_store, mock_redis):
     """Tests the behavior of check_and_set on a cache hit (existing key)."""
     mock_redis.set.return_value = False
 
-    with tracer.start_as_current_span("test-span"):
-        result = await idempotency_store.check_and_set("existing_key")
+    result = await idempotency_store.check_and_set("existing_key")
 
     assert result is False
     assert (
@@ -121,15 +119,14 @@ async def test_check_and_set_hit(idempotency_store, mock_redis, tracer):
 
 
 @pytest.mark.asyncio
-async def test_check_and_set_redis_error(idempotency_store, mock_redis, tracer):
+async def test_check_and_set_redis_error(idempotency_store, mock_redis):
     """Tests that a specific error is raised when Redis fails."""
     mock_redis.set.side_effect = RedisError("Connection failed")
 
-    with tracer.start_as_current_span("test-span"):
-        with pytest.raises(
-            IdempotencyStoreError, match="Failed to check/set idempotency key"
-        ):
-            await idempotency_store.check_and_set("error_key")
+    with pytest.raises(
+        IdempotencyStoreError, match="Failed to check/set idempotency key"
+    ):
+        await idempotency_store.check_and_set("error_key")
 
 
 @pytest.mark.asyncio
@@ -260,14 +257,13 @@ async def test_stop_when_not_started(set_env_redis_url):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_check_and_set(idempotency_store, mock_redis, tracer):
+async def test_concurrent_check_and_set(idempotency_store, mock_redis):
     """Tests that concurrent operations are handled correctly."""
     # Simulate the first call succeeding and subsequent calls failing
     mock_redis.set.side_effect = [True] + [False] * 49
 
     async def check_key():
-        with tracer.start_as_current_span("test-span-concurrent"):
-            return await idempotency_store.check_and_set("concurrent_key")
+        return await idempotency_store.check_and_set("concurrent_key")
 
     tasks = [check_key() for _ in range(50)]
     results = await asyncio.gather(*tasks)
@@ -287,13 +283,12 @@ async def test_concurrent_check_and_set(idempotency_store, mock_redis, tracer):
 
 
 @pytest.mark.asyncio
-async def test_check_and_set_with_custom_ttl(idempotency_store, mock_redis, tracer):
+async def test_check_and_set_with_custom_ttl(idempotency_store, mock_redis):
     """Tests that custom TTL is used when provided."""
     mock_redis.set.return_value = True
     custom_ttl = 7200
 
-    with tracer.start_as_current_span("test-span"):
-        await idempotency_store.check_and_set("custom_ttl_key", ttl=custom_ttl)
+    await idempotency_store.check_and_set("custom_ttl_key", ttl=custom_ttl)
     mock_redis.set.assert_awaited_with(
         "app:idempotency:custom_ttl_key", "processed", nx=True, ex=custom_ttl
     )
