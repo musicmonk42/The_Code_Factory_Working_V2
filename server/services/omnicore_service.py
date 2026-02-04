@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from server.utils.agent_loader import get_agent_loader
 from server.storage import jobs_db
+from server.schemas.jobs import JobStatus
 
 logger = logging.getLogger(__name__)
 
