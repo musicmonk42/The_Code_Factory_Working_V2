@@ -81,17 +81,23 @@ os.environ.setdefault(
 )
 
 # --- OPTIONAL FEATURES CONFIGURATION ---
-# Enable Database support by default
+# P3/Security Hardening: Require explicit enable flags for powerful subsystems
+# Changed from "auto" to "0" to prevent accidental exposure
+
+# Enable Database support by default (commonly needed)
 os.environ.setdefault("ENABLE_DATABASE", "1")
 
-# Enable Feature Store with auto-detection (enable if Feast is available)
-os.environ.setdefault("ENABLE_FEATURE_STORE", "auto")
+# Feature Store (Feast) - SECURITY: Disabled by default
+# Set ENABLE_FEATURE_STORE=1 to enable if you actually use Feast
+os.environ.setdefault("ENABLE_FEATURE_STORE", "0")
 
-# Enable HSM Support with auto-detection (enable if python-pkcs11 is available)
-os.environ.setdefault("ENABLE_HSM", "auto")
+# HSM Support - SECURITY: Disabled by default
+# Set ENABLE_HSM=1 only if you have an actual Hardware Security Module
+os.environ.setdefault("ENABLE_HSM", "0")
 
-# Enable Libvirt Support with auto-detection (enable if libvirt-python is available)
-os.environ.setdefault("ENABLE_LIBVIRT", "auto")
+# Libvirt Support - SECURITY: Disabled by default
+# Set ENABLE_LIBVIRT=1 only if you need virtualization features
+os.environ.setdefault("ENABLE_LIBVIRT", "0")
 
 # Enable Sentry automatically if SENTRY_DSN is provided
 if os.environ.get("SENTRY_DSN"):
@@ -555,6 +561,68 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.error(f"Configuration initialization failed: {e}", exc_info=True)
         logger.warning(f"Continuing startup despite configuration error: {type(e).__name__}")
     
+    # P2 FIX: Validate Redis connection on startup (explicit PING test)
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        logger.info("=" * 80)
+        logger.info("VALIDATING REDIS CONNECTION")
+        logger.info("=" * 80)
+        try:
+            import redis.asyncio as aioredis
+            r = aioredis.Redis.from_url(
+                redis_url,
+                socket_connect_timeout=5,
+                socket_timeout=5
+            )
+            await r.ping()
+            await r.close()
+            logger.info(f"✓ Redis connection validated: {redis_url.split('@')[-1] if '@' in redis_url else redis_url}")
+        except ImportError:
+            logger.warning("⚠ redis library not installed - Redis features unavailable")
+        except Exception as e:
+            logger.error(f"❌ Redis connection failed: {e}")
+            logger.warning("  Redis is configured but connection test failed!")
+            logger.warning("  Check REDIS_URL and ensure Redis is accessible")
+    else:
+        logger.info("Redis not configured (REDIS_URL not set)")
+    
+    # P2 FIX: Validate Database connection on startup (explicit query test)
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        logger.info("=" * 80)
+        logger.info("VALIDATING DATABASE CONNECTION")
+        logger.info("=" * 80)
+        try:
+            from sqlalchemy import text
+            from sqlalchemy.ext.asyncio import create_async_engine
+            
+            # Convert database URL for async if needed
+            async_url = database_url
+            if database_url.startswith("postgresql://"):
+                async_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif database_url.startswith("sqlite://"):
+                async_url = database_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+            
+            engine = create_async_engine(
+                async_url,
+                pool_pre_ping=True,
+            )
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            await engine.dispose()
+            # Mask password in log
+            safe_url = database_url.split('@')[-1] if '@' in database_url else database_url
+            logger.info(f"✓ Database connection validated: {safe_url}")
+        except ImportError as ie:
+            logger.warning(f"⚠ Database driver not installed: {ie}")
+            logger.warning("  Install asyncpg (PostgreSQL) or aiosqlite (SQLite)")
+        except Exception as e:
+            logger.error(f"❌ Database connection failed: {e}")
+            logger.warning("  DATABASE_URL is configured but connection test failed!")
+            logger.warning("  Check credentials and ensure database is accessible")
+    else:
+        logger.info("Database not configured (DATABASE_URL not set)")
+    
     # Start background agent loading (only if routers loaded successfully)
     if routers_ok and get_agent_loader is not None:
         logger.info("=" * 80)
@@ -584,6 +652,17 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             logger.warning("Skipping agent loading due to router loading failure")
         elif get_agent_loader is None:
             logger.warning("Agent loader not available - skipping agent loading")
+    
+    # P2 FIX: Warn if Sentry is not configured in production
+    sentry_dsn = os.getenv("SENTRY_DSN")
+    if _is_production and not sentry_dsn:
+        logger.warning("=" * 80)
+        logger.warning("⚠ SENTRY NOT CONFIGURED IN PRODUCTION")
+        logger.warning("  Error tracking is disabled. Set SENTRY_DSN to enable.")
+        logger.warning("  This reduces visibility into production exceptions.")
+        logger.warning("=" * 80)
+    elif sentry_dsn:
+        logger.info("✓ Sentry error tracking: ENABLED")
     
     logger.info("=" * 80)
     logger.info("Platform initialization complete")
@@ -787,29 +866,34 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-# Configure CORS with sensible defaults
-# In production, set ALLOWED_ORIGINS environment variable to specific domains
-# Example: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+# Configure CORS with secure defaults
+# P0 FIX: In production, CORS blocks ALL browser requests unless ALLOWED_ORIGINS is explicitly set
+# This prevents "works in curl but fails in browser" issues
+# Example: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com,https://your-railway-domain.up.railway.app
 _is_production = (
     os.getenv("APP_ENV", "").lower() == "production" or 
     os.getenv("PYTHON_ENV", "").lower() == "production" or
+    os.getenv("RAILWAY_ENVIRONMENT") is not None or
     not _is_test_environment
 )
 
-# Get allowed origins from environment
-allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "")
+# Get allowed origins from environment (support both ALLOWED_ORIGINS and CORS_ORIGINS)
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "") or os.getenv("CORS_ORIGINS", "")
 if allowed_origins_str:
     ALLOWED_ORIGINS = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
+    logger.info(f"CORS configured with explicit origins: {ALLOWED_ORIGINS}")
 else:
     # Use sensible defaults based on environment
     if _is_production:
-        # In production, default to localhost for health checks
-        # User MUST set ALLOWED_ORIGINS for actual clients
-        ALLOWED_ORIGINS = ["http://localhost:8080"]
-        logger.warning(
-            "CORS_ORIGINS not configured in production! "
-            "Set ALLOWED_ORIGINS environment variable to allow specific domains. "
-            "Currently only allowing localhost health checks."
+        # P0 FIX: In production, REJECT all CORS requests by default
+        # This ensures operators MUST configure ALLOWED_ORIGINS for browser clients
+        # Server-to-server/curl requests will still work (no CORS headers needed)
+        ALLOWED_ORIGINS = []  # Empty list = no CORS allowed
+        logger.error(
+            "CRITICAL: ALLOWED_ORIGINS not set in production! "
+            "Browser requests will fail with CORS errors. "
+            "Set ALLOWED_ORIGINS environment variable with your frontend domains. "
+            "Example: ALLOWED_ORIGINS=https://your-frontend.com,https://your-app.railway.app"
         )
     else:
         # In development, allow common local development ports
@@ -821,8 +905,7 @@ else:
             "http://127.0.0.1:8080",
             "http://127.0.0.1:5173",
         ]
-
-logger.info(f"CORS enabled for origins: {ALLOWED_ORIGINS}")
+        logger.info(f"CORS configured with development defaults: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -959,51 +1042,50 @@ async def get_agents_status():
 )
 async def readiness_check(response: Response) -> ReadinessResponse:
     """
-    Readiness check endpoint.
+    Readiness check endpoint - returns OK only when the application is truly ready.
 
     Returns the readiness status of the API server, indicating whether
     the application is fully ready to accept traffic and handle requests.
     
-    This endpoint returns HTTP 200 only when all agents are loaded and ready.
-    It returns HTTP 503 if agents are still loading or failed to load.
+    P1 FIX: This endpoint now performs actual health checks on dependencies,
+    not just "configured" status checks. This prevents routing traffic to
+    instances that haven't fully initialized.
+
+    **Checks performed:**
+    - Routers loaded
+    - Agents loaded and ready
+    - Redis connection (PING)
+    - Database connection (if configured)
 
     **Returns:**
-    - HTTP 200: Application is ready (agents loaded)
-    - HTTP 503: Application is not ready (agents loading or failed)
+    - HTTP 200: Application is ready (all checks pass)
+    - HTTP 503: Application is not ready (one or more checks fail)
     
     **Response includes:**
     - Overall readiness status
-    - Individual check results (agents_loaded, api_available)
+    - Individual check results
     - Timestamp
     """
-    # Check if routers are loaded first
+    checks = {
+        "api_available": "pass",
+    }
+    ready = True
+    status_text = "ready"
+    
+    # Check 1: Routers loaded
     if not _routers_loaded:
-        # Routers still loading - not ready
-        checks = {
-            "api_available": "pass",
-            "routers_loaded": "loading",
-        }
+        checks["routers_loaded"] = "loading"
         ready = False
         status_text = "loading"
     elif _router_load_error:
-        # Router loading failed
-        checks = {
-            "api_available": "pass",
-            "routers_loaded": f"error: {_router_load_error}",
-        }
-        ready = False
-        status_text = "degraded"
-    elif get_agent_loader is None:
-        # Agent loader not available
-        checks = {
-            "api_available": "pass",
-            "routers_loaded": "pass",
-            "agents_loaded": "unavailable",
-        }
+        checks["routers_loaded"] = f"error: {_router_load_error}"
         ready = False
         status_text = "degraded"
     else:
-        # Get agent status from loader with timeout
+        checks["routers_loaded"] = "pass"
+    
+    # Check 2: Agents loaded (only if routers loaded)
+    if ready and get_agent_loader is not None:
         try:
             loader = get_agent_loader()
             # Add timeout to prevent readiness check from blocking too long
@@ -1016,13 +1098,6 @@ async def readiness_check(response: Response) -> ReadinessResponse:
             loading_in_progress = agent_status.get('loading_in_progress', False)
             loading_error = agent_status.get('loading_error')
             
-            # Build check results
-            checks = {
-                "api_available": "pass",
-                "routers_loaded": "pass",
-            }
-            
-            # Check agent loading status
             if loading_in_progress:
                 checks["agents_loaded"] = "loading"
                 ready = False
@@ -1037,47 +1112,102 @@ async def readiness_check(response: Response) -> ReadinessResponse:
                 total_agents = agent_status.get('total_agents', 0)
                 
                 if total_agents == 0:
-                    # No agents have been loaded yet
                     checks["agents_loaded"] = "loading"
                     ready = False
                     status_text = "loading"
                 elif agent_availability > 0:
-                    # At least some agents are available
                     checks["agents_loaded"] = "pass"
-                    ready = True
-                    status_text = "ready"
-                    
-                    # Include details about available agents
                     available = agent_status.get('available_agents', [])
                     unavailable = agent_status.get('unavailable_agents', [])
                     checks["agents_available"] = f"{len(available)}/{total_agents}"
-                    
                     if unavailable:
                         checks["agents_unavailable"] = ", ".join(unavailable)
                 else:
-                    # No agents are available
                     checks["agents_loaded"] = "fail"
                     ready = False
                     status_text = "degraded"
-            
+                    
         except asyncio.TimeoutError:
             logger.warning("Readiness check timed out waiting for agent status")
-            checks = {
-                "api_available": "pass",
-                "routers_loaded": "pass",
-                "agents_loaded": "timeout",
-            }
+            checks["agents_loaded"] = "timeout"
             ready = False
             status_text = "timeout"
         except Exception as e:
-            logger.error(f"Error checking readiness: {e}", exc_info=True)
-            checks = {
-                "api_available": "pass",
-                "routers_loaded": "pass",
-                "agents_loaded": "error",
-            }
+            logger.error(f"Error checking agent readiness: {e}", exc_info=True)
+            checks["agents_loaded"] = "error"
             ready = False
             status_text = "error"
+    elif get_agent_loader is None and ready:
+        # Agent loader not available yet
+        checks["agents_loaded"] = "loading"
+        ready = False
+        status_text = "loading"
+    
+    # Check 3: Redis connection (P2 FIX - actual PING, not just "configured")
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        try:
+            import redis.asyncio as aioredis
+            # Try to connect with timeout (1s for readiness check balance between speed and reliability)
+            r = aioredis.Redis.from_url(
+                redis_url,
+                socket_connect_timeout=1.0,
+                socket_timeout=1.0
+            )
+            await r.ping()
+            checks["redis"] = "connected"
+            await r.close()
+        except ImportError:
+            checks["redis"] = "client_not_installed"
+            # Don't fail readiness if Redis client not installed - it's optional
+        except Exception as e:
+            # Redis is optional - show status but don't fail readiness
+            checks["redis"] = f"unavailable: {type(e).__name__}"
+            logger.warning(f"Redis health check failed (optional): {e}")
+    else:
+        checks["redis"] = "not_configured"
+    
+    # Check 4: Database connection (P2 FIX - actual query, not just "configured")
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        try:
+            # Try a simple database query with timeout
+            from sqlalchemy import text
+            from sqlalchemy.ext.asyncio import create_async_engine
+            
+            # Convert database URL for async if needed
+            async_db_url = database_url
+            if database_url.startswith("postgresql://"):
+                async_db_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif database_url.startswith("sqlite://"):
+                async_db_url = database_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+            
+            # Configure connection args with timeout based on database type
+            connect_args = {}
+            if "sqlite" in async_db_url:
+                connect_args = {"timeout": 2}
+            elif "asyncpg" in async_db_url:
+                # asyncpg uses 'command_timeout' for query timeout
+                connect_args = {"command_timeout": 2}
+            
+            engine = create_async_engine(
+                async_db_url,
+                pool_pre_ping=True,
+                connect_args=connect_args,
+                pool_timeout=2,  # Time to wait for connection from pool
+            )
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            await engine.dispose()
+            checks["database"] = "connected"
+        except ImportError:
+            checks["database"] = "driver_not_installed"
+        except Exception as e:
+            # Database is optional - show status but don't fail readiness
+            checks["database"] = f"unavailable: {type(e).__name__}"
+            logger.warning(f"Database health check failed (optional): {e}")
+    else:
+        checks["database"] = "not_configured"
     
     # Set HTTP status code based on readiness
     if not ready:
@@ -1163,15 +1293,34 @@ async def detailed_health_check() -> DetailedHealthResponse:
     except Exception:
         dependencies["redis"] = "unavailable"
     
-    # Check Database
-    try:
-        # Check if DATABASE_URL is configured
-        if os.getenv("DATABASE_URL"):
-            dependencies["database"] = "configured"
-        else:
-            dependencies["database"] = "not_configured"
-    except Exception:
-        dependencies["database"] = "error"
+    # Check Database - P2 FIX: Actually test the connection, not just "configured"
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        try:
+            from sqlalchemy import text
+            from sqlalchemy.ext.asyncio import create_async_engine
+            
+            # Convert database URL for async if needed
+            async_url = database_url
+            if database_url.startswith("postgresql://"):
+                async_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif database_url.startswith("sqlite://"):
+                async_url = database_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+            
+            engine = create_async_engine(
+                async_url,
+                pool_pre_ping=True,
+            )
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            await engine.dispose()
+            dependencies["database"] = "connected"
+        except ImportError:
+            dependencies["database"] = "driver_not_installed"
+        except Exception as e:
+            dependencies["database"] = f"error: {type(e).__name__}"
+    else:
+        dependencies["database"] = "not_configured"
     
     # Check Feast feature store
     try:

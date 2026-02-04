@@ -68,8 +68,8 @@ def parse_args():
     parser.add_argument(
         "--workers",
         type=int,
-        default=1,
-        help="Number of worker processes (default: 1)",
+        default=None,  # Will use WEB_CONCURRENCY or default to 1
+        help="Number of worker processes (default: WEB_CONCURRENCY env var or 1)",
     )
 
     parser.add_argument(
@@ -86,6 +86,20 @@ def parse_args():
 def main():
     """Main entry point for the API server."""
     args = parse_args()
+    
+    # P3 FIX: Support WEB_CONCURRENCY environment variable for worker count
+    # This allows easy scaling through environment configuration
+    if args.workers is None:
+        workers = int(os.environ.get("WEB_CONCURRENCY", "1"))
+    else:
+        workers = args.workers
+    
+    # Validate worker count
+    if workers < 1:
+        logger.warning(f"Invalid worker count {workers}, using 1")
+        workers = 1
+    elif workers > 16:
+        logger.warning(f"High worker count {workers}, consider if this is intentional")
 
     # Configure logging
     logging.basicConfig(
@@ -98,7 +112,9 @@ def main():
     logger.info("=" * 70)
     logger.info(f"Host: {args.host}")
     logger.info(f"Port: {args.port}")
-    logger.info(f"Workers: {args.workers}")
+    logger.info(f"Workers: {workers}")
+    if workers == 1:
+        logger.info("  Note: Single worker mode. Set WEB_CONCURRENCY for more workers.")
     logger.info(f"Reload: {args.reload}")
     logger.info(f"Log Level: {args.log_level}")
     logger.info("=" * 70)
@@ -112,7 +128,7 @@ def main():
         host=args.host,
         port=args.port,
         reload=args.reload,
-        workers=args.workers if not args.reload else 1,
+        workers=workers if not args.reload else 1,
         log_level=args.log_level,
         access_log=True,
         timeout_keep_alive=300,  # 5 minutes for long-running operations (pipeline, codegen)

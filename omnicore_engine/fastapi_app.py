@@ -881,9 +881,38 @@ app = FastAPI(
 )
 
 # Configure middlewares
+# P0 FIX: Replace wildcard CORS with environment-configured origins
+# This prevents "works in curl but fails in browser" issues in production
+_is_production_omni = (
+    os.getenv("APP_ENV", "").lower() == "production" or
+    os.getenv("PRODUCTION_MODE", "0") == "1" or
+    os.getenv("RAILWAY_ENVIRONMENT") is not None
+)
+_allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "") or os.getenv("CORS_ORIGINS", "")
+if _allowed_origins_str:
+    _allowed_origins = [origin.strip() for origin in _allowed_origins_str.split(",") if origin.strip()]
+elif _is_production_omni:
+    # In production, reject all CORS requests without explicit configuration
+    _allowed_origins = []
+    logger.error(
+        "CRITICAL: ALLOWED_ORIGINS not set in production! "
+        "Browser requests to OmniCore API will fail. "
+        "Set ALLOWED_ORIGINS=https://your-frontend.com,https://your-app.railway.app"
+    )
+else:
+    # Development defaults
+    _allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:5173",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
