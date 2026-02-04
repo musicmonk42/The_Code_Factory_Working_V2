@@ -103,20 +103,54 @@ def ensure_real_aiofiles():
     Remove any mocks that may have been applied by conftest.
     """
     import sys
+    import importlib
+    from unittest.mock import MagicMock, Mock
     
-    # Remove any mocked aiofiles modules
-    mocked_modules = [key for key in sys.modules.keys() if 'aiofiles' in key]
-    for mod in mocked_modules:
-        if hasattr(sys.modules.get(mod), '_mock_name'):
+    # Step 1: Remove any mocked aiofiles modules from sys.modules
+    # This includes both the main module and any submodules
+    mocked_modules = [key for key in list(sys.modules.keys()) if 'aiofiles' in key]
+    for mod_name in mocked_modules:
+        mod = sys.modules.get(mod_name)
+        # Check if this is a mock by looking for mock attributes or isinstance check
+        if mod is not None and (
+            hasattr(mod, '_mock_name') or 
+            hasattr(mod, '_spec_class') or
+            isinstance(mod, (MagicMock, Mock))
+        ):
             # This is a mock, remove it
-            del sys.modules[mod]
+            del sys.modules[mod_name]
     
-    # Re-import real aiofiles to ensure it's available
+    # Step 2: Force re-import of the real aiofiles module
     try:
+        # First try to import it fresh
         import aiofiles
+        
+        # If aiofiles was already imported but potentially mocked, reload it
+        if 'aiofiles' in sys.modules:
+            aiofiles = importlib.reload(aiofiles)
+        
     except ImportError:
-        pytest.skip("aiofiles not installed")
+        pytest.skip("aiofiles not installed - cannot run persistence tests")
     
+    # Step 3: Verify that aiofiles is functional (not a mock)
+    try:
+        # Check if aiofiles.open exists and is callable
+        if not hasattr(aiofiles, 'open') or not callable(aiofiles.open):
+            pytest.skip("aiofiles.open is not available - cannot run persistence tests")
+        
+        # Check if aiofiles.open is a mock
+        if isinstance(aiofiles.open, (MagicMock, Mock)) or hasattr(aiofiles.open, '_mock_name'):
+            pytest.skip("aiofiles.open is mocked and cannot be unmocked - skipping persistence tests")
+        
+        # Additional verification: check that aiofiles module is real (not a mock itself)
+        if isinstance(aiofiles, (MagicMock, Mock)) or hasattr(aiofiles, '_mock_name'):
+            pytest.skip("aiofiles module is still mocked - cannot run persistence tests")
+            
+    except Exception as e:
+        # If verification fails for any reason, skip the tests
+        pytest.skip(f"Failed to verify aiofiles functionality: {e}")
+    
+    # Step 4: All checks passed, yield to run the test
     yield
 
 
