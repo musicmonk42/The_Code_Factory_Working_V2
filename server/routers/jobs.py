@@ -578,7 +578,10 @@ async def list_job_files(job_id: str) -> JobFilesResponse:
     job = jobs_db[job_id]
     job_dir = Path(f"./uploads/{job_id}")
     
+    logger.info(f"[Files] Listing files for job {job_id}, status={job.status}, dir={job_dir}")
+    
     if not job_dir.exists():
+        logger.warning(f"[Files] Job directory {job_dir} does not exist for job {job_id}")
         return JobFilesResponse(
             job_id=job_id,
             status=job.status,
@@ -608,6 +611,14 @@ async def list_job_files(job_id: str) -> JobFilesResponse:
 
     # Sort files by path for consistent ordering
     files.sort(key=lambda f: f.path)
+    
+    logger.info(
+        f"[Files] Found {len(files)} files for job {job_id}, total_size={total_size} bytes"
+    )
+    if files:
+        # Log first few files for debugging
+        sample_files = [f.path for f in files[:5]]
+        logger.info(f"[Files] Sample files: {', '.join(sample_files)}")
     
     # Only provide download URL if job is completed and has files
     download_url = None
