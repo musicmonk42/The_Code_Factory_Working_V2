@@ -910,28 +910,28 @@ else:
                         "Set ALLOWED_ORIGINS explicitly if you have additional frontend domains."
                     )
                 else:
-                    # Railway env var doesn't contain expected domain - log warning and block
+                    # Railway env var doesn't contain expected domain - use permissive default with warning
                     logger.warning(
                         f"Railway URL detected but hostname doesn't match expected pattern: {hostname}. "
                         "Expected: *.railway.app or *.up.railway.app. "
-                        "Blocking CORS for security. Set ALLOWED_ORIGINS explicitly."
+                        "Using permissive CORS default. Set ALLOWED_ORIGINS explicitly for better security."
                     )
-                    ALLOWED_ORIGINS = []
+                    ALLOWED_ORIGINS = ["*"]  # Allow all origins to prevent breaking the application
             except Exception as e:
-                # URL parsing failed - block CORS for security
+                # URL parsing failed - use permissive default with warning
                 logger.warning(
                     f"Failed to parse Railway URL '{railway_url}': {e}. "
-                    "Blocking CORS for security. Set ALLOWED_ORIGINS explicitly."
+                    "Using permissive CORS default. Set ALLOWED_ORIGINS explicitly for better security."
                 )
-                ALLOWED_ORIGINS = []
+                ALLOWED_ORIGINS = ["*"]  # Allow all origins to prevent breaking the application
         else:
             # No Railway URL detected and no explicit configuration
-            # Use restrictive default but log critical error
-            ALLOWED_ORIGINS = []  # Block CORS by default for security
-            logger.error(
-                "CRITICAL: ALLOWED_ORIGINS not set in production and Railway URL not detected! "
-                "Browser requests will fail with CORS errors. "
-                "Set ALLOWED_ORIGINS environment variable with your frontend domains. "
+            # Use permissive default to prevent breaking the application
+            ALLOWED_ORIGINS = ["*"]  # Allow all origins as fallback
+            logger.warning(
+                "ALLOWED_ORIGINS not set in production and Railway URL not detected. "
+                "Using permissive CORS default (*). "
+                "For better security, set ALLOWED_ORIGINS environment variable with your frontend domains. "
                 "Example: ALLOWED_ORIGINS=https://myapp.example.com,https://app.mycompany.com"
             )
     else:
