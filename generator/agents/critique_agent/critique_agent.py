@@ -369,7 +369,10 @@ async def call_llm_for_critique(
     Expects the underlying LLM (via call_llm_api) to return JSON (or markdown-wrapped JSON),
     but degrades gracefully when it doesn't.
     """
-    response = await call_llm_api(prompt=prompt, provider=config.target_language)
+    # Fix: Use proper LLM provider instead of target_language
+    # target_language is for code generation, not LLM provider selection
+    provider = os.getenv("DEFAULT_LLM_PROVIDER", "openai")
+    response = await call_llm_api(prompt=prompt, provider=provider)
 
     content = response.get("content") if isinstance(response, dict) else str(response)
 
@@ -677,16 +680,15 @@ class PythonCritiquePlugin(LanguageCritiquePlugin):
         temp_dir: Path,
         config: CritiqueConfig,
     ) -> Dict[str, Any]:
-        payload = {
-            "test_files": test_files,
-            "code_files": code_files,
-            "output_path": str(temp_dir),
-            "config": {
-                "language": "python",
-                "timeout": config.tool_timeout_seconds,
-            },
-        }
-        return await runner_run_tests(payload)
+        # Fix: Pass individual parameters instead of payload dict
+        return await runner_run_tests(
+            test_files=test_files,
+            code_files=code_files,
+            temp_path=str(temp_dir),
+            language="python",
+            framework="pytest",
+            timeout=config.tool_timeout_seconds,
+        )
 
     async def run_e2e_tests(
         self,
@@ -748,16 +750,15 @@ class JavaScriptCritiquePlugin(LanguageCritiquePlugin):
         temp_dir: Path,
         config: CritiqueConfig,
     ) -> Dict[str, Any]:
-        payload = {
-            "test_files": test_files,
-            "code_files": code_files,
-            "output_path": str(temp_dir),
-            "config": {
-                "language": "javascript",
-                "timeout": config.tool_timeout_seconds,
-            },
-        }
-        return await runner_run_tests(payload)
+        # Fix: Pass individual parameters instead of payload dict
+        return await runner_run_tests(
+            test_files=test_files,
+            code_files=code_files,
+            temp_path=str(temp_dir),
+            language="javascript",
+            framework="jest",
+            timeout=config.tool_timeout_seconds,
+        )
 
     async def run_e2e_tests(
         self,
@@ -819,16 +820,15 @@ class GoCritiquePlugin(LanguageCritiquePlugin):
         temp_dir: Path,
         config: CritiqueConfig,
     ) -> Dict[str, Any]:
-        payload = {
-            "test_files": test_files,
-            "code_files": code_files,
-            "output_path": str(temp_dir),
-            "config": {
-                "language": "go",
-                "timeout": config.tool_timeout_seconds,
-            },
-        }
-        return await runner_run_tests(payload)
+        # Fix: Pass individual parameters instead of payload dict
+        return await runner_run_tests(
+            test_files=test_files,
+            code_files=code_files,
+            temp_path=str(temp_dir),
+            language="go",
+            framework="testing",
+            timeout=config.tool_timeout_seconds,
+        )
 
     async def run_e2e_tests(
         self,
