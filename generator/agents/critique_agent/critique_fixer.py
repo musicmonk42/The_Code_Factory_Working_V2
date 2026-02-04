@@ -585,8 +585,8 @@ async def security_check_fix(code_files: Dict[str, str], lang: str) -> bool:
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 file_path.write_text(content)
             
-            # Now scan the temp directory
-            result = await scan_for_vulnerabilities(temp_dir, scan_type="code")
+            # Now scan the temp directory (convert to str for consistency)
+            result = await scan_for_vulnerabilities(str(temp_dir), scan_type="code")
             vulnerabilities_found = result.get("vulnerabilities_found", 0)
             if vulnerabilities_found > 0:
                 logger.warning(f"Security vulnerabilities found: {vulnerabilities_found}")
