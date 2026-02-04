@@ -31,7 +31,9 @@ Critical Requirements:
 
 import json
 import logging
+import mimetypes
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -419,7 +421,6 @@ async def finalize_job_failure(
         job.metadata["finalization_correlation_id"] = correlation_id
         
         # Store stack trace if available (helps debugging)
-        import traceback
         job.metadata["error_traceback"] = traceback.format_exc()
         
         # Mark as finalized
@@ -549,7 +550,6 @@ async def _generate_output_manifest(
                     file_size = file_stat.st_size
                     
                     # Detect MIME type for better UI/download handling
-                    import mimetypes
                     mime_type, _ = mimetypes.guess_type(str(file_path))
                     
                     file_info = {

@@ -34,6 +34,7 @@ Circuit Breaker States:
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
@@ -292,7 +293,6 @@ async def dispatch_job_completion(
         >>> }
         >>> success = await dispatch_job_completion("job-123", job_data)
     """
-    import time
     start_time = time.time()
     correlation_id = correlation_id or str(uuid4())
     
@@ -482,8 +482,6 @@ async def _dispatch_via_kafka(event: Dict[str, Any], correlation_id: str) -> boo
     - TLS support via KAFKA_SECURITY_PROTOCOL
     - SASL authentication for cloud providers
     """
-    import time
-    
     try:
         # Check if kafka-python is available
         try:
