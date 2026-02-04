@@ -1122,14 +1122,21 @@ Respond in plain prose only (no JSON / no code fences).
                                     }
 
                                 if (
-                                    v_report.get("build_status") != "success"
+                                    v_report.get("build_status") not in ("success", "skipped")
                                     or v_report.get("compliance_score", 0.0) < 0.5
                                 ):
-                                    VALIDATION_ERRORS.labels(run_type=t).inc()
-                                    raise RunnerError(
-                                        error_code="VALIDATION_FAILED",
-                                        detail=f"Config validation failed for {t}"
-                                    )
+                                    # Allow skipped builds when Docker is unavailable (unless docker_required=True)
+                                    if v_report.get("build_status") == "skipped":
+                                        logger.warning(
+                                            f"Docker validation skipped for {t} - Docker not available. "
+                                            "Set DOCKER_REQUIRED=true to enforce Docker availability."
+                                        )
+                                    else:
+                                        VALIDATION_ERRORS.labels(run_type=t).inc()
+                                        raise RunnerError(
+                                            error_code="VALIDATION_FAILED",
+                                            detail=f"Config validation failed for {t}"
+                                        )
 
                                 configs[t] = handled["final_config_output"]
 

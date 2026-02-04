@@ -72,6 +72,16 @@ try:
 except ImportError:
     HAS_TIKTOKEN = False
 
+# FIX: Set TOKENIZERS_PARALLELISM to avoid warning about fork safety
+# This prevents the warning: "The current process just got forked, after parallelism has already been used"
+if "TOKENIZERS_PARALLELISM" not in os.environ:
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    logger.debug("Set TOKENIZERS_PARALLELISM=false to prevent fork warnings")
+
+# Constants for retry logic
+DEFAULT_MAX_RETRIES = 3
+BASE_BACKOFF_SECONDS = 1.0
+
 
 # --- Secrets Management ---
 class SecretsManager:
@@ -431,6 +441,7 @@ class LLMClient:
         provider: Optional[
             Literal["openai", "claude", "grok", "gemini", "local"]
         ] = None,
+        max_retries: int = DEFAULT_MAX_RETRIES,
         **kwargs,
     ) -> Dict[str, Any] | AsyncGenerator[str, None]:
         # Ensure initialization has started (lazy initialization for backward compatibility)
@@ -443,6 +454,35 @@ class LLMClient:
         # [FIX] Redact secrets from the prompt *before* it's used in cache keys or logs
         # [FIX] redact_secrets is now synchronous, remove await
         prompt = redact_secrets(prompt)
+        
+        # FIX: Add retry logic with exponential backoff
+        for attempt in range(max_retries):
+            try:
+                start_time = time.time()
+
+                if not await self.rate_limiter.acquire(provider):
+                    metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
+                    raise LLMError("Rate limit exceeded")
+
+                if not await self.circuit_breaker.allow_request(provider):
+                    metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
+                    raise LLMError("Circuit breaker open")
+
+                cache_key = hashlib.sha256(f"{prompt}:{model}:{provider}".encode()).hexdigest()
+                cached = await self.cache.get(cache_key)
+                if cached and not stream:
+                    metrics.LLM_CALLS_TOTAL.labels(provider=provider, model=model).inc()
+                    return cached
+
+                plugin = self.manager.get_provider(provider)
+                # [FIX] Graceful degradation if provider plugin failed to load (e.g., missing SDK/Key)
+                if not plugin:
+                    metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
+                    self.circuit_breaker.record_failure(provider)
+                    raise ConfigurationError(
+                        f"LLM provider '{provider}' not loaded",
+                        detail="SDK or API key may be missing",
+                    )
         start_time = time.time()
 
         if not await self.rate_limiter.acquire(provider):
@@ -480,67 +520,89 @@ class LLMClient:
             metrics.LLM_CALLS_TOTAL.labels(provider=provider, model=model).inc()
             self.circuit_breaker.record_success(provider)  # Record success here
 
-            if isinstance(response, dict):
-                input_tokens = await self.count_tokens(prompt, model)
-                output_tokens = await self.count_tokens(
-                    response.get("content", ""), model
+                response = await plugin.call(
+                    prompt=prompt, model=model, stream=stream, **kwargs
                 )
-                metrics.LLM_TOKENS_INPUT.labels(provider=provider, model=model).inc(
-                    input_tokens
+                latency = time.time() - start_time
+                metrics.LLM_LATENCY_SECONDS.labels(provider=provider, model=model).observe(
+                    latency
                 )
-                metrics.LLM_TOKENS_OUTPUT.labels(provider=provider, model=model).inc(
-                    output_tokens
-                )
-                # [FIX] Replace add_provenance with log_audit_event
-                await log_audit_event(
-                    action="llm_call",
-                    data={
-                        "provider": provider,
-                        "model": model,
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                    },
-                )
-                await self.cache.set(cache_key, response)
-                return response
-            else:
-                # Handle async generator for streaming
-                async def stream_generator():
-                    total_output = ""
-                    try:
-                        async for chunk in response:
-                            total_output += chunk
-                            yield chunk
-                    finally:
-                        input_tokens = await self.count_tokens(prompt, model)
-                        output_tokens = await self.count_tokens(total_output, model)
-                        metrics.LLM_TOKENS_INPUT.labels(
-                            provider=provider, model=model
-                        ).inc(input_tokens)
-                        metrics.LLM_TOKENS_OUTPUT.labels(
-                            provider=provider, model=model
-                        ).inc(output_tokens)
-                        # [FIX] Log audit event for streaming call
-                        await log_audit_event(
-                            action="llm_stream_call",
-                            data={
-                                "provider": provider,
-                                "model": model,
-                                "input_tokens": input_tokens,
-                                "output_tokens": output_tokens,
-                            },
-                        )
+                metrics.LLM_CALLS_TOTAL.labels(provider=provider, model=model).inc()
+                self.circuit_breaker.record_success(provider)  # Record success here
 
-                return stream_generator()
+                if isinstance(response, dict):
+                    input_tokens = await self.count_tokens(prompt, model)
+                    output_tokens = await self.count_tokens(
+                        response.get("content", ""), model
+                    )
+                    metrics.LLM_TOKENS_INPUT.labels(provider=provider, model=model).inc(
+                        input_tokens
+                    )
+                    metrics.LLM_TOKENS_OUTPUT.labels(provider=provider, model=model).inc(
+                        output_tokens
+                    )
+                    # [FIX] Replace add_provenance with log_audit_event
+                    await log_audit_event(
+                        action="llm_call",
+                        data={
+                            "provider": provider,
+                            "model": model,
+                            "input_tokens": input_tokens,
+                            "output_tokens": output_tokens,
+                        },
+                    )
+                    await self.cache.set(cache_key, response)
+                    return response
+                else:
+                    # Handle async generator for streaming
+                    async def stream_generator():
+                        total_output = ""
+                        try:
+                            async for chunk in response:
+                                total_output += chunk
+                                yield chunk
+                        finally:
+                            input_tokens = await self.count_tokens(prompt, model)
+                            output_tokens = await self.count_tokens(total_output, model)
+                            metrics.LLM_TOKENS_INPUT.labels(
+                                provider=provider, model=model
+                            ).inc(input_tokens)
+                            metrics.LLM_TOKENS_OUTPUT.labels(
+                                provider=provider, model=model
+                            ).inc(output_tokens)
+                            # [FIX] Log audit event for streaming call
+                            await log_audit_event(
+                                action="llm_stream_call",
+                                data={
+                                    "provider": provider,
+                                    "model": model,
+                                    "input_tokens": input_tokens,
+                                    "output_tokens": output_tokens,
+                                },
+                            )
 
-        except Exception as e:
-            metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
-            self.circuit_breaker.record_failure(provider)
-            # Don't re-raise as LLMError if it's already a ConfigurationError
-            if isinstance(e, (LLMError, ConfigurationError)):
+                    return stream_generator()
+
+            except (LLMError, ConfigurationError) as e:
+                # Don't retry configuration errors or circuit breaker opens
+                metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
+                self.circuit_breaker.record_failure(provider)
                 raise
-            raise LLMError(f"LLM call failed: {e}") from e
-        # [FIX] Removed 'finally' block that incorrectly recorded success
+            except Exception as e:
+                metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
+                self.circuit_breaker.record_failure(provider)
+                
+                # Retry with exponential backoff
+                if attempt < max_retries - 1:
+                    backoff_time = (2 ** attempt) * BASE_BACKOFF_SECONDS
+                    logger.warning(
+                        f"LLM call failed (attempt {attempt + 1}/{max_retries}), "
+                        f"retrying in {backoff_time}s: {e}"
+                    )
+                    await asyncio.sleep(backoff_time)
+                else:
+                    # Last attempt failed, raise error
+                    raise LLMError(f"LLM call failed after {max_retries} retries: {e}") from e
 
     async def call_ensemble_api(
         self,

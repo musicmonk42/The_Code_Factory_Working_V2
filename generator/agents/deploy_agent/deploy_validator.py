@@ -464,6 +464,7 @@ class DockerValidator(Validator):
                 if not shutil.which("docker"):
                     logger.warning("Docker tool not found. Skipping Docker build test.")
                     report["build_status"] = "skipped"
+                    report["lint_status"] = "skipped"  # FIX: Also set lint_status to skipped
                     report["lint_issues"].append(
                         "Docker tool not available. Install docker to enable build validation."
                     )
