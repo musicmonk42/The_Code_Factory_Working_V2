@@ -203,6 +203,15 @@ async def _trigger_pipeline_background(
             # SUCCESS: Finalize with success status
             logger.info(f"[Pipeline] Finalizing successful job {job_id}")
             
+            # Verify output directory exists and has files before finalizing
+            job_dir = Path(f"./uploads/{job_id}")
+            if not job_dir.exists():
+                logger.warning(f"[Pipeline] Output directory {job_dir} does not exist after pipeline completion")
+            else:
+                files = list(job_dir.rglob('*'))
+                file_count = sum(1 for f in files if f.is_file())
+                logger.info(f"[Pipeline] Found {file_count} output files in {job_dir}")
+            
             # Call finalization service to persist status and manifest
             finalized = await finalize_job_success(job_id, result)
             
@@ -1021,5 +1030,60 @@ async def run_full_pipeline(
 
     logger.info(f"Full pipeline executed for job {job_id}")
     return result
+
+
+@router.post("/{job_id}/dispatch-to-sfe")
+async def dispatch_job_to_sfe(job_id: str):
+    """
+    Manually trigger dispatch to Self-Fixing Engineer for a completed job.
+    
+    This endpoint allows manual triggering of job completion dispatch to downstream
+    systems (e.g., Self-Fixing Engineer) for jobs that have already completed.
+    
+    Args:
+        job_id: The unique identifier of the job to dispatch
+        
+    Returns:
+        Success response with dispatch status
+        
+    Raises:
+        HTTPException: If job not found (404) or job not completed (400)
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = jobs_db[job_id]
+    
+    if job.status != JobStatus.COMPLETED:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Job must be COMPLETED to dispatch (current status: {job.status})"
+        )
+    
+    logger.info(f"Manual dispatch to SFE requested for job {job_id}")
+    
+    job_data = {
+        "status": job.status,
+        "output_files": job.output_files,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+    }
+    
+    try:
+        dispatched = await dispatch_job_completion(job_id, job_data)
+        
+        if dispatched:
+            logger.info(f"Successfully dispatched job {job_id} to SFE")
+            return {"status": "dispatched", "job_id": job_id, "success": True}
+        else:
+            logger.warning(f"Failed to dispatch job {job_id} to SFE - no dispatch methods succeeded")
+            return {
+                "status": "failed", 
+                "job_id": job_id, 
+                "success": False,
+                "message": "No dispatch methods available or all failed. Check KAFKA_ENABLED and SFE_WEBHOOK_URL configuration."
+            }
+    except Exception as e:
+        logger.error(f"Error dispatching job {job_id} to SFE: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -97,6 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Navigation
+let jobsRefreshInterval = null;
+
 function initNavigation() {
     const navLinks = document.querySelectorAll('.main-nav a');
     
@@ -120,6 +122,36 @@ function showView(viewName) {
     const targetView = document.getElementById(`${viewName}-view`);
     if (targetView) {
         targetView.classList.add('active');
+    }
+    
+    // Handle jobs auto-refresh
+    if (viewName === 'jobs') {
+        startJobsAutoRefresh();
+    } else {
+        stopJobsAutoRefresh();
+    }
+}
+
+function startJobsAutoRefresh() {
+    // Stop any existing interval
+    stopJobsAutoRefresh();
+    
+    // Start new interval (refresh every 5 seconds)
+    jobsRefreshInterval = setInterval(async () => {
+        const jobsView = document.getElementById('jobs-view');
+        if (jobsView && jobsView.classList.contains('active')) {
+            await loadJobs();
+        }
+    }, 5000);
+    
+    console.log('Jobs auto-refresh started (5s interval)');
+}
+
+function stopJobsAutoRefresh() {
+    if (jobsRefreshInterval) {
+        clearInterval(jobsRefreshInterval);
+        jobsRefreshInterval = null;
+        console.log('Jobs auto-refresh stopped');
     }
 }
 
@@ -490,30 +522,46 @@ async function loadJobs() {
         }
         
         container.innerHTML = '';
-        data.jobs.forEach(job => {
-            const card = createJobCard(job);
+        // Create job cards asynchronously
+        for (const job of data.jobs) {
+            const card = await createJobCard(job);
             container.appendChild(card);
-        });
+        }
     } catch (error) {
         console.error('Failed to load jobs:', error);
         container.innerHTML = '<p class="error">Failed to load jobs. Please try again.</p>';
     }
 }
 
-function createJobCard(job) {
+async function createJobCard(job) {
     const card = document.createElement('div');
     card.className = 'job-card';
     
-    const hasOutputFiles = job.output_files && job.output_files.length > 0;
-    const hasInputFiles = job.input_files && job.input_files.length > 0;
-    const hasAnyFiles = hasOutputFiles || hasInputFiles;
     const isCompleted = job.status === 'completed';
     const isRunning = job.status === 'running';
     const isFailed = job.status === 'failed';
     
-    // Show output file count if available, with null-safe access
+    // Auto-fetch files for completed jobs to ensure file count is up-to-date
+    let hasOutputFiles = job.output_files && job.output_files.length > 0;
+    let outputCount = job.output_files ? job.output_files.length : 0;
+    
+    if (isCompleted && job.id) {
+        try {
+            const filesResponse = await fetchWithRetry(`${API_BASE}/jobs/${job.id}/files`, {}, 1);
+            if (filesResponse.ok) {
+                const filesData = await filesResponse.json();
+                outputCount = filesData.total_files || 0;
+                hasOutputFiles = outputCount > 0;
+            }
+        } catch (e) {
+            console.warn('Could not auto-fetch files for job', job.id, e);
+        }
+    }
+    
+    const hasInputFiles = job.input_files && job.input_files.length > 0;
+    const hasAnyFiles = hasOutputFiles || hasInputFiles;
     const inputCount = job.input_files ? job.input_files.length : 0;
-    const outputCount = job.output_files ? job.output_files.length : 0;
+    
     const fileCountDisplay = hasOutputFiles 
         ? `Input: ${inputCount}, Output: ${outputCount}`
         : `Files: ${inputCount}`;
@@ -545,6 +593,11 @@ function createJobCard(job) {
             ${isCompleted && hasAnyFiles ? `
                 <button class="btn btn-primary" onclick="downloadJobFiles('${job.id}')">
                     ⬇️ Download
+                </button>
+            ` : ''}
+            ${isCompleted && hasOutputFiles ? `
+                <button class="btn btn-primary" onclick="sendToSelfFixing('${job.id}')">
+                    🤖 Send to SFE
                 </button>
             ` : ''}
             ${(isCompleted || isFailed || hasAnyFiles) ? `
@@ -1418,6 +1471,29 @@ async function downloadJobFiles(jobId) {
         }
     } catch (error) {
         showError('Download failed: ' + error.message);
+    }
+}
+
+async function sendToSelfFixing(jobId) {
+    try {
+        showSuccess('Sending to Self-Fixing Engineer...');
+        const response = await fetchWithRetry(`${API_BASE}/generator/${jobId}/dispatch-to-sfe`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                showSuccess('✓ Job sent to Self-Fixing Engineer successfully!');
+            } else {
+                showError(data.message || 'Failed to send to SFE - no dispatch methods available');
+            }
+        } else {
+            const errorText = await response.text();
+            showError(`Failed to send to SFE: ${errorText}`);
+        }
+    } catch (error) {
+        showError('Failed to send to Self-Fixing Engineer: ' + error.message);
     }
 }
 
