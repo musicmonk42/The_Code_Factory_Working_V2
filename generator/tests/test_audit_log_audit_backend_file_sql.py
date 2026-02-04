@@ -200,6 +200,7 @@ async def mock_alerts_and_otel():
             new_callable=AsyncMock,
         ) as mock_alert,
         patch("audit_log.audit_backend.audit_backend_core.tracer") as mock_tracer,
+        patch("audit_log.audit_backend.audit_backend_core.HAS_OPENTELEMETRY", True),
     ):
 
         mock_span = MagicMock()

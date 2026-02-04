@@ -771,41 +771,46 @@ class LogBackend(abc.ABC):
 
         async def perform_flush():
             start_time = time.perf_counter()
-            if HAS_OPENTELEMETRY:
-                with tracer.start_as_current_span(
-                    f"{backend_name}.flush_batch"
-                ) as span:
-                    span.set_attribute("batch.size", len(batch_copy))
-                    span.set_attribute("backend.type", backend_name)
-                    try:
+            
+            try:
+                if HAS_OPENTELEMETRY:
+                    with tracer.start_as_current_span(
+                        f"{backend_name}.flush_batch"
+                    ) as span:
+                        span.set_attribute("batch.size", len(batch_copy))
+                        span.set_attribute("backend.type", backend_name)
                         await self._perform_atomic_batch_write(batch_copy, span)
-
-                        BACKEND_WRITES.labels(backend=backend_name).inc(len(batch_copy))
-                        BACKEND_APPEND_LATENCY.labels(backend=backend_name).observe(
-                            time.perf_counter() - start_time
-                        )
                         span.set_status(_STATUS_OK)
-                    except Exception as e:
-                        BACKEND_ERRORS.labels(
-                            backend=backend_name, type=type(e).__name__
-                        ).inc()
-                        logger.error(
-                            f"Batch flush failed for {backend_name}: {e}", exc_info=True
-                        )
-                        span.set_status(_STATUS_ERROR, description=str(e))
-                        asyncio.create_task(
-                            send_alert(
-                                f"Audit log batch flush failed for {backend_name}: {e}",
-                                severity="high",
-                            )
-                        )
-                        raise
-            else:
-                await self._perform_atomic_batch_write(batch_copy)
+                else:
+                    await self._perform_atomic_batch_write(batch_copy)
+                
+                # CRITICAL FIX: Increment metrics AFTER successful write, OUTSIDE OpenTelemetry block
                 BACKEND_WRITES.labels(backend=backend_name).inc(len(batch_copy))
                 BACKEND_APPEND_LATENCY.labels(backend=backend_name).observe(
                     time.perf_counter() - start_time
                 )
+                
+            except Exception as e:
+                # Increment error metrics in BOTH paths
+                BACKEND_ERRORS.labels(
+                    backend=backend_name, type=type(e).__name__
+                ).inc()
+                logger.error(
+                    f"Batch flush failed for {backend_name}: {e}", exc_info=True
+                )
+                
+                if HAS_OPENTELEMETRY:
+                    # Set OpenTelemetry span status if available
+                    with tracer.start_as_current_span(f"{backend_name}.flush_fail") as span:
+                        span.set_status(_STATUS_ERROR, description=str(e))
+                
+                asyncio.create_task(
+                    send_alert(
+                        f"Audit log batch flush failed for {backend_name}: {e}",
+                        severity="high",
+                    )
+                )
+                raise
 
         # --- START: Change to allow opting out of core retries ---
         # New: allow backends to disable core-level retries
