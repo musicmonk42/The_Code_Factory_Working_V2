@@ -771,7 +771,7 @@ class LogBackend(abc.ABC):
 
         async def perform_flush():
             start_time = time.perf_counter()
-            
+
             try:
                 if HAS_OPENTELEMETRY:
                     with tracer.start_as_current_span(
@@ -779,17 +779,21 @@ class LogBackend(abc.ABC):
                     ) as span:
                         span.set_attribute("batch.size", len(batch_copy))
                         span.set_attribute("backend.type", backend_name)
-                        await self._perform_atomic_batch_write(batch_copy, span)
-                        span.set_status(_STATUS_OK)
+                        try:
+                            await self._perform_atomic_batch_write(batch_copy, span)
+                            span.set_status(_STATUS_OK)
+                        except Exception as e:
+                            span.set_status(_STATUS_ERROR, description=str(e))
+                            raise
                 else:
                     await self._perform_atomic_batch_write(batch_copy)
-                
+
                 # CRITICAL FIX: Increment metrics AFTER successful write, OUTSIDE OpenTelemetry block
                 BACKEND_WRITES.labels(backend=backend_name).inc(len(batch_copy))
                 BACKEND_APPEND_LATENCY.labels(backend=backend_name).observe(
                     time.perf_counter() - start_time
                 )
-                
+
             except Exception as e:
                 # Increment error metrics in BOTH paths
                 BACKEND_ERRORS.labels(
@@ -798,12 +802,7 @@ class LogBackend(abc.ABC):
                 logger.error(
                     f"Batch flush failed for {backend_name}: {e}", exc_info=True
                 )
-                
-                if HAS_OPENTELEMETRY:
-                    # Set OpenTelemetry span status if available
-                    with tracer.start_as_current_span(f"{backend_name}.flush_fail") as span:
-                        span.set_status(_STATUS_ERROR, description=str(e))
-                
+
                 asyncio.create_task(
                     send_alert(
                         f"Audit log batch flush failed for {backend_name}: {e}",
