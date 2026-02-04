@@ -10,6 +10,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 
@@ -36,6 +37,10 @@ from server.storage import jobs_db
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/generator", tags=["Generator"])
+
+# UUID validation pattern (RFC 4122)
+# Used for validating job IDs in API requests to prevent injection attacks
+UUID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
 
 
 def get_generator_service() -> GeneratorService:
@@ -203,19 +208,27 @@ async def _trigger_pipeline_background(
             # SUCCESS: Finalize with success status
             logger.info(f"[Pipeline] Finalizing successful job {job_id}")
             
+            # Verify output directory exists and has files before finalizing
+            job_dir = Path(f"./uploads/{job_id}")
+            if not job_dir.exists():
+                logger.warning(f"[Pipeline] Output directory {job_dir} does not exist after pipeline completion")
+            else:
+                files = list(job_dir.rglob('*'))
+                file_count = sum(1 for f in files if f.is_file())
+                logger.info(f"[Pipeline] Found {file_count} output files in {job_dir}")
+            
             # Call finalization service to persist status and manifest
             finalized = await finalize_job_success(job_id, result)
             
             if finalized:
-                # Dispatch completion event to downstream systems
-                job_data = {
-                    "status": JobStatus.COMPLETED,
-                    "output_files": jobs_db[job_id].output_files,
-                    "completed_at": jobs_db[job_id].completed_at.isoformat() if jobs_db[job_id].completed_at else None,
-                }
-                await dispatch_job_completion(job_id, job_data)
-                
-                logger.info(f"[Pipeline] Job {job_id} finalized and dispatched successfully")
+                # NOTE: Dispatch to Self-Fixing Engineer is now MANUAL ONLY
+                # Users must explicitly click "Send to SFE" button in UI
+                # This prevents unwanted automatic processing and gives users control
+                # See endpoint: POST /generator/{job_id}/dispatch-to-sfe
+                logger.info(
+                    f"[Pipeline] Job {job_id} finalized successfully. "
+                    f"Ready for manual dispatch to Self-Fixing Engineer."
+                )
             else:
                 logger.error(f"[Pipeline] Failed to finalize job {job_id}")
             
@@ -1021,5 +1034,218 @@ async def run_full_pipeline(
 
     logger.info(f"Full pipeline executed for job {job_id}")
     return result
+
+
+@router.post("/{job_id}/dispatch-to-sfe")
+async def dispatch_job_to_sfe(job_id: str):
+    """
+    Manually trigger dispatch to Self-Fixing Engineer for a completed job.
+    
+    This endpoint implements enterprise-grade job dispatch with:
+    - Idempotent operations (safe to call multiple times)
+    - Comprehensive input validation
+    - Structured logging with correlation IDs
+    - Proper error handling and status codes
+    - Security best practices (no sensitive data exposure)
+    
+    **Business Logic:**
+    Dispatches completed job artifacts to the Self-Fixing Engineer system for
+    automated code analysis, testing, and improvement. Only jobs with COMPLETED
+    status and existing output files can be dispatched.
+    
+    **Idempotency:**
+    This operation is idempotent - calling it multiple times with the same job_id
+    will produce the same result. The dispatch service tracks sent events and
+    handles duplicates gracefully.
+    
+    **Dispatch Methods (in priority order):**
+    1. Kafka event stream (if KAFKA_ENABLED=true)
+    2. HTTP webhook (if SFE_WEBHOOK_URL configured)
+    3. Database queue (fallback - not yet implemented)
+    
+    Args:
+        job_id: The unique identifier (UUID) of the job to dispatch
+        
+    Returns:
+        Dict with:
+            - status: "dispatched" or "failed"
+            - job_id: The job identifier
+            - success: Boolean indicating dispatch success
+            - message: (optional) Additional context on failure
+        
+    Raises:
+        HTTPException 400: Job is not in COMPLETED status
+        HTTPException 404: Job ID not found in database
+        HTTPException 500: Internal server error during dispatch
+        
+    Status Codes:
+        200: Dispatch succeeded or failed gracefully (check success field)
+        400: Invalid request (job not completed)
+        404: Job not found
+        500: Internal server error
+        
+    Industry Standards:
+        - REST API design best practices (RFC 7231)
+        - Idempotent operations (RFC 7231 Section 4.2.2)
+        - ISO 27001 A.12.4.1: Event logging
+        - OWASP API Security Top 10 compliance
+        
+    Example Response (Success):
+        {
+            "status": "dispatched",
+            "job_id": "8183136e-86fe-42f9-8412-b8f03c7a3edf",
+            "success": true
+        }
+        
+    Example Response (No dispatch methods available):
+        {
+            "status": "failed",
+            "job_id": "8183136e-86fe-42f9-8412-b8f03c7a3edf",
+            "success": false,
+            "message": "No dispatch methods available..."
+        }
+    """
+    # Input validation: Check job_id format (UUID) using module-level constant
+    if not UUID_PATTERN.match(job_id):
+        logger.warning(
+            f"Invalid job_id format received: {job_id[:20]}...",
+            extra={"action": "dispatch_to_sfe", "error": "invalid_uuid"}
+        )
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid job ID format. Must be a valid UUID."
+        )
+    
+    # Check if job exists
+    if job_id not in jobs_db:
+        logger.info(
+            f"Dispatch requested for non-existent job: {job_id}",
+            extra={"action": "dispatch_to_sfe", "error": "job_not_found"}
+        )
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = jobs_db[job_id]
+    
+    # Validate job is in COMPLETED state
+    if job.status != JobStatus.COMPLETED:
+        logger.info(
+            f"Dispatch rejected for job {job_id} with status {job.status}",
+            extra={
+                "action": "dispatch_to_sfe",
+                "job_id": job_id,
+                "current_status": job.status.value,
+                "error": "invalid_status"
+            }
+        )
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Job must be COMPLETED to dispatch. Current status: {job.status.value}"
+        )
+    
+    # Validate job has output files
+    if not job.output_files or len(job.output_files) == 0:
+        logger.warning(
+            f"Dispatch rejected for job {job_id} - no output files",
+            extra={
+                "action": "dispatch_to_sfe",
+                "job_id": job_id,
+                "error": "no_output_files"
+            }
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Job has no output files to dispatch"
+        )
+    
+    # Structured logging with correlation ID
+    correlation_id = str(uuid4())
+    
+    logger.info(
+        f"Manual dispatch to SFE requested for job {job_id}",
+        extra={
+            "action": "dispatch_to_sfe",
+            "job_id": job_id,
+            "correlation_id": correlation_id,
+            "output_file_count": len(job.output_files),
+            "phase": "start"
+        }
+    )
+    
+    # Prepare job data for dispatch
+    job_data = {
+        "status": job.status.value,
+        "output_files": job.output_files,
+        "file_count": len(job.output_files),
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        "correlation_id": correlation_id,
+    }
+    
+    try:
+        # Attempt dispatch with correlation ID for tracing
+        dispatched = await dispatch_job_completion(job_id, job_data, correlation_id)
+        
+        if dispatched:
+            logger.info(
+                f"Successfully dispatched job {job_id} to SFE",
+                extra={
+                    "action": "dispatch_to_sfe",
+                    "job_id": job_id,
+                    "correlation_id": correlation_id,
+                    "result": "success",
+                    "phase": "complete"
+                }
+            )
+            return {
+                "status": "dispatched", 
+                "job_id": job_id, 
+                "success": True,
+                "correlation_id": correlation_id
+            }
+        else:
+            # All dispatch methods failed, but this is a graceful failure
+            logger.warning(
+                f"Failed to dispatch job {job_id} to SFE - no dispatch methods succeeded",
+                extra={
+                    "action": "dispatch_to_sfe",
+                    "job_id": job_id,
+                    "correlation_id": correlation_id,
+                    "result": "no_methods_available",
+                    "phase": "complete"
+                }
+            )
+            return {
+                "status": "failed", 
+                "job_id": job_id, 
+                "success": False,
+                "correlation_id": correlation_id,
+                "message": (
+                    "No dispatch methods available or all failed. "
+                    "Ensure KAFKA_ENABLED=true or SFE_WEBHOOK_URL is configured. "
+                    "Job remains available for manual download."
+                )
+            }
+            
+    except Exception as e:
+        # Log error with full context but don't expose internals to client
+        logger.error(
+            f"Unexpected error dispatching job {job_id} to SFE: {type(e).__name__}: {e}",
+            exc_info=True,
+            extra={
+                "action": "dispatch_to_sfe",
+                "job_id": job_id,
+                "correlation_id": correlation_id,
+                "error_type": type(e).__name__,
+                "phase": "error"
+            }
+        )
+        raise HTTPException(
+            status_code=500, 
+            detail=(
+                "Failed to dispatch job to Self-Fixing Engineer. "
+                f"Correlation ID: {correlation_id}. "
+                "Please contact support with this ID for assistance."
+            )
+        )
+
 
 

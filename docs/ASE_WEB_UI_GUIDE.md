@@ -111,10 +111,25 @@ Returns JSON with API information and endpoints.
    - Generator Clarification
    - Generator Generation
    - OmniCore Processing
-   - SFE Analysis
-   - SFE Fixing
 
-### 5. Handle Errors and Fixes
+**Note:** Jobs are now finalized automatically when code generation completes. SFE dispatch is **manual only** for user control.
+
+### 5. Send Completed Jobs to Self-Fixing Engineer (NEW)
+**Manual Dispatch Feature** - You control when jobs are sent to SFE:
+
+1. Go to **Jobs** tab
+2. Find a completed job (green "completed" badge)
+3. Verify the file count shows output files were generated
+4. Click the **"🤖 Send to SFE"** button
+5. Wait for confirmation message with correlation ID
+6. If dispatch fails, check that Kafka or webhook is configured (see [Manual SFE Dispatch Guide](./MANUAL_SFE_DISPATCH.md))
+
+**Benefits:**
+- Review generated code before sending to SFE
+- Control which jobs get automated improvements
+- Reduce unnecessary processing and costs
+
+### 6. Handle Errors and Fixes
 1. Navigate to **Self-Fixing Engineer** tab
 2. Enter a job ID and click **"Analyze Code"**
 3. View detected errors in the errors section
@@ -123,7 +138,7 @@ Returns JSON with API information and endpoints.
 6. Click **"Apply"** to apply a fix
 7. Click **"Rollback"** if needed
 
-### 6. Real-Time Events
+### 7. Real-Time Events
 1. On the Dashboard, click **"Connect to Stream"**
 2. Watch live events as they occur:
    - Job creations and completions
