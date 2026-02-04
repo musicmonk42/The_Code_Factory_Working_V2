@@ -88,6 +88,21 @@ _PRESIDIO_NLP_MODE: bool = (
 # This module will no longer import or increment UTIL_ERRORS.
 
 
+# Presidio entities that generate unmapped warnings but don't affect functionality
+# These are filtered to prevent log clutter
+IGNORED_PRESIDIO_ENTITIES = [
+    "CARDINAL",     # Numbers/quantities
+    "MONEY",        # Monetary values
+    "PERCENT",      # Percentages
+    "WORK_OF_ART",  # Titles of works
+    "LAW",          # Legal references
+    "EVENT",        # Named events
+    "FAC",          # Facilities/buildings
+    "ORDINAL",      # Ordinal numbers (1st, 2nd, etc.)
+    "is not mapped" # Generic unmapped warning text
+]
+
+
 def _add_custom_recognizers(analyzer_engine):
     """
     Add custom recognizers for entities not covered by default Presidio patterns.
@@ -234,7 +249,7 @@ def _load_presidio_engine() -> bool:
             presidio_logger.addFilter(
                 lambda record: not any(
                     entity in record.getMessage()
-                    for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "LAW", "EVENT", "FAC", "ORDINAL", "is not mapped"]
+                    for entity in IGNORED_PRESIDIO_ENTITIES
                 )
             )
             
