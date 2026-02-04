@@ -1050,19 +1050,57 @@ if PLUGIN_AVAILABLE:
                             else str(response_dict)
                         )
                         backend_used = "ensemble"
+                        
+                        # FIX: Log LLM ensemble response received
+                        logger.info(
+                            f"[CODEGEN] LLM ensemble response received",
+                            extra={
+                                "backend": "ensemble",
+                                "response_length": len(str(response)),
+                                "response_preview": str(response)[:200]
+                            }
+                        )
                     else:
                         # Single call logic (using configured backend)
                         backend_used = config.backend
+                        
+                        # FIX: Log LLM call attempt
+                        logger.info(
+                            f"[CODEGEN] Calling LLM",
+                            extra={
+                                "backend": config.backend,
+                                "model": config.model.get(config.backend),
+                                "requirements_keys": list(requirements.keys())
+                            }
+                        )
+                        
                         response = await call_llm_api(
                             prompt=prompt,
                             provider=config.backend,
                             model=config.model.get(config.backend),
                             # Removed cache_manager argument
                         )
+                        
+                        # FIX: Log LLM response received
+                        logger.info(
+                            f"[CODEGEN] LLM response received",
+                            extra={
+                                "backend": config.backend,
+                                "response_length": len(str(response)),
+                                "response_preview": str(response)[:200]
+                            }
+                        )
                     # --- End LLM Execution Change ---
 
                 with tracer.start_as_current_span("parse_response_and_scan"):
                     code_files = parse_llm_response(response)
+                    
+                    # FIX: Log parsed files
+                    logger.info(
+                        f"[CODEGEN] Parsed {len(code_files)} files from LLM response",
+                        extra={"files": list(code_files.keys())}
+                    )
+                    
                     code_files = add_traceability_comments(
                         code_files,
                         requirements,
@@ -1117,7 +1155,17 @@ if PLUGIN_AVAILABLE:
                 return code_files
 
             except Exception as e:
-                logger.exception(f"Code generation failed: {e}")
+                # FIX: Improve error logging with more context
+                logger.error(
+                    f"[CODEGEN] Generation failed",
+                    extra={
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "backend": config.backend if 'config' in locals() and config else 'unknown',
+                        "requirements": requirements
+                    },
+                    exc_info=True
+                )
                 # --- Audit/Logging Change: Use log_audit_event ---
                 await log_audit_event(
                     "Code Generation Failed", {"error": str(e), "traceback": repr(e)}
@@ -1125,7 +1173,7 @@ if PLUGIN_AVAILABLE:
                 # --- End Audit/Logging Change ---
                 CODEGEN_ERRORS.labels(type(e).__name__).inc()
                 return {
-                    "error.txt": f"Error: Code generation failed. Details: {str(e)}"
+                    "error.txt": f"Error: {type(e).__name__}: {str(e)}"
                 }
 
 else:
@@ -1241,19 +1289,57 @@ else:
                             else str(response_dict)
                         )
                         backend_used = "ensemble"
+                        
+                        # FIX: Log LLM ensemble response received
+                        logger.info(
+                            f"[CODEGEN] LLM ensemble response received",
+                            extra={
+                                "backend": "ensemble",
+                                "response_length": len(str(response)),
+                                "response_preview": str(response)[:200]
+                            }
+                        )
                     else:
                         # Single call logic (using configured backend)
                         backend_used = config.backend
+                        
+                        # FIX: Log LLM call attempt
+                        logger.info(
+                            f"[CODEGEN] Calling LLM",
+                            extra={
+                                "backend": config.backend,
+                                "model": config.model.get(config.backend),
+                                "requirements_keys": list(requirements.keys())
+                            }
+                        )
+                        
                         response = await call_llm_api(
                             prompt=prompt,
                             provider=config.backend,
                             model=config.model.get(config.backend),
                             # Removed cache_manager argument
                         )
+                        
+                        # FIX: Log LLM response received
+                        logger.info(
+                            f"[CODEGEN] LLM response received",
+                            extra={
+                                "backend": config.backend,
+                                "response_length": len(str(response)),
+                                "response_preview": str(response)[:200]
+                            }
+                        )
                     # --- End LLM Execution Change ---
 
                 with tracer.start_as_current_span("parse_response_and_scan"):
                     code_files = parse_llm_response(response)
+                    
+                    # FIX: Log parsed files
+                    logger.info(
+                        f"[CODEGEN] Parsed {len(code_files)} files from LLM response",
+                        extra={"files": list(code_files.keys())}
+                    )
+                    
                     code_files = add_traceability_comments(
                         code_files,
                         requirements,
@@ -1308,7 +1394,17 @@ else:
                 return code_files
 
             except Exception as e:
-                logger.exception(f"Code generation failed: {e}")
+                # FIX: Improve error logging with more context
+                logger.error(
+                    f"[CODEGEN] Generation failed",
+                    extra={
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "backend": config.backend if 'config' in locals() and config else 'unknown',
+                        "requirements": requirements
+                    },
+                    exc_info=True
+                )
                 # --- Audit/Logging Change: Use log_audit_event ---
                 await log_audit_event(
                     "Code Generation Failed", {"error": str(e), "traceback": repr(e)}
@@ -1316,7 +1412,7 @@ else:
                 # --- End Audit/Logging Change ---
                 CODEGEN_ERRORS.labels(type(e).__name__).inc()
                 return {
-                    "error.txt": f"Error: Code generation failed. Details: {str(e)}"
+                    "error.txt": f"Error: {type(e).__name__}: {str(e)}"
                 }
 
 

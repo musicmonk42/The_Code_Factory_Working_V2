@@ -543,7 +543,27 @@ class LLMClient:
                     metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
                     raise LLMError("Rate limit exceeded")
 
+                # FIX: Log circuit breaker state before call
+                circuit_state = self.circuit_breaker.get_state(provider)
+                logger.debug(
+                    f"[LLM] Circuit breaker state",
+                    extra={
+                        "provider": provider,
+                        "state": circuit_state,
+                        "failure_count": self.circuit_breaker.failure_count.get(provider, 0),
+                    }
+                )
+                
                 if not await self.circuit_breaker.allow_request(provider):
+                    # FIX: Log when circuit is open and blocking call
+                    logger.warning(
+                        f"[LLM] Circuit breaker OPEN - call blocked",
+                        extra={
+                            "provider": provider,
+                            "state": self.circuit_breaker.get_state(provider),
+                            "failure_count": self.circuit_breaker.failure_count.get(provider, 0),
+                        }
+                    )
                     metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
                     raise LLMError("Circuit breaker open")
 
