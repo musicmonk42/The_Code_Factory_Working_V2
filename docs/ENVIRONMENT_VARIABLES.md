@@ -91,6 +91,41 @@ This document provides a comprehensive reference for all environment variables u
 
 ## Security and Authentication
 
+### ALLOWED_ORIGINS
+- **Purpose:** CORS (Cross-Origin Resource Sharing) allowed origins for browser requests
+- **Type:** String (comma-separated URLs)
+- **Values:** Comma-separated list of allowed origin URLs
+- **Default:** Auto-detected from Railway environment or `*` in production (with critical warning)
+- **Production:** **CRITICAL** - Set explicit domain list to prevent CORS errors
+- **Example:** `ALLOWED_ORIGINS=https://myapp.example.com,https://app.railway.app`
+- **Impact:** Without this, browser-based API requests will fail with CORS errors
+- **Security:** Never use `*` in production; specify exact domains for security
+- **Railway:** Automatically detects Railway URLs if not set, but explicit configuration recommended
+- **Note:** Alternative variable name `CORS_ORIGINS` is also supported
+
+### AUDIT_CRYPTO_MODE
+- **Purpose:** Cryptographic signature mode for audit logs
+- **Type:** String
+- **Values:** `software`, `hsm`, `dev`, `disabled`
+- **Default:** `software` (secure by default)
+- **Production:** **CRITICAL** - Must be `software` or `hsm` (disabled mode blocked)
+- **Example:** `AUDIT_CRYPTO_MODE=software`
+- **Impact:** Ensures audit log integrity and regulatory compliance
+- **Security:** Production deployments will fail to start if set to `disabled`
+- **Compliance:** Required for ISO 27001, SOC 2, NIST SP 800-53, GDPR Article 32
+- **Related:** Requires `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` when using `software` mode
+
+### AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64
+- **Purpose:** Master encryption key for audit crypto (software mode)
+- **Type:** String (base64-encoded 32-byte key)
+- **Values:** Base64-encoded random key
+- **Default:** None (REQUIRED for software mode)
+- **Production:** **REQUIRED** when `AUDIT_CRYPTO_MODE=software`
+- **Example:** Generate with `python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"`
+- **Impact:** Critical for audit log cryptographic signatures
+- **Security:** Store in secrets manager (AWS Secrets Manager, GCP, Vault), rotate regularly
+- **Warning:** DO NOT commit to version control
+
 ### AGENTIC_AUDIT_HMAC_KEY
 - **Purpose:** HMAC key for audit log signing
 - **Type:** String (hex-encoded key)
@@ -220,6 +255,45 @@ This document provides a comprehensive reference for all environment variables u
 - **Production:** `30-60`
 - **Example:** `MESSAGE_BUS_GUARDIAN_INTERVAL=30`
 - **Impact:** Frequency of health checks
+
+### KAFKA_ENABLED
+- **Purpose:** Enables Kafka message bus for audit events
+- **Type:** Boolean
+- **Values:** `true`, `false`
+- **Default:** `false`
+- **Production:** `false` (optional, uses file-based fallback)
+- **Example:** `KAFKA_ENABLED=true`
+- **Impact:** When enabled, streams audit events to Kafka; when disabled, uses file-only storage
+- **Note:** System gracefully degrades to file-based audit logging if Kafka unavailable
+
+### KAFKA_BOOTSTRAP_SERVERS
+- **Purpose:** Kafka broker connection string
+- **Type:** String (comma-separated host:port)
+- **Values:** Kafka broker addresses
+- **Default:** `localhost:9092`
+- **Production:** Set to actual Kafka cluster addresses
+- **Example:** `KAFKA_BOOTSTRAP_SERVERS=kafka1.example.com:9092,kafka2.example.com:9092`
+- **Impact:** Defines Kafka cluster to connect to for audit event streaming
+- **Note:** Connection failures trigger graceful fallback to file-based logging
+
+### KAFKA_TOPIC
+- **Purpose:** Kafka topic for audit events
+- **Type:** String
+- **Values:** Valid Kafka topic name
+- **Default:** `audit_events`
+- **Production:** `audit_events` or custom topic
+- **Example:** `KAFKA_TOPIC=production-audit-events`
+- **Impact:** Topic name for audit event streaming
+
+### KAFKA_REQUIRED
+- **Purpose:** Whether Kafka is required for startup
+- **Type:** Boolean
+- **Values:** `true`, `false`
+- **Default:** `false`
+- **Production:** `false` (allows graceful degradation)
+- **Example:** `KAFKA_REQUIRED=false`
+- **Impact:** When false, allows startup without Kafka using file-based fallback
+- **Note:** Recommended to keep false for Railway deployments without dedicated Kafka
 
 ---
 
@@ -379,7 +453,10 @@ PRODUCTION_MODE=1
 APP_STARTUP=1
 SKIP_IMPORT_TIME_VALIDATION=1
 
-# Security
+# Security - CRITICAL Configuration
+ALLOWED_ORIGINS=https://myapp.example.com,https://app.railway.app
+AUDIT_CRYPTO_MODE=software
+AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64=<generate-with-python-command>
 AGENTIC_AUDIT_HMAC_KEY=7f8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a
 ENCRYPTION_KEY=<fernet-key>
 KMS_KEY_ID=arn:aws:kms:us-east-1:123456789012:key/abc-123
@@ -397,10 +474,15 @@ MESSAGE_BUS_WORKERS_PER_SHARD=4
 ENABLE_MESSAGE_BUS_GUARDIAN=1
 MESSAGE_BUS_GUARDIAN_INTERVAL=30
 
+# Kafka (Optional - graceful fallback if unavailable)
+KAFKA_ENABLED=false
+KAFKA_REQUIRED=false
+KAFKA_BOOTSTRAP_SERVERS=kafka.example.com:9092
+KAFKA_TOPIC=audit_events
+
 # Features
 ENABLE_HSM=1
 ENABLE_REDIS=1
-ENABLE_KAFKA=0
 
 # Logging
 LOG_LEVEL=INFO
@@ -518,10 +600,32 @@ ENABLE_STRUCTURED_LOGGING=0
 - ✅ Use different keys per environment
 - ✅ Audit secrets access
 - ✅ Use strong random keys (64+ hex chars for HMAC)
+- ✅ Set ALLOWED_ORIGINS explicitly in production
+- ✅ Use AUDIT_CRYPTO_MODE=software or hsm in production
+- ✅ Keep KAFKA_REQUIRED=false for Railway deployments
 
 ---
 
 ## Troubleshooting
+
+### Issue: "CRITICAL: ALLOWED_ORIGINS not set in production! Browser requests will fail with CORS errors"
+**Check:** Is `ALLOWED_ORIGINS` environment variable set?
+**Fix:** Set `ALLOWED_ORIGINS=https://your-app.railway.app,https://your-frontend.com`
+**Impact:** Without this, browser-based API requests will be blocked by CORS policy
+**Railway:** Automatically detects Railway URLs, but explicit configuration is recommended
+
+### Issue: "CRITICAL SECURITY ERROR: AUDIT_CRYPTO_MODE=disabled is not allowed in production"
+**Check:** Is `AUDIT_CRYPTO_MODE` set to `disabled` in production?
+**Fix:** Set `AUDIT_CRYPTO_MODE=software` and configure `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64`
+**Generate Key:** `python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"`
+**Impact:** Audit logs require cryptographic signatures for integrity and regulatory compliance
+**Compliance:** Required for ISO 27001, SOC 2, NIST SP 800-53, GDPR Article 32
+
+### Issue: "❌ Kafka connectivity test failed: NoBrokersAvailable"
+**Check:** Is Kafka server running and accessible?
+**Fix:** Either start Kafka or set `KAFKA_REQUIRED=false` to use file-based fallback
+**Impact:** System continues with file-based audit logging; no data loss
+**Railway:** Kafka not available by default; use `KAFKA_REQUIRED=false`
 
 ### Issue: "RuntimeError: no running event loop"
 **Check:** Is `PYTEST_COLLECTING=1` set incorrectly?
