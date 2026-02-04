@@ -1913,6 +1913,14 @@ def shutdown_handler(signum: int, frame) -> None:
     )
     
     try:
+        # Check if crypto_provider_factory exists (may not if module loading was interrupted)
+        if 'crypto_provider_factory' not in globals():
+            logger.warning(
+                "Shutdown handler called but crypto_provider_factory not yet initialized",
+                extra={"signal_name": signal_name}
+            )
+            return
+        
         # close_all_providers is designed to be signal-safe and idempotent
         results = crypto_provider_factory.close_all_providers()
         
@@ -1926,6 +1934,15 @@ def shutdown_handler(signum: int, frame) -> None:
                     "results": results
                 }
             )
+    except NameError as ne:
+        # Handle case where crypto_provider_factory is not defined
+        logger.warning(
+            f"Shutdown handler called but required variables not available: {ne}",
+            extra={
+                "signal_name": signal_name,
+                "error_type": "NameError"
+            }
+        )
     except Exception as e:
         # Last-resort error handling - must not raise in signal handler
         logger.error(
