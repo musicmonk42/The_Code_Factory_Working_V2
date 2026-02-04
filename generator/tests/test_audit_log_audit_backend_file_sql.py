@@ -128,8 +128,8 @@ def _counter_total_for_labels(counter, **expected_labels) -> float:
 
 
 # Import metrics from core module for convenient access in test assertions.
-# These are the actual Prometheus counter objects, not REGISTRY.get_sample_value()
-# which doesn't exist in the prometheus_client library.
+# These are the actual Prometheus counter objects. Using counter.collect() directly
+# is the correct way to access metric values, rather than REGISTRY.get_sample_value().
 BACKEND_WRITES = core.BACKEND_WRITES
 BACKEND_ERRORS = core.BACKEND_ERRORS
 BACKEND_TAMPER_DETECTION_FAILURES = core.BACKEND_TAMPER_DETECTION_FAILURES
