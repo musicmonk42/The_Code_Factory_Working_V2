@@ -127,7 +127,9 @@ def _counter_total_for_labels(counter, **expected_labels) -> float:
     return total
 
 
-# Import metrics from core
+# Import metrics from core module for convenient access in test assertions.
+# These are the actual Prometheus counter objects, not REGISTRY.get_sample_value()
+# which doesn't exist in the prometheus_client library.
 BACKEND_WRITES = core.BACKEND_WRITES
 BACKEND_ERRORS = core.BACKEND_ERRORS
 BACKEND_TAMPER_DETECTION_FAILURES = core.BACKEND_TAMPER_DETECTION_FAILURES
@@ -273,6 +275,8 @@ async def test_file_backend_append_and_flush(file_backend, mock_alerts_and_otel)
 
     # Check metrics and traces
     mock_span.set_attribute.assert_any_call("batch.size", 1)
+    # Use >= instead of == because Prometheus counters are global and may have
+    # been incremented by previous test runs in the same process
     assert _counter_total_for_labels(
         BACKEND_WRITES, backend="FileBackend"
     ) >= 1
@@ -312,6 +316,8 @@ async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_o
     final_entry = json.loads(decompressed)
 
     assert final_entry["action"] == "create_user"
+    # Use >= instead of == because Prometheus counters are global and may have
+    # been incremented by previous test runs in the same process
     assert _counter_total_for_labels(
         BACKEND_WRITES, backend="SQLiteBackend"
     ) >= 1
@@ -356,6 +362,7 @@ async def test_file_backend_query_and_tamper(file_backend, mock_alerts_and_otel)
         severity="medium",
     )
     # --- END FIX ---
+    # Use > instead of >= because we're checking that errors were incremented
     assert _counter_total_for_labels(
         BACKEND_ERRORS, backend="FileBackend", type="DecodeError"
     ) > 0
@@ -403,6 +410,8 @@ async def test_sqlite_backend_query_and_tamper(sqlite_backend, mock_alerts_and_o
     )
     # --- END: FIX for test_sqlite_backend_query_and_tamper ---
 
+    # Use >= instead of == because Prometheus counters are global and may have
+    # been incremented by previous test runs in the same process
     assert _counter_total_for_labels(
         BACKEND_TAMPER_DETECTION_FAILURES, backend="SQLiteBackend"
     ) >= 1
