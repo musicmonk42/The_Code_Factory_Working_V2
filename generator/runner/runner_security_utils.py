@@ -234,7 +234,7 @@ def _load_presidio_engine() -> bool:
             presidio_logger.addFilter(
                 lambda record: not any(
                     entity in record.getMessage()
-                    for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped"]
+                    for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "LAW", "EVENT", "FAC", "ORDINAL", "is not mapped"]
                 )
             )
             

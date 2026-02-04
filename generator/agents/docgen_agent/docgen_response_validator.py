@@ -152,6 +152,7 @@ except ValueError:
 def setup_nltk_data():
     nltk_data_paths = {
         "punkt": "tokenizers/punkt",
+        "punkt_tab": "tokenizers/punkt_tab",
         "stopwords": "corpora/stopwords",
         "vader_lexicon": "sentiment/vader_lexicon",
     }
