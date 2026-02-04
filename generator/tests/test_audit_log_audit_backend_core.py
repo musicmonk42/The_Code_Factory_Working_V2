@@ -109,6 +109,9 @@ def _counter_total_for_labels(counter, **expected_labels) -> float:
     total = 0.0
     for metric in counter.collect():
         for sample in metric.samples:
+            # Only sum samples that end with _total (exclude _created timestamps)
+            if not sample.name.endswith('_total'):
+                continue
             labels = sample.labels or {}
             if all(labels.get(k) == v for k, v in expected_labels.items()):
                 total += float(sample.value)
@@ -275,6 +278,11 @@ async def test_tamper_detection_flags_and_skips(
     # Give scheduled tasks (send_alert via create_task) time to execute
     await asyncio.sleep(0.5)  # Give async tasks more time to complete and increment metrics
 
+    # Force metric collection to ensure the latest metric samples are captured.
+    # This ensures the collection iterator returns fresh data that includes
+    # any recent counter increments.
+    _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
+
     after = _counter_total_for_labels(
         BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
     )
@@ -316,6 +324,11 @@ async def test_retry_operation_respects_limits(monkeypatch):
 
     # Give metrics time to be collected
     await asyncio.sleep(0.2)
+
+    # Force metric collection to ensure the latest metric samples are captured.
+    # This ensures the collection iterator returns fresh data that includes
+    # any recent counter increments.
+    _ = list(BACKEND_ERRORS.collect())
 
     after = _counter_total_for_labels(
         BACKEND_ERRORS, backend="TestBackend", type="ValueError"
