@@ -45,7 +45,7 @@ def test_kafka_config():
         print(f"✓ kafka_connection_timeout_ms: {config.kafka_connection_timeout_ms}")
         
         # Verify defaults
-        assert config.kafka_enabled == False, "kafka_enabled should default to False"
+        assert config.kafka_enabled is False, "kafka_enabled should default to False"
         assert config.kafka_max_retries == 3, "kafka_max_retries should default to 3"
         assert config.kafka_retry_backoff_ms == 1000, "kafka_retry_backoff_ms should default to 1000"
         assert config.kafka_connection_timeout_ms == 5000, "kafka_connection_timeout_ms should default to 5000"
@@ -133,7 +133,7 @@ async def test_kafka_health_check():
             kafka_healthy = await bus._check_kafka_health()
             print(f"✓ Health check returned: {kafka_healthy} (expected False when disabled)")
             
-            assert kafka_healthy == False, "Health check should return False when Kafka disabled"
+            assert kafka_healthy is False, "Health check should return False when Kafka disabled"
             
             print("\n✅ TEST PASSED: Kafka health check handles unavailable Kafka gracefully")
             return True

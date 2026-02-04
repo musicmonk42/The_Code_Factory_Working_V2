@@ -246,7 +246,6 @@ def _load_presidio_engine() -> bool:
                 except OSError:
                     # Model not available, skip it
                     logger.debug(f"Skipping {model_config['lang_code']} - model not available")
-                    pass
         except Exception as e:
             logger.debug(f"Could not check for multilingual models: {e}")
         

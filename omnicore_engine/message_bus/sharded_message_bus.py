@@ -406,7 +406,7 @@ class ShardedMessageBus:
 
         # Resiliency components
         self.kafka_circuit = CircuitBreaker(
-            failure_threshold=getattr(self.config, "KAFKA_CIRCUIT_THRESHOLD", 5),
+            failure_threshold=getattr(self.config, "KAFKA_CIRCUIT_THRESHOLD", 3),
             recovery_timeout=getattr(self.config, "KAFKA_CIRCUIT_TIMEOUT", 60),
         )
         self.redis_circuit = CircuitBreaker(
