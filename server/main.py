@@ -890,14 +890,24 @@ else:
         railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
         
         if railway_url:
-            # Auto-detected Railway deployment
+            # Validate Railway URL to prevent environment variable injection
             if not railway_url.startswith("http"):
                 railway_url = f"https://{railway_url}"
-            ALLOWED_ORIGINS = [railway_url]
-            logger.info(
-                f"CORS configured with auto-detected Railway URL: {ALLOWED_ORIGINS}. "
-                "Set ALLOWED_ORIGINS explicitly if you have additional frontend domains."
-            )
+            
+            # Security: Only trust Railway domains to prevent injection attacks
+            if ".railway.app" in railway_url or ".up.railway.app" in railway_url:
+                ALLOWED_ORIGINS = [railway_url]
+                logger.info(
+                    f"CORS configured with auto-detected Railway URL: {ALLOWED_ORIGINS}. "
+                    "Set ALLOWED_ORIGINS explicitly if you have additional frontend domains."
+                )
+            else:
+                # Railway env var doesn't contain expected domain - log warning and block
+                logger.warning(
+                    f"Railway URL detected but doesn't match expected pattern: {railway_url}. "
+                    "Blocking CORS for security. Set ALLOWED_ORIGINS explicitly."
+                )
+                ALLOWED_ORIGINS = []
         else:
             # No Railway URL detected and no explicit configuration
             # Use restrictive default but log critical error
