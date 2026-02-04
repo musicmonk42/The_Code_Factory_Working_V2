@@ -1275,10 +1275,16 @@ Respond in plain prose only (no JSON / no code fences).
                 raise ValueError("Requirements must be a dictionary")
 
             try:
+                logger.info(f"[DEPLOY_AGENT] Attempting to get plugin for target='{target}'")
+                logger.info(f"[DEPLOY_AGENT] Available plugins: {list(self.plugin_registry.plugins.keys())}")
+                
                 plugin = self.plugin_registry.get_plugin(target)
                 if not plugin:
                     DEPLOY_ERRORS.labels(error_type="PluginNotFound").inc()
+                    logger.error(f"[DEPLOY_AGENT] No plugin found for target '{target}'. Available: {list(self.plugin_registry.plugins.keys())}")
                     raise ValueError(f"No plugin found for target: {target}")
+                
+                logger.info(f"[DEPLOY_AGENT] Found plugin for target '{target}': {plugin.name if hasattr(plugin, 'name') else 'unknown'}")
 
                 context = await self.gather_context([])
 
@@ -1321,6 +1327,7 @@ Respond in plain prose only (no JSON / no code fences).
                     )
                     # --------------------------------------------
                     config_content = handled["final_config_output"]
+                    logger.info(f"[DEPLOY_AGENT] Config generated, length: {len(config_content)} chars")
 
                 if "validate" in steps:
                     vres = await self.validate_configs_final(config_content, target)
@@ -1364,6 +1371,8 @@ Respond in plain prose only (no JSON / no code fences).
                         "version": "1.0",
                     },
                 }
+                
+                logger.info(f"[DEPLOY_AGENT] Result prepared with configs: {list(result['configs'].keys())}")
 
                 self.last_result = result
                 self.history.append(result)
