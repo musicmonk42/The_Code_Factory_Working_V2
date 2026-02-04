@@ -1,0 +1,136 @@
+{# Base Code Generation Template #}
+{# This template provides structured instructions for generating code from specifications #}
+
+You are an expert software engineer tasked with generating production-ready code.
+
+## INPUT SPECIFICATION
+
+### Requirements:
+{{ requirements | tojson(indent=2) }}
+
+### Target Language: {{ target_language }}
+{% if target_framework %}
+### Target Framework: {{ target_framework }}
+{% endif %}
+
+### System State Summary:
+{{ state_summary }}
+
+{% if previous_feedback %}
+### Previous Feedback to Address:
+{{ previous_feedback }}
+{% endif %}
+
+{% if rag_context %}
+### Relevant Context & Best Practices:
+{{ rag_context }}
+{% endif %}
+
+{% if best_practices %}
+### Language-Specific Best Practices:
+{% for practice in best_practices %}
+- {{ practice }}
+{% endfor %}
+{% endif %}
+
+{% if image_descriptions %}
+### Visual Requirements (from images):
+{{ image_descriptions }}
+{% endif %}
+
+{% if diagram_descriptions %}
+### Architecture Diagrams:
+{{ diagram_descriptions }}
+{% endif %}
+
+## TASK INSTRUCTIONS
+
+### 1. Parse the Specification Carefully
+
+Extract and implement ALL of the following from the requirements:
+
+**API Endpoints/Functions**: Identify all endpoints, routes, or functions specified
+- HTTP methods (GET, POST, PUT, DELETE, etc.)
+- Path parameters and query parameters
+- Request/response models
+
+**Data Models**: Create all data structures, classes, schemas mentioned
+- Field names and types
+- Validation rules
+- Relationships between models
+
+**Business Logic**: Implement all specified behaviors
+- Calculations and transformations
+- Conditional logic
+- Error handling rules (e.g., division by zero, invalid input)
+
+**Error Handling**: Implement comprehensive error handling
+- Input validation
+- Edge cases mentioned in spec
+- Appropriate error messages and status codes
+
+**Configuration**: Include any configuration requirements
+- Dependencies and imports
+- Environment variables
+- Constants and settings
+
+### 2. Generate Complete, Production-Ready Code
+
+Your code must be:
+- **Functional**: Implements ALL requirements from the specification
+- **Complete**: No placeholders, TODOs, or incomplete sections
+- **Well-Structured**: Follows {{ target_language }} best practices
+- **Type-Safe**: Use type hints/annotations where applicable
+- **Documented**: Include docstrings for modules, classes, and functions
+- **Error-Resistant**: Handle edge cases and errors gracefully
+
+### 3. Multi-File Project Structure
+
+Organize code into logical files:
+- **main.py** or entry point file
+- **models.py** for data models/schemas  
+- **routes.py** or **api.py** for API endpoints (if applicable)
+- **utils.py** or **helpers.py** for utility functions
+- **requirements.txt** or dependency file
+- **README.md** with setup and usage instructions (optional but recommended)
+
+### 4. Code Quality Requirements
+
+- Use consistent naming conventions
+- Add inline comments for complex logic
+- Follow DRY (Don't Repeat Yourself) principle
+- Implement proper separation of concerns
+- Use design patterns appropriately
+
+### 5. Testing Considerations
+
+Structure your code to be testable:
+- Separate concerns (business logic from I/O)
+- Use dependency injection where appropriate
+- Avoid tight coupling
+- Make functions pure where possible
+
+## CRITICAL: Your response must be VALID JSON in this exact format:
+
+```json
+{
+  "files": {
+    "main.py": "# Complete code here...",
+    "models.py": "# Model definitions here...",
+    "requirements.txt": "# Dependencies here...",
+    "README.md": "# Project documentation here..."
+  }
+}
+```
+
+**IMPORTANT RULES:**
+
+1. **JSON ONLY**: Your entire response must be valid JSON - nothing before or after
+2. **NO MARKDOWN**: Do not wrap the JSON in markdown code fences (```json)
+3. **NO EXPLANATIONS**: Do not include explanatory text outside the JSON
+4. **ALL FILES**: Include ALL necessary files for a complete, working project
+5. **COMPLETE CODE**: Every file must have complete, executable code (no placeholders)
+6. **PROPERLY ESCAPED**: Ensure all code strings are properly JSON-escaped
+
+Double-check that you are implementing EVERY requirement from the specification.
+Verify that your JSON is valid before responding.

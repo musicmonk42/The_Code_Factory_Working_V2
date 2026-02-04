@@ -837,6 +837,85 @@ async def hitl_review(
         return ("rejected", f"Internal error during HITL review: {e}")
 
 
+def _build_fallback_prompt(requirements: Dict[str, Any]) -> str:
+    """
+    Builds an enhanced fallback prompt when templates are unavailable.
+    This ensures comprehensive spec parsing even without templates.
+    
+    Args:
+        requirements: The requirements dict containing features, target_language, etc.
+        
+    Returns:
+        A detailed prompt that emphasizes spec compliance and multi-file JSON output
+    """
+    target_language = requirements.get("target_language", "python")
+    features = requirements.get("features", [])
+    
+    # Extract key requirements
+    features_text = "\n".join([f"- {feature}" for feature in features])
+    
+    prompt = f"""You are an expert {target_language} developer. Generate production-ready code that implements ALL requirements.
+
+## REQUIREMENTS TO IMPLEMENT:
+{features_text}
+
+Full Requirements: {json.dumps(requirements, sort_keys=True)}
+
+## YOUR TASK:
+
+1. **ANALYZE THE SPEC**: Carefully read and extract:
+   - All API endpoints, routes, or functions mentioned
+   - All data models, classes, or schemas required  
+   - All business logic, calculations, and operations
+   - All error handling requirements (validation, edge cases like division by zero)
+   - All dependencies and imports needed
+
+2. **IMPLEMENT COMPLETELY**: Generate complete, working code:
+   - NO placeholders or TODOs
+   - NO incomplete implementations
+   - ALL features from requirements must be implemented
+   - Proper error handling for all edge cases
+   - Type hints and documentation
+
+3. **ORGANIZE INTO FILES**: Structure as a proper {target_language} project:
+   - main.py (or equivalent entry point)
+   - models.py (data structures/schemas)
+   - utils.py or helpers.py (utility functions if needed)
+   - requirements.txt (dependencies)
+   - README.md (setup and usage instructions)
+
+4. **CODE QUALITY**:
+   - Follow {target_language} best practices
+   - Use proper naming conventions
+   - Add docstrings and comments
+   - Handle errors gracefully
+   - Make code testable
+
+## CRITICAL OUTPUT FORMAT:
+
+Your response MUST be VALID JSON in this EXACT format:
+
+{{
+  "files": {{
+    "main.py": "complete code content here...",
+    "models.py": "complete code content here...",
+    "requirements.txt": "dependencies here...",
+    "README.md": "documentation here..."
+  }}
+}}
+
+**RULES:**
+1. Output ONLY the JSON - no text before or after
+2. Do NOT wrap in markdown fences (no ```json```)
+3. ALL code must be complete and functional
+4. Properly escape special characters in JSON (\\n for newlines, \\" for quotes)
+5. Implement EVERY requirement from the specification
+
+Verify you have implemented ALL requirements before responding.
+"""
+    return prompt
+
+
 if PLUGIN_AVAILABLE:
 
     @plugin(
@@ -930,20 +1009,14 @@ if PLUGIN_AVAILABLE:
                         )
                     except TemplateNotFound as e:
                         logger.warning(
-                            f"Template not found ({e}). Using minimal fallback prompt."
+                            f"Template not found ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = (
-                            "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
-                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}\n\n" + "CRITICAL: Output ONLY valid JSON or code. No explanations, no markdown fences, no conversational text."
-                        )
+                        prompt = _build_fallback_prompt(requirements)
                     except Exception as e:
                         logger.warning(
-                            f"Prompt build failed ({e}). Using minimal fallback prompt."
+                            f"Prompt build failed ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = (
-                            "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
-                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}\n\n" + "CRITICAL: Output ONLY valid JSON or code. No explanations, no markdown fences, no conversational text."
-                        )
+                        prompt = _build_fallback_prompt(requirements)
 
                 # Generate Code
                 with tracer.start_as_current_span("call_llm"):
@@ -1127,20 +1200,14 @@ else:
                         )
                     except TemplateNotFound as e:
                         logger.warning(
-                            f"Template not found ({e}). Using minimal fallback prompt."
+                            f"Template not found ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = (
-                            "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
-                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}\n\n" + "CRITICAL: Output ONLY valid JSON or code. No explanations, no markdown fences, no conversational text."
-                        )
+                        prompt = _build_fallback_prompt(requirements)
                     except Exception as e:
                         logger.warning(
-                            f"Prompt build failed ({e}). Using minimal fallback prompt."
+                            f"Prompt build failed ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = (
-                            "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
-                            + f"Requirements: {json.dumps(requirements, sort_keys=True)}\n\n" + "CRITICAL: Output ONLY valid JSON or code. No explanations, no markdown fences, no conversational text."
-                        )
+                        prompt = _build_fallback_prompt(requirements)
 
                 # Generate Code
                 with tracer.start_as_current_span("call_llm"):

@@ -1,0 +1,172 @@
+{# Python-Specific Code Generation Template with FastAPI Support #}
+
+You are an expert Python developer specializing in FastAPI applications.
+
+## INPUT SPECIFICATION
+
+### Requirements:
+{{ requirements | tojson(indent=2) }}
+
+### Target Language: Python{{ ' (Framework: ' + target_framework + ')' if target_framework else '' }}
+
+### System State Summary:
+{{ state_summary }}
+
+{% if previous_feedback %}
+### Previous Feedback to Address:
+{{ previous_feedback }}
+{% endif %}
+
+{% if rag_context %}
+### Relevant Context & Best Practices:
+{{ rag_context }}
+{% endif %}
+
+{% if best_practices %}
+### Python Best Practices to Follow:
+{% for practice in best_practices %}
+- {{ practice }}
+{% endfor %}
+{% endif %}
+
+## TASK: Generate a Complete Python{% if target_framework %} {{ target_framework }}{% endif %} Application
+
+### Step 1: Analyze the Specification
+
+Extract from requirements:
+1. **API Endpoints**: All routes, HTTP methods, parameters
+2. **Data Models**: Request/response schemas, validation rules
+3. **Business Logic**: Operations, calculations, transformations
+4. **Error Handling**: Validation, edge cases (e.g., division by zero)
+5. **Dependencies**: Required packages
+
+### Step 2: Implement the Following Files
+
+#### main.py
+- FastAPI application instance
+- All API endpoint implementations
+- Error handlers
+- Application startup/shutdown events
+- Run configuration
+
+#### models.py  
+- Pydantic models for request/response validation
+- Proper type hints
+- Field validators
+- Example values in schema
+
+#### requirements.txt
+- FastAPI
+- Uvicorn
+- Pydantic
+- Any other dependencies needed
+
+#### README.md
+- Project description
+- Installation instructions
+- Usage examples
+- API endpoints documentation
+
+### Step 3: Python/FastAPI Specific Requirements
+
+**Code Style:**
+- Use type hints for all function parameters and return values
+- Follow PEP 8 naming conventions
+- Use f-strings for string formatting
+- Docstrings for all modules, classes, and functions
+
+**FastAPI Best Practices:**
+- Use Pydantic models for request/response validation
+- Include proper HTTP status codes
+- Add response_model to endpoints
+- Implement proper error handling with HTTPException
+- Use dependency injection where appropriate
+- Add OpenAPI tags for endpoint organization
+
+**Example FastAPI Endpoint Structure:**
+```python
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+app = FastAPI(title="API Title", version="1.0.0")
+
+class RequestModel(BaseModel):
+    field1: int
+    field2: float
+    
+    class Config:
+        json_schema_extra = {
+            "example": {"field1": 10, "field2": 5.0}
+        }
+
+class ResponseModel(BaseModel):
+    result: float
+
+@app.post("/endpoint", response_model=ResponseModel)
+async def endpoint_function(data: RequestModel):
+    """
+    Endpoint description.
+    
+    Args:
+        data: Request data
+        
+    Returns:
+        Response with result
+        
+    Raises:
+        HTTPException: If validation fails
+    """
+    try:
+        # Implementation
+        result = data.field1 + data.field2
+        return ResponseModel(result=result)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+```
+
+**Error Handling:**
+- Validate all inputs
+- Handle edge cases (division by zero, negative numbers where invalid, etc.)
+- Return appropriate HTTP status codes (400 for bad request, 500 for server error)
+- Include helpful error messages
+
+**Testing Structure:**
+- Separate business logic from API layer for testability
+- Make functions pure where possible
+- Use dependency injection for external dependencies
+
+### Step 4: Implementation Checklist
+
+Before generating code, ensure you will include:
+- [ ] All specified endpoints with correct HTTP methods
+- [ ] All request/response models with validation
+- [ ] All business logic and calculations
+- [ ] Comprehensive error handling for all edge cases
+- [ ] Type hints on all functions
+- [ ] Docstrings for all public functions
+- [ ] Complete requirements.txt
+- [ ] Clear README.md with usage instructions
+
+## CRITICAL: Output Format
+
+Your response MUST be valid JSON in this exact format:
+
+```json
+{
+  "files": {
+    "main.py": "from fastapi import FastAPI...",
+    "models.py": "from pydantic import BaseModel...",  
+    "requirements.txt": "fastapi==0.104.1\\nuvicorn==0.24.0...",
+    "README.md": "# Project Title\\n\\n..."
+  }
+}
+```
+
+**RULES:**
+1. **VALID JSON ONLY**: No text before or after the JSON
+2. **NO MARKDOWN FENCES**: Do not wrap in ```json``` fences
+3. **COMPLETE CODE**: Every file must be fully implemented (no TODOs or placeholders)
+4. **ALL REQUIREMENTS**: Implement EVERY feature from the specification
+5. **PROPER ESCAPING**: Escape all special characters in JSON strings (newlines as \\n, quotes as \\", etc.)
+
+Verify you are implementing EVERY requirement before responding.
