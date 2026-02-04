@@ -141,7 +141,8 @@ jobs:
             cryptography \
             python-dotenv \
             presidio-analyzer \
-            presidio-anonymizer
+            presidio-anonymizer \
+            watchdog
           
           # Install unified platform requirements first
           if [ -f requirements.txt ]; then
