@@ -282,7 +282,15 @@ async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_o
 
     # Decrypt to verify
     decrypted = ENCRYPTER.decrypt(base64.b64decode(result[0]))
-    decompressed = zlib.decompress(decrypted).decode("utf-8")
+    # Decompress based on the actual compression algorithm used
+    if COMPRESSION_ALGO == "gzip":
+        decompressed = zlib.decompress(decrypted).decode("utf-8")
+    elif COMPRESSION_ALGO == "zstd":
+        import zstd
+        decompressed = zstd.decompress(decrypted).decode("utf-8")
+    else:
+        # No compression
+        decompressed = decrypted.decode("utf-8")
     final_entry = json.loads(decompressed)
 
     assert final_entry["action"] == "create_user"

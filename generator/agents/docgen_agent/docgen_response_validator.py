@@ -379,6 +379,11 @@ class MarkdownPlugin(DocGenPlugin):
         if "repo_name" in context:
             badges = "[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]() [![Version](https://img.shields.io/badge/version-1.0.0-blue)]()\n\n"
             enriched = badges + enriched
+        
+        # Ensure a "Recent Changes" or "Changelog" section exists
+        if "Recent Changes" not in enriched and "Changelog" not in enriched:
+            enriched += "\n\n## Recent Changes\n\nNo recent changes available.\n"
+        
         return enriched
 
 
