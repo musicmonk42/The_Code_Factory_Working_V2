@@ -47,7 +47,7 @@ pythonpath = ["."]
 # CI workflow controls parallelism via command line, and having these in addopts
 # caused conflicts when workflows disabled parallelism for memory-intensive modules.
 addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider --import-mode=importlib --maxfail=5"
-# REMOVED: testpaths configuration
+# REMOVED: testpaths configuration and ignore list (test files were deleted)
 # Test directories should be specified on the command line to prevent pytest from
 # automatically scanning and loading all test modules during pytest initialization.
 # This was causing CPU time limit exceeded errors (exit code 152) in CI because
