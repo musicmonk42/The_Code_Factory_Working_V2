@@ -545,7 +545,12 @@ async def _generate_output_manifest(
                         )
                         continue
                     
-                    rel_path = str(file_path.relative_to(job_dir))
+                    # [FIX] Add error handling for path resolution
+                    try:
+                        rel_path = str(file_path.resolve().relative_to(job_dir.resolve()))
+                    except ValueError as e:
+                        logger.warning(f"[JOB_FINALIZATION] File {file_path} is outside job_dir {job_dir}, using absolute path. Error: {e}")
+                        rel_path = str(file_path)
                     file_stat = file_path.stat()
                     file_size = file_stat.st_size
                     
