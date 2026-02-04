@@ -887,6 +887,7 @@ else:
     if _is_production:
         # P0 FIX: In production, try to auto-detect Railway deployment URL
         # This prevents "works in curl but fails in browser" issues
+        # Railway provides RAILWAY_PUBLIC_DOMAIN (preferred) and RAILWAY_STATIC_URL (fallback)
         railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
         
         if railway_url:
@@ -895,16 +896,31 @@ else:
                 railway_url = f"https://{railway_url}"
             
             # Security: Only trust Railway domains to prevent injection attacks
-            if ".railway.app" in railway_url or ".up.railway.app" in railway_url:
-                ALLOWED_ORIGINS = [railway_url]
-                logger.info(
-                    f"CORS configured with auto-detected Railway URL: {ALLOWED_ORIGINS}. "
-                    "Set ALLOWED_ORIGINS explicitly if you have additional frontend domains."
-                )
-            else:
-                # Railway env var doesn't contain expected domain - log warning and block
+            # Use proper domain validation by checking the end of the hostname
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(railway_url)
+                hostname = parsed.hostname or ""
+                
+                # Validate that hostname ENDS with Railway domains (prevents injection like evil.com/.railway.app.attacker.com)
+                if hostname.endswith(".railway.app") or hostname.endswith(".up.railway.app") or hostname == "railway.app" or hostname == "up.railway.app":
+                    ALLOWED_ORIGINS = [railway_url]
+                    logger.info(
+                        f"CORS configured with auto-detected Railway URL: {ALLOWED_ORIGINS}. "
+                        "Set ALLOWED_ORIGINS explicitly if you have additional frontend domains."
+                    )
+                else:
+                    # Railway env var doesn't contain expected domain - log warning and block
+                    logger.warning(
+                        f"Railway URL detected but hostname doesn't match expected pattern: {hostname}. "
+                        "Expected: *.railway.app or *.up.railway.app. "
+                        "Blocking CORS for security. Set ALLOWED_ORIGINS explicitly."
+                    )
+                    ALLOWED_ORIGINS = []
+            except Exception as e:
+                # URL parsing failed - block CORS for security
                 logger.warning(
-                    f"Railway URL detected but doesn't match expected pattern: {railway_url}. "
+                    f"Failed to parse Railway URL '{railway_url}': {e}. "
                     "Blocking CORS for security. Set ALLOWED_ORIGINS explicitly."
                 )
                 ALLOWED_ORIGINS = []
@@ -916,7 +932,7 @@ else:
                 "CRITICAL: ALLOWED_ORIGINS not set in production and Railway URL not detected! "
                 "Browser requests will fail with CORS errors. "
                 "Set ALLOWED_ORIGINS environment variable with your frontend domains. "
-                "Example: ALLOWED_ORIGINS=https://your-frontend.com,https://your-app.railway.app"
+                "Example: ALLOWED_ORIGINS=https://myapp.example.com,https://app.mycompany.com"
             )
     else:
         # In development, allow common local development ports
