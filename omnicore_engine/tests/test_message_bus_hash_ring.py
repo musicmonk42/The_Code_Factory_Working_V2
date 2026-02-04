@@ -20,8 +20,8 @@ class TestConsistentHashRing:
     def setup(self):
         """Set up test fixtures before each test."""
         self.nodes = ["node1", "node2", "node3"]
-        self.ring = ConsistentHashRing(nodes=self.nodes, replicas=100)
-        
+        # Don't create ring instance here - let each test create its own
+        # to avoid pytest-xdist process forking issues with stateful fixtures
         yield
 
     def test_initialization_with_nodes(self):

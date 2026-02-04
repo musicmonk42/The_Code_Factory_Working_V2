@@ -20,16 +20,13 @@ class TestFernetEncryption:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Set up test fixtures before each test."""
-        # Generate test keys
+        # Generate test keys - safe to create in fixture
         self.key1 = Fernet.generate_key()
         self.key2 = Fernet.generate_key()
         self.key3 = Fernet.generate_key()
 
-        # Create encryption instance with single key
-        self.encryption_single = FernetEncryption([self.key1])
-
-        # Create encryption instance with multiple keys for rotation
-        self.encryption_multi = FernetEncryption([self.key1, self.key2, self.key3])
+        # Don't create encryption instances in fixture - create per test instead
+        # to avoid pytest-xdist process forking issues with stateful fixtures
         
         yield
 
@@ -80,8 +77,9 @@ class TestFernetEncryption:
 
     def test_encrypt_basic(self):
         """Test basic encryption."""
+        encryption_single = FernetEncryption([self.key1])
         data = b"Hello, World!"
-        encrypted = self.encryption_single.encrypt(data)
+        encrypted = encryption_single.encrypt(data)
 
         # Encrypted data should be different from original
         assert data != encrypted
@@ -90,26 +88,29 @@ class TestFernetEncryption:
         assert isinstance(encrypted, bytes)
 
         # Should be able to decrypt back
-        decrypted = self.encryption_single.decrypt(encrypted)
+        decrypted = encryption_single.decrypt(encrypted)
         assert data == decrypted
 
     def test_encrypt_empty_data(self):
         """Test encryption of empty data."""
+        encryption_single = FernetEncryption([self.key1])
         data = b""
-        encrypted = self.encryption_single.encrypt(data)
-        decrypted = self.encryption_single.decrypt(encrypted)
+        encrypted = encryption_single.encrypt(data)
+        decrypted = encryption_single.decrypt(encrypted)
         assert data == decrypted
 
     def test_encrypt_large_data(self):
         """Test encryption of large data."""
+        encryption_single = FernetEncryption([self.key1])
         # Create 1MB of data
         data = b"x" * (1024 * 1024)
-        encrypted = self.encryption_single.encrypt(data)
-        decrypted = self.encryption_single.decrypt(encrypted)
+        encrypted = encryption_single.encrypt(data)
+        decrypted = encryption_single.decrypt(encrypted)
         assert data == decrypted
 
     def test_encrypt_various_data_types(self):
         """Test encryption with various byte patterns."""
+        encryption_single = FernetEncryption([self.key1])
         test_cases = [
             b"ASCII text",
             "UTF-8 text with émojis 🔐".encode("utf-8"),
@@ -119,14 +120,15 @@ class TestFernetEncryption:
         ]
 
         for data in test_cases:
-            encrypted = self.encryption_single.encrypt(data)
-            decrypted = self.encryption_single.decrypt(encrypted)
+            encrypted = encryption_single.encrypt(data)
+            decrypted = encryption_single.decrypt(encrypted)
             assert data == decrypted, f"Failed for data: {data[:20]}..."
 
     def test_decrypt_with_wrong_key(self):
         """Test decryption with wrong key."""
+        encryption_single = FernetEncryption([self.key1])
         data = b"Secret data"
-        encrypted = self.encryption_single.encrypt(data)
+        encrypted = encryption_single.encrypt(data)
 
         # Try to decrypt with different key
         wrong_key = Fernet.generate_key()
@@ -137,17 +139,19 @@ class TestFernetEncryption:
 
     def test_decrypt_invalid_data(self):
         """Test decryption of invalid data."""
+        encryption_single = FernetEncryption([self.key1])
         invalid_data = b"This is not encrypted data"
 
         with pytest.raises(InvalidToken):
-            self.encryption_single.decrypt(invalid_data)
+            encryption_single.decrypt(invalid_data)
 
     def test_key_rotation_encrypt_with_new_decrypt_with_old(self):
         """Test key rotation: encrypt with new key, decrypt with old keys."""
+        encryption_multi = FernetEncryption([self.key1, self.key2, self.key3])
         data = b"Rotation test data"
 
         # Encrypt with the first (newest) key
-        encrypted = self.encryption_multi.encrypt(data)
+        encrypted = encryption_multi.encrypt(data)
 
         # Create new encryption with same keys in different order
         # MultiFernet tries keys in order until one works
@@ -174,26 +178,28 @@ class TestFernetEncryption:
 
     def test_multiple_encryption_decryption_cycles(self):
         """Test multiple encryption/decryption cycles."""
+        encryption_single = FernetEncryption([self.key1])
         data = b"Cycle test data"
 
         # Perform multiple cycles
         for i in range(10):
-            encrypted = self.encryption_single.encrypt(data)
-            decrypted = self.encryption_single.decrypt(encrypted)
+            encrypted = encryption_single.encrypt(data)
+            decrypted = encryption_single.decrypt(encrypted)
             assert data == decrypted, f"Failed at cycle {i}"
 
     def test_concurrent_encryption(self):
         """Test thread safety of encryption operations."""
         import concurrent.futures
 
+        encryption_multi = FernetEncryption([self.key1, self.key2, self.key3])
         data_samples = [f"Thread {i} data".encode() for i in range(100)]
         results = {}
         errors = []
 
         def encrypt_decrypt(thread_id, data):
             try:
-                encrypted = self.encryption_multi.encrypt(data)
-                decrypted = self.encryption_multi.decrypt(encrypted)
+                encrypted = encryption_multi.encrypt(data)
+                decrypted = encryption_multi.decrypt(encrypted)
                 results[thread_id] = (data, decrypted)
             except Exception as e:
                 errors.append((thread_id, str(e)))
@@ -215,12 +221,13 @@ class TestFernetEncryption:
 
     def test_encryption_determinism(self):
         """Test that encryption is non-deterministic (different each time)."""
+        encryption_single = FernetEncryption([self.key1])
         data = b"Test determinism"
 
         # Encrypt same data multiple times
-        encrypted1 = self.encryption_single.encrypt(data)
-        encrypted2 = self.encryption_single.encrypt(data)
-        encrypted3 = self.encryption_single.encrypt(data)
+        encrypted1 = encryption_single.encrypt(data)
+        encrypted2 = encryption_single.encrypt(data)
+        encrypted3 = encryption_single.encrypt(data)
 
         # Encrypted values should be different (Fernet includes timestamp)
         assert encrypted1 != encrypted2
@@ -228,9 +235,9 @@ class TestFernetEncryption:
         assert encrypted1 != encrypted3
 
         # But all should decrypt to same value
-        assert self.encryption_single.decrypt(encrypted1) == data
-        assert self.encryption_single.decrypt(encrypted2) == data
-        assert self.encryption_single.decrypt(encrypted3) == data
+        assert encryption_single.decrypt(encrypted1) == data
+        assert encryption_single.decrypt(encrypted2) == data
+        assert encryption_single.decrypt(encrypted3) == data
 
     def test_key_generation(self):
         """Test generating valid Fernet keys."""
@@ -257,32 +264,35 @@ class TestFernetEncryption:
 
     def test_protocol_implementation(self):
         """Test that FernetEncryption implements EncryptionStrategy protocol."""
+        encryption_single = FernetEncryption([self.key1])
         # Check that required methods exist
-        assert hasattr(self.encryption_single, "encrypt")
-        assert hasattr(self.encryption_single, "decrypt")
+        assert hasattr(encryption_single, "encrypt")
+        assert hasattr(encryption_single, "decrypt")
 
         # Check method signatures
-        assert callable(self.encryption_single.encrypt)
-        assert callable(self.encryption_single.decrypt)
+        assert callable(encryption_single.encrypt)
+        assert callable(encryption_single.decrypt)
 
     def test_encryption_with_time_delay(self):
         """Test that old encrypted data can still be decrypted."""
+        encryption_single = FernetEncryption([self.key1])
         data = b"Time-sensitive data"
-        encrypted = self.encryption_single.encrypt(data)
+        encrypted = encryption_single.encrypt(data)
 
         # Simulate time passing (Fernet includes timestamp)
         time.sleep(0.1)
 
         # Should still decrypt successfully
-        decrypted = self.encryption_single.decrypt(encrypted)
+        decrypted = encryption_single.decrypt(encrypted)
         assert data == decrypted
 
     def test_key_rotation_remove_old_key(self):
         """Test removing old keys from rotation."""
+        encryption_multi = FernetEncryption([self.key1, self.key2, self.key3])
         data = b"Key removal test"
 
         # Encrypt with all keys available
-        encrypted = self.encryption_multi.encrypt(data)
+        encrypted = encryption_multi.encrypt(data)
 
         # Create new instance without the first key
         # This simulates removing the newest key
@@ -294,17 +304,19 @@ class TestFernetEncryption:
 
     def test_edge_case_single_byte(self):
         """Test encryption of single byte."""
+        encryption_single = FernetEncryption([self.key1])
         data = b"a"
-        encrypted = self.encryption_single.encrypt(data)
-        decrypted = self.encryption_single.decrypt(encrypted)
+        encrypted = encryption_single.encrypt(data)
+        decrypted = encryption_single.decrypt(encrypted)
         assert data == decrypted
 
     def test_edge_case_max_fernet_message(self):
         """Test encryption near Fernet's practical limits."""
+        encryption_single = FernetEncryption([self.key1])
         # Fernet can handle large messages, but let's test a reasonable size
         data = b"x" * (10 * 1024 * 1024)  # 10MB
-        encrypted = self.encryption_single.encrypt(data)
-        decrypted = self.encryption_single.decrypt(encrypted)
+        encrypted = encryption_single.encrypt(data)
+        decrypted = encryption_single.decrypt(encrypted)
         assert data == decrypted
 
 
