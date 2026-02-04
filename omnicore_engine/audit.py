@@ -548,12 +548,14 @@ class KafkaAuditStreamer:
                     
             except Exception as e:
                 self.logger.warning(
-                    f"Kafka initialization failed ({bootstrap_servers}): {e}. "
-                    "Falling back to file-only audit logging.",
+                    f"❌ Kafka connectivity test failed: {e.__class__.__name__}: {str(e)}. "
+                    "Continuing without Kafka (fallback dispatch will be used). "
+                    "Audit logs will be written to file-based storage only.",
                     extra={
                         "operation": "kafka_init_failed",
                         "bootstrap_servers": bootstrap_servers,
                         "error": str(e),
+                        "error_type": e.__class__.__name__,
                         "fallback": "file_only"
                     }
                 )

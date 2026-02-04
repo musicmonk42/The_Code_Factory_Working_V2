@@ -934,8 +934,9 @@ Agent --> Dev : Deliver Report
                     
                 except SyntaxError as e:
                     logger.warning(
-                        f"[TESTGEN] Could not parse {file_path}: {e}. Skipping basic test generation.",
-                        extra={"run_id": run_id}
+                        f"[TESTGEN] Could not parse {file_path}: invalid syntax ({e.__class__.__name__}, line {e.lineno}). "
+                        f"Error: {e.msg}. Skipping basic test generation for this file.",
+                        extra={"run_id": run_id, "syntax_error": str(e), "line": e.lineno}
                     )
                 except Exception as e:
                     logger.error(

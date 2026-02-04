@@ -911,28 +911,40 @@ else:
                     )
                 else:
                     # Railway env var doesn't contain expected domain - use permissive default with warning
-                    logger.warning(
-                        f"Railway URL detected but hostname doesn't match expected pattern: {hostname}. "
-                        "Expected: *.railway.app or *.up.railway.app. "
-                        "Using permissive CORS default. Set ALLOWED_ORIGINS explicitly for better security."
+                    logger.critical(
+                        f"CRITICAL: Railway URL detected but hostname doesn't match expected pattern: {hostname}. "
+                        f"Expected: *.railway.app or *.up.railway.app. "
+                        f"Using permissive CORS default (*) as fallback. "
+                        f"\n\n⚠️  ACTION REQUIRED: Set ALLOWED_ORIGINS explicitly.\n"
+                        f"   Example: ALLOWED_ORIGINS=https://your-app.railway.app,https://your-frontend.com"
                     )
                     ALLOWED_ORIGINS = ["*"]  # Allow all origins to prevent breaking the application
             except Exception as e:
-                # URL parsing failed - use permissive default with warning
-                logger.warning(
-                    f"Failed to parse Railway URL '{railway_url}': {e}. "
-                    "Using permissive CORS default. Set ALLOWED_ORIGINS explicitly for better security."
+                # URL parsing failed - use permissive default with critical warning
+                logger.critical(
+                    f"CRITICAL: Failed to parse Railway URL '{railway_url}': {e}. "
+                    f"Using permissive CORS default (*) as fallback. "
+                    f"\n\n⚠️  ACTION REQUIRED: Set ALLOWED_ORIGINS explicitly.\n"
+                    f"   Example: ALLOWED_ORIGINS=https://your-app.railway.app,https://your-frontend.com"
                 )
                 ALLOWED_ORIGINS = ["*"]  # Allow all origins to prevent breaking the application
         else:
             # No Railway URL detected and no explicit configuration
             # Use permissive default to prevent breaking the application
             ALLOWED_ORIGINS = ["*"]  # Allow all origins as fallback
-            logger.warning(
-                "ALLOWED_ORIGINS not set in production and Railway URL not detected. "
-                "Using permissive CORS default (*). "
-                "For better security, set ALLOWED_ORIGINS environment variable with your frontend domains. "
-                "Example: ALLOWED_ORIGINS=https://myapp.example.com,https://app.mycompany.com"
+            logger.critical(
+                "CRITICAL: ALLOWED_ORIGINS not set in production! Browser requests will fail with CORS errors. "
+                "Railway URL was not detected. Using permissive CORS default (*) as fallback. "
+                "\n\n"
+                "⚠️  ACTION REQUIRED: Set ALLOWED_ORIGINS environment variable with your frontend domains.\n"
+                "   Example: ALLOWED_ORIGINS=https://myapp.example.com,https://your-app.railway.app\n"
+                "\n"
+                "Without proper CORS configuration:\n"
+                "  - API calls from browsers will be blocked\n"
+                "  - Users will see CORS errors in browser console\n"
+                "  - Application will appear broken in web browsers\n"
+                "\n"
+                "For Railway deployments, set: ALLOWED_ORIGINS=https://your-app.railway.app"
             )
     else:
         # In development, allow common local development ports
