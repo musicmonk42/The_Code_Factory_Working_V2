@@ -118,6 +118,9 @@ def _counter_total_for_labels(counter, **expected_labels) -> float:
     total = 0.0
     for metric in counter.collect():
         for sample in metric.samples:
+            # Only sum samples that end with _total (exclude _created timestamps)
+            if not sample.name.endswith('_total'):
+                continue
             labels = sample.labels or {}
             if all(labels.get(k) == v for k, v in expected_labels.items()):
                 total += float(sample.value)
