@@ -1161,7 +1161,7 @@ if PLUGIN_AVAILABLE:
                     extra={
                         "error_type": type(e).__name__,
                         "error_message": str(e),
-                        "backend": config.backend if 'config' in locals() and config else 'unknown',
+                        "backend": config.backend,
                         "requirements": requirements
                     },
                     exc_info=True
@@ -1400,7 +1400,7 @@ else:
                     extra={
                         "error_type": type(e).__name__,
                         "error_message": str(e),
-                        "backend": config.backend if 'config' in locals() and config else 'unknown',
+                        "backend": config.backend,
                         "requirements": requirements
                     },
                     exc_info=True

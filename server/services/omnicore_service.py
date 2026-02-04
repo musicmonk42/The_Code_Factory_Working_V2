@@ -1073,13 +1073,7 @@ class OmniCoreService:
                             file_path.write_text(content, encoding='utf-8')
                             
                             # FIX: Verify file was actually written
-                            if file_path.exists() and file_path.stat().st_size > 0:
-                                generated_files.append(str(file_path))
-                                total_bytes_written += len(content.encode('utf-8'))
-                                
-                                # Determine file type for metrics
-                                file_ext = file_path.suffix.lstrip('.') or 'unknown'
-                            else:
+                            if not file_path.exists():
                                 # File not found after write - this is a critical error
                                 logger.error(
                                     f"[CODEGEN] ✗ File not found after write: {filename}",
@@ -1092,6 +1086,26 @@ class OmniCoreService:
                                 )
                                 files_failed.append({"filename": filename, "error": "file_not_found_after_write"})
                                 continue
+                            elif file_path.stat().st_size == 0:
+                                # File exists but is empty - also an error
+                                logger.error(
+                                    f"[CODEGEN] ✗ File is empty after write: {filename}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "file_name": filename,
+                                        "file_path": str(file_path),
+                                        "status": "failed"
+                                    }
+                                )
+                                files_failed.append({"filename": filename, "error": "file_empty_after_write"})
+                                continue
+                            
+                            # File verified successfully
+                            generated_files.append(str(file_path))
+                            total_bytes_written += len(content.encode('utf-8'))
+                            
+                            # Determine file type for metrics
+                            file_ext = file_path.suffix.lstrip('.') or 'unknown'
                             
                             # File verified - continue with metrics
                             
