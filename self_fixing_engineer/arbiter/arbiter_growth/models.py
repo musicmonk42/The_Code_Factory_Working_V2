@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, Union
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Column, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import declarative_base
 
@@ -31,14 +31,16 @@ class GrowthEvent(BaseModel):
         1.0, description="The schema version of the event payload."
     )
 
-    @validator("type")
+    @field_validator("type")
+    @classmethod
     def type_must_not_be_whitespace(cls, v: str) -> str:
         """Ensures the event type is not just whitespace."""
         if not v.strip():
             raise ValueError("Event type cannot be empty or just whitespace.")
         return v
 
-    @validator("timestamp")
+    @field_validator("timestamp")
+    @classmethod
     def validate_timestamp(cls, v: str) -> str:
         """Ensures the timestamp is a valid ISO 8601 format."""
         try:
@@ -76,7 +78,8 @@ class ArbiterState(BaseModel):
         0.0, description="The total experience points accumulated by the arbiter."
     )
 
-    @validator("event_offset")
+    @field_validator("event_offset")
+    @classmethod
     def convert_event_offset(cls, v: Union[int, str]) -> int:
         """Ensures event_offset is always an integer."""
         if isinstance(v, str):
@@ -91,7 +94,8 @@ class ArbiterState(BaseModel):
                 return v
         return v
 
-    @validator("skills")
+    @field_validator("skills")
+    @classmethod
     def validate_skill_scores(cls, v: Dict[str, float]) -> Dict[str, float]:
         """Ensures all skill scores are within the valid range of 0.0 to 1.0."""
         for skill, score in v.items():

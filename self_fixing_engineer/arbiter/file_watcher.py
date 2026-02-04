@@ -25,7 +25,7 @@ from apscheduler.triggers.cron import CronTrigger
 from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, register
 from dotenv import load_dotenv
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, generate_latest
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from tenacity import retry, stop_after_attempt, wait_exponential
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -174,7 +174,8 @@ class LLMConfig(BaseModel):
     prompt_template: str = "Summarize this {ext} file:\n\n{code}"
     max_code_size: int = 10000
 
-    @validator("provider")
+    @field_validator("provider")
+    @classmethod
     def validate_provider(cls, v):
         if v not in ["openai", "ollama", "anthropic", "gemini"]:
             raise ValueError("Invalid LLM provider")
