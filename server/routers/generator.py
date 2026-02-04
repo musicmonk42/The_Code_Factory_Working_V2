@@ -227,7 +227,17 @@ async def _trigger_pipeline_background(
                         rel_path = str(file_path.relative_to(job_dir))
                         output_files.append(rel_path)
                 job.output_files = output_files
-                logger.info(f"[Pipeline] Found {len(output_files)} output files for job {job_id}")
+                logger.info(
+                    f"[FileDiscovery] Found {len(output_files)} output files for job {job_id} in {job_dir}"
+                )
+                if output_files:
+                    # Log first few files for debugging
+                    sample_files = output_files[:5]
+                    logger.info(f"[FileDiscovery] Sample files: {', '.join(sample_files)}")
+            else:
+                logger.warning(
+                    f"[FileDiscovery] Job directory {job_dir} does not exist - no output files found"
+                )
             
             job.metadata["pipeline_completed_at"] = datetime.now(timezone.utc).isoformat()
             

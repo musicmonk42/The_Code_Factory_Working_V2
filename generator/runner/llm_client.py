@@ -483,6 +483,42 @@ class LLMClient:
                         f"LLM provider '{provider}' not loaded",
                         detail="SDK or API key may be missing",
                     )
+        start_time = time.time()
+
+        if not await self.rate_limiter.acquire(provider):
+            metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
+            raise LLMError("Rate limit exceeded")
+
+        if not await self.circuit_breaker.allow_request(provider):
+            metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
+            raise LLMError(f"[LLM_PROVIDER_ERROR] Circuit breaker open for provider '{provider}'")
+
+        cache_key = hashlib.sha256(f"{prompt}:{model}:{provider}".encode()).hexdigest()
+        cached = await self.cache.get(cache_key)
+        if cached and not stream:
+            metrics.LLM_CALLS_TOTAL.labels(provider=provider, model=model).inc()
+            return cached
+
+        try:
+            plugin = self.manager.get_provider(provider)
+            # [FIX] Graceful degradation if provider plugin failed to load (e.g., missing SDK/Key)
+            if not plugin:
+                metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
+                self.circuit_breaker.record_failure(provider)
+                raise ConfigurationError(
+                    f"LLM provider '{provider}' not loaded",
+                    detail="SDK or API key may be missing",
+                )
+
+            response = await plugin.call(
+                prompt=prompt, model=model, stream=stream, **kwargs
+            )
+            latency = time.time() - start_time
+            metrics.LLM_LATENCY_SECONDS.labels(provider=provider, model=model).observe(
+                latency
+            )
+            metrics.LLM_CALLS_TOTAL.labels(provider=provider, model=model).inc()
+            self.circuit_breaker.record_success(provider)  # Record success here
 
                 response = await plugin.call(
                     prompt=prompt, model=model, stream=stream, **kwargs

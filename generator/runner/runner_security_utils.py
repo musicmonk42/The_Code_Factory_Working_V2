@@ -88,6 +88,28 @@ _PRESIDIO_NLP_MODE: bool = (
 # This module will no longer import or increment UTIL_ERRORS.
 
 
+# Presidio entity types that generate unmapped warnings but don't affect functionality
+# These are filtered to prevent log clutter from known non-critical entity types
+PRESIDIO_IGNORED_ENTITY_TYPES = [
+    "CARDINAL",     # Numbers/quantities
+    "MONEY",        # Monetary values
+    "PERCENT",      # Percentages
+    "WORK_OF_ART",  # Titles of works
+    "LAW",          # Legal references
+    "EVENT",        # Named events
+    "FAC",          # Facilities/buildings
+    "ORDINAL",      # Ordinal numbers (1st, 2nd, etc.)
+]
+
+# Compile regex pattern once for efficient log filtering
+# Matches: "Entity {TYPE} is not mapped", "entity {TYPE} is not mapped", or "{TYPE} is not mapped"
+# Uses word boundaries to prevent false matches in other contexts
+_presidio_filter_pattern = re.compile(
+    r'\b(' + '|'.join(PRESIDIO_IGNORED_ENTITY_TYPES) + r')\s+is\s+not\s+mapped\b',
+    re.IGNORECASE
+)
+
+
 def _add_custom_recognizers(analyzer_engine):
     """
     Add custom recognizers for entities not covered by default Presidio patterns.
@@ -231,12 +253,21 @@ def _load_presidio_engine() -> bool:
             # Suppress non-critical Presidio warnings for unmapped entities
             # These warnings clutter logs but don't affect functionality
             presidio_logger = logging.getLogger("presidio_analyzer")
-            presidio_logger.addFilter(
-                lambda record: not any(
-                    entity in record.getMessage()
-                    for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped"]
-                )
-            )
+            
+            def presidio_log_filter(record):
+                """Filter out non-critical unmapped entity warnings from Presidio.
+                
+                Uses compiled regex for efficient filtering. Matches patterns like:
+                - "Entity CARDINAL is not mapped"
+                - "entity MONEY is not mapped"
+                - "PERCENT is not mapped"
+                
+                Case-insensitive with word boundaries to prevent false positives.
+                """
+                # Use compiled regex pattern for O(1) matching instead of O(n*m) loop
+                return not _presidio_filter_pattern.search(record.getMessage())
+            
+            presidio_logger.addFilter(presidio_log_filter)
             
             logger.info(
                 f"Presidio analyzer loaded successfully with {model_name} model (full NLP mode)"

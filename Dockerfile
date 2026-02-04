@@ -209,7 +209,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ENABLE_HSM="auto" \
     ENABLE_LIBVIRT="auto" \
     PARALLEL_AGENT_LOADING="1" \
-    LAZY_LOAD_ML="1"
+    LAZY_LOAD_ML="1" \
+    TOKENIZERS_PARALLELISM="false"
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support
