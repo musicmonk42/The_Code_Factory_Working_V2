@@ -885,15 +885,29 @@ if allowed_origins_str:
 else:
     # Use sensible defaults based on environment
     if _is_production:
-        # P0 FIX: In production, allow wildcard origin as fallback
+        # P0 FIX: In production, try to auto-detect Railway deployment URL
         # This prevents "works in curl but fails in browser" issues
-        # Operators should still set ALLOWED_ORIGINS explicitly for better security
-        ALLOWED_ORIGINS = ["*"]  # Allow all origins as safe fallback
-        logger.warning(
-            "WARNING: ALLOWED_ORIGINS not set in production - using wildcard (*) as fallback. "
-            "For better security, set ALLOWED_ORIGINS environment variable with your frontend domains. "
-            "Example: ALLOWED_ORIGINS=https://your-frontend.com,https://your-app.railway.app"
-        )
+        railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
+        
+        if railway_url:
+            # Auto-detected Railway deployment
+            if not railway_url.startswith("http"):
+                railway_url = f"https://{railway_url}"
+            ALLOWED_ORIGINS = [railway_url]
+            logger.info(
+                f"CORS configured with auto-detected Railway URL: {ALLOWED_ORIGINS}. "
+                "Set ALLOWED_ORIGINS explicitly if you have additional frontend domains."
+            )
+        else:
+            # No Railway URL detected and no explicit configuration
+            # Use restrictive default but log critical error
+            ALLOWED_ORIGINS = []  # Block CORS by default for security
+            logger.error(
+                "CRITICAL: ALLOWED_ORIGINS not set in production and Railway URL not detected! "
+                "Browser requests will fail with CORS errors. "
+                "Set ALLOWED_ORIGINS environment variable with your frontend domains. "
+                "Example: ALLOWED_ORIGINS=https://your-frontend.com,https://your-app.railway.app"
+            )
     else:
         # In development, allow common local development ports
         ALLOWED_ORIGINS = [
