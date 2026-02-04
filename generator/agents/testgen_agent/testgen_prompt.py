@@ -167,20 +167,49 @@ class MultiVectorDBManager:
             logger.debug(f"No files provided for {collection_name} collection")
             return
         try:
+            # Generate IDs including filename to ensure uniqueness
             ids = [
-                hashlib.sha256(content.encode()).hexdigest()
-                for content in files.values()
+                hashlib.sha256(f"{filename}:{content}".encode()).hexdigest()
+                for filename, content in files.items()
             ]
             documents = list(files.values())
             metadatas = [{"filename": filename} for filename in files.keys()]
+            
+            # Check if any IDs already exist in the collection
+            existing_ids = set()
+            try:
+                # Query for existing IDs
+                result = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: self.collections[collection_name].get(ids=ids, include=[])
+                )
+                if result and 'ids' in result:
+                    existing_ids = set(result['ids'])
+            except Exception:
+                pass  # If query fails, proceed with add
+            
+            # Filter out files with existing IDs
+            new_ids = []
+            new_documents = []
+            new_metadatas = []
+            for id_, doc, meta in zip(ids, documents, metadatas):
+                if id_ not in existing_ids:
+                    new_ids.append(id_)
+                    new_documents.append(doc)
+                    new_metadatas.append(meta)
+            
+            if not new_ids:
+                logger.debug(f"All {len(files)} files already exist in {collection_name} collection. Skipping.")
+                return
+            
             await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: self.collections[collection_name].add(
-                    documents=documents, metadatas=metadatas, ids=ids
+                    documents=new_documents, metadatas=new_metadatas, ids=new_ids
                 ),
             )
             logger.info(
-                f"Added/updated {len(files)} files in {collection_name} collection."
+                f"Added/updated {len(new_ids)} new files in {collection_name} collection (skipped {len(existing_ids)} existing)."
             )
 
             # REFACTORED: Use add_provenance
@@ -188,7 +217,8 @@ class MultiVectorDBManager:
                 "VectorDBUpdate",
                 {
                     "collection": collection_name,
-                    "file_count": len(files),
+                    "file_count": len(new_ids),
+                    "skipped_count": len(existing_ids),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "trigger": "add_files",
                 }
