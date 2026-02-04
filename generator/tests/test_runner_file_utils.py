@@ -136,9 +136,11 @@ async def test_load_file_content_redacts_secrets(temp_file: Path, mock_aiofiles)
 
     # Use the real redact_secrets logic which is mocked in the test class setUp
     # We just need to ensure the mock from setUp is active or provide one
+    # NOTE: redact_secrets is a SYNC function, so use MagicMock, not AsyncMock
+    # Using AsyncMock for sync functions causes coroutine return issues in Python 3.11+
     with patch(
         "runner.runner_file_utils.redact_secrets",
-        new=AsyncMock(side_effect=lambda t, **kw: t.replace("secret123", "[REDACTED]")),
+        new=MagicMock(side_effect=lambda t, **kw: t.replace("secret123", "[REDACTED]")),
     ):
         result = await load_file_content(temp_file)
     assert "[REDACTED]" in result
@@ -289,6 +291,8 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
 
         # *** FIX for Failure 3 ***
         # Mock redact_secrets to handle non-string inputs
+        # NOTE: redact_secrets is a SYNC function, so use MagicMock, not AsyncMock
+        # Using AsyncMock for sync functions causes coroutine return issues in Python 3.11+
         def simple_redact(t, **kw):
             if isinstance(t, str):
                 return t.replace("secret123", "[REDACTED]")
@@ -296,7 +300,7 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
 
         self.patcher = patch(
             "runner.runner_file_utils.redact_secrets",
-            new=AsyncMock(side_effect=simple_redact),
+            new=MagicMock(side_effect=simple_redact),
         )
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
