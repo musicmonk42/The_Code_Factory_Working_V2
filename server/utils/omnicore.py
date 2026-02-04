@@ -48,12 +48,19 @@ class OmniCoreService:
             logger.debug("Periodic audit flush not started - OmniCore not available")
             return False
         
+        # Don't start if already running
+        if self._periodic_flush_task and not self._periodic_flush_task.done():
+            logger.debug("Periodic audit flush already running")
+            return True
+        
         try:
             # Import audit functionality
             from generator.audit_log import audit_logger
             
             # Start periodic flush if audit logger is available
             if hasattr(audit_logger, 'start_periodic_flush'):
+                # Note: audit_logger.start_periodic_flush() typically creates its own task
+                # We just call it to initiate the process
                 await audit_logger.start_periodic_flush()
                 logger.info("Periodic audit flush started successfully")
                 return True
@@ -70,12 +77,16 @@ class OmniCoreService:
     
     async def stop(self):
         """Stop periodic tasks and cleanup resources."""
-        if self._periodic_flush_task:
+        # Note: The audit_logger typically manages its own tasks
+        # We just ensure we clean up our references
+        if self._periodic_flush_task and not self._periodic_flush_task.done():
             try:
                 self._periodic_flush_task.cancel()
                 logger.debug("Periodic flush task cancelled")
             except Exception as e:
                 logger.warning(f"Error stopping periodic flush task: {e}")
+        
+        self._periodic_flush_task = None
 
 
 # Singleton instance
