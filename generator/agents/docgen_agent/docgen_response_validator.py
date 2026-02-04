@@ -152,6 +152,7 @@ except ValueError:
 def setup_nltk_data():
     nltk_data_paths = {
         "punkt": "tokenizers/punkt",
+        "punkt_tab": "tokenizers/punkt_tab",
         "stopwords": "corpora/stopwords",
         "vader_lexicon": "sentiment/vader_lexicon",
     }
@@ -765,14 +766,14 @@ class ResponseValidator:
 
         return findings
 
-    def _enrich_content(self, content: str, output_format: str, repo_path: str) -> str:
+    async def _enrich_content(self, content: str, output_format: str, repo_path: str) -> str:
         """
         Add contextual enrichments to the documentation.
         """
         try:
             # Get Git changelog if available
             try:
-                changelog_content = get_commits(repo_path)
+                changelog_content = await get_commits(repo_path)
                 if changelog_content:
                     if output_format == "md":
                         changelog_section = (
@@ -925,7 +926,7 @@ Return only the corrected documentation content.
                         )
 
                 # Step 7: Content enrichment
-                content = self._enrich_content(content, output_format, repo_path)
+                content = await self._enrich_content(content, output_format, repo_path)
                 provenance["rationale_steps"].append("Applied content enrichment")
 
                 # Step 8: Final formatting

@@ -1139,13 +1139,13 @@ class DocgenAgent:
                 try:
                     if doc_content_str:
                         summary = await call_summarizer(
-                            content=doc_content_str,
+                            text=doc_content_str,
                             summarizer_name="doc_critique",
                             max_length=200,
                             llm_model=llm_model,
                         )
                         ensemble_summary = await ensemble_summarizers(
-                            content=doc_content_str,
+                            text=doc_content_str,
                             summarizers=[
                                 "doc_critique",
                                 "default_summary",
@@ -1519,7 +1519,7 @@ class DocgenAgent:
                 if doc_content_str:
                     # Use a shorter summary for streaming to avoid blocking
                     summary = await call_summarizer(
-                        content=doc_content_str,
+                        text=doc_content_str,
                         summarizer_name="doc_critique",
                         max_length=150,  # Shorter for stream
                         llm_model=llm_model,
