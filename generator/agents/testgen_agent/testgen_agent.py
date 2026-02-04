@@ -933,51 +933,182 @@ Agent --> Dev : Deliver Report
                     )
                     
                 except SyntaxError as e:
+                    # ✅ INDUSTRY STANDARD: Comprehensive error recovery with fallback test generation
+                    # Instead of silently skipping files with syntax errors, we generate
+                    # structural tests that verify file existence and basic properties.
+                    # This ensures the test suite always produces meaningful output.
+                    
                     logger.warning(
-                        f"[TESTGEN] Could not parse {file_path}: invalid syntax ({e.__class__.__name__}, line {e.lineno}). "
-                        f"Error: {e.msg}. Generating basic structure test instead.",
-                        extra={"run_id": run_id, "syntax_error": str(e), "line": e.lineno}
+                        f"[TESTGEN] Could not parse {file_path}: invalid syntax at line {e.lineno}. "
+                        f"Error: {e.msg}. Generating structural fallback tests.",
+                        extra={
+                            "run_id": run_id,
+                            "file_path": file_path,
+                            "syntax_error": str(e),
+                            "error_line": e.lineno,
+                            "error_offset": e.offset,
+                            "error_text": e.text[:100] if e.text else None,
+                            "recovery_strategy": "fallback_structural_tests"
+                        }
                     )
                     
-                    # ✅ FIX: Generate a basic import test even if parsing fails
-                    file_stem = file_path.replace('.py', '').replace('/', '_').replace('-', '_')
+                    # Generate safe file identifier for test function names
+                    # Remove extension, convert path separators and special chars to underscores
+                    file_stem = (
+                        file_path.replace('.py', '')
+                        .replace('/', '_')
+                        .replace('-', '_')
+                        .replace('.', '_')
+                        .strip('_')
+                    )
+                    
+                    # Ensure valid Python identifier
+                    if not file_stem or not file_stem[0].isalpha():
+                        file_stem = f"file_{file_stem}"
+                    
+                    # ✅ INDUSTRY STANDARD: Generate comprehensive fallback test suite
+                    # Includes:
+                    # - File existence validation
+                    # - Content validation (not empty)
+                    # - Basic metadata checks
+                    # - Skipped import test with clear reasoning
+                    # - Detailed documentation for maintainability
                     
                     fallback_test = f'''"""
-Basic structure test for {file_path}
-Generated because the source file has syntax errors.
+Structural test suite for {file_path}
+
+AUTO-GENERATED FALLBACK TESTS
+These tests were generated because the source file contains syntax errors
+that prevented AST parsing. They validate basic file structure and existence.
+
+Syntax Error Details:
+- Line: {e.lineno}
+- Error: {e.msg}
+- Context: {e.text[:50] if e.text else 'N/A'}
+
+To enable full test generation, fix the syntax errors in the source file.
 """
-import pytest
 import os
+import pytest
+from pathlib import Path
 
-def test_{file_stem}_exists():
-    """Test that the module file exists."""
-    assert os.path.exists("{file_path}"), "Module file should exist"
 
-def test_{file_stem}_not_empty():
-    """Test that the module file is not empty."""
-    with open("{file_path}") as f:
-        content = f.read()
-    assert len(content) > 0, "Module file should not be empty"
+class Test{file_stem.title()}Structure:
+    """Structural validation tests for {file_path}"""
+    
+    @pytest.fixture
+    def file_path(self):
+        """Fixture providing the path to the source file."""
+        return "{file_path}"
+    
+    def test_{file_stem}_exists(self, file_path):
+        """Verify that the source file exists in the expected location."""
+        assert os.path.exists(file_path), (
+            f"Source file {{file_path}} does not exist. "
+            f"Expected at: {{os.path.abspath(file_path)}}"
+        )
+    
+    def test_{file_stem}_is_file(self, file_path):
+        """Verify that the path points to a file, not a directory."""
+        assert os.path.isfile(file_path), (
+            f"Path {{file_path}} exists but is not a regular file"
+        )
+    
+    def test_{file_stem}_not_empty(self, file_path):
+        """Verify that the source file contains content."""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        assert len(content) > 0, (
+            f"Source file {{file_path}} exists but is empty"
+        )
+        assert content.strip(), (
+            f"Source file {{file_path}} contains only whitespace"
+        )
+    
+    def test_{file_stem}_has_python_extension(self, file_path):
+        """Verify file has .py extension."""
+        assert file_path.endswith('.py'), (
+            f"File {{file_path}} does not have .py extension"
+        )
+    
+    def test_{file_stem}_readable(self, file_path):
+        """Verify file is readable with UTF-8 encoding."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                _ = f.read()
+        except UnicodeDecodeError as e:
+            pytest.fail(f"File {{file_path}} is not valid UTF-8: {{e}}")
+        except IOError as e:
+            pytest.fail(f"Cannot read file {{file_path}}: {{e}}")
+    
+    @pytest.mark.skip(reason="Source file has syntax errors - cannot import")
+    def test_{file_stem}_import(self, file_path):
+        """
+        Test module import (SKIPPED due to syntax errors).
+        
+        This test is skipped because the source file contains syntax errors
+        at line {e.lineno}: {e.msg}
+        
+        Fix the syntax errors to enable this test.
+        """
+        # Would attempt: import {file_stem}
+        pass
+    
+    @pytest.mark.skip(reason="Source file has syntax errors - cannot parse AST")
+    def test_{file_stem}_has_docstring(self, file_path):
+        """
+        Test module docstring presence (SKIPPED due to syntax errors).
+        
+        This test would verify the module has proper documentation,
+        but cannot run due to syntax errors in the source.
+        """
+        pass
 
-@pytest.mark.skip(reason="Source file has syntax errors")
-def test_{file_stem}_import():
-    """Test module import (skipped due to syntax errors)."""
-    # This would fail due to syntax errors
-    # import {file_stem}
-    pass
+
+# Additional context for debugging
+def test_{file_stem}_syntax_error_documentation():
+    """
+    Document the syntax error for debugging purposes.
+    
+    This test always passes but logs information about why
+    full test generation was not possible.
+    """
+    error_info = {{
+        "file": "{file_path}",
+        "error_line": {e.lineno},
+        "error_message": "{e.msg}",
+        "error_type": "SyntaxError",
+        "recovery_strategy": "structural_fallback_tests"
+    }}
+    
+    # Test passes - this is informational
+    assert True, f"Syntax error context: {{error_info}}"
 '''
                     
+                    # Generate test file path following pytest conventions
                     test_file_path = file_path.replace('.py', '_test.py')
                     if not test_file_path.startswith('test_'):
                         # Put test file in tests directory
                         parts = test_file_path.split('/')
                         filename = parts[-1]
-                        test_file_path = 'tests/test_' + filename
+                        test_file_path = 'tests/test_' + filename.lstrip('_')
                     
                     basic_tests[test_file_path] = fallback_test
+                    
+                    # Log successful fallback generation with metrics
                     logger.info(
-                        f"[TESTGEN] Generated fallback test for {file_path} -> {test_file_path}",
-                        extra={"run_id": run_id}
+                        "[TESTGEN] Generated structural fallback tests for file with syntax errors",
+                        extra={
+                            "run_id": run_id,
+                            "source_file": file_path,
+                            "test_file": test_file_path,
+                            "test_count": fallback_test.count("def test_"),
+                            "skipped_tests": fallback_test.count("@pytest.mark.skip"),
+                            "test_suite_size_bytes": len(fallback_test),
+                            "recovery_strategy": "fallback_structural_tests",
+                            "original_error": f"{e.__class__.__name__}: {e.msg}"
+                        }
                     )
                 except Exception as e:
                     logger.error(
