@@ -90,7 +90,7 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
  * @returns {Promise<Array>} Results from all tasks
  */
 async function limitConcurrency(tasks, limit) {
-    const results = [];
+    const results = new Array(tasks.length); // Initialize with proper length
     const executing = [];
     
     for (const [index, task] of tasks.entries()) {
@@ -100,7 +100,6 @@ async function limitConcurrency(tasks, limit) {
             return result;
         });
         
-        results.push(promise);
         executing.push(promise);
         
         if (executing.length >= limit) {
@@ -108,7 +107,7 @@ async function limitConcurrency(tasks, limit) {
         }
     }
     
-    await Promise.all(results);
+    await Promise.all(executing);
     return results;
 }
 

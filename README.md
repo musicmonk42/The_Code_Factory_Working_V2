@@ -10,6 +10,7 @@ Table of Contents
 **Quick Links**
 - [QUICKSTART.md](./docs/QUICKSTART.md) - Get started in 5 minutes
 - [DEPLOYMENT.md](./docs/DEPLOYMENT.md) - Production deployment guide
+- [Manual SFE Dispatch](./docs/MANUAL_SFE_DISPATCH.md) - Control when jobs are sent to Self-Fixing Engineer
 - [Makefile Commands](#makefile-commands) - Common development commands
 
 Features
