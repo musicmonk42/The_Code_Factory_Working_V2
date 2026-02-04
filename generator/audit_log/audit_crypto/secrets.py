@@ -11,6 +11,7 @@ import base64
 import concurrent.futures
 import logging
 import os
+import random  # For jitter in retry delays
 import threading
 import time
 from abc import ABC, abstractmethod  # For SecretManager ABC
@@ -652,15 +653,42 @@ _SECRET_ACCESS_ATTEMPTS: Dict[str, List[float]] = defaultdict(
 )  # {secret_name: [timestamp1, timestamp2, ...]}
 RETRY_DELAY_SECONDS = 0.5  # Initial delay for retries
 
+# Secret caching to prevent repeated fetches
+_SECRET_CACHE: Dict[str, bytes] = {}  # {secret_name: secret_value}
+_SECRET_CACHE_LOCK = threading.Lock()  # Thread-safe cache access
+SECRET_CACHE_TTL_SECONDS = int(os.getenv("SECRET_CACHE_TTL_SECONDS", "300"))  # 5 minutes default
+_SECRET_CACHE_TIMESTAMPS: Dict[str, float] = {}  # {secret_name: timestamp}
+
 
 async def _get_secret_with_retries_and_rate_limit(
     secret_name: str, max_retries: int = 3, initial_delay: float = RETRY_DELAY_SECONDS
 ) -> Optional[bytes]:
     """
-    Internal helper to fetch a secret with rate limiting and exponential backoff retries.
+    Internal helper to fetch a secret with rate limiting, caching, and exponential backoff retries.
     Calls the currently configured global _secret_manager.
+    
+    Implements in-memory caching with TTL to prevent excessive secret manager access.
     """
     current_time = time.time()
+
+    # Check cache first (thread-safe)
+    with _SECRET_CACHE_LOCK:
+        if secret_name in _SECRET_CACHE:
+            cache_timestamp = _SECRET_CACHE_TIMESTAMPS.get(secret_name, 0)
+            if current_time - cache_timestamp < SECRET_CACHE_TTL_SECONDS:
+                logger.debug(
+                    f"Secret '{secret_name}' retrieved from cache (age: {current_time - cache_timestamp:.1f}s)",
+                    extra={"operation": "secret_cache_hit", "secret_name": secret_name}
+                )
+                return _SECRET_CACHE[secret_name]
+            else:
+                # Cache expired, remove it
+                logger.debug(
+                    f"Cache expired for secret '{secret_name}' (age: {current_time - cache_timestamp:.1f}s)",
+                    extra={"operation": "secret_cache_expired", "secret_name": secret_name}
+                )
+                del _SECRET_CACHE[secret_name]
+                del _SECRET_CACHE_TIMESTAMPS[secret_name]
 
     # Clean up old timestamps (older than the configured window)
     _SECRET_ACCESS_ATTEMPTS[secret_name] = [
@@ -694,6 +722,17 @@ async def _get_secret_with_retries_and_rate_limit(
     while attempt < max_retries:
         try:
             secret_value = await _secret_manager.get_secret(secret_name)
+            
+            # Cache the secret (thread-safe)
+            if secret_value:
+                with _SECRET_CACHE_LOCK:
+                    _SECRET_CACHE[secret_name] = secret_value
+                    _SECRET_CACHE_TIMESTAMPS[secret_name] = current_time
+                    logger.debug(
+                        f"Secret '{secret_name}' cached (TTL: {SECRET_CACHE_TTL_SECONDS}s)",
+                        extra={"operation": "secret_cached", "secret_name": secret_name}
+                    )
+            
             return secret_value
         # --- FIX 2: Swapped SecretError and Exception blocks ---
         # This ensures SecretError (and its children) are retried.
@@ -718,7 +757,10 @@ async def _get_secret_with_retries_and_rate_limit(
                     f"Failed to retrieve secret '{secret_name}': {e}"
                 ) from e
 
-            delay = initial_delay * (2 ** (attempt - 1))
+            # Exponential backoff with jitter to prevent thundering herd
+            base_delay = initial_delay * (2 ** (attempt - 1))
+            jitter = random.uniform(0, base_delay * 0.1)  # Add up to 10% jitter
+            delay = base_delay + jitter
             logger.warning(
                 f"Transient error retrieving secret '{secret_name}' (attempt {attempt}/{max_retries}). Retrying in {delay:.2f} seconds. Error: {e}"
             )

@@ -383,7 +383,8 @@ class SphinxDocGenerator:
         self, content: str, title: str, module_name: Optional[str] = None
     ) -> str:
         """
-        Convert markdown/plain text content to RST format.
+        Convert markdown/plain text content to RST format with proper indentation.
+        Fixes common RST formatting issues that cause Sphinx errors.
         """
         rst_content = f"{title}\n{'=' * len(title)}\n\n"
 
@@ -394,27 +395,35 @@ class SphinxDocGenerator:
             rst_content += "   :undoc-members:\n"
             rst_content += "   :show-inheritance:\n\n"
 
-        # Convert content to RST format
-        # Simple conversion - in production, use pandoc or similar
+        # Convert content to RST format with proper indentation
         lines = content.split("\n")
         in_code_block = False
+        code_language = "python"
 
         for line in lines:
-            # Convert markdown code blocks to RST
+            # Convert markdown code blocks to RST with proper indentation
             if line.strip().startswith("```"):
                 if not in_code_block:
-                    language = line.strip()[3:].strip() or "python"
-                    rst_content += f"\n.. code-block:: {language}\n\n"
+                    code_language = line.strip()[3:].strip() or "python"
+                    # RST requires :: followed by blank line, then indented content
+                    rst_content += f"\n.. code-block:: {code_language}\n"
+                    rst_content += "\n"  # Required blank line after directive
                     in_code_block = True
                 else:
-                    rst_content += "\n"
+                    rst_content += "\n"  # Blank line after code block
                     in_code_block = False
                 continue
 
             if in_code_block:
-                rst_content += f"   {line}\n"
+                # RST requires 4-space indentation for code blocks (standard)
+                # Handle already-indented lines to avoid double-indentation
+                if line:
+                    rst_content += f"    {line}\n"
+                else:
+                    # Preserve blank lines within code blocks with proper indentation
+                    rst_content += "\n"
             else:
-                # Convert markdown headers to RST
+                # Convert markdown headers to RST with proper spacing
                 if line.startswith("# "):
                     header = line[2:].strip()
                     rst_content += f"\n{header}\n{'=' * len(header)}\n\n"
@@ -424,10 +433,58 @@ class SphinxDocGenerator:
                 elif line.startswith("### "):
                     header = line[4:].strip()
                     rst_content += f"\n{header}\n{'^' * len(header)}\n\n"
+                elif line.startswith("#### "):
+                    header = line[5:].strip()
+                    rst_content += f"\n{header}\n{'~' * len(header)}\n\n"
                 else:
+                    # Regular content line
                     rst_content += line + "\n"
 
         return rst_content
+
+    def validate_rst(self, rst_content: str) -> Tuple[bool, List[str]]:
+        """
+        Validate RST content for syntax errors before building with Sphinx.
+        
+        Returns:
+            Tuple of (is_valid, list_of_errors)
+        """
+        try:
+            from docutils.core import publish_doctree
+            from docutils.utils import Reporter
+            from io import StringIO
+            
+            # Capture warnings and errors
+            warning_stream = StringIO()
+            
+            # Parse the RST content
+            try:
+                publish_doctree(
+                    rst_content,
+                    settings_overrides={
+                        'report_level': Reporter.WARNING_LEVEL,
+                        'halt_level': Reporter.SEVERE_LEVEL,
+                        'warning_stream': warning_stream,
+                    }
+                )
+                
+                # Get warnings/errors
+                warnings = warning_stream.getvalue()
+                if warnings:
+                    error_lines = [line.strip() for line in warnings.split('\n') if line.strip()]
+                    logger.warning(f"RST validation warnings: {error_lines}")
+                    return True, error_lines  # Valid but with warnings
+                    
+                return True, []  # Valid with no warnings
+                
+            except Exception as e:
+                error_msg = f"RST syntax error: {str(e)}"
+                logger.error(error_msg)
+                return False, [error_msg]
+                
+        except ImportError:
+            logger.warning("docutils not available for RST validation")
+            return True, []  # Skip validation if docutils not available
 
     async def build_sphinx_docs(self, rst_files: List[Path]) -> bool:
         """
@@ -907,6 +964,22 @@ class DocgenAgent:
                 content=content, title=title, module_name=module_name
             )
 
+            # Validate RST content before saving
+            is_valid, validation_errors = self.sphinx_generator.validate_rst(rst_content)
+            
+            if not is_valid:
+                logger.error(
+                    f"RST validation failed for {doc_type}: {validation_errors}",
+                    extra={"doc_type": doc_type, "errors": validation_errors}
+                )
+                # Still save the file for debugging, but log the errors
+            
+            if validation_errors:
+                logger.warning(
+                    f"RST validation warnings for {doc_type}: {validation_errors}",
+                    extra={"doc_type": doc_type, "warnings": validation_errors}
+                )
+
             # Save RST file
             rst_filename = f"{doc_type.lower()}.rst"
             rst_path = self.sphinx_generator.docs_dir / rst_filename
@@ -915,11 +988,18 @@ class DocgenAgent:
             async with aiofiles.open(rst_path, "w") as f:
                 await f.write(rst_content)
 
-            logger.info(f"Generated Sphinx RST documentation: {rst_path}")
+            logger.info(
+                f"Generated Sphinx RST documentation: {rst_path} "
+                f"(valid: {is_valid}, warnings: {len(validation_errors)})"
+            )
 
-            # Optionally build HTML documentation
-            if SPHINX_AVAILABLE:
+            # Optionally build HTML documentation (only if validation passed)
+            if SPHINX_AVAILABLE and is_valid:
                 await self.sphinx_generator.build_sphinx_docs([rst_path])
+            elif not is_valid:
+                logger.warning(
+                    f"Skipping Sphinx HTML build for {doc_type} due to RST syntax validation failure"
+                )
 
             return rst_content
 

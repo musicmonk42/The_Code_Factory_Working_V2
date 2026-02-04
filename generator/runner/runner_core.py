@@ -656,6 +656,71 @@ class Runner(ABC):
 
         logger.info("Runner background services stopped.")
 
+    def _validate_test_files(self, test_files: Dict[str, str], framework: str) -> Dict[str, List[str]]:
+        """
+        Validate test files for proper naming and content.
+        
+        Args:
+            test_files: Dictionary of filename -> content
+            framework: Test framework being used
+            
+        Returns:
+            Dictionary with validation results: {
+                "valid_files": [...],
+                "warnings": [...],
+                "errors": [...]
+            }
+        """
+        validation_result = {
+            "valid_files": [],
+            "warnings": [],
+            "errors": []
+        }
+        
+        if not test_files:
+            validation_result["warnings"].append("No test files provided")
+            return validation_result
+        
+        for filename, content in test_files.items():
+            safe_name = os.path.basename(filename)
+            
+            # Check naming convention based on framework
+            if framework == "pytest":
+                if not (safe_name.startswith("test_") or safe_name.endswith("_test.py")):
+                    validation_result["warnings"].append(
+                        f"File '{safe_name}' does not follow pytest naming convention (test_*.py or *_test.py)"
+                    )
+                
+                # Check for test functions/classes
+                if not content:
+                    validation_result["errors"].append(f"File '{safe_name}' is empty")
+                    continue
+                    
+                # Simple regex check for test functions or classes
+                import re
+                has_test_func = re.search(r'def\s+test_\w+\s*\(', content)
+                has_test_class = re.search(r'class\s+Test\w+\s*[:\(]', content)
+                
+                if not (has_test_func or has_test_class):
+                    validation_result["warnings"].append(
+                        f"File '{safe_name}' does not appear to contain test functions (def test_*) or test classes (class Test*)"
+                    )
+            
+            elif framework == "unittest":
+                # Check for unittest patterns
+                import re
+                has_test_case = re.search(r'class\s+\w+\(.*TestCase.*\)', content)
+                has_test_method = re.search(r'def\s+test_\w+\s*\(', content)
+                
+                if not (has_test_case or has_test_method):
+                    validation_result["warnings"].append(
+                        f"File '{safe_name}' does not appear to contain unittest.TestCase classes or test methods"
+                    )
+            
+            validation_result["valid_files"].append(safe_name)
+        
+        return validation_result
+
     async def _save_files_to_temp_dir(self, files: Dict[str, str], target_dir: Path):
         """
         Helper to asynchronously save a dict of files to a target directory.
@@ -1776,6 +1841,27 @@ class Runner(ABC):
             )
             span.set_attribute("runner.actual_framework", actual_framework_name)
 
+            # Validate test files before execution
+            validation_result = self._validate_test_files(task_payload.test_files, actual_framework_name)
+            
+            # Log validation warnings
+            for warning in validation_result["warnings"]:
+                logger.warning(f"Test file validation warning: {warning}")
+                span.add_event(f"Test validation warning: {warning}")
+            
+            # Log validation errors (but don't fail - let pytest fail naturally)
+            for error in validation_result["errors"]:
+                logger.error(f"Test file validation error: {error}")
+                span.add_event(f"Test validation error: {error}")
+            
+            # If no valid test files found, log a clear warning
+            if not validation_result["valid_files"]:
+                logger.warning(
+                    f"No valid test files found for framework '{actual_framework_name}'. "
+                    f"Pytest may exit with code 5 (no tests collected)."
+                )
+                span.add_event("Warning: No valid test files found")
+
             # --- Setup Phase ---
             temp_dir_obj = tempfile.TemporaryDirectory()
             temp_dir_path = Path(temp_dir_obj.name)
@@ -1869,6 +1955,26 @@ class Runner(ABC):
             stdout = exec_results.get("stdout", "")
             stderr = exec_results.get("stderr", "")
             returncode = exec_results.get("returncode", 1)
+
+            # Special handling for pytest exit code 5 (no tests collected)
+            if returncode == 5 and actual_framework_name == "pytest":
+                logger.error(
+                    json.dumps(
+                        {
+                            "event": "pytest_no_tests_collected",
+                            "task_id": task_id,
+                            "returncode": 5,
+                            "message": "Pytest exited with code 5 - no tests were collected. "
+                                       "This usually means test files don't match naming conventions "
+                                       "(test_*.py or *_test.py) or don't contain test functions (def test_*).",
+                            "validation_warnings": validation_result.get("warnings", []),
+                            "stdout_snippet": stdout[:500],
+                            "stderr_snippet": stderr[:500],
+                        }
+                    )
+                )
+                span.set_attribute("runner.pytest_exit_code_5", True)
+                span.add_event("Pytest exit code 5: No tests collected")
 
             if returncode != 0:
                 logger.warning(
