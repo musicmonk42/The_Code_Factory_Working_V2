@@ -113,6 +113,22 @@ compute_hash = core.compute_hash
 
 # --- Test Helper Functions ---
 
+def _counter_total_for_labels(counter, **expected_labels) -> float:
+    """Sum counter samples that match expected label values."""
+    total = 0.0
+    for metric in counter.collect():
+        for sample in metric.samples:
+            labels = sample.labels or {}
+            if all(labels.get(k) == v for k, v in expected_labels.items()):
+                total += float(sample.value)
+    return total
+
+
+# Import metrics from core
+BACKEND_WRITES = core.BACKEND_WRITES
+BACKEND_ERRORS = core.BACKEND_ERRORS
+BACKEND_TAMPER_DETECTION_FAILURES = core.BACKEND_TAMPER_DETECTION_FAILURES
+
 
 def _prepare_v1_entry(entry_data: Dict) -> str:
     """Creates a V1-style (schema_version=1) prepared entry string."""
@@ -254,12 +270,9 @@ async def test_file_backend_append_and_flush(file_backend, mock_alerts_and_otel)
 
     # Check metrics and traces
     mock_span.set_attribute.assert_any_call("batch.size", 1)
-    assert (
-        REGISTRY.get_sample_value(
-            "audit_backend_writes_total", {"backend": "FileBackend"}
-        )
-        == 1
-    )
+    assert _counter_total_for_labels(
+        BACKEND_WRITES, backend="FileBackend"
+    ) >= 1
 
 
 @pytest.mark.asyncio
@@ -296,12 +309,9 @@ async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_o
     final_entry = json.loads(decompressed)
 
     assert final_entry["action"] == "create_user"
-    assert (
-        REGISTRY.get_sample_value(
-            "audit_backend_writes_total", {"backend": "SQLiteBackend"}
-        )
-        == 1
-    )
+    assert _counter_total_for_labels(
+        BACKEND_WRITES, backend="SQLiteBackend"
+    ) >= 1
 
 
 @pytest.mark.asyncio
@@ -343,13 +353,9 @@ async def test_file_backend_query_and_tamper(file_backend, mock_alerts_and_otel)
         severity="medium",
     )
     # --- END FIX ---
-    assert (
-        REGISTRY.get_sample_value(
-            "audit_backend_errors_total",
-            {"backend": "FileBackend", "type": "DecodeError"},
-        )
-        > 0
-    )
+    assert _counter_total_for_labels(
+        BACKEND_ERRORS, backend="FileBackend", type="DecodeError"
+    ) > 0
 
 
 @pytest.mark.asyncio
@@ -394,13 +400,9 @@ async def test_sqlite_backend_query_and_tamper(sqlite_backend, mock_alerts_and_o
     )
     # --- END: FIX for test_sqlite_backend_query_and_tamper ---
 
-    assert (
-        REGISTRY.get_sample_value(
-            "audit_backend_tamper_detection_failures_total",
-            {"backend": "SQLiteBackend"},
-        )
-        == 1
-    )
+    assert _counter_total_for_labels(
+        BACKEND_TAMPER_DETECTION_FAILURES, backend="SQLiteBackend"
+    ) >= 1
 
 
 @pytest.mark.asyncio
