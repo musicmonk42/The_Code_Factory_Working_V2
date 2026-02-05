@@ -92,6 +92,23 @@ class CircuitBreaker:
         self._async_lock: Optional[asyncio.Lock] = None
         self._lock_init_lock = threading.Lock()
 
+    def __getstate__(self):
+        """Prepare for pickling - remove unpicklable locks."""
+        state = self.__dict__.copy()
+        # Remove locks which can't be pickled
+        state['_async_lock'] = None
+        state['_thread_lock'] = None
+        state['_lock_init_lock'] = None
+        return state
+
+    def __setstate__(self, state):
+        """Restore after unpickling in forked process."""
+        self.__dict__.update(state)
+        # Locks will be recreated in the new process
+        self._thread_lock = threading.Lock()
+        self._async_lock = None
+        self._lock_init_lock = threading.Lock()
+
     def _get_async_lock(self) -> Optional[asyncio.Lock]:
         """
         Lazy initialization of asyncio.Lock.
