@@ -1,8 +1,10 @@
 import json
 import sys
 import threading
+import importlib
+import importlib.util
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, Mock
 
 import pytest
 import yaml
@@ -24,6 +26,33 @@ from self_fixing_engineer.arbiter.codebase_analyzer import (
     app,
     logger,
 )
+
+
+# Fixture to ensure real aiofiles module is available
+@pytest.fixture(autouse=True)
+def ensure_real_aiofiles_for_codebase_analyzer():
+    """Ensure aiofiles is real, not mocked, for these tests."""
+    # Remove any mocked aiofiles modules from sys.modules
+    mocked_modules = [key for key in list(sys.modules.keys()) if 'aiofiles' in key]
+    for mod_name in mocked_modules:
+        mod = sys.modules.get(mod_name)
+        if mod is not None and (
+            isinstance(mod, (MagicMock, Mock)) or 
+            hasattr(mod, '_mock_name') or
+            hasattr(mod, '_spec_class')
+        ):
+            del sys.modules[mod_name]
+    
+    # Force import of the real aiofiles module
+    try:
+        spec = importlib.util.find_spec("aiofiles")
+        if spec is not None:
+            import aiofiles
+            aiofiles = importlib.reload(aiofiles)
+    except (ImportError, AttributeError):
+        pass  # aiofiles may not be installed, tests will handle this
+    
+    yield
 
 
 # Fixture for temp directory
@@ -185,13 +214,13 @@ async def test_generate_report_markdown(temp_dir):
         ]
     }
 
-    # Mock aiofiles properly
+    # Mock aiofiles properly - patch where it's used, not where it's defined
     mock_file = AsyncMock()
     mock_file.__aenter__ = AsyncMock(return_value=mock_file)
     mock_file.__aexit__ = AsyncMock()
     mock_file.write = AsyncMock()
 
-    with patch("aiofiles.open", return_value=mock_file):
+    with patch("self_fixing_engineer.arbiter.codebase_analyzer.aiofiles.open", return_value=mock_file):
         await analyzer.generate_report(
             output_format="markdown", output_path=str(temp_dir / "report.md")
         )
@@ -214,13 +243,13 @@ async def test_generate_report_json(temp_dir):
         ]
     }
 
-    # Mock aiofiles properly
+    # Mock aiofiles properly - patch where it's used, not where it's defined
     mock_file = AsyncMock()
     mock_file.__aenter__ = AsyncMock(return_value=mock_file)
     mock_file.__aexit__ = AsyncMock()
     mock_file.write = AsyncMock()
 
-    with patch("aiofiles.open", return_value=mock_file):
+    with patch("self_fixing_engineer.arbiter.codebase_analyzer.aiofiles.open", return_value=mock_file):
         await analyzer.generate_report(
             output_format="json", output_path=str(temp_dir / "report.json")
         )
@@ -243,13 +272,13 @@ async def test_generate_report_junit(temp_dir):
         ]
     }
 
-    # Mock aiofiles properly
+    # Mock aiofiles properly - patch where it's used, not where it's defined
     mock_file = AsyncMock()
     mock_file.__aenter__ = AsyncMock(return_value=mock_file)
     mock_file.__aexit__ = AsyncMock()
     mock_file.write = AsyncMock()
 
-    with patch("aiofiles.open", return_value=mock_file):
+    with patch("self_fixing_engineer.arbiter.codebase_analyzer.aiofiles.open", return_value=mock_file):
         await analyzer.generate_report(
             output_format="junit", output_path=str(temp_dir / "report.xml")
         )

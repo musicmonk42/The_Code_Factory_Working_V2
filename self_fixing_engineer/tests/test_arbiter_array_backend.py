@@ -100,37 +100,42 @@ def ensure_real_aiofiles():
     """Ensure aiofiles is real, not mocked, for these tests.
     
     These tests require actual file I/O to test persistence.
-    Remove any mocks that may have been applied by conftest.
+    Remove any mocks that may have been applied by other test modules.
     """
     import sys
     import importlib
+    import importlib.util
     from unittest.mock import MagicMock, Mock
     
-    # Step 1: Remove any mocked aiofiles modules from sys.modules
-    # This includes both the main module and any submodules
+    # Step 1: Save any mocked modules to restore after test
+    saved_modules = {}
     mocked_modules = [key for key in list(sys.modules.keys()) if 'aiofiles' in key]
     for mod_name in mocked_modules:
         mod = sys.modules.get(mod_name)
-        # Check if this is a mock by looking for mock attributes or isinstance check
-        if mod is not None and (
-            hasattr(mod, '_mock_name') or 
-            hasattr(mod, '_spec_class') or
-            isinstance(mod, (MagicMock, Mock))
-        ):
-            # This is a mock, remove it
+        if mod is not None:
+            saved_modules[mod_name] = mod
             del sys.modules[mod_name]
     
-    # Step 2: Force re-import of the real aiofiles module
+    # Step 2: Force import of the real aiofiles module from site-packages
     try:
-        # First try to import it fresh
+        # Find real aiofiles spec from the package
+        spec = importlib.util.find_spec("aiofiles")
+        if spec is None:
+            pytest.skip("aiofiles not installed - cannot run persistence tests")
+        
+        # Import the real module
         import aiofiles
+        aiofiles = importlib.reload(aiofiles)
         
-        # If aiofiles was already imported but potentially mocked, reload it
-        if 'aiofiles' in sys.modules:
-            aiofiles = importlib.reload(aiofiles)
+        # Also reload submodules that may be needed
+        try:
+            import aiofiles.os
+            aiofiles.os = importlib.reload(aiofiles.os)
+        except (ImportError, AttributeError):
+            pass
         
-    except ImportError:
-        pytest.skip("aiofiles not installed - cannot run persistence tests")
+    except ImportError as e:
+        pytest.skip(f"aiofiles not installed - cannot run persistence tests: {e}")
     
     # Step 3: Verify that aiofiles is functional (not a mock)
     try:
@@ -152,6 +157,9 @@ def ensure_real_aiofiles():
     
     # Step 4: All checks passed, yield to run the test
     yield
+    
+    # Step 5: Restore any saved mocked modules (for other tests that depend on them)
+    # Note: We don't restore because we want the real module to persist for subsequent tests
 
 
 @pytest.fixture
