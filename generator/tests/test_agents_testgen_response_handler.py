@@ -10,26 +10,42 @@ This version works with the refactored implementation that has:
 All 33 tests should pass.
 """
 
+import importlib.machinery
 import json
 import os
 import subprocess
 import sys
 import tempfile
+from types import ModuleType
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+
+def create_mock_package(name):
+    """Create a properly configured mock package."""
+    mock_pkg = ModuleType(name)
+    mock_pkg.__path__ = []
+    mock_pkg.__spec__ = importlib.machinery.ModuleSpec(
+        name=name,
+        loader=None,
+        is_package=True
+    )
+    mock_pkg.__file__ = f"<mocked {name}>"
+    return mock_pkg
+
+
 # Mock external dependencies BEFORE importing
-sys.modules["runner"] = Mock()
-sys.modules["runner.tracer"] = Mock()
-sys.modules["runner.runner_logging"] = Mock()
-sys.modules["runner.runner_metrics"] = Mock()
-sys.modules["runner.llm_client"] = Mock()
-sys.modules["runner.runner_errors"] = Mock()
-sys.modules["aiohttp"] = Mock()
-sys.modules["aiohttp.web"] = Mock()
-sys.modules["watchdog.events"] = Mock()
-sys.modules["watchdog.observers"] = Mock()
+sys.modules["runner"] = create_mock_package("runner")
+sys.modules["runner.tracer"] = create_mock_package("runner.tracer")
+sys.modules["runner.runner_logging"] = create_mock_package("runner.runner_logging")
+sys.modules["runner.runner_metrics"] = create_mock_package("runner.runner_metrics")
+sys.modules["runner.llm_client"] = create_mock_package("runner.llm_client")
+sys.modules["runner.runner_errors"] = create_mock_package("runner.runner_errors")
+sys.modules["aiohttp"] = create_mock_package("aiohttp")
+sys.modules["aiohttp.web"] = create_mock_package("aiohttp.web")
+sys.modules["watchdog.events"] = create_mock_package("watchdog.events")
+sys.modules["watchdog.observers"] = create_mock_package("watchdog.observers")
 
 # Now import the module under test
 from agents.testgen_agent.testgen_response_handler import (
