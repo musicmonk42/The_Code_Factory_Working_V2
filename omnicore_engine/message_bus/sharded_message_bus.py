@@ -680,6 +680,17 @@ class ShardedMessageBus:
             return
         
         # We have a running event loop, start dispatchers
+        self._create_dispatcher_tasks()
+        self._dispatchers_started = True
+        logger.info("Dispatcher tasks started.", num_tasks=len(self.dispatcher_tasks))
+
+    def _create_dispatcher_tasks(self) -> None:
+        """
+        Create and start dispatcher tasks for all shards.
+        
+        This is a helper method used by both _start_dispatchers() and start().
+        It creates tasks for both normal and high-priority queues for each shard.
+        """
         for shard_id in range(self.shard_count):
             task = asyncio.create_task(
                 self._dispatcher_loop(
@@ -699,9 +710,6 @@ class ShardedMessageBus:
                 )
             )
             self.dispatcher_tasks.append(task)
-        
-        self._dispatchers_started = True
-        logger.info("Dispatcher tasks started.", num_tasks=len(self.dispatcher_tasks))
 
     async def start(self) -> None:
         """
@@ -721,27 +729,8 @@ class ShardedMessageBus:
             logger.debug("Dispatcher tasks already started, skipping")
             return
         
-        # Start dispatcher tasks
-        for shard_id in range(self.shard_count):
-            task = asyncio.create_task(
-                self._dispatcher_loop(
-                    shard_id,
-                    self.queues[shard_id],
-                    self.executors[shard_id],
-                    high_priority=False,
-                )
-            )
-            self.dispatcher_tasks.append(task)
-            task = asyncio.create_task(
-                self._dispatcher_loop(
-                    shard_id,
-                    self.high_priority_queues[shard_id],
-                    self.high_priority_executors[shard_id],
-                    high_priority=True,
-                )
-            )
-            self.dispatcher_tasks.append(task)
-        
+        # Start dispatcher tasks using shared helper
+        self._create_dispatcher_tasks()
         self._dispatchers_started = True
         logger.info("Dispatcher tasks started.", num_tasks=len(self.dispatcher_tasks))
 
