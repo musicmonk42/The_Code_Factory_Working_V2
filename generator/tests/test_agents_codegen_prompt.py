@@ -415,7 +415,7 @@ def test_hot_reloading_loader_clears_cache():
     """
     import tempfile
     import os
-    import time
+    from unittest.mock import Mock
     from jinja2 import Environment
     from agents.codegen_agent.codegen_prompt import HotReloadingFileSystemLoader
     
@@ -439,18 +439,31 @@ def test_hot_reloading_loader_clears_cache():
         # Verify cache has content
         assert len(env.cache) > 0
         
-        # Wait a bit to ensure mtime changes
-        time.sleep(0.1)
+        # Use os.utime to explicitly modify the file's mtime
+        # This is more reliable than time.sleep()
+        current_time = os.path.getmtime(template_path)
+        new_time = current_time + 2  # Add 2 seconds to mtime
+        os.utime(template_path, (new_time, new_time))
         
-        # Modify the template
+        # Modify the template content
         with open(template_path, "w") as f:
             f.write("Modified content")
         
-        # Load the template again - this should clear the cache and reload
+        # Mock the environment cache to verify clear() is called
+        original_clear = env.cache.clear
+        clear_called = []
+        def mock_clear():
+            clear_called.append(True)
+            original_clear()
+        env.cache.clear = mock_clear
+        
+        # Load the template again - this should trigger cache clear
         template2 = env.get_template("test_template.txt")
         content2 = template2.render()
         assert "Modified content" in content2
         
-        # The key assertion: cache was cleared (though it may have been repopulated)
-        # We can't directly assert cache size, but we can verify the content changed
+        # Verify cache.clear() was actually called
+        assert len(clear_called) > 0, "environment.cache.clear() was not called"
+        
+        # Verify the content changed
         assert content1 != content2
