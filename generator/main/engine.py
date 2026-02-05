@@ -78,6 +78,18 @@ from typing import (
     runtime_checkable,
 )
 
+# Import provenance tracking for pipeline stage logging
+try:
+    from generator.main.provenance import (
+        ProvenanceTracker,
+        run_fail_fast_validation,
+    )
+    HAS_PROVENANCE = True
+except ImportError:
+    HAS_PROVENANCE = False
+    ProvenanceTracker = None
+    run_fail_fast_validation = None
+
 # --- Pydantic for Data Validation ---
 try:
     from pydantic import BaseModel, Field, field_validator
@@ -949,8 +961,36 @@ class WorkflowEngine:
                 "agent_results": {}
             }
             
+            # Initialize provenance tracker for pipeline stage logging
+            provenance = None
+            if HAS_PROVENANCE and ProvenanceTracker:
+                provenance = ProvenanceTracker(job_id=workflow_id)
+                logger.info(f"[STAGE:INIT] Provenance tracking initialized for workflow {workflow_id}")
+            
             try:
                 result["status"] = WorkflowStatus.RUNNING.value
+                
+                # [STAGE:READ_MD] Read and record input MD content
+                md_content = ""
+                if Path(input_file).exists():
+                    try:
+                        with open(input_file, "r", encoding="utf-8") as f:
+                            md_content = f.read()
+                        if provenance:
+                            provenance.record_stage(
+                                ProvenanceTracker.STAGE_READ_MD,
+                                artifacts={"md_input": md_content},
+                                metadata={"input_file": input_file}
+                            )
+                        logger.info(f"[STAGE:READ_MD] Read {len(md_content)} chars from {input_file}")
+                    except Exception as e:
+                        logger.warning(f"Could not read input file {input_file}: {e}")
+                        if provenance:
+                            provenance.record_error(
+                                ProvenanceTracker.STAGE_READ_MD,
+                                "file_read_error",
+                                str(e)
+                            )
                 
                 # Main orchestration loop
                 for iteration in range(max_iterations):
@@ -973,17 +1013,30 @@ class WorkflowEngine:
                         iter_span.set_attribute("iteration.number", iteration_num)
                         logger.debug(f"Workflow {workflow_id}: Starting iteration {iteration_num}")
                         
-                        # Execute codegen agent
+                        # [STAGE:CODEGEN] Execute codegen agent with MD content
+                        codegen_input = {
+                            "input_file": input_file,
+                            "md_content": md_content,  # Pass MD content directly
+                            "iteration": iteration_num,
+                            "previous_results": result.get("agent_results", {})
+                        }
                         codegen_result = await self._execute_agent(
                             "codegen",
-                            {
-                                "input_file": input_file,
-                                "iteration": iteration_num,
-                                "previous_results": result.get("agent_results", {})
-                            },
+                            codegen_input,
                             workflow_id
                         )
                         result["agent_results"]["codegen"] = codegen_result
+                        
+                        # Record codegen output in provenance
+                        if provenance:
+                            codegen_files = codegen_result.get("files", {}) if isinstance(codegen_result, dict) else {}
+                            main_py_content = codegen_files.get("main.py", "")
+                            if main_py_content:
+                                provenance.record_stage(
+                                    ProvenanceTracker.STAGE_CODEGEN,
+                                    artifacts={"main.py": main_py_content},
+                                    metadata={"iteration": iteration_num}
+                                )
                         
                         # Execute critique agent if enabled
                         if self._enable_critique and "critique" in _agent_registry:
@@ -997,17 +1050,45 @@ class WorkflowEngine:
                             )
                             result["agent_results"]["critique"] = critique_result
                         
-                        # Execute test generation if enabled
+                        # [STAGE:VALIDATE] Run fail-fast validation BEFORE test generation
+                        if HAS_PROVENANCE and run_fail_fast_validation:
+                            codegen_files = codegen_result.get("files", {}) if isinstance(codegen_result, dict) else {}
+                            if codegen_files:
+                                validation_result = run_fail_fast_validation(
+                                    codegen_files,
+                                    output_dir=output_path
+                                )
+                                if provenance:
+                                    provenance.record_stage(
+                                        ProvenanceTracker.STAGE_VALIDATE,
+                                        metadata={"validation_result": validation_result}
+                                    )
+                                if not validation_result.get("valid", True):
+                                    logger.warning(
+                                        f"[STAGE:VALIDATE] Validation failed: {validation_result.get('errors', [])}",
+                                        extra={"validation_errors": validation_result.get("errors", [])}
+                                    )
+                        
+                        # [STAGE:TESTGEN] Execute test generation AFTER validation
+                        # Tests should be generated based on final validated code
                         if self._enable_testing and "testgen" in _agent_registry:
                             testgen_result = await self._execute_agent(
                                 "testgen",
                                 {
                                     "codegen_output": codegen_result,
-                                    "iteration": iteration_num
+                                    "iteration": iteration_num,
+                                    "md_content": md_content  # Pass MD for spec-driven tests
                                 },
                                 workflow_id
                             )
                             result["agent_results"]["testgen"] = testgen_result
+                            
+                            # Record testgen output
+                            if provenance:
+                                provenance.record_stage(
+                                    ProvenanceTracker.STAGE_TESTGEN,
+                                    metadata={"iteration": iteration_num, "status": testgen_result.get("status", "unknown")}
+                                )
                         
                         # Small delay between iterations
                         await asyncio.sleep(DEFAULT_ITERATION_DELAY_SECONDS)
@@ -1058,6 +1139,31 @@ class WorkflowEngine:
                 end_time = time.monotonic()
                 result["finished_at"] = datetime.now(timezone.utc).isoformat()
                 result["duration_seconds"] = end_time - start_time
+                
+                # [STAGE:PACKAGE] Save provenance data if output_path is specified
+                if provenance and output_path:
+                    try:
+                        provenance.record_stage(
+                            ProvenanceTracker.STAGE_PACKAGE,
+                            metadata={
+                                "status": result["status"],
+                                "iterations": result["iterations"],
+                                "duration_seconds": result["duration_seconds"]
+                            }
+                        )
+                        provenance_path = provenance.save_to_file(output_path)
+                        result["provenance_path"] = provenance_path
+                        logger.info(f"[STAGE:PACKAGE] Provenance saved to {provenance_path}")
+                        
+                        # Check for overwrites
+                        overwrites = provenance.get_artifact_overwrites()
+                        if overwrites:
+                            logger.warning(
+                                f"[PROVENANCE] Detected artifact overwrites: {list(overwrites.keys())}",
+                                extra={"overwrites": overwrites}
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to save provenance data: {e}")
                 
                 # Record metrics
                 WORKFLOW_EXECUTIONS.labels(

@@ -850,14 +850,77 @@ def _build_fallback_prompt(requirements: Dict[str, Any]) -> str:
     """
     target_language = requirements.get("target_language", "python")
     features = requirements.get("features", [])
+    md_content = requirements.get("md_content", "")
     
     # Extract key requirements
-    features_text = "\n".join([f"- {feature}" for feature in features])
+    features_text = "\n".join([f"- {feature}" for feature in features]) if features else ""
+    
+    # Detect calculator API requirements from MD content or features
+    is_calculator_api = False
+    calculator_hint = ""
+    
+    # Check for calculator-related keywords
+    calculator_keywords = ["calculator", "calculate", "arithmetic", "add", "subtract", "multiply", "divide"]
+    all_text = (md_content + " " + features_text + " " + str(requirements)).lower()
+    
+    if any(kw in all_text for kw in calculator_keywords):
+        is_calculator_api = True
+        calculator_hint = """
+## CALCULATOR API REQUIREMENTS (DETECTED):
+
+This appears to be a CALCULATOR API. You MUST implement:
+
+1. **Endpoints** (use /api/calculate/ prefix):
+   - POST /api/calculate/add - Addition of two numbers
+   - POST /api/calculate/subtract - Subtraction of two numbers  
+   - POST /api/calculate/multiply - Multiplication of two numbers
+   - POST /api/calculate/divide - Division of two numbers
+
+2. **Request Body** (JSON):
+   ```json
+   {"a": <number>, "b": <number>}
+   ```
+
+3. **Response Body** (JSON):
+   ```json
+   {"result": <number>, "operation": "<op_name>", "operands": {"a": <number>, "b": <number>}}
+   ```
+
+4. **CRITICAL: Divide-by-zero handling**:
+   - When b=0 in division, return HTTP 400 with error message
+   - Use: raise HTTPException(status_code=400, detail="Division by zero is not allowed")
+
+5. **Health endpoint**:
+   - GET /health - returns {"status": "healthy", "service": "calculator-api"}
+
+6. **Dependencies** (requirements.txt must include):
+   - fastapi
+   - uvicorn
+   - pytest
+   - httpx
+   - pydantic
+
+"""
+    
+    # Include MD content if available
+    md_section = ""
+    if md_content:
+        md_section = f"""
+## ORIGINAL SPECIFICATION (from MD file):
+```markdown
+{md_content}
+```
+
+IMPORTANT: Implement EXACTLY what the specification describes. Do not add or remove features.
+"""
     
     prompt = f"""You are an expert {target_language} developer. Generate production-ready code that implements ALL requirements.
 
 ## REQUIREMENTS TO IMPLEMENT:
 {features_text}
+
+{md_section}
+{calculator_hint}
 
 Full Requirements: {json.dumps(requirements, sort_keys=True)}
 

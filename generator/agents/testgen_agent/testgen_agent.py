@@ -1295,7 +1295,22 @@ def test_{file_stem}_syntax_error_documentation():
                 lines.append('')
         
         # Add specific tests for calculator endpoints if detected
-        if any('/calculate/' in e['path'] or '/api/calculate' in e['path'] for e in endpoints):
+        # Check multiple patterns for calculator detection
+        calculator_patterns = ['/calculate/', '/api/calculate', 'calculator', 'arithmetic']
+        is_calculator = any(
+            any(pattern in e['path'].lower() for pattern in ['/calculate/', '/api/calculate'])
+            for e in endpoints
+        )
+        
+        # Also check the code content for calculator-related keywords
+        if not is_calculator:
+            content_lower = content.lower()
+            is_calculator = any(
+                kw in content_lower 
+                for kw in ['calculator', 'add_numbers', 'subtract', 'multiply', 'divide', 'arithmetic']
+            )
+        
+        if is_calculator:
             lines.extend(self._generate_calculator_tests())
         
         return '\n'.join(lines)
