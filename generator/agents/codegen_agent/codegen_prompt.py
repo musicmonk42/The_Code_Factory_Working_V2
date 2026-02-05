@@ -93,7 +93,7 @@ except ImportError:
 
     # Need a dummy SecretsManager if the primary import fails, otherwise secrets_manager = SecretsManager() will fail
     class SecretsManager:
-        def get(self, key: str) -> Optional[str]:
+        def get_secret(self, key: str) -> Optional[str]:
             logging.warning(f"Using dummy SecretsManager. {key} not found.")
             return os.getenv(key)
 
@@ -353,7 +353,7 @@ class HotReloadingFileSystemLoader(FileSystemLoader):
         return super().get_source(environment, template)
 
 
-template_paths = ["templates", "project_templates"]
+template_paths = [os.path.join(os.path.dirname(__file__), "templates"), "project_templates"]
 env = Environment(
     loader=HotReloadingFileSystemLoader(template_paths),
     autoescape=select_autoescape(["html", "xml"]),
@@ -558,12 +558,12 @@ async def translate_requirements_if_needed(
 
     try:
         # Note: This requires a Google Cloud Translate API key/credentials.
-        api_key = secrets_manager.get("GOOGLE_TRANSLATE_API_KEY")
+        api_key = secrets_manager.get_secret("GOOGLE_TRANSLATE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_TRANSLATE_API_KEY not found.")
 
         # Use Google Cloud Natural Language API for language detection
-        nlp_api_key = secrets_manager.get("GOOGLE_CLOUD_NLP_API_KEY")
+        nlp_api_key = secrets_manager.get_secret("GOOGLE_CLOUD_NLP_API_KEY")
         if not nlp_api_key:
             raise ValueError("GOOGLE_CLOUD_NLP_API_KEY not found.")
 
