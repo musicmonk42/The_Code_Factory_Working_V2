@@ -725,17 +725,45 @@ class Runner(ABC):
         """
         Helper to asynchronously save a dict of files to a target directory.
         This replaces the missing `save_files_to_output` utility.
+        
+        FIX: Preserves subdirectory paths in filenames (e.g., 'tests/test_main.py')
+        instead of stripping them with os.path.basename().
         """
         target_dir.mkdir(parents=True, exist_ok=True)
         tasks = []
         for file_name, content in files.items():
-            # Sanitize file_name to prevent path traversal
-            safe_name = os.path.basename(file_name)
-            if not safe_name or safe_name in (".", ".."):
+            # Security: Validate and sanitize file_name
+            # Reject empty names, parent directory references, and absolute paths
+            if not file_name or ".." in file_name or file_name.startswith("/"):
                 logger.warning(f"Skipping potentially unsafe file name: {file_name}")
                 continue
+            
+            # Also reject Windows-style absolute paths
+            if len(file_name) > 1 and file_name[1] == ":":
+                logger.warning(f"Skipping Windows absolute path: {file_name}")
+                continue
 
-            full_path = target_dir / safe_name
+            # Compute full path and ensure it's within target_dir (symlink-safe)
+            full_path = (target_dir / file_name).resolve()
+            resolved_target = target_dir.resolve()
+            # Use is_relative_to (Python 3.9+) if available, otherwise fallback
+            try:
+                is_inside = full_path.is_relative_to(resolved_target)
+            except AttributeError:
+                # Python < 3.9 fallback
+                try:
+                    full_path.relative_to(resolved_target)
+                    is_inside = True
+                except ValueError:
+                    is_inside = False
+            
+            if not is_inside:
+                logger.warning(f"Skipping file outside target directory: {file_name}")
+                continue
+            
+            # Create parent directories for subdirectory paths (e.g., tests/test_main.py)
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            
             tasks.append(self._write_file_async(full_path, content))
         await asyncio.gather(*tasks)
 
@@ -2468,8 +2496,12 @@ class TestPlaceholder:
                         span.add_event(f"Output file copied: {file_in_temp.name}")
 
             # Copy generated documentation output
+            # FIX: Gate docs output - only include _build/html if explicitly requested
+            # This prevents bloating job artifacts with unnecessary docs by default.
+            include_docs_output = os.getenv("INCLUDE_DOCS_OUTPUT", "false").lower() in ("true", "1", "yes")
             if (
-                "status" in doc_validation_status_dict
+                include_docs_output
+                and "status" in doc_validation_status_dict
                 and doc_validation_status_dict["status"] in ["passed", "failed"]
                 and doc_framework_info
             ):
@@ -2487,6 +2519,10 @@ class TestPlaceholder:
                         f"Copied generated documentation from {final_doc_output_source_dir} to {doc_output_dest_dir}."
                     )
                     span.add_event("Generated documentation copied")
+            elif doc_framework_info and not include_docs_output:
+                logger.info(
+                    "Skipping docs output (set INCLUDE_DOCS_OUTPUT=true to include _build/html in artifacts)"
+                )
 
             # --- Provenance and Feedback Phase ---
             span.add_event("Logging provenance and feedback")

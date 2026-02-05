@@ -556,3 +556,246 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
                 await save_file_content(file_path, b"data")
         finally:
             os.chmod(self.temp_dir, 0o777)  # restore directory permissions
+
+
+# --------------------------------------------------------------------------- #
+# Tests for materialize_file_map and validate_generated_project
+# --------------------------------------------------------------------------- #
+# Use pytest.importorskip for clearer import handling (pytest best practice)
+materialize_funcs = pytest.importorskip(
+    "runner.runner_file_utils",
+    reason="runner.runner_file_utils module required for materialization tests"
+)
+materialize_file_map = materialize_funcs.materialize_file_map
+validate_generated_project = materialize_funcs.validate_generated_project
+write_validation_error = materialize_funcs.write_validation_error
+
+
+class TestMaterializeFileMap:
+    """Tests for the materialize_file_map function."""
+
+    @pytest.fixture
+    def output_dir(self, tmp_path):
+        """Create a temporary output directory."""
+        return tmp_path / "output"
+
+    @pytest.mark.asyncio
+    async def test_materialize_dict_basic(self, output_dir):
+        """Test basic file map materialization from dict."""
+        file_map = {
+            "main.py": "print('hello')",
+            "README.md": "# Project\n",
+        }
+        
+        result = await materialize_file_map(file_map, output_dir)
+        
+        assert result["success"] is True
+        assert "main.py" in result["files_written"]
+        assert "README.md" in result["files_written"]
+        assert (output_dir / "main.py").exists()
+        assert (output_dir / "README.md").exists()
+        assert (output_dir / "main.py").read_text() == "print('hello')"
+
+    @pytest.mark.asyncio
+    async def test_materialize_with_subdirectories(self, output_dir):
+        """Test file map with subdirectory paths."""
+        file_map = {
+            "main.py": "import tests",
+            "tests/test_main.py": "def test(): pass",
+            "src/utils/helper.py": "def help(): pass",
+        }
+        
+        result = await materialize_file_map(file_map, output_dir)
+        
+        assert result["success"] is True
+        assert len(result["files_written"]) == 3
+        assert (output_dir / "tests" / "test_main.py").exists()
+        assert (output_dir / "src" / "utils" / "helper.py").exists()
+
+    @pytest.mark.asyncio
+    async def test_materialize_from_json_string(self, output_dir):
+        """Test materialization from JSON string input."""
+        import json
+        file_map_json = json.dumps({
+            "app.py": "from flask import Flask",
+        })
+        
+        result = await materialize_file_map(file_map_json, output_dir)
+        
+        assert result["success"] is True
+        assert "app.py" in result["files_written"]
+
+    @pytest.mark.asyncio
+    async def test_materialize_from_nested_json(self, output_dir):
+        """Test materialization from nested {'files': {...}} JSON format."""
+        import json
+        file_map_json = json.dumps({
+            "files": {
+                "main.py": "print('nested')",
+                "models.py": "class Model: pass",
+            }
+        })
+        
+        result = await materialize_file_map(file_map_json, output_dir)
+        
+        assert result["success"] is True
+        assert "main.py" in result["files_written"]
+        assert "models.py" in result["files_written"]
+
+    @pytest.mark.asyncio
+    async def test_materialize_rejects_path_traversal(self, output_dir):
+        """Test that path traversal attempts are blocked."""
+        file_map = {
+            "../evil.py": "import os; os.system('rm -rf /')",
+            "../../etc/passwd": "root access",
+            "valid.py": "print('ok')",
+        }
+        
+        result = await materialize_file_map(file_map, output_dir)
+        
+        assert result["success"] is True  # Partial success
+        assert "valid.py" in result["files_written"]
+        assert len(result["files_skipped"]) == 2
+        # Verify traversal files were NOT created
+        assert not (output_dir.parent / "evil.py").exists()
+
+    @pytest.mark.asyncio
+    async def test_materialize_rejects_absolute_paths(self, output_dir):
+        """Test that absolute paths are rejected."""
+        file_map = {
+            "/etc/passwd": "should not work",
+            "C:\\Windows\\System32\\evil.exe": "also bad",
+            "good.py": "print('safe')",
+        }
+        
+        result = await materialize_file_map(file_map, output_dir)
+        
+        assert result["success"] is True
+        assert "good.py" in result["files_written"]
+        assert len(result["files_skipped"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_materialize_empty_map_fails(self, output_dir):
+        """Test that empty file map returns failure."""
+        result = await materialize_file_map({}, output_dir)
+        
+        assert result["success"] is False
+        assert "empty" in result["errors"][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_materialize_skips_error_txt(self, output_dir):
+        """Test that error.txt metadata file is skipped."""
+        file_map = {
+            "main.py": "print('hello')",
+            "error.txt": "This is an error message, not a real file",
+        }
+        
+        result = await materialize_file_map(file_map, output_dir)
+        
+        assert result["success"] is True
+        assert "main.py" in result["files_written"]
+        assert "error.txt" not in result["files_written"]
+
+    @pytest.mark.asyncio
+    async def test_materialize_normalizes_newlines(self, output_dir):
+        """Test that newlines are normalized by default."""
+        file_map = {
+            "main.py": "line1\r\nline2\rline3\n",
+        }
+        
+        result = await materialize_file_map(file_map, output_dir, normalize_newlines=True)
+        
+        content = (output_dir / "main.py").read_text()
+        assert "\r\n" not in content
+        assert "\r" not in content
+        assert content == "line1\nline2\nline3\n"
+
+
+class TestValidateGeneratedProject:
+    """Tests for the validate_generated_project function."""
+
+    @pytest.fixture
+    def project_dir(self, tmp_path):
+        """Create a temporary project directory with sample files."""
+        proj = tmp_path / "project"
+        proj.mkdir()
+        return proj
+
+    @pytest.mark.asyncio
+    async def test_validate_valid_project(self, project_dir):
+        """Test validation of a valid project."""
+        (project_dir / "main.py").write_text("print('hello')")
+        (project_dir / "requirements.txt").write_text("fastapi\nuvicorn\n")
+        tests_dir = project_dir / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_main.py").write_text("def test_main(): assert True")
+        
+        result = await validate_generated_project(project_dir)
+        
+        assert result["valid"] is True
+        assert len(result["errors"]) == 0
+
+    @pytest.mark.asyncio
+    async def test_validate_missing_main_py(self, project_dir):
+        """Test validation fails when main.py is missing."""
+        (project_dir / "other.py").write_text("pass")
+        
+        result = await validate_generated_project(project_dir)
+        
+        assert result["valid"] is False
+        assert any("main.py" in e for e in result["errors"])
+
+    @pytest.mark.asyncio
+    async def test_validate_empty_main_py(self, project_dir):
+        """Test validation fails when main.py is empty."""
+        (project_dir / "main.py").write_text("")
+        
+        result = await validate_generated_project(project_dir)
+        
+        assert result["valid"] is False
+        assert any("empty" in e.lower() for e in result["errors"])
+
+    @pytest.mark.asyncio
+    async def test_validate_python_syntax_error(self, project_dir):
+        """Test validation detects Python syntax errors."""
+        (project_dir / "main.py").write_text("def broken(:\n  pass")
+        
+        result = await validate_generated_project(project_dir, check_python_syntax=True)
+        
+        assert result["valid"] is False
+        assert result["python_files_invalid"] > 0
+        assert any("syntax" in e.lower() for e in result["errors"])
+
+    @pytest.mark.asyncio
+    async def test_validate_detects_json_file_map(self, project_dir):
+        """Test validation detects when main.py contains a JSON file map (the bug)."""
+        # This simulates the original bug where a file map was written as content
+        bad_content = '{\n  "main.py": "print(\'hello\')",\n  "models.py": "class Model: pass"\n}'
+        (project_dir / "main.py").write_text(bad_content)
+        
+        result = await validate_generated_project(project_dir)
+        
+        assert result["valid"] is False
+        assert any("JSON file map" in e for e in result["errors"])
+
+    @pytest.mark.asyncio
+    async def test_validate_custom_required_files(self, project_dir):
+        """Test validation with custom required files list."""
+        (project_dir / "app.py").write_text("print('app')")
+        (project_dir / "config.py").write_text("CONFIG = {}")
+        
+        result = await validate_generated_project(
+            project_dir, 
+            required_files=["app.py", "config.py"]
+        )
+        
+        assert result["valid"] is True
+
+    @pytest.mark.asyncio
+    async def test_validate_warns_missing_requirements(self, project_dir):
+        """Test validation warns when requirements.txt is missing."""
+        (project_dir / "main.py").write_text("print('hello')")
+        
+        result = await validate_generated_project(project_dir)
+        
+        assert any("requirements.txt" in w for w in result["warnings"])
