@@ -18,6 +18,13 @@ KAFKA_CONTAINER="codefactory-kafka"
 ZOOKEEPER_CONTAINER="codefactory-zookeeper"
 KAFKA_BOOTSTRAP="localhost:9093"
 
+# Determine which Docker Compose command to use
+if docker compose version &>/dev/null 2>&1; then
+    DOCKER_COMPOSE="docker compose"
+else
+    DOCKER_COMPOSE="docker-compose"
+fi
+
 # Topics to create
 TOPICS=(
     "audit-events:3:1"           # audit-events with 3 partitions, replication factor 1
@@ -80,7 +87,7 @@ cleanup_kafka() {
     # Stop and remove containers
     if docker ps -a | grep -q "$KAFKA_CONTAINER\|$ZOOKEEPER_CONTAINER"; then
         print_info "Stopping existing Kafka and Zookeeper containers..."
-        docker-compose -f "$COMPOSE_FILE" down 2>/dev/null || true
+        $DOCKER_COMPOSE -f "$COMPOSE_FILE" down 2>/dev/null || true
         print_success "Stopped containers"
     else
         print_info "No existing containers found"
@@ -88,7 +95,7 @@ cleanup_kafka() {
     
     # Remove volumes (this clears stale metadata)
     print_warning "Removing Kafka volumes to clear stale metadata..."
-    docker-compose -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" down -v 2>/dev/null || true
     print_success "Removed volumes"
     
     # Additional cleanup for any orphaned containers
@@ -107,7 +114,7 @@ start_kafka() {
     print_header "Starting Kafka Services"
     
     print_info "Starting Zookeeper and Kafka..."
-    docker-compose -f "$COMPOSE_FILE" up -d
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d
     
     print_success "Services started"
 }
@@ -134,7 +141,7 @@ wait_for_kafka() {
     
     echo ""
     print_error "Kafka failed to become ready after ${max_attempts}s"
-    print_info "Check logs with: docker-compose -f $COMPOSE_FILE logs kafka"
+    print_info "Check logs with: $DOCKER_COMPOSE -f $COMPOSE_FILE logs kafka"
     return 1
 }
 
@@ -195,10 +202,10 @@ show_troubleshooting() {
     print_header "Troubleshooting Commands"
     
     echo "View Kafka logs:"
-    echo "  docker-compose -f $COMPOSE_FILE logs -f kafka"
+    echo "  $DOCKER_COMPOSE -f $COMPOSE_FILE logs -f kafka"
     echo ""
     echo "View Zookeeper logs:"
-    echo "  docker-compose -f $COMPOSE_FILE logs -f zookeeper"
+    echo "  $DOCKER_COMPOSE -f $COMPOSE_FILE logs -f zookeeper"
     echo ""
     echo "List topics:"
     echo "  docker exec $KAFKA_CONTAINER kafka-topics --list --bootstrap-server localhost:9092"
@@ -216,10 +223,10 @@ show_troubleshooting() {
     echo "  docker exec $KAFKA_CONTAINER kafka-broker-api-versions --bootstrap-server localhost:9092"
     echo ""
     echo "Stop services:"
-    echo "  docker-compose -f $COMPOSE_FILE down"
+    echo "  $DOCKER_COMPOSE -f $COMPOSE_FILE down"
     echo ""
     echo "Stop and remove volumes (complete cleanup):"
-    echo "  docker-compose -f $COMPOSE_FILE down -v"
+    echo "  $DOCKER_COMPOSE -f $COMPOSE_FILE down -v"
     echo ""
 }
 
@@ -227,7 +234,7 @@ show_troubleshooting() {
 show_status() {
     print_header "Kafka Service Status"
     
-    docker-compose -f "$COMPOSE_FILE" ps
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" ps
     
     echo ""
     print_info "Container health status:"
@@ -250,7 +257,10 @@ full_setup() {
         
         print_header "Setup Complete!"
         print_success "Kafka is ready to use"
-        print_info "Kafka Bootstrap Servers: kafka:9092 (Docker) or localhost:9093 (Host)"
+        print_info "Connection strings:"
+        print_info "  - From Docker containers: kafka:9092"
+        print_info "  - From host machine: localhost:9093"
+        print_info "  - Zookeeper: localhost:2181"
         echo ""
         show_troubleshooting
     else
@@ -263,7 +273,7 @@ full_setup() {
 # Show logs
 show_logs() {
     print_info "Showing Kafka logs (Ctrl+C to exit)..."
-    docker-compose -f "$COMPOSE_FILE" logs -f kafka
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" logs -f kafka
 }
 
 # Show usage
@@ -320,14 +330,14 @@ main() {
             check_docker
             check_compose_file
             print_info "Stopping Kafka services..."
-            docker-compose -f "$COMPOSE_FILE" down
+            $DOCKER_COMPOSE -f "$COMPOSE_FILE" down
             print_success "Services stopped"
             ;;
         restart)
             check_docker
             check_compose_file
             print_info "Restarting Kafka services..."
-            docker-compose -f "$COMPOSE_FILE" restart
+            $DOCKER_COMPOSE -f "$COMPOSE_FILE" restart
             wait_for_kafka
             print_success "Services restarted"
             ;;

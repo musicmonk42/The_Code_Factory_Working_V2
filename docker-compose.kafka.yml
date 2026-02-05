@@ -63,7 +63,13 @@ services:
       # Log retention (7 days default)
       KAFKA_LOG_RETENTION_HOURS: 168
       
-      # JVM heap size (adjust based on available memory)
+      # JVM heap size configuration
+      # Development: 512M is sufficient for local testing
+      # Production: Increase based on throughput requirements
+      #   - Light load (< 10 MB/s): 1G-2G
+      #   - Medium load (10-50 MB/s): 2G-4G
+      #   - Heavy load (> 50 MB/s): 4G-8G
+      # Rule of thumb: Allocate 25% of total RAM to Kafka heap
       KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
     volumes:
       - codefactory-kafka-data:/var/lib/kafka/data
