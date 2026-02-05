@@ -1421,10 +1421,18 @@ class ShardedMessageBus:
                 logger_for_subscribe.error(
                     f"CRITICAL: Subscription to {topic} timed out after {subscription_timeout}s. "
                     f"This indicates the message bus dispatcher tasks are not running. "
-                    f"Check that message_bus.start() was called during server initialization."
+                    f"Check that message_bus.start() was called during server initialization. "
+                    f"WebSocket connections will use fallback heartbeat mode."
                 )
-                # Don't raise in production - allow fallback
-                if os.getenv("APP_ENV") != "production":
+                # In production, allow graceful degradation to fallback mode
+                # In development/test, raise to catch issues early
+                if os.getenv("APP_ENV") == "production":
+                    logger_for_subscribe.warning(
+                        f"Production mode: Allowing subscription timeout for graceful degradation. "
+                        f"WebSocket will operate in fallback mode."
+                    )
+                else:
+                    # In non-production, raise to catch configuration issues early
                     raise
             except Exception as e:
                 logger_for_subscribe.error(
