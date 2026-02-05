@@ -1494,9 +1494,61 @@ class OmniCoreService:
                 )
                 
                 logger.info(f"[TESTGEN] Test generation completed for job {job_id}")
+                
+                # Extract generated tests from result
+                generated_tests = result.get("generated_tests", {})
+                logger.info(f"[TESTGEN] Extracted {len(generated_tests)} test files from result")
+                
+                if not generated_tests:
+                    logger.warning(f"Testgen agent returned no tests for job {job_id}")
+                    return {
+                        "status": "completed",
+                        "generated_files": [],
+                        "job_id": job_id,
+                        "result": result,
+                        "warning": "No test files were generated",
+                    }
+                
+                # Write generated tests to files
+                generated_files = []
+                tests_dir = repo_path / "tests"
+                tests_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Create __init__.py in tests directory
+                init_file = tests_dir / "__init__.py"
+                async with aiofiles.open(init_file, "w", encoding="utf-8") as f:
+                    await f.write('"""Test suite for generated code."""\n')
+                generated_files.append(str(init_file.relative_to(repo_path)))
+                
+                for test_file_path, test_content in generated_tests.items():
+                    # Ensure test file path is relative and clean
+                    test_path = Path(test_file_path)
+                    
+                    # If path is absolute or contains "..", use just the filename
+                    if test_path.is_absolute() or ".." in str(test_path):
+                        test_path = Path(test_path.name)
+                    
+                    # Construct full path in tests directory
+                    full_test_path = tests_dir / test_path.name
+                    
+                    # Write the test file
+                    logger.info(f"[TESTGEN] Writing test file: {full_test_path}")
+                    async with aiofiles.open(full_test_path, "w", encoding="utf-8") as f:
+                        await f.write(test_content)
+                    
+                    try:
+                        generated_files.append(str(full_test_path.relative_to(repo_path)))
+                    except ValueError as e:
+                        logger.warning(f"[TESTGEN] File {full_test_path} is outside repo_path {repo_path}, using absolute path. Error: {e}")
+                        generated_files.append(str(full_test_path))
+                
+                logger.info(f"[TESTGEN] Wrote {len(generated_files)} test files to disk")
+                
                 return {
                     "status": "completed",
                     "job_id": job_id,
+                    "generated_files": generated_files,
+                    "tests_count": len(generated_tests),
                     "result": result,
                 }
         

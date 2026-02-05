@@ -342,16 +342,16 @@ class ServerConfig(BaseSettings):
     
     # Kafka Configuration
     kafka_enabled: bool = Field(
-        default=False,
-        description="Enable Kafka message bus (set to false for local-only operation)"
+        default=True,  # Changed from False - Kafka required for production-ready generation
+        description="Enable Kafka message bus for event-driven worker orchestration"
     )
     kafka_bootstrap_servers: str = Field(
-        default="kafka:9092",  # Changed from localhost:9092 for Docker Compose
+        default="kafka:9092",  # Docker Compose default; update for Railway/Cloud
         description="Kafka bootstrap servers (comma-separated list)"
     )
     kafka_required: bool = Field(
-        default=False,
-        description="Require Kafka to be available (if False, allows fallback when Kafka unavailable)"
+        default=True,  # Changed from False - Fail-fast if Kafka unavailable
+        description="Require Kafka to be available (prevents silent fallback to stub mode)"
     )
     kafka_max_retries: int = Field(
         default=3,

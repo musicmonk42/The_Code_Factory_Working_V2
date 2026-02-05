@@ -60,6 +60,29 @@ You are an expert software engineer tasked with generating production-ready, ent
 
 ## TASK: GENERATE PRODUCTION-READY CODE
 
+**CRITICAL: NO STUB IMPLEMENTATIONS ALLOWED**
+
+Your generated code MUST be complete and production-ready. This means:
+
+❌ **FORBIDDEN - These will cause failures:**
+- `pass` statements (except in abstract base classes)
+- `...` (Ellipsis) as placeholder
+- `TODO`, `FIXME`, `XXX` comments
+- `raise NotImplementedError()`
+- Functions that only `return None`
+- Placeholder comments like "implement this later"
+- Minimal "hello world" examples when complex logic is required
+
+✅ **REQUIRED - Production-ready code includes:**
+- **Complete business logic** - All calculations, transformations, and workflows fully implemented
+- **Full error handling** - try/except blocks for all risky operations
+- **Input validation** - Check all parameters, validate types and ranges
+- **Logging** - Log important operations, errors, and state changes
+- **Edge cases** - Handle null values, empty lists, division by zero, etc.
+- **Proper data structures** - Use appropriate collections and algorithms
+- **Configuration** - Externalize magic numbers and strings
+- **Documentation** - Docstrings explaining what code does and why
+
 {{ macros.render_spec_checklist(target_language) }}
 
 ---

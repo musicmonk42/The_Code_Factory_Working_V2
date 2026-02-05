@@ -73,10 +73,35 @@ Your response MUST be valid JSON in this exact structure:
 **MANDATORY RULES:**
 1. **PURE JSON**: Output ONLY the JSON - no text before or after
 2. **NO MARKDOWN FENCES**: Do not wrap in ```json``` or any code fences
-3. **COMPLETE CODE**: Every file must have complete, functional code (no TODOs, no placeholders)
+3. **COMPLETE CODE**: Every file must have complete, functional code (no TODOs, no placeholders, no stub `pass` statements as sole implementation)
 4. **PROPER ESCAPING**: Escape all special characters (\\n for newlines, \\" for quotes, \\\\ for backslashes)
 5. **VALID SYNTAX**: All code must be syntactically correct and executable
 6. **ALL REQUIREMENTS**: Implement EVERY feature from the specification
+
+**NOTE on `pass` statements:** While `pass` is forbidden as stub implementation, it IS acceptable in:
+- Abstract base classes with `@abstractmethod` decorators
+- Empty exception handlers where no action is needed
+- Structural placeholders in class definitions
+
+**EXAMPLES:**
+
+❌ BAD (Stub Implementation):
+```json
+{
+  "files": {
+    "calculator.py": "def add(a, b):\\n    # TODO: implement addition\\n    pass"
+  }
+}
+```
+
+✅ GOOD (Production-Ready):
+```json
+{
+  "files": {
+    "calculator.py": "def add(a: float, b: float) -> float:\\n    \"\"\"Add two numbers together.\"\"\"\\n    if not isinstance(a, (int, float)):\\n        raise TypeError('a must be numeric')\\n    if not isinstance(b, (int, float)):\\n        raise TypeError('b must be numeric')\\n    return a + b"
+  }
+}
+```
 {% endmacro %}
 
 {# Macro: Render spec parsing checklist #}
