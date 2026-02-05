@@ -25,7 +25,7 @@ except ImportError:
         "Warning: 'xattr' library not found. Extended attributes for GDPR/CCPA compliance will not be set."
     )
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Import Fernet for the test case
 try:
@@ -1385,8 +1385,6 @@ async def materialize_file_map(
     
     # Send materialization result to audit system
     try:
-        from datetime import timezone
-        
         await add_provenance(
             "file_materialization_completed",
             {
@@ -1629,8 +1627,6 @@ async def validate_generated_project(
     
     # Send validation result to audit system
     try:
-        from datetime import timezone
-        
         await add_provenance(
             "project_validation_completed",
             {
