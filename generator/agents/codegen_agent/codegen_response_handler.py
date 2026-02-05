@@ -576,6 +576,74 @@ def _clean_code_block(code_content: str) -> str:
     return result
 
 
+# ==============================================================================
+# File Type Detection - Industry Standard Configuration
+# ==============================================================================
+
+# Module-level constant for language detection (performance optimization)
+# Follows GitHub Linguist and VS Code language identifiers
+_EXTENSION_TO_LANGUAGE: Dict[str, str] = {
+    # Python
+    "py": "python",
+    "pyw": "python",
+    "pyi": "python",
+    # JavaScript/TypeScript
+    "js": "javascript",
+    "mjs": "javascript",
+    "cjs": "javascript",
+    "jsx": "javascript",
+    "ts": "typescript",
+    "tsx": "typescript",
+    # Java
+    "java": "java",
+    # Go
+    "go": "go",
+    # C/C++
+    "c": "c",
+    "cpp": "c++",
+    "cc": "c++",
+    "cxx": "c++",
+    "h": "c",
+    "hpp": "c++",
+    # C#
+    "cs": "csharp",
+    # Ruby
+    "rb": "ruby",
+    # PHP
+    "php": "php",
+    # Rust
+    "rs": "rust",
+    # Swift
+    "swift": "swift",
+    # Kotlin
+    "kt": "kotlin",
+    # Shell
+    "sh": "shell",
+    "bash": "shell",
+    # SQL
+    "sql": "sql",
+    # Documentation/Config files (should not be validated as code)
+    "md": "markdown",
+    "markdown": "markdown",
+    "txt": "text",
+    "rst": "restructuredtext",
+    "json": "json",
+    "yaml": "yaml",
+    "yml": "yaml",
+    "toml": "toml",
+    "xml": "xml",
+    "html": "html",
+    "css": "css",
+}
+
+# Non-code languages that should skip syntax validation (performance: frozenset)
+_NON_CODE_LANGUAGES: frozenset = frozenset({
+    "markdown", "text", "restructuredtext",
+    "json", "yaml", "toml", "xml", "html", "css"
+})
+
+
+@lru_cache(maxsize=256)
 def _infer_language_from_filename(filename: str, default_lang: str = "python") -> str:
     """
     Infer the programming language from a filename's extension.
@@ -583,12 +651,22 @@ def _infer_language_from_filename(filename: str, default_lang: str = "python") -
     This is used to determine the appropriate syntax validator when the
     language is not explicitly provided or when validating multi-file responses.
     
+    Industry Standards:
+        - Follows GitHub Linguist language detection
+        - Results cached for performance (LRU cache)
+        - Thread-safe caching implementation
+        - Input validation for security
+    
     Args:
-        filename: The filename to analyze
+        filename: The filename to analyze (can include path)
         default_lang: Default language to return if extension is unknown
         
     Returns:
         Inferred language name (e.g., 'python', 'javascript', 'java')
+        
+    Raises:
+        TypeError: If filename is not a string
+        ValueError: If filename is empty
         
     Examples:
         >>> _infer_language_from_filename("main.py")
@@ -598,67 +676,25 @@ def _infer_language_from_filename(filename: str, default_lang: str = "python") -
         >>> _infer_language_from_filename("README.md")
         'markdown'
     """
-    # Extract extension
-    ext = os.path.splitext(filename)[1].lstrip(".").lower()
+    # Input validation - defensive programming
+    if not isinstance(filename, str):
+        raise TypeError(f"filename must be a string, got {type(filename).__name__}")
     
-    # Map common extensions to language names
-    EXTENSION_TO_LANGUAGE = {
-        # Python
-        "py": "python",
-        "pyw": "python",
-        "pyi": "python",
-        # JavaScript/TypeScript
-        "js": "javascript",
-        "mjs": "javascript",
-        "cjs": "javascript",
-        "jsx": "javascript",
-        "ts": "typescript",
-        "tsx": "typescript",
-        # Java
-        "java": "java",
-        # Go
-        "go": "go",
-        # C/C++
-        "c": "c",
-        "cpp": "c++",
-        "cc": "c++",
-        "cxx": "c++",
-        "h": "c",
-        "hpp": "c++",
-        # C#
-        "cs": "csharp",
-        # Ruby
-        "rb": "ruby",
-        # PHP
-        "php": "php",
-        # Rust
-        "rs": "rust",
-        # Swift
-        "swift": "swift",
-        # Kotlin
-        "kt": "kotlin",
-        # Shell
-        "sh": "shell",
-        "bash": "shell",
-        # SQL
-        "sql": "sql",
-        # Documentation/Config files (should not be validated as code)
-        "md": "markdown",
-        "markdown": "markdown",
-        "txt": "text",
-        "rst": "restructuredtext",
-        "json": "json",
-        "yaml": "yaml",
-        "yml": "yaml",
-        "toml": "toml",
-        "xml": "xml",
-        "html": "html",
-        "css": "css",
-    }
+    filename = filename.strip()
+    if not filename:
+        raise ValueError("filename cannot be empty")
     
-    return EXTENSION_TO_LANGUAGE.get(ext, default_lang)
+    # Security: use basename only to avoid path traversal influencing detection
+    basename = os.path.basename(filename)
+    
+    # Extract extension (case-insensitive)
+    ext = os.path.splitext(basename)[1].lstrip(".").lower()
+    
+    # Return detected language or default
+    return _EXTENSION_TO_LANGUAGE.get(ext, default_lang)
 
 
+@lru_cache(maxsize=256)
 def _should_skip_syntax_validation(filename: str) -> bool:
     """
     Determine if a file should skip syntax validation.
@@ -666,11 +702,21 @@ def _should_skip_syntax_validation(filename: str) -> bool:
     Documentation files, configuration files, and other non-code files
     should not be validated as source code.
     
+    Industry Standards:
+        - Distinguishes data/config from executable code
+        - O(1) lookup performance using frozenset
+        - Results cached for performance
+        - Input validation for security
+    
     Args:
         filename: The filename to check
         
     Returns:
         True if syntax validation should be skipped
+        
+    Raises:
+        TypeError: If filename is not a string
+        ValueError: If filename is empty
         
     Examples:
         >>> _should_skip_syntax_validation("README.md")
@@ -680,49 +726,113 @@ def _should_skip_syntax_validation(filename: str) -> bool:
         >>> _should_skip_syntax_validation("main.py")
         False
     """
-    # Get inferred language
-    lang = _infer_language_from_filename(filename, default_lang="")
+    # Input validation
+    if not isinstance(filename, str):
+        raise TypeError(f"filename must be a string, got {type(filename).__name__}")
     
-    # Skip validation for documentation and configuration files
-    NON_CODE_LANGUAGES = {
-        "markdown", "text", "restructuredtext",
-        "json", "yaml", "toml", "xml", "html", "css"
-    }
+    filename = filename.strip()
+    if not filename:
+        raise ValueError("filename cannot be empty")
     
-    return lang in NON_CODE_LANGUAGES
+    # Get inferred language and check against non-code set
+    try:
+        lang = _infer_language_from_filename(filename, default_lang="")
+        return lang in _NON_CODE_LANGUAGES
+    except Exception as e:
+        # Log error but default to not skipping (validate for safety)
+        logger.error(
+            "Error determining if validation should be skipped for '%s': %s. Defaulting to validate.",
+            filename,
+            e,
+            exc_info=True
+        )
+        return False
 
 
 def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
     """
     Validates code syntax using language-appropriate mechanisms.
+    
+    Industry Standards:
+        - Input validation and type checking
+        - File type detection to skip non-code files
+        - Language inference from filename
+        - Comprehensive error messages
+        - Graceful degradation when tools unavailable
+    
+    Args:
+        code: The code content to validate
+        lang: The programming language
+        filename: The filename (used for language detection and context)
 
     Returns:
-        (is_valid, message)
-        - is_valid: True if considered syntactically OK.
-        - message: empty or diagnostic text.
+        Tuple of (is_valid, message):
+            - is_valid: True if syntactically valid or validation skipped
+            - message: Empty if valid, error description otherwise
+            
+    Raises:
+        TypeError: If inputs are not of expected types
+        
+    Examples:
+        >>> _validate_syntax("def hello(): pass", "python", "main.py")
+        (True, "")
+        >>> _validate_syntax("# Documentation", "python", "README.md")
+        (True, "Skipped validation for markdown file")
     """
+    # Input validation - industry standard defensive programming
+    if not isinstance(code, str):
+        raise TypeError(f"code must be a string, got {type(code).__name__}")
+    
+    if not isinstance(lang, str):
+        raise TypeError(f"lang must be a string, got {type(lang).__name__}")
+    
+    if not isinstance(filename, str):
+        raise TypeError(f"filename must be a string, got {type(filename).__name__}")
+    
     # Check if this file should skip validation (e.g., README.md, config files)
-    if _should_skip_syntax_validation(filename):
-        logger.debug(
-            "Skipping syntax validation for %s (detected as documentation/config file)",
-            filename
+    try:
+        if _should_skip_syntax_validation(filename):
+            detected_type = _infer_language_from_filename(filename, default_lang="unknown")
+            logger.debug(
+                "Skipping syntax validation for %s (detected as %s file)",
+                filename,
+                detected_type
+            )
+            return True, f"Skipped validation for {detected_type} file"
+    except (TypeError, ValueError):
+        # Re-raise validation errors
+        raise
+    except Exception as e:
+        # Log unexpected errors but continue with validation for safety
+        logger.warning(
+            "Error checking if validation should be skipped for '%s': %s. Proceeding with validation.",
+            filename,
+            e
         )
-        return True, f"Skipped validation for {_infer_language_from_filename(filename)} file"
     
     # Infer language from filename if not provided or if it's generic
-    inferred_lang = _infer_language_from_filename(filename, default_lang="python")
-    
-    # Use inferred language if original lang is empty or generic
-    if not lang or lang.lower() in ("", "text", "plain"):
-        lang = inferred_lang
-        logger.debug(
-            "Inferred language '%s' from filename '%s'",
-            lang,
-            filename
+    try:
+        inferred_lang = _infer_language_from_filename(filename, default_lang="python")
+        
+        # Use inferred language if original lang is empty or generic
+        if not lang or lang.lower() in ("", "text", "plain"):
+            lang = inferred_lang
+            logger.debug(
+                "Inferred language '%s' from filename '%s'",
+                lang,
+                filename
+            )
+    except Exception as e:
+        logger.warning(
+            "Could not infer language from filename '%s': %s. Using provided lang '%s'.",
+            filename,
+            e,
+            lang
         )
     
     lang_l = (lang or "").lower()
 
+    # Validate that code is not empty
     if not code.strip():
         logger.warning("Empty code block for %s; treating as error.", filename)
         return False, "Empty code block received - no valid code generated."
