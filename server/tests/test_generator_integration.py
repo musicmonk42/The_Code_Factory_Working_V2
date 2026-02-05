@@ -229,7 +229,7 @@ class TestClarifierIntegration:
 
         response = client.post(
             f"/api/generator/{sample_job.id}/clarification/respond",
-            params={"question_id": "q1", "response": "PostgreSQL"},
+            json={"question_id": "q1", "response": "PostgreSQL"},
         )
 
         assert response.status_code == 200
