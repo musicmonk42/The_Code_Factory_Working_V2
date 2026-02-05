@@ -459,8 +459,29 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     cleaned_code = _clean_code_block(raw)
     
     # If cleaning resulted in empty string but we have raw content,
-    # treat the raw response as a single file (legacy behavior for compatibility)
+    # check if it's likely explanatory prose or actual code
     if not cleaned_code and raw:
+        # Check if the raw text contains prose indicators (explanatory text)
+        raw_lower = raw.lower()
+        PROSE_INDICATORS = (
+            'i need', 'i apologize', 'i cannot', "i'm sorry", "i can't",
+            'please provide', 'could you', 'would you', 'you need to',
+            'more information', 'clarify', 'specify', 'details about',
+            'unfortunately', 'however', 'before i can', 'in order to',
+            'help me understand', 'not enough details', 'provide enough',
+        )
+        
+        # If raw text contains prose indicators, it's explanatory, not code
+        if any(indicator in raw_lower for indicator in PROSE_INDICATORS):
+            error_msg = (
+                "LLM response did not contain recognizable code. "
+                "The response appears to be an explanation or clarification request. "
+                f"Response preview: {raw[:200]}..."
+            )
+            logger.error(error_msg)
+            return {ERROR_FILENAME: error_msg}
+        
+        # Otherwise, treat as raw code (legacy behavior for compatibility)
         logger.warning(
             "No code markers found in response after cleaning. "
             "Falling back to using raw response as-is for compatibility. "
