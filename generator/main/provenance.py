@@ -39,6 +39,7 @@ class ProvenanceTracker:
     STAGE_POSTPROCESS = "POSTPROCESS"
     STAGE_MATERIALIZE = "MATERIALIZE"
     STAGE_TESTGEN = "TESTGEN"
+    STAGE_DEPLOY_GEN = "DEPLOY_GEN"  # Deployment artifact generation
     STAGE_PACKAGE = "PACKAGE"
     STAGE_VALIDATE = "VALIDATE"
     
@@ -462,6 +463,150 @@ def run_fail_fast_validation(
         
         logger.error(
             f"Fail-fast validation failed: {len(results['errors'])} errors",
+            extra={"errors": results["errors"]}
+        )
+    
+    return results
+
+
+def validate_dockerfile(content: str) -> Dict[str, Any]:
+    """
+    Validate that a Dockerfile has required directives.
+    
+    Args:
+        content: Dockerfile content
+        
+    Returns:
+        Validation result
+    """
+    results = {
+        "valid": True,
+        "has_from": False,
+        "has_cmd_or_entrypoint": False,
+        "has_workdir": False,
+        "has_copy": False,
+        "errors": []
+    }
+    
+    if not content or not content.strip():
+        results["valid"] = False
+        results["errors"].append("Dockerfile is empty")
+        return results
+    
+    content_upper = content.upper()
+    
+    # Check for FROM directive
+    if "FROM " in content_upper:
+        results["has_from"] = True
+    else:
+        results["valid"] = False
+        results["errors"].append("Dockerfile missing FROM directive")
+    
+    # Check for CMD or ENTRYPOINT
+    if "CMD " in content_upper or "ENTRYPOINT " in content_upper:
+        results["has_cmd_or_entrypoint"] = True
+    else:
+        results["valid"] = False
+        results["errors"].append("Dockerfile missing CMD or ENTRYPOINT directive")
+    
+    # Check for WORKDIR (recommended)
+    results["has_workdir"] = "WORKDIR " in content_upper
+    
+    # Check for COPY (common)
+    results["has_copy"] = "COPY " in content_upper or "ADD " in content_upper
+    
+    return results
+
+
+def validate_docker_compose(content: str) -> Dict[str, Any]:
+    """
+    Validate docker-compose.yml structure.
+    
+    Args:
+        content: docker-compose.yml content
+        
+    Returns:
+        Validation result
+    """
+    results = {
+        "valid": True,
+        "has_services": False,
+        "has_version": False,
+        "errors": []
+    }
+    
+    if not content or not content.strip():
+        results["valid"] = False
+        results["errors"].append("docker-compose.yml is empty")
+        return results
+    
+    content_lower = content.lower()
+    
+    # Check for services section
+    if "services:" in content_lower:
+        results["has_services"] = True
+    else:
+        results["valid"] = False
+        results["errors"].append("docker-compose.yml missing 'services:' section")
+    
+    # Check for version (optional in newer compose specs)
+    results["has_version"] = "version:" in content_lower
+    
+    return results
+
+
+def validate_deployment_artifacts(
+    deploy_files: Dict[str, str],
+    output_dir: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Validate deployment artifacts (Dockerfile, docker-compose.yml, etc.).
+    
+    Args:
+        deploy_files: Dict mapping filenames to their content
+        output_dir: Optional output directory for error.txt
+        
+    Returns:
+        Validation result with all deployment checks
+    """
+    results = {
+        "valid": True,
+        "checks": {},
+        "errors": [],
+        "files_validated": list(deploy_files.keys())
+    }
+    
+    # Validate Dockerfile
+    dockerfile = deploy_files.get("Dockerfile", "")
+    if dockerfile:
+        df_result = validate_dockerfile(dockerfile)
+        results["checks"]["dockerfile"] = df_result
+        if not df_result["valid"]:
+            results["valid"] = False
+            results["errors"].extend(df_result["errors"])
+    
+    # Validate docker-compose.yml
+    compose = deploy_files.get("docker-compose.yml", "")
+    if compose:
+        compose_result = validate_docker_compose(compose)
+        results["checks"]["docker_compose"] = compose_result
+        if not compose_result["valid"]:
+            results["valid"] = False
+            results["errors"].extend(compose_result["errors"])
+    
+    # Write error.txt if validation failed
+    if not results["valid"] and output_dir:
+        error_path = Path(output_dir) / "error.txt"
+        error_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(error_path, "a", encoding="utf-8") as f:
+            f.write("\nDEPLOYMENT VALIDATION FAILED\n")
+            f.write("=" * 50 + "\n\n")
+            f.write("Deployment Errors:\n")
+            for error in results["errors"]:
+                f.write(f"  - {error}\n")
+        
+        logger.error(
+            f"Deployment validation failed: {len(results['errors'])} errors",
             extra={"errors": results["errors"]}
         )
     

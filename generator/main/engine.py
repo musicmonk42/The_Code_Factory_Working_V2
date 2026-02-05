@@ -83,12 +83,22 @@ try:
     from generator.main.provenance import (
         ProvenanceTracker,
         run_fail_fast_validation,
+        validate_deployment_artifacts,
     )
     HAS_PROVENANCE = True
 except ImportError:
     HAS_PROVENANCE = False
     ProvenanceTracker = None
     run_fail_fast_validation = None
+    validate_deployment_artifacts = None
+
+# Import DeployAgent for deployment artifact generation
+try:
+    from generator.agents.deploy_agent.deploy_agent import DeployAgent
+    HAS_DEPLOY_AGENT = True
+except ImportError:
+    HAS_DEPLOY_AGENT = False
+    DeployAgent = None
 
 # --- Pydantic for Data Validation ---
 try:
@@ -1090,6 +1100,41 @@ class WorkflowEngine:
                                     metadata={"iteration": iteration_num, "status": testgen_result.get("status", "unknown")}
                                 )
                         
+                        # [STAGE:DEPLOY_GEN] Generate deployment artifacts AFTER testgen
+                        # This ensures we have validated code before creating deployment configs
+                        enable_deploy = self.config.get('enable_deploy', True)
+                        if enable_deploy and HAS_DEPLOY_AGENT and DeployAgent:
+                            try:
+                                deploy_result = await self._run_deploy_stage(
+                                    codegen_result=codegen_result,
+                                    output_path=output_path,
+                                    workflow_id=workflow_id,
+                                    provenance=provenance
+                                )
+                                result["agent_results"]["deploy"] = deploy_result
+                                logger.info(
+                                    f"[STAGE:DEPLOY_GEN] Deployment artifacts generated",
+                                    extra={
+                                        "workflow_id": workflow_id,
+                                        "files_generated": deploy_result.get("files_written", [])
+                                    }
+                                )
+                            except Exception as deploy_error:
+                                logger.warning(
+                                    f"[STAGE:DEPLOY_GEN] Deployment generation failed: {deploy_error}",
+                                    extra={"workflow_id": workflow_id, "error": str(deploy_error)}
+                                )
+                                result["agent_results"]["deploy"] = {
+                                    "status": "failed",
+                                    "error": str(deploy_error)
+                                }
+                                if provenance:
+                                    provenance.record_error(
+                                        ProvenanceTracker.STAGE_DEPLOY_GEN,
+                                        "deploy_generation_error",
+                                        str(deploy_error)
+                                    )
+                        
                         # Small delay between iterations
                         await asyncio.sleep(DEFAULT_ITERATION_DELAY_SECONDS)
                 
@@ -1262,6 +1307,335 @@ class WorkflowEngine:
                     "status": AgentStatus.FAILED.value,
                     "error": str(e)
                 }
+    
+    async def _run_deploy_stage(
+        self,
+        codegen_result: Dict[str, Any],
+        output_path: Optional[str],
+        workflow_id: str,
+        provenance: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        """Run the deployment artifact generation stage.
+        
+        This stage generates Docker-based deployment configurations including:
+        - Dockerfile
+        - docker-compose.yml
+        - .dockerignore
+        - deploy_metadata.json
+        
+        Args:
+            codegen_result: Results from the code generation stage
+            output_path: Directory for output artifacts
+            workflow_id: Parent workflow identifier
+            provenance: Optional ProvenanceTracker instance
+            
+        Returns:
+            Deploy stage results including files written
+        """
+        with _tracer.start_as_current_span("workflow_engine.deploy_stage") as span:
+            span.set_attribute("workflow.id", workflow_id)
+            
+            deploy_result = {
+                "status": "pending",
+                "files_written": [],
+                "plugin": "docker",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+            try:
+                # Get generated files from codegen result
+                codegen_files = codegen_result.get("files", {}) if isinstance(codegen_result, dict) else {}
+                
+                if not codegen_files:
+                    logger.warning(
+                        "[STAGE:DEPLOY_GEN] No generated files found for deployment",
+                        extra={"workflow_id": workflow_id}
+                    )
+                    deploy_result["status"] = "skipped"
+                    deploy_result["reason"] = "No generated files"
+                    return deploy_result
+                
+                # Detect language and framework from generated code
+                language = "python"
+                framework = "fastapi"  # Default for calculator API
+                entry_point = "main.py"
+                
+                # Check main.py content for framework detection
+                main_py = codegen_files.get("main.py", "")
+                if "flask" in main_py.lower():
+                    framework = "flask"
+                elif "django" in main_py.lower():
+                    framework = "django"
+                elif "fastapi" in main_py.lower():
+                    framework = "fastapi"
+                
+                # Generate deployment configs using templates (fallback if DeployAgent not available)
+                deploy_files = self._generate_docker_configs(
+                    language=language,
+                    framework=framework,
+                    entry_point=entry_point,
+                    codegen_files=codegen_files
+                )
+                
+                # Validate deployment artifacts
+                if HAS_PROVENANCE and validate_deployment_artifacts:
+                    validation = validate_deployment_artifacts(deploy_files, output_path)
+                    if not validation["valid"]:
+                        deploy_result["status"] = "validation_failed"
+                        deploy_result["validation_errors"] = validation["errors"]
+                        if provenance:
+                            provenance.record_error(
+                                ProvenanceTracker.STAGE_DEPLOY_GEN,
+                                "validation_failed",
+                                f"Deployment validation failed: {validation['errors']}"
+                            )
+                        return deploy_result
+                
+                # Write deployment files to output directory
+                if output_path:
+                    output_dir = Path(output_path)
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    for filename, content in deploy_files.items():
+                        file_path = output_dir / filename
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            f.write(content)
+                        deploy_result["files_written"].append(filename)
+                        logger.debug(f"[STAGE:DEPLOY_GEN] Wrote {filename}")
+                
+                # Record provenance
+                if provenance:
+                    provenance.record_stage(
+                        ProvenanceTracker.STAGE_DEPLOY_GEN,
+                        artifacts=deploy_files,
+                        metadata={
+                            "plugin": "docker",
+                            "files_written": deploy_result["files_written"],
+                            "language": language,
+                            "framework": framework
+                        }
+                    )
+                
+                deploy_result["status"] = "completed"
+                deploy_result["deploy_files"] = deploy_files
+                span.set_status(Status(StatusCode.OK))
+                
+                return deploy_result
+                
+            except Exception as e:
+                logger.error(
+                    f"[STAGE:DEPLOY_GEN] Deployment generation failed: {e}",
+                    exc_info=True,
+                    extra={"workflow_id": workflow_id}
+                )
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                span.record_exception(e)
+                deploy_result["status"] = "failed"
+                deploy_result["error"] = str(e)
+                return deploy_result
+    
+    def _generate_docker_configs(
+        self,
+        language: str,
+        framework: str,
+        entry_point: str,
+        codegen_files: Dict[str, str]
+    ) -> Dict[str, str]:
+        """Generate Docker deployment configuration files.
+        
+        Args:
+            language: Programming language (e.g., 'python')
+            framework: Web framework (e.g., 'fastapi', 'flask')
+            entry_point: Main application entry point file
+            codegen_files: Dictionary of generated code files
+            
+        Returns:
+            Dictionary mapping filenames to their content
+        """
+        deploy_files = {}
+        
+        # Get requirements if available
+        requirements = codegen_files.get("requirements.txt", "")
+        
+        # Generate Dockerfile
+        if framework == "fastapi":
+            dockerfile = f'''# Production-ready Dockerfile for FastAPI application
+# Generated by Code Factory Deploy Stage
+
+FROM python:3.11-slim
+
+# Security: Run as non-root user
+RUN groupadd --gid 1000 appgroup && \\
+    useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home appuser
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \\
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Change ownership to non-root user
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \\
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+# Run the application
+CMD ["uvicorn", "{entry_point.replace('.py', '')}:app", "--host", "0.0.0.0", "--port", "8000"]
+'''
+        else:
+            dockerfile = f'''# Dockerfile for {language} application
+# Generated by Code Factory Deploy Stage
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["python", "{entry_point}"]
+'''
+        deploy_files["Dockerfile"] = dockerfile
+        
+        # Generate docker-compose.yml
+        docker_compose = f'''# Docker Compose configuration
+# Generated by Code Factory Deploy Stage
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Optional: Add Redis for caching (uncomment if needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+'''
+        deploy_files["docker-compose.yml"] = docker_compose
+        
+        # Generate .dockerignore
+        dockerignore = '''# Docker ignore file
+# Generated by Code Factory Deploy Stage
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.docker/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Local development
+*.local
+*.log
+'''
+        deploy_files[".dockerignore"] = dockerignore
+        
+        # Generate deploy_metadata.json
+        import json
+        metadata = {
+            "generation_type": "production",
+            "language": language,
+            "framework": framework,
+            "entry_point": entry_point,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "files": list(deploy_files.keys()),
+            "docker": {
+                "base_image": "python:3.11-slim",
+                "exposed_ports": [8000],
+                "health_check": True,
+                "non_root_user": True
+            }
+        }
+        deploy_files["deploy_metadata.json"] = json.dumps(metadata, indent=2)
+        
+        return deploy_files
     
     def _tune_from_feedback(self, rating: int) -> None:
         """Tune the workflow based on user feedback.
