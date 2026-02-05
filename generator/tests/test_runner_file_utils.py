@@ -721,6 +721,13 @@ class TestMaterializeFileMap:
         
         result = await materialize_file_map(file_map, output_dir)
         
+        # Verify the materialization succeeded
+        assert result["success"] is True
+        assert "main.py" in result["files_written"]
+        assert "README.md" in result["files_written"]
+        assert (output_dir / "main.py").exists()
+        assert (output_dir / "README.md").exists()
+        
         # Verify add_provenance was called
         mock_add_provenance.assert_called_once()
         call_args = mock_add_provenance.call_args
@@ -839,6 +846,11 @@ class TestValidateGeneratedProject:
         (project_dir / "requirements.txt").write_text("fastapi\n")
         
         result = await validate_generated_project(project_dir)
+        
+        # Verify the validation succeeded
+        assert result["valid"] is True
+        assert len(result["errors"]) == 0
+        assert result["file_count"] >= 2
         
         # Verify add_provenance was called
         mock_add_provenance.assert_called_once()
