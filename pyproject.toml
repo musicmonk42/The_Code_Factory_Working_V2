@@ -38,38 +38,54 @@ include = ["generator*", "omnicore_engine*", "self_fixing_engineer*", "server*"]
 [tool.pytest.ini_options]
 minversion = "7.4"
 pythonpath = ["."]
-# Prevent expensive plugin loading during collection to avoid CPU timeout
-# - no:randomly: Disable pytest-randomly plugin (if installed) to reduce collection overhead
-# - no:cacheprovider: Disable pytest cache to avoid filesystem overhead during collection
-# - import-mode=importlib: Use importlib for faster, more reliable imports
-# - maxfail=5: Stop after 5 failures to save time
-# NOTE: pytest-xdist options (-n, --forked) removed from addopts.
-# CI workflow controls parallelism via command line, and having these in addopts
-# caused conflicts when workflows disabled parallelism for memory-intensive modules.
-addopts = "-ra -q --tb=short -p no:randomly -p no:cacheprovider --import-mode=importlib --maxfail=5"
-# REMOVED: testpaths configuration and ignore list (test files were deleted)
-# Test directories should be specified on the command line to prevent pytest from
-# automatically scanning and loading all test modules during pytest initialization.
-# This was causing CPU time limit exceeded errors (exit code 152) in CI because
-# pytest was importing heavy dependencies (torch, transformers, etc.) during startup.
-# See .github/workflows/pytest-all.yml for the test directories to run.
+
+# Explicit test paths - pytest will only scan these directories
+# This prevents automatic scanning of the entire repository during collection
+testpaths = [
+    "tests",
+    "generator/tests",
+    "omnicore_engine/tests",
+    "self_fixing_engineer/tests",
+    "server/tests",
+]
+
+# Optimized addopts - skip heavy and slow tests by default for fast local development
+# To run all tests including heavy/slow: pytest -m ""
+addopts = [
+    "-ra",                              # Show extra test summary info
+    "-q",                               # Quiet mode
+    "--tb=short",                       # Short traceback format
+    "-p no:randomly",                   # Disable pytest-randomly plugin
+    "-p no:cacheprovider",              # Disable cache for faster collection
+    "--import-mode=importlib",          # Use importlib for imports
+    "--maxfail=5",                      # Stop after 5 failures
+    "-m not (heavy or slow)",           # Skip heavy and slow tests by default
+]
+
 python_files = ["test_*.py"]
+
+# Async test configuration
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
 # Timeout configuration - prevent individual tests from hanging
 timeout = 30
 timeout_method = "thread"
 timeout_func_only = true
-# Directories to ignore during collection to reduce overhead
-# Using patterns that match directory basenames
+
+# Directories to ignore during collection
 norecursedirs = ".* _* build dist venv env node_modules __pycache__"
+
 # Custom markers for test categorization
 markers = [
-    "slow: marks tests as slow (deselected by default in CI)",
-    "integration: marks tests as integration tests (deselected by default in CI)",
+    "unit: marks tests as unit tests (fast, no external dependencies)",
+    "integration: marks tests as integration tests (requires external services)",
+    "slow: marks tests as slow (execution time > 5 seconds)",
+    "heavy: marks tests requiring heavy dependencies (numpy, pandas, torch, transformers)",
     "requires_redis: marks tests that require Redis connection",
+    "requires_db: marks tests that require database connection",
     "forked: marks tests that should run in isolated forked process",
     "flaky: marks tests as flaky (may need retries)",
-    "heavy: marks tests as resource-intensive (deselect with '-m \"not heavy\"')",
 ]
 # NOTE: Environment variables for tests are set in the CI workflow (.github/workflows/pytest-all.yml)
 # The 'env' configuration option requires pytest-env plugin which is not installed.

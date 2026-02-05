@@ -199,16 +199,36 @@ def _initialize_opentelemetry_mock():
     except ImportError:
         pass
     
+    # Create mock tracer and trace objects
+    class MockTracer:
+        def start_span(self, name, **kwargs):
+            return MockSpan()
+        def start_as_current_span(self, name, **kwargs):
+            return MockSpan()
+    
+    class MockSpan:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def set_attribute(self, key, value):
+            pass
+        def add_event(self, name, attributes=None):
+            pass
+        def set_status(self, status):
+            pass
+    
     # Create simple mocks for opentelemetry modules
-    for module_name in [
-        "opentelemetry",
-        "opentelemetry.trace",
-        "opentelemetry.sdk",
-        "opentelemetry.sdk.trace",
-        "opentelemetry.sdk.trace.export",
-        "opentelemetry.exporter",
-    ]:
-        _create_simple_mock(module_name, {}, submodules=[])
+    _create_simple_mock("opentelemetry", {}, submodules=["trace", "sdk"])
+    _create_simple_mock("opentelemetry.trace", {
+        "get_tracer": lambda name: MockTracer(),
+        "get_tracer_provider": lambda: MagicMock(),
+        "set_tracer_provider": lambda provider: None,
+    }, submodules=[])
+    _create_simple_mock("opentelemetry.sdk", {}, submodules=["trace"])
+    _create_simple_mock("opentelemetry.sdk.trace", {}, submodules=["export"])
+    _create_simple_mock("opentelemetry.sdk.trace.export", {}, submodules=[])
+    _create_simple_mock("opentelemetry.exporter", {}, submodules=[])
 
 
 # Initialize mocks at import time
