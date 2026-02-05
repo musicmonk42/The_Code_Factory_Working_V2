@@ -1,8 +1,127 @@
 # Kafka Setup and Configuration Guide
 
+## Quick Fix for DUPLICATE_BROKER_REGISTRATION Error
+
+If you're experiencing the `DUPLICATE_BROKER_REGISTRATION` error, follow these steps for a quick resolution:
+
+### Automated Fix (Recommended)
+
+```bash
+# Run the automated setup script (cleans up and restarts Kafka)
+./scripts/kafka-setup.sh setup
+
+# Or simply run without arguments (default is setup)
+./scripts/kafka-setup.sh
+```
+
+This script will:
+1. Stop and remove existing Kafka/Zookeeper containers
+2. Remove volumes to clear stale metadata
+3. Start fresh Kafka and Zookeeper instances
+4. Wait for Kafka to be ready
+5. Create required topics (audit-events, audit-events-dlq, job-completed)
+6. Verify the setup
+
+### Manual Fix
+
+If you prefer to fix manually:
+
+```bash
+# 1. Stop and remove existing containers and volumes
+docker-compose -f docker-compose.kafka.yml down -v
+
+# 2. Start services fresh
+docker-compose -f docker-compose.kafka.yml up -d
+
+# 3. Wait for Kafka to be ready (30 seconds)
+sleep 30
+
+# 4. Create required topics
+docker exec codefactory-kafka kafka-topics \
+  --create --if-not-exists \
+  --topic audit-events \
+  --bootstrap-server localhost:9092 \
+  --partitions 3 --replication-factor 1
+
+docker exec codefactory-kafka kafka-topics \
+  --create --if-not-exists \
+  --topic audit-events-dlq \
+  --bootstrap-server localhost:9092 \
+  --partitions 1 --replication-factor 1
+
+docker exec codefactory-kafka kafka-topics \
+  --create --if-not-exists \
+  --topic job-completed \
+  --bootstrap-server localhost:9092 \
+  --partitions 3 --replication-factor 1
+
+# 5. Verify setup
+docker exec codefactory-kafka kafka-topics --list --bootstrap-server localhost:9092
+```
+
+### What Causes DUPLICATE_BROKER_REGISTRATION?
+
+This error occurs when:
+- A previous Kafka instance registered with the same broker ID but didn't cleanly unregister
+- Stale metadata exists in Zookeeper
+- Multiple Kafka instances try to use the same broker ID
+
+The fix involves **completely removing the Kafka and Zookeeper volumes** to clear all stale metadata.
+
+---
+
 ## Overview
 
 The Code Factory Platform uses Apache Kafka for audit event streaming and message bus functionality. Kafka is **optional** and the platform can operate without it using graceful degradation.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Code Factory Platform                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────┐    ┌──────────────┐   ┌──────────────┐  │
+│  │  Generator   │    │  OmniCore    │   │     SFE      │  │
+│  │   Workers    │───▶│    Engine    │◀──│   (Arbiter)  │  │
+│  └──────────────┘    └──────────────┘   └──────────────┘  │
+│         │                    │                   │          │
+│         │                    │                   │          │
+│         └────────────────────┼───────────────────┘          │
+│                              │                              │
+│                    KAFKA_BOOTSTRAP_SERVERS                  │
+│                     (kafka:9092 / localhost:9093)           │
+└──────────────────────────────┼───────────────────────────────┘
+                               │
+                               ▼
+        ┌──────────────────────────────────────────┐
+        │         Kafka Infrastructure             │
+        ├──────────────────────────────────────────┤
+        │                                          │
+        │  ┌──────────────┐    ┌──────────────┐  │
+        │  │  Zookeeper   │    │    Kafka     │  │
+        │  │   :2181      │◀───│  Broker #1   │  │
+        │  │              │    │   :9092/9093 │  │
+        │  └──────────────┘    └──────────────┘  │
+        │         │                    │          │
+        │         ▼                    ▼          │
+        │  ┌──────────────┐    ┌──────────────┐  │
+        │  │   Metadata   │    │    Topics    │  │
+        │  │   Storage    │    │  • audit-*   │  │
+        │  │              │    │  • job-*     │  │
+        │  └──────────────┘    └──────────────┘  │
+        └──────────────────────────────────────────┘
+
+Topics:
+  • audit-events       - Main audit log stream (3 partitions)
+  • audit-events-dlq   - Dead letter queue for failed events (1 partition)
+  • job-completed      - Job completion notifications (3 partitions)
+```
+
+**Port Configuration:**
+- `kafka:9092` - Internal Docker network (for containers)
+- `localhost:9093` - External host access (for local development)
+- `localhost:2181` - Zookeeper client port
 
 ## Quick Start
 
@@ -179,9 +298,42 @@ KAFKA_ALLOW_PLAINTEXT=false
 
 ## Docker Compose Setup
 
+### Using the Provided Kafka Configuration
+
+The repository includes a complete Kafka setup in `docker-compose.kafka.yml`. This is the **recommended** way to run Kafka for development and testing.
+
+**Quick Start:**
+
+```bash
+# Automated setup (recommended)
+./scripts/kafka-setup.sh
+
+# Or manually start services
+docker-compose -f docker-compose.kafka.yml up -d
+
+# View logs
+docker-compose -f docker-compose.kafka.yml logs -f kafka
+
+# Stop services
+docker-compose -f docker-compose.kafka.yml down
+```
+
+The `docker-compose.kafka.yml` file includes:
+- **Zookeeper**: Coordination service for Kafka
+- **Kafka Broker**: Single broker with proper listener configuration
+- **Health Checks**: Ensures services are ready before accepting connections
+- **Data Persistence**: Named volumes for Zookeeper and Kafka data
+- **Network**: Connects to `codefactory-network` (same as main services)
+
+**Configuration Details:**
+- Kafka is accessible at `kafka:9092` from Docker containers
+- Kafka is accessible at `localhost:9093` from the host machine
+- Zookeeper is accessible at `localhost:2181`
+- Auto-create topics is enabled for convenience
+
 ### Basic Kafka Setup
 
-Create `docker-compose.kafka.yml`:
+If you need a custom configuration, here's a minimal example:
 
 ```yaml
 version: '3.8'
@@ -218,30 +370,94 @@ docker-compose -f docker-compose.kafka.yml up -d
 
 ### Create Required Topics
 
+**Automated (Recommended):**
+
+The `kafka-setup.sh` script automatically creates all required topics:
+
+```bash
+./scripts/kafka-setup.sh setup
+```
+
+**Manual Creation:**
+
+If you need to manually create topics:
+
 ```bash
 # Create audit events topic
-docker-compose -f docker-compose.kafka.yml exec kafka kafka-topics \
-  --create \
+docker exec codefactory-kafka kafka-topics \
+  --create --if-not-exists \
   --topic audit-events \
   --bootstrap-server localhost:9092 \
   --partitions 3 \
   --replication-factor 1
 
 # Create dead letter queue topic
-docker-compose -f docker-compose.kafka.yml exec kafka kafka-topics \
-  --create \
+docker exec codefactory-kafka kafka-topics \
+  --create --if-not-exists \
   --topic audit-events-dlq \
   --bootstrap-server localhost:9092 \
   --partitions 1 \
   --replication-factor 1
 
+# Create job completion topic
+docker exec codefactory-kafka kafka-topics \
+  --create --if-not-exists \
+  --topic job-completed \
+  --bootstrap-server localhost:9092 \
+  --partitions 3 \
+  --replication-factor 1
+
 # List topics
-docker-compose -f docker-compose.kafka.yml exec kafka kafka-topics \
+docker exec codefactory-kafka kafka-topics \
   --list \
   --bootstrap-server localhost:9092
 ```
 
 ## Troubleshooting
+
+### DUPLICATE_BROKER_REGISTRATION Error
+
+**Symptom:**
+```
+[BrokerLifecycleManager id=1] Unable to register broker 1 because the controller returned error DUPLICATE_BROKER_REGISTRATION
+ERROR Encountered fatal fault: Error starting LogManager
+```
+
+**Root Cause:**
+- Stale Kafka broker registration in Zookeeper
+- Previous instance didn't cleanly shut down
+- Multiple instances trying to use the same broker ID
+
+**Solution:**
+
+1. **Use the automated fix script:**
+   ```bash
+   ./scripts/kafka-setup.sh setup
+   ```
+
+2. **Or manually clean up:**
+   ```bash
+   # Stop everything
+   docker-compose -f docker-compose.kafka.yml down -v
+   
+   # Remove any orphaned containers
+   docker rm -f codefactory-kafka codefactory-zookeeper 2>/dev/null || true
+   
+   # Start fresh
+   docker-compose -f docker-compose.kafka.yml up -d
+   ```
+
+3. **Verify the fix:**
+   ```bash
+   # Check container status
+   docker-compose -f docker-compose.kafka.yml ps
+   
+   # View Kafka logs (should show successful startup)
+   docker-compose -f docker-compose.kafka.yml logs kafka | grep -i "started"
+   
+   # Test broker API
+   docker exec codefactory-kafka kafka-broker-api-versions --bootstrap-server localhost:9092
+   ```
 
 ### Connection Refused Errors
 
@@ -255,6 +471,8 @@ Failed to connect to kafka:9092: Connection refused
 1. **Check if Kafka is running:**
    ```bash
    docker-compose -f docker-compose.kafka.yml ps
+   # Or use the script
+   ./scripts/kafka-setup.sh status
    ```
 
 2. **Enable dry-run mode temporarily:**
@@ -265,13 +483,24 @@ Failed to connect to kafka:9092: Connection refused
 3. **Check Kafka logs:**
    ```bash
    docker-compose -f docker-compose.kafka.yml logs kafka
+   # Or use the script
+   ./scripts/kafka-setup.sh logs
    ```
 
 4. **Verify network connectivity:**
    ```bash
-   telnet localhost 9092
+   # From host machine
+   telnet localhost 9093
    # or
-   nc -zv localhost 9092
+   nc -zv localhost 9093
+   
+   # From Docker container (should use kafka:9092)
+   docker exec codefactory-platform nc -zv kafka 9092
+   ```
+
+5. **Restart Kafka:**
+   ```bash
+   ./scripts/kafka-setup.sh restart
    ```
 
 ### Retry Storms
@@ -374,21 +603,24 @@ Authentication failed: Invalid credentials
 ### Check Kafka Health
 
 ```bash
+# Use the setup script for status
+./scripts/kafka-setup.sh status
+
 # Test connection
-docker-compose -f docker-compose.kafka.yml exec kafka \
-  kafka-broker-api-versions --bootstrap-server localhost:9092
+docker exec codefactory-kafka kafka-broker-api-versions --bootstrap-server localhost:9092
 
 # Monitor consumer lag
-docker-compose -f docker-compose.kafka.yml exec kafka \
-  kafka-consumer-groups --bootstrap-server localhost:9092 --describe --all-groups
+docker exec codefactory-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --describe --all-groups
 
 # View topic data
-docker-compose -f docker-compose.kafka.yml exec kafka \
-  kafka-console-consumer \
+docker exec codefactory-kafka kafka-console-consumer \
   --bootstrap-server localhost:9092 \
   --topic audit-events \
   --from-beginning \
   --max-messages 10
+
+# List all topics
+./scripts/kafka-setup.sh topics
 ```
 
 ### Prometheus Metrics
