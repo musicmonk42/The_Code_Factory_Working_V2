@@ -790,8 +790,10 @@ def _find_config_file(config_file: str) -> Optional[Path]:
     if filename == "runner_config.yaml":
         search_paths = [
             Path("runner_config.yaml"),  # Root directory
-            Path("generator/runner/runner_config.yaml"),  # Package location
             Path("config/runner_config.yaml"),  # Config directory
+            # NOTE: generator/runner/runner_config.yaml is NOT searched because it uses
+            # a different schema (documentation/reference format with 'backends' and 'frameworks'
+            # as lists, not the simple 'backend' and 'framework' strings expected by RunnerConfig)
         ]
     elif filename == "config.yaml":
         search_paths = [
@@ -813,7 +815,7 @@ def _find_config_file(config_file: str) -> Optional[Path]:
 
 
 def load_config(
-    config_file: str = "runner_config.yaml", overrides: Optional[Dict[str, Any]] = None
+    config_file: str = "config.yaml", overrides: Optional[Dict[str, Any]] = None
 ) -> RunnerConfig:
     """
     Load config from YAML, apply env overrides, handle versioning/migrations.
@@ -822,12 +824,14 @@ def load_config(
     standard locations. The search order is:
     1. Environment variable RUNNER_CONFIG_PATH (highest priority)
     2. Explicit path provided (if absolute or exists)
-    3. ./runner_config.yaml (root directory)
-    4. ./generator/runner/runner_config.yaml (package location)
-    5. ./config/runner_config.yaml (config directory)
+    3. For config.yaml: ./config.yaml, ./generator/config.yaml, ./config/config.yaml
+    4. For runner_config.yaml: ./runner_config.yaml, ./config/runner_config.yaml
+    
+    Note: generator/runner/runner_config.yaml is NOT searched as it uses a different
+    schema (documentation format) incompatible with the RunnerConfig Pydantic model.
     
     Args:
-        config_file (str): Path to the YAML configuration file. Defaults to "runner_config.yaml".
+        config_file (str): Path to the YAML configuration file. Defaults to "config.yaml".
         overrides (Optional[Dict[str, Any]]): Dictionary of settings to override.
     Returns:
         RunnerConfig: The validated and migrated RunnerConfig instance.
@@ -848,7 +852,6 @@ def load_config(
             searched_paths = [
                 f"   - Environment variable RUNNER_CONFIG_PATH: {env_path if env_path else '(not set)'}",
                 f"   - ./runner_config.yaml: not found",
-                f"   - ./generator/runner/runner_config.yaml: not found",
                 f"   - ./config/runner_config.yaml: not found",
             ]
         elif filename == "config.yaml":
@@ -1067,12 +1070,12 @@ def load_config(
             },
         }
         # Apply migrations sequentially until current version is reached
-        # Ensure version exists in data dict before migration loop
+        # Ensure version exists in data dict for migration loop (use the determined version)
         if "version" not in data:
             data["version"] = current_version_in_file
         
-        while data.get("version", 1) < CURRENT_VERSION:
-            mig_func = migrations.get(data.get("version", 1))
+        while data["version"] < CURRENT_VERSION:
+            mig_func = migrations.get(data["version"])
             if mig_func:
                 data = mig_func(data)
                 logger.info(f"Migrated config to version {data['version']}.")
