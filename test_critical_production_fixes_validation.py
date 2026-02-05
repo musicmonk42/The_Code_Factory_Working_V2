@@ -217,8 +217,8 @@ class TestLLMFallbackCodeGeneration:
         # Should be valid Python (compile should not raise)
         compile(main_code, "main.py", "exec")
         
-        # Should have main function
-        assert "def main()" in main_code
+        # Should have main function with colon
+        assert "def main():" in main_code
     
     def test_fallback_generic_response(self):
         """Generic prompts should get generic guidance."""
