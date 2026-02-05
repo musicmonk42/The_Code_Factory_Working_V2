@@ -12,26 +12,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 def _reload_backend_with_real_aiofiles():
     """Reload the arbiter_array_backend module with real aiofiles."""
     # Remove any mocked aiofiles modules from sys.modules
-    mocked_modules = [key for key in list(sys.modules.keys()) if 'aiofiles' in key]
+    mocked_modules = [key for key in sys.modules.keys() if 'aiofiles' in key]
     for mod_name in mocked_modules:
         mod = sys.modules.get(mod_name)
         if mod is not None:
             # Check if it's a mock without triggering attribute access errors
             if isinstance(mod, (MagicMock, Mock)):
                 del sys.modules[mod_name]
-            else:
-                try:
-                    if hasattr(mod, '_mock_name') or hasattr(mod, '_spec_class'):
-                        del sys.modules[mod_name]
-                except (AttributeError, TypeError):
-                    pass  # Not a mock
     
     # Force import of the real aiofiles module
     try:
         spec = importlib.util.find_spec("aiofiles")
         if spec is not None:
             import aiofiles
-            aiofiles = importlib.reload(aiofiles)
+            importlib.reload(aiofiles)
     except (ImportError, AttributeError):
         pass  # aiofiles may not be installed
     
