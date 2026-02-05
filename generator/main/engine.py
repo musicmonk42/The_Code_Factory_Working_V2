@@ -54,6 +54,7 @@ Industry Standards Compliance:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import threading
@@ -1357,7 +1358,7 @@ class WorkflowEngine:
                 
                 # Detect language and framework from generated code
                 language = "python"
-                framework = "fastapi"  # Default for calculator API
+                framework = "fastapi"  # Default for Python web APIs
                 entry_point = "main.py"
                 
                 # Check main.py content for framework detection
@@ -1369,7 +1370,7 @@ class WorkflowEngine:
                 elif "fastapi" in main_py.lower():
                     framework = "fastapi"
                 
-                # Generate deployment configs using templates (fallback if DeployAgent not available)
+                # Generate deployment configs
                 deploy_files = self._generate_docker_configs(
                     language=language,
                     framework=framework,
@@ -1559,7 +1560,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: calculator-api
     ports:
       - "8000:8000"
     environment:
@@ -1567,7 +1567,6 @@ services:
       - LOG_LEVEL=info
       - PYTHONUNBUFFERED=1
     healthcheck:
-      # Uses curl, which is installed in the Dockerfile
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
@@ -1673,8 +1672,7 @@ secrets/
 '''
         deploy_files[".dockerignore"] = dockerignore
         
-        # Generate deploy_metadata.json with comprehensive deployment info
-        import json as json_module  # Avoid name collision
+        # Generate deploy_metadata.json
         metadata = {
             "schema_version": "1.0.0",
             "generation_type": "production",
@@ -1716,7 +1714,7 @@ secrets/
                 "env_file_support": True
             }
         }
-        deploy_files["deploy_metadata.json"] = json_module.dumps(metadata, indent=2, sort_keys=False)
+        deploy_files["deploy_metadata.json"] = json.dumps(metadata, indent=2, sort_keys=False)
         
         return deploy_files
     

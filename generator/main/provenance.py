@@ -276,10 +276,14 @@ def validate_syntax(code_content: str, filename: str = "unknown.py") -> Dict[str
         return {"valid": False, "filename": filename, "error": str(e), "line": e.lineno}
 
 
+# Minimum content length to be considered non-trivial
+MIN_CONTENT_LENGTH = 10
+
+
 def validate_has_content(content: str, filename: str) -> Dict[str, Any]:
     """Validate file has non-trivial content."""
     stripped = content.strip()
-    has_content = len(stripped) > 10  # More than just whitespace/comments
+    has_content = len(stripped) > MIN_CONTENT_LENGTH
     return {
         "valid": has_content,
         "filename": filename,
