@@ -23,7 +23,7 @@ This document summarizes the critical production fixes implemented to resolve is
 - Improved logging to show actual timeout value in warning messages
 
 **Files Modified**:
-- `omnicore_engine/message_bus/sharded_message_bus.py` (lines 73-88, 1381-1389, 1461-1469)
+- `omnicore_engine/message_bus/sharded_message_bus.py` (line 83, lines 1383-1389, 1463-1469)
 
 **Validation**:
 ```

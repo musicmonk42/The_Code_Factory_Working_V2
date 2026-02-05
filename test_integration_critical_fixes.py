@@ -204,7 +204,6 @@ def test_kafka_graceful_degradation():
             print("✓ Kafka bridge has error handling")
         
         # Check message bus for health check
-        from pathlib import Path
         bus_path = Path("omnicore_engine/message_bus/sharded_message_bus.py")
         
         with open(bus_path, 'r') as f:
