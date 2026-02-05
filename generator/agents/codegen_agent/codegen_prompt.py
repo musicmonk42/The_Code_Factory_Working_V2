@@ -347,7 +347,7 @@ class HotReloadingFileSystemLoader(FileSystemLoader):
             template, 0
         ):
             logger.info(f"Template '{template}' has changed. Reloading.")
-            self.clear_cache()
+            environment.cache.clear()
             self._last_mtime[template] = mtime
 
         return super().get_source(environment, template)
