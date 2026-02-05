@@ -92,7 +92,14 @@ async def test_mock_log_db_find(mock_log_db):
 # Test MockLogDB thread safety
 def test_mock_log_db_thread_safety(mock_log_db):
     def save_thread(i):
-        asyncio.run(mock_log_db.save_experiment_log({"id": i}))
+        # Create a new event loop for this thread since asyncio.run() may fail
+        # with certain event loop policies (e.g., uvloop) in threaded contexts
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(mock_log_db.save_experiment_log({"id": i}))
+        finally:
+            loop.close()
 
     threads = [threading.Thread(target=save_thread, args=(i,)) for i in range(10)]
     for t in threads:

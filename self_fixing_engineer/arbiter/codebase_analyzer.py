@@ -1358,6 +1358,37 @@ app = typer.Typer(
 )
 
 
+def _run_async(coro):
+    """Run an async coroutine with robust event loop handling.
+    
+    Handles various edge cases including:
+    - Running under existing event loops (e.g., in tests with nest_asyncio)
+    - Environments where asyncio.run() fails (e.g., uvloop in some contexts)
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    
+    if loop and loop.is_running():
+        # If there's already a running loop, use nest_asyncio pattern
+        import nest_asyncio
+        nest_asyncio.apply()
+        loop.run_until_complete(coro)
+    else:
+        # Create a new event loop if none exists
+        try:
+            asyncio.run(coro)
+        except RuntimeError:
+            # Fallback for environments where asyncio.run() fails
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(coro)
+            finally:
+                loop.close()
+
+
 @app.command()
 def scan(
     root_dir: str = typer.Option(".", help="Root directory to analyze"),
@@ -1382,7 +1413,7 @@ def scan(
                 use_baseline=use_baseline,
             )
 
-    asyncio.run(_scan())
+    _run_async(_scan())
 
 
 @app.command()
@@ -1398,7 +1429,7 @@ def tools(root_dir: str = typer.Option(".", help="Root directory to analyze")):
                     f"{tool['name']} ({tool['type']}): {status} via {tool['installed_via'] or 'N/A'}"
                 )
 
-    asyncio.run(_tools())
+    _run_async(_tools())
 
 
 if __name__ == "__main__":
