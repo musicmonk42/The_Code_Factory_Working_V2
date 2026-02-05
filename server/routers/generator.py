@@ -15,6 +15,7 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 
 from server.schemas import (
+    ClarificationResponseRequest,
     ClarifyRequest,
     CodegenRequest,
     CritiqueRequest,
@@ -751,8 +752,7 @@ async def get_clarification_feedback(
 @router.post("/{job_id}/clarification/respond")
 async def submit_clarification_response(
     job_id: str,
-    question_id: str,
-    response: str,
+    request: ClarificationResponseRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -778,13 +778,15 @@ async def submit_clarification_response(
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
+    logger.debug(f"Received clarification response for job {job_id}, question {request.question_id}")
+
     result = await generator_service.submit_clarification_response(
         job_id=job_id,
-        question_id=question_id,
-        response=response,
+        question_id=request.question_id,
+        response=request.response,
     )
 
-    logger.info(f"Clarification response submitted for job {job_id}, question {question_id}")
+    logger.info(f"Clarification response submitted for job {job_id}, question {request.question_id}")
     return result
 
 
