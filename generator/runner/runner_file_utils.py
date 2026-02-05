@@ -1000,11 +1000,506 @@ async def save_files_to_output(
     saved_paths = []
     for filename, content in files.items():
         file_path = output_dir / filename
+        # FIX: Create parent directories for subdirectory paths (e.g., tests/test_main.py)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         await save_file_content(file_path, content, encoding=encoding, backup=False)
         saved_paths.append(file_path)
         logger.debug(f"Saved file to {file_path}")
 
     return saved_paths
+
+
+@util_decorator("materialize_file_map")
+async def materialize_file_map(
+    file_map: Union[Dict[str, str], str],
+    output_dir: Union[str, Path],
+    encoding: str = "utf-8",
+    normalize_newlines: bool = True,
+) -> Dict[str, Any]:
+    """
+    Materialize a file map (dict of relative_path -> content) to disk.
+    
+    This is the PRIMARY function for writing generated code files to disk.
+    It handles both parsed dicts and JSON strings, with robust validation
+    and security checks.
+    
+    ROOT CAUSE FIX:
+    Previously, the pipeline was writing the file map as JSON content to a 
+    single main.py file instead of materializing each file. This function
+    ensures proper materialization with:
+    - Path traversal prevention
+    - Subdirectory creation
+    - UTF-8 encoding with newline normalization
+    - Validation of string content (rejects nested dicts/lists)
+    
+    Args:
+        file_map: Either:
+            - Dict[str, str]: mapping of relative paths to file contents
+            - str: JSON string representing the above mapping
+        output_dir: Directory to write files to
+        encoding: Text encoding (default: utf-8)
+        normalize_newlines: If True, normalize \\r\\n to \\n (default: True)
+    
+    Returns:
+        Dict with:
+            - success: bool
+            - files_written: List[str] - paths of successfully written files
+            - files_skipped: List[Dict] - files that were skipped with reasons
+            - errors: List[str] - any errors encountered
+            - output_dir: str - the output directory path
+    
+    Security:
+        - Rejects paths with '..' to prevent traversal
+        - Rejects absolute paths
+        - Validates all content is string type
+        - Enforces file size limits (10MB per file)
+    
+    Example:
+        >>> result = await materialize_file_map(
+        ...     {"main.py": "from fastapi import FastAPI\\napp = FastAPI()",
+        ...      "tests/test_main.py": "def test_app(): assert True"},
+        ...     output_dir="./generated"
+        ... )
+        >>> print(result["files_written"])
+        ['main.py', 'tests/test_main.py']
+    """
+    output_dir = Path(output_dir).resolve()
+    result = {
+        "success": True,
+        "files_written": [],
+        "files_skipped": [],
+        "errors": [],
+        "output_dir": str(output_dir),
+    }
+    
+    # Parse JSON string if needed
+    if isinstance(file_map, str):
+        try:
+            parsed = json.loads(file_map)
+            # Handle nested {"files": {...}} format
+            if isinstance(parsed, dict) and "files" in parsed and isinstance(parsed["files"], dict):
+                file_map = parsed["files"]
+            elif isinstance(parsed, dict):
+                file_map = parsed
+            else:
+                result["success"] = False
+                result["errors"].append(f"JSON must be an object, got {type(parsed).__name__}")
+                return result
+        except json.JSONDecodeError as e:
+            result["success"] = False
+            result["errors"].append(f"Invalid JSON: {e}")
+            return result
+    
+    if not isinstance(file_map, dict):
+        result["success"] = False
+        result["errors"].append(f"file_map must be dict or JSON string, got {type(file_map).__name__}")
+        return result
+    
+    if len(file_map) == 0:
+        result["success"] = False
+        result["errors"].append("file_map is empty - no files to materialize")
+        return result
+    
+    # Create output directory
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        result["success"] = False
+        result["errors"].append(f"Failed to create output directory: {e}")
+        return result
+    
+    # Process each file
+    for relative_path, content in file_map.items():
+        # Skip error.txt - it's metadata, not a generated file
+        if relative_path == "error.txt":
+            continue
+            
+        # Security: Validate path
+        if not relative_path or not isinstance(relative_path, str):
+            result["files_skipped"].append({
+                "path": str(relative_path),
+                "reason": "invalid_path_type"
+            })
+            continue
+        
+        # Security: Prevent path traversal
+        if ".." in relative_path:
+            result["files_skipped"].append({
+                "path": relative_path,
+                "reason": "path_traversal_attempt"
+            })
+            logger.warning(f"Skipping file with path traversal attempt: {relative_path}")
+            continue
+        
+        # Security: Reject absolute paths
+        if relative_path.startswith("/") or (len(relative_path) > 1 and relative_path[1] == ":"):
+            result["files_skipped"].append({
+                "path": relative_path,
+                "reason": "absolute_path_rejected"
+            })
+            logger.warning(f"Skipping absolute path: {relative_path}")
+            continue
+        
+        # Validate content is string
+        if not isinstance(content, str):
+            result["files_skipped"].append({
+                "path": relative_path,
+                "reason": f"content_not_string (got {type(content).__name__})"
+            })
+            logger.warning(f"Skipping {relative_path}: content is {type(content).__name__}, not string")
+            continue
+        
+        # Size limit (10MB)
+        if len(content) > 10 * 1024 * 1024:
+            result["files_skipped"].append({
+                "path": relative_path,
+                "reason": "exceeds_10mb_limit"
+            })
+            logger.warning(f"Skipping {relative_path}: exceeds 10MB limit")
+            continue
+        
+        # Normalize newlines if requested
+        if normalize_newlines:
+            content = content.replace("\r\n", "\n").replace("\r", "\n")
+        
+        # Compute full path and validate it's within output_dir
+        file_path = (output_dir / relative_path).resolve()
+        if not str(file_path).startswith(str(output_dir)):
+            result["files_skipped"].append({
+                "path": relative_path,
+                "reason": "path_outside_output_dir"
+            })
+            logger.warning(f"Skipping {relative_path}: resolved path is outside output directory")
+            continue
+        
+        try:
+            # Create parent directories
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Write file with UTF-8 encoding
+            file_path.write_text(content, encoding=encoding)
+            
+            # Verify file was written
+            if not file_path.exists():
+                result["files_skipped"].append({
+                    "path": relative_path,
+                    "reason": "file_not_found_after_write"
+                })
+                logger.error(f"File not found after write: {relative_path}")
+                continue
+            
+            if file_path.stat().st_size == 0 and len(content) > 0:
+                result["files_skipped"].append({
+                    "path": relative_path,
+                    "reason": "file_empty_after_write"
+                })
+                logger.error(f"File is empty after write: {relative_path}")
+                continue
+            
+            result["files_written"].append(relative_path)
+            logger.debug(f"Materialized file: {relative_path} ({len(content)} bytes)")
+            
+        except Exception as e:
+            result["files_skipped"].append({
+                "path": relative_path,
+                "reason": f"write_error: {type(e).__name__}: {e}"
+            })
+            logger.error(f"Failed to write {relative_path}: {e}")
+    
+    # Update success status
+    if len(result["files_written"]) == 0:
+        result["success"] = False
+        result["errors"].append("No files were successfully written")
+    elif len(result["files_skipped"]) > 0:
+        # Partial success - some files written, some skipped
+        result["success"] = True  # Still consider it success if at least one file written
+        logger.warning(
+            f"Materialized {len(result['files_written'])} files, "
+            f"skipped {len(result['files_skipped'])} files"
+        )
+    
+    logger.info(
+        f"File map materialization complete: "
+        f"{len(result['files_written'])} written, "
+        f"{len(result['files_skipped'])} skipped"
+    )
+    
+    return result
+
+
+@util_decorator("validate_generated_project")
+async def validate_generated_project(
+    output_dir: Union[str, Path],
+    required_files: Optional[List[str]] = None,
+    check_python_syntax: bool = True,
+    check_fastapi_endpoints: bool = False,
+    expected_endpoints: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Validate a generated project after materialization.
+    
+    This implements the pipeline validation + fail-fast pattern. If validation
+    fails, the caller should mark the job as failed and write an error.txt
+    explaining the exact issue.
+    
+    Args:
+        output_dir: Directory containing the generated project
+        required_files: List of files that must exist (default: ['main.py'])
+        check_python_syntax: If True, verify all .py files have valid syntax
+        check_fastapi_endpoints: If True, check for FastAPI endpoint definitions
+        expected_endpoints: List of endpoint paths that should be defined
+    
+    Returns:
+        Dict with:
+            - valid: bool - overall validation status
+            - errors: List[str] - critical errors that fail validation
+            - warnings: List[str] - non-critical issues
+            - file_count: int - number of files found
+            - python_files_valid: int - count of valid Python files
+            - python_files_invalid: int - count of invalid Python files
+            - endpoints_found: List[str] - endpoints detected in code
+            - endpoints_missing: List[str] - expected endpoints not found
+    
+    Example:
+        >>> result = await validate_generated_project(
+        ...     output_dir="./generated",
+        ...     expected_endpoints=["/api/calculate/add", "/api/calculate/divide"]
+        ... )
+        >>> if not result["valid"]:
+        ...     write_error_file(result["errors"])
+    """
+    import ast
+    
+    output_dir = Path(output_dir).resolve()
+    result = {
+        "valid": True,
+        "errors": [],
+        "warnings": [],
+        "file_count": 0,
+        "python_files_valid": 0,
+        "python_files_invalid": 0,
+        "endpoints_found": [],
+        "endpoints_missing": [],
+    }
+    
+    # Check output directory exists
+    if not output_dir.exists():
+        result["valid"] = False
+        result["errors"].append(f"Output directory does not exist: {output_dir}")
+        return result
+    
+    if not output_dir.is_dir():
+        result["valid"] = False
+        result["errors"].append(f"Output path is not a directory: {output_dir}")
+        return result
+    
+    # Count files and collect Python files
+    all_files = list(output_dir.rglob("*"))
+    files_only = [f for f in all_files if f.is_file()]
+    result["file_count"] = len(files_only)
+    
+    if result["file_count"] == 0:
+        result["valid"] = False
+        result["errors"].append("No files found in output directory")
+        return result
+    
+    # Check required files
+    if required_files is None:
+        required_files = ["main.py"]
+    
+    for required_file in required_files:
+        file_path = output_dir / required_file
+        if not file_path.exists():
+            result["valid"] = False
+            result["errors"].append(f"Required file missing: {required_file}")
+        else:
+            # Check file is not empty
+            if file_path.stat().st_size == 0:
+                result["valid"] = False
+                result["errors"].append(f"Required file is empty: {required_file}")
+            else:
+                # Check it's not a JSON file map (the original bug)
+                try:
+                    content = file_path.read_text(encoding="utf-8")
+                    # Detect if content looks like a JSON file map
+                    if content.strip().startswith("{") and '"main.py"' in content[:500]:
+                        try:
+                            parsed = json.loads(content)
+                            if isinstance(parsed, dict) and any(k.endswith(".py") for k in parsed.keys()):
+                                result["valid"] = False
+                                result["errors"].append(
+                                    f"File {required_file} contains a JSON file map instead of actual code. "
+                                    "This indicates the materialization step failed."
+                                )
+                        except json.JSONDecodeError:
+                            pass  # Not JSON, which is good
+                except Exception as e:
+                    result["warnings"].append(f"Could not read {required_file}: {e}")
+    
+    # Validate Python syntax
+    python_files = [f for f in files_only if f.suffix == ".py"]
+    
+    if check_python_syntax:
+        for py_file in python_files:
+            try:
+                content = py_file.read_text(encoding="utf-8")
+                ast.parse(content)
+                result["python_files_valid"] += 1
+            except SyntaxError as e:
+                result["python_files_invalid"] += 1
+                rel_path = str(py_file.relative_to(output_dir))
+                result["errors"].append(
+                    f"Python syntax error in {rel_path}: line {e.lineno}: {e.msg}"
+                )
+                result["valid"] = False
+            except Exception as e:
+                result["warnings"].append(f"Could not parse {py_file.name}: {e}")
+    
+    # Check requirements.txt
+    requirements_path = output_dir / "requirements.txt"
+    if requirements_path.exists():
+        try:
+            req_content = requirements_path.read_text(encoding="utf-8").lower()
+            if "fastapi" not in req_content:
+                result["warnings"].append("requirements.txt does not contain 'fastapi'")
+            if "uvicorn" not in req_content:
+                result["warnings"].append("requirements.txt does not contain 'uvicorn'")
+        except Exception as e:
+            result["warnings"].append(f"Could not read requirements.txt: {e}")
+    else:
+        result["warnings"].append("requirements.txt not found")
+    
+    # Check for FastAPI endpoints
+    if check_fastapi_endpoints or expected_endpoints:
+        main_py = output_dir / "main.py"
+        if main_py.exists():
+            try:
+                main_content = main_py.read_text(encoding="utf-8")
+                
+                # Simple pattern matching for FastAPI routes
+                import re
+                endpoint_patterns = [
+                    r'@app\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
+                    r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
+                ]
+                
+                found_endpoints = set()
+                for pattern in endpoint_patterns:
+                    matches = re.findall(pattern, main_content, re.IGNORECASE)
+                    for method, path in matches:
+                        found_endpoints.add(path)
+                
+                result["endpoints_found"] = list(found_endpoints)
+                
+                if expected_endpoints:
+                    for expected in expected_endpoints:
+                        if expected not in found_endpoints:
+                            result["endpoints_missing"].append(expected)
+                    
+                    if result["endpoints_missing"]:
+                        result["warnings"].append(
+                            f"Expected endpoints not found: {result['endpoints_missing']}"
+                        )
+            except Exception as e:
+                result["warnings"].append(f"Could not analyze main.py for endpoints: {e}")
+    
+    # Check tests directory
+    tests_dir = output_dir / "tests"
+    if not tests_dir.exists():
+        result["warnings"].append("No tests/ directory found")
+    else:
+        test_files = list(tests_dir.glob("test_*.py"))
+        if not test_files:
+            result["warnings"].append("No test files (test_*.py) found in tests/")
+        else:
+            # Check for placeholder tests
+            for test_file in test_files:
+                try:
+                    content = test_file.read_text(encoding="utf-8")
+                    if "assert True" in content and "# Placeholder" in content:
+                        result["warnings"].append(
+                            f"Test file {test_file.name} contains placeholder tests"
+                        )
+                except Exception:
+                    pass
+    
+    logger.info(
+        f"Project validation complete: valid={result['valid']}, "
+        f"files={result['file_count']}, py_valid={result['python_files_valid']}, "
+        f"py_invalid={result['python_files_invalid']}, errors={len(result['errors'])}"
+    )
+    
+    return result
+
+
+async def write_validation_error(
+    output_dir: Union[str, Path],
+    validation_result: Dict[str, Any],
+) -> Path:
+    """
+    Write a clear error.txt file explaining validation failures.
+    
+    This is called when validation fails to provide clear feedback
+    about what went wrong.
+    
+    Args:
+        output_dir: Directory to write error.txt to
+        validation_result: Result from validate_generated_project
+    
+    Returns:
+        Path to the error.txt file
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    error_path = output_dir / "error.txt"
+    
+    lines = [
+        "=" * 60,
+        "CODE GENERATION VALIDATION FAILED",
+        "=" * 60,
+        "",
+        "The generated code did not pass validation checks.",
+        "Please review the errors below and regenerate with more specific requirements.",
+        "",
+        "ERRORS:",
+        "-" * 40,
+    ]
+    
+    for error in validation_result.get("errors", []):
+        lines.append(f"  ✗ {error}")
+    
+    if validation_result.get("warnings"):
+        lines.extend([
+            "",
+            "WARNINGS:",
+            "-" * 40,
+        ])
+        for warning in validation_result["warnings"]:
+            lines.append(f"  ⚠ {warning}")
+    
+    lines.extend([
+        "",
+        "SUMMARY:",
+        "-" * 40,
+        f"  Files found: {validation_result.get('file_count', 0)}",
+        f"  Python files valid: {validation_result.get('python_files_valid', 0)}",
+        f"  Python files invalid: {validation_result.get('python_files_invalid', 0)}",
+        "",
+        "NEXT STEPS:",
+        "-" * 40,
+        "  1. Check that requirements are specific and complete",
+        "  2. Include example API endpoints or data models",
+        "  3. Specify the framework (e.g., 'Python with FastAPI')",
+        "  4. Regenerate the project",
+        "",
+    ])
+    
+    content = "\n".join(lines)
+    error_path.write_text(content, encoding="utf-8")
+    
+    logger.warning(f"Wrote validation error to {error_path}")
+    return error_path
 
 
 @util_decorator("delete_compliant_data")
