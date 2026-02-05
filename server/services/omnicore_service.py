@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from server.utils.agent_loader import get_agent_loader
 from server.storage import jobs_db
-from server.schemas.jobs import JobStatus
+from server.schemas.jobs import JobStatus, JobStage
 
 # Import shared Presidio placeholders constant
 try:
@@ -1349,6 +1349,23 @@ class OmniCoreService:
                             f"Updated job {job_id} with {len(relative_files)} output files",
                             extra={"job_id": job_id, "files_count": len(relative_files)}
                         )
+                        
+                        # FIX: Mark job as COMPLETED after successful code generation
+                        # This ensures jobs appear in UI immediately and are downloadable
+                        if len(generated_files) > 0:  # Only mark complete if files were generated
+                            job.status = JobStatus.COMPLETED
+                            job.completed_at = datetime.now(timezone.utc)
+                            job.current_stage = JobStage.COMPLETED
+                            
+                            logger.info(
+                                f"✓ Job {job_id} marked as COMPLETED after code generation",
+                                extra={
+                                    "job_id": job_id,
+                                    "status": "completed",
+                                    "files_generated": len(generated_files),
+                                    "stage": "codegen"
+                                }
+                            )
                     except Exception as update_error:
                         logger.warning(
                             f"Failed to update job.output_files for {job_id}: {update_error}",
