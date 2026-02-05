@@ -680,6 +680,17 @@ class ShardedMessageBus:
             return
         
         # We have a running event loop, start dispatchers
+        self._create_dispatcher_tasks()
+        self._dispatchers_started = True
+        logger.info("Dispatcher tasks started.", num_tasks=len(self.dispatcher_tasks))
+
+    def _create_dispatcher_tasks(self) -> None:
+        """
+        Create and start dispatcher tasks for all shards.
+        
+        This is a helper method used by both _start_dispatchers() and start().
+        It creates tasks for both normal and high-priority queues for each shard.
+        """
         for shard_id in range(self.shard_count):
             task = asyncio.create_task(
                 self._dispatcher_loop(
@@ -699,7 +710,27 @@ class ShardedMessageBus:
                 )
             )
             self.dispatcher_tasks.append(task)
+
+    async def start(self) -> None:
+        """
+        Explicitly start the message bus dispatcher tasks.
         
+        This method should be called from an async context during application
+        startup to ensure dispatcher tasks are running before any subscriptions
+        are attempted. It's idempotent and safe to call multiple times.
+        
+        Industry-standard startup pattern ensuring:
+        - Dispatcher tasks are running in the event loop
+        - Subscriptions can be processed immediately
+        - No timeout errors during WebSocket setup
+        """
+        # Skip if already started
+        if self._dispatchers_started and self.dispatcher_tasks:
+            logger.debug("Dispatcher tasks already started, skipping")
+            return
+        
+        # Start dispatcher tasks using shared helper
+        self._create_dispatcher_tasks()
         self._dispatchers_started = True
         logger.info("Dispatcher tasks started.", num_tasks=len(self.dispatcher_tasks))
 
@@ -1386,10 +1417,23 @@ class ShardedMessageBus:
                 future.result(timeout=subscription_timeout)
                 logger_for_subscribe.debug("Subscription completed successfully")
             except TimeoutError:
-                logger_for_subscribe.warning(
-                    f"Subscription to {topic} timed out after {subscription_timeout} seconds. "
-                    "Subscription may still complete in background."
+                # Provide actionable error message
+                logger_for_subscribe.error(
+                    f"CRITICAL: Subscription to {topic} timed out after {subscription_timeout}s. "
+                    f"This indicates the message bus dispatcher tasks are not running. "
+                    f"Check that message_bus.start() was called during server initialization. "
+                    f"WebSocket connections will use fallback heartbeat mode."
                 )
+                # In production, allow graceful degradation to fallback mode
+                # In development/test, raise to catch issues early
+                if os.getenv("APP_ENV") == "production":
+                    logger_for_subscribe.warning(
+                        f"Production mode: Allowing subscription timeout for graceful degradation. "
+                        f"WebSocket will operate in fallback mode."
+                    )
+                else:
+                    # In non-production, raise to catch configuration issues early
+                    raise
             except Exception as e:
                 logger_for_subscribe.error(
                     f"Error completing subscription: {e}",

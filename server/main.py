@@ -561,6 +561,42 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.error(f"Configuration initialization failed: {e}", exc_info=True)
         logger.warning(f"Continuing startup despite configuration error: {type(e).__name__}")
     
+    # Start and verify message bus
+    logger.info("=" * 80)
+    logger.info("VERIFYING MESSAGE BUS STARTUP")
+    logger.info("=" * 80)
+    
+    try:
+        from server.services.omnicore_service import OmniCoreService
+        
+        # Get OmniCore service instance
+        omnicore_service = OmniCoreService()
+        
+        # Start message bus dispatcher tasks
+        if hasattr(omnicore_service, '_message_bus') and omnicore_service._message_bus:
+            logger.info("Starting message bus dispatcher tasks...")
+            await omnicore_service.start_message_bus()
+            
+            # Verify startup with retry logic
+            max_retries = 10
+            for i in range(max_retries):
+                if (hasattr(omnicore_service._message_bus, 'dispatcher_tasks') and 
+                    omnicore_service._message_bus.dispatcher_tasks and
+                    hasattr(omnicore_service._message_bus, '_dispatchers_started') and
+                    omnicore_service._message_bus._dispatchers_started):
+                    logger.info("✓ Message bus verified operational")
+                    break
+                
+                logger.info(f"Waiting for message bus startup... ({i+1}/{max_retries})")
+                await asyncio.sleep(1)
+            else:
+                logger.error("⚠ Message bus did not start within timeout - using fallback mode")
+        else:
+            logger.warning("Message bus not initialized - WebSocket events will use fallback mode")
+    except Exception as e:
+        logger.error(f"Message bus verification failed: {e}", exc_info=True)
+        logger.warning("Continuing startup - WebSocket events will use fallback mode")
+    
     # P2 FIX: Validate Redis connection on startup (explicit PING test)
     redis_url = os.getenv("REDIS_URL")
     if redis_url:

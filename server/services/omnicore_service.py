@@ -663,6 +663,29 @@ class OmniCoreService:
             },
         }
     
+    async def start_message_bus(self) -> bool:
+        """
+        Explicitly start the message bus dispatcher tasks.
+        
+        This method should be called from an async context during application
+        startup to ensure the message bus is fully operational before WebSocket
+        connections attempt to subscribe to events.
+        
+        Returns:
+            bool: True if message bus was started successfully, False otherwise
+        """
+        if not self._message_bus or not self._omnicore_components_available.get("message_bus", False):
+            logger.warning("Message bus not available - cannot start dispatcher tasks")
+            return False
+        
+        try:
+            await self._message_bus.start()
+            logger.info("✓ Message bus dispatcher tasks started")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to start message bus dispatcher tasks: {e}", exc_info=True)
+            return False
+    
     async def start_periodic_audit_flush(self):
         """
         Start periodic audit flush task.
