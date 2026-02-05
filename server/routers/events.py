@@ -46,6 +46,43 @@ def get_omnicore_service() -> OmniCoreService:
     return OmniCoreService()
 
 
+def _is_message_bus_ready(omnicore_service: OmniCoreService) -> bool:
+    """
+    Check if message bus is fully operational.
+    
+    Industry-standard readiness check ensuring:
+    - Message bus is initialized
+    - Dispatcher tasks are running
+    - Component is marked as available
+    
+    Args:
+        omnicore_service: OmniCoreService instance to check
+        
+    Returns:
+        bool: True if message bus is ready, False otherwise
+    """
+    if not hasattr(omnicore_service, '_message_bus'):
+        return False
+    
+    bus = omnicore_service._message_bus
+    if not bus:
+        return False
+    
+    # Check if dispatcher tasks are running
+    if not hasattr(bus, 'dispatcher_tasks') or not bus.dispatcher_tasks:
+        return False
+    
+    # Check if dispatcher started flag is set
+    if not hasattr(bus, '_dispatchers_started') or not bus._dispatchers_started:
+        return False
+    
+    # Check if message bus is marked as available
+    if not omnicore_service._omnicore_components_available.get("message_bus", False):
+        return False
+    
+    return True
+
+
 # Active WebSocket connections
 # Note: In production with multiple workers, use a shared connection manager
 # (e.g., Redis pub/sub) instead of a global list
@@ -217,12 +254,10 @@ async def websocket_endpoint(websocket: WebSocket):
         # Initialize OmniCore service for this connection
         omnicore_service = get_omnicore_service()
         
-        # Check if message bus is available
-        if (hasattr(omnicore_service, '_message_bus') and 
-            omnicore_service._message_bus and 
-            omnicore_service._omnicore_components_available.get("message_bus", False)):
+        # Check if message bus is ready BEFORE subscribing
+        if _is_message_bus_ready(omnicore_service):
             
-            logger.info("Using actual message bus for WebSocket events")
+            logger.info("Message bus is ready, using actual event streaming")
             
             # Subscribe to relevant topics
             event_topics = [
@@ -303,7 +338,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     break
         else:
             # Fallback: Use mock heartbeats
-            logger.info("Message bus not available, using fallback heartbeat mode")
+            logger.warning("Message bus not ready, using fallback heartbeat mode")
             
             while True:
                 try:
@@ -352,13 +387,10 @@ async def event_stream(
     Yields:
         SSE-formatted event strings
     """
-    # Check if message bus is available
-    if (omnicore_service and 
-        hasattr(omnicore_service, '_message_bus') and 
-        omnicore_service._message_bus and 
-        omnicore_service._omnicore_components_available.get("message_bus", False)):
+    # Check if message bus is ready
+    if omnicore_service and _is_message_bus_ready(omnicore_service):
         
-        logger.info(f"Using actual message bus for SSE events (job_id: {job_id})")
+        logger.info(f"Message bus ready for SSE events (job_id: {job_id})")
         
         # Create event queue for SSE
         event_queue = asyncio.Queue(maxsize=100)

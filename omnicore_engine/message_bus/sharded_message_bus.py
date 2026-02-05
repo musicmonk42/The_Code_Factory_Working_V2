@@ -703,6 +703,48 @@ class ShardedMessageBus:
         self._dispatchers_started = True
         logger.info("Dispatcher tasks started.", num_tasks=len(self.dispatcher_tasks))
 
+    async def start(self) -> None:
+        """
+        Explicitly start the message bus dispatcher tasks.
+        
+        This method should be called from an async context during application
+        startup to ensure dispatcher tasks are running before any subscriptions
+        are attempted. It's idempotent and safe to call multiple times.
+        
+        Industry-standard startup pattern ensuring:
+        - Dispatcher tasks are running in the event loop
+        - Subscriptions can be processed immediately
+        - No timeout errors during WebSocket setup
+        """
+        # Skip if already started
+        if self._dispatchers_started and self.dispatcher_tasks:
+            logger.debug("Dispatcher tasks already started, skipping")
+            return
+        
+        # Start dispatcher tasks
+        for shard_id in range(self.shard_count):
+            task = asyncio.create_task(
+                self._dispatcher_loop(
+                    shard_id,
+                    self.queues[shard_id],
+                    self.executors[shard_id],
+                    high_priority=False,
+                )
+            )
+            self.dispatcher_tasks.append(task)
+            task = asyncio.create_task(
+                self._dispatcher_loop(
+                    shard_id,
+                    self.high_priority_queues[shard_id],
+                    self.high_priority_executors[shard_id],
+                    high_priority=True,
+                )
+            )
+            self.dispatcher_tasks.append(task)
+        
+        self._dispatchers_started = True
+        logger.info("Dispatcher tasks started.", num_tasks=len(self.dispatcher_tasks))
+
     async def _dispatcher_loop(
         self,
         shard_id: int,
@@ -1386,10 +1428,15 @@ class ShardedMessageBus:
                 future.result(timeout=subscription_timeout)
                 logger_for_subscribe.debug("Subscription completed successfully")
             except TimeoutError:
-                logger_for_subscribe.warning(
-                    f"Subscription to {topic} timed out after {subscription_timeout} seconds. "
-                    "Subscription may still complete in background."
+                # Provide actionable error message
+                logger_for_subscribe.error(
+                    f"CRITICAL: Subscription to {topic} timed out after {subscription_timeout}s. "
+                    f"This indicates the message bus dispatcher tasks are not running. "
+                    f"Check that message_bus.start() was called during server initialization."
                 )
+                # Don't raise in production - allow fallback
+                if os.getenv("APP_ENV") != "production":
+                    raise
             except Exception as e:
                 logger_for_subscribe.error(
                     f"Error completing subscription: {e}",
