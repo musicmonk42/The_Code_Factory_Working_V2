@@ -1383,6 +1383,27 @@ async def materialize_file_map(
         }
     )
     
+    # Send materialization result to audit system
+    try:
+        from datetime import timezone
+        
+        await add_provenance(
+            "file_materialization_completed",
+            {
+                "output_dir": str(output_dir),
+                "files_written": result["files_written"],
+                "files_skipped": [f["path"] for f in result["files_skipped"]],
+                "total_bytes": result["total_bytes_written"],
+                "success": result["success"],
+                "errors": result["errors"],
+                "warnings": result["warnings"],
+                "materialization_time_ms": result["materialization_time_ms"],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except Exception as e:
+        logger.warning(f"Failed to log materialization to audit system: {e}")
+    
     return result
 
 
@@ -1605,6 +1626,27 @@ async def validate_generated_project(
         f"py_invalid={result['python_files_invalid']}, errors={len(result['errors'])}, "
         f"time={result['validation_time_ms']:.2f}ms"
     )
+    
+    # Send validation result to audit system
+    try:
+        from datetime import timezone
+        
+        await add_provenance(
+            "project_validation_completed",
+            {
+                "output_dir": str(output_dir),
+                "valid": result["valid"],
+                "file_count": result["file_count"],
+                "python_files_valid": result["python_files_valid"],
+                "python_files_invalid": result["python_files_invalid"],
+                "errors": result["errors"],
+                "warnings": result["warnings"],
+                "validation_time_ms": result["validation_time_ms"],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except Exception as e:
+        logger.warning(f"Failed to log validation to audit system: {e}")
     
     return result
 

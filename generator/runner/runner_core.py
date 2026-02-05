@@ -1882,6 +1882,26 @@ class Runner(ABC):
                 logger.error(f"Test file validation error: {error}")
                 span.add_event(f"Test validation error: {error}")
             
+            # Send test validation to audit system
+            try:
+                from datetime import datetime, timezone
+                
+                log_audit_event = _get_log_audit_event()
+                await log_audit_event(
+                    "test_validation_completed",
+                    {
+                        "framework": actual_framework_name,
+                        "valid_files": validation_result.get("valid_files", []),
+                        "invalid_files": validation_result.get("invalid_files", []),
+                        "warnings": validation_result["warnings"],
+                        "errors": validation_result["errors"],
+                        "total_files": len(task_payload.test_files),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Failed to log test validation to audit system: {e}")
+            
             # If no valid test files found, log a clear warning and generate fallback
             if not validation_result["valid_files"]:
                 logger.warning(
