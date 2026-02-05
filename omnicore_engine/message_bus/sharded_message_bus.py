@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import os
+import threading
 import time
 import types
 import uuid
@@ -365,7 +366,15 @@ class ShardedMessageBus:
         self.regex_subscribers: Dict[
             Pattern, List[Tuple[Callable[[Message], None], Optional[Any]]]
         ] = defaultdict(list)
+        # Dual-lock strategy for subscriber management:
+        # - _subscriber_lock (asyncio): Used by async dispatcher for reading subscribers
+        # - _subscriber_sync_lock (threading): Used by sync subscribe/unsubscribe for writing
+        # This is safe because:
+        # 1. List append/extend operations are atomic in CPython (GIL protected)
+        # 2. Dispatcher copies subscriber lists while holding async lock
+        # 3. Threading lock ensures subscribe/unsubscribe don't interfere with each other
         self._subscriber_lock = asyncio.Lock()
+        self._subscriber_sync_lock = threading.RLock()  # Thread-safe lock for sync subscribe/unsubscribe
         self._publish_lock = asyncio.Lock()
         # Issue #13 fix: Add lock for shard management operations
         self._shard_management_lock = asyncio.Lock()
@@ -1387,10 +1396,11 @@ class ShardedMessageBus:
         """
         Subscribe a handler to a topic.
         
-        Industry-standard implementation with:
-        - Proper error handling and logging
-        - Thread-safe event loop access
-        - Graceful handling of sync/async contexts
+        Fully synchronous implementation - no async overhead.
+        Thread-safe using threading.RLock for immediate subscription.
+        
+        This method is called from synchronous contexts (e.g., WebSocket handlers)
+        and performs instant subscription without waiting for event loop scheduling.
         
         Args:
             topic: Topic string or regex pattern to subscribe to
@@ -1402,44 +1412,14 @@ class ShardedMessageBus:
         )
         
         try:
-            # Get the event loop with fallback support
-            loop = self._get_loop()
-            
-            # Schedule the async subscription in the event loop
-            future = asyncio.run_coroutine_threadsafe(
-                self._subscribe_async(topic, handler, filter), loop
-            )
-            
-            # Wait for completion with timeout (industry best practice)
-            # Use configurable timeout (default 30s) instead of hardcoded 5s
-            subscription_timeout = getattr(settings, 'MESSAGE_BUS_SUBSCRIPTION_TIMEOUT', 30.0)
-            try:
-                result = future.result(timeout=subscription_timeout)
-                logger_for_subscribe.debug("Subscription completed successfully", result=result)
-            except TimeoutError:
-                # Provide actionable error message
-                logger_for_subscribe.error(
-                    f"CRITICAL: Subscription to {topic} timed out after {subscription_timeout}s. "
-                    f"This indicates the message bus dispatcher tasks are not running. "
-                    f"Check that message_bus.start() was called during server initialization. "
-                    f"WebSocket connections will use fallback heartbeat mode."
-                )
-                # In production, allow graceful degradation to fallback mode
-                # In development/test, raise to catch issues early
-                if os.getenv("APP_ENV") == "production":
-                    logger_for_subscribe.warning(
-                        f"Production mode: Allowing subscription timeout for graceful degradation. "
-                        f"WebSocket will operate in fallback mode."
-                    )
+            # Use threading lock for synchronous thread-safe operation
+            with self._subscriber_sync_lock:
+                if isinstance(topic, str):
+                    self.subscribers[topic].append((handler, filter))
+                    logger_for_subscribe.info("Subscribed callback to topic.")
                 else:
-                    # In non-production, raise to catch configuration issues early
-                    raise
-            except Exception as e:
-                logger_for_subscribe.error(
-                    f"Error completing subscription: {e}",
-                    exc_info=True
-                )
-                raise
+                    self.regex_subscribers[topic].append((handler, filter))
+                    logger_for_subscribe.info("Subscribed callback to regex pattern.")
             
             # --- FIX 7: Add type check for startswith ---
             if isinstance(topic, str) and topic.startswith("requests.arbiter"):
@@ -1460,47 +1440,14 @@ class ShardedMessageBus:
                 )
             raise
 
-    async def _subscribe_async(
-        self,
-        topic: Union[str, Pattern],
-        callback: Callable[[Message], None],
-        filter: Optional[Any] = None,
-    ) -> Dict[str, Any]:
-        async with self._subscriber_lock:
-            logger_for_subscribe = logger.bind(
-                topic=str(topic), callback=getattr(callback, "__name__", str(callback))
-            )
-            if isinstance(topic, str):
-                self.subscribers[topic].append((callback, filter))
-                logger_for_subscribe.info("Subscribed callback to topic.")
-                # Explicitly signal completion
-                return {
-                    "status": "subscribed",
-                    "topic": str(topic),
-                    "handler": getattr(callback, "__name__", str(callback)),
-                    "filter": str(filter.__class__.__name__) if filter else None
-                }
-            else:
-                self.regex_subscribers[topic].append((callback, filter))
-                logger_for_subscribe.info("Subscribed callback to regex pattern.")
-                # Explicitly signal completion for regex subscriptions
-                return {
-                    "status": "subscribed",
-                    "topic_pattern": str(topic.pattern) if hasattr(topic, 'pattern') else str(topic),
-                    "handler": getattr(callback, "__name__", str(callback)),
-                    "filter": str(filter.__class__.__name__) if filter else None
-                }
-
     def unsubscribe(
         self, topic: Union[str, Pattern], callback: Callable[[Message], None]
     ) -> None:
         """
         Unsubscribe a handler from a topic.
         
-        Industry-standard implementation with:
-        - Proper error handling and logging
-        - Thread-safe event loop access
-        - Graceful handling of sync/async contexts
+        Fully synchronous implementation - no async overhead.
+        Thread-safe using threading.RLock for immediate unsubscription.
         
         Args:
             topic: Topic string or regex pattern to unsubscribe from
@@ -1511,31 +1458,35 @@ class ShardedMessageBus:
         )
         
         try:
-            # Get the event loop with fallback support
-            loop = self._get_loop()
-            
-            # Schedule the async unsubscription in the event loop
-            future = asyncio.run_coroutine_threadsafe(
-                self._unsubscribe_async(topic, callback), loop
-            )
-            
-            # Wait for completion with timeout (industry best practice)
-            # Use configurable timeout (default 30s) instead of hardcoded 5s
-            subscription_timeout = getattr(settings, 'MESSAGE_BUS_SUBSCRIPTION_TIMEOUT', 30.0)
-            try:
-                result = future.result(timeout=subscription_timeout)
-                logger_for_unsubscribe.debug("Unsubscription completed successfully", result=result)
-            except TimeoutError:
-                logger_for_unsubscribe.warning(
-                    f"Unsubscription from {topic} timed out after {subscription_timeout} seconds. "
-                    "Unsubscription may still complete in background."
-                )
-            except Exception as e:
-                logger_for_unsubscribe.error(
-                    f"Error completing unsubscription: {e}",
-                    exc_info=True
-                )
-                raise
+            # Use threading lock for synchronous thread-safe operation
+            with self._subscriber_sync_lock:
+                def filter_out_callback(item):
+                    return item[0] != callback
+
+                if isinstance(topic, str):
+                    initial_len = len(self.subscribers[topic])
+                    self.subscribers[topic] = list(
+                        filter(filter_out_callback, self.subscribers[topic])
+                    )
+                    if len(self.subscribers[topic]) < initial_len:
+                        logger_for_unsubscribe.info("Unsubscribed callback from topic.")
+                    else:
+                        logger_for_unsubscribe.warning(
+                            "Callback not found for unsubscribe from topic."
+                        )
+                else:
+                    initial_len = len(self.regex_subscribers[topic])
+                    self.regex_subscribers[topic] = list(
+                        filter(filter_out_callback, self.regex_subscribers[topic])
+                    )
+                    if len(self.regex_subscribers[topic]) < initial_len:
+                        logger_for_unsubscribe.info(
+                            "Unsubscribed callback from regex pattern."
+                        )
+                    else:
+                        logger_for_unsubscribe.warning(
+                            "Callback not found for unsubscribe from regex pattern."
+                        )
                 
         except Exception as e:
             logger_for_unsubscribe.error(
@@ -1549,70 +1500,6 @@ class ShardedMessageBus:
                     topic=topic,
                     error=str(e)
                 )
-
-    async def _unsubscribe_async(
-        self, topic: Union[str, Pattern], callback: Callable[[Message], None]
-    ) -> Dict[str, Any]:
-        async with self._subscriber_lock:
-            logger_for_unsubscribe = logger.bind(
-                topic=str(topic), callback=getattr(callback, "__name__", str(callback))
-            )
-
-            def filter_out_callback(item):
-                return item[0] != callback
-
-            if isinstance(topic, str):
-                initial_len = len(self.subscribers[topic])
-                self.subscribers[topic] = list(
-                    filter(filter_out_callback, self.subscribers[topic])
-                )
-                if len(self.subscribers[topic]) < initial_len:
-                    logger_for_unsubscribe.info("Unsubscribed callback from topic.")
-                    # Explicitly signal successful unsubscription
-                    return {
-                        "status": "unsubscribed",
-                        "topic": str(topic),
-                        "handler": getattr(callback, "__name__", str(callback)),
-                        "removed": True
-                    }
-                else:
-                    logger_for_unsubscribe.warning(
-                        "Callback not found for unsubscribe from topic."
-                    )
-                    # Signal that handler wasn't found
-                    return {
-                        "status": "not_found",
-                        "topic": str(topic),
-                        "handler": getattr(callback, "__name__", str(callback)),
-                        "removed": False
-                    }
-            else:
-                initial_len = len(self.regex_subscribers[topic])
-                self.regex_subscribers[topic] = list(
-                    filter(filter_out_callback, self.regex_subscribers[topic])
-                )
-                if len(self.regex_subscribers[topic]) < initial_len:
-                    logger_for_unsubscribe.info(
-                        "Unsubscribed callback from regex pattern."
-                    )
-                    # Explicitly signal successful unsubscription from regex
-                    return {
-                        "status": "unsubscribed",
-                        "topic_pattern": str(topic.pattern) if hasattr(topic, 'pattern') else str(topic),
-                        "handler": getattr(callback, "__name__", str(callback)),
-                        "removed": True
-                    }
-                else:
-                    logger_for_unsubscribe.warning(
-                        "Callback not found for unsubscribe from regex pattern."
-                    )
-                    # Signal that handler wasn't found in regex subscribers
-                    return {
-                        "status": "not_found",
-                        "topic_pattern": str(topic.pattern) if hasattr(topic, 'pattern') else str(topic),
-                        "handler": getattr(callback, "__name__", str(callback)),
-                        "removed": False
-                    }
 
     async def request(
         self, topic: str, payload: Any, timeout: float = 5.0, priority: int = 5

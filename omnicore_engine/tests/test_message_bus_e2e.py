@@ -140,7 +140,7 @@ class MessageBusE2ETest(unittest.TestCase):
             logger.info(f"Received message: {message.topic}")
 
         # Subscribe
-        await bus._subscribe_async("test.topic", handler)
+        bus.subscribe("test.topic", handler)
 
         # Publish
         result = await bus.publish(
@@ -177,9 +177,9 @@ class MessageBusE2ETest(unittest.TestCase):
             received_3.append(msg)
 
         # Subscribe multiple handlers
-        await bus._subscribe_async("multi.topic", handler_1)
-        await bus._subscribe_async("multi.topic", handler_2)
-        await bus._subscribe_async("multi.topic", handler_3)
+        bus.subscribe("multi.topic", handler_1)
+        bus.subscribe("multi.topic", handler_2)
+        bus.subscribe("multi.topic", handler_3)
 
         # Publish once
         await bus.publish("multi.topic", {"value": 42})
@@ -204,7 +204,7 @@ class MessageBusE2ETest(unittest.TestCase):
             received_order.append(msg.payload["id"])
             await asyncio.sleep(0.01)  # Simulate processing time
 
-        await bus._subscribe_async("priority.test", handler)
+        bus.subscribe("priority.test", handler)
 
         # Publish messages with different priorities
         # Note: Lower priority number = higher priority in the queue
@@ -235,7 +235,7 @@ class MessageBusE2ETest(unittest.TestCase):
                 if reply_topic:
                     await bus.publish(reply_topic, {"result": result})
 
-        await bus._subscribe_async("calc.add", responder)
+        bus.subscribe("calc.add", responder)
 
         # Make request
         reply_topic = f"reply.{uuid.uuid4()}"
@@ -244,7 +244,7 @@ class MessageBusE2ETest(unittest.TestCase):
         async def reply_handler(msg):
             response_future.set_result(msg.payload)
 
-        await bus._subscribe_async(reply_topic, reply_handler)
+        bus.subscribe(reply_topic, reply_handler)
 
         # Send request
         await bus.publish("calc.add", {"a": 5, "b": 3, "reply_topic": reply_topic})
@@ -268,9 +268,9 @@ class MessageBusE2ETest(unittest.TestCase):
             received.append(msg)
 
         # Subscribe to multiple topics
-        await bus._subscribe_async("batch.topic1", handler)
-        await bus._subscribe_async("batch.topic2", handler)
-        await bus._subscribe_async("batch.topic3", handler)
+        bus.subscribe("batch.topic1", handler)
+        bus.subscribe("batch.topic2", handler)
+        bus.subscribe("batch.topic3", handler)
 
         # Batch publish
         messages = [
@@ -300,7 +300,7 @@ class MessageBusE2ETest(unittest.TestCase):
         async def handler(msg):
             received.append(msg)
 
-        await bus._subscribe_async("idempotent.topic", handler)
+        bus.subscribe("idempotent.topic", handler)
 
         idempotency_key = "unique_key_123"
 
@@ -329,7 +329,7 @@ class MessageBusE2ETest(unittest.TestCase):
         async def handler(msg):
             received.append(msg)
 
-        await bus._subscribe_async("concurrent.topic", handler)
+        bus.subscribe("concurrent.topic", handler)
 
         # Create multiple publisher tasks
         async def publisher(publisher_id, count):
@@ -378,7 +378,7 @@ class MessageBusE2ETest(unittest.TestCase):
                 raise Exception("Simulated error")
             success_messages.append(msg)
 
-        await bus._subscribe_async("error.topic", faulty_handler)
+        bus.subscribe("error.topic", faulty_handler)
 
         # Publish messages that will fail
         await bus.publish(
@@ -414,7 +414,7 @@ class MessageBusE2ETest(unittest.TestCase):
             nonlocal received_count
             received_count += 1
 
-        await bus._subscribe_async("perf.topic", handler)
+        bus.subscribe("perf.topic", handler)
 
         # Publish many messages
         publish_tasks = []
@@ -460,7 +460,7 @@ class MessageBusE2ETest(unittest.TestCase):
             await asyncio.sleep(0.1)  # Simulate slow processing
             processed.append(msg)
 
-        await bus._subscribe_async("shutdown.topic", slow_handler)
+        bus.subscribe("shutdown.topic", slow_handler)
 
         # Publish messages
         for i in range(10):
