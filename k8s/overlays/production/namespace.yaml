@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: codefactory-production
+  labels:
+    name: codefactory-production
+    app: codefactory
+    environment: production

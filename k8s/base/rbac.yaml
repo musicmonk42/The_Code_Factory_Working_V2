@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: codefactory
+  namespace: codefactory
+  labels:
+    app: codefactory
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: codefactory
+  namespace: codefactory
+  labels:
+    app: codefactory
+rules:
+  # Minimal permissions - only what's needed
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: codefactory
+  namespace: codefactory
+  labels:
+    app: codefactory
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: codefactory
+subjects:
+  - kind: ServiceAccount
+    name: codefactory
+    namespace: codefactory

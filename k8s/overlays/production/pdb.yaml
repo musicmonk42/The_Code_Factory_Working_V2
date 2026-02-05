@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: codefactory-api
+  namespace: codefactory-production
+  labels:
+    app: codefactory-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: codefactory-api

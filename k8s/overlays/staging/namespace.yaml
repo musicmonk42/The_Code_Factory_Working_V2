@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: codefactory-staging
+  labels:
+    name: codefactory-staging
+    app: codefactory
+    environment: staging

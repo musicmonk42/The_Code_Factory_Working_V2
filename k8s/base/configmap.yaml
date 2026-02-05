@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: codefactory-config
+  namespace: codefactory
+data:
+  # ============================================
+  # Application Environment
+  # ============================================
+  APP_ENV: "production"
+  PRODUCTION_MODE: "1"
+  DEV_MODE: "0"
+  
+  # ============================================
+  # Startup Optimization
+  # ============================================
+  APP_STARTUP: "1"
+  SKIP_IMPORT_TIME_VALIDATION: "1"
+  SPACY_WARNING_IGNORE: "W007"
+  
+  # ============================================
+  # Performance Flags
+  # ============================================
+  PARALLEL_AGENT_LOADING: "1"
+  LAZY_LOAD_ML: "1"
+  STARTUP_TIMEOUT: "90"
+  
+  # ============================================
+  # Database Configuration
+  # ============================================
+  DB_POOL_SIZE: "50"
+  DB_POOL_MAX_OVERFLOW: "20"
+  DB_RETRY_ATTEMPTS: "3"
+  DB_RETRY_DELAY: "1.0"
+  
+  # ============================================
+  # Message Bus Configuration
+  # ============================================
+  MESSAGE_BUS_SHARD_COUNT: "8"
+  MESSAGE_BUS_WORKERS_PER_SHARD: "4"
+  ENABLE_MESSAGE_BUS_GUARDIAN: "1"
+  MESSAGE_BUS_GUARDIAN_INTERVAL: "30"
+  
+  # ============================================
+  # LLM Configuration
+  # ============================================
+  DEFAULT_LLM_PROVIDER: "openai"
+  LLM_TIMEOUT: "300"
+  LLM_MAX_RETRIES: "3"
+  LLM_TEMPERATURE: "0.7"
+  TESTGEN_LLM_TIMEOUT: "300"
+  
+  # ============================================
+  # Feature Flags
+  # ============================================
+  ENABLE_DATABASE: "1"
+  ENABLE_REDIS: "1"
+  ENABLE_PROMETHEUS: "1"
+  ENABLE_AUDIT_LOGGING: "1"
+  ENABLE_HSM: "0"
+  ENABLE_FEATURE_STORE: "0"
+  ENABLE_LIBVIRT: "0"
+  ENABLE_KAFKA: "0"
+  
+  # ============================================
+  # Audit Crypto Configuration
+  # ============================================
+  AUDIT_CRYPTO_MODE: "software"
+  AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"
+  
+  # ============================================
+  # Logging
+  # ============================================
+  LOG_LEVEL: "INFO"
+  ENABLE_STRUCTURED_LOGGING: "1"
+  
+  # ============================================
+  # Monitoring
+  # ============================================
+  PROMETHEUS_PORT: "9090"
+  
+  # ============================================
+  # Application Paths
+  # ============================================
+  CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
+  AUDIT_LOG_PATH: "/app/logs/audit_trail.log"
+  
+  # ============================================
+  # Worker Configuration
+  # ============================================
+  WORKER_COUNT: "4"
+  
+  # ============================================
+  # Redis Configuration
+  # ============================================
+  REDIS_HOST: "codefactory-redis"
+  REDIS_PORT: "6379"

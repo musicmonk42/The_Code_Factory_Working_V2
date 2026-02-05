@@ -1,0 +1,289 @@
+# Default values for Code Factory Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Number of replicas (can be overridden by HPA)
+replicaCount: 1
+
+image:
+  repository: ghcr.io/musicmonk42/codefactory
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false  # Set to true if possible, requires tmpfs mounts
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+    - ALL
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+  metricsPort: 9090
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: codefactory.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: codefactory-tls
+      hosts:
+        - codefactory.example.com
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Startup probe - critical for agent loading
+# Allows up to 90 seconds for background agent initialization
+startupProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 18  # 18 * 5s = 90s max startup time
+
+# Liveness probe - restart if unhealthy
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+# Readiness probe - remove from load balancer if not ready
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+# Additional volumes and volume mounts
+volumes: []
+# - name: uploads
+#   persistentVolumeClaim:
+#     claimName: codefactory-uploads
+
+volumeMounts: []
+# - name: uploads
+#   mountPath: /app/uploads
+
+# Persistent storage
+persistence:
+  uploads:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteMany
+    size: 10Gi
+    annotations: {}
+  workspace:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteMany
+    size: 5Gi
+    annotations: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Topology spread for better availability
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app: "{{ include \"codefactory.name\" . }}"
+
+# Environment variables
+env:
+  # Application Environment
+  PRODUCTION_MODE: "1"
+  APP_ENV: "production"
+  DEV_MODE: "0"
+  
+  # Startup Optimization
+  APP_STARTUP: "1"
+  SKIP_IMPORT_TIME_VALIDATION: "1"
+  SPACY_WARNING_IGNORE: "W007"
+  
+  # Performance optimizations
+  PARALLEL_AGENT_LOADING: "1"
+  LAZY_LOAD_ML: "1"
+  STARTUP_TIMEOUT: "90"
+  
+  # Database Configuration
+  DB_POOL_SIZE: "50"
+  DB_POOL_MAX_OVERFLOW: "20"
+  DB_RETRY_ATTEMPTS: "3"
+  DB_RETRY_DELAY: "1.0"
+  
+  # Message Bus Configuration
+  MESSAGE_BUS_SHARD_COUNT: "8"
+  MESSAGE_BUS_WORKERS_PER_SHARD: "4"
+  ENABLE_MESSAGE_BUS_GUARDIAN: "1"
+  MESSAGE_BUS_GUARDIAN_INTERVAL: "30"
+  
+  # LLM Configuration
+  DEFAULT_LLM_PROVIDER: "openai"
+  LLM_TIMEOUT: "300"
+  LLM_MAX_RETRIES: "3"
+  LLM_TEMPERATURE: "0.7"
+  TESTGEN_LLM_TIMEOUT: "300"
+  
+  # Feature flags
+  ENABLE_DATABASE: "1"
+  ENABLE_REDIS: "1"
+  ENABLE_PROMETHEUS: "1"
+  ENABLE_AUDIT_LOGGING: "1"
+  ENABLE_HSM: "0"
+  ENABLE_FEATURE_STORE: "0"
+  ENABLE_LIBVIRT: "0"
+  ENABLE_KAFKA: "0"
+  
+  # Audit Crypto Configuration
+  AUDIT_CRYPTO_MODE: "software"
+  AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"
+  
+  # Logging
+  LOG_LEVEL: "INFO"
+  ENABLE_STRUCTURED_LOGGING: "1"
+  
+  # Monitoring
+  PROMETHEUS_PORT: "9090"
+  
+  # Application Paths
+  CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
+  AUDIT_LOG_PATH: "/app/logs/audit_trail.log"
+  
+  # Worker configuration
+  WORKER_COUNT: "4"
+
+# Secrets configuration
+# These should be created manually or via external secrets operator
+secrets:
+  # Redis configuration
+  redis:
+    host: "codefactory-redis"
+    port: "6379"
+    # Password should be provided via secret
+    passwordSecretName: "codefactory-secrets"
+    passwordSecretKey: "redis-password"
+  
+  # Database configuration (optional)
+  database:
+    enabled: false
+    urlSecretName: "codefactory-secrets"
+    urlSecretKey: "database-url"
+  
+  # API keys (required)
+  apiKeys:
+    openaiSecretName: "codefactory-secrets"
+    openaiSecretKey: "openai-api-key"
+    anthropicSecretName: "codefactory-secrets"
+    anthropicSecretKey: "anthropic-api-key"
+  
+  # Security keys
+  security:
+    hmacKeySecretName: "codefactory-secrets"
+    hmacKeySecretKey: "hmac-key"
+    encryptionKeySecretName: "codefactory-secrets"
+    encryptionKeySecretKey: "encryption-key"
+
+# Redis subchart configuration
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: "codefactory-secrets"
+    existingSecretPasswordKey: "redis-password"
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+# Monitoring
+monitoring:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}

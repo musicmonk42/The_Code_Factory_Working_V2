@@ -1,0 +1,58 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: codefactory-production
+
+resources:
+  - ../../base
+  - namespace.yaml
+  - hpa.yaml
+  - pdb.yaml
+
+patches:
+  # Production starts with 3 replicas (HPA will scale from here)
+  - target:
+      kind: Deployment
+      name: codefactory-api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  
+  # Full resource limits for production
+  - target:
+      kind: Deployment
+      name: codefactory-api
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 2000m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 4Gi
+  
+  # Production environment
+  - target:
+      kind: ConfigMap
+      name: codefactory-config
+    patch: |-
+      - op: replace
+        path: /data/APP_ENV
+        value: production
+      - op: replace
+        path: /data/WORKER_COUNT
+        value: "8"
+
+labels:
+  - pairs:
+      environment: production
+
+images:
+  - name: ghcr.io/musicmonk42/codefactory
+    newTag: latest

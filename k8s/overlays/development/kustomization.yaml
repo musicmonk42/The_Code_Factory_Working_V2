@@ -1,0 +1,56 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: codefactory-dev
+
+resources:
+  - ../../base
+  - namespace.yaml
+
+patches:
+  # Reduce replicas for development
+  - target:
+      kind: Deployment
+      name: codefactory-api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  
+  # Lower resource limits for development
+  - target:
+      kind: Deployment
+      name: codefactory-api
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 250m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 1000m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 2Gi
+  
+  # Enable debug logging
+  - target:
+      kind: ConfigMap
+      name: codefactory-config
+    patch: |-
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: DEBUG
+      - op: replace
+        path: /data/APP_ENV
+        value: development
+
+labels:
+  - pairs:
+      environment: development
+
+images:
+  - name: ghcr.io/musicmonk42/codefactory
+    newTag: dev

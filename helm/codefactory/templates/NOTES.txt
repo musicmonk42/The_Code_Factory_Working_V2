@@ -1,0 +1,113 @@
+🚀 Code Factory has been deployed!
+
+Release Name: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+📊 Deployment Status:
+
+To check the status of your deployment:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "codefactory.name" . }}
+
+To watch the rollout status:
+
+  kubectl rollout status deployment/{{ include "codefactory.fullname" . }} -n {{ .Release.Namespace }}
+
+📝 View Logs:
+
+  kubectl logs -f -l app.kubernetes.io/name={{ include "codefactory.name" . }} -n {{ .Release.Namespace }}
+
+{{- if .Values.ingress.enabled }}
+
+🌐 Access the Application:
+
+Your application will be available at:
+{{- range .Values.ingress.hosts }}
+  {{- range .paths }}
+  {{ if $.Values.ingress.tls }}https{{ else }}http{{ end }}://{{ .host }}{{ .path }}
+  {{- end }}
+{{- end }}
+
+Note: It may take a few minutes for the ingress and TLS certificates to be ready.
+
+{{- else }}
+
+🔌 Access the Application (Port Forward):
+
+Since ingress is disabled, use port forwarding to access the application:
+
+  kubectl port-forward svc/{{ include "codefactory.fullname" . }} 8000:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+Then visit: http://localhost:8000
+
+{{- end }}
+
+⚠️  Important Next Steps:
+
+{{- if (lookup "v1" "Secret" .Release.Namespace (printf "%s-secrets" (include "codefactory.fullname" .))) }}
+
+1. ✅ Secrets are configured
+{{- else }}
+
+1. ⚠️  CREATE SECRETS - You need to create the secrets manually:
+
+   kubectl create secret generic {{ include "codefactory.fullname" . }}-secrets \
+     --from-literal=redis-password=$(openssl rand -base64 32) \
+     --from-literal=openai-api-key=sk-YOUR-KEY \
+     --from-literal=hmac-key=$(openssl rand -hex 32) \
+     --from-literal=encryption-key=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())") \
+     -n {{ .Release.Namespace }}
+
+{{- end }}
+
+2. Monitor startup (agents take ~8-10 seconds to load):
+
+   kubectl get pods -n {{ .Release.Namespace }} -w
+
+3. Check application health:
+
+   kubectl exec -n {{ .Release.Namespace }} deployment/{{ include "codefactory.fullname" . }} -- \
+     curl -s http://localhost:8000/health | jq
+
+📈 Monitoring:
+
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+- Prometheus ServiceMonitor is enabled
+- Metrics endpoint: http://{{ include "codefactory.fullname" . }}:{{ .Values.service.metricsPort }}/metrics
+{{- else }}
+- Enable ServiceMonitor in values.yaml to use Prometheus Operator
+{{- end }}
+
+{{- if .Values.autoscaling.enabled }}
+
+🔄 Auto-Scaling:
+
+HPA is enabled:
+- Min Replicas: {{ .Values.autoscaling.minReplicas }}
+- Max Replicas: {{ .Values.autoscaling.maxReplicas }}
+- Target CPU: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}%
+
+Check HPA status:
+
+  kubectl get hpa {{ include "codefactory.fullname" . }} -n {{ .Release.Namespace }}
+
+{{- end }}
+
+📚 Documentation:
+
+- Helm Guide: docs/HELM_DEPLOYMENT.md
+- Kubernetes Guide: docs/KUBERNETES_DEPLOYMENT.md
+- GitHub: https://github.com/musicmonk42/The_Code_Factory_Working_V2
+
+🔒 Security Reminders:
+
+- Never commit secrets to git
+- Rotate secrets regularly (every 90 days minimum)
+- Use external secrets management for production
+- Review NetworkPolicies for your environment
+- Enable TLS for all external endpoints
+
+For more information, run:
+
+  helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
+  helm get values {{ .Release.Name }} -n {{ .Release.Namespace }}
