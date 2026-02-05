@@ -86,7 +86,7 @@ spec:
                   key: {{ .Values.secrets.redis.passwordSecretKey }}
             {{- if .Values.secrets.database.enabled }}
             # Database configuration
-            - name: DATABASE_URL
+            - name: DB_PATH
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secrets.database.urlSecretName }}
@@ -104,6 +104,30 @@ spec:
                   name: {{ .Values.secrets.apiKeys.anthropicSecretName }}
                   key: {{ .Values.secrets.apiKeys.anthropicSecretKey }}
                   optional: true
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.apiKeys.openaiSecretName }}
+                  key: google-api-key
+                  optional: true
+            - name: XAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.apiKeys.openaiSecretName }}
+                  key: xai-api-key
+                  optional: true
+            - name: GROK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.apiKeys.openaiSecretName }}
+                  key: grok-api-key
+                  optional: true
+            - name: OLLAMA_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.apiKeys.openaiSecretName }}
+                  key: ollama-host
+                  optional: true
             # Security keys
             - name: AGENTIC_AUDIT_HMAC_KEY
               valueFrom:
@@ -115,6 +139,30 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.security.encryptionKeySecretName }}
                   key: {{ .Values.secrets.security.encryptionKeySecretKey }}
+            - name: KMS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.security.encryptionKeySecretName }}
+                  key: kms-key-id
+                  optional: true
+            - name: AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.security.encryptionKeySecretName }}
+                  key: audit-crypto-key
+                  optional: true
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.security.encryptionKeySecretName }}
+                  key: sentry-dsn
+                  optional: true
+            - name: ALLOWED_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.security.encryptionKeySecretName }}
+                  key: allowed-origins
+                  optional: true
           {{- with .Values.startupProbe }}
           startupProbe:
             {{- toYaml . | nindent 12 }}
@@ -138,6 +186,8 @@ spec:
             - name: workspace
               mountPath: /app/workspace
             {{- end }}
+            - name: logs
+              mountPath: /app/logs
             - name: tmp
               mountPath: /tmp
             {{- with .Values.volumeMounts }}
@@ -158,6 +208,8 @@ spec:
           persistentVolumeClaim:
             claimName: {{ include "codefactory.fullname" . }}-workspace
         {{- end }}
+        - name: logs
+          emptyDir: {}
         - name: tmp
           emptyDir: {}
         {{- with .Values.volumes }}

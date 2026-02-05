@@ -81,14 +81,16 @@ spec:
                   key: redis-password
             - name: REDIS_URL
               value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)"
+            
             # Database configuration
-            - name: DATABASE_URL
+            - name: DB_PATH
               valueFrom:
                 secretKeyRef:
                   name: codefactory-secrets
                   key: database-url
                   optional: true
-            # API keys
+            
+            # LLM API keys
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -100,6 +102,31 @@ spec:
                   name: codefactory-secrets
                   key: anthropic-api-key
                   optional: true
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: google-api-key
+                  optional: true
+            - name: XAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: xai-api-key
+                  optional: true
+            - name: GROK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: grok-api-key
+                  optional: true
+            - name: OLLAMA_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: ollama-host
+                  optional: true
+            
             # Security keys
             - name: AGENTIC_AUDIT_HMAC_KEY
               valueFrom:
@@ -111,6 +138,34 @@ spec:
                 secretKeyRef:
                   name: codefactory-secrets
                   key: encryption-key
+            - name: KMS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: kms-key-id
+                  optional: true
+            - name: AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: audit-crypto-key
+                  optional: true
+            
+            # Monitoring and error tracking
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: sentry-dsn
+                  optional: true
+            
+            # CORS configuration
+            - name: ALLOWED_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: allowed-origins
+                  optional: true
           startupProbe:
             httpGet:
               path: /ready
@@ -158,6 +213,8 @@ spec:
               mountPath: /app/uploads
             - name: workspace
               mountPath: /app/workspace
+            - name: logs
+              mountPath: /app/logs
             - name: tmp
               mountPath: /tmp
           lifecycle:
@@ -171,6 +228,8 @@ spec:
         - name: workspace
           persistentVolumeClaim:
             claimName: codefactory-workspace
+        - name: logs
+          emptyDir: {}
         - name: tmp
           emptyDir: {}
 ---
