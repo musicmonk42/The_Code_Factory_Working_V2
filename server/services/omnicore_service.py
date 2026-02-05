@@ -1013,13 +1013,42 @@ class OmniCoreService:
                 # FIX: Check if result is an error response (single error.txt file)
                 if "error.txt" in result and len(result) == 1:
                     error_content = result["error.txt"]
+                    
+                    # Enhanced error message with actionable suggestions
+                    error_msg = error_content
+                    suggestions = []
+                    
+                    # Detect specific error patterns and provide guidance
+                    if "did not contain recognizable code" in error_content.lower():
+                        suggestions.append("The AI provided an explanation instead of code.")
+                        if "<ORGANIZATION>" in error_content or "<URL>" in error_content or "<PERSON>" in error_content:
+                            suggestions.append("ISSUE DETECTED: Requirements were corrupted by PII redaction (Presidio over-redaction).")
+                            suggestions.append("FIX: Ensure technical terms and URLs in requirements are not being redacted.")
+                        suggestions.append("Try providing more specific, detailed requirements.")
+                        suggestions.append("Include example code structure or API endpoints.")
+                        suggestions.append("Avoid placeholder text like <ORGANIZATION> or <URL>.")
+                    elif "requirements" in error_content.lower() and "provide" in error_content.lower():
+                        suggestions.append("Requirements may be incomplete or ambiguous.")
+                        suggestions.append("Provide specific technical details (e.g., 'Python with FastAPI' instead of 'API').")
+                        suggestions.append("Include concrete examples of desired functionality.")
+                    
+                    if suggestions:
+                        error_msg = f"{error_content}\n\nSuggestions:\n" + "\n".join(f"  • {s}" for s in suggestions)
+                    
                     logger.error(
                         f"[CODEGEN] Generation failed with error",
-                        extra={"job_id": job_id, "error": error_content[:500]}
+                        extra={
+                            "job_id": job_id,
+                            "error": error_content[:500],
+                            "suggestions": suggestions,
+                            "has_presidio_placeholders": any(p in error_content for p in ['<ORGANIZATION>', '<URL>', '<PERSON>', '<API_KEY>'])
+                        }
                     )
                     return {
                         "status": "error",
-                        "message": error_content,
+                        "message": error_msg,
+                        "error_details": error_content,
+                        "suggestions": suggestions,
                         "job_id": job_id,
                     }
                 
@@ -1260,9 +1289,11 @@ class OmniCoreService:
                     }
                 )
                 
+                # Build detailed result dict with file information
                 result_dict = {
                     "status": "completed",
-                    "generated_files": generated_files,
+                    "generated_files": generated_files,  # Full paths
+                    "file_names": [Path(f).name for f in generated_files],  # Just filenames for UI
                     "output_path": str(output_path),
                     "files_count": len(generated_files),
                     "total_bytes_written": total_bytes_written,
@@ -1272,7 +1303,17 @@ class OmniCoreService:
                 # Include failures in response if any
                 if files_failed:
                     result_dict["files_failed"] = files_failed
+                    result_dict["files_failed_count"] = len(files_failed)
                     result_dict["warning"] = f"{len(files_failed)} file(s) failed to write"
+                    logger.warning(
+                        f"[CODEGEN] Partial success - {len(generated_files)} succeeded, {len(files_failed)} failed",
+                        extra={
+                            "job_id": job_id,
+                            "succeeded": len(generated_files),
+                            "failed": len(files_failed),
+                            "failed_files": files_failed
+                        }
+                    )
                 
                 # FIX: Update job.output_files immediately after writing files
                 # This ensures files appear in UI without waiting for pipeline completion
