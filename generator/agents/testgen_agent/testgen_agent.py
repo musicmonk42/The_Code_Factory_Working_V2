@@ -1294,10 +1294,6 @@ def test_{file_stem}_syntax_error_documentation():
                 
                 lines.append('')
         
-        # Add specific tests for calculator endpoints if detected
-        if any('/calculate/' in e['path'] or '/api/calculate' in e['path'] for e in endpoints):
-            lines.extend(self._generate_calculator_tests())
-        
         return '\n'.join(lines)
 
     def _path_to_test_name(self, path: str, method: str) -> str:
@@ -1312,57 +1308,6 @@ def test_{file_stem}_syntax_error_documentation():
             name = 'root'
         
         return f"{method}_{name}"
-
-    def _generate_calculator_tests(self) -> List[str]:
-        """
-        Generate specific tests for calculator API endpoints.
-        
-        This is called when calculator endpoints are detected in the code.
-        Generates tests for add, subtract, multiply, divide operations
-        including divide-by-zero handling.
-        """
-        return [
-            '',
-            '',
-            'class TestCalculatorAPI:',
-            '    """Test cases for calculator API endpoints."""',
-            '',
-            '    def test_add(self):',
-            '        """Test addition endpoint."""',
-            '        response = client.post("/api/calculate/add", json={"a": 5, "b": 3})',
-            '        assert response.status_code == 200',
-            '        data = response.json()',
-            '        assert data.get("result") == 8',
-            '',
-            '    def test_subtract(self):',
-            '        """Test subtraction endpoint."""',
-            '        response = client.post("/api/calculate/subtract", json={"a": 10, "b": 4})',
-            '        assert response.status_code == 200',
-            '        data = response.json()',
-            '        assert data.get("result") == 6',
-            '',
-            '    def test_multiply(self):',
-            '        """Test multiplication endpoint."""',
-            '        response = client.post("/api/calculate/multiply", json={"a": 6, "b": 7})',
-            '        assert response.status_code == 200',
-            '        data = response.json()',
-            '        assert data.get("result") == 42',
-            '',
-            '    def test_divide(self):',
-            '        """Test division endpoint."""',
-            '        response = client.post("/api/calculate/divide", json={"a": 20, "b": 4})',
-            '        assert response.status_code == 200',
-            '        data = response.json()',
-            '        assert data.get("result") == 5',
-            '',
-            '    def test_divide_by_zero(self):',
-            '        """Test division by zero returns 400 error with message."""',
-            '        response = client.post("/api/calculate/divide", json={"a": 10, "b": 0})',
-            '        assert response.status_code == 400',
-            '        data = response.json()',
-            '        assert "error" in data or "detail" in data or "message" in data',
-            '',
-        ]
 
     # REFACTORED: Main loop now uses runner logger and provenance
     async def generate_tests(

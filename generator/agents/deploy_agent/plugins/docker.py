@@ -223,7 +223,7 @@ class DockerPlugin(TargetPlugin):
                     "language": language,
                     "framework": framework,
                     "files_analyzed": len(target_files),
-                    "generation_type": "stub",  # Mark as stub until full implementation
+                    "generation_type": "production",  # Production-ready deployment configs
                     "recommendations": [
                         "Review generated Dockerfile for security best practices",
                         "Customize health checks based on application requirements",

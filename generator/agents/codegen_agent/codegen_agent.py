@@ -842,24 +842,55 @@ def _build_fallback_prompt(requirements: Dict[str, Any]) -> str:
     Builds an enhanced fallback prompt when templates are unavailable.
     This ensures comprehensive spec parsing even without templates.
     
+    The prompt is driven entirely by the requirements dict which is populated
+    by the IntentParser from the actual specification. No hardcoded values.
+    
     Args:
-        requirements: The requirements dict containing features, target_language, etc.
+        requirements: The requirements dict containing features, target_language, 
+                     constraints, and other parsed spec data from IntentParser.
         
     Returns:
         A detailed prompt that emphasizes spec compliance and multi-file JSON output
     """
     target_language = requirements.get("target_language", "python")
     features = requirements.get("features", [])
+    constraints = requirements.get("constraints", [])
+    md_content = requirements.get("md_content", "")
+    file_structure = requirements.get("file_structure", [])
     
-    # Extract key requirements
-    features_text = "\n".join([f"- {feature}" for feature in features])
+    # Build features section from parsed spec
+    features_text = ""
+    if features:
+        features_text = "## FEATURES TO IMPLEMENT:\n"
+        for feature in features:
+            features_text += f"- {feature}\n"
     
-    prompt = f"""You are an expert {target_language} developer. Generate production-ready code that implements ALL requirements.
+    # Build constraints section from parsed spec
+    constraints_text = ""
+    if constraints:
+        constraints_text = "## CONSTRAINTS:\n"
+        for constraint in constraints:
+            constraints_text += f"- {constraint}\n"
+    
+    # Include original MD content if available
+    md_section = ""
+    if md_content:
+        md_section = f"""
+## ORIGINAL SPECIFICATION:
+```markdown
+{md_content}
+```
 
-## REQUIREMENTS TO IMPLEMENT:
+IMPORTANT: Implement EXACTLY what the specification describes. Do not add or remove features.
+"""
+    
+    prompt = f"""You are an expert {target_language} developer. Generate production-ready code that implements ALL requirements from the specification.
+
 {features_text}
+{constraints_text}
+{md_section}
 
-Full Requirements: {json.dumps(requirements, sort_keys=True)}
+Full Requirements JSON: {json.dumps(requirements, sort_keys=True, default=str)}
 
 ## YOUR TASK:
 
@@ -867,7 +898,7 @@ Full Requirements: {json.dumps(requirements, sort_keys=True)}
    - All API endpoints, routes, or functions mentioned
    - All data models, classes, or schemas required  
    - All business logic, calculations, and operations
-   - All error handling requirements (validation, edge cases like division by zero)
+   - All error handling requirements (validation, edge cases)
    - All dependencies and imports needed
 
 2. **IMPLEMENT COMPLETELY**: Generate complete, working code:
