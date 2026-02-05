@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import os
+import threading
 import time
 import types
 import uuid
@@ -366,6 +367,7 @@ class ShardedMessageBus:
             Pattern, List[Tuple[Callable[[Message], None], Optional[Any]]]
         ] = defaultdict(list)
         self._subscriber_lock = asyncio.Lock()
+        self._subscriber_sync_lock = threading.RLock()  # Thread-safe lock for sync subscribe/unsubscribe
         self._publish_lock = asyncio.Lock()
         # Issue #13 fix: Add lock for shard management operations
         self._shard_management_lock = asyncio.Lock()
@@ -1387,10 +1389,11 @@ class ShardedMessageBus:
         """
         Subscribe a handler to a topic.
         
-        Industry-standard implementation with:
-        - Proper error handling and logging
-        - Thread-safe event loop access
-        - Graceful handling of sync/async contexts
+        Fully synchronous implementation - no async overhead.
+        Thread-safe using threading.RLock for immediate subscription.
+        
+        This method is called from synchronous contexts (e.g., WebSocket handlers)
+        and performs instant subscription without waiting for event loop scheduling.
         
         Args:
             topic: Topic string or regex pattern to subscribe to
@@ -1402,44 +1405,14 @@ class ShardedMessageBus:
         )
         
         try:
-            # Get the event loop with fallback support
-            loop = self._get_loop()
-            
-            # Schedule the async subscription in the event loop
-            future = asyncio.run_coroutine_threadsafe(
-                self._subscribe_async(topic, handler, filter), loop
-            )
-            
-            # Wait for completion with timeout (industry best practice)
-            # Use configurable timeout (default 30s) instead of hardcoded 5s
-            subscription_timeout = getattr(settings, 'MESSAGE_BUS_SUBSCRIPTION_TIMEOUT', 30.0)
-            try:
-                result = future.result(timeout=subscription_timeout)
-                logger_for_subscribe.debug("Subscription completed successfully", result=result)
-            except TimeoutError:
-                # Provide actionable error message
-                logger_for_subscribe.error(
-                    f"CRITICAL: Subscription to {topic} timed out after {subscription_timeout}s. "
-                    f"This indicates the message bus dispatcher tasks are not running. "
-                    f"Check that message_bus.start() was called during server initialization. "
-                    f"WebSocket connections will use fallback heartbeat mode."
-                )
-                # In production, allow graceful degradation to fallback mode
-                # In development/test, raise to catch issues early
-                if os.getenv("APP_ENV") == "production":
-                    logger_for_subscribe.warning(
-                        f"Production mode: Allowing subscription timeout for graceful degradation. "
-                        f"WebSocket will operate in fallback mode."
-                    )
+            # Use threading lock for synchronous thread-safe operation
+            with self._subscriber_sync_lock:
+                if isinstance(topic, str):
+                    self.subscribers[topic].append((handler, filter))
+                    logger_for_subscribe.info("Subscribed callback to topic.")
                 else:
-                    # In non-production, raise to catch configuration issues early
-                    raise
-            except Exception as e:
-                logger_for_subscribe.error(
-                    f"Error completing subscription: {e}",
-                    exc_info=True
-                )
-                raise
+                    self.regex_subscribers[topic].append((handler, filter))
+                    logger_for_subscribe.info("Subscribed callback to regex pattern.")
             
             # --- FIX 7: Add type check for startswith ---
             if isinstance(topic, str) and topic.startswith("requests.arbiter"):
@@ -1459,37 +1432,6 @@ class ShardedMessageBus:
                     error=str(e)
                 )
             raise
-
-    async def _subscribe_async(
-        self,
-        topic: Union[str, Pattern],
-        callback: Callable[[Message], None],
-        filter: Optional[Any] = None,
-    ) -> Dict[str, Any]:
-        async with self._subscriber_lock:
-            logger_for_subscribe = logger.bind(
-                topic=str(topic), callback=getattr(callback, "__name__", str(callback))
-            )
-            if isinstance(topic, str):
-                self.subscribers[topic].append((callback, filter))
-                logger_for_subscribe.info("Subscribed callback to topic.")
-                # Explicitly signal completion
-                return {
-                    "status": "subscribed",
-                    "topic": str(topic),
-                    "handler": getattr(callback, "__name__", str(callback)),
-                    "filter": str(filter.__class__.__name__) if filter else None
-                }
-            else:
-                self.regex_subscribers[topic].append((callback, filter))
-                logger_for_subscribe.info("Subscribed callback to regex pattern.")
-                # Explicitly signal completion for regex subscriptions
-                return {
-                    "status": "subscribed",
-                    "topic_pattern": str(topic.pattern) if hasattr(topic, 'pattern') else str(topic),
-                    "handler": getattr(callback, "__name__", str(callback)),
-                    "filter": str(filter.__class__.__name__) if filter else None
-                }
 
     def unsubscribe(
         self, topic: Union[str, Pattern], callback: Callable[[Message], None]
