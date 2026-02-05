@@ -275,8 +275,11 @@ pytest_report.xml
 
 # Uploads directory - temporary job files
 uploads/
-test_collection_fixes.py
-test_runtime_fixes.py
-validate_runtime_fixes.py
-test_production_config_fixes.py
-test_code_generation_validation.py
+
+# Prevent test files in repository root - tests should be in module-specific tests/ directories
+# This prevents temporary fix validation files from being committed
+/test_*.py
+/validate_*.py
+/verify_*.py
+/demo_*.py
+/demonstrate_*.py
