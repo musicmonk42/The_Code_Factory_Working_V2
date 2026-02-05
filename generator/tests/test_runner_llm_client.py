@@ -483,3 +483,30 @@ class TestGlobalFunctions:
 
         mock_instance.close.assert_awaited_once()
         assert llm_client._async_client is None
+
+    @pytest.mark.asyncio
+    @patch("generator.runner.llm_client.LLMClient", new_callable=MagicMock)
+    async def test_global_call_llm_api_with_kwargs(self, MockLLMClient, mock_config, mock_imports):
+        """Test that module-level call_llm_api passes max_retries and **kwargs correctly."""
+        MockLLMClient.return_value._is_initialized = asyncio.Future()
+        MockLLMClient.return_value._is_initialized.set_result(True)
+        MockLLMClient.return_value.call_llm_api = AsyncMock(
+            return_value={"content": "test response", "tokens_used": 100}
+        )
+
+        result = await call_llm_api(
+            prompt="test prompt",
+            model="gpt-4",
+            provider="openai",
+            config=mock_config,
+            max_retries=5,
+            temperature=0.7,
+            top_p=0.9
+        )
+
+        assert result["content"] == "test response"
+        MockLLMClient.assert_called_once()
+        # Verify all parameters including max_retries and kwargs are passed
+        MockLLMClient.return_value.call_llm_api.assert_awaited_once_with(
+            "test prompt", "gpt-4", False, "openai", 5, temperature=0.7, top_p=0.9
+        )

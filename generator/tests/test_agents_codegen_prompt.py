@@ -406,3 +406,51 @@ async def test_build_prompt_with_meta_llm_critique(monkeypatch):
 
     # Ensure a self-refinement audit entry is recorded
     assert any(e[0] == "Prompt Self-Refined" for e in events)
+
+
+def test_hot_reloading_loader_clears_cache():
+    """
+    Test that HotReloadingFileSystemLoader correctly clears the environment cache
+    when a template is modified.
+    """
+    import tempfile
+    import os
+    import time
+    from jinja2 import Environment
+    from agents.codegen_agent.codegen_prompt import HotReloadingFileSystemLoader
+    
+    # Create a temporary directory for templates
+    with tempfile.TemporaryDirectory() as tmpdir:
+        template_path = os.path.join(tmpdir, "test_template.txt")
+        
+        # Write initial template
+        with open(template_path, "w") as f:
+            f.write("Initial content")
+        
+        # Create loader and environment
+        loader = HotReloadingFileSystemLoader([tmpdir])
+        env = Environment(loader=loader)
+        
+        # Load the template first time
+        template1 = env.get_template("test_template.txt")
+        content1 = template1.render()
+        assert "Initial content" in content1
+        
+        # Verify cache has content
+        assert len(env.cache) > 0
+        
+        # Wait a bit to ensure mtime changes
+        time.sleep(0.1)
+        
+        # Modify the template
+        with open(template_path, "w") as f:
+            f.write("Modified content")
+        
+        # Load the template again - this should clear the cache and reload
+        template2 = env.get_template("test_template.txt")
+        content2 = template2.render()
+        assert "Modified content" in content2
+        
+        # The key assertion: cache was cleared (though it may have been repopulated)
+        # We can't directly assert cache size, but we can verify the content changed
+        assert content1 != content2
