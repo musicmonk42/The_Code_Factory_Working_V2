@@ -66,23 +66,33 @@ class MockFileSystemEventHandler:
         pass
 
 
-# Create mock watchdog modules
+# Create mock watchdog modules with proper attributes for pytest
 _mock_watchdog_observers = MagicMock()
 _mock_watchdog_observers.__path__ = []  # Required for package-like behavior
+_mock_watchdog_observers.__name__ = 'watchdog.observers'
 _mock_watchdog_observers.Observer = MockObserver
 
 _mock_watchdog_events = MagicMock()
 _mock_watchdog_events.__path__ = []  # Required for package-like behavior
+_mock_watchdog_events.__name__ = 'watchdog.events'
 _mock_watchdog_events.FileSystemEventHandler = MockFileSystemEventHandler
 _mock_watchdog_events.FileCreatedEvent = MagicMock
 _mock_watchdog_events.FileModifiedEvent = MagicMock
 _mock_watchdog_events.FileDeletedEvent = MagicMock
 _mock_watchdog_events.FileMovedEvent = MagicMock
 
+# Create parent watchdog module to ensure full hierarchy
+_mock_watchdog = MagicMock()
+_mock_watchdog.__path__ = []
+_mock_watchdog.__name__ = 'watchdog'
+_mock_watchdog.observers = _mock_watchdog_observers
+_mock_watchdog.events = _mock_watchdog_events
+
 # Pre-register the mocks BEFORE any code imports watchdog
 # This ensures that when modules do `from watchdog.observers import Observer`,
 # they get our mock instead of the real one
 if os.environ.get("TESTING") == "1" or os.environ.get("PYTEST_CURRENT_TEST"):
+    sys.modules["watchdog"] = _mock_watchdog
     sys.modules["watchdog.observers"] = _mock_watchdog_observers
     sys.modules["watchdog.events"] = _mock_watchdog_events
 

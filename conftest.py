@@ -158,6 +158,7 @@ def _initialize_prometheus_mock():
     class MockRegistry:
         def __init__(self, *args, **kwargs):
             self._names_to_collectors = {}
+            self._collector_to_names = {}  # Required for prometheus client compatibility
         def register(self, collector):
             pass
         def unregister(self, collector):
