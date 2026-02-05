@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # Zookeeper - Coordination service for Kafka
+  # IMPORTANT: Required for Kafka broker management and metadata storage
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: codefactory-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - codefactory-zookeeper-data:/var/lib/zookeeper/data
+      - codefactory-zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - codefactory-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Kafka Broker
+  # SECURITY NOTE: This configuration uses PLAINTEXT for development
+  # For production, configure SASL_SSL authentication (see .env.example)
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: codefactory-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      # Internal port for Docker network communication
+      - "9092:9092"
+      # External port for localhost connections (host machine)
+      - "9093:9093"
+    environment:
+      # Broker identification
+      KAFKA_BROKER_ID: 1
+      
+      # Zookeeper connection
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      
+      # Listener configuration
+      # PLAINTEXT://kafka:9092 - For Docker network (internal)
+      # PLAINTEXT_HOST://localhost:9093 - For host machine connections
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      
+      # Replication factors (set to 1 for single broker development)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      
+      # Auto-create topics when producers send to non-existent topics
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      
+      # Log retention (7 days default)
+      KAFKA_LOG_RETENTION_HOURS: 168
+      
+      # JVM heap size (adjust based on available memory)
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+    volumes:
+      - codefactory-kafka-data:/var/lib/kafka/data
+    networks:
+      - codefactory-network
+    restart: unless-stopped
+    healthcheck:
+      # Check if Kafka broker is responding to API requests
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+# Named volumes for data persistence
+# These volumes persist data across container restarts
+# To completely reset Kafka, remove these volumes with:
+#   docker-compose -f docker-compose.kafka.yml down -v
+volumes:
+  codefactory-zookeeper-data:
+    name: codefactory-zookeeper-data
+  codefactory-zookeeper-logs:
+    name: codefactory-zookeeper-logs
+  codefactory-kafka-data:
+    name: codefactory-kafka-data
+
+# Bridge network for Kafka services
+# Matches the network name used in docker-compose.yml
+networks:
+  codefactory-network:
+    name: codefactory-network
+    driver: bridge

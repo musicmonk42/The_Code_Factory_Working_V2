@@ -22,6 +22,7 @@ Quick Start (Recommended)
 Manual Installation
 Configuration
 Environment Variables
+Kafka Infrastructure
 
 
 Usage
@@ -185,6 +186,22 @@ docker run -d -p 6379:6379 redis:7-alpine
 # Ubuntu: sudo apt-get install redis-server
 
 
+Setup Kafka (optional, but recommended for production):
+# Kafka is used for event streaming and message bus functionality
+# For development, you can run without Kafka (graceful degradation)
+
+# Quick setup with automated script (recommended)
+./scripts/kafka-setup.sh
+
+# Or start manually
+docker-compose -f docker-compose.kafka.yml up -d
+
+# To run without Kafka (development only)
+export KAFKA_DEV_DRY_RUN=true
+
+# See docs/KAFKA_SETUP.md for detailed configuration
+
+
 Run Services:
 # Terminal 1 - Generator
 make run-generator
@@ -281,6 +298,90 @@ Observability:
 PROMETHEUS_MULTIPROC_DIR: Prometheus metrics directory
 OTEL_EXPORTER_OTLP_ENDPOINT: OpenTelemetry collector endpoint
 LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+
+
+Kafka Infrastructure
+
+The Code Factory Platform uses **Apache Kafka** for event streaming, audit logging, and message bus functionality. Kafka is **optional** for development but **recommended for production** deployments.
+
+### Quick Start
+
+```bash
+# Automated setup (recommended)
+./scripts/kafka-setup.sh
+
+# Or start manually
+docker-compose -f docker-compose.kafka.yml up -d
+
+# Check status
+./scripts/kafka-setup.sh status
+```
+
+### When is Kafka Required?
+
+**Development**: Optional - Use dry-run mode to develop without Kafka:
+```bash
+export KAFKA_DEV_DRY_RUN=true
+```
+
+**Production**: Recommended - Kafka provides:
+- Event-driven orchestration for code generation workers
+- Audit event streaming with durability
+- Message bus for inter-service communication
+- Dead letter queue for failed messages
+
+**Without Kafka**, the system operates with graceful degradation:
+- Events are logged locally instead of streamed
+- Workers run in local/stub mode
+- No distributed event processing
+
+### Configuration
+
+Set these environment variables in `.env`:
+
+```bash
+# Enable/disable Kafka
+KAFKA_ENABLED=true
+
+# Connection settings
+KAFKA_BOOTSTRAP_SERVERS=kafka:9092  # Docker: kafka:9092, Host: localhost:9093
+
+# Topics
+KAFKA_TOPIC=job-completed
+KAFKA_DLQ_TOPIC=audit-events-dlq
+
+# Behavior
+KAFKA_REQUIRED=true  # Fail-fast if unavailable (production)
+KAFKA_DEV_DRY_RUN=false  # Disable for production
+```
+
+### Fixing DUPLICATE_BROKER_REGISTRATION Error
+
+If you encounter this error, it means stale Kafka metadata exists. Quick fix:
+
+```bash
+# Automated cleanup and restart
+./scripts/kafka-setup.sh setup
+
+# Or manual cleanup
+docker-compose -f docker-compose.kafka.yml down -v
+docker-compose -f docker-compose.kafka.yml up -d
+```
+
+### Available Commands
+
+```bash
+./scripts/kafka-setup.sh setup        # Full setup (cleanup + start + topics)
+./scripts/kafka-setup.sh status       # Check service status
+./scripts/kafka-setup.sh logs         # View Kafka logs
+./scripts/kafka-setup.sh topics       # List all topics
+./scripts/kafka-setup.sh cleanup      # Stop and remove all data
+./scripts/kafka-setup.sh troubleshoot # Show troubleshooting commands
+```
+
+### More Information
+
+For detailed Kafka configuration, troubleshooting, and best practices, see [docs/KAFKA_SETUP.md](./docs/KAFKA_SETUP.md).
 
 
 Usage
