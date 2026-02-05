@@ -22,8 +22,22 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 
+class MockCallable:
+    """A mock object that can be called or accessed as an attribute."""
+    def __init__(self, name="MockCallable"):
+        self._mock_name = name
+        
+    def __call__(self, *args, **kwargs):
+        return MockCallable(f"{self._mock_name}()")
+        
+    def __getattr__(self, attr):
+        if attr in ('__spec__', '__path__', '__file__', '__name__', '__package__', '__loader__', '_mock_name'):
+            raise AttributeError(f"MockCallable has no attribute '{attr}'")
+        return MockCallable(f"{self._mock_name}.{attr}")
+
+
 def create_mock_package(name):
-    """Create a properly configured mock package."""
+    """Create a properly configured mock package with __getattr__ support."""
     mock_pkg = ModuleType(name)
     mock_pkg.__path__ = []
     mock_pkg.__spec__ = importlib.machinery.ModuleSpec(
@@ -32,6 +46,24 @@ def create_mock_package(name):
         is_package=True
     )
     mock_pkg.__file__ = f"<mocked {name}>"
+    
+    # Add __getattr__ to support dynamic attribute access
+    def module_getattr(attr):
+        if attr == '__spec__':
+            return mock_pkg.__spec__
+        elif attr == '__path__':
+            return mock_pkg.__path__
+        elif attr == '__file__':
+            return mock_pkg.__file__
+        elif attr == '__name__':
+            return name
+        elif attr == '__package__':
+            return name.rpartition('.')[0] if '.' in name else ''
+        elif attr == '__loader__':
+            return None
+        return MockCallable(f"{name}.{attr}")
+    
+    mock_pkg.__getattr__ = module_getattr
     return mock_pkg
 
 
@@ -44,7 +76,17 @@ sys.modules["runner.llm_client"] = create_mock_package("runner.llm_client")
 sys.modules["runner.runner_errors"] = create_mock_package("runner.runner_errors")
 sys.modules["aiohttp"] = create_mock_package("aiohttp")
 sys.modules["aiohttp.web"] = create_mock_package("aiohttp.web")
-sys.modules["watchdog.events"] = create_mock_package("watchdog.events")
+
+# Special handling for watchdog.events - it needs to be inheritable
+watchdog_events_mock = create_mock_package("watchdog.events")
+# Add a base class that can be inherited
+class FileSystemEventHandler:
+    """Mock FileSystemEventHandler for testing."""
+    def __init__(self):
+        pass
+watchdog_events_mock.FileSystemEventHandler = FileSystemEventHandler
+sys.modules["watchdog.events"] = watchdog_events_mock
+
 sys.modules["watchdog.observers"] = create_mock_package("watchdog.observers")
 
 # Now import the module under test
