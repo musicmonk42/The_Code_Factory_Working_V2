@@ -9,6 +9,9 @@ import numpy as np
 import pytest
 from cryptography.fernet import Fernet
 
+# Mark all tests in this module as heavy (requires numpy)
+pytestmark = pytest.mark.heavy
+
 # Store original modules for restoration
 _ORIGINAL_MODULES = {}
 _MOCKED_MODULE_NAMES = [

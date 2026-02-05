@@ -14,6 +14,9 @@ from unittest.mock import AsyncMock, Mock, patch
 import numpy as np
 import pytest
 
+# Mark all tests in this module as heavy (requires numpy and potentially torch)
+pytestmark = pytest.mark.heavy
+
 # Handle torch import error gracefully
 # Note: This module-level import is necessary for @pytest.mark.skipif decorators
 # which are evaluated during test collection. Torch import is relatively fast

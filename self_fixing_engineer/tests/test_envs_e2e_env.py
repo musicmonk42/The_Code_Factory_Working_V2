@@ -18,6 +18,9 @@ import matplotlib
 import numpy as np
 import pytest
 
+# Mark all tests in this module as heavy (requires numpy and matplotlib)
+pytestmark = pytest.mark.heavy
+
 matplotlib.use("Agg")  # Use non-interactive backend for testing
 
 from self_fixing_engineer.envs.code_health_env import ActionType, CodeHealthEnv, EnvironmentConfig, SystemMetrics
