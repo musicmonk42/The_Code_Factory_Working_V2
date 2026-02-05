@@ -756,9 +756,12 @@ def _find_config_file(config_file: str) -> Optional[Path]:
     1. Path from environment variable RUNNER_CONFIG_PATH (highest priority)
     2. Explicit path provided (if absolute or exists)
     3. Standard locations based on requested filename:
-       - For runner_config.yaml: ./runner_config.yaml, ./generator/runner/runner_config.yaml, ./config/runner_config.yaml
+       - For runner_config.yaml: ./runner_config.yaml, ./config/runner_config.yaml
        - For config.yaml: ./config.yaml, ./generator/config.yaml, ./config/config.yaml
        - For other files: the explicit path only
+    
+    Note: generator/runner/runner_config.yaml is NOT searched as it uses a different
+    schema (documentation format) incompatible with the RunnerConfig Pydantic model.
     
     Args:
         config_file (str): Initial config file path to check.
@@ -1074,8 +1077,10 @@ def load_config(
         if "version" not in data:
             data["version"] = current_version_in_file
         
-        while data["version"] < CURRENT_VERSION:
-            mig_func = migrations.get(data["version"])
+        while data.get("version", current_version_in_file) < CURRENT_VERSION:
+            # Use .get() for defensive programming even though version should exist
+            current_data_version = data.get("version", current_version_in_file)
+            mig_func = migrations.get(current_data_version)
             if mig_func:
                 data = mig_func(data)
                 logger.info(f"Migrated config to version {data['version']}.")
