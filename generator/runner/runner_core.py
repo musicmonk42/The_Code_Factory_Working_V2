@@ -18,6 +18,7 @@ import uuid  # Explicitly import uuid for clarity
 from abc import ABC
 from collections import defaultdict, deque  # Import defaultdict
 from contextlib import asynccontextmanager  # [NEW] Added for lifespan
+from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -1884,8 +1885,6 @@ class Runner(ABC):
             
             # Send test validation to audit system
             try:
-                from datetime import datetime, timezone
-                
                 log_audit_event = _get_log_audit_event()
                 await log_audit_event(
                     "test_validation_completed",
