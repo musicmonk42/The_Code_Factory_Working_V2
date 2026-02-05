@@ -9,6 +9,9 @@ import pandas as pd
 import pytest
 import pytest_asyncio
 
+# Mark all tests in this module as heavy (requires pandas)
+pytestmark = pytest.mark.heavy
+
 # Import metrics directly from the module
 # Import the FeatureStoreClient - fix the import path
 from self_fixing_engineer.arbiter.models.feature_store_client import (

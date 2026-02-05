@@ -14,6 +14,9 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
+# Mark all tests in this module as heavy (requires numpy)
+pytestmark = pytest.mark.heavy
+
 from self_fixing_engineer.envs.code_health_env import (
     ActionType,
     AsyncActionExecutor,

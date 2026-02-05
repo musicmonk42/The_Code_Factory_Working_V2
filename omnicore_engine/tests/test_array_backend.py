@@ -22,6 +22,9 @@ from omnicore_engine.array_backend import (
     validate_array_size,
 )
 
+# Mark all tests in this module as heavy (requires numpy)
+pytestmark = pytest.mark.heavy
+
 
 class TestArraySizeValidation:
     """Test array size validation functions"""
