@@ -40,7 +40,9 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        const timeoutId = setTimeout(() => {
+            controller.abort(new DOMException(`Request timeout after ${timeout}ms`, 'TimeoutError'));
+        }, timeout);
         
         try {
             const response = await fetch(url, {
@@ -68,6 +70,11 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
             
             // Don't retry on client errors (4xx)
             if (error.isClientError) {
+                throw error;
+            }
+            
+            // Don't retry on timeout errors - they're unlikely to succeed
+            if (error.name === 'TimeoutError' || error.name === 'AbortError') {
                 throw error;
             }
             
@@ -808,8 +815,8 @@ async function createJobCard(job) {
     
     if (isCompleted && job.id) {
         try {
-            // Fetch latest file information with single retry and short timeout
-            const filesResponse = await fetchWithRetry(`${API_BASE}/jobs/${job.id}/files`, {timeout: 3000}, 1);
+            // Fetch latest file information with single retry and 5s timeout
+            const filesResponse = await fetchWithRetry(`${API_BASE}/jobs/${job.id}/files`, {timeout: 5000}, 1);
             if (filesResponse.ok) {
                 const filesData = await filesResponse.json();
                 
@@ -821,7 +828,10 @@ async function createJobCard(job) {
             }
         } catch (e) {
             // Non-critical error - log and continue with cached data
-            console.warn('Could not auto-fetch files for job', job.id.substring(0, 8), ':', e.message);
+            const errorMsg = e.name === 'TimeoutError' || e.name === 'AbortError' 
+                ? `timeout after ${e.message.includes('5000') ? '5s' : 'unknown'}` 
+                : e.message;
+            console.debug('Could not auto-fetch files for job', job.id.substring(0, 8), ':', errorMsg);
         }
     }
     

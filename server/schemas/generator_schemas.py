@@ -91,6 +91,12 @@ class ClarifyRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
+class ClarificationResponseRequest(BaseModel):
+    """Request body for submitting a clarification response."""
+    question_id: str = Field(..., description="ID of the question being answered")
+    response: str = Field(..., description="User's response to the question")
+
+
 class LLMConfigRequest(BaseModel):
     """Request to configure LLM provider."""
     provider: LLMProvider = Field(..., description="LLM provider to configure")
