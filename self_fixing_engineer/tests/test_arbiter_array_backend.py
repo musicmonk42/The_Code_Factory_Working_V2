@@ -122,3 +122,11 @@ def ensure_real_aiofiles():
         pytest.skip(f"Failed to verify aiofiles functionality: {e}")
     
     yield
+
+
+# Placeholder test to verify fixture works
+def test_fixture_loads_successfully():
+    """Test that the ensure_real_aiofiles fixture works without errors."""
+    assert _backend is not None, "Backend module should be loaded"
+    assert ConcreteArrayBackend is not None, "ConcreteArrayBackend should be available"
+
