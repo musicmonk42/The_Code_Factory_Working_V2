@@ -837,6 +837,25 @@ async def hitl_review(
         return ("rejected", f"Internal error during HITL review: {e}")
 
 
+# =============================================================================
+# CALCULATOR API DETECTION CONSTANTS
+# =============================================================================
+
+# Keywords used to detect calculator API requirements in specs
+CALCULATOR_DETECTION_KEYWORDS = [
+    "calculator",
+    "calculate", 
+    "arithmetic",
+    "add",
+    "subtract",
+    "multiply",
+    "divide",
+    "mathematical",
+    "math operation",
+    "basic operations"
+]
+
+
 def _build_fallback_prompt(requirements: Dict[str, Any]) -> str:
     """
     Builds an enhanced fallback prompt when templates are unavailable.
@@ -859,11 +878,10 @@ def _build_fallback_prompt(requirements: Dict[str, Any]) -> str:
     is_calculator_api = False
     calculator_hint = ""
     
-    # Check for calculator-related keywords
-    calculator_keywords = ["calculator", "calculate", "arithmetic", "add", "subtract", "multiply", "divide"]
+    # Check for calculator-related keywords using module-level constant
     all_text = (md_content + " " + features_text + " " + str(requirements)).lower()
     
-    if any(kw in all_text for kw in calculator_keywords):
+    if any(kw in all_text for kw in CALCULATOR_DETECTION_KEYWORDS):
         is_calculator_api = True
         calculator_hint = """
 ## CALCULATOR API REQUIREMENTS (DETECTED):

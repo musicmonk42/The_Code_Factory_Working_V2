@@ -68,14 +68,22 @@ except ImportError:
     HAS_OPENTELEMETRY = False
     _tracer = None
 
-    class StatusCode:
-        OK = "OK"
-        ERROR = "ERROR"
+    # Fallback implementations compatible with OpenTelemetry API
+    # These are intentionally simple - they're only used when OTel is unavailable
+    class StatusCode(Enum):
+        """Fallback StatusCode enum matching OpenTelemetry interface."""
+        OK = 0
+        ERROR = 2
+        UNSET = 1
 
     class Status:
-        def __init__(self, status_code, description=None):
+        """Fallback Status class matching OpenTelemetry interface."""
+        def __init__(self, status_code: StatusCode, description: Optional[str] = None):
             self.status_code = status_code
             self.description = description
+        
+        def is_ok(self) -> bool:
+            return self.status_code == StatusCode.OK
 
 # --- Prometheus Metrics ---
 try:
