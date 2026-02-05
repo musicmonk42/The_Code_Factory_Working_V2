@@ -600,6 +600,94 @@ async def translate_requirements_if_needed(
     return requirements
 
 
+def _parse_requirements_flexible(requirements: Any) -> Dict[str, Any]:
+    """
+    Parse requirements in any format into a structured dict with 'features' list.
+    
+    Handles multiple input formats:
+    - Dict with 'features' key (pass through)
+    - String (markdown, plain text, or JSON string)
+    - Other formats (convert to string and extract features)
+    
+    Args:
+        requirements: Requirements in any format
+    
+    Returns:
+        Dict with 'features' list and optional 'description'
+    
+    Example:
+        >>> _parse_requirements_flexible("Build a REST API")
+        {'features': ['Build a REST API'], 'description': 'Build a REST API'}
+        
+        >>> _parse_requirements_flexible({'features': ['API', 'Auth']})
+        {'features': ['API', 'Auth']}
+    """
+    import json
+    import re
+    
+    # Already in correct format
+    if isinstance(requirements, dict) and 'features' in requirements and isinstance(requirements['features'], list):
+        return requirements
+    
+    # Try to parse as JSON string
+    if isinstance(requirements, str):
+        # Try JSON parsing first
+        try:
+            parsed = json.loads(requirements)
+            if isinstance(parsed, dict) and 'features' in parsed:
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+        
+        # Extract features from markdown/text
+        features = []
+        description = requirements
+        
+        # Look for bullet points (-, *, •)
+        bullet_pattern = r'^[\s]*[-*•]\s+(.+)$'
+        for line in requirements.split('\n'):
+            match = re.match(bullet_pattern, line.strip())
+            if match:
+                features.append(match.group(1).strip())
+        
+        # Look for numbered lists (1., 2., etc.)
+        numbered_pattern = r'^[\s]*\d+[\.)]\s+(.+)$'
+        if not features:
+            for line in requirements.split('\n'):
+                match = re.match(numbered_pattern, line.strip())
+                if match:
+                    features.append(match.group(1).strip())
+        
+        # Look for ## Feature: or # Feature: headers
+        feature_header_pattern = r'^#+\s*(feature|requirement|task)s?:\s*(.+)$'
+        if not features:
+            for line in requirements.split('\n'):
+                match = re.match(feature_header_pattern, line.strip(), re.IGNORECASE)
+                if match:
+                    features.append(match.group(2).strip())
+        
+        # If no structured features found, split on sentences or use whole text
+        if not features:
+            # Split on periods for multiple requirements
+            sentences = [s.strip() for s in requirements.split('.') if s.strip()]
+            if len(sentences) > 1:
+                features = sentences[:10]  # Limit to 10 features
+            else:
+                # Single requirement
+                features = [requirements.strip()]
+        
+        return {
+            'features': features,
+            'description': description,
+        }
+    
+    # Convert other types to string and treat as single feature
+    return {
+        'features': [str(requirements)],
+        'description': str(requirements),
+    }
+
+
 # ==============================================================================
 # --- Main Prompt Builder ---
 # ==============================================================================
@@ -632,7 +720,20 @@ async def build_code_generation_prompt(
                 f"Building prompt for language='{target_language}', framework='{target_framework}'"
             )
 
-            # 1. Input Validation
+            # 1. Input Validation & Flexible Parsing
+            # FIX: Accept requirements in any format and normalize to dict with 'features'
+            try:
+                requirements = _parse_requirements_flexible(requirements)
+            except Exception as e:
+                logger.warning(f"Failed to parse requirements flexibly: {e}. Using as-is.")
+                # If parsing fails completely, wrap in basic structure
+                if not isinstance(requirements, dict):
+                    requirements = {
+                        'features': [str(requirements)],
+                        'description': str(requirements)
+                    }
+            
+            # Validate after parsing
             if (
                 not isinstance(requirements, dict)
                 or "features" not in requirements
