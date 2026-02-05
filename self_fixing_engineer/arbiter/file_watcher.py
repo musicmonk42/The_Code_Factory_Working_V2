@@ -134,20 +134,37 @@ SUMMARY_LATENCY = _get_or_create_metric(
 _METRICS_LOCK = threading.Lock()
 
 
+# Safe conversion helpers for environment variables
+def _safe_int(value: str, default: int) -> int:
+    """Safely convert string to int with fallback to default."""
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(value: str, default: float) -> float:
+    """Safely convert string to float with fallback to default."""
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
 # Configuration models
 class SMTPConfig(BaseModel):
-    host: str
-    port: int
-    username: str
-    password: str
-    use_tls: bool
-    timeout: int
-    rate_limit: float
+    host: str = Field(default_factory=lambda: os.getenv("ALERTER_SMTP_HOST", "localhost"))
+    port: int = Field(default_factory=lambda: _safe_int(os.getenv("ALERTER_SMTP_PORT", "25"), 25))
+    username: str = Field(default_factory=lambda: os.getenv("ALERTER_SMTP_USERNAME", ""))
+    password: str = Field(default_factory=lambda: os.getenv("ALERTER_SMTP_PASSWORD", ""))
+    use_tls: bool = Field(default_factory=lambda: os.getenv("ALERTER_SMTP_USE_TLS", "false").lower() == "true")
+    timeout: int = Field(default_factory=lambda: _safe_int(os.getenv("ALERTER_SMTP_TIMEOUT", "30"), 30))
+    rate_limit: float = Field(default_factory=lambda: _safe_float(os.getenv("ALERTER_RATE_LIMIT", "1.0"), 1.0))
 
 
 class AlerterConfig(BaseModel):
-    smtp: SMTPConfig
-    audit_file: str
+    smtp: SMTPConfig = Field(default_factory=SMTPConfig)
+    audit_file: str = Field(default_factory=lambda: os.getenv("ALERTER_AUDIT_FILE", "audit.log"))
 
 
 class AWSConfig(BaseModel):
