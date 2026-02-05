@@ -814,9 +814,10 @@ async function createJobCard(job) {
     let outputCount = job.output_files ? job.output_files.length : 0;
     
     if (isCompleted && job.id) {
+        const FILE_FETCH_TIMEOUT = 5000;
         try {
             // Fetch latest file information with single retry and 5s timeout
-            const filesResponse = await fetchWithRetry(`${API_BASE}/jobs/${job.id}/files`, {timeout: 5000}, 1);
+            const filesResponse = await fetchWithRetry(`${API_BASE}/jobs/${job.id}/files`, {timeout: FILE_FETCH_TIMEOUT}, 1);
             if (filesResponse.ok) {
                 const filesData = await filesResponse.json();
                 
@@ -829,7 +830,7 @@ async function createJobCard(job) {
         } catch (e) {
             // Non-critical error - log and continue with cached data
             const errorMsg = e.name === 'TimeoutError' || e.name === 'AbortError' 
-                ? `timeout after ${e.message.includes('5000') ? '5s' : 'unknown'}` 
+                ? `timeout after ${FILE_FETCH_TIMEOUT / 1000}s` 
                 : e.message;
             console.debug('Could not auto-fetch files for job', job.id.substring(0, 8), ':', errorMsg);
         }
