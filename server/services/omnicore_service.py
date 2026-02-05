@@ -27,6 +27,13 @@ from server.utils.agent_loader import get_agent_loader
 from server.storage import jobs_db
 from server.schemas.jobs import JobStatus
 
+# Import shared Presidio placeholders constant
+try:
+    from generator.runner.runner_security_utils import PRESIDIO_PLACEHOLDERS
+except ImportError:
+    # Fallback if import fails
+    PRESIDIO_PLACEHOLDERS = ['<ORGANIZATION>', '<URL>', '<PERSON>', '<API_KEY>']
+
 logger = logging.getLogger(__name__)
 
 # Observability imports with graceful degradation
@@ -1021,12 +1028,13 @@ class OmniCoreService:
                     # Detect specific error patterns and provide guidance
                     if "did not contain recognizable code" in error_content.lower():
                         suggestions.append("The AI provided an explanation instead of code.")
-                        if "<ORGANIZATION>" in error_content or "<URL>" in error_content or "<PERSON>" in error_content:
+                        # Check for any Presidio placeholders in the error content
+                        if any(placeholder in error_content for placeholder in PRESIDIO_PLACEHOLDERS):
                             suggestions.append("ISSUE DETECTED: Requirements were corrupted by PII redaction (Presidio over-redaction).")
                             suggestions.append("FIX: Ensure technical terms and URLs in requirements are not being redacted.")
                         suggestions.append("Try providing more specific, detailed requirements.")
                         suggestions.append("Include example code structure or API endpoints.")
-                        suggestions.append("Avoid placeholder text like <ORGANIZATION> or <URL>.")
+                        suggestions.append("Avoid placeholder text (e.g., '<ORGANIZATION>' or '<URL>').")
                     elif "requirements" in error_content.lower() and "provide" in error_content.lower():
                         suggestions.append("Requirements may be incomplete or ambiguous.")
                         suggestions.append("Provide specific technical details (e.g., 'Python with FastAPI' instead of 'API').")
@@ -1041,7 +1049,7 @@ class OmniCoreService:
                             "job_id": job_id,
                             "error": error_content[:500],
                             "suggestions": suggestions,
-                            "has_presidio_placeholders": any(p in error_content for p in ['<ORGANIZATION>', '<URL>', '<PERSON>', '<API_KEY>'])
+                            "has_presidio_placeholders": any(p in error_content for p in PRESIDIO_PLACEHOLDERS)
                         }
                     )
                     return {

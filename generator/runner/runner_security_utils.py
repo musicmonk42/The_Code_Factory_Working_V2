@@ -119,6 +119,18 @@ TECHNICAL_ALLOWLIST = [
     # NOTE: Actual sensitive URLs will still be caught by context-aware detection
 ]
 
+# Presidio placeholder patterns that indicate over-redaction
+# These are shared across modules to detect corrupted requirements
+PRESIDIO_PLACEHOLDERS = [
+    '<ORGANIZATION>',
+    '<URL>',
+    '<PERSON>',
+    '<API_KEY>',
+    '<EMAIL_ADDRESS>',
+    '<PHONE_NUMBER>',
+    '<LOCATION>',
+]
+
 # Compile regex pattern once for efficient log filtering
 # Matches: "Entity {TYPE} is not mapped", "entity {TYPE} is not mapped", or "{TYPE} is not mapped"
 # Uses word boundaries to prevent false matches in other contexts
@@ -554,8 +566,8 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, a
                 for result in results:
                     # Extract the detected text
                     detected_text = data[result.start:result.end]
-                    # Check if it's in our technical allowlist
-                    if detected_text not in TECHNICAL_ALLOWLIST:
+                    # Check if it's in our technical allowlist (case-insensitive)
+                    if detected_text not in TECHNICAL_ALLOWLIST and detected_text.lower() not in [t.lower() for t in TECHNICAL_ALLOWLIST]:
                         filtered_results.append(result)
                     else:
                         logger.debug(f"Skipping allowlisted term: {detected_text}")

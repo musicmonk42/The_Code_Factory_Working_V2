@@ -551,6 +551,14 @@ def _contains_code_markers(text: str) -> bool:
     )
     
     # Prose indicators (if these dominate, it's likely not code)
+    # Import shared Presidio placeholders
+    try:
+        from generator.runner.runner_security_utils import PRESIDIO_PLACEHOLDERS
+        presidio_placeholders = PRESIDIO_PLACEHOLDERS
+    except ImportError:
+        # Fallback if import fails
+        presidio_placeholders = ['<ORGANIZATION>', '<URL>', '<PERSON>', '<API_KEY>']
+    
     PROSE_INDICATORS = (
         'I need', 'I apologize', 'I cannot', "I'm sorry", "I can't",
         'please provide', 'could you', 'would you', 'you need to',
@@ -558,14 +566,13 @@ def _contains_code_markers(text: str) -> bool:
         'unfortunately', 'however', 'therefore',
         'before I can', 'in order to', 'help me understand',
         'not enough details', 'provide enough', 'are placeholders',
-        '<ORGANIZATION>', '<URL>', '<PERSON>', '<API_KEY>',  # Presidio placeholders
-    )
+    ) + tuple(presidio_placeholders)
     
     text_lower = text.lower()
     
-    # Count indicators
+    # Count indicators (using lowercase for consistent comparison)
     code_score = sum(1 for indicator in CODE_INDICATORS if indicator.lower() in text_lower)
-    prose_score = sum(1 for indicator in PROSE_INDICATORS if indicator in text_lower)
+    prose_score = sum(1 for indicator in PROSE_INDICATORS if indicator.lower() in text_lower)
     
     # If prose dominates, it's not code
     if prose_score > code_score:
