@@ -283,3 +283,6 @@ uploads/
 /verify_*.py
 /demo_*.py
 /demonstrate_*.py
+
+# Test artifacts
+mock_history_updater.json
