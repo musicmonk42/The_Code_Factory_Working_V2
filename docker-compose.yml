@@ -60,6 +60,17 @@ services:
       - SPACY_WARNING_IGNORE=W007
       
       # ============================================
+      # Configuration Path Resolution
+      # ============================================
+      # Optional: Set custom path to runner configuration file
+      # If not set, uses smart path resolution (see CONFIG_PATH_RESOLUTION_FIX.md)
+      # Default search order:
+      #   1. RUNNER_CONFIG_PATH (if set)
+      #   2. ./config.yaml -> ./generator/config.yaml (for config.yaml)
+      #   3. ./runner_config.yaml -> ./config/runner_config.yaml (for runner_config.yaml)
+      # - RUNNER_CONFIG_PATH=/app/generator/config.yaml
+      
+      # ============================================
       # SECURITY: Required keys - must be set via environment variables
       # Generate keys with:
       #   openssl rand -hex 32  (for AGENTIC_AUDIT_HMAC_KEY)

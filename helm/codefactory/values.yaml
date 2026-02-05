@@ -226,6 +226,16 @@ env:
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
   AUDIT_LOG_PATH: "/app/logs/audit_trail.log"
   
+  # Runner Configuration Path
+  # Optional: Set custom path to runner configuration file
+  # If not set, uses smart path resolution (see CONFIG_PATH_RESOLUTION_FIX.md)
+  # For production deployments, recommend explicit path for clarity
+  # Default search order:
+  #   1. RUNNER_CONFIG_PATH (if set)
+  #   2. ./config.yaml -> ./generator/config.yaml (for config.yaml)
+  # Uncomment and set if needed:
+  # RUNNER_CONFIG_PATH: "/app/generator/config.yaml"
+  
   # Worker configuration
   WORKER_COUNT: "4"
 

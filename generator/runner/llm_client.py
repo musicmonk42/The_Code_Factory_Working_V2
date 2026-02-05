@@ -858,22 +858,22 @@ async def call_llm_api(
                 # Try to load config from file, fallback to minimal defaults if file doesn't exist
                 try:
                     config = RunnerConfig.load()
-                    logger.debug("Loaded RunnerConfig from runner_config.yaml")
+                    logger.info("✅ Configuration loaded successfully")
                 except (ConfigurationError, FileNotFoundError) as e:
                     # Check if we're in production - if so, log more seriously
                     is_production = os.getenv("PYTHON_ENV", "").lower() == "production"
                     
                     if is_production:
                         logger.error(
-                            f"PRODUCTION WARNING: Could not load runner_config.yaml: {e}. "
+                            f"PRODUCTION WARNING: {e}. "
                             f"Using minimal fallback configuration. This may cause degraded functionality. "
                             f"Please ensure runner_config.yaml exists in production deployments."
                         )
                     else:
-                        logger.warning(
-                            f"Could not load runner_config.yaml: {e}. "
-                            f"Using minimal fallback configuration (backend=docker, framework=pytest). "
-                            f"This is acceptable for development/testing."
+                        logger.info(
+                            f"✅ Using minimal fallback configuration (backend=docker, framework=pytest). "
+                            f"This is acceptable for development/testing. "
+                            f"For production, set RUNNER_CONFIG_PATH or place config in a standard location."
                         )
                     
                     # Create minimal config with required fields suitable for development
@@ -921,22 +921,22 @@ async def call_ensemble_api(
                 # Try to load config from file, fallback to minimal defaults if file doesn't exist
                 try:
                     config = RunnerConfig.load()
-                    logger.debug("Loaded RunnerConfig from runner_config.yaml")
+                    logger.info("✅ Configuration loaded successfully")
                 except (ConfigurationError, FileNotFoundError) as e:
                     # Check if we're in production - if so, log more seriously
                     is_production = os.getenv("PYTHON_ENV", "").lower() == "production"
                     
                     if is_production:
                         logger.error(
-                            f"PRODUCTION WARNING: Could not load runner_config.yaml: {e}. "
+                            f"PRODUCTION WARNING: {e}. "
                             f"Using minimal fallback configuration. This may cause degraded functionality. "
                             f"Please ensure runner_config.yaml exists in production deployments."
                         )
                     else:
-                        logger.warning(
-                            f"Could not load runner_config.yaml: {e}. "
-                            f"Using minimal fallback configuration (backend=docker, framework=pytest). "
-                            f"This is acceptable for development/testing."
+                        logger.info(
+                            f"✅ Using minimal fallback configuration (backend=docker, framework=pytest). "
+                            f"This is acceptable for development/testing. "
+                            f"For production, set RUNNER_CONFIG_PATH or place config in a standard location."
                         )
                     
                     # Create minimal config with required fields suitable for development

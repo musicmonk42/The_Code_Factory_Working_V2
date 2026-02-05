@@ -254,6 +254,11 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 Component Configuration:
 
 Generator: Configure generator/config.yaml with LLM providers
+- **Smart Configuration Resolution:** The platform uses intelligent path resolution to find configuration files
+- **Default:** Uses `generator/config.yaml` automatically
+- **Custom Path:** Set `RUNNER_CONFIG_PATH` environment variable for custom locations
+- **Details:** See `CONFIG_PATH_RESOLUTION_FIX.md` and `docs/ENVIRONMENT_VARIABLES.md`
+
 OmniCore: Set omnicore_engine/config.yaml for message bus and database
 SFE: Update self_fixing_engineer/agent_orchestration/crew_config.yaml:
 version: 10.0.0
