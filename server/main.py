@@ -669,24 +669,30 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     logger.info("=" * 80)
     
     # Validate Kafka configuration
+    # P0 CRITICAL: Kafka is REQUIRED for production-ready code generation
+    # Without Kafka, the system falls back to local mode which produces stub code
     try:
         from server.services.dispatch_service import get_kafka_health_status
         kafka_status = get_kafka_health_status()
         
         if kafka_status["enabled"]:
             logger.info("=" * 80)
-            logger.info("VALIDATING KAFKA CONFIGURATION")
+            logger.info("VALIDATING KAFKA CONFIGURATION (CRITICAL)")
             logger.info("=" * 80)
             
             bootstrap_servers = kafka_status.get("bootstrap_servers", "")
+            kafka_required = kafka_status.get("required", False)
             
             # Check for localhost misconfiguration
             if "localhost" in bootstrap_servers or "127.0.0.1" in bootstrap_servers:
-                logger.warning(
-                    f"⚠️  Kafka configured with localhost ({bootstrap_servers}). "
+                error_msg = (
+                    f"❌ CRITICAL: Kafka configured with localhost ({bootstrap_servers}). "
                     "This will fail in containerized environments. "
                     "Use service name (e.g., 'kafka:9092') or external URL."
                 )
+                logger.error(error_msg)
+                if kafka_required:
+                    raise RuntimeError(error_msg)
             
             # Test connectivity with quick timeout
             try:
@@ -701,22 +707,57 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 )
                 producer.close()
                 logger.info(f"✓ Kafka connectivity validated: {bootstrap_servers}")
+                logger.info("✓ Event-driven orchestration is ACTIVE")
+                logger.info("✓ Workers will receive jobs for production-ready generation")
                 
             except ImportError:
-                logger.warning(
+                error_msg = (
                     "kafka-python not installed. Kafka dispatch will not work. "
                     "Install with: pip install kafka-python"
                 )
+                logger.error(f"❌ {error_msg}")
+                if kafka_required:
+                    raise RuntimeError(error_msg)
+                    
             except Exception as e:
-                logger.warning(
-                    f"❌ Kafka connectivity test failed: {e}. "
-                    "Continuing without Kafka (fallback dispatch will be used)"
+                error_msg = (
+                    f"❌ CRITICAL: Kafka connectivity test failed: {e}\n"
+                    f"  Bootstrap servers: {bootstrap_servers}\n"
+                    f"  This means:\n"
+                    f"    - Workers won't receive jobs\n"
+                    f"    - System will fall back to local/stub mode\n"
+                    f"    - Generated code will be minimal/incomplete\n"
+                    f"  FIX: Ensure Kafka is running and accessible"
                 )
+                logger.error(error_msg)
+                
+                if kafka_required:
+                    logger.error("❌ KAFKA_REQUIRED=true - FAILING STARTUP")
+                    raise RuntimeError(f"Kafka connectivity required but failed: {e}")
+                else:
+                    logger.warning(
+                        "⚠️  KAFKA_REQUIRED=false - Continuing with degraded functionality"
+                    )
         else:
-            logger.info("Kafka is disabled (KAFKA_ENABLED=false)")
+            logger.warning("=" * 80)
+            logger.warning("⚠️  KAFKA IS DISABLED (KAFKA_ENABLED=false)")
+            logger.warning("  WARNING: System will operate in local/fallback mode")
+            logger.warning("  This means:")
+            logger.warning("    - No event-driven worker orchestration")
+            logger.warning("    - Generated code will be minimal/stubs")
+            logger.warning("    - No clarifier refinement loops")
+            logger.warning("    - Tests/docs/configs may not be generated")
+            logger.warning("  RECOMMENDATION: Enable Kafka for production use")
+            logger.warning("=" * 80)
             
+    except RuntimeError:
+        # Re-raise to fail startup
+        raise
     except Exception as e:
-        logger.warning(f"Error during Kafka validation: {e}", exc_info=True)
+        logger.error(f"Error during Kafka validation: {e}", exc_info=True)
+        # Check if Kafka is required
+        if os.getenv("KAFKA_REQUIRED", "false").lower() in ("true", "1", "yes"):
+            raise RuntimeError(f"Kafka validation failed and KAFKA_REQUIRED=true: {e}")
     
     # HIGH: Start periodic audit flush task now that event loop is running
     try:
