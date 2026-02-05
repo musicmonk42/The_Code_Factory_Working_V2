@@ -441,12 +441,19 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 code_files[ERROR_FILENAME] = "\n".join(lines).rstrip()
 
             if code_files:
+                # Perform production-ready validation
+                is_production_ready, prod_error = validate_production_ready(code_files)
+                if not is_production_ready:
+                    logger.warning("Production-ready validation failed for multi-file response")
+                    code_files[ERROR_FILENAME] = prod_error
+                
                 log_action(
                     "Parsed Multi-File Response",
                     {
                         "files": [f for f in code_files.keys() if f != ERROR_FILENAME],
                         "language": lang,
                         "had_errors": bool(errors),
+                        "production_ready": is_production_ready,
                     },
                 )
                 return code_files
@@ -462,9 +469,20 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     is_valid, msg = _validate_syntax(cleaned_code, lang, DEFAULT_FILENAME)
 
     if is_valid:
+        # Perform production-ready validation for single file
+        single_file_dict = {DEFAULT_FILENAME: cleaned_code}
+        is_production_ready, prod_error = validate_production_ready(single_file_dict)
+        
+        if not is_production_ready:
+            logger.warning("Production-ready validation failed for single-file response")
+            return {
+                DEFAULT_FILENAME: cleaned_code,
+                ERROR_FILENAME: prod_error
+            }
+        
         log_action(
             "Parsed Single-File Response",
-            {"file": DEFAULT_FILENAME, "language": lang},
+            {"file": DEFAULT_FILENAME, "language": lang, "production_ready": True},
         )
         return {DEFAULT_FILENAME: cleaned_code}
 
@@ -1051,6 +1069,130 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
         filename,
     )
     return True, "No validator for this language; skipped."
+
+
+# ==============================================================================
+# --- Production-Ready Code Quality Validation ---
+# ==============================================================================
+
+
+def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
+    """
+    Detect if code contains stub/placeholder patterns indicating incomplete implementation.
+    
+    Args:
+        code: The code content to analyze
+        filename: Name of the file being analyzed
+        
+    Returns:
+        Tuple of (is_stub, list_of_issues):
+        - is_stub: True if stub patterns detected
+        - list_of_issues: Descriptions of stub patterns found
+    """
+    issues = []
+    
+    # Don't validate non-code files
+    if filename.lower().endswith(('.md', '.txt', '.json', '.yaml', '.yml', '.toml', '.xml', '.rst')):
+        return False, []
+    
+    # Stub patterns to detect
+    STUB_PATTERNS = [
+        (r'\bpass\s*(?:\n|$)', "Contains 'pass' statement (placeholder)"),
+        (r'\.\.\.(?:\s*(?:\n|#|$))', "Contains '...' (Ellipsis placeholder)"),
+        (r'\bTODO\b', "Contains TODO comment"),
+        (r'\bFIXME\b', "Contains FIXME comment"),
+        (r'\bXXX\b', "Contains XXX comment"),
+        (r'\bNOT(?:_|\s+)IMPLEMENTED\b', "Contains NOT_IMPLEMENTED marker"),
+        (r'\braise\s+NotImplementedError', "Raises NotImplementedError (stub)"),
+        (r'\breturn\s+None\s*(?:\n|#|$)', "Returns None without logic"),
+        (r'def\s+\w+\([^)]*\)\s*:\s*(?:pass|\.\.\.)', "Function with only pass/..."),
+        (r'async\s+def\s+\w+\([^)]*\)\s*:\s*(?:pass|\.\.\.)', "Async function with only pass/..."),
+    ]
+    
+    code_lower = code.lower()
+    lines = code.split('\n')
+    
+    # Check for stub patterns
+    for pattern, description in STUB_PATTERNS:
+        matches = re.findall(pattern, code, re.IGNORECASE)
+        if matches:
+            issues.append(f"{description} (found {len(matches)} occurrence(s))")
+    
+    # Check for minimal implementation (very short code files)
+    # Exclude config/setup files
+    if not filename.lower().endswith(('requirements.txt', 'setup.py', 'config.py', '__init__.py')):
+        non_empty_lines = [line for line in lines if line.strip() and not line.strip().startswith('#')]
+        if len(non_empty_lines) < 10:
+            issues.append(f"Code is suspiciously short ({len(non_empty_lines)} non-empty lines)")
+    
+    # Check for missing error handling in main application files
+    if filename.lower() in ('main.py', 'app.py', 'server.py', 'api.py', 'routes.py'):
+        if 'try' not in code_lower and 'except' not in code_lower:
+            issues.append("Missing error handling (no try/except blocks)")
+    
+    # Check for proper imports in Python files
+    if filename.endswith('.py'):
+        if len(non_empty_lines) > 5:  # Only check if there's substantial code
+            has_imports = any('import' in line.lower() for line in lines[:20])  # Check first 20 lines
+            has_from_import = any('from' in line.lower() and 'import' in line.lower() for line in lines[:20])
+            if not (has_imports or has_from_import):
+                issues.append("Missing import statements (no imports found)")
+    
+    is_stub = len(issues) > 0
+    return is_stub, issues
+
+
+def validate_production_ready(code_files: Dict[str, str]) -> Tuple[bool, str]:
+    """
+    Validate that generated code is production-ready, not just stub/placeholder code.
+    
+    This function checks for:
+    - Stub patterns (pass, ..., TODO, NotImplementedError)
+    - Minimal implementations
+    - Missing error handling
+    - Placeholder comments
+    
+    Args:
+        code_files: Dictionary mapping filenames to code content
+        
+    Returns:
+        Tuple of (is_valid, error_message):
+        - is_valid: True if code appears production-ready
+        - error_message: Description of issues if not valid
+    """
+    all_issues = []
+    stub_files = []
+    
+    for filename, content in code_files.items():
+        # Skip error files
+        if filename == ERROR_FILENAME:
+            continue
+            
+        is_stub, issues = _detect_stub_patterns(content, filename)
+        
+        if is_stub:
+            stub_files.append(filename)
+            file_issues = f"\n[{filename}]"
+            for issue in issues:
+                file_issues += f"\n  - {issue}"
+            all_issues.append(file_issues)
+    
+    if stub_files:
+        error_message = (
+            "Generated code contains stub/placeholder implementations.\n"
+            "Production-ready code should be complete, with full business logic, "
+            "error handling, and no TODO/placeholder comments.\n\n"
+            "Issues found:\n"
+            + "\n".join(all_issues)
+            + "\n\n"
+            "RECOMMENDATION: Regenerate with more specific requirements or examples. "
+            "Explicitly request complete implementations without placeholders."
+        )
+        logger.warning("Production-ready validation failed for %d files", len(stub_files))
+        return False, error_message
+    
+    logger.info("Production-ready validation passed for %d files", len(code_files))
+    return True, ""
 
 
 # ==============================================================================
