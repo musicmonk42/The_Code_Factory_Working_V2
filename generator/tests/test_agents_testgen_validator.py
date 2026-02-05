@@ -14,12 +14,28 @@ Tests all functionality including:
 """
 
 import asyncio
+import importlib.machinery
 import os
+import sys
 import tempfile
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+
+
+def create_mock_package(name):
+    """Create a properly configured mock package."""
+    mock_pkg = ModuleType(name)
+    mock_pkg.__path__ = []
+    mock_pkg.__spec__ = importlib.machinery.ModuleSpec(
+        name=name,
+        loader=None,
+        is_package=True
+    )
+    mock_pkg.__file__ = f"<mocked {name}>"
+    return mock_pkg
 
 
 # Mock all external dependencies before importing testgen_validator
@@ -96,6 +112,15 @@ class MockAiofilesContextManager:
 
 
 class MockAiofiles:
+    """Mock for aiofiles module."""
+    __path__ = []
+    __spec__ = importlib.machinery.ModuleSpec(
+        name="aiofiles",
+        loader=None,
+        is_package=True
+    )
+    __file__ = "<mocked aiofiles>"
+    
     def open(self, path, mode="r", encoding=None):
         return MockAiofilesContextManager(path, mode, encoding)
 
@@ -108,6 +133,15 @@ class MockWebResponse:
 
 
 class MockWeb:
+    """Mock for aiohttp.web module."""
+    __path__ = []
+    __spec__ = importlib.machinery.ModuleSpec(
+        name="aiohttp.web",
+        loader=None,
+        is_package=True
+    )
+    __file__ = "<mocked aiohttp.web>"
+    
     Response = MockWebResponse
     Application = Mock
     AppRunner = Mock
@@ -147,9 +181,9 @@ class MockObserver:
         pass
 
 
-sys.modules["watchdog.events"] = Mock()
+sys.modules["watchdog.events"] = create_mock_package("watchdog.events")
 sys.modules["watchdog.events"].FileSystemEventHandler = MockFileSystemEventHandler
-sys.modules["watchdog.observers"] = Mock()
+sys.modules["watchdog.observers"] = create_mock_package("watchdog.observers")
 sys.modules["watchdog.observers"].Observer = MockObserver
 
 # Now import the module under test
