@@ -1067,8 +1067,12 @@ def load_config(
             },
         }
         # Apply migrations sequentially until current version is reached
+        # Ensure version exists in data dict before migration loop
+        if "version" not in data:
+            data["version"] = current_version_in_file
+        
         while data.get("version", 1) < CURRENT_VERSION:
-            mig_func = migrations.get(data["version"])
+            mig_func = migrations.get(data.get("version", 1))
             if mig_func:
                 data = mig_func(data)
                 logger.info(f"Migrated config to version {data['version']}.")
