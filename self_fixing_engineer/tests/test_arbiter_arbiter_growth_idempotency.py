@@ -51,6 +51,7 @@ async def mock_redis():
     mock.ping = AsyncMock(return_value=True)
     mock.set = AsyncMock(return_value=True)  # Default for a cache miss
     mock.close = AsyncMock(return_value=None)
+    mock.aclose = AsyncMock(return_value=None)  # The actual method used in stop()
     return mock
 
 
@@ -251,13 +252,13 @@ async def test_start_fails_after_max_retries(set_env_redis_url, caplog):
 async def test_stop_success(idempotency_store, mock_redis):
     """Tests successful connection close."""
     await idempotency_store.stop()
-    mock_redis.close.assert_awaited_once()
+    mock_redis.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_stop_handles_error_gracefully(idempotency_store, mock_redis, caplog):
     """Tests that stop() logs an error but does not raise an exception on failure."""
-    mock_redis.close.side_effect = RedisError("Shutdown failed")
+    mock_redis.aclose.side_effect = RedisError("Shutdown failed")
     with caplog.at_level(logging.WARNING):
         # FIX: Changed 'store.stop()' back to 'idempotency_store.stop()'
         await idempotency_store.stop()
