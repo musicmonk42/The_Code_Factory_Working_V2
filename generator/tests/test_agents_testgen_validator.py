@@ -114,7 +114,11 @@ class MockAiofilesContextManager:
 class MockAiofiles:
     """Mock for aiofiles module."""
     __path__ = []
-    __spec__ = None
+    __spec__ = importlib.machinery.ModuleSpec(
+        name="aiofiles",
+        loader=None,
+        is_package=True
+    )
     __file__ = "<mocked aiofiles>"
     
     def open(self, path, mode="r", encoding=None):
@@ -131,7 +135,11 @@ class MockWebResponse:
 class MockWeb:
     """Mock for aiohttp.web module."""
     __path__ = []
-    __spec__ = None
+    __spec__ = importlib.machinery.ModuleSpec(
+        name="aiohttp.web",
+        loader=None,
+        is_package=True
+    )
     __file__ = "<mocked aiohttp.web>"
     
     Response = MockWebResponse
