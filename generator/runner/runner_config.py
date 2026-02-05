@@ -748,34 +748,137 @@ class RunnerConfig(BaseModel):
         return load_config(config_file, overrides)
 
 
+def _find_config_file(config_file: str) -> Optional[Path]:
+    """
+    Smart path resolution for configuration files.
+    
+    Searches for config files in multiple standard locations:
+    1. Path from environment variable RUNNER_CONFIG_PATH (highest priority)
+    2. Explicit path provided (if absolute or exists)
+    3. Standard locations based on requested filename:
+       - For runner_config.yaml: ./runner_config.yaml, ./generator/runner/runner_config.yaml, ./config/runner_config.yaml
+       - For config.yaml: ./config.yaml, ./generator/config.yaml, ./config/config.yaml
+       - For other files: the explicit path only
+    
+    Args:
+        config_file (str): Initial config file path to check.
+        
+    Returns:
+        Optional[Path]: Resolved path to config file, or None if not found.
+    """
+    # Priority 1: Environment variable override
+    env_path = os.getenv("RUNNER_CONFIG_PATH")
+    if env_path:
+        env_config_path = Path(env_path)
+        if env_config_path.exists():
+            logger.info(f"✅ Found config at: {env_config_path} (from RUNNER_CONFIG_PATH)")
+            return env_config_path
+        else:
+            logger.warning(f"RUNNER_CONFIG_PATH set to '{env_path}' but file does not exist")
+    
+    # Priority 2: Explicit path provided (if absolute or relative and exists)
+    explicit_path = Path(config_file)
+    if explicit_path.is_absolute() or explicit_path.exists():
+        if explicit_path.exists():
+            logger.info(f"✅ Found config at: {explicit_path}")
+            return explicit_path
+    
+    # Priority 3: Search standard locations based on filename
+    filename = Path(config_file).name
+    search_paths = []
+    
+    if filename == "runner_config.yaml":
+        search_paths = [
+            Path("runner_config.yaml"),  # Root directory
+            Path("generator/runner/runner_config.yaml"),  # Package location
+            Path("config/runner_config.yaml"),  # Config directory
+        ]
+    elif filename == "config.yaml":
+        search_paths = [
+            Path("config.yaml"),  # Root directory
+            Path("generator/config.yaml"),  # Generator directory (most common)
+            Path("config/config.yaml"),  # Config directory
+        ]
+    else:
+        # For other filenames, only try the explicit path (already checked above)
+        return None
+    
+    for search_path in search_paths:
+        if search_path.exists():
+            logger.info(f"✅ Found config at: {search_path}")
+            return search_path
+    
+    # Not found in any standard location
+    return None
+
+
 def load_config(
-    config_file: str = "generator/config.yaml", overrides: Optional[Dict[str, Any]] = None
+    config_file: str = "runner_config.yaml", overrides: Optional[Dict[str, Any]] = None
 ) -> RunnerConfig:
     """
     Load config from YAML, apply env overrides, handle versioning/migrations.
+    
+    This function uses smart path resolution to find configuration files in multiple
+    standard locations. The search order is:
+    1. Environment variable RUNNER_CONFIG_PATH (highest priority)
+    2. Explicit path provided (if absolute or exists)
+    3. ./runner_config.yaml (root directory)
+    4. ./generator/runner/runner_config.yaml (package location)
+    5. ./config/runner_config.yaml (config directory)
+    
     Args:
-        config_file (str): Path to the YAML configuration file.
+        config_file (str): Path to the YAML configuration file. Defaults to "runner_config.yaml".
         overrides (Optional[Dict[str, Any]]): Dictionary of settings to override.
     Returns:
         RunnerConfig: The validated and migrated RunnerConfig instance.
     """
-    config_path = Path(config_file)
-
+    # Try to find the config file using smart path resolution
+    resolved_path = _find_config_file(config_file)
+    
     # Check if file should exist (not a test scenario with overrides)
     # Note: We check `is None` rather than `not overrides` because an empty dict {} is valid
     # and means "load from file with no overrides", while None means "use defaults if no file"
-    if not config_path.exists() and overrides is None:
-        raise ConfigurationError(
-            "CONFIGURATION_ERROR", detail=f"Configuration file not found: {config_file}"
+    if resolved_path is None and overrides is None:
+        # Build helpful error message showing all searched locations
+        env_path = os.getenv("RUNNER_CONFIG_PATH")
+        filename = Path(config_file).name
+        
+        # Build searched paths list based on filename
+        if filename == "runner_config.yaml":
+            searched_paths = [
+                f"   - Environment variable RUNNER_CONFIG_PATH: {env_path if env_path else '(not set)'}",
+                f"   - ./runner_config.yaml: not found",
+                f"   - ./generator/runner/runner_config.yaml: not found",
+                f"   - ./config/runner_config.yaml: not found",
+            ]
+        elif filename == "config.yaml":
+            searched_paths = [
+                f"   - Environment variable RUNNER_CONFIG_PATH: {env_path if env_path else '(not set)'}",
+                f"   - ./config.yaml: not found",
+                f"   - ./generator/config.yaml: not found",
+                f"   - ./config/config.yaml: not found",
+            ]
+        else:
+            searched_paths = [
+                f"   - Environment variable RUNNER_CONFIG_PATH: {env_path if env_path else '(not set)'}",
+                f"   - ./{config_file}: not found",
+            ]
+            
+        error_msg = (
+            f"⚠️  {filename} not found in:\n" + "\n".join(searched_paths) + "\n"
+            f"For production, set RUNNER_CONFIG_PATH or place config in a standard location"
         )
+        raise ConfigurationError("CONFIGURATION_ERROR", detail=error_msg)
+    
+    config_path = resolved_path if resolved_path else Path(config_file)
 
     data: Dict[str, Any] = {}
     if config_path.exists():
         try:
-            with open(config_file, "r", encoding="utf-8") as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
         except yaml.YAMLError as e:
-            logger.error(f"Error parsing YAML config file {config_file}: {e}")
+            logger.error(f"Error parsing YAML config file {config_path}: {e}")
             raise
 
     if overrides:
@@ -906,7 +1009,7 @@ def load_config(
         # *** FIX: Pass error code as first arg and message as detail kwarg ***
         raise ConfigurationError(
             "CONFIGURATION_ERROR",
-            detail=f"Invalid 'version' value {raw_version!r} in {config_file}; must be an integer.",
+            detail=f"Invalid 'version' value {raw_version!r} in {config_path}; must be an integer.",
         )
 
     if current_version_in_file < CURRENT_VERSION:
