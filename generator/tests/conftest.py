@@ -68,9 +68,11 @@ class MockFileSystemEventHandler:
 
 # Create mock watchdog modules
 _mock_watchdog_observers = MagicMock()
+_mock_watchdog_observers.__path__ = []  # Required for package-like behavior
 _mock_watchdog_observers.Observer = MockObserver
 
 _mock_watchdog_events = MagicMock()
+_mock_watchdog_events.__path__ = []  # Required for package-like behavior
 _mock_watchdog_events.FileSystemEventHandler = MockFileSystemEventHandler
 _mock_watchdog_events.FileCreatedEvent = MagicMock
 _mock_watchdog_events.FileModifiedEvent = MagicMock
