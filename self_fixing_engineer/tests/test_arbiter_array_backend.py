@@ -14,6 +14,51 @@ Run:
 from __future__ import annotations
 
 import os
+import sys
+import importlib
+import importlib.util
+
+# CRITICAL: Restore real aiofiles BEFORE any other imports that might use the mocked version
+# This must happen at module load time to fix pollution from other test modules
+def _restore_real_aiofiles():
+    """Restore real aiofiles module, removing any mocks from sys.modules."""
+    from unittest.mock import MagicMock, Mock
+    
+    # Remove all mocked aiofiles modules
+    aiofiles_modules = [key for key in list(sys.modules.keys()) if 'aiofiles' in key]
+    for mod_name in aiofiles_modules:
+        mod = sys.modules.get(mod_name)
+        if mod is not None and (
+            isinstance(mod, (MagicMock, Mock)) or 
+            hasattr(mod, '_mock_name') or
+            hasattr(mod, '_spec_class')
+        ):
+            del sys.modules[mod_name]
+    
+    # Force import of the real aiofiles
+    try:
+        spec = importlib.util.find_spec("aiofiles")
+        if spec and spec.origin:
+            # Import the real module
+            import aiofiles
+            # Force reload to ensure we have the real version
+            aiofiles = importlib.reload(aiofiles)
+            # Reload submodules
+            try:
+                import aiofiles.os
+                aiofiles.os = importlib.reload(aiofiles.os)
+            except Exception:
+                pass
+            try:
+                import aiofiles.threadpool
+                aiofiles.threadpool = importlib.reload(aiofiles.threadpool)
+            except Exception:
+                pass
+    except Exception:
+        pass  # Will be handled by pytest.skip in fixture
+
+_restore_real_aiofiles()
+
 # Opt out of global mocking - these tests need real file I/O
 os.environ['PYTEST_NO_MOCK'] = '1'
 
@@ -102,43 +147,23 @@ def ensure_real_aiofiles():
     These tests require actual file I/O to test persistence.
     Remove any mocks that may have been applied by other test modules.
     """
-    import sys
-    import importlib
-    import importlib.util
     from unittest.mock import MagicMock, Mock
     
-    # Step 1: Save any mocked modules to restore after test
-    saved_modules = {}
-    mocked_modules = [key for key in list(sys.modules.keys()) if 'aiofiles' in key]
-    for mod_name in mocked_modules:
-        mod = sys.modules.get(mod_name)
-        if mod is not None:
-            saved_modules[mod_name] = mod
-            del sys.modules[mod_name]
+    # Call the module-level restore function to ensure real aiofiles
+    _restore_real_aiofiles()
     
-    # Step 2: Force import of the real aiofiles module from site-packages
-    try:
-        # Find real aiofiles spec from the package
-        spec = importlib.util.find_spec("aiofiles")
-        if spec is None:
-            pytest.skip("aiofiles not installed - cannot run persistence tests")
-        
-        # Import the real module
-        import aiofiles
-        aiofiles = importlib.reload(aiofiles)
-        
-        # Also reload submodules that may be needed
+    # Also reload arbiter_array_backend to pick up real aiofiles
+    backend_mod_name = "self_fixing_engineer.arbiter.arbiter_array_backend"
+    if backend_mod_name in sys.modules:
         try:
-            import aiofiles.os
-            aiofiles.os = importlib.reload(aiofiles.os)
-        except (ImportError, AttributeError):
-            pass
-        
-    except ImportError as e:
-        pytest.skip(f"aiofiles not installed - cannot run persistence tests: {e}")
+            importlib.reload(sys.modules[backend_mod_name])
+        except Exception:
+            pass  # If reload fails, the module should still work
     
-    # Step 3: Verify that aiofiles is functional (not a mock)
+    # Verify that aiofiles is functional (not a mock)
     try:
+        import aiofiles
+        
         # Check if aiofiles.open exists and is callable
         if not hasattr(aiofiles, 'open') or not callable(aiofiles.open):
             pytest.skip("aiofiles.open is not available - cannot run persistence tests")
@@ -151,15 +176,13 @@ def ensure_real_aiofiles():
         if isinstance(aiofiles, (MagicMock, Mock)) or hasattr(aiofiles, '_mock_name'):
             pytest.skip("aiofiles module is still mocked - cannot run persistence tests")
             
+    except ImportError as e:
+        pytest.skip(f"aiofiles not installed - cannot run persistence tests: {e}")
     except Exception as e:
         # If verification fails for any reason, skip the tests
         pytest.skip(f"Failed to verify aiofiles functionality: {e}")
     
-    # Step 4: All checks passed, yield to run the test
     yield
-    
-    # Step 5: Restore any saved mocked modules (for other tests that depend on them)
-    # Note: We don't restore because we want the real module to persist for subsequent tests
 
 
 @pytest.fixture
