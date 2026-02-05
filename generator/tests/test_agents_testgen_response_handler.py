@@ -13,35 +13,33 @@ All 33 tests should pass.
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-# Mock all external dependencies before importing testgen_response_handler
-with patch.dict(
-    "sys.modules",
-    {
-        "runner": Mock(),
-        "runner.tracer": Mock(),
-        "runner.runner_logging": Mock(),
-        "runner.runner_metrics": Mock(),
-        "runner.llm_client": Mock(),
-        "runner.runner_errors": Mock(),
-        "aiohttp": Mock(),
-        "aiohttp.web": Mock(),
-        "watchdog.events": Mock(),
-        "watchdog.observers": Mock(),
-    },
-):
-    from agents.testgen_agent.testgen_response_handler import (
-        LANGUAGE_CONFIG,
-        PARSERS,
-        DefaultResponseParser,
-        ResponseParser,
-        _local_regex_sanitize,
-        parse_llm_response,
-    )
+# Mock external dependencies BEFORE importing
+sys.modules["runner"] = Mock()
+sys.modules["runner.tracer"] = Mock()
+sys.modules["runner.runner_logging"] = Mock()
+sys.modules["runner.runner_metrics"] = Mock()
+sys.modules["runner.llm_client"] = Mock()
+sys.modules["runner.runner_errors"] = Mock()
+sys.modules["aiohttp"] = Mock()
+sys.modules["aiohttp.web"] = Mock()
+sys.modules["watchdog.events"] = Mock()
+sys.modules["watchdog.observers"] = Mock()
+
+# Now import the module under test
+from agents.testgen_agent.testgen_response_handler import (
+    LANGUAGE_CONFIG,
+    PARSERS,
+    DefaultResponseParser,
+    ResponseParser,
+    _local_regex_sanitize,
+    parse_llm_response,
+)
 
 
 class TestLocalRegexSanitize:
