@@ -539,7 +539,7 @@ class NotificationService:
     async def shutdown(self):
         """Gracefully shuts down the service, closing all open connections."""
         if self._session and not self._session.closed:
-            await self._session.aclose()
+            await self._session.close()
         if self.circuit_breaker.redis:
             await self.circuit_breaker.redis.aclose()
         if self.rate_limiter.redis:

@@ -68,6 +68,12 @@ class MockAsyncFile:
         raise StopAsyncIteration
 
 
+# Save original aiofiles module for restoration after tests
+_original_aiofiles = sys.modules.get("aiofiles")
+_original_aiofiles_threadpool = sys.modules.get("aiofiles.threadpool")
+_original_aiofiles_threadpool_binary = sys.modules.get("aiofiles.threadpool.binary")
+_original_aiofiles_os = sys.modules.get("aiofiles.os")
+
 mock_aiofiles = MagicMock()
 mock_aiofiles_open = AsyncMock(return_value=MockAsyncFile())
 mock_aiofiles.open = mock_aiofiles_open
@@ -77,6 +83,33 @@ sys.modules["aiofiles"] = mock_aiofiles
 sys.modules["aiofiles.threadpool"] = MagicMock()
 sys.modules["aiofiles.threadpool.binary"] = MagicMock()
 sys.modules["aiofiles.os"] = mock_aiofiles.os
+
+
+def _restore_original_aiofiles():
+    """Restore original aiofiles modules after test module is done."""
+    import importlib
+    import importlib.util
+    
+    # Remove our mocked versions
+    for key in list(sys.modules.keys()):
+        if 'aiofiles' in key:
+            del sys.modules[key]
+    
+    # Restore originals if they existed, otherwise reimport
+    if _original_aiofiles is not None:
+        sys.modules["aiofiles"] = _original_aiofiles
+    else:
+        # Import fresh
+        try:
+            import aiofiles
+            importlib.reload(aiofiles)
+        except ImportError:
+            pass
+
+
+# Register cleanup to run when this module is unloaded or at atexit
+import atexit
+atexit.register(_restore_original_aiofiles)
 
 
 # Mock pythonjsonlogger
@@ -217,6 +250,18 @@ def reset_mocks():
     )
     mock_audit_logger.reset_mock()
     yield
+
+
+@pytest.fixture(scope="module", autouse=True)
+def restore_aiofiles_after_module():
+    """Restore real aiofiles after this test module completes.
+    
+    This is necessary because this module mocks aiofiles at import time,
+    which pollutes sys.modules for subsequent tests.
+    """
+    yield
+    # After all tests in this module, restore real aiofiles
+    _restore_original_aiofiles()
 
 
 @pytest.fixture

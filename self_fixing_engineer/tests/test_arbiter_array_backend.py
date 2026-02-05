@@ -14,6 +14,68 @@ Run:
 from __future__ import annotations
 
 import os
+import sys
+import importlib
+import importlib.util
+
+def _restore_real_aiofiles():
+    """Restore real aiofiles module, removing any mocks from sys.modules."""
+    from unittest.mock import MagicMock, Mock
+    
+    # Remove all mocked aiofiles modules
+    aiofiles_modules = [key for key in list(sys.modules.keys()) if 'aiofiles' in key]
+    for mod_name in aiofiles_modules:
+        mod = sys.modules.get(mod_name)
+        if mod is not None and (
+            isinstance(mod, (MagicMock, Mock)) or 
+            hasattr(mod, '_mock_name') or
+            hasattr(mod, '_spec_class')
+        ):
+            del sys.modules[mod_name]
+    
+    # Force import of the real aiofiles
+    try:
+        spec = importlib.util.find_spec("aiofiles")
+        if spec and spec.origin:
+            # Import the real module
+            import aiofiles
+            # Force reload to ensure we have the real version
+            aiofiles = importlib.reload(aiofiles)
+            # Reload submodules
+            try:
+                import aiofiles.os
+                aiofiles.os = importlib.reload(aiofiles.os)
+            except Exception:
+                pass
+            try:
+                import aiofiles.threadpool
+                aiofiles.threadpool = importlib.reload(aiofiles.threadpool)
+            except Exception:
+                pass
+    except Exception:
+        pass  # Will be handled by pytest.skip in fixture
+
+
+def _reload_backend_with_real_aiofiles():
+    """Reload arbiter_array_backend to pick up real aiofiles."""
+    _restore_real_aiofiles()
+    
+    # Remove cached arbiter_array_backend so it reimports with real aiofiles
+    backend_modules = [k for k in list(sys.modules.keys()) if 'arbiter_array_backend' in k]
+    for mod_name in backend_modules:
+        try:
+            del sys.modules[mod_name]
+        except KeyError:
+            pass
+    
+    # Now import fresh
+    from self_fixing_engineer.arbiter import arbiter_array_backend
+    return arbiter_array_backend
+
+
+# CRITICAL: Call this at module load time to fix pollution from other test modules
+_restore_real_aiofiles()
+
 # Opt out of global mocking - these tests need real file I/O
 os.environ['PYTEST_NO_MOCK'] = '1'
 
@@ -100,40 +162,33 @@ def ensure_real_aiofiles():
     """Ensure aiofiles is real, not mocked, for these tests.
     
     These tests require actual file I/O to test persistence.
-    Remove any mocks that may have been applied by conftest.
+    Remove any mocks that may have been applied by other test modules.
     """
-    import sys
-    import importlib
+    global _backend, ConcreteArrayBackend, ArrayBackendError, ArraySizeLimitError, StorageError, ArrayMeta
     from unittest.mock import MagicMock, Mock
     
-    # Step 1: Remove any mocked aiofiles modules from sys.modules
-    # This includes both the main module and any submodules
-    mocked_modules = [key for key in list(sys.modules.keys()) if 'aiofiles' in key]
-    for mod_name in mocked_modules:
-        mod = sys.modules.get(mod_name)
-        # Check if this is a mock by looking for mock attributes or isinstance check
-        if mod is not None and (
-            hasattr(mod, '_mock_name') or 
-            hasattr(mod, '_spec_class') or
-            isinstance(mod, (MagicMock, Mock))
-        ):
-            # This is a mock, remove it
-            del sys.modules[mod_name]
-    
-    # Step 2: Force re-import of the real aiofiles module
+    # Reload the backend module with real aiofiles
     try:
-        # First try to import it fresh
+        _backend = _reload_backend_with_real_aiofiles()
+        
+        # Update global references to use the reloaded module
+        ConcreteArrayBackend = getattr(_backend, "ConcreteArrayBackend")
+        ArrayBackendError = getattr(_backend, "ArrayBackendError")
+        ArraySizeLimitError = getattr(_backend, "ArraySizeLimitError")
+        StorageError = getattr(_backend, "StorageError")
+        ArrayMeta = getattr(_backend, "ArrayMeta")
+        
+        # Verify the reloaded module has real aiofiles
+        if hasattr(_backend, 'aiofiles'):
+            if isinstance(_backend.aiofiles, (MagicMock, Mock)) or hasattr(_backend.aiofiles, '_mock_name'):
+                pytest.skip("arbiter_array_backend has mocked aiofiles - cannot run persistence tests")
+    except Exception as e:
+        pytest.skip(f"Failed to reload backend with real aiofiles: {e}")
+    
+    # Verify that aiofiles is functional (not a mock)
+    try:
         import aiofiles
         
-        # If aiofiles was already imported but potentially mocked, reload it
-        if 'aiofiles' in sys.modules:
-            aiofiles = importlib.reload(aiofiles)
-        
-    except ImportError:
-        pytest.skip("aiofiles not installed - cannot run persistence tests")
-    
-    # Step 3: Verify that aiofiles is functional (not a mock)
-    try:
         # Check if aiofiles.open exists and is callable
         if not hasattr(aiofiles, 'open') or not callable(aiofiles.open):
             pytest.skip("aiofiles.open is not available - cannot run persistence tests")
@@ -146,16 +201,19 @@ def ensure_real_aiofiles():
         if isinstance(aiofiles, (MagicMock, Mock)) or hasattr(aiofiles, '_mock_name'):
             pytest.skip("aiofiles module is still mocked - cannot run persistence tests")
             
+    except ImportError as e:
+        pytest.skip(f"aiofiles not installed - cannot run persistence tests: {e}")
     except Exception as e:
         # If verification fails for any reason, skip the tests
         pytest.skip(f"Failed to verify aiofiles functionality: {e}")
     
-    # Step 4: All checks passed, yield to run the test
     yield
 
 
 @pytest.fixture
-async def backend(json_file: Path, fresh_env) -> ConcreteArrayBackend:
+async def backend(json_file: Path, fresh_env, ensure_real_aiofiles):
+    """Create a backend instance using the reloaded module."""
+    # Use the global ConcreteArrayBackend which is updated by ensure_real_aiofiles
     be = ConcreteArrayBackend(
         name="test_array", storage_path=str(json_file), storage_type="json"
     )
