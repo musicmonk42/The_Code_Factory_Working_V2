@@ -1377,16 +1377,21 @@ def _run_async(coro):
         loop.run_until_complete(coro)
     else:
         # Create a new event loop if none exists
+        # First check if we can use asyncio.run by testing if there's a current loop
         try:
-            asyncio.run(coro)
+            current_loop = asyncio.get_event_loop()
+            if current_loop.is_closed():
+                raise RuntimeError("Loop is closed")
+            # Use the existing event loop
+            current_loop.run_until_complete(coro)
         except RuntimeError:
-            # Fallback for environments where asyncio.run() fails
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # Fallback: create a fresh loop
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
             try:
-                loop.run_until_complete(coro)
+                new_loop.run_until_complete(coro)
             finally:
-                loop.close()
+                new_loop.close()
 
 
 @app.command()

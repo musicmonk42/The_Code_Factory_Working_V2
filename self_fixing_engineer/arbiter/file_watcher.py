@@ -136,18 +136,18 @@ _METRICS_LOCK = threading.Lock()
 
 # Configuration models
 class SMTPConfig(BaseModel):
-    host: str
-    port: int
-    username: str
-    password: str
-    use_tls: bool
-    timeout: int
-    rate_limit: float
+    host: str = Field(default_factory=lambda: os.getenv("ALERTER_SMTP_HOST", "localhost"))
+    port: int = Field(default_factory=lambda: int(os.getenv("ALERTER_SMTP_PORT", "25")))
+    username: str = Field(default_factory=lambda: os.getenv("ALERTER_SMTP_USERNAME", ""))
+    password: str = Field(default_factory=lambda: os.getenv("ALERTER_SMTP_PASSWORD", ""))
+    use_tls: bool = Field(default_factory=lambda: os.getenv("ALERTER_SMTP_USE_TLS", "false").lower() == "true")
+    timeout: int = Field(default_factory=lambda: int(os.getenv("ALERTER_SMTP_TIMEOUT", "30")))
+    rate_limit: float = Field(default_factory=lambda: float(os.getenv("ALERTER_RATE_LIMIT", "1.0")))
 
 
 class AlerterConfig(BaseModel):
-    smtp: SMTPConfig
-    audit_file: str
+    smtp: SMTPConfig = Field(default_factory=SMTPConfig)
+    audit_file: str = Field(default_factory=lambda: os.getenv("ALERTER_AUDIT_FILE", "audit.log"))
 
 
 class AWSConfig(BaseModel):

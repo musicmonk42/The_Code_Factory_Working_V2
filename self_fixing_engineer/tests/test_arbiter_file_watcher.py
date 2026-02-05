@@ -211,14 +211,16 @@ async def test_send_email_alert_failure(valid_config, caplog):
 @pytest.mark.asyncio
 async def test_send_slack_alert():
     result = await send_slack_alert("Message")
-    assert result  # Placeholder function returns True
+    # Without SLACK_WEBHOOK_URL configured, the function returns False
+    assert result is False
 
 
 # Test send_pagerduty_alert (simplified version)
 @pytest.mark.asyncio
 async def test_send_pagerduty_alert():
     result = await send_pagerduty_alert("Title", "Details")
-    assert result  # Placeholder function returns True
+    # Without PAGERDUTY_ROUTING_KEY configured, the function returns False
+    assert result is False
 
 
 # Test summarize_code_changes
@@ -375,8 +377,9 @@ async def test_metrics_health_server(valid_config):
 
                 # Check that setup and start were called
                 mock_runner.setup.assert_called_once()
+                # The default METRICS_HOST is 127.0.0.1 for security
                 mock_site_class.assert_called_once_with(
-                    mock_runner, "0.0.0.0", valid_config.metrics.prometheus_port
+                    mock_runner, "127.0.0.1", valid_config.metrics.prometheus_port
                 )
                 mock_site.start.assert_called_once()
 
