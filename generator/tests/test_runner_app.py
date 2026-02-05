@@ -134,10 +134,8 @@ sys.modules["textual.timer"].Timer = MagicMock()
 # NOTE: Do NOT mock aiohttp, pydantic, or fastapi - they are needed for proper
 # type annotations and decorator evaluation at import time
 # sys.modules["aiohttp"] = MagicMock()  # REMOVED - causes type annotation errors
-sys.modules["opentelemetry"] = MagicMock()
-sys.modules["opentelemetry.trace"] = MagicMock()
-sys.modules["opentelemetry.sdk.trace"] = MagicMock()
-sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
+# NOTE: Do NOT mock opentelemetry - it breaks namespace package imports for chromadb
+# opentelemetry is now a required dependency and should be installed
 
 # Import runner modules *after* mocks are in place
 from generator.runner.runner_app import RunnerApp, TuiLogHandler

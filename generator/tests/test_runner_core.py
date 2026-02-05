@@ -16,21 +16,29 @@ from prometheus_client import REGISTRY
 # Add parent directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Mock external dependencies
+# Mock external dependencies ONLY if they are not already installed
 # NOTE: Do NOT mock aiohttp, pydantic, or fastapi - they are needed for proper
 # type annotations and decorator evaluation at import time
 # sys.modules["aiohttp"] = MagicMock()  # REMOVED - causes type annotation errors
-sys.modules["backoff"] = MagicMock()
-sys.modules["opentelemetry"] = MagicMock()
-sys.modules["opentelemetry.trace"] = MagicMock()
-sys.modules["opentelemetry.sdk.trace"] = MagicMock()
-sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
-sys.modules["jinja2"] = MagicMock()
-sys.modules["cryptography"] = MagicMock()
-sys.modules["cryptography.hazmat.primitives"] = MagicMock()
-sys.modules["cryptography.hazmat.primitives.asymmetric"] = MagicMock()
-sys.modules["cryptography.hazmat.primitives.serialization"] = MagicMock()
-sys.modules["aiofiles"] = MagicMock()  # Mock aiofiles used in runner_core
+
+# Helper function to conditionally mock a module only if it's not installed
+def _mock_if_not_installed(module_name):
+    """Only mock a module if it's not already installed."""
+    if module_name not in sys.modules:
+        try:
+            __import__(module_name)
+        except ImportError:
+            sys.modules[module_name] = MagicMock()
+
+_mock_if_not_installed("backoff")
+# NOTE: Do NOT mock opentelemetry - it breaks namespace package imports for chromadb
+# opentelemetry is now a required dependency and should be installed
+_mock_if_not_installed("jinja2")
+_mock_if_not_installed("cryptography")
+_mock_if_not_installed("cryptography.hazmat.primitives")
+_mock_if_not_installed("cryptography.hazmat.primitives.asymmetric")
+_mock_if_not_installed("cryptography.hazmat.primitives.serialization")
+_mock_if_not_installed("aiofiles")
 
 from runner.runner_config import RunnerConfig
 from runner.runner_contracts import TaskPayload, TaskResult

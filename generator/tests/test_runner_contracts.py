@@ -16,11 +16,17 @@ from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Mock OpenTelemetry
-sys.modules["opentelemetry"] = MagicMock()
-sys.modules["opentelemetry.trace"] = MagicMock()
-sys.modules["opentelemetry.sdk.trace"] = MagicMock()
-sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
+# Helper function to conditionally mock a module only if it's not installed
+def _mock_if_not_installed(module_name):
+    """Only mock a module if it's not already installed."""
+    if module_name not in sys.modules:
+        try:
+            __import__(module_name)
+        except ImportError:
+            sys.modules[module_name] = MagicMock()
+
+# NOTE: Do NOT mock OpenTelemetry - it breaks namespace package imports for chromadb
+# opentelemetry is now a required dependency and should be installed
 
 # Import runner modules
 from runner.runner_contracts import BatchTaskPayload, TaskPayload, TaskResult

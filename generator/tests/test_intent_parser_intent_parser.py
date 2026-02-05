@@ -46,23 +46,27 @@ def passthrough_decorator(name):
     return decorator
 
 
-mock_otel = MagicMock()
-mock_otel.__path__ = []  # Required for package imports
-mock_otel.__name__ = "opentelemetry"
-mock_otel.__file__ = "<mocked opentelemetry>"
-mock_otel.trace.get_tracer.return_value.start_as_current_span = passthrough_decorator
-mock_otel.trace.get_current_span = MagicMock(return_value=None)
-sys.modules["opentelemetry"] = mock_otel
-sys.modules["opentelemetry.trace"] = mock_otel.trace
+# Helper function to conditionally mock a module only if it's not installed
+def _mock_if_not_installed(module_name, mock_value=None):
+    """Only mock a module if it's not already installed."""
+    if module_name not in sys.modules:
+        try:
+            __import__(module_name)
+        except ImportError:
+            sys.modules[module_name] = mock_value if mock_value is not None else MagicMock()
 
-# 5. Mock heavy ML/parsing libs
-sys.modules["spacy"] = MagicMock(name="MockSpacyModule")
-sys.modules["torch"] = MagicMock()
-sys.modules["transformers"] = MagicMock()
-sys.modules["pdfplumber"] = MagicMock()
-sys.modules["pytesseract"] = MagicMock()
-sys.modules["rst_to_myst"] = MagicMock()
-sys.modules["langdetect"] = MagicMock()
+
+# NOTE: Do NOT mock opentelemetry - it breaks namespace package imports for chromadb
+# opentelemetry is now a required dependency and should be installed
+
+# 5. Mock heavy ML/parsing libs only if not installed
+_mock_if_not_installed("spacy", MagicMock(name="MockSpacyModule"))
+_mock_if_not_installed("torch")
+_mock_if_not_installed("transformers")
+_mock_if_not_installed("pdfplumber")
+_mock_if_not_installed("pytesseract")
+_mock_if_not_installed("rst_to_myst")
+_mock_if_not_installed("langdetect")
 
 # --- Now, import the module to be tested using canonical path ---
 from generator.intent_parser.intent_parser import (

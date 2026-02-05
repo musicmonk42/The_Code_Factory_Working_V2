@@ -25,27 +25,32 @@ os.environ["GENERATOR_API_KEY"] = "test-api-key-integration"
 # Module-level mocking moved to fixture to avoid expensive operations during pytest collection
 @pytest.fixture(scope="session", autouse=True)
 def mock_expensive_modules():
-    """Mock all expensive module dependencies before any imports."""
-    # Mock all dependencies
-    sys.modules["runner.runner_config"] = MagicMock()
-    sys.modules["runner.runner_core"] = MagicMock()
-    sys.modules["runner.runner_logging"] = MagicMock()
-    sys.modules["runner.runner_metrics"] = MagicMock()
-    sys.modules["runner.runner_utils"] = MagicMock()
-    sys.modules["runner.alerting"] = MagicMock()
-    sys.modules["intent_parser.intent_parser"] = MagicMock()
-    sys.modules["engine"] = MagicMock()
-    sys.modules["clarifier_updater"] = MagicMock()
-    sys.modules["opentelemetry"] = MagicMock()
-    sys.modules["opentelemetry.sdk.trace"] = MagicMock()
-    sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
-    sys.modules["opentelemetry.sdk.resources"] = MagicMock()
-    sys.modules["opentelemetry.instrumentation.fastapi"] = MagicMock()
-    sys.modules["opentelemetry.instrumentation.logging"] = MagicMock()
-    sys.modules["opentelemetry.exporter.otlp.proto.grpc.trace_exporter"] = MagicMock()
-    sys.modules["opentelemetry.semconv.trace"] = MagicMock()
-    sys.modules["opentelemetry.trace"] = MagicMock()
-    sys.modules["uvicorn"] = MagicMock()
+    """Mock all expensive module dependencies before any imports.
+    
+    Only mocks modules that are not already installed to avoid breaking
+    other tests that depend on real implementations (e.g., chromadb needs real opentelemetry).
+    """
+    def _mock_if_not_installed(module_name):
+        """Only mock a module if it's not already installed."""
+        if module_name not in sys.modules:
+            try:
+                __import__(module_name)
+            except ImportError:
+                sys.modules[module_name] = MagicMock()
+    
+    # Mock runner/engine dependencies only if not present
+    _mock_if_not_installed("runner.runner_config")
+    _mock_if_not_installed("runner.runner_core")
+    _mock_if_not_installed("runner.runner_logging")
+    _mock_if_not_installed("runner.runner_metrics")
+    _mock_if_not_installed("runner.runner_utils")
+    _mock_if_not_installed("runner.alerting")
+    _mock_if_not_installed("intent_parser.intent_parser")
+    _mock_if_not_installed("engine")
+    _mock_if_not_installed("clarifier_updater")
+    # NOTE: Do NOT mock opentelemetry - it breaks namespace package imports for chromadb
+    # opentelemetry is now a required dependency and should be installed
+    _mock_if_not_installed("uvicorn")
     yield
     # Cleanup not strictly necessary as these are test mocks
 

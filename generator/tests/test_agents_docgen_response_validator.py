@@ -205,22 +205,15 @@ mock_prometheus.Gauge = MagicMock(return_value=mock_gauge)
 
 sys.modules["prometheus_client"] = mock_prometheus
 
-# Mock opentelemetry
-mock_otel = MagicMock()
-mock_otel_trace = MagicMock()
-mock_otel_status = MagicMock()
-
-# Create mock span
+# NOTE: Do NOT mock opentelemetry at module level - it breaks namespace package imports for chromadb
+# opentelemetry is now a required dependency and should be installed
+# Create mock span for patching (not for sys.modules replacement)
 mock_span = MagicMock()
 mock_span.__enter__ = MagicMock(return_value=mock_span)
 mock_span.__exit__ = MagicMock(return_value=None)
 
 mock_tracer = MagicMock()
 mock_tracer.start_as_current_span = MagicMock(return_value=mock_span)
-
-sys.modules["opentelemetry"] = mock_otel
-sys.modules["opentelemetry.trace"] = mock_otel_trace
-sys.modules["opentelemetry.trace.status"] = mock_otel_status
 
 # FIX: Add Path, Tuple, Optional to builtins for type hint resolution in source files
 import builtins
