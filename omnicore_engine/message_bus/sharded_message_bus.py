@@ -1414,8 +1414,8 @@ class ShardedMessageBus:
             # Use configurable timeout (default 30s) instead of hardcoded 5s
             subscription_timeout = getattr(settings, 'MESSAGE_BUS_SUBSCRIPTION_TIMEOUT', 30.0)
             try:
-                future.result(timeout=subscription_timeout)
-                logger_for_subscribe.debug("Subscription completed successfully")
+                result = future.result(timeout=subscription_timeout)
+                logger_for_subscribe.debug("Subscription completed successfully", result=result)
             except TimeoutError:
                 # Provide actionable error message
                 logger_for_subscribe.error(
@@ -1465,7 +1465,7 @@ class ShardedMessageBus:
         topic: Union[str, Pattern],
         callback: Callable[[Message], None],
         filter: Optional[Any] = None,
-    ) -> None:
+    ) -> Dict[str, Any]:
         async with self._subscriber_lock:
             logger_for_subscribe = logger.bind(
                 topic=str(topic), callback=getattr(callback, "__name__", str(callback))
@@ -1473,9 +1473,23 @@ class ShardedMessageBus:
             if isinstance(topic, str):
                 self.subscribers[topic].append((callback, filter))
                 logger_for_subscribe.info("Subscribed callback to topic.")
+                # Explicitly signal completion
+                return {
+                    "status": "subscribed",
+                    "topic": str(topic),
+                    "handler": getattr(callback, "__name__", str(callback)),
+                    "filter": str(filter.__class__.__name__) if filter else None
+                }
             else:
                 self.regex_subscribers[topic].append((callback, filter))
                 logger_for_subscribe.info("Subscribed callback to regex pattern.")
+                # Explicitly signal completion for regex subscriptions
+                return {
+                    "status": "subscribed",
+                    "topic_pattern": str(topic.pattern) if hasattr(topic, 'pattern') else str(topic),
+                    "handler": getattr(callback, "__name__", str(callback)),
+                    "filter": str(filter.__class__.__name__) if filter else None
+                }
 
     def unsubscribe(
         self, topic: Union[str, Pattern], callback: Callable[[Message], None]
@@ -1509,8 +1523,8 @@ class ShardedMessageBus:
             # Use configurable timeout (default 30s) instead of hardcoded 5s
             subscription_timeout = getattr(settings, 'MESSAGE_BUS_SUBSCRIPTION_TIMEOUT', 30.0)
             try:
-                future.result(timeout=subscription_timeout)
-                logger_for_unsubscribe.debug("Unsubscription completed successfully")
+                result = future.result(timeout=subscription_timeout)
+                logger_for_unsubscribe.debug("Unsubscription completed successfully", result=result)
             except TimeoutError:
                 logger_for_unsubscribe.warning(
                     f"Unsubscription from {topic} timed out after {subscription_timeout} seconds. "
@@ -1538,7 +1552,7 @@ class ShardedMessageBus:
 
     async def _unsubscribe_async(
         self, topic: Union[str, Pattern], callback: Callable[[Message], None]
-    ) -> None:
+    ) -> Dict[str, Any]:
         async with self._subscriber_lock:
             logger_for_unsubscribe = logger.bind(
                 topic=str(topic), callback=getattr(callback, "__name__", str(callback))
@@ -1554,10 +1568,24 @@ class ShardedMessageBus:
                 )
                 if len(self.subscribers[topic]) < initial_len:
                     logger_for_unsubscribe.info("Unsubscribed callback from topic.")
+                    # Explicitly signal successful unsubscription
+                    return {
+                        "status": "unsubscribed",
+                        "topic": str(topic),
+                        "handler": getattr(callback, "__name__", str(callback)),
+                        "removed": True
+                    }
                 else:
                     logger_for_unsubscribe.warning(
                         "Callback not found for unsubscribe from topic."
                     )
+                    # Signal that handler wasn't found
+                    return {
+                        "status": "not_found",
+                        "topic": str(topic),
+                        "handler": getattr(callback, "__name__", str(callback)),
+                        "removed": False
+                    }
             else:
                 initial_len = len(self.regex_subscribers[topic])
                 self.regex_subscribers[topic] = list(
@@ -1567,10 +1595,24 @@ class ShardedMessageBus:
                     logger_for_unsubscribe.info(
                         "Unsubscribed callback from regex pattern."
                     )
+                    # Explicitly signal successful unsubscription from regex
+                    return {
+                        "status": "unsubscribed",
+                        "topic_pattern": str(topic.pattern) if hasattr(topic, 'pattern') else str(topic),
+                        "handler": getattr(callback, "__name__", str(callback)),
+                        "removed": True
+                    }
                 else:
                     logger_for_unsubscribe.warning(
                         "Callback not found for unsubscribe from regex pattern."
                     )
+                    # Signal that handler wasn't found in regex subscribers
+                    return {
+                        "status": "not_found",
+                        "topic_pattern": str(topic.pattern) if hasattr(topic, 'pattern') else str(topic),
+                        "handler": getattr(callback, "__name__", str(callback)),
+                        "removed": False
+                    }
 
     async def request(
         self, topic: str, payload: Any, timeout: float = 5.0, priority: int = 5
