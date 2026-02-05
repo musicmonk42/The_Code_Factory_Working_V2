@@ -710,6 +710,44 @@ class TestMaterializeFileMap:
         assert "\r" not in content
         assert content == "line1\nline2\nline3\n"
 
+    @pytest.mark.asyncio
+    @patch("generator.runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
+    async def test_materialize_logs_to_audit_system(self, mock_add_provenance, output_dir):
+        """Test that materialize_file_map logs to the audit system."""
+        file_map = {
+            "main.py": "print('hello')",
+            "README.md": "# Project\n",
+        }
+        
+        result = await materialize_file_map(file_map, output_dir)
+        
+        # Verify the materialization succeeded
+        assert result["success"] is True
+        assert "main.py" in result["files_written"]
+        assert "README.md" in result["files_written"]
+        assert (output_dir / "main.py").exists()
+        assert (output_dir / "README.md").exists()
+        
+        # Verify add_provenance was called
+        mock_add_provenance.assert_called_once()
+        call_args = mock_add_provenance.call_args
+        
+        # Check the event type
+        assert call_args[0][0] == "file_materialization_completed"
+        
+        # Check the data contains expected fields
+        data = call_args[0][1]
+        assert "output_dir" in data
+        assert "files_written" in data
+        assert "files_skipped" in data
+        assert "total_bytes" in data
+        assert "success" in data
+        assert data["success"] is True
+        assert "errors" in data
+        assert "warnings" in data
+        assert "materialization_time_ms" in data
+        assert "timestamp" in data
+
 
 class TestValidateGeneratedProject:
     """Tests for the validate_generated_project function."""
@@ -799,3 +837,37 @@ class TestValidateGeneratedProject:
         result = await validate_generated_project(project_dir)
         
         assert any("requirements.txt" in w for w in result["warnings"])
+
+    @pytest.mark.asyncio
+    @patch("generator.runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
+    async def test_validate_logs_to_audit_system(self, mock_add_provenance, project_dir):
+        """Test that validate_generated_project logs to the audit system."""
+        (project_dir / "main.py").write_text("print('hello')")
+        (project_dir / "requirements.txt").write_text("fastapi\n")
+        
+        result = await validate_generated_project(project_dir)
+        
+        # Verify the validation succeeded
+        assert result["valid"] is True
+        assert len(result["errors"]) == 0
+        assert result["file_count"] >= 2
+        
+        # Verify add_provenance was called
+        mock_add_provenance.assert_called_once()
+        call_args = mock_add_provenance.call_args
+        
+        # Check the event type
+        assert call_args[0][0] == "project_validation_completed"
+        
+        # Check the data contains expected fields
+        data = call_args[0][1]
+        assert "output_dir" in data
+        assert "valid" in data
+        assert data["valid"] is True
+        assert "file_count" in data
+        assert "python_files_valid" in data
+        assert "python_files_invalid" in data
+        assert "errors" in data
+        assert "warnings" in data
+        assert "validation_time_ms" in data
+        assert "timestamp" in data
