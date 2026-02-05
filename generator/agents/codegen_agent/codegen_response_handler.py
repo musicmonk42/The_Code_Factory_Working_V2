@@ -380,8 +380,26 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
         raw = response
     
     raw = raw.strip() if raw else ''
+    
+    # Log raw response length for debugging
+    logger.debug(
+        "Processing LLM response - length: %d chars, first 100: %s",
+        len(raw),
+        raw[:100] if raw else "(empty)"
+    )
+    
     # For robustness, strip outer code fences before JSON parsing attempt.
     cleaned_for_json = _clean_code_block(raw)
+    
+    # Check if cleaning resulted in empty code
+    if not cleaned_for_json:
+        error_msg = (
+            "LLM response did not contain recognizable code. "
+            "The response may have been an explanation or clarification request rather than code generation. "
+            f"Response preview: {raw[:200]}..."
+        )
+        logger.error(error_msg)
+        return {ERROR_FILENAME: error_msg}
 
     # --- 1. Try multi-file JSON format ---
     try:
@@ -465,6 +483,80 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
 # ==============================================================================
 # --- Helpers: Cleaning & Syntax Validation ---
 # ==============================================================================
+
+
+def _contains_code_markers(text: str) -> bool:
+    """
+    Check if text contains indicators that it's actual code rather than prose.
+    
+    This function helps distinguish between:
+    - Actual code (imports, function definitions, class declarations, etc.)
+    - Explanatory text from LLM (apologies, clarification requests, questions)
+    
+    Args:
+        text: The text to analyze
+        
+    Returns:
+        True if text appears to be code, False if it's likely prose/explanation
+        
+    Examples:
+        >>> _contains_code_markers("import os\\ndef main(): pass")
+        True
+        >>> _contains_code_markers("I need more information about your requirements")
+        False
+        
+    Note:
+        This is a heuristic check that uses indicator counting. It's designed to
+        catch cases where the LLM returns explanatory text instead of code.
+    """
+    if not text or len(text) < 5:
+        return False
+    
+    # Code indicators (must have at least one)
+    CODE_INDICATORS = (
+        # Python-specific keywords and constructs
+        'import ', 'from ', 'def ', 'class ', 'async def',
+        'if __name__', 'return ', 'yield ', 'raise ',
+        'for ', 'while ', 'try:', 'except', 'with ',
+        'lambda ', 'assert ', 'pass', 'break', 'continue',
+        # Function/method calls - common in Python
+        'print(', 'len(', 'range(', 'str(', 'int(', 'open(',
+        # Common patterns
+        '= ', '==', '!=', '()', '[]', '{}',
+        # Comments/docstrings
+        '#', '"""', "'''",
+        # Operators
+        '+=', '-=', '*=', '/=', '**', '//'
+    )
+    
+    # Prose indicators (if these dominate, it's likely not code)
+    PROSE_INDICATORS = (
+        'I need', 'I apologize', 'I cannot', "I'm sorry", "I can't",
+        'please provide', 'could you', 'would you', 'you need to',
+        'more information', 'clarify', 'specify', 'details about',
+        'unfortunately', 'however', 'therefore',
+        'before I can', 'in order to', 'help me understand'
+    )
+    
+    text_lower = text.lower()
+    
+    # Count indicators
+    code_score = sum(1 for indicator in CODE_INDICATORS if indicator.lower() in text_lower)
+    prose_score = sum(1 for indicator in PROSE_INDICATORS if indicator in text_lower)
+    
+    # If prose dominates, it's not code
+    if prose_score > code_score:
+        return False
+    
+    # Must have at least one code indicator
+    return code_score > 0
+    
+    # If prose dominates, it's not code
+    if prose_score > code_score:
+        return False
+    
+    # Must have at least one code indicator
+    return code_score > 0
 
 
 def _clean_code_block(code_content: str) -> str:
@@ -572,6 +664,18 @@ def _clean_code_block(code_content: str) -> str:
             code_start_idx,
             len(result)
         )
+    
+    # ADDED: Check if result contains any code markers
+    # This prevents explanatory text from being passed to syntax validation
+    if not _contains_code_markers(result):
+        logger.warning(
+            "No code markers found in LLM response after cleaning. "
+            "Response may be explanatory text rather than code. "
+            "Preview: %s",
+            result[:150] + "..." if len(result) > 150 else result
+        )
+        # Return empty string to trigger proper error handling downstream
+        return ""
     
     return result
 
@@ -835,7 +939,11 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
     # Validate that code is not empty
     if not code.strip():
         logger.warning("Empty code block for %s; treating as error.", filename)
-        return False, "Empty code block received - no valid code generated."
+        return False, (
+            "Empty code block received - no valid code generated. "
+            "This may indicate the LLM returned explanatory text instead of code. "
+            "Try providing more specific requirements or examples."
+        )
 
     # --- Python ---
     if lang_l in ("python", "py"):
