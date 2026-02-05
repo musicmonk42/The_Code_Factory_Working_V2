@@ -576,6 +576,122 @@ def _clean_code_block(code_content: str) -> str:
     return result
 
 
+def _infer_language_from_filename(filename: str, default_lang: str = "python") -> str:
+    """
+    Infer the programming language from a filename's extension.
+    
+    This is used to determine the appropriate syntax validator when the
+    language is not explicitly provided or when validating multi-file responses.
+    
+    Args:
+        filename: The filename to analyze
+        default_lang: Default language to return if extension is unknown
+        
+    Returns:
+        Inferred language name (e.g., 'python', 'javascript', 'java')
+        
+    Examples:
+        >>> _infer_language_from_filename("main.py")
+        'python'
+        >>> _infer_language_from_filename("app.js")
+        'javascript'
+        >>> _infer_language_from_filename("README.md")
+        'markdown'
+    """
+    # Extract extension
+    ext = os.path.splitext(filename)[1].lstrip(".").lower()
+    
+    # Map common extensions to language names
+    EXTENSION_TO_LANGUAGE = {
+        # Python
+        "py": "python",
+        "pyw": "python",
+        "pyi": "python",
+        # JavaScript/TypeScript
+        "js": "javascript",
+        "mjs": "javascript",
+        "cjs": "javascript",
+        "jsx": "javascript",
+        "ts": "typescript",
+        "tsx": "typescript",
+        # Java
+        "java": "java",
+        # Go
+        "go": "go",
+        # C/C++
+        "c": "c",
+        "cpp": "c++",
+        "cc": "c++",
+        "cxx": "c++",
+        "h": "c",
+        "hpp": "c++",
+        # C#
+        "cs": "csharp",
+        # Ruby
+        "rb": "ruby",
+        # PHP
+        "php": "php",
+        # Rust
+        "rs": "rust",
+        # Swift
+        "swift": "swift",
+        # Kotlin
+        "kt": "kotlin",
+        # Shell
+        "sh": "shell",
+        "bash": "shell",
+        # SQL
+        "sql": "sql",
+        # Documentation/Config files (should not be validated as code)
+        "md": "markdown",
+        "markdown": "markdown",
+        "txt": "text",
+        "rst": "restructuredtext",
+        "json": "json",
+        "yaml": "yaml",
+        "yml": "yaml",
+        "toml": "toml",
+        "xml": "xml",
+        "html": "html",
+        "css": "css",
+    }
+    
+    return EXTENSION_TO_LANGUAGE.get(ext, default_lang)
+
+
+def _should_skip_syntax_validation(filename: str) -> bool:
+    """
+    Determine if a file should skip syntax validation.
+    
+    Documentation files, configuration files, and other non-code files
+    should not be validated as source code.
+    
+    Args:
+        filename: The filename to check
+        
+    Returns:
+        True if syntax validation should be skipped
+        
+    Examples:
+        >>> _should_skip_syntax_validation("README.md")
+        True
+        >>> _should_skip_syntax_validation("config.yaml")
+        True
+        >>> _should_skip_syntax_validation("main.py")
+        False
+    """
+    # Get inferred language
+    lang = _infer_language_from_filename(filename, default_lang="")
+    
+    # Skip validation for documentation and configuration files
+    NON_CODE_LANGUAGES = {
+        "markdown", "text", "restructuredtext",
+        "json", "yaml", "toml", "xml", "html", "css"
+    }
+    
+    return lang in NON_CODE_LANGUAGES
+
+
 def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
     """
     Validates code syntax using language-appropriate mechanisms.
@@ -585,6 +701,26 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
         - is_valid: True if considered syntactically OK.
         - message: empty or diagnostic text.
     """
+    # Check if this file should skip validation (e.g., README.md, config files)
+    if _should_skip_syntax_validation(filename):
+        logger.debug(
+            "Skipping syntax validation for %s (detected as documentation/config file)",
+            filename
+        )
+        return True, f"Skipped validation for {_infer_language_from_filename(filename)} file"
+    
+    # Infer language from filename if not provided or if it's generic
+    inferred_lang = _infer_language_from_filename(filename, default_lang="python")
+    
+    # Use inferred language if original lang is empty or generic
+    if not lang or lang.lower() in ("", "text", "plain"):
+        lang = inferred_lang
+        logger.debug(
+            "Inferred language '%s' from filename '%s'",
+            lang,
+            filename
+        )
+    
     lang_l = (lang or "").lower()
 
     if not code.strip():
