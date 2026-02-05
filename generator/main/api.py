@@ -469,7 +469,7 @@ except ImportError:
     # FIX: Added dummy load_config and ConfigWatcher to the except block
     def load_config(config_file: str):
         """Dummy config loader for when imports fail."""
-        logging.warning(
+        logging.debug(
             f"Using DUMMY load_config due to ImportError. Could not load real config '{config_file}'."
         )
         # Return a minimal config to allow startup
@@ -485,17 +485,17 @@ except ImportError:
         """Dummy ConfigWatcher for when imports fail."""
 
         def __init__(self, config_file: str, callback: Callable):
-            logging.warning("Using DUMMY ConfigWatcher due to ImportError.")
+            logging.debug("Using DUMMY ConfigWatcher due to ImportError.")
 
         async def start(self):
-            logging.warning("DUMMY ConfigWatcher: Not watching file.")
+            logging.debug("DUMMY ConfigWatcher: Not watching file.")
             pass  # Do nothing
 
         def stop(self):
-            logging.warning("DUMMY ConfigWatcher: Stopped.")
+            logging.debug("DUMMY ConfigWatcher: Stopped.")
             pass  # Do nothing
 
-    logging.warning(
+    logging.debug(
         "Custom modules (runner, intent_parser, logging, metrics, utils) not found. Using dummy implementations."
     )
 

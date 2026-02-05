@@ -238,6 +238,40 @@ class FallbackConfig:
 DEFAULT_GROK_CONFIG: Final[GrokConfig] = GrokConfig()
 DEFAULT_FALLBACK_CONFIG: Final[FallbackConfig] = FallbackConfig()
 
+# ============================================================================
+# Fallback Response Constants
+# ============================================================================
+
+# Keywords to detect code generation requests
+CODE_GENERATION_KEYWORDS: Final[tuple] = (
+    "generate", "create", "write", "implement", "code", 
+    "function", "class", "method", "program", "script",
+    "def ", "class ", "import ", "function(", "const ",
+    "file:", "files:", "main.py", ".py", ".js", ".java"
+)
+
+# Keywords to detect clarification requests
+CLARIFICATION_KEYWORDS: Final[tuple] = (
+    "ambiguit", "clarif", "unclear", "requirement", "specify"
+)
+
+# Placeholder code template for when LLM API is unavailable
+FALLBACK_PYTHON_CODE: Final[str] = (
+    "# TODO: API unavailable - placeholder code\n"
+    "# Please configure API access or try again later\n\n"
+    "def main():\n"
+    "    print('Hello World')\n"
+    "    pass\n\n"
+    "if __name__ == '__main__':\n"
+    "    main()\n"
+)
+
+FALLBACK_README: Final[str] = (
+    "# Placeholder\n\n"
+    "This is placeholder code generated because the API was unavailable.\n\n"
+    "Please configure proper API access to generate actual code.\n"
+)
+
 
 # ============================================================================
 # Abstract Base Class
@@ -786,22 +820,47 @@ class GrokLLM(LLMProvider):
         Generate an intelligent fallback response when API is unavailable.
 
         This method uses the FallbackConfig to generate contextually
-        appropriate clarifying questions. The questions can be customized
-        via the fallback_config parameter during initialization.
+        appropriate clarifying questions or code templates based on the prompt type.
 
         Args:
             prompt: The original prompt
 
         Returns:
-            Generated fallback response with clarifying questions
+            Generated fallback response with clarifying questions or code template
         """
-        # Detect if this is a clarification request
         prompt_lower = prompt.lower()
+        
+        # Detect if this is a code generation request
+        is_code_request = any(
+            keyword in prompt_lower for keyword in CODE_GENERATION_KEYWORDS
+        )
+        
+        # Detect if this is a clarification request
         is_clarification_request = any(
-            keyword in prompt_lower
-            for keyword in ["ambiguit", "clarif", "unclear", "requirement", "specify"]
+            keyword in prompt_lower for keyword in CLARIFICATION_KEYWORDS
         )
 
+        if is_code_request:
+            # Return a minimal valid code structure for code generation requests
+            logger.info(
+                "Fallback detected code generation request, returning placeholder code",
+                extra={"provider": self.PROVIDER_NAME}
+            )
+            # Return multi-file JSON format with placeholder
+            return json.dumps(
+                {
+                    "files": {
+                        "main.py": FALLBACK_PYTHON_CODE,
+                        "README.md": FALLBACK_README
+                    },
+                    "metadata": {
+                        "generated_by": "fallback",
+                        "note": "API unavailable - placeholder code returned"
+                    }
+                },
+                indent=2
+            )
+        
         if is_clarification_request:
             # Generate structured clarification response using configured questions
             clarifications = [
@@ -1058,20 +1117,46 @@ class UnifiedLLMProvider(LLMProvider):
         Generate an intelligent fallback response when API is unavailable.
         
         This method uses the FallbackConfig to generate contextually
-        appropriate clarifying questions.
+        appropriate clarifying questions or code templates based on the prompt type.
         
         Args:
             prompt: The original prompt
         
         Returns:
-            Generated fallback response with clarifying questions
+            Generated fallback response with clarifying questions or code template
         """
-        # Detect if this is a clarification request
         prompt_lower = prompt.lower()
-        is_clarification_request = any(
-            keyword in prompt_lower
-            for keyword in ["ambiguit", "clarif", "unclear", "requirement", "specify"]
+        
+        # Detect if this is a code generation request
+        is_code_request = any(
+            keyword in prompt_lower for keyword in CODE_GENERATION_KEYWORDS
         )
+        
+        # Detect if this is a clarification request
+        is_clarification_request = any(
+            keyword in prompt_lower for keyword in CLARIFICATION_KEYWORDS
+        )
+        
+        if is_code_request:
+            # Return a minimal valid code structure for code generation requests
+            logger.info(
+                "Fallback detected code generation request, returning placeholder code",
+                extra={"provider": self.provider}
+            )
+            # Return multi-file JSON format with placeholder
+            return json.dumps(
+                {
+                    "files": {
+                        "main.py": FALLBACK_PYTHON_CODE,
+                        "README.md": FALLBACK_README
+                    },
+                    "metadata": {
+                        "generated_by": "fallback",
+                        "note": "Central LLM client unavailable - placeholder code returned"
+                    }
+                },
+                indent=2
+            )
         
         if is_clarification_request:
             # Generate structured clarification response using configured questions
