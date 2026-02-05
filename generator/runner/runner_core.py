@@ -743,9 +743,21 @@ class Runner(ABC):
                 logger.warning(f"Skipping Windows absolute path: {file_name}")
                 continue
 
-            # Compute full path and ensure it's within target_dir
+            # Compute full path and ensure it's within target_dir (symlink-safe)
             full_path = (target_dir / file_name).resolve()
-            if not str(full_path).startswith(str(target_dir.resolve())):
+            resolved_target = target_dir.resolve()
+            # Use is_relative_to (Python 3.9+) if available, otherwise fallback
+            try:
+                is_inside = full_path.is_relative_to(resolved_target)
+            except AttributeError:
+                # Python < 3.9 fallback
+                try:
+                    full_path.relative_to(resolved_target)
+                    is_inside = True
+                except ValueError:
+                    is_inside = False
+            
+            if not is_inside:
                 logger.warning(f"Skipping file outside target directory: {file_name}")
                 continue
             

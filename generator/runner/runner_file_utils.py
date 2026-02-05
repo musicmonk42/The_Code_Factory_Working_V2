@@ -1078,11 +1078,20 @@ def _validate_filename_security(filename: str, output_dir: Path) -> Tuple[bool, 
         if base_name in windows_reserved:
             return False, f"windows_reserved_name: {base_name}"
     
-    # Verify resolved path is within output directory
+    # Verify resolved path is within output directory (symlink-safe)
     try:
         resolved_path = (output_dir / normalized).resolve()
-        if not str(resolved_path).startswith(str(output_dir)):
-            return False, "resolved_path_outside_output_dir"
+        resolved_output_dir = output_dir.resolve()
+        # Use is_relative_to (Python 3.9+) if available, otherwise use parent check
+        try:
+            if not resolved_path.is_relative_to(resolved_output_dir):
+                return False, "resolved_path_outside_output_dir"
+        except AttributeError:
+            # Fallback for Python < 3.9: check parent chain
+            try:
+                resolved_path.relative_to(resolved_output_dir)
+            except ValueError:
+                return False, "resolved_path_outside_output_dir"
     except (OSError, ValueError) as e:
         return False, f"path_resolution_error: {e}"
     
@@ -1484,7 +1493,9 @@ async def validate_generated_project(
                 try:
                     content = file_path.read_text(encoding="utf-8")
                     # Detect if content looks like a JSON file map
-                    if content.strip().startswith("{") and '"main.py"' in content[:JSON_DETECTION_HEADER_SIZE]:
+                    # Safe slicing with min() to handle short content
+                    content_header = content[:min(JSON_DETECTION_HEADER_SIZE, len(content))] if content else ""
+                    if len(content) > 0 and content.strip().startswith("{") and '"main.py"' in content_header:
                         try:
                             parsed = json.loads(content)
                             if isinstance(parsed, dict) and any(k.endswith(".py") for k in parsed.keys()):

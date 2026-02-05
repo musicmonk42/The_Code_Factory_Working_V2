@@ -896,9 +896,23 @@ Agent --> Dev : Deliver Report
                     ]
                     
                     # Add import for the module being tested
+                    # Use explicit imports to avoid namespace pollution (industry best practice)
                     module_name = Path(file_path).stem
                     test_lines.append(f'# Import the module being tested')
-                    test_lines.append(f'from {module_name} import *')
+                    if functions:
+                        funcs_to_import = ', '.join(functions[:10])  # Limit to first 10
+                        if len(functions) > 10:
+                            test_lines.append(f'from {module_name} import {funcs_to_import}  # truncated')
+                        else:
+                            test_lines.append(f'from {module_name} import {funcs_to_import}')
+                    if classes:
+                        classes_to_import = ', '.join(classes[:5])  # Limit to first 5
+                        if len(classes) > 5:
+                            test_lines.append(f'from {module_name} import {classes_to_import}  # truncated')
+                        else:
+                            test_lines.append(f'from {module_name} import {classes_to_import}')
+                    if not functions and not classes:
+                        test_lines.append(f'import {module_name}')
                     test_lines.append('')
                     test_lines.append('')
                     
@@ -1257,17 +1271,23 @@ def test_{file_stem}_syntax_error_documentation():
                     lines.append('        # Verify the endpoint returns a successful response')
                     lines.append('        assert response.status_code == 200, f"Expected 200, got {response.status_code}"')
                 elif method == 'post':
-                    lines.append('        # TODO: Customize payload based on endpoint schema')
-                    lines.append('        # The empty payload may fail validation - update with required fields')
-                    lines.append('        payload = {}  # Placeholder - replace with actual required fields')
+                    lines.append('        # IMPORTANT: This test requires manual configuration!')
+                    lines.append('        # The endpoint likely requires specific fields in the request body.')
+                    lines.append('        # Update the payload below with valid test data based on the endpoint schema.')
+                    lines.append('        # Without valid data, FastAPI will return 422 (Unprocessable Entity).')
+                    lines.append('        pytest.skip("POST test requires manual payload configuration")')
+                    lines.append('        payload = {')
+                    lines.append('            # TODO: Add required fields here')
+                    lines.append('            # Example: "field_name": "test_value"')
+                    lines.append('        }')
                     lines.append(f'        response = client.post("{path}", json=payload)')
-                    lines.append('        # Accept 200/201 for success, 422 indicates missing required fields')
-                    lines.append('        assert response.status_code in (200, 201, 422), f"Unexpected status: {response.status_code}"')
+                    lines.append('        assert response.status_code in (200, 201), f"Expected success, got {response.status_code}"')
                 elif method in ('put', 'patch'):
-                    lines.append('        # TODO: Customize payload based on endpoint schema')
-                    lines.append('        payload = {}  # Placeholder - replace with actual required fields')
+                    lines.append('        # IMPORTANT: This test requires manual configuration!')
+                    lines.append('        pytest.skip("PUT/PATCH test requires manual payload configuration")')
+                    lines.append('        payload = {}  # TODO: Add required fields')
                     lines.append(f'        response = client.{method}("{path}", json=payload)')
-                    lines.append('        assert response.status_code in (200, 422), f"Unexpected status: {response.status_code}"')
+                    lines.append('        assert response.status_code == 200, f"Expected success, got {response.status_code}"')
                 elif method == 'delete':
                     lines.append(f'        response = client.delete("{path}")')
                     lines.append('        assert response.status_code in (200, 204), f"Expected success, got {response.status_code}"')
