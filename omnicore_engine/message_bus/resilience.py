@@ -49,7 +49,7 @@ def _is_async_context() -> bool:
 
 class CircuitBreaker:
     """
-    Hybrid sync/async circuit breaker implementation.
+    Hybrid sync/async circuit breaker implementation with multiprocessing support.
 
     This circuit breaker automatically detects the execution context (sync vs async)
     and uses the appropriate locking mechanism to prevent event loop blocking.
@@ -60,9 +60,13 @@ class CircuitBreaker:
         - half-open: Testing if service has recovered
 
     Thread-safe and asyncio-safe through context-aware locking.
+    Pickle-safe for multiprocessing and distributed testing scenarios.
 
-    Industry Standard: Follows the Circuit Breaker pattern from "Release It!"
-    by Michael Nygard and Netflix's Hystrix implementation.
+    Industry Standards:
+        - Circuit Breaker pattern: "Release It!" by Michael Nygard
+        - Resilience patterns: Netflix's Hystrix implementation
+        - Pickle protocol: PEP 307/3154 for distributed computing compatibility
+        - Used with pytest-xdist, Celery, Dask, and other distributed frameworks
     """
 
     def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60):
@@ -90,6 +94,61 @@ class CircuitBreaker:
         # Hybrid locking: Both thread lock and async lock for context-aware safety
         self._thread_lock = threading.Lock()
         self._async_lock: Optional[asyncio.Lock] = None
+        self._lock_init_lock = threading.Lock()
+
+    def __getstate__(self):
+        """
+        Prepare CircuitBreaker for serialization (pickle protocol).
+
+        This method is essential for multiprocessing and distributed testing scenarios,
+        particularly with pytest-xdist's --forked mode. Synchronization primitives
+        (threading.Lock, asyncio.Lock) cannot be pickled as they are process-specific
+        and bound to the parent process's memory space.
+
+        Industry Standard: Python's pickle protocol (PEP 307/3154) is used by distributed
+        computing frameworks (Celery, Dask, Ray) and multiprocessing libraries to
+        enable safe object transfer across process boundaries.
+
+        Returns:
+            dict: Object state without unpicklable synchronization primitives
+
+        Note:
+            This follows the same pattern used in production-grade libraries like
+            concurrent.futures.ProcessPoolExecutor and multiprocessing.Queue.
+        """
+        state = self.__dict__.copy()
+        # Remove synchronization primitives which cannot be pickled
+        # These will be reconstructed in the target process via __setstate__
+        state['_async_lock'] = None
+        state['_thread_lock'] = None
+        state['_lock_init_lock'] = None
+        return state
+
+    def __setstate__(self, state):
+        """
+        Restore CircuitBreaker after deserialization in forked/spawned process.
+
+        Reconstructs synchronization primitives that were excluded during pickling.
+        This ensures the CircuitBreaker is fully functional in the new process with
+        fresh locks bound to the new process's memory space.
+
+        Industry Standard: Following the pickle protocol pattern used in concurrent
+        and distributed computing frameworks where objects must be safely
+        reconstructed across process boundaries.
+
+        Args:
+            state: Pickled object state dictionary
+
+        Note:
+            - Thread locks are recreated immediately for thread-safety
+            - Async lock remains None and will be lazily initialized when needed
+              via _get_async_lock() to ensure it's bound to the correct event loop
+            - All circuit breaker state (failure counts, thresholds) is preserved
+        """
+        self.__dict__.update(state)
+        # Reconstruct synchronization primitives in the new process
+        self._thread_lock = threading.Lock()
+        self._async_lock = None  # Lazy initialization via _get_async_lock()
         self._lock_init_lock = threading.Lock()
 
     def _get_async_lock(self) -> Optional[asyncio.Lock]:

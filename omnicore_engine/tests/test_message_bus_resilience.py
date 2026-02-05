@@ -1,6 +1,8 @@
 # test_resilience.py
 
 import concurrent.futures
+import multiprocessing as mp
+import pickle
 import time
 import unittest
 from unittest.mock import patch
@@ -405,6 +407,194 @@ class TestCircuitBreaker(unittest.TestCase):
         # Wait past timeout
         time.sleep(0.02)
         self.assertTrue(cb.can_attempt())
+
+
+class TestCircuitBreakerPickle(unittest.TestCase):
+    """
+    Test suite for CircuitBreaker pickle/multiprocessing support.
+    
+    Validates that CircuitBreaker instances can be safely serialized and
+    transferred across process boundaries, which is essential for:
+    - pytest-xdist --forked mode
+    - multiprocessing-based parallel execution
+    - distributed computing frameworks (Celery, Dask, Ray)
+    """
+
+    def test_pickle_basic_serialization(self):
+        """Test basic pickle serialization and deserialization."""
+        cb = CircuitBreaker(failure_threshold=5, recovery_timeout=60)
+        cb.record_failure()
+        cb.record_failure()
+        
+        # Serialize
+        pickled = pickle.dumps(cb)
+        self.assertIsInstance(pickled, bytes)
+        self.assertGreater(len(pickled), 0)
+        
+        # Deserialize
+        cb_restored = pickle.loads(pickled)
+        
+        # Verify state preservation
+        self.assertEqual(cb_restored.failure_count, 2)
+        self.assertEqual(cb_restored.state, "closed")
+        self.assertEqual(cb_restored.failure_threshold, 5)
+        self.assertEqual(cb_restored.recovery_timeout, 60)
+
+    def test_pickle_state_preservation(self):
+        """Test that all CircuitBreaker state is preserved across pickle."""
+        cb = CircuitBreaker(failure_threshold=3, recovery_timeout=120)
+        
+        # Set various states
+        cb.record_failure()
+        cb.record_failure()
+        cb.record_failure()  # Should open circuit
+        
+        self.assertEqual(cb.state, "open")
+        self.assertEqual(cb.failure_count, 3)
+        self.assertIsNotNone(cb.last_failure_time)
+        
+        # Pickle and unpickle
+        cb_restored = pickle.loads(pickle.dumps(cb))
+        
+        # Verify all state preserved
+        self.assertEqual(cb_restored.state, "open")
+        self.assertEqual(cb_restored.failure_count, 3)
+        self.assertEqual(cb_restored.failure_threshold, 3)
+        self.assertEqual(cb_restored.recovery_timeout, 120)
+        self.assertEqual(cb_restored.last_failure_time, cb.last_failure_time)
+
+    def test_pickle_functionality_after_restore(self):
+        """Test that CircuitBreaker remains fully functional after unpickling."""
+        cb = CircuitBreaker(failure_threshold=5, recovery_timeout=60)
+        cb.record_failure()
+        
+        # Pickle and unpickle
+        cb_restored = pickle.loads(pickle.dumps(cb))
+        
+        # Test can_attempt
+        self.assertTrue(cb_restored.can_attempt())
+        
+        # Test record_failure
+        cb_restored.record_failure()
+        self.assertEqual(cb_restored.failure_count, 2)
+        
+        # Test record_success
+        cb_restored.record_success()
+        self.assertEqual(cb_restored.failure_count, 0)
+        self.assertEqual(cb_restored.state, "closed")
+
+    def test_pickle_locks_recreated(self):
+        """Test that synchronization primitives are properly recreated."""
+        cb = CircuitBreaker()
+        cb.record_failure()
+        
+        # Store original lock references
+        original_thread_lock = cb._thread_lock
+        original_lock_init_lock = cb._lock_init_lock
+        
+        # Pickle and unpickle
+        cb_restored = pickle.loads(pickle.dumps(cb))
+        
+        # Verify locks exist and are new instances
+        self.assertIsNotNone(cb_restored._thread_lock)
+        self.assertIsNotNone(cb_restored._lock_init_lock)
+        self.assertIsNone(cb_restored._async_lock)  # Lazy initialization
+        
+        # Locks should be different objects (new process memory)
+        self.assertIsNot(cb_restored._thread_lock, original_thread_lock)
+        self.assertIsNot(cb_restored._lock_init_lock, original_lock_init_lock)
+
+    def test_pickle_multiple_cycles(self):
+        """Test multiple pickle/unpickle cycles maintain correctness."""
+        cb = CircuitBreaker(failure_threshold=10, recovery_timeout=30)
+        
+        for i in range(3):
+            cb.record_failure()
+            cb = pickle.loads(pickle.dumps(cb))
+            self.assertEqual(cb.failure_count, i + 1)
+            self.assertEqual(cb.state, "closed")
+        
+        # Verify still functional
+        self.assertTrue(cb.can_attempt())
+
+    def test_multiprocessing_fork_compatibility(self):
+        """Test CircuitBreaker works in forked process (pytest-xdist scenario)."""
+        def worker_func(cb_pickled, result_queue):
+            """Worker function running in forked child process."""
+            try:
+                cb = pickle.loads(cb_pickled)
+                
+                # Verify state
+                assert cb.failure_count == 2
+                assert cb.state == "closed"
+                
+                # Test operations
+                cb.record_failure()
+                can_attempt = cb.can_attempt()
+                
+                result_queue.put(("SUCCESS", cb.failure_count, can_attempt))
+            except Exception as e:
+                result_queue.put(("ERROR", str(e), type(e).__name__))
+        
+        # Create and pickle CircuitBreaker
+        cb = CircuitBreaker(failure_threshold=5, recovery_timeout=60)
+        cb.record_failure()
+        cb.record_failure()
+        cb_pickled = pickle.dumps(cb)
+        
+        # Fork process
+        result_queue = mp.Queue()
+        process = mp.Process(target=worker_func, args=(cb_pickled, result_queue))
+        process.start()
+        process.join(timeout=5)
+        
+        # Verify process completed successfully
+        self.assertEqual(process.exitcode, 0, 
+                        f"Worker process failed with exit code {process.exitcode}")
+        
+        # Check results
+        result = result_queue.get(timeout=1)
+        status, failure_count, can_attempt = result[0], result[1], result[2]
+        
+        self.assertEqual(status, "SUCCESS")
+        self.assertEqual(failure_count, 3)
+        self.assertTrue(can_attempt)
+
+    def test_pickle_open_circuit_state(self):
+        """Test pickling when circuit is in open state."""
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=10)
+        
+        # Open the circuit
+        cb.record_failure()
+        cb.record_failure()
+        self.assertEqual(cb.state, "open")
+        
+        # Pickle and unpickle
+        cb_restored = pickle.loads(pickle.dumps(cb))
+        
+        # Verify open state preserved
+        self.assertEqual(cb_restored.state, "open")
+        self.assertFalse(cb_restored.can_attempt())
+
+    @patch("omnicore_engine.message_bus.resilience.time.time")
+    def test_pickle_half_open_transition(self, mock_time):
+        """Test that half-open transition works after unpickling."""
+        cb = CircuitBreaker(failure_threshold=1, recovery_timeout=10)
+        
+        # Set time and open circuit
+        mock_time.return_value = 1000.0
+        cb.record_failure()
+        self.assertEqual(cb.state, "open")
+        
+        # Pickle and unpickle
+        cb_restored = pickle.loads(pickle.dumps(cb))
+        
+        # Move time forward past recovery timeout
+        mock_time.return_value = 1011.0
+        
+        # Should transition to half-open
+        self.assertTrue(cb_restored.can_attempt())
+        self.assertEqual(cb_restored.state, "half-open")
 
 
 class TestIntegration(unittest.TestCase):
