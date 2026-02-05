@@ -1095,6 +1095,10 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
     if filename.lower().endswith(('.md', '.txt', '.json', '.yaml', '.yml', '.toml', '.xml', '.rst')):
         return False, []
     
+    # Parse code into lines early for all checks
+    lines = code.split('\n')
+    non_empty_lines = [line for line in lines if line.strip() and not line.strip().startswith('#')]
+    
     # Stub patterns to detect
     STUB_PATTERNS = [
         (r'\bpass\s*(?:\n|$)', "Contains 'pass' statement (placeholder)"),
@@ -1110,7 +1114,6 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
     ]
     
     code_lower = code.lower()
-    lines = code.split('\n')
     
     # Check for stub patterns
     for pattern, description in STUB_PATTERNS:
@@ -1119,11 +1122,13 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
             issues.append(f"{description} (found {len(matches)} occurrence(s))")
     
     # Check for minimal implementation (very short code files)
-    # Exclude config/setup files
+    # Exclude config/setup files and utility modules
     if not filename.lower().endswith(('requirements.txt', 'setup.py', 'config.py', '__init__.py')):
-        non_empty_lines = [line for line in lines if line.strip() and not line.strip().startswith('#')]
-        if len(non_empty_lines) < 10:
-            issues.append(f"Code is suspiciously short ({len(non_empty_lines)} non-empty lines)")
+        # Configurable threshold - 10 lines for main application files
+        # Data classes and simple utilities may legitimately be shorter
+        min_lines = 10 if filename.lower() in ('main.py', 'app.py', 'server.py', 'api.py', 'routes.py') else 5
+        if len(non_empty_lines) < min_lines:
+            issues.append(f"Code is suspiciously short ({len(non_empty_lines)} non-empty lines, expected at least {min_lines})")
     
     # Check for missing error handling in main application files
     if filename.lower() in ('main.py', 'app.py', 'server.py', 'api.py', 'routes.py'):

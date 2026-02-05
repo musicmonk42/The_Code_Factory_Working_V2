@@ -755,8 +755,14 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         raise
     except Exception as e:
         logger.error(f"Error during Kafka validation: {e}", exc_info=True)
-        # Check if Kafka is required
-        if os.getenv("KAFKA_REQUIRED", "false").lower() in ("true", "1", "yes"):
+        # Check if Kafka is required from config (already loaded) or env var
+        kafka_required = False
+        if config:
+            kafka_required = getattr(config, 'kafka_required', False)
+        else:
+            kafka_required = os.getenv("KAFKA_REQUIRED", "false").lower() in ("true", "1", "yes")
+            
+        if kafka_required:
             raise RuntimeError(f"Kafka validation failed and KAFKA_REQUIRED=true: {e}")
     
     # HIGH: Start periodic audit flush task now that event loop is running
