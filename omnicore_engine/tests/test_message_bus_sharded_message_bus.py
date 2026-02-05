@@ -291,18 +291,17 @@ class TestShardedMessageBus(unittest.TestCase):
             # Create mock callback
             callback = Mock()
 
-            # Subscribe
+            # Subscribe (now synchronous)
             bus.subscribe("test.topic", callback)
 
             # Verify subscription
-            await bus._subscribe_async("test.topic", callback)
             self.assertIn("test.topic", bus.subscribers)
             self.assertEqual(len(bus.subscribers["test.topic"]), 1)
 
-            # Unsubscribe
+            # Unsubscribe (now synchronous)
             bus.unsubscribe("test.topic", callback)
 
-            await bus._unsubscribe_async("test.topic", callback)
+            # Verify unsubscription
             self.assertEqual(len(bus.subscribers["test.topic"]), 0)
 
     async def test_request_response_pattern(self):
@@ -456,8 +455,8 @@ class TestShardedMessageBusIntegration(unittest.TestCase):
             async def callback(message):
                 received_messages.append(message)
 
-            # Subscribe
-            await bus._subscribe_async("test.topic", callback)
+            # Subscribe (now synchronous, callable from async context)
+            bus.subscribe("test.topic", callback)
 
             # Publish
             await bus.publish("test.topic", {"data": "test"}, priority=1)

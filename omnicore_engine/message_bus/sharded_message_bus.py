@@ -1439,10 +1439,8 @@ class ShardedMessageBus:
         """
         Unsubscribe a handler from a topic.
         
-        Industry-standard implementation with:
-        - Proper error handling and logging
-        - Thread-safe event loop access
-        - Graceful handling of sync/async contexts
+        Fully synchronous implementation - no async overhead.
+        Thread-safe using threading.RLock for immediate unsubscription.
         
         Args:
             topic: Topic string or regex pattern to unsubscribe from
@@ -1453,31 +1451,35 @@ class ShardedMessageBus:
         )
         
         try:
-            # Get the event loop with fallback support
-            loop = self._get_loop()
-            
-            # Schedule the async unsubscription in the event loop
-            future = asyncio.run_coroutine_threadsafe(
-                self._unsubscribe_async(topic, callback), loop
-            )
-            
-            # Wait for completion with timeout (industry best practice)
-            # Use configurable timeout (default 30s) instead of hardcoded 5s
-            subscription_timeout = getattr(settings, 'MESSAGE_BUS_SUBSCRIPTION_TIMEOUT', 30.0)
-            try:
-                result = future.result(timeout=subscription_timeout)
-                logger_for_unsubscribe.debug("Unsubscription completed successfully", result=result)
-            except TimeoutError:
-                logger_for_unsubscribe.warning(
-                    f"Unsubscription from {topic} timed out after {subscription_timeout} seconds. "
-                    "Unsubscription may still complete in background."
-                )
-            except Exception as e:
-                logger_for_unsubscribe.error(
-                    f"Error completing unsubscription: {e}",
-                    exc_info=True
-                )
-                raise
+            # Use threading lock for synchronous thread-safe operation
+            with self._subscriber_sync_lock:
+                def filter_out_callback(item):
+                    return item[0] != callback
+
+                if isinstance(topic, str):
+                    initial_len = len(self.subscribers[topic])
+                    self.subscribers[topic] = list(
+                        filter(filter_out_callback, self.subscribers[topic])
+                    )
+                    if len(self.subscribers[topic]) < initial_len:
+                        logger_for_unsubscribe.info("Unsubscribed callback from topic.")
+                    else:
+                        logger_for_unsubscribe.warning(
+                            "Callback not found for unsubscribe from topic."
+                        )
+                else:
+                    initial_len = len(self.regex_subscribers[topic])
+                    self.regex_subscribers[topic] = list(
+                        filter(filter_out_callback, self.regex_subscribers[topic])
+                    )
+                    if len(self.regex_subscribers[topic]) < initial_len:
+                        logger_for_unsubscribe.info(
+                            "Unsubscribed callback from regex pattern."
+                        )
+                    else:
+                        logger_for_unsubscribe.warning(
+                            "Callback not found for unsubscribe from regex pattern."
+                        )
                 
         except Exception as e:
             logger_for_unsubscribe.error(
@@ -1491,70 +1493,6 @@ class ShardedMessageBus:
                     topic=topic,
                     error=str(e)
                 )
-
-    async def _unsubscribe_async(
-        self, topic: Union[str, Pattern], callback: Callable[[Message], None]
-    ) -> Dict[str, Any]:
-        async with self._subscriber_lock:
-            logger_for_unsubscribe = logger.bind(
-                topic=str(topic), callback=getattr(callback, "__name__", str(callback))
-            )
-
-            def filter_out_callback(item):
-                return item[0] != callback
-
-            if isinstance(topic, str):
-                initial_len = len(self.subscribers[topic])
-                self.subscribers[topic] = list(
-                    filter(filter_out_callback, self.subscribers[topic])
-                )
-                if len(self.subscribers[topic]) < initial_len:
-                    logger_for_unsubscribe.info("Unsubscribed callback from topic.")
-                    # Explicitly signal successful unsubscription
-                    return {
-                        "status": "unsubscribed",
-                        "topic": str(topic),
-                        "handler": getattr(callback, "__name__", str(callback)),
-                        "removed": True
-                    }
-                else:
-                    logger_for_unsubscribe.warning(
-                        "Callback not found for unsubscribe from topic."
-                    )
-                    # Signal that handler wasn't found
-                    return {
-                        "status": "not_found",
-                        "topic": str(topic),
-                        "handler": getattr(callback, "__name__", str(callback)),
-                        "removed": False
-                    }
-            else:
-                initial_len = len(self.regex_subscribers[topic])
-                self.regex_subscribers[topic] = list(
-                    filter(filter_out_callback, self.regex_subscribers[topic])
-                )
-                if len(self.regex_subscribers[topic]) < initial_len:
-                    logger_for_unsubscribe.info(
-                        "Unsubscribed callback from regex pattern."
-                    )
-                    # Explicitly signal successful unsubscription from regex
-                    return {
-                        "status": "unsubscribed",
-                        "topic_pattern": str(topic.pattern) if hasattr(topic, 'pattern') else str(topic),
-                        "handler": getattr(callback, "__name__", str(callback)),
-                        "removed": True
-                    }
-                else:
-                    logger_for_unsubscribe.warning(
-                        "Callback not found for unsubscribe from regex pattern."
-                    )
-                    # Signal that handler wasn't found in regex subscribers
-                    return {
-                        "status": "not_found",
-                        "topic_pattern": str(topic.pattern) if hasattr(topic, 'pattern') else str(topic),
-                        "handler": getattr(callback, "__name__", str(callback)),
-                        "removed": False
-                    }
 
     async def request(
         self, topic: str, payload: Any, timeout: float = 5.0, priority: int = 5
