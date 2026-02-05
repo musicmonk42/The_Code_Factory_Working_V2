@@ -366,6 +366,13 @@ class ShardedMessageBus:
         self.regex_subscribers: Dict[
             Pattern, List[Tuple[Callable[[Message], None], Optional[Any]]]
         ] = defaultdict(list)
+        # Dual-lock strategy for subscriber management:
+        # - _subscriber_lock (asyncio): Used by async dispatcher for reading subscribers
+        # - _subscriber_sync_lock (threading): Used by sync subscribe/unsubscribe for writing
+        # This is safe because:
+        # 1. List append/extend operations are atomic in CPython (GIL protected)
+        # 2. Dispatcher copies subscriber lists while holding async lock
+        # 3. Threading lock ensures subscribe/unsubscribe don't interfere with each other
         self._subscriber_lock = asyncio.Lock()
         self._subscriber_sync_lock = threading.RLock()  # Thread-safe lock for sync subscribe/unsubscribe
         self._publish_lock = asyncio.Lock()
