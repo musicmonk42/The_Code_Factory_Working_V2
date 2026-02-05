@@ -575,7 +575,8 @@ class TestDLTIntegration:
     async def test_dlt_anchoring_critical_events(self, logger_instance):
         """Test that critical events trigger DLT anchoring when enabled."""
         mock_dlt_client = MagicMock()
-        mock_dlt_client.log_event_batch = AsyncMock(return_value=["tx_123"])
+        # log_event_batch is called via run_in_executor (synchronously), not awaited
+        mock_dlt_client.log_event_batch = MagicMock(return_value=["tx_123"])
 
         logger_instance.config.dlt_enabled = True
         logger_instance._dlt_client = mock_dlt_client

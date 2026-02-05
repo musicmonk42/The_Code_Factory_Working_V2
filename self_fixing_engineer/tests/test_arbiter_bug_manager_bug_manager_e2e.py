@@ -235,14 +235,9 @@ async def test_e2e_rate_limiting(tmp_path):
         ENABLED_NOTIFICATION_CHANNELS=(),
     )
 
-    # Initialize the global rate limiter with test settings
-    from self_fixing_engineer.arbiter.bug_manager import bug_manager
-
-    bug_manager.rate_limiter = bug_manager.RateLimiter(settings)
-    await bug_manager.rate_limiter.initialize()
-
     error_to_report = "Database is locked"
 
+    # BugManager now creates its own rate_limiter internally with the given settings
     bm = BugManager(settings)
     try:
         # 2. Action & Assertions

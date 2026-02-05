@@ -1382,7 +1382,29 @@ def scan(
                 use_baseline=use_baseline,
             )
 
-    asyncio.run(_scan())
+    # Use a more robust async execution pattern that works in test environments
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    
+    if loop and loop.is_running():
+        # If there's already a running loop, use nest_asyncio pattern
+        import nest_asyncio
+        nest_asyncio.apply()
+        loop.run_until_complete(_scan())
+    else:
+        # Create a new event loop if none exists
+        try:
+            asyncio.run(_scan())
+        except RuntimeError:
+            # Fallback for environments where asyncio.run() fails
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(_scan())
+            finally:
+                loop.close()
 
 
 @app.command()
@@ -1398,7 +1420,29 @@ def tools(root_dir: str = typer.Option(".", help="Root directory to analyze")):
                     f"{tool['name']} ({tool['type']}): {status} via {tool['installed_via'] or 'N/A'}"
                 )
 
-    asyncio.run(_tools())
+    # Use a more robust async execution pattern that works in test environments
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    
+    if loop and loop.is_running():
+        # If there's already a running loop, use nest_asyncio pattern
+        import nest_asyncio
+        nest_asyncio.apply()
+        loop.run_until_complete(_tools())
+    else:
+        # Create a new event loop if none exists
+        try:
+            asyncio.run(_tools())
+        except RuntimeError:
+            # Fallback for environments where asyncio.run() fails
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(_tools())
+            finally:
+                loop.close()
 
 
 if __name__ == "__main__":
