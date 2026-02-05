@@ -906,9 +906,11 @@ Agent --> Dev : Deliver Report
                     for func_name in functions:
                         test_lines.append(f'def test_{func_name}():')
                         test_lines.append(f'    """Test {func_name} function."""')
-                        test_lines.append(f'    # Test that the function can be called')
-                        test_lines.append(f'    result = {func_name}()')
-                        test_lines.append(f'    assert result is not None or result is None  # Verify call succeeded')
+                        test_lines.append(f'    # Test that the function can be called without raising an exception')
+                        test_lines.append(f'    try:')
+                        test_lines.append(f'        result = {func_name}()')
+                        test_lines.append(f'    except TypeError:')
+                        test_lines.append(f'        pass  # Function may require arguments')
                         test_lines.append('')
                         test_lines.append('')
                     
@@ -1252,17 +1254,23 @@ def test_{file_stem}_syntax_error_documentation():
                 
                 if method == 'get':
                     lines.append(f'        response = client.get("{path}")')
-                    lines.append('        assert response.status_code in (200, 404), f"Unexpected status: {response.status_code}"')
+                    lines.append('        # Verify the endpoint returns a successful response')
+                    lines.append('        assert response.status_code == 200, f"Expected 200, got {response.status_code}"')
                 elif method == 'post':
-                    lines.append(f'        # Adjust payload based on endpoint requirements')
-                    lines.append(f'        response = client.post("{path}", json={{}})')
-                    lines.append('        assert response.status_code in (200, 201, 400, 422), f"Unexpected status: {response.status_code}"')
+                    lines.append('        # TODO: Customize payload based on endpoint schema')
+                    lines.append('        # The empty payload may fail validation - update with required fields')
+                    lines.append('        payload = {}  # Placeholder - replace with actual required fields')
+                    lines.append(f'        response = client.post("{path}", json=payload)')
+                    lines.append('        # Accept 200/201 for success, 422 indicates missing required fields')
+                    lines.append('        assert response.status_code in (200, 201, 422), f"Unexpected status: {response.status_code}"')
                 elif method in ('put', 'patch'):
-                    lines.append(f'        response = client.{method}("{path}", json={{}})')
-                    lines.append('        assert response.status_code in (200, 400, 404, 422), f"Unexpected status: {response.status_code}"')
+                    lines.append('        # TODO: Customize payload based on endpoint schema')
+                    lines.append('        payload = {}  # Placeholder - replace with actual required fields')
+                    lines.append(f'        response = client.{method}("{path}", json=payload)')
+                    lines.append('        assert response.status_code in (200, 422), f"Unexpected status: {response.status_code}"')
                 elif method == 'delete':
                     lines.append(f'        response = client.delete("{path}")')
-                    lines.append('        assert response.status_code in (200, 204, 404), f"Unexpected status: {response.status_code}"')
+                    lines.append('        assert response.status_code in (200, 204), f"Expected success, got {response.status_code}"')
                 
                 lines.append('')
         
