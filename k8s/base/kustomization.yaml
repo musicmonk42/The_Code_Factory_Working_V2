@@ -4,7 +4,6 @@ kind: Kustomization
 namespace: codefactory
 
 resources:
-  - namespace.yaml
   - configmap.yaml
   - secret.yaml
   - rbac.yaml
@@ -14,9 +13,10 @@ resources:
   - api-networkpolicy.yaml
   - redis-networkpolicy.yaml
 
-commonLabels:
-  app.kubernetes.io/name: codefactory
-  app.kubernetes.io/part-of: codefactory-platform
+labels:
+  - pairs:
+      app.kubernetes.io/name: codefactory
+      app.kubernetes.io/part-of: codefactory-platform
 
 images:
   - name: ghcr.io/musicmonk42/codefactory

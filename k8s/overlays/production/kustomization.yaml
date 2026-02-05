@@ -3,10 +3,8 @@ kind: Kustomization
 
 namespace: codefactory-production
 
-bases:
-  - ../../base
-
 resources:
+  - ../../base
   - namespace.yaml
   - hpa.yaml
   - pdb.yaml
@@ -51,8 +49,9 @@ patches:
         path: /data/WORKER_COUNT
         value: "8"
 
-commonLabels:
-  environment: production
+labels:
+  - pairs:
+      environment: production
 
 images:
   - name: ghcr.io/musicmonk42/codefactory

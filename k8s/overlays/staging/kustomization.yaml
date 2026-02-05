@@ -3,10 +3,8 @@ kind: Kustomization
 
 namespace: codefactory-staging
 
-bases:
-  - ../../base
-
 resources:
+  - ../../base
   - namespace.yaml
 
 patches:
@@ -46,8 +44,9 @@ patches:
         path: /data/APP_ENV
         value: staging
 
-commonLabels:
-  environment: staging
+labels:
+  - pairs:
+      environment: staging
 
 images:
   - name: ghcr.io/musicmonk42/codefactory
