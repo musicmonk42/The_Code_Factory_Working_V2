@@ -415,7 +415,6 @@ def test_hot_reloading_loader_clears_cache():
     """
     import tempfile
     import os
-    from unittest.mock import Mock
     from jinja2 import Environment
     from agents.codegen_agent.codegen_prompt import HotReloadingFileSystemLoader
     
@@ -434,36 +433,37 @@ def test_hot_reloading_loader_clears_cache():
         # Load the template first time
         template1 = env.get_template("test_template.txt")
         content1 = template1.render()
+        
+        # FIXED: Ensure we're actually getting string content, not Mock
+        assert isinstance(content1, str), f"Expected string, got {type(content1)}"
         assert "Initial content" in content1
         
         # Verify cache has content
         assert len(env.cache) > 0
         
-        # Use os.utime to explicitly modify the file's mtime
-        # This is more reliable than time.sleep()
+        # Modify file timestamp
         current_time = os.path.getmtime(template_path)
-        new_time = current_time + 2  # Add 2 seconds to mtime
+        new_time = current_time + 2
         os.utime(template_path, (new_time, new_time))
         
-        # Modify the template content
+        # Modify content
         with open(template_path, "w") as f:
             f.write("Modified content")
         
-        # Mock the environment cache to verify clear() is called
-        original_clear = env.cache.clear
+        # Track cache clears
         clear_called = []
+        original_clear = env.cache.clear
         def mock_clear():
             clear_called.append(True)
             original_clear()
         env.cache.clear = mock_clear
         
-        # Load the template again - this should trigger cache clear
-        template2 = env.get_template("test_template.txt")
+        # Reload template
+        template2 = env.get_template("test_template.txt")  
         content2 = template2.render()
+        
+        # Verify results
+        assert isinstance(content2, str)
         assert "Modified content" in content2
-        
-        # Verify cache.clear() was actually called
-        assert len(clear_called) > 0, "environment.cache.clear() was not called"
-        
-        # Verify the content changed
+        assert len(clear_called) > 0, "cache.clear() was not called"
         assert content1 != content2

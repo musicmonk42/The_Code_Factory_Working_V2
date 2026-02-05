@@ -721,28 +721,23 @@ async def build_code_generation_prompt(
             )
 
             # 1. Input Validation & Flexible Parsing
-            # FIX: Accept requirements in any format and normalize to dict with 'features'
-            try:
-                requirements = _parse_requirements_flexible(requirements)
-            except Exception as e:
-                logger.warning(f"Failed to parse requirements flexibly: {e}. Using as-is.")
-                # If parsing fails completely, wrap in basic structure
-                if not isinstance(requirements, dict):
-                    requirements = {
-                        'features': [str(requirements)],
-                        'description': str(requirements)
-                    }
-            
-            # Validate after parsing
-            if (
-                not isinstance(requirements, dict)
-                or "features" not in requirements
-                or not isinstance(requirements["features"], list)
-            ):
+            # ADDED: Validate requirements structure early
+            if not requirements:
                 PROMPT_ERRORS.labels("InvalidInput").inc()
-                raise ValueError(
-                    "Requirements must be a dictionary with a 'features' list."
-                )
+                raise ValueError("Requirements cannot be None or empty")
+            
+            if not isinstance(requirements, dict):
+                PROMPT_ERRORS.labels("InvalidInput").inc()
+                raise ValueError(f"Requirements must be a dict, got {type(requirements).__name__}")
+            
+            if "features" not in requirements:
+                PROMPT_ERRORS.labels("InvalidInput").inc()
+                raise ValueError("Requirements must contain 'features' key")
+            
+            features = requirements.get("features")
+            if not features or not isinstance(features, list):
+                PROMPT_ERRORS.labels("InvalidInput").inc()
+                raise ValueError("Requirements 'features' must be a non-empty list")
             if not isinstance(target_language, str) or not target_language:
                 PROMPT_ERRORS.labels("InvalidInput").inc()
                 raise ValueError("Target language must be a non-empty string.")

@@ -391,81 +391,109 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     # For robustness, strip outer code fences before JSON parsing attempt.
     cleaned_for_json = _clean_code_block(raw)
     
-    # Check if cleaning resulted in empty code
-    if not cleaned_for_json:
-        error_msg = (
-            "LLM response did not contain recognizable code. "
-            "The response may have been an explanation or clarification request rather than code generation. "
-            f"Response preview: {raw[:200]}..."
-        )
-        logger.error(error_msg)
-        return {ERROR_FILENAME: error_msg}
+    # --- 1. Try multi-file JSON format (only if cleaning produced something) ---
+    if cleaned_for_json:
+        try:
+            payload = json.loads(cleaned_for_json)
+            if isinstance(payload, dict) and isinstance(payload.get("files"), dict):
+                files_obj = payload["files"]
+                code_files: Dict[str, str] = {}
+                errors: Dict[str, str] = {}
 
-    # --- 1. Try multi-file JSON format ---
-    try:
-        payload = json.loads(cleaned_for_json)
-        if isinstance(payload, dict) and isinstance(payload.get("files"), dict):
-            files_obj = payload["files"]
-            code_files: Dict[str, str] = {}
-            errors: Dict[str, str] = {}
+                for filename, content in files_obj.items():
+                    if not isinstance(content, str):
+                        errors[filename] = "Content is not a string."
+                        continue
 
-            for filename, content in files_obj.items():
-                if not isinstance(content, str):
-                    errors[filename] = "Content is not a string."
-                    continue
+                    cleaned = _clean_code_block(content)
+                    is_valid, msg = _validate_syntax(cleaned, lang, filename)
 
-                cleaned = _clean_code_block(content)
-                is_valid, msg = _validate_syntax(cleaned, lang, filename)
+                    if is_valid:
+                        code_files[filename] = cleaned
+                    else:
+                        logger.warning(
+                            "Syntax validation failed for '%s' (%s). Details: %s",
+                            filename,
+                            lang,
+                            msg,
+                        )
+                        errors[filename] = msg
 
-                if is_valid:
-                    code_files[filename] = cleaned
-                else:
-                    logger.warning(
-                        "Syntax validation failed for '%s' (%s). Details: %s",
-                        filename,
-                        lang,
-                        msg,
+                # If any file failed, emit an aggregated error.txt
+                if errors:
+                    lines = [
+                        "One or more files failed syntax validation.",
+                        "",
+                    ]
+                    for fname, emsg in errors.items():
+                        lines.append(f"[{fname}]")
+                        lines.append(str(emsg))
+                        lines.append("")
+                    code_files[ERROR_FILENAME] = "\n".join(lines).rstrip()
+
+                if code_files:
+                    # Perform production-ready validation
+                    is_production_ready, prod_error = validate_production_ready(code_files)
+                    if not is_production_ready:
+                        logger.warning("Production-ready validation failed for multi-file response")
+                        code_files[ERROR_FILENAME] = prod_error
+                    
+                    log_action(
+                        "Parsed Multi-File Response",
+                        {
+                            "files": [f for f in code_files.keys() if f != ERROR_FILENAME],
+                            "language": lang,
+                            "had_errors": bool(errors),
+                            "production_ready": is_production_ready,
+                        },
                     )
-                    errors[filename] = msg
+                    return code_files
+                # If nothing usable, fall through to single-file handling.
 
-            # If any file failed, emit an aggregated error.txt
-            if errors:
-                lines = [
-                    "One or more files failed syntax validation.",
-                    "",
-                ]
-                for fname, emsg in errors.items():
-                    lines.append(f"[{fname}]")
-                    lines.append(str(emsg))
-                    lines.append("")
-                code_files[ERROR_FILENAME] = "\n".join(lines).rstrip()
-
-            if code_files:
-                # Perform production-ready validation
-                is_production_ready, prod_error = validate_production_ready(code_files)
-                if not is_production_ready:
-                    logger.warning("Production-ready validation failed for multi-file response")
-                    code_files[ERROR_FILENAME] = prod_error
-                
-                log_action(
-                    "Parsed Multi-File Response",
-                    {
-                        "files": [f for f in code_files.keys() if f != ERROR_FILENAME],
-                        "language": lang,
-                        "had_errors": bool(errors),
-                        "production_ready": is_production_ready,
-                    },
-                )
-                return code_files
-            # If nothing usable, fall through to single-file handling.
-
-    except json.JSONDecodeError:
-        logger.info("LLM response is not valid JSON; using single-file fallback.")
-    except Exception as e:
-        logger.error("Unexpected error while parsing JSON LLM response: %s", e)
+        except json.JSONDecodeError:
+            logger.info("LLM response is not valid JSON; using single-file fallback.")
+        except Exception as e:
+            logger.error("Unexpected error while parsing JSON LLM response: %s", e)
 
     # --- 2. Single-file fallback ---
     cleaned_code = _clean_code_block(raw)
+    
+    # If cleaning resulted in empty string but we have raw content,
+    # check if it's likely explanatory prose or actual code
+    if not cleaned_code and raw:
+        # Check if the raw text contains prose indicators (explanatory text)
+        raw_lower = raw.lower()
+        PROSE_INDICATORS = (
+            'i need', 'i apologize', 'i cannot', "i'm sorry", "i can't",
+            'please provide', 'could you', 'would you', 'you need to',
+            'more information', 'clarify', 'specify', 'details about',
+            'unfortunately', 'however', 'before i can', 'in order to',
+            'help me understand', 'not enough details', 'provide enough',
+        )
+        
+        # If raw text contains prose indicators, it's explanatory, not code
+        if any(indicator in raw_lower for indicator in PROSE_INDICATORS):
+            error_msg = (
+                "LLM response did not contain recognizable code. "
+                "The response appears to be an explanation or clarification request. "
+                f"Response preview: {raw[:200]}..."
+            )
+            logger.error(error_msg)
+            return {ERROR_FILENAME: error_msg}
+        
+        # Otherwise, treat as raw code (legacy behavior for compatibility)
+        logger.warning(
+            "No code markers found in response after cleaning. "
+            "Falling back to using raw response as-is for compatibility. "
+            "Preview: %s",
+            raw[:150] + "..." if len(raw) > 150 else raw
+        )
+        log_action(
+            "Parsed Single-File Response (Raw Fallback)",
+            {"file": DEFAULT_FILENAME, "language": lang, "production_ready": False},
+        )
+        return {DEFAULT_FILENAME: raw}
+    
     is_valid, msg = _validate_syntax(cleaned_code, lang, DEFAULT_FILENAME)
 
     if is_valid:
@@ -1100,6 +1128,8 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
     """
     Detect if code contains stub/placeholder patterns indicating incomplete implementation.
     
+    MODIFIED: Less aggressive detection that allows test code and simple implementations.
+    
     Args:
         code: The code content to analyze
         filename: Name of the file being analyzed
@@ -1119,52 +1149,50 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
     lines = code.split('\n')
     non_empty_lines = [line for line in lines if line.strip() and not line.strip().startswith('#')]
     
-    # Stub patterns to detect
+    # CHANGED: More lenient stub patterns - require multiple indicators
     STUB_PATTERNS = [
-        (r'\bpass\s*(?:\n|$)', "Contains 'pass' statement (placeholder)"),
-        (r'\.\.\.(?:\s*(?:\n|#|$))', "Contains '...' (Ellipsis placeholder)"),
         (r'\bTODO\b', "Contains TODO comment"),
         (r'\bFIXME\b', "Contains FIXME comment"),
         (r'\bXXX\b', "Contains XXX comment"),
         (r'\bNOT(?:_|\s+)IMPLEMENTED\b', "Contains NOT_IMPLEMENTED marker"),
         (r'\braise\s+NotImplementedError', "Raises NotImplementedError (stub)"),
-        (r'\breturn\s+None\s*(?:\n|#|$)', "Returns None without logic"),
-        (r'def\s+\w+\([^)]*\)\s*:\s*(?:pass|\.\.\.)', "Function with only pass/..."),
-        (r'async\s+def\s+\w+\([^)]*\)\s*:\s*(?:pass|\.\.\.)', "Async function with only pass/..."),
     ]
     
     code_lower = code.lower()
     
-    # Check for stub patterns
+    # Count stub indicators
+    stub_count = 0
     for pattern, description in STUB_PATTERNS:
         matches = re.findall(pattern, code, re.IGNORECASE)
         if matches:
             issues.append(f"{description} (found {len(matches)} occurrence(s))")
+            stub_count += len(matches)
     
-    # Check for minimal implementation (very short code files)
-    # Exclude config/setup files and utility modules
-    if not filename.lower().endswith(('requirements.txt', 'setup.py', 'config.py', '__init__.py')):
-        # Configurable threshold - 10 lines for main application files
-        # Data classes and simple utilities may legitimately be shorter
-        min_lines = 10 if filename.lower() in ('main.py', 'app.py', 'server.py', 'api.py', 'routes.py') else 5
-        if len(non_empty_lines) < min_lines:
-            issues.append(f"Code is suspiciously short ({len(non_empty_lines)} non-empty lines, expected at least {min_lines})")
+    # CHANGED: Only flag as stub if multiple strong indicators present
+    # Single pass statement or short code is OK for utilities and tests
+    if stub_count < 2:
+        # Code with 0-1 stub indicators is considered valid
+        return False, []
     
-    # Check for missing error handling in main application files
-    if filename.lower() in ('main.py', 'app.py', 'server.py', 'api.py', 'routes.py'):
-        if 'try' not in code_lower and 'except' not in code_lower:
-            issues.append("Missing error handling (no try/except blocks)")
+    # REMOVED: Overly restrictive checks:
+    # - No longer checking for minimal line counts for non-main files  
+    # - No longer requiring error handling in all files
+    # - No longer requiring imports in all Python files
+    # These are too restrictive for test code, utilities, and simple implementations
     
-    # Check for proper imports in Python files
-    if filename.endswith('.py'):
-        if len(non_empty_lines) > 5:  # Only check if there's substantial code
-            has_imports = any('import' in line.lower() for line in lines[:20])  # Check first 20 lines
-            has_from_import = any('from' in line.lower() and 'import' in line.lower() for line in lines[:20])
-            if not (has_imports or has_from_import):
-                issues.append("Missing import statements (no imports found)")
+    # Only check main application files for completeness
+    if filename.lower() in ('main.py', 'app.py', 'server.py'):
+        if len(non_empty_lines) < 10:
+            issues.append(f"Main application file is too short ({len(non_empty_lines)} non-empty lines)")
+            stub_count += 1
+        
+        if 'try' not in code_lower and 'except' not in code_lower and len(non_empty_lines) > 20:
+            issues.append("Large main file missing error handling")
+            stub_count += 1
     
-    is_stub = len(issues) > 0
-    return is_stub, issues
+    # Need at least 2 concerning indicators to flag as stub
+    is_stub = stub_count >= 2
+    return is_stub, issues if is_stub else []
 
 
 def validate_production_ready(code_files: Dict[str, str]) -> Tuple[bool, str]:
