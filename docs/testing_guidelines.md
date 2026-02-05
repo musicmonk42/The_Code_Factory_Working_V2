@@ -260,8 +260,14 @@ async def test_complex_integration():
 ### Local Development
 
 ```bash
-# Run all fast tests (default)
+# Fast unit tests (skip heavy, slow, and integration tests)
 pytest -m "not (heavy or slow or integration)"
+
+# Skip only heavy tests (used in CI)
+pytest -m "not heavy"
+
+# Run all tests (full suite)
+pytest
 
 # Run specific module tests
 pytest generator/tests/
@@ -299,14 +305,15 @@ pytest -m "not heavy"
 - Includes integration tests with Redis
 - Run before pushing
 - May require Docker services
+- **Used in CI/CD**
 
 #### Tier 3: Full Suite (< 15 minutes)
 ```bash
 pytest
 ```
-- Includes all tests
-- Run in CI/CD pipeline
-- Requires all dependencies
+- Includes all tests including heavy ones
+- Run periodically or before releases
+- Requires all dependencies (numpy, pandas, etc.)
 
 #### Tier 4: Heavy Tests Only
 ```bash

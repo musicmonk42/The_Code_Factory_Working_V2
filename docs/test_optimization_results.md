@@ -110,7 +110,7 @@ testpaths = [
     "server/tests",
 ]
 
-# NEW: Skip heavy and slow tests by default
+# NEW: Optimized addopts without marker filtering (CI controls markers)
 addopts = [
     "-ra",
     "-q",
@@ -119,7 +119,6 @@ addopts = [
     "-p no:cacheprovider",
     "--import-mode=importlib",
     "--maxfail=5",
-    "-m not (heavy or slow)",  # NEW!
 ]
 
 # NEW: Improved async configuration
@@ -139,8 +138,8 @@ markers = [
 ```
 
 **Benefits**:
-- Fast local development (skips heavy tests by default)
-- Explicit test discovery (no accidental scanning)
+- Fast test collection with explicit testpaths
+- CI controls marker filtering with `-m "not heavy"` flag
 - Better async support
 - Clear test categorization
 
@@ -198,13 +197,20 @@ pytestmark = pytest.mark.heavy
 
 ## Test Execution Examples
 
-### Fast Local Development (Default)
+### Local Development
 
 ```bash
-# Run only fast tests (skips heavy and slow)
+# Fast unit tests (skip heavy, slow, integration)
+$ pytest -m "not (heavy or slow or integration)"
+# Runs ~350 fast tests in < 1 minute
+
+# Standard tests (skip only heavy - used in CI)
+$ pytest -m "not heavy"
+# Runs all tests except heavy dependency tests
+
+# Full suite (all tests including heavy)
 $ pytest
-# Collects and runs ~350 tests (excluding 7 heavy tests)
-# Completes in < 1 minute for unit tests
+# Runs all ~404 tests including numpy/pandas tests
 ```
 
 ### Run Specific Test Categories

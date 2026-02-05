@@ -49,8 +49,12 @@ testpaths = [
     "server/tests",
 ]
 
-# Optimized addopts - skip heavy and slow tests by default for fast local development
-# To run all tests including heavy/slow: pytest -m ""
+# Optimized addopts for fast test collection and execution
+# NOTE: Does NOT include marker filtering - use -m flag explicitly
+# Examples:
+#   pytest -m "not (heavy or slow)"  # Skip heavy/slow tests (fast local dev)
+#   pytest -m "not heavy"            # Skip only heavy tests (used in CI)
+#   pytest                           # Run all tests (full suite)
 addopts = [
     "-ra",                              # Show extra test summary info
     "-q",                               # Quiet mode
@@ -59,7 +63,6 @@ addopts = [
     "-p no:cacheprovider",              # Disable cache for faster collection
     "--import-mode=importlib",          # Use importlib for imports
     "--maxfail=5",                      # Stop after 5 failures
-    "-m not (heavy or slow)",           # Skip heavy and slow tests by default
 ]
 
 python_files = ["test_*.py"]

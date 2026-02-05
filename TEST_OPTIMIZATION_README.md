@@ -17,10 +17,16 @@ This PR optimizes the test infrastructure for better performance and developer e
 ### Running Tests Locally
 
 ```bash
-# Fast development workflow (DEFAULT - recommended)
-pytest
+# Fast development workflow (skip heavy/slow tests)
+pytest -m "not (heavy or slow)"
 # Runs all tests EXCEPT heavy and slow ones
 # Completes in < 1 minute for unit tests
+
+# Skip only heavy tests (used in CI)
+pytest -m "not heavy"
+
+# Run all tests (full suite including heavy)
+pytest
 
 # Run specific module
 pytest generator/tests/
@@ -32,11 +38,11 @@ pytest tests/test_api_critical.py
 # Run with verbose output
 pytest -v
 
-# Run heavy tests (requires numpy, pandas, torch)
+# Run heavy tests explicitly (requires numpy, pandas, torch)
 pytest -m heavy
 
-# Run ALL tests (override default filter)
-pytest -m ""
+# Run slow tests
+pytest -m slow
 ```
 
 ### Writing New Tests
