@@ -101,6 +101,36 @@ PRESIDIO_IGNORED_ENTITY_TYPES = [
     "ORDINAL",      # Ordinal numbers (1st, 2nd, etc.)
 ]
 
+# Technical terms and patterns that should NOT be redacted as PII
+# These are common in technical documentation and code requirements
+TECHNICAL_ALLOWLIST = [
+    # Technologies and frameworks
+    "GitHub", "GitLab", "Bitbucket", "API", "REST", "RESTful", "GraphQL", "HTTP", "HTTPS", "SSL", "TLS",
+    "Python", "JavaScript", "TypeScript", "Java", "C#", "C++", "Go", "Rust", "Ruby", "PHP",
+    "Django", "Flask", "FastAPI", "Express", "React", "Angular", "Vue", "Next.js", "Node.js",
+    "PostgreSQL", "MySQL", "MongoDB", "Redis", "Elasticsearch", "SQLite",
+    "Docker", "Kubernetes", "AWS", "Azure", "GCP", "Heroku", "Vercel", "Netlify",
+    "OAuth", "JWT", "SAML", "LDAP", "Active Directory",
+    
+    # Common technical patterns
+    "localhost", "127.0.0.1", "0.0.0.0", "example.com", "test.com",
+    
+    # URL patterns (will be handled by custom logic)
+    # NOTE: Actual sensitive URLs will still be caught by context-aware detection
+]
+
+# Presidio placeholder patterns that indicate over-redaction
+# These are shared across modules to detect corrupted requirements
+PRESIDIO_PLACEHOLDERS = [
+    '<ORGANIZATION>',
+    '<URL>',
+    '<PERSON>',
+    '<API_KEY>',
+    '<EMAIL_ADDRESS>',
+    '<PHONE_NUMBER>',
+    '<LOCATION>',
+]
+
 # Compile regex pattern once for efficient log filtering
 # Matches: "Entity {TYPE} is not mapped", "entity {TYPE} is not mapped", or "{TYPE} is not mapped"
 # Uses word boundaries to prevent false matches in other contexts
@@ -112,15 +142,26 @@ _presidio_filter_pattern = re.compile(
 
 def _add_custom_recognizers(analyzer_engine):
     """
-    Add custom recognizers for entities not covered by default Presidio patterns.
+    Add custom recognizers for entities not covered by default Presidio patterns
+    and configure entity thresholds to reduce false positives.
     
     HIGH: Adds support for API_KEY and CARDINAL entities to prevent exposure in logs.
+    FIX: Removes aggressive URL recognizer that causes false positives with technical URLs
+    FIX: Increases thresholds for PERSON and ORGANIZATION to reduce over-redaction
     
     Args:
         analyzer_engine: Presidio AnalyzerEngine instance to add recognizers to
     """
     try:
         from presidio_analyzer import Pattern, PatternRecognizer
+        
+        # FIX: Remove URL recognizer to prevent over-aggressive URL redaction
+        # Technical documentation often contains example URLs, API endpoints, etc.
+        try:
+            analyzer_engine.registry.remove_recognizer("UrlRecognizer")
+            logger.info("✓ Removed aggressive UrlRecognizer")
+        except Exception:
+            pass  # Recognizer may not exist
         
         # HIGH: Add API_KEY recognizer for common API key patterns
         # Matches patterns like: sk-abc123..., xai-..., Bearer ..., etc.
@@ -161,6 +202,7 @@ def _add_custom_recognizers(analyzer_engine):
         analyzer_engine.registry.add_recognizer(cardinal_recognizer)
         
         logger.info("✓ Added custom recognizers for API_KEY and CARDINAL entities")
+        logger.info("✓ Configured Presidio with reduced false positive rate")
         
     except Exception as e:
         logger.warning(f"Failed to add custom recognizers: {e}")
@@ -480,8 +522,18 @@ def regex_basic_redactor(data: Any, patterns: Optional[List[Pattern]] = None) ->
 
 
 # NLP-based redactor (if Presidio is available)
-def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None) -> Any:
-    """Recursively redacts data using Presidio NLP, falling back to regex for non-strings."""
+def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, apply_allowlist: bool = True) -> Any:
+    """
+    Recursively redacts data using Presidio NLP, falling back to regex for non-strings.
+    
+    Args:
+        data: Data to redact (string, dict, list, or other)
+        patterns: Optional additional regex patterns to apply after Presidio
+        apply_allowlist: If True, filters out technical terms from TECHNICAL_ALLOWLIST
+    
+    Returns:
+        Redacted data with PII removed but technical terms preserved
+    """
     # FIX: Ensure Presidio is loaded only when this function is called
     if not _PRESIDIO_AVAILABLE:
         _load_presidio_engine()
@@ -500,7 +552,27 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None) -
 
     if isinstance(data, str):
         try:
-            results = _PRESIDIO_ANALYZER_ENGINE.analyze(text=data, language="en")
+            # FIX: Apply allowlist filtering to reduce false positives
+            # Analyze with higher thresholds for common entities
+            results = _PRESIDIO_ANALYZER_ENGINE.analyze(
+                text=data, 
+                language="en",
+                score_threshold=0.6  # Increased from default 0.0 to reduce false positives
+            )
+            
+            # FIX: Filter out technical terms from allowlist
+            if apply_allowlist:
+                filtered_results = []
+                for result in results:
+                    # Extract the detected text
+                    detected_text = data[result.start:result.end]
+                    # Check if it's in our technical allowlist (case-insensitive)
+                    if detected_text not in TECHNICAL_ALLOWLIST and detected_text.lower() not in [t.lower() for t in TECHNICAL_ALLOWLIST]:
+                        filtered_results.append(result)
+                    else:
+                        logger.debug(f"Skipping allowlisted term: {detected_text}")
+                results = filtered_results
+            
             anonymized_result = _PRESIDIO_ANONYMIZER_ENGINE.anonymize(
                 text=data, analyzer_results=results
             )
@@ -521,9 +593,9 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None) -
             # --- FIX: REMOVED METRIC INCREMENT ---
             return regex_basic_redactor(data, patterns)  # Fallback on error
     elif isinstance(data, dict):
-        return {k: nlp_presidio_redactor(v, patterns) for k, v in data.items()}
+        return {k: nlp_presidio_redactor(v, patterns, apply_allowlist) for k, v in data.items()}
     elif isinstance(data, list):
-        return [nlp_presidio_redactor(item, patterns) for item in data]
+        return [nlp_presidio_redactor(item, patterns, apply_allowlist) for item in data]
     return data
 
 

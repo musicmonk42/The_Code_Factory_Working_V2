@@ -544,30 +544,35 @@ def _contains_code_markers(text: str) -> bool:
         # Comments/docstrings
         '#', '"""', "'''",
         # Operators
-        '+=', '-=', '*=', '/=', '**', '//'
+        '+=', '-=', '*=', '/=', '**', '//',
+        # Other languages
+        'function ', 'const ', 'let ', 'var ', 'public ', 'private ',
+        'package ', 'namespace ', 'using ', 'include ', '#include',
     )
     
     # Prose indicators (if these dominate, it's likely not code)
+    # Import shared Presidio placeholders
+    try:
+        from generator.runner.runner_security_utils import PRESIDIO_PLACEHOLDERS
+        presidio_placeholders = PRESIDIO_PLACEHOLDERS
+    except ImportError:
+        # Fallback if import fails
+        presidio_placeholders = ['<ORGANIZATION>', '<URL>', '<PERSON>', '<API_KEY>']
+    
     PROSE_INDICATORS = (
         'I need', 'I apologize', 'I cannot', "I'm sorry", "I can't",
         'please provide', 'could you', 'would you', 'you need to',
         'more information', 'clarify', 'specify', 'details about',
         'unfortunately', 'however', 'therefore',
-        'before I can', 'in order to', 'help me understand'
-    )
+        'before I can', 'in order to', 'help me understand',
+        'not enough details', 'provide enough', 'are placeholders',
+    ) + tuple(presidio_placeholders)
     
     text_lower = text.lower()
     
-    # Count indicators
+    # Count indicators (using lowercase for consistent comparison)
     code_score = sum(1 for indicator in CODE_INDICATORS if indicator.lower() in text_lower)
-    prose_score = sum(1 for indicator in PROSE_INDICATORS if indicator in text_lower)
-    
-    # If prose dominates, it's not code
-    if prose_score > code_score:
-        return False
-    
-    # Must have at least one code indicator
-    return code_score > 0
+    prose_score = sum(1 for indicator in PROSE_INDICATORS if indicator.lower() in text_lower)
     
     # If prose dominates, it's not code
     if prose_score > code_score:
@@ -612,10 +617,10 @@ def _clean_code_block(code_content: str) -> str:
     
     text = code_content.strip()
     
-    # Strategy 1: Extract from language-specific markdown fences (```python, ```py)
-    # Pattern matches ONLY: ```python\ncode\n``` or ```py\ncode\n```
-    # Note: Non-optional language specifier to avoid overlap with Strategy 2
-    code_block_pattern = r'```(?:python|py)\s*\n(.*?)```'
+    # Strategy 1: Extract from language-specific markdown fences (```python, ```py, etc.)
+    # Pattern matches: ```<language>\ncode\n```
+    # Supports: python, py, javascript, js, typescript, ts, java, go, rust, cpp, c++, etc.
+    code_block_pattern = r'```(?:python|py|javascript|js|typescript|ts|java|go|rust|cpp|c\+\+|c#|csharp|ruby|php|swift|kotlin)\s*\n(.*?)```'
     matches = re.findall(code_block_pattern, text, flags=re.DOTALL | re.IGNORECASE)
     
     if matches:
@@ -639,6 +644,19 @@ def _clean_code_block(code_content: str) -> str:
         )
         return largest_match
     
+    # Strategy 2.5: Try single-line code fence format (```code```)
+    inline_pattern = r'```(.*?)```'
+    matches = re.findall(inline_pattern, text, flags=re.DOTALL)
+    if matches:
+        largest_match = max(matches, key=len).strip()
+        # Only use if it looks like code (contains newlines or code indicators)
+        if '\n' in largest_match or _contains_code_markers(largest_match):
+            logger.debug(
+                "Extracted code from inline fence (length: %d chars)",
+                len(largest_match)
+            )
+            return largest_match
+    
     # Strategy 3: No code fences found - strip conversational preamble
     # This handles cases where the LLM didn't use markdown but included explanatory text
     lines = text.split('\n')
@@ -649,10 +667,12 @@ def _clean_code_block(code_content: str) -> str:
     PREAMBLE_PATTERNS = (
         'here is', 'here\'s', 'this is', 'this will', 
         'the following', 'below is', 'below you',
-        'i will', 'i\'ve', 'i have'
+        'i will', 'i\'ve', 'i have', 'sure', 'certainly',
+        'of course', 'absolutely'
     )
     # Code markers that indicate the start of actual code
-    CODE_MARKERS = ('import ', 'from ', 'def ', 'class ', '#', '"""', "'''", '@', 'if ', 'for ', 'while ')
+    CODE_MARKERS = ('import ', 'from ', 'def ', 'class ', '#', '"""', "'''", '@', 'if ', 'for ', 'while ',
+                   'function ', 'const ', 'let ', 'var ', 'package ', 'public ', 'private ', 'namespace ')
     
     for i, line in enumerate(lines):
         stripped = line.strip().lower()
