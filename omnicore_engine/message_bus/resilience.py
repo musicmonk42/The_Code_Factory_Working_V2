@@ -65,7 +65,7 @@ class CircuitBreaker:
     Industry Standards:
         - Circuit Breaker pattern: "Release It!" by Michael Nygard
         - Resilience patterns: Netflix's Hystrix implementation
-        - Pickle protocol: PEP 307 for distributed computing compatibility
+        - Pickle protocol: PEP 307/3154 for distributed computing compatibility
         - Used with pytest-xdist, Celery, Dask, and other distributed frameworks
     """
 
@@ -105,7 +105,7 @@ class CircuitBreaker:
         (threading.Lock, asyncio.Lock) cannot be pickled as they are process-specific
         and bound to the parent process's memory space.
 
-        Industry Standard: Python's pickle protocol (PEP 307) is used by distributed
+        Industry Standard: Python's pickle protocol (PEP 307/3154) is used by distributed
         computing frameworks (Celery, Dask, Ray) and multiprocessing libraries to
         enable safe object transfer across process boundaries.
 
