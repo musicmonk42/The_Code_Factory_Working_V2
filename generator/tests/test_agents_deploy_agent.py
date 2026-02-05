@@ -90,9 +90,9 @@ CMD ["python", "src/main.py"]
         yield repo_path
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 async def agent(temp_repo_module):
-    """Module-scoped async fixture to create and initialize a DeployAgent."""
+    """Function-scoped async fixture to create and initialize a DeployAgent."""
     with patch.dict("os.environ", {"TESTING": "1"}):
         agent = DeployAgent(str(temp_repo_module))
         agent.db_path = str(temp_repo_module / "test_agent.db")
