@@ -80,6 +80,7 @@ def _create_fallback_settings():
         MESSAGE_BUS_SHARD_COUNT=4,
         MESSAGE_BUS_MAX_QUEUE_SIZE=10000,
         MESSAGE_BUS_WORKERS_PER_SHARD=2,
+        MESSAGE_BUS_SUBSCRIPTION_TIMEOUT=30.0,  # Default 30 seconds for subscription operations
         ENCRYPTION_KEY=None,
         ENCRYPTION_KEY_BYTES=b"",
         REDIS_URL="redis://localhost:6379/0",
@@ -1379,12 +1380,14 @@ class ShardedMessageBus:
             )
             
             # Wait for completion with timeout (industry best practice)
+            # Use configurable timeout (default 30s) instead of hardcoded 5s
+            subscription_timeout = getattr(settings, 'MESSAGE_BUS_SUBSCRIPTION_TIMEOUT', 30.0)
             try:
-                future.result(timeout=5.0)
+                future.result(timeout=subscription_timeout)
                 logger_for_subscribe.debug("Subscription completed successfully")
             except TimeoutError:
                 logger_for_subscribe.warning(
-                    f"Subscription to {topic} timed out after 5 seconds. "
+                    f"Subscription to {topic} timed out after {subscription_timeout} seconds. "
                     "Subscription may still complete in background."
                 )
             except Exception as e:
@@ -1459,12 +1462,14 @@ class ShardedMessageBus:
             )
             
             # Wait for completion with timeout (industry best practice)
+            # Use configurable timeout (default 30s) instead of hardcoded 5s
+            subscription_timeout = getattr(settings, 'MESSAGE_BUS_SUBSCRIPTION_TIMEOUT', 30.0)
             try:
-                future.result(timeout=5.0)
+                future.result(timeout=subscription_timeout)
                 logger_for_unsubscribe.debug("Unsubscription completed successfully")
             except TimeoutError:
                 logger_for_unsubscribe.warning(
-                    f"Unsubscription from {topic} timed out after 5 seconds. "
+                    f"Unsubscription from {topic} timed out after {subscription_timeout} seconds. "
                     "Unsubscription may still complete in background."
                 )
             except Exception as e:

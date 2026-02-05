@@ -78,6 +78,7 @@ def get_omnicore_service() -> OmniCoreService:
 async def create_job(
     request: JobCreateRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
+    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ) -> Job:
     """
     Create a new job.
@@ -108,6 +109,24 @@ async def create_job(
 
     jobs_db[job_id] = job
     logger.info(f"Created job {job_id}")
+    
+    # Emit job.created event to message bus for event-driven processing
+    try:
+        await omnicore_service.emit_event(
+            topic="job.created",
+            payload={
+                "job_id": job_id,
+                "status": job.status.value,
+                "stage": job.current_stage.value,
+                "created_at": job.created_at.isoformat(),
+                "metadata": job.metadata,
+            },
+            priority=5,
+        )
+        logger.debug(f"Emitted job.created event for job {job_id}")
+    except Exception as e:
+        # Don't fail job creation if event emission fails
+        logger.warning(f"Failed to emit job.created event for job {job_id}: {e}")
 
     return job
 
