@@ -158,6 +158,57 @@ This document provides a comprehensive reference for all environment variables u
 
 ---
 
+## Configuration File Resolution
+
+### RUNNER_CONFIG_PATH
+- **Purpose:** Specifies custom path to runner configuration file
+- **Type:** String (file path)
+- **Values:** Absolute or relative path to YAML configuration file
+- **Default:** Smart path resolution (see below)
+- **Production:** Recommended to set explicitly for clarity
+- **Example:** `RUNNER_CONFIG_PATH=/app/generator/config.yaml`
+- **Impact:** Overrides default configuration file search
+
+#### Smart Path Resolution
+When `RUNNER_CONFIG_PATH` is not set, the system searches for configuration files in standard locations:
+
+**For `config.yaml`:**
+1. `./config.yaml` (root directory)
+2. `./generator/config.yaml` (most common location)
+3. `./config/config.yaml` (config directory)
+
+**For `runner_config.yaml`:**
+1. `./runner_config.yaml` (root directory)
+2. `./config/runner_config.yaml` (config directory)
+
+**Note:** `generator/runner/runner_config.yaml` is NOT searched automatically as it uses a documentation format incompatible with the RunnerConfig model.
+
+#### Best Practices
+- **Development:** Let smart resolution find `generator/config.yaml` automatically
+- **Production:** Set `RUNNER_CONFIG_PATH` explicitly for predictability
+- **Docker:** Mount custom configs and set `RUNNER_CONFIG_PATH` to mounted path
+- **Kubernetes:** Use ConfigMap or Secret and set `RUNNER_CONFIG_PATH`
+
+#### Example Usage
+```bash
+# Development (auto-discovery)
+python server/run.py  # Uses generator/config.yaml
+
+# Production (explicit)
+export RUNNER_CONFIG_PATH=/app/config/production.yaml
+python server/run.py
+
+# Docker
+docker run -e RUNNER_CONFIG_PATH=/app/config/custom.yaml codefactory
+
+# Kubernetes
+env:
+  - name: RUNNER_CONFIG_PATH
+    value: "/app/config/production.yaml"
+```
+
+---
+
 ## Database Configuration
 
 ### DB_PATH / DATABASE_URL

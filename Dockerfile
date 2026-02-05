@@ -168,6 +168,12 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
     fi
 
 # Copy the rest of the application
+# This includes all configuration files:
+#   - generator/config.yaml (default runner configuration)
+#   - generator/runner/runner_config.yaml (documentation/reference format)
+#   - self_fixing_engineer/crew_config.yaml
+#   - audit configurations
+# Use RUNNER_CONFIG_PATH environment variable at runtime to specify custom config location
 COPY . /app
 
 ###############################################

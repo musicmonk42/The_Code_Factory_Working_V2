@@ -98,6 +98,18 @@ services:
       - SPACY_WARNING_IGNORE=W007
       
       # ============================================
+      # Configuration Path Resolution
+      # ============================================
+      # Optional: Set custom path to runner configuration file
+      # If not set, uses smart path resolution (see CONFIG_PATH_RESOLUTION_FIX.md)
+      # For production, recommend explicit path to ensure correct config is loaded
+      # Example: RUNNER_CONFIG_PATH=/app/config/production.yaml
+      # Default search order:
+      #   1. RUNNER_CONFIG_PATH (if set)
+      #   2. ./config.yaml -> ./generator/config.yaml (for config.yaml)
+      # - RUNNER_CONFIG_PATH=${RUNNER_CONFIG_PATH:-/app/generator/config.yaml}
+      
+      # ============================================
       # Database Configuration
       # ============================================
       - DB_PATH=postgresql+asyncpg://codefactory:${POSTGRES_PASSWORD}@postgres:5432/codefactory
