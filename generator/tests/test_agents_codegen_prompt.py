@@ -408,6 +408,7 @@ async def test_build_prompt_with_meta_llm_critique(monkeypatch):
     assert any(e[0] == "Prompt Self-Refined" for e in events)
 
 
+@pytest.mark.filterwarnings("ignore:The test.*is marked with.*asyncio.*but it is not an async function:pytest.PytestWarning")
 def test_hot_reloading_loader_clears_cache():
     """
     Test that HotReloadingFileSystemLoader correctly clears the environment cache
