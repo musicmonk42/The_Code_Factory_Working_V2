@@ -391,81 +391,88 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     # For robustness, strip outer code fences before JSON parsing attempt.
     cleaned_for_json = _clean_code_block(raw)
     
-    # Check if cleaning resulted in empty code
-    if not cleaned_for_json:
-        error_msg = (
-            "LLM response did not contain recognizable code. "
-            "The response may have been an explanation or clarification request rather than code generation. "
-            f"Response preview: {raw[:200]}..."
-        )
-        logger.error(error_msg)
-        return {ERROR_FILENAME: error_msg}
+    # --- 1. Try multi-file JSON format (only if cleaning produced something) ---
+    if cleaned_for_json:
+        try:
+            payload = json.loads(cleaned_for_json)
+            if isinstance(payload, dict) and isinstance(payload.get("files"), dict):
+                files_obj = payload["files"]
+                code_files: Dict[str, str] = {}
+                errors: Dict[str, str] = {}
 
-    # --- 1. Try multi-file JSON format ---
-    try:
-        payload = json.loads(cleaned_for_json)
-        if isinstance(payload, dict) and isinstance(payload.get("files"), dict):
-            files_obj = payload["files"]
-            code_files: Dict[str, str] = {}
-            errors: Dict[str, str] = {}
+                for filename, content in files_obj.items():
+                    if not isinstance(content, str):
+                        errors[filename] = "Content is not a string."
+                        continue
 
-            for filename, content in files_obj.items():
-                if not isinstance(content, str):
-                    errors[filename] = "Content is not a string."
-                    continue
+                    cleaned = _clean_code_block(content)
+                    is_valid, msg = _validate_syntax(cleaned, lang, filename)
 
-                cleaned = _clean_code_block(content)
-                is_valid, msg = _validate_syntax(cleaned, lang, filename)
+                    if is_valid:
+                        code_files[filename] = cleaned
+                    else:
+                        logger.warning(
+                            "Syntax validation failed for '%s' (%s). Details: %s",
+                            filename,
+                            lang,
+                            msg,
+                        )
+                        errors[filename] = msg
 
-                if is_valid:
-                    code_files[filename] = cleaned
-                else:
-                    logger.warning(
-                        "Syntax validation failed for '%s' (%s). Details: %s",
-                        filename,
-                        lang,
-                        msg,
+                # If any file failed, emit an aggregated error.txt
+                if errors:
+                    lines = [
+                        "One or more files failed syntax validation.",
+                        "",
+                    ]
+                    for fname, emsg in errors.items():
+                        lines.append(f"[{fname}]")
+                        lines.append(str(emsg))
+                        lines.append("")
+                    code_files[ERROR_FILENAME] = "\n".join(lines).rstrip()
+
+                if code_files:
+                    # Perform production-ready validation
+                    is_production_ready, prod_error = validate_production_ready(code_files)
+                    if not is_production_ready:
+                        logger.warning("Production-ready validation failed for multi-file response")
+                        code_files[ERROR_FILENAME] = prod_error
+                    
+                    log_action(
+                        "Parsed Multi-File Response",
+                        {
+                            "files": [f for f in code_files.keys() if f != ERROR_FILENAME],
+                            "language": lang,
+                            "had_errors": bool(errors),
+                            "production_ready": is_production_ready,
+                        },
                     )
-                    errors[filename] = msg
+                    return code_files
+                # If nothing usable, fall through to single-file handling.
 
-            # If any file failed, emit an aggregated error.txt
-            if errors:
-                lines = [
-                    "One or more files failed syntax validation.",
-                    "",
-                ]
-                for fname, emsg in errors.items():
-                    lines.append(f"[{fname}]")
-                    lines.append(str(emsg))
-                    lines.append("")
-                code_files[ERROR_FILENAME] = "\n".join(lines).rstrip()
-
-            if code_files:
-                # Perform production-ready validation
-                is_production_ready, prod_error = validate_production_ready(code_files)
-                if not is_production_ready:
-                    logger.warning("Production-ready validation failed for multi-file response")
-                    code_files[ERROR_FILENAME] = prod_error
-                
-                log_action(
-                    "Parsed Multi-File Response",
-                    {
-                        "files": [f for f in code_files.keys() if f != ERROR_FILENAME],
-                        "language": lang,
-                        "had_errors": bool(errors),
-                        "production_ready": is_production_ready,
-                    },
-                )
-                return code_files
-            # If nothing usable, fall through to single-file handling.
-
-    except json.JSONDecodeError:
-        logger.info("LLM response is not valid JSON; using single-file fallback.")
-    except Exception as e:
-        logger.error("Unexpected error while parsing JSON LLM response: %s", e)
+        except json.JSONDecodeError:
+            logger.info("LLM response is not valid JSON; using single-file fallback.")
+        except Exception as e:
+            logger.error("Unexpected error while parsing JSON LLM response: %s", e)
 
     # --- 2. Single-file fallback ---
     cleaned_code = _clean_code_block(raw)
+    
+    # If cleaning resulted in empty string but we have raw content,
+    # treat the raw response as a single file (legacy behavior for compatibility)
+    if not cleaned_code and raw:
+        logger.warning(
+            "No code markers found in response after cleaning. "
+            "Falling back to using raw response as-is for compatibility. "
+            "Preview: %s",
+            raw[:150] + "..." if len(raw) > 150 else raw
+        )
+        log_action(
+            "Parsed Single-File Response (Raw Fallback)",
+            {"file": DEFAULT_FILENAME, "language": lang, "production_ready": False},
+        )
+        return {DEFAULT_FILENAME: raw}
+    
     is_valid, msg = _validate_syntax(cleaned_code, lang, DEFAULT_FILENAME)
 
     if is_valid:
