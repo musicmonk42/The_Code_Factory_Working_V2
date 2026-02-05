@@ -101,6 +101,14 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+# Minimum content length to be considered non-trivial
+MIN_CONTENT_LENGTH = 10
+
+
 class PipelineStage(str, Enum):
     """Pipeline stages."""
     READ_MD = "READ_MD"
@@ -274,10 +282,6 @@ def validate_syntax(code_content: str, filename: str = "unknown.py") -> Dict[str
         return {"valid": True, "filename": filename, "error": None}
     except SyntaxError as e:
         return {"valid": False, "filename": filename, "error": str(e), "line": e.lineno}
-
-
-# Minimum content length to be considered non-trivial
-MIN_CONTENT_LENGTH = 10
 
 
 def validate_has_content(content: str, filename: str) -> Dict[str, Any]:
