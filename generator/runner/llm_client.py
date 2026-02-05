@@ -828,6 +828,8 @@ async def call_llm_api(
     stream: bool = False,
     provider: Optional[Literal["openai", "claude", "grok", "gemini", "local"]] = None,
     config: Optional[RunnerConfig] = None,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    **kwargs,
 ) -> Dict[str, Any] | AsyncGenerator[str, None]:
     """
     Call LLM API with automatic config loading and graceful fallback.
@@ -838,6 +840,8 @@ async def call_llm_api(
         stream: Whether to stream the response
         provider: Optional provider name
         config: Optional RunnerConfig. If None, will attempt to load from file with fallback to defaults.
+        max_retries: Maximum number of retry attempts
+        **kwargs: Additional arguments passed to the provider
     
     Returns:
         LLM response dictionary or async generator for streaming
@@ -880,7 +884,7 @@ async def call_llm_api(
                     )
             # Use direct instantiation for backward compatibility (lazy init happens on first call)
             _async_client = LLMClient(config)
-    return await _async_client.call_llm_api(prompt, model, stream, provider)
+    return await _async_client.call_llm_api(prompt, model, stream, provider, max_retries, **kwargs)
 
 
 async def call_ensemble_api(
