@@ -1,7 +1,9 @@
 # Code Factory Platform Makefile
 # This file provides convenient commands for development, testing, and deployment
 
-.PHONY: help install install-dev test lint format clean docker-build docker-up docker-down deploy-staging deploy-production
+.PHONY: help install install-dev test lint format clean docker-build docker-up docker-down deploy-staging deploy-production \
+	k8s-deploy-dev k8s-deploy-staging k8s-deploy-prod k8s-status k8s-logs k8s-validate \
+	helm-install helm-uninstall helm-template helm-lint helm-package helm-status
 
 # Default target
 .DEFAULT_GOAL := help
@@ -258,6 +260,142 @@ db-reset: ## Reset database (WARNING: destroys data)
 	@echo "$(RED)Resetting database...$(NC)"
 	rm -f dev.db deploy_agent_history.db mock_history.db
 	@echo "$(GREEN)Database reset!$(NC)"
+
+# =============================================================================
+# Kubernetes
+# =============================================================================
+
+k8s-deploy-dev: ## Deploy to Kubernetes (development)
+	@echo "$(BLUE)Deploying to Kubernetes development environment...$(NC)"
+	kubectl apply -k k8s/overlays/development
+	@echo "$(GREEN)Deployed to development!$(NC)"
+
+k8s-deploy-staging: ## Deploy to Kubernetes (staging)
+	@echo "$(BLUE)Deploying to Kubernetes staging environment...$(NC)"
+	kubectl apply -k k8s/overlays/staging
+	@echo "$(GREEN)Deployed to staging!$(NC)"
+
+k8s-deploy-prod: ## Deploy to Kubernetes (production)
+	@echo "$(RED)Deploying to Kubernetes production environment...$(NC)"
+	kubectl apply -k k8s/overlays/production
+	@echo "$(GREEN)Deployed to production!$(NC)"
+
+k8s-status: ## Show Kubernetes deployment status
+	@echo "$(BLUE)Kubernetes Deployment Status:$(NC)"
+	@kubectl get all -n codefactory 2>/dev/null || echo "No resources in codefactory namespace"
+
+k8s-status-dev: ## Show Kubernetes deployment status (development)
+	@echo "$(BLUE)Development Environment Status:$(NC)"
+	kubectl get all -n codefactory-dev
+
+k8s-status-staging: ## Show Kubernetes deployment status (staging)
+	@echo "$(BLUE)Staging Environment Status:$(NC)"
+	kubectl get all -n codefactory-staging
+
+k8s-status-prod: ## Show Kubernetes deployment status (production)
+	@echo "$(BLUE)Production Environment Status:$(NC)"
+	kubectl get all -n codefactory-production
+
+k8s-logs: ## Show Kubernetes pod logs
+	@echo "$(BLUE)Showing API pod logs...$(NC)"
+	kubectl logs -f -l app=codefactory-api -n codefactory --tail=100
+
+k8s-logs-dev: ## Show Kubernetes pod logs (development)
+	kubectl logs -f -l app=codefactory-api -n codefactory-dev --tail=100
+
+k8s-logs-staging: ## Show Kubernetes pod logs (staging)
+	kubectl logs -f -l app=codefactory-api -n codefactory-staging --tail=100
+
+k8s-logs-prod: ## Show Kubernetes pod logs (production)
+	kubectl logs -f -l app=codefactory-api -n codefactory-production --tail=100
+
+k8s-delete-dev: ## Delete Kubernetes resources (development)
+	@echo "$(RED)Deleting development environment...$(NC)"
+	kubectl delete -k k8s/overlays/development
+	@echo "$(GREEN)Development environment deleted!$(NC)"
+
+k8s-delete-staging: ## Delete Kubernetes resources (staging)
+	@echo "$(RED)Deleting staging environment...$(NC)"
+	kubectl delete -k k8s/overlays/staging
+	@echo "$(GREEN)Staging environment deleted!$(NC)"
+
+k8s-delete-prod: ## Delete Kubernetes resources (production)
+	@echo "$(RED)WARNING: Deleting production environment...$(NC)"
+	@read -p "Are you sure? Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ] || (echo "Aborted" && exit 1)
+	kubectl delete -k k8s/overlays/production
+	@echo "$(GREEN)Production environment deleted!$(NC)"
+
+k8s-validate: ## Validate Kubernetes manifests
+	@echo "$(BLUE)Validating Kubernetes manifests...$(NC)"
+	kubectl apply --dry-run=client -k k8s/base
+	@echo "$(GREEN)Validation complete!$(NC)"
+
+# =============================================================================
+# Helm
+# =============================================================================
+
+helm-install: ## Install with Helm (development)
+	@echo "$(BLUE)Installing Code Factory with Helm...$(NC)"
+	helm upgrade --install codefactory ./helm/codefactory \
+		--create-namespace \
+		--namespace codefactory \
+		--set image.tag=latest
+	@echo "$(GREEN)Helm release installed!$(NC)"
+
+helm-install-dev: ## Install with Helm (development environment)
+	@echo "$(BLUE)Installing Code Factory with Helm (dev)...$(NC)"
+	helm upgrade --install codefactory-dev ./helm/codefactory \
+		--create-namespace \
+		--namespace codefactory-dev \
+		--set image.tag=dev \
+		--set replicaCount=1 \
+		--set resources.limits.cpu=1000m \
+		--set resources.limits.memory=2Gi
+	@echo "$(GREEN)Dev Helm release installed!$(NC)"
+
+helm-install-prod: ## Install with Helm (production environment)
+	@echo "$(BLUE)Installing Code Factory with Helm (production)...$(NC)"
+	helm upgrade --install codefactory-prod ./helm/codefactory \
+		--create-namespace \
+		--namespace codefactory-production \
+		--set image.tag=latest \
+		--set replicaCount=3 \
+		--set autoscaling.enabled=true
+	@echo "$(GREEN)Production Helm release installed!$(NC)"
+
+helm-uninstall: ## Uninstall Helm release
+	@echo "$(RED)Uninstalling Helm release...$(NC)"
+	helm uninstall codefactory -n codefactory
+	@echo "$(GREEN)Helm release uninstalled!$(NC)"
+
+helm-uninstall-dev: ## Uninstall Helm release (development)
+	@echo "$(RED)Uninstalling dev Helm release...$(NC)"
+	helm uninstall codefactory-dev -n codefactory-dev
+	@echo "$(GREEN)Dev Helm release uninstalled!$(NC)"
+
+helm-uninstall-prod: ## Uninstall Helm release (production)
+	@echo "$(RED)WARNING: Uninstalling production Helm release...$(NC)"
+	@read -p "Are you sure? Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ] || (echo "Aborted" && exit 1)
+	helm uninstall codefactory-prod -n codefactory-production
+	@echo "$(GREEN)Production Helm release uninstalled!$(NC)"
+
+helm-template: ## Show Helm template output
+	@echo "$(BLUE)Rendering Helm templates...$(NC)"
+	helm template codefactory ./helm/codefactory
+
+helm-lint: ## Lint Helm chart
+	@echo "$(BLUE)Linting Helm chart...$(NC)"
+	helm lint helm/codefactory
+	@echo "$(GREEN)Helm chart lint complete!$(NC)"
+
+helm-package: ## Package Helm chart
+	@echo "$(BLUE)Packaging Helm chart...$(NC)"
+	helm package helm/codefactory -d dist/
+	@echo "$(GREEN)Helm chart packaged!$(NC)"
+
+helm-status: ## Show Helm release status
+	@echo "$(BLUE)Helm Release Status:$(NC)"
+	helm list -A | grep codefactory || echo "No codefactory releases found"
 
 # =============================================================================
 # Deployment

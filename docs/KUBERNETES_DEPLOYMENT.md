@@ -1,6 +1,6 @@
 # Kubernetes Deployment Guide for Code Factory Platform
 
-This guide provides Kubernetes deployment configurations optimized for the Code Factory platform, including proper health checks, startup probes, and resource management.
+This guide provides Kubernetes deployment configurations optimized for the Code Factory platform, including proper health checks, startup probes, and resource management. It covers both Kustomize-based deployments and raw manifest usage.
 
 ## Overview
 
@@ -9,6 +9,287 @@ The Code Factory platform requires specific Kubernetes configurations to handle:
 - Distributed locking for multi-replica deployments
 - Redis connectivity for coordination
 - Graceful startup and shutdown
+
+## Deployment Options
+
+The Code Factory platform can be deployed using two methods:
+
+1. **Helm** (Recommended for most users) - See `docs/HELM_DEPLOYMENT.md`
+2. **Kustomize** (Recommended for GitOps workflows) - Covered in this document
+
+## Prerequisites
+
+- Kubernetes 1.19+ (for startup probe support)
+- kubectl with Kustomize support (v1.14+)
+- Redis instance (for distributed locking)
+- Persistent volume for uploads (optional)
+- Load balancer or ingress controller
+
+## Quick Start with Kustomize
+
+### Deploy to Development
+
+```bash
+# Deploy to development environment
+kubectl apply -k k8s/overlays/development
+
+# Check status
+kubectl get pods -n codefactory-dev
+
+# View logs
+kubectl logs -f -l app=codefactory-api -n codefactory-dev
+```
+
+### Deploy to Production
+
+```bash
+# First, update secrets in k8s/base/secret.yaml with actual values
+# Then deploy
+kubectl apply -k k8s/overlays/production
+
+# Check status
+kubectl get pods -n codefactory-production
+
+# View HPA status
+kubectl get hpa -n codefactory-production
+```
+
+## Kustomize Deployment Structure
+
+The Code Factory includes a complete Kustomize setup with base manifests and environment-specific overlays:
+
+```
+k8s/
+├── base/                          # Base manifests (shared across environments)
+│   ├── kustomization.yaml         # Base kustomization config
+│   ├── namespace.yaml             # Namespace definition
+│   ├── configmap.yaml             # Environment variables
+│   ├── secret.yaml                # Secret templates (replace before deploying!)
+│   ├── rbac.yaml                  # Service account, role, role binding
+│   ├── api-deployment.yaml        # Main application deployment
+│   ├── redis-deployment.yaml      # Redis deployment with persistence
+│   ├── ingress.yaml               # Ingress configuration
+│   ├── api-networkpolicy.yaml     # Network policies for API
+│   └── redis-networkpolicy.yaml   # Network policies for Redis
+└── overlays/                      # Environment-specific configurations
+    ├── development/               # Development environment
+    │   ├── kustomization.yaml     # Dev-specific patches
+    │   └── namespace.yaml         # codefactory-dev namespace
+    ├── staging/                   # Staging environment
+    │   ├── kustomization.yaml     # Staging-specific patches
+    │   └── namespace.yaml         # codefactory-staging namespace
+    └── production/                # Production environment
+        ├── kustomization.yaml     # Production-specific patches
+        ├── namespace.yaml         # codefactory-production namespace
+        ├── hpa.yaml               # Horizontal Pod Autoscaler
+        └── pdb.yaml               # Pod Disruption Budget
+```
+
+### Environment Configurations
+
+#### Development
+- **Namespace**: `codefactory-dev`
+- **Replicas**: 1
+- **Resources**: 250m CPU / 512Mi RAM (requests), 1 CPU / 2Gi RAM (limits)
+- **Image Tag**: `dev`
+- **Log Level**: `DEBUG`
+
+#### Staging
+- **Namespace**: `codefactory-staging`
+- **Replicas**: 2
+- **Resources**: 500m CPU / 1Gi RAM (requests), 1.5 CPU / 3Gi RAM (limits)
+- **Image Tag**: `staging`
+- **Log Level**: `INFO`
+
+#### Production
+- **Namespace**: `codefactory-production`
+- **Replicas**: 3 (with HPA 3-10)
+- **Resources**: 500m CPU / 1Gi RAM (requests), 2 CPU / 4Gi RAM (limits)
+- **Image Tag**: `latest`
+- **Log Level**: `INFO`
+- **Additional Features**: HPA, PodDisruptionBudget, higher worker count
+
+## Deploying with Kustomize
+
+### Prepare Secrets
+
+Before deploying, you MUST update the secrets in `k8s/base/secret.yaml`:
+
+```bash
+# Generate strong random secrets
+REDIS_PASSWORD=$(openssl rand -base64 32)
+HMAC_KEY=$(openssl rand -hex 32)
+ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+
+# Edit the secret file
+vi k8s/base/secret.yaml
+
+# Replace:
+# - REPLACE_WITH_REDIS_PASSWORD with $REDIS_PASSWORD
+# - REPLACE_WITH_HMAC_KEY with $HMAC_KEY
+# - REPLACE_WITH_ENCRYPTION_KEY with $ENCRYPTION_KEY
+# - REPLACE_WITH_OPENAI_API_KEY with your OpenAI API key
+```
+
+**Security Note**: For production, use external secrets management (AWS Secrets Manager, HashiCorp Vault, etc.) instead of committing secrets to git.
+
+### Deploy to Development
+
+```bash
+# Preview what will be deployed
+kubectl kustomize k8s/overlays/development
+
+# Deploy
+kubectl apply -k k8s/overlays/development
+
+# Verify deployment
+kubectl get all -n codefactory-dev
+
+# Check pod status
+kubectl get pods -n codefactory-dev -w
+
+# View logs
+kubectl logs -f -l app=codefactory-api -n codefactory-dev
+```
+
+### Deploy to Staging
+
+```bash
+# Deploy to staging
+kubectl apply -k k8s/overlays/staging
+
+# Verify
+kubectl get all -n codefactory-staging
+kubectl get pods -n codefactory-staging
+```
+
+### Deploy to Production
+
+```bash
+# Preview production deployment
+kubectl kustomize k8s/overlays/production
+
+# Deploy to production
+kubectl apply -k k8s/overlays/production
+
+# Verify deployment
+kubectl get all -n codefactory-production
+
+# Check HPA status
+kubectl get hpa -n codefactory-production
+
+# Check PDB
+kubectl get pdb -n codefactory-production
+
+# Monitor rollout
+kubectl rollout status deployment/codefactory-api -n codefactory-production
+```
+
+### Update Deployments
+
+```bash
+# Update image tag in base kustomization.yaml or overlay
+# Then apply changes
+kubectl apply -k k8s/overlays/production
+
+# Watch the rolling update
+kubectl rollout status deployment/codefactory-api -n codefactory-production
+
+# Rollback if needed
+kubectl rollout undo deployment/codefactory-api -n codefactory-production
+```
+
+### Cleanup
+
+```bash
+# Delete development environment
+kubectl delete -k k8s/overlays/development
+
+# Delete staging environment
+kubectl delete -k k8s/overlays/staging
+
+# Delete production environment
+kubectl delete -k k8s/overlays/production
+```
+
+## Network Policies
+
+The Code Factory includes NetworkPolicies for security:
+
+### API Network Policy
+- **Ingress**: Allows traffic from ingress controller and Prometheus
+- **Egress**: Allows DNS, Redis, and external API calls (HTTPS/HTTP)
+
+### Redis Network Policy
+- **Ingress**: Only allows connections from API pods
+- **Egress**: Only allows DNS resolution
+
+To disable NetworkPolicies (not recommended for production):
+```bash
+# Remove from kustomization.yaml resources list
+# Or delete them after deployment
+kubectl delete networkpolicy -n codefactory-production codefactory-api codefactory-redis
+```
+
+## RBAC Configuration
+
+The deployment includes least-privilege RBAC:
+- **ServiceAccount**: `codefactory`
+- **Role**: Minimal permissions (get/list configmaps, get secrets)
+- **RoleBinding**: Binds role to service account
+
+No cluster-wide permissions are granted.
+
+## Customizing Kustomize Overlays
+
+### Add Custom Patches
+
+Create a patch file in your overlay directory:
+
+```yaml
+# k8s/overlays/production/custom-patch.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codefactory-api
+spec:
+  template:
+    spec:
+      nodeSelector:
+        workload-type: ai-compute
+```
+
+Add it to `kustomization.yaml`:
+```yaml
+patches:
+  - custom-patch.yaml
+```
+
+### Override Environment Variables
+
+```yaml
+# In overlay's kustomization.yaml
+patches:
+  - target:
+      kind: ConfigMap
+      name: codefactory-config
+    patch: |-
+      - op: add
+        path: /data/CUSTOM_VAR
+        value: "custom-value"
+```
+
+### Change Storage Class
+
+```yaml
+patches:
+  - target:
+      kind: PersistentVolumeClaim
+    patch: |-
+      - op: replace
+        path: /spec/storageClassName
+        value: "fast-ssd"
+```
 
 ## Prerequisites
 

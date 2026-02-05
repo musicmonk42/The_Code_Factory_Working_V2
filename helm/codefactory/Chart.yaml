@@ -1,0 +1,15 @@
+apiVersion: v2
+name: codefactory
+description: A Helm chart for The Code Factory - AI-powered code generation platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - codefactory
+  - ai
+  - code-generation
+home: https://github.com/musicmonk42/The_Code_Factory_Working_V2
+sources:
+  - https://github.com/musicmonk42/The_Code_Factory_Working_V2
+maintainers:
+  - name: musicmonk42

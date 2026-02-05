@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: codefactory-redis
+  namespace: codefactory
+  labels:
+    app: codefactory-redis
+spec:
+  podSelector:
+    matchLabels:
+      app: codefactory-redis
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only allow connections from API pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app: codefactory-api
+      ports:
+        - protocol: TCP
+          port: 6379
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+        - podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53

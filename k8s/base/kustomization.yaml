@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: codefactory
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - rbac.yaml
+  - api-deployment.yaml
+  - redis-deployment.yaml
+  - ingress.yaml
+  - api-networkpolicy.yaml
+  - redis-networkpolicy.yaml
+
+commonLabels:
+  app.kubernetes.io/name: codefactory
+  app.kubernetes.io/part-of: codefactory-platform
+
+images:
+  - name: ghcr.io/musicmonk42/codefactory
+    newTag: latest

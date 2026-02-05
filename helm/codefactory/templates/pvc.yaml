@@ -1,0 +1,43 @@
+{{- if .Values.persistence.uploads.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "codefactory.fullname" . }}-uploads
+  labels:
+    {{- include "codefactory.labels" . | nindent 4 }}
+  {{- with .Values.persistence.uploads.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.uploads.accessMode }}
+  {{- if .Values.persistence.uploads.storageClass }}
+  storageClassName: {{ .Values.persistence.uploads.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.uploads.size }}
+{{- end }}
+---
+{{- if .Values.persistence.workspace.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "codefactory.fullname" . }}-workspace
+  labels:
+    {{- include "codefactory.labels" . | nindent 4 }}
+  {{- with .Values.persistence.workspace.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.workspace.accessMode }}
+  {{- if .Values.persistence.workspace.storageClass }}
+  storageClassName: {{ .Values.persistence.workspace.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.workspace.size }}
+{{- end }}
