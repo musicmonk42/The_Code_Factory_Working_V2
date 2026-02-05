@@ -514,23 +514,28 @@ def _contains_code_markers(text: str) -> bool:
     
     # Code indicators (must have at least one)
     CODE_INDICATORS = (
-        # Python-specific
+        # Python-specific keywords and constructs
         'import ', 'from ', 'def ', 'class ', 'async def',
-        # Common programming constructs
         'if __name__', 'return ', 'yield ', 'raise ',
         'for ', 'while ', 'try:', 'except', 'with ',
+        'lambda ', 'assert ', 'pass', 'break', 'continue',
+        # Function/method calls - common in Python
+        'print(', 'len(', 'range(', 'str(', 'int(', 'open(',
         # Common patterns
         '= ', '==', '!=', '()', '[]', '{}',
         # Comments/docstrings
-        '#', '"""', "'''"
+        '#', '"""', "'''",
+        # Operators
+        '+=', '-=', '*=', '/=', '**', '//'
     )
     
     # Prose indicators (if these dominate, it's likely not code)
     PROSE_INDICATORS = (
-        'I need', 'I apologize', 'I cannot', "I'm sorry",
-        'please provide', 'could you', 'would you',
-        'more information', 'clarify', 'specify',
-        'unfortunately', 'however', 'therefore'
+        'I need', 'I apologize', 'I cannot', "I'm sorry", "I can't",
+        'please provide', 'could you', 'would you', 'you need to',
+        'more information', 'clarify', 'specify', 'details about',
+        'unfortunately', 'however', 'therefore',
+        'before I can', 'in order to', 'help me understand'
     )
     
     text_lower = text.lower()
@@ -538,6 +543,13 @@ def _contains_code_markers(text: str) -> bool:
     # Count indicators
     code_score = sum(1 for indicator in CODE_INDICATORS if indicator.lower() in text_lower)
     prose_score = sum(1 for indicator in PROSE_INDICATORS if indicator in text_lower)
+    
+    # If prose dominates, it's not code
+    if prose_score > code_score:
+        return False
+    
+    # Must have at least one code indicator
+    return code_score > 0
     
     # If prose dominates, it's not code
     if prose_score > code_score:

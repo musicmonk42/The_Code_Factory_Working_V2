@@ -348,3 +348,131 @@ def test_parse_llm_response_dict_malformed():
     # Should return error file since no valid content found
     assert crh.ERROR_FILENAME in files
 
+
+def test_clean_code_block_explanatory_text_only():
+    """
+    When LLM returns only explanatory text without code,
+    _clean_code_block should return empty string to trigger proper error handling.
+    """
+    explanatory = """
+    I apologize, but I need more information to generate the code.
+    Please provide details about your requirements.
+    """
+    cleaned = crh._clean_code_block(explanatory)
+    assert cleaned == "", "Explanatory text should result in empty string"
+
+
+def test_contains_code_markers_valid_code():
+    """Test that actual code is recognized."""
+    code = """
+    import os
+    
+    def main():
+        print("Hello")
+    """
+    assert crh._contains_code_markers(code) is True
+
+
+def test_contains_code_markers_prose():
+    """Test that prose is NOT recognized as code."""
+    prose = """
+    I apologize for the confusion. Could you please provide
+    more information about what you'd like me to implement?
+    """
+    assert crh._contains_code_markers(prose) is False
+
+
+def test_contains_code_markers_mixed_but_prose_dominant():
+    """Test that when prose indicators dominate, result is False."""
+    mixed = """
+    I'm sorry, but I need clarification on your requirements.
+    Please provide more information about what you want = implemented.
+    Unfortunately, I cannot proceed without more details.
+    """
+    # Even though there's an '=' sign, prose indicators should dominate
+    assert crh._contains_code_markers(mixed) is False
+
+
+def test_contains_code_markers_empty_or_short():
+    """Test that empty or very short text returns False."""
+    assert crh._contains_code_markers("") is False
+    assert crh._contains_code_markers("ok") is False
+    assert crh._contains_code_markers("    ") is False
+
+
+def test_parse_llm_response_explanatory_only_returns_error():
+    """
+    If LLM output contains no code, should return ERROR_FILENAME with helpful message.
+    """
+    explanatory = "I need more details before I can generate the code."
+    files = crh.parse_llm_response(explanatory, lang="python")
+    assert crh.ERROR_FILENAME in files
+    err_msg = files[crh.ERROR_FILENAME].lower()
+    assert "did not contain recognizable code" in err_msg or "explanation" in err_msg
+
+
+def test_parse_llm_response_clarification_request():
+    """
+    Test that clarification requests are properly detected and handled.
+    """
+    clarification = """
+    Could you please specify the following details:
+    1. The input format you expect
+    2. The output format you need
+    3. Any specific constraints
+    
+    I apologize, but I need this information to generate the appropriate code.
+    """
+    files = crh.parse_llm_response(clarification, lang="python")
+    assert crh.ERROR_FILENAME in files
+    error_content = files[crh.ERROR_FILENAME]
+    assert "did not contain recognizable code" in error_content
+
+
+def test_parse_llm_response_with_code_after_fence():
+    """
+    Test that code in fences is still properly extracted even with new validation.
+    """
+    response = """```python
+import sys
+
+def hello():
+    print("Hello, World!")
+    
+if __name__ == "__main__":
+    hello()
+```"""
+    files = crh.parse_llm_response(response, lang="python")
+    assert crh.DEFAULT_FILENAME in files
+    assert "import sys" in files[crh.DEFAULT_FILENAME]
+    assert "def hello():" in files[crh.DEFAULT_FILENAME]
+    assert crh.ERROR_FILENAME not in files
+
+
+def test_clean_code_block_with_preamble_and_valid_code():
+    """
+    Test that preamble is stripped but valid code is preserved.
+    """
+    response = """Here's the implementation you requested:
+
+import os
+import sys
+
+def process_data():
+    return True
+"""
+    cleaned = crh._clean_code_block(response)
+    assert "import os" in cleaned
+    assert "def process_data():" in cleaned
+    assert "Here's the implementation" not in cleaned
+
+
+def test_validate_syntax_empty_code_error_message():
+    """
+    Test that empty code produces helpful error message.
+    """
+    is_valid, msg = crh._validate_syntax("", "python", "main.py")
+    assert is_valid is False
+    assert "Empty code block" in msg
+    assert "explanatory text" in msg or "LLM returned" in msg
+
