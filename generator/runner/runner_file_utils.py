@@ -1493,8 +1493,8 @@ async def validate_generated_project(
                 try:
                     content = file_path.read_text(encoding="utf-8")
                     # Detect if content looks like a JSON file map
-                    # Safe slicing with min() to handle short content
-                    content_header = content[:min(JSON_DETECTION_HEADER_SIZE, len(content))] if content else ""
+                    # Slicing handles empty strings safely by returning an empty slice
+                    content_header = content[:min(JSON_DETECTION_HEADER_SIZE, len(content))]
                     if len(content) > 0 and content.strip().startswith("{") and '"main.py"' in content_header:
                         try:
                             parsed = json.loads(content)

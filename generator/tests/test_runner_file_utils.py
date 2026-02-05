@@ -561,19 +561,16 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
 # --------------------------------------------------------------------------- #
 # Tests for materialize_file_map and validate_generated_project
 # --------------------------------------------------------------------------- #
-# Import the new functions
-try:
-    from runner.runner_file_utils import (
-        materialize_file_map,
-        validate_generated_project,
-        write_validation_error,
-    )
-    HAS_MATERIALIZE = True
-except ImportError:
-    HAS_MATERIALIZE = False
+# Use pytest.importorskip for clearer import handling (pytest best practice)
+materialize_funcs = pytest.importorskip(
+    "runner.runner_file_utils",
+    reason="runner.runner_file_utils module required for materialization tests"
+)
+materialize_file_map = materialize_funcs.materialize_file_map
+validate_generated_project = materialize_funcs.validate_generated_project
+write_validation_error = materialize_funcs.write_validation_error
 
 
-@pytest.mark.skipif(not HAS_MATERIALIZE, reason="materialize_file_map not available")
 class TestMaterializeFileMap:
     """Tests for the materialize_file_map function."""
 
@@ -714,7 +711,6 @@ class TestMaterializeFileMap:
         assert content == "line1\nline2\nline3\n"
 
 
-@pytest.mark.skipif(not HAS_MATERIALIZE, reason="validate_generated_project not available")
 class TestValidateGeneratedProject:
     """Tests for the validate_generated_project function."""
 
