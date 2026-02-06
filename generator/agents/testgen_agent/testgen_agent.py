@@ -1767,6 +1767,9 @@ def test_{file_stem}_syntax_error_documentation():
                 if self.arbiter_bridge:
                     try:
                         await self.arbiter_bridge.report_bug({
+                            "title": f"Test generation failed: File operation error",
+                            "description": f"Test generation run {run_id} failed during file operations: {str(e)}",
+                            "severity": "high",
                             "agent": "testgen",
                             "error_type": type(e).__name__,
                             "error_message": str(e),
@@ -1793,6 +1796,9 @@ def test_{file_stem}_syntax_error_documentation():
                 if self.arbiter_bridge:
                     try:
                         await self.arbiter_bridge.report_bug({
+                            "title": f"Test generation failed: Configuration/parsing error",
+                            "description": f"Test generation run {run_id} failed due to validation or parsing issues: {str(e)}",
+                            "severity": "medium",
                             "agent": "testgen",
                             "error_type": type(e).__name__,
                             "error_message": str(e),
@@ -1819,6 +1825,9 @@ def test_{file_stem}_syntax_error_documentation():
                 if self.arbiter_bridge:
                     try:
                         await self.arbiter_bridge.report_bug({
+                            "title": f"Test generation failed: LLM operation error",
+                            "description": f"Test generation run {run_id} failed during LLM operations or validation: {str(e)}",
+                            "severity": "high",
                             "agent": "testgen",
                             "error_type": type(e).__name__,
                             "error_message": str(e),

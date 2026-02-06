@@ -1444,6 +1444,9 @@ class DocgenAgent:
                 if self.arbiter_bridge:
                     try:
                         await self.arbiter_bridge.report_bug({
+                            "title": f"Documentation generation failed: {type(e).__name__}",
+                            "description": f"Documentation generation for {doc_type} failed in run {run_id}: {str(e)}",
+                            "severity": "high",
                             "agent": "docgen",
                             "error_type": type(e).__name__,
                             "error_message": str(e),

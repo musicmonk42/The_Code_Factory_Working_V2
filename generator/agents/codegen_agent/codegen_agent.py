@@ -1244,6 +1244,9 @@ if PLUGIN_AVAILABLE:
                 if arbiter_bridge:
                     try:
                         await arbiter_bridge.report_bug({
+                            "title": f"Code generation failed: {type(e).__name__}",
+                            "description": f"Code generation request {request_id} failed: {str(e)}",
+                            "severity": "high",
                             "agent": "codegen",
                             "error_type": type(e).__name__,
                             "error_message": str(e),
@@ -1528,6 +1531,9 @@ else:
                 if arbiter_bridge:
                     try:
                         await arbiter_bridge.report_bug({
+                            "title": f"Code generation failed: {type(e).__name__}",
+                            "description": f"Code generation request {request_id} failed: {str(e)}",
+                            "severity": "high",
                             "agent": "codegen",
                             "error_type": type(e).__name__,
                             "error_message": str(e),
