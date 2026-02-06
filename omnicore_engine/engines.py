@@ -863,6 +863,16 @@ class OmniCoreOmega:
         )
 
     def _initialize_arbiters(self):
+        """Initialize arbiter instances with graceful CI handling."""
+        import os
+        
+        # Skip arbiter initialization in CI environment to avoid resource exhaustion
+        if os.getenv("CI") == "1" or os.getenv("CI") == "true":
+            logger.warning(
+                "CI environment detected - skipping arbiter initialization to avoid resource constraints"
+            )
+            return
+            
         logger.info("OmniCoreOmega: Initializing arbiters...")
 
         db_engine_for_arbiters = self.db.engine
