@@ -1536,19 +1536,6 @@ else:
                     except Exception as bridge_err:
                         logger.warning(f"Failed to report error to arbiter: {bridge_err}")
                 
-                
-                # [ARBITER] Report error to bridge
-                if arbiter_bridge:
-                    try:
-                        await arbiter_bridge.report_bug({
-                            "agent": "codegen",
-                            "error_type": type(e).__name__,
-                            "error_message": str(e),
-                            "request_id": request_id,
-                        })
-                    except Exception as bridge_err:
-                        logger.warning(f"Failed to report error to arbiter: {bridge_err}")
-                
                 return {
                     "error.txt": f"Error: {type(e).__name__}: {str(e)}"
                 }
