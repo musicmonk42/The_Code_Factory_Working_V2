@@ -19,14 +19,26 @@ import pytest
 # import path_setup - moved to test functions
 # from omnicore_engine.engines import (...) - moved to test functions
 
+# Disable parallel execution for tests that interact with ENGINE_REGISTRY
+# to prevent race conditions when running with pytest-xdist
+pytestmark = [
+    pytest.mark.xdist_group(name="engine_registry_serial"),
+]
+
 
 class TestGeneratorIntegration:
     """Test generator integration with OmniCoreOmega"""
 
     def setup_method(self):
-        """Clear registry before each test"""
-        # Avoid importing during test collection - import inside test methods if needed
-        pass
+        """Save ENGINE_REGISTRY state before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        self._original_registry = dict(ENGINE_REGISTRY)
+
+    def teardown_method(self):
+        """Restore ENGINE_REGISTRY state after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(self._original_registry)
 
     @pytest.mark.integration
     def test_generator_imports_available(self):
@@ -190,6 +202,17 @@ class TestGeneratorIntegration:
 
 class TestMessageBusIntegration:
     """Test message bus integration for generator"""
+
+    def setup_method(self):
+        """Save ENGINE_REGISTRY state before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        self._original_registry = dict(ENGINE_REGISTRY)
+
+    def teardown_method(self):
+        """Restore ENGINE_REGISTRY state after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(self._original_registry)
 
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -356,6 +379,17 @@ class TestPathSetup:
 class TestCrewConfigHelper:
     """Test crew config helper function"""
 
+    def setup_method(self):
+        """Save ENGINE_REGISTRY state before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        self._original_registry = dict(ENGINE_REGISTRY)
+
+    def teardown_method(self):
+        """Restore ENGINE_REGISTRY state after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(self._original_registry)
+
     @pytest.mark.integration
     def test_find_crew_config_static_method(self):
         """Test that _find_crew_config is a static method"""
@@ -372,6 +406,17 @@ class TestCrewConfigHelper:
 
 class TestAuditLogManagerFallback:
     """Test audit log manager fallback logic"""
+
+    def setup_method(self):
+        """Save ENGINE_REGISTRY state before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        self._original_registry = dict(ENGINE_REGISTRY)
+
+    def teardown_method(self):
+        """Restore ENGINE_REGISTRY state after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(self._original_registry)
 
     @pytest.mark.integration
     @patch("omnicore_engine.engines.Database")

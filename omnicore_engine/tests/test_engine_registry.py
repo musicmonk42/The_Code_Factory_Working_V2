@@ -18,11 +18,26 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # from omnicore_engine.engines import (...) - moved to test functions
 
 # Disable parallel execution for tests that modify shared ENGINE_REGISTRY
-pytestmark = pytest.mark.xdist_group(name="engine_registry_serial")
+# Also mark as not requiring forked mode to avoid subprocess crashes
+# when running with pytest-xdist --forked flag
+pytestmark = [
+    pytest.mark.xdist_group(name="engine_registry_serial"),
+]
 
 
 class TestEngineRegistry:
     """Test the engine registry functions"""
+
+    def setup_method(self):
+        """Save ENGINE_REGISTRY state before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        self._original_registry = dict(ENGINE_REGISTRY)
+
+    def teardown_method(self):
+        """Restore ENGINE_REGISTRY state after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(self._original_registry)
 
     @pytest.mark.integration
     def test_register_engine_success(self):
@@ -333,6 +348,17 @@ class TestPluginService:
 class TestRunImportFixer:
     """Test the run_import_fixer helper function"""
 
+    def setup_method(self):
+        """Save ENGINE_REGISTRY state before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        self._original_registry = dict(ENGINE_REGISTRY)
+
+    def teardown_method(self):
+        """Restore ENGINE_REGISTRY state after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(self._original_registry)
+
     @pytest.mark.integration
     @patch("omnicore_engine.engines.asyncio.run")
     def test_run_import_fixer(self, mock_asyncio_run):
@@ -354,6 +380,17 @@ class TestRunImportFixer:
 
 class TestOmniCoreOmega:
     """Test the OmniCoreOmega orchestrator class"""
+
+    def setup_method(self):
+        """Save ENGINE_REGISTRY state before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        self._original_registry = dict(ENGINE_REGISTRY)
+
+    def teardown_method(self):
+        """Restore ENGINE_REGISTRY state after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(self._original_registry)
 
     @pytest.fixture
     def mock_components(self):
@@ -584,6 +621,17 @@ class TestOmniCoreOmega:
 
 class TestCrewConfigLoading:
     """Test crew configuration loading"""
+
+    def setup_method(self):
+        """Save ENGINE_REGISTRY state before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        self._original_registry = dict(ENGINE_REGISTRY)
+
+    def teardown_method(self):
+        """Restore ENGINE_REGISTRY state after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(self._original_registry)
 
     @pytest.mark.integration
     @patch("builtins.open", new_callable=mock_open)
