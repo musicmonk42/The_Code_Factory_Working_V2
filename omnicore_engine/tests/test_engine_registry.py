@@ -29,24 +29,6 @@ pytestmark = [
 class TestEngineRegistry:
     """Test the engine registry functions"""
 
-    @pytest.fixture(autouse=True)
-    def isolate_registry(self):
-        """Isolate ENGINE_REGISTRY for this test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        # Save keys only, not the entire registry
-        original_keys = set(ENGINE_REGISTRY.keys())
-        # Clear for test
-        ENGINE_REGISTRY.clear()
-        yield
-        # Remove only keys added during test
-        current_keys = set(ENGINE_REGISTRY.keys())
-        new_keys = current_keys - original_keys
-        for key in new_keys:
-            try:
-                ENGINE_REGISTRY.pop(key, None)
-            except:
-                pass
-
     @pytest.mark.integration
     def test_register_engine_success(self):
         """Test successful engine registration"""
