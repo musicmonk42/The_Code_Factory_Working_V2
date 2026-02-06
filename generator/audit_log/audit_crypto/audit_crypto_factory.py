@@ -241,6 +241,43 @@ logger = logging.getLogger(__name__)
 logging.getLogger().setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
 
+# --- Rate-Limited Logger for Error Messages ---
+class RateLimitedLogger:
+    """
+    Rate limits log messages to prevent log flooding.
+    Only logs once per interval for each unique error key.
+    """
+    def __init__(self, interval_seconds: int = 60):
+        self._last_log_time: Dict[str, float] = {}
+        self._interval = interval_seconds
+        self._lock = threading.Lock()
+    
+    def rate_limited_log(self, log_func: Callable, key: str, *args, **kwargs) -> bool:
+        """
+        Only log once per interval for the same error key.
+        
+        Args:
+            log_func: The logging function to call (e.g., logger.critical, logger.error)
+            key: Unique identifier for this log message type
+            *args: Arguments to pass to log_func
+            **kwargs: Keyword arguments to pass to log_func
+            
+        Returns:
+            True if the message was logged, False if it was rate-limited
+        """
+        with self._lock:
+            now = time.time()
+            if key not in self._last_log_time or (now - self._last_log_time[key]) > self._interval:
+                self._last_log_time[key] = now
+                log_func(*args, **kwargs)
+                return True
+        return False
+
+
+# Global rate limiter for error logging (1 message per 60 seconds)
+_logger_limiter = RateLimitedLogger(interval_seconds=60)
+
+
 # --- Helper for checking if crypto is disabled ---
 def _is_crypto_disabled() -> bool:
     """
@@ -544,13 +581,46 @@ async def _ensure_software_key_master() -> bytes:
         return _SOFTWARE_KEY_MASTER
 
     except Exception as e:
-        logger.critical(
-            f"Failed to initialize software key master in production: {e}",
-            exc_info=True,
-        )
-        raise CryptoInitializationError(
-            f"Failed to initialize software key master: {e}"
-        ) from e
+        # Check if this is an InvalidCiphertextException from AWS KMS
+        # This happens when the encrypted data was encrypted with a different KMS key
+        is_invalid_ciphertext = False
+        if HAS_BOTO3 and botocore is not None:
+            # Check if it's a ClientError with InvalidCiphertextException code
+            if hasattr(botocore, 'ClientError') and isinstance(e, botocore.ClientError):
+                if e.response.get('Error', {}).get('Code') == 'InvalidCiphertextException':
+                    is_invalid_ciphertext = True
+        
+        if is_invalid_ciphertext:
+            # Use rate-limited logging to prevent log flooding
+            _logger_limiter.rate_limited_log(
+                logger.error,
+                "kms_invalid_ciphertext",
+                "InvalidCiphertextException: The encrypted master key was encrypted with a different KMS key. "
+                "This typically happens after KMS key rotation or environment migration. "
+                "RESOLUTION REQUIRED: Update the AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 secret "
+                "with a new master key encrypted using the current KMS key ID: %s. "
+                "To generate a new key: 1) Generate a fresh Fernet key, 2) Encrypt it with current KMS key, "
+                "3) Base64 encode the ciphertext, 4) Update the secret in your secret manager. "
+                "WARNING: Changing the master key will invalidate all existing encrypted audit data. "
+                "Ensure you have backups before proceeding.",
+                settings.KMS_KEY_ID,
+            )
+            # Re-raise with a clear error message
+            raise CryptoInitializationError(
+                "InvalidCiphertextException: Master key encrypted with different KMS key. "
+                "See logs for resolution steps."
+            ) from e
+        else:
+            # Use rate-limited logging for other errors too
+            _logger_limiter.rate_limited_log(
+                logger.critical,
+                "kms_decrypt_failed",
+                f"Failed to initialize software key master in production: {e}",
+                exc_info=True,
+            )
+            raise CryptoInitializationError(
+                f"Failed to initialize software key master: {e}"
+            ) from e
 
 
 async def _ensure_fallback_hmac_secret() -> bytes:
@@ -1218,7 +1288,10 @@ class CryptoProviderFactory:
                 if allow_init_failure:
                     # User explicitly requested graceful degradation
                     # Return DummyCryptoProvider with strong security warnings
-                    logger.critical(
+                    # Use rate-limited logging to prevent log flooding
+                    _logger_limiter.rate_limited_log(
+                        logger.critical,
+                        "security_critical_allow_init_failure",
                         "SECURITY CRITICAL: AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set. "
                         f"Failed to initialize 'software' crypto provider due to: {e}. "
                         "Falling back to DummyCryptoProvider which provides NO REAL SECURITY. "
@@ -1237,8 +1310,12 @@ class CryptoProviderFactory:
                         "If you need to start the application without proper crypto configuration, "
                         "set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1 (NOT recommended for production)."
                     )
-                    logger.critical(
-                        critical_msg, extra={"operation": "get_provider_software_init_fail"}
+                    # Use rate-limited logging to prevent log flooding
+                    _logger_limiter.rate_limited_log(
+                        logger.critical,
+                        "critical_software_init_fail",
+                        critical_msg,
+                        extra={"operation": "get_provider_software_init_fail"}
                     )
                     raise CryptoInitializationError(critical_msg) from e
 
@@ -1276,7 +1353,10 @@ class CryptoProviderFactory:
             except Exception as fallback_e:
                 # Also check for AUDIT_CRYPTO_ALLOW_INIT_FAILURE when HSM fallback to software fails
                 if allow_init_failure:
-                    logger.critical(
+                    # Use rate-limited logging to prevent log flooding
+                    _logger_limiter.rate_limited_log(
+                        logger.critical,
+                        "security_critical_hsm_and_software_fail",
                         "SECURITY CRITICAL: AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set. "
                         f"Both HSM and software crypto providers failed. HSM error: {e}. "
                         f"Software fallback error: {fallback_e}. "
@@ -1289,7 +1369,10 @@ class CryptoProviderFactory:
                     )
                     return self._create_dummy_provider()
                 else:
-                    logger.critical(
+                    # Use rate-limited logging to prevent log flooding
+                    _logger_limiter.rate_limited_log(
+                        logger.critical,
+                        "critical_fallback_fail",
                         f"Failed to initialize fallback 'software' crypto provider: {fallback_e}. "
                         "No crypto provider available. Exiting. "
                         "If you need to start the application without proper crypto configuration, "
@@ -2041,7 +2124,10 @@ else:
             crypto_provider = crypto_provider_factory.get_provider("dummy")
             
             if not _is_test_or_dev_mode() and allow_init_failure:
-                logger.critical(
+                # Use rate-limited logging to prevent log flooding
+                _logger_limiter.rate_limited_log(
+                    logger.critical,
+                    "security_critical_dummy_provider_production",
                     "SECURITY CRITICAL: Using DummyCryptoProvider in PRODUCTION due to AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1. "
                     "This provides NO REAL SECURITY for audit log signatures and cryptographic operations. "
                     "Audit log integrity is COMPROMISED. "
