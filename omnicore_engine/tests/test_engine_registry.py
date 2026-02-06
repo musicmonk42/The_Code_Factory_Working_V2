@@ -33,14 +33,19 @@ class TestEngineRegistry:
     def isolate_registry(self):
         """Isolate ENGINE_REGISTRY for this test"""
         from omnicore_engine.engines import ENGINE_REGISTRY
-        # Save current state
-        original = ENGINE_REGISTRY.copy()
+        # Save keys only, not the entire registry
+        original_keys = set(ENGINE_REGISTRY.keys())
         # Clear for test
         ENGINE_REGISTRY.clear()
         yield
-        # Restore original state
-        ENGINE_REGISTRY.clear()
-        ENGINE_REGISTRY.update(original)
+        # Remove only keys added during test
+        current_keys = set(ENGINE_REGISTRY.keys())
+        new_keys = current_keys - original_keys
+        for key in new_keys:
+            try:
+                ENGINE_REGISTRY.pop(key, None)
+            except:
+                pass
 
     @pytest.mark.integration
     def test_register_engine_success(self):
@@ -421,9 +426,8 @@ class TestOmniCoreOmega:
         """Test factory method create_and_initialize"""
         from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
 
-        # Save and clear registry
-        original = ENGINE_REGISTRY.copy()
-        ENGINE_REGISTRY.clear()
+        # Save keys only, not the entire registry
+        original_keys = set(ENGINE_REGISTRY.keys())
 
         # Mock database instance properly to avoid mmap errors
         mock_db_instance = Mock()
@@ -445,8 +449,11 @@ class TestOmniCoreOmega:
             mock_sim.assert_called_once()
             mock_crew.assert_called_once()
         finally:
-            ENGINE_REGISTRY.clear()
-            ENGINE_REGISTRY.update(original)
+            # Only remove keys that were added during this test
+            current_keys = set(ENGINE_REGISTRY.keys())
+            new_keys = current_keys - original_keys
+            for key in new_keys:
+                ENGINE_REGISTRY.pop(key, None)
 
     @pytest.mark.integration
     @patch("omnicore_engine.engines.OmniCoreOmega._find_crew_config")
@@ -488,9 +495,8 @@ class TestOmniCoreOmega:
         """Test _initialize_arbiters method"""
         from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
         
-        # Save and clear registry
-        original = ENGINE_REGISTRY.copy()
-        ENGINE_REGISTRY.clear()
+        # Save keys only, not the entire registry
+        original_keys = set(ENGINE_REGISTRY.keys())
 
         try:
             mock_db = Mock()
@@ -525,8 +531,11 @@ class TestOmniCoreOmega:
             assert mock_arbiter.call_count == 3
             assert mock_code_health_env.call_count == 1
         finally:
-            ENGINE_REGISTRY.clear()
-            ENGINE_REGISTRY.update(original)
+            # Only remove keys that were added during this test
+            current_keys = set(ENGINE_REGISTRY.keys())
+            new_keys = current_keys - original_keys
+            for key in new_keys:
+                ENGINE_REGISTRY.pop(key, None)
 
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -534,8 +543,8 @@ class TestOmniCoreOmega:
         """Test asset data initialization"""
         from omnicore_engine.engines import ENGINE_REGISTRY, OmniCoreOmega
 
-        # Isolate ENGINE_REGISTRY for this test
-        original_registry = ENGINE_REGISTRY.copy()
+        # Isolate ENGINE_REGISTRY for this test - save keys only
+        original_keys = set(ENGINE_REGISTRY.keys())
         ENGINE_REGISTRY.clear()
         
         try:
@@ -558,9 +567,14 @@ class TestOmniCoreOmega:
                 # Check engine was registered
                 assert "import_fixer" in ENGINE_REGISTRY
         finally:
-            # Restore original registry
-            ENGINE_REGISTRY.clear()
-            ENGINE_REGISTRY.update(original_registry)
+            # Remove only keys added during test
+            current_keys = set(ENGINE_REGISTRY.keys())
+            new_keys = current_keys - original_keys
+            for key in new_keys:
+                try:
+                    ENGINE_REGISTRY.pop(key, None)
+                except:
+                    pass
 
     @pytest.mark.asyncio
     @pytest.mark.integration
