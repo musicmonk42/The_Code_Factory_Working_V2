@@ -269,7 +269,11 @@ except ImportError as e:
 # Generator component imports (optional, graceful degradation)
 # Skip in CI to avoid resource constraints and PyO3 runtime panics
 import os
-_skip_generator_imports = os.getenv("CI") == "1" or os.getenv("CI") == "true"
+_skip_generator_imports = (
+    os.getenv("CI") == "1" or 
+    os.getenv("CI") == "true" or 
+    os.getenv("GITHUB_ACTIONS") == "true"
+)
 
 if _skip_generator_imports:
     logging.info("CI environment detected - skipping generator imports to avoid resource constraints")
@@ -833,7 +837,9 @@ class OmniCoreOmega:
         audit_log_manager = None
 
         # Skip generator audit log import in CI to avoid PyO3 panics
-        if not (os.getenv("CI") == "1" or os.getenv("CI") == "true"):
+        if not (os.getenv("CI") == "1" or 
+                os.getenv("CI") == "true" or 
+                os.getenv("GITHUB_ACTIONS") == "true"):
             # First, try generator's audit log
             try:
                 from generator.audit_log.audit_log import AUDIT_LOG
@@ -889,7 +895,9 @@ class OmniCoreOmega:
         import os
         
         # Skip arbiter initialization in CI environment to avoid resource exhaustion
-        if os.getenv("CI") == "1" or os.getenv("CI") == "true":
+        if (os.getenv("CI") == "1" or 
+            os.getenv("CI") == "true" or 
+            os.getenv("GITHUB_ACTIONS") == "true"):
             logger.warning(
                 "CI environment detected - skipping arbiter initialization to avoid resource constraints"
             )
