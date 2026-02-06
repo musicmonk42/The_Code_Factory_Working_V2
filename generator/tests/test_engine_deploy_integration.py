@@ -17,9 +17,6 @@ import pytest
 # Set testing environment
 os.environ["TESTING"] = "true"
 
-# Import after setting TESTING environment variable
-from generator.main.engine import WorkflowEngine
-
 
 @pytest.fixture
 def sample_codegen_result():
@@ -65,6 +62,9 @@ async def test_deploy_stage_generates_artifacts_with_real_agent(tmp_path, sample
     5. deploy_metadata.json is generated
     6. Files are written to disk
     """
+    # Import after pytest setup to avoid collection-time errors
+    from generator.main.engine import WorkflowEngine
+    
     # Create a minimal config
     config = {
         "enable_deploy": True,
@@ -137,6 +137,9 @@ async def test_deploy_stage_fallback_to_templates(tmp_path, sample_codegen_resul
     3. Files are written successfully
     4. No exception is raised
     """
+    # Import after pytest setup
+    from generator.main.engine import WorkflowEngine
+    
     config = {
         "enable_deploy": True,
         "output_path": str(tmp_path)
@@ -173,6 +176,9 @@ async def test_deploy_stage_fallback_to_templates(tmp_path, sample_codegen_resul
 @pytest.mark.asyncio
 async def test_deploy_stage_handles_empty_codegen_result(tmp_path):
     """Test that deploy stage handles empty codegen results gracefully."""
+    # Import after pytest setup
+    from generator.main.engine import WorkflowEngine
+    
     config = {
         "enable_deploy": True,
         "output_path": str(tmp_path)
@@ -196,6 +202,8 @@ async def test_deploy_stage_handles_empty_codegen_result(tmp_path):
 @pytest.mark.asyncio
 async def test_deploy_stage_detects_framework_correctly(tmp_path):
     """Test that deploy stage correctly detects different frameworks."""
+    # Import after pytest setup
+    from generator.main.engine import WorkflowEngine
     
     test_cases = [
         ("fastapi", "from fastapi import FastAPI\napp = FastAPI()"),

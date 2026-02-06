@@ -193,11 +193,13 @@ try:
         'workflow_engine',
         'Workflow engine metadata'
     )
-    ENGINE_INFO.info({
-        'version': '1.0.0',
-        'has_opentelemetry': str(HAS_OPENTELEMETRY),
-        'has_pydantic': str(HAS_PYDANTIC)
-    })
+    # Set info metadata if the method is available (may not be in all mock implementations)
+    if hasattr(ENGINE_INFO, 'info'):
+        ENGINE_INFO.info({
+            'version': '1.0.0',
+            'has_opentelemetry': str(HAS_OPENTELEMETRY),
+            'has_pydantic': str(HAS_PYDANTIC)
+        })
 except ImportError:
     HAS_PROMETHEUS = False
     
