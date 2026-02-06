@@ -70,11 +70,11 @@ template = self.env.get_template(template_name)  # Jinja2 ChoiceLoader
 
 | Target | Variant | File | Plugin | Status |
 |--------|---------|------|--------|--------|
-| docker | default | ✅ docker_default.jinja | ✅ DockerPlugin | Fully integrated |
-| docker | enterprise | ✅ docker_enterprise.jinja | ✅ DockerPlugin | Newly added |
-| kubernetes | enterprise | ✅ kubernetes_enterprise.jinja | ⚠️ No plugin yet | Template ready |
-| helm | default | ✅ helm_default.jinja | ⚠️ No plugin yet | Template ready |
-| docs | default | ✅ docs_default.jinja | ⚠️ No plugin yet | Template ready |
+| docker | default | ✅ docker_default.jinja | ✅ DockerPlugin | ✅ Fully integrated |
+| docker | enterprise | ✅ docker_enterprise.jinja | ✅ DockerPlugin | ✅ Fully integrated |
+| kubernetes | enterprise | ✅ kubernetes_enterprise.jinja | ✅ KubernetesPlugin | ✅ Fully integrated |
+| helm | default | ✅ helm_default.jinja | ✅ HelmPlugin | ✅ Fully integrated |
+| docs | default | ✅ docs_default.jinja | ✅ DocsPlugin | ✅ Fully integrated |
 
 ---
 
