@@ -34,6 +34,12 @@ except ImportError:
     # Fallback if import fails
     PRESIDIO_PLACEHOLDERS = ['<ORGANIZATION>', '<URL>', '<PERSON>', '<API_KEY>']
 
+# Import flexible requirements parser for code generation
+try:
+    from generator.agents.codegen_agent.codegen_prompt import _parse_requirements_flexible
+except ImportError:
+    _parse_requirements_flexible = None
+
 logger = logging.getLogger(__name__)
 
 # Observability imports with graceful degradation
@@ -994,6 +1000,22 @@ class OmniCoreService:
                     "target_language": language,
                     "framework": framework,
                 }
+                
+                # Parse requirements to extract structured features for the prompt builder
+                if _parse_requirements_flexible is not None:
+                    try:
+                        parsed = _parse_requirements_flexible(requirements)
+                        requirements_dict.update(parsed)
+                        logger.info(f"[CODEGEN] Extracted {len(requirements_dict.get('features', []))} features from requirements")
+                    except Exception as e:
+                        logger.warning(f"[CODEGEN] Failed to parse requirements flexibly: {e}")
+                        # Ensure at minimum a features key exists with the raw content
+                        if 'features' not in requirements_dict:
+                            requirements_dict['features'] = [requirements] if requirements else ["No specific features provided"]
+                else:
+                    # Fallback if import failed - ensure features key exists
+                    if 'features' not in requirements_dict:
+                        requirements_dict['features'] = [requirements] if requirements else ["No specific features provided"]
                 
                 # Add span attributes for observability
                 if span:
@@ -3095,6 +3117,26 @@ class OmniCoreService:
             "priority": priority,
             "transport": "fallback",
         }
+
+    async def emit_event(
+        self, topic: str, payload: Dict[str, Any], priority: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Emit an event to the message bus.
+        
+        This is a convenience alias for publish_message() used by job lifecycle
+        event handlers. It delegates to publish_message which handles both
+        real message bus publishing and fallback behavior.
+        
+        Args:
+            topic: Event topic/channel (e.g., "job.created", "job.updated")
+            payload: Event payload data
+            priority: Message priority (1-10, default 5)
+        
+        Returns:
+            Publication result with message_id and status
+        """
+        return await self.publish_message(topic=topic, payload=payload, priority=priority)
 
     async def subscribe_to_topic(
         self, topic: str, callback_url: Optional[str] = None, filters: Optional[Dict[str, Any]] = None
