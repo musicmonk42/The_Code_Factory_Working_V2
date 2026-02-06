@@ -969,56 +969,43 @@ class CompanyDataPlugin:
             }
 
 
-# --- Production-Ready SimulationEngine ---
-class SimulationEngine:
-    """Performs simulations for action evaluation with configurable strategies."""
+# [GAP #11 FIX] Import SimulationEngine from the canonical implementation
+# Removed duplicate inline SimulationEngine class - use real implementation from simulation_module
+try:
+    from self_fixing_engineer.simulation.simulation_module import SimulationEngine
+    logger.info("Using real SimulationEngine from simulation_module")
+except ImportError as e:
+    logger.warning(f"SimulationEngine not available ({e}), using fallback")
+    
+    # Fallback SimulationEngine for when simulation_module is unavailable
+    class SimulationEngine:
+        """Fallback simulation engine when real implementation unavailable."""
 
-    def __init__(self):
-        self.name = "SimulationEngine"
+        def __init__(self):
+            self.name = "SimulationEngine_Fallback"
 
-    async def run(
-        self, config: Dict[str, Any], context: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Runs a simulation based on the provided configuration.
-        """
-        sim_type = config.get("type", "monte_carlo")
-        params = config.get("params", {})
-        iterations = params.get("iterations", 100)
-
-        if sim_type == "monte_carlo":
-            results = [
-                np.random.uniform(0, 1) * params.get("alpha", 1.0)
-                for _ in range(iterations)
-            ]
+        async def run(
+            self, config: Dict[str, Any], context: Dict[str, Any]
+        ) -> Dict[str, Any]:
+            """Fallback simulation - returns mock results."""
+            logger.warning("Using fallback SimulationEngine")
             return {
                 "status": "success",
-                "result": float(np.mean(results)),
+                "result": 0.5,
                 "details": {
-                    "iterations": iterations,
-                    "std": float(np.std(results)),
                     "agent": context.get("agent_name"),
+                    "warning": "Using fallback simulation engine"
                 },
             }
-        elif sim_type == "predictive":
-            energy = context.get("energy", 100.0)
+
+        async def perform_quantum_op(
+            self, op_type: str, params: Dict[str, Any]
+        ) -> Dict[str, Any]:
+            """Fallback quantum operation."""
             return {
                 "status": "success",
-                "result": energy * params.get("multiplier", 0.5),
-                "details": {"agent": context.get("agent_name")},
+                "output": f"Fallback quantum {op_type}",
             }
-        raise ValueError(f"Unknown simulation type: {sim_type}")
-
-    async def perform_quantum_op(
-        self, op_type: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Performs a simulation-based quantum operation.
-        """
-        return {
-            "status": "success",
-            "output": f"Quantum {op_type} with value {params.get('value', 0)}",
-        }
 
     async def explain_result(self, result: Dict[str, Any]) -> str:
         """

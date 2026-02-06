@@ -39,8 +39,9 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 # --- Import External Components with Fallbacks ---
+# [GAP #11 FIX] Import SimulationEngine from canonical implementation
 try:
-    from simulation.simulation_module import SimulationEngine
+    from self_fixing_engineer.simulation.simulation_module import SimulationEngine
 
     SIMULATION_AVAILABLE = True
     logger.info("SimulationEngine successfully imported")
