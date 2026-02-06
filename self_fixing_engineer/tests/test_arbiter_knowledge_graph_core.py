@@ -193,7 +193,9 @@ def mock_all_external_services():
                                 ):
                                     # Configure mocks to return proper instances
                                     mock_openai.return_value = MagicMock()
-                                    # Configure Redis mock to return None for get() calls (no state found)
+                                    # Configure Redis mock:
+                                    # - get() returns None to simulate no existing state (avoids json.loads error)
+                                    # - ping() returns True to simulate a successful Redis connection
                                     redis_client_mock = AsyncMock()
                                     redis_client_mock.get = AsyncMock(return_value=None)
                                     redis_client_mock.ping = AsyncMock(return_value=True)

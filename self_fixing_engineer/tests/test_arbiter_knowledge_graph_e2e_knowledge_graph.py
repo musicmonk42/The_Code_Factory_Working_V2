@@ -186,11 +186,15 @@ class TestKnowledgeGraphE2EWorkflow:
             ) as mock_audit:
                 mock_audit.log_event = AsyncMock()
 
-                # If pydub is not installed, audio processing returns "skipped" status
-                # Otherwise, mock the pydub module to avoid ffmpeg dependency
-                try:
-                    import pydub
+                # Check if pydub is available without actually importing it
+                # This avoids side effects and unnecessary dependencies during test execution
+                import importlib.util
+                pydub_available = importlib.util.find_spec("pydub") is not None
+
+                if pydub_available:
                     # pydub is available, mock AudioSegment to avoid ffmpeg calls
+                    # We need to import it first, then patch.object to properly override the reference
+                    import pydub
                     with patch.object(pydub, "AudioSegment") as mock_audio:
                         mock_segment = Mock()
                         mock_segment.__len__ = Mock(return_value=1000)  # 1 second
@@ -207,7 +211,7 @@ class TestKnowledgeGraphE2EWorkflow:
                             assert "data_hash" in result
                         finally:
                             processor.audio_transcriber = original_transcriber  # Restore
-                except ImportError:
+                else:
                     # pydub is not installed, audio processing will be skipped
                     # The processor returns "skipped" status without needing pydub
                     result = await processor.summarize(audio_item)
