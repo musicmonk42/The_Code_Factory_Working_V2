@@ -483,6 +483,7 @@ class TestOmniCoreOmega:
     @pytest.mark.integration
     @patch("omnicore_engine.engines.Arbiter")
     @patch("omnicore_engine.engines.CodeHealthEnv")
+    @patch.dict("os.environ", clear=True)
     def test_initialize_arbiters(self, mock_code_health_env, mock_arbiter, mock_components):
         """Test _initialize_arbiters method"""
         from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
