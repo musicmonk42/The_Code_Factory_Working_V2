@@ -1130,10 +1130,11 @@ class WorkflowEngine:
                                         extra={"missing_endpoints": missing}
                                     )
                                     if provenance:
+                                        missing_endpoints = [f"{e['method']} {e['path']}" for e in missing]
                                         provenance.record_error(
                                             ProvenanceTracker.STAGE_SPEC_VALIDATE,
                                             "spec_fidelity_failed",
-                                            f"Missing required endpoints: {[f'{e['method']} {e['path']}' for e in missing]}"
+                                            f"Missing required endpoints: {missing_endpoints}"
                                         )
                                     # HARD FAIL: Do not proceed if spec fidelity fails
                                     result["status"] = WorkflowStatus.FAILED.value
