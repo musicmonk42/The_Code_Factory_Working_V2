@@ -17,31 +17,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Defer heavy imports to test functions to reduce memory during collection
 # from omnicore_engine.engines import (...) - moved to test functions
 
+# Import shared test base class from conftest
+from omnicore_engine.tests.conftest import EngineRegistryTestBase
+
 # Disable parallel execution for tests that modify shared ENGINE_REGISTRY
 # Also mark as not requiring forked mode to avoid subprocess crashes
 # when running with pytest-xdist --forked flag
 pytestmark = [
     pytest.mark.xdist_group(name="engine_registry_serial"),
 ]
-
-
-class EngineRegistryTestBase:
-    """Base class for tests that need ENGINE_REGISTRY isolation.
-    
-    This provides setup/teardown methods that save and restore the
-    ENGINE_REGISTRY state to prevent cross-test contamination.
-    """
-
-    def setup_method(self):
-        """Save ENGINE_REGISTRY state before each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        self._original_registry = dict(ENGINE_REGISTRY)
-
-    def teardown_method(self):
-        """Restore ENGINE_REGISTRY state after each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        ENGINE_REGISTRY.clear()
-        ENGINE_REGISTRY.update(self._original_registry)
 
 
 class TestEngineRegistry(EngineRegistryTestBase):
