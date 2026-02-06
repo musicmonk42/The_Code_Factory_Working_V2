@@ -42,6 +42,10 @@ from tenacity import (
 
 logger = logging.getLogger(__name__)
 
+# Re-entrancy guard: Prevent register_with_omnicore from triggering circular imports during module load
+# This flag is checked in register_with_omnicore to defer OmniCore registration during import time
+_IMPORT_IN_PROGRESS = True
+
 # Mock opentelemetry.trace if not available
 try:
     import opentelemetry.trace as trace
@@ -515,9 +519,20 @@ class PluginRegistry:
     ):
         """
         Registers a plugin with the omnicore_engine.
+        Defers registration if called during module import to avoid circular imports.
         """
+        # Guard: Skip registration if called during module import time to prevent circular imports
+        # This prevents the circular import chain: arbiter_plugin_registry -> engines -> database -> models -> arbiter
+        global _IMPORT_IN_PROGRESS
+        if _IMPORT_IN_PROGRESS:
+            logger.debug(
+                f"Deferring OmniCore registration for plugin [{kind.value}:{name}] - "
+                "module import in progress"
+            )
+            return
+        
         try:
-            from engines import register_engine
+            from omnicore_engine.engines import register_engine
 
             # Assuming 'engines' is a module that provides 'register_engine' function
             # The 'entrypoints' dict maps a unique name to a function to be exposed by the engine
@@ -1351,3 +1366,7 @@ def __getattr__(name: str) -> Any:
         # Returns a fresh snapshot on each access to ensure up-to-date data
         return get_registry().list_plugins()
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+# Mark module import as complete - safe for OmniCore registration now
+_IMPORT_IN_PROGRESS = False
