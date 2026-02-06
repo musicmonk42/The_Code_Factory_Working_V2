@@ -395,10 +395,12 @@ class TestOmniCoreOmega:
     @patch("omnicore_engine.engines.TestGenerationOrchestrator")
     @patch("omnicore_engine.engines.create_import_fixer_engine")
     @patch("omnicore_engine.engines.OmniCoreOmega._find_crew_config")
+    @patch("omnicore_engine.engines.yaml.safe_load")
     @patch("builtins.open", new_callable=mock_open, read_data="agents: []")
     def test_create_and_initialize(
         self,
         mock_file,
+        mock_yaml_load,
         mock_find_config,
         mock_fixer,
         mock_test_gen,
@@ -411,8 +413,10 @@ class TestOmniCoreOmega:
         """Test factory method create_and_initialize"""
         from omnicore_engine.engines import OmniCoreOmega
 
-        # Mock _find_crew_config to return a valid path without filesystem access
+        # Mock _find_crew_config to return a valid path
         mock_find_config.return_value = "/mock/crew_config.yaml"
+        # Mock yaml.safe_load to return an empty agents list
+        mock_yaml_load.return_value = {"agents": []}
         mock_fixer.return_value = Mock()
 
         omega = OmniCoreOmega.create_and_initialize()
