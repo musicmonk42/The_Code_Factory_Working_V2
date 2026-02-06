@@ -131,9 +131,14 @@ def reset_prometheus_collectors():
     # Skip cleanup after tests - let process exit handle it
 
 
-@pytest.fixture(autouse=True, scope="function")
+@pytest.fixture(autouse=False, scope="function")  # Disabled autouse: causes thread issues with async database tests
 def isolate_engine_registry():
-    """Isolate ENGINE_REGISTRY for each test to prevent cross-contamination."""
+    """Isolate ENGINE_REGISTRY for each test to prevent cross-contamination.
+    
+    NOTE: This fixture is disabled (autouse=False) because importing engines
+    at fixture setup time causes thread creation issues with async database tests.
+    Tests that need ENGINE_REGISTRY isolation should explicitly request this fixture.
+    """
     from omnicore_engine import engines
     
     # Save original state

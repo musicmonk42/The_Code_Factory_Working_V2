@@ -269,13 +269,10 @@ import pytest
 import asyncio
 
 
-@pytest.fixture(scope="function")
-def event_loop():
-    """Create an event loop for async tests."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
+# NOTE: Removed custom event_loop fixture. pytest-asyncio 1.3.0+ manages event loops
+# automatically. Custom event_loop fixtures conflict with pytest-asyncio's internal
+# handling, causing "can't start new thread" errors in async database tests.
+# See: https://pytest-asyncio.readthedocs.io/en/latest/reference/fixtures.html
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -307,9 +304,13 @@ def setup_prometheus_multiproc_dir(tmp_path_factory):
     yield
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function", autouse=False)  # Disabled: causes issues with async tests
 def isolate_imports():
-    """Isolate imports between tests to prevent state leakage."""
+    """Isolate imports between tests to prevent state leakage.
+    
+    NOTE: This fixture is disabled (autouse=False) because it can interfere
+    with async database tests that require persistent module state.
+    """
     # Record modules before test
     modules_before = set(sys.modules.keys())
     

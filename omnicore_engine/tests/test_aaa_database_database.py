@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+import pytest_asyncio
 from cryptography.fernet import Fernet
 
 # Add parent directory to path for imports
@@ -72,7 +73,7 @@ def temp_db_path():
         yield Path(tmpdir) / "test.db"
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def database(mock_settings, mock_security_config, temp_db_path):
     """Create a Database instance for testing with temporary file-based SQLite."""
     with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
