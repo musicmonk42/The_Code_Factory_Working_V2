@@ -4,6 +4,7 @@ Tests engine registry, plugin service, and OmniCoreOmega orchestrator.
 """
 
 import asyncio
+import copy
 import os
 
 # Add the parent directory to path for imports
@@ -17,9 +18,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Defer heavy imports to test functions to reduce memory during collection
 # from omnicore_engine.engines import (...) - moved to test functions
 
-# Import shared test base class from conftest
-from omnicore_engine.tests.conftest import EngineRegistryTestBase
-
 # Disable parallel execution for tests that modify shared ENGINE_REGISTRY
 # Also mark as not requiring forked mode to avoid subprocess crashes
 # when running with pytest-xdist --forked flag
@@ -28,60 +26,66 @@ pytestmark = [
 ]
 
 
-class TestEngineRegistry(EngineRegistryTestBase):
-    """Test the engine registry functions.
-    
-    Inherits from EngineRegistryTestBase for automatic ENGINE_REGISTRY isolation.
-    """
+class TestEngineRegistry:
+    """Test the engine registry functions"""
+
+    @pytest.fixture(autouse=True)
+    def isolate_registry(self):
+        """Isolate ENGINE_REGISTRY for this test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        # Save current state
+        original = ENGINE_REGISTRY.copy()
+        # Clear for test
+        ENGINE_REGISTRY.clear()
+        yield
+        # Restore original state
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(original)
 
     @pytest.mark.integration
     def test_register_engine_success(self):
         """Test successful engine registration"""
         from omnicore_engine.engines import ENGINE_REGISTRY, register_engine
 
-        with patch.dict(ENGINE_REGISTRY, {}, clear=True):
-            entrypoints = {"initialize": Mock(), "shutdown": Mock(), "execute": Mock()}
-            
-            register_engine("test_engine", entrypoints)
-            
-            assert "test_engine" in ENGINE_REGISTRY
-            assert ENGINE_REGISTRY["test_engine"] == entrypoints
+        entrypoints = {"initialize": Mock(), "shutdown": Mock(), "execute": Mock()}
+        
+        register_engine("test_engine", entrypoints)
+        
+        assert "test_engine" in ENGINE_REGISTRY
+        assert ENGINE_REGISTRY["test_engine"] == entrypoints
 
     @pytest.mark.integration
     def test_register_engine_invalid_entrypoints(self):
         """Test registration with invalid entrypoints"""
-        from omnicore_engine.engines import register_engine, ENGINE_REGISTRY
-        
-        with patch.dict(ENGINE_REGISTRY, {}, clear=True):
-            with pytest.raises(TypeError, match="Entrypoints must be a dictionary"):
-                register_engine("bad_engine", "not_a_dict")
+        from omnicore_engine.engines import register_engine
 
-            with pytest.raises(TypeError, match="Entrypoints must be a dictionary"):
-                register_engine("bad_engine", ["list", "not", "dict"])
+        with pytest.raises(TypeError, match="Entrypoints must be a dictionary"):
+            register_engine("bad_engine", "not_a_dict")
+
+        with pytest.raises(TypeError, match="Entrypoints must be a dictionary"):
+            register_engine("bad_engine", ["list", "not", "dict"])
 
     @pytest.mark.integration
     def test_get_engine_exists(self):
         """Test retrieving an existing engine"""
         from omnicore_engine.engines import ENGINE_REGISTRY, get_engine
 
-        with patch.dict(ENGINE_REGISTRY, {}, clear=True):
-            entrypoints = {"func": Mock()}
-            ENGINE_REGISTRY["existing_engine"] = entrypoints
+        entrypoints = {"func": Mock()}
+        ENGINE_REGISTRY["existing_engine"] = entrypoints
 
-            result = get_engine("existing_engine")
-            assert result == entrypoints
+        result = get_engine("existing_engine")
+        assert result == entrypoints
 
     @pytest.mark.integration
     def test_get_engine_not_exists(self):
         """Test retrieving non-existent engine"""
-        from omnicore_engine.engines import get_engine, ENGINE_REGISTRY
+        from omnicore_engine.engines import get_engine
 
-        with patch.dict(ENGINE_REGISTRY, {}, clear=True):
-            result = get_engine("nonexistent_engine")
-            assert result is None
+        result = get_engine("nonexistent_engine")
+        assert result is None
 
 
-class TestPluginService(EngineRegistryTestBase):
+class TestPluginService:
     """Test the PluginService class"""
 
     @pytest.fixture
@@ -335,7 +339,7 @@ class TestPluginService(EngineRegistryTestBase):
         mock_simulator.assert_called_with(["AAPL", "GOOGL"])
 
 
-class TestRunImportFixer(EngineRegistryTestBase):
+class TestRunImportFixer:
     """Test the run_import_fixer helper function"""
 
     @pytest.mark.integration
@@ -357,7 +361,7 @@ class TestRunImportFixer(EngineRegistryTestBase):
             mock_asyncio_run.assert_called_once()
 
 
-class TestOmniCoreOmega(EngineRegistryTestBase):
+class TestOmniCoreOmega:
     """Test the OmniCoreOmega orchestrator class"""
 
     @pytest.fixture
@@ -417,7 +421,11 @@ class TestOmniCoreOmega(EngineRegistryTestBase):
         """Test factory method create_and_initialize"""
         from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
 
-        with patch.dict(ENGINE_REGISTRY, {}, clear=True):
+        # Isolate ENGINE_REGISTRY for this test
+        original_registry = ENGINE_REGISTRY.copy()
+        ENGINE_REGISTRY.clear()
+        
+        try:
             # Mock _find_crew_config to return a valid path
             mock_find_config.return_value = "/mock/crew_config.yaml"
             # Mock yaml.safe_load to return an empty agents list
@@ -431,6 +439,10 @@ class TestOmniCoreOmega(EngineRegistryTestBase):
             mock_bus.assert_called_once()
             mock_sim.assert_called_once()
             mock_crew.assert_called_once()
+        finally:
+            # Restore original registry
+            ENGINE_REGISTRY.clear()
+            ENGINE_REGISTRY.update(original_registry)
 
     @pytest.mark.integration
     @patch("omnicore_engine.engines.OmniCoreOmega._find_crew_config")
@@ -469,7 +481,11 @@ class TestOmniCoreOmega(EngineRegistryTestBase):
         """Test arbiter initialization"""
         from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
 
-        with patch.dict(ENGINE_REGISTRY, {}, clear=True):
+        # Isolate ENGINE_REGISTRY for this test
+        original_registry = ENGINE_REGISTRY.copy()
+        ENGINE_REGISTRY.clear()
+        
+        try:
             omega = OmniCoreOmega(**mock_components, num_arbiters=2)
 
             mock_components["database"].engine = Mock()
@@ -485,6 +501,10 @@ class TestOmniCoreOmega(EngineRegistryTestBase):
 
                         assert len(omega.arbiters) == 2
                         assert mock_arbiter.call_count == 2
+        finally:
+            # Restore original registry
+            ENGINE_REGISTRY.clear()
+            ENGINE_REGISTRY.update(original_registry)
 
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -492,7 +512,11 @@ class TestOmniCoreOmega(EngineRegistryTestBase):
         """Test asset data initialization"""
         from omnicore_engine.engines import ENGINE_REGISTRY, OmniCoreOmega
 
-        with patch.dict(ENGINE_REGISTRY, {}, clear=True):
+        # Isolate ENGINE_REGISTRY for this test
+        original_registry = ENGINE_REGISTRY.copy()
+        ENGINE_REGISTRY.clear()
+        
+        try:
             omega = OmniCoreOmega(**mock_components, num_arbiters=1)
 
             mock_components["import_fixer_engine"].initialize = AsyncMock()
@@ -511,6 +535,10 @@ class TestOmniCoreOmega(EngineRegistryTestBase):
 
                 # Check engine was registered
                 assert "import_fixer" in ENGINE_REGISTRY
+        finally:
+            # Restore original registry
+            ENGINE_REGISTRY.clear()
+            ENGINE_REGISTRY.update(original_registry)
 
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -587,7 +615,7 @@ class TestOmniCoreOmega(EngineRegistryTestBase):
         )
 
 
-class TestCrewConfigLoading(EngineRegistryTestBase):
+class TestCrewConfigLoading:
     """Test crew configuration loading"""
 
     @pytest.mark.integration
