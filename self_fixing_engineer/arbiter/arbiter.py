@@ -16,6 +16,9 @@ from collections import deque
 from datetime import datetime, timezone
 from functools import wraps
 from logging.handlers import RotatingFileHandler
+
+# Initialize logger early to avoid NameError when used before full setup
+logger = logging.getLogger(__name__)
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -1007,23 +1010,23 @@ except ImportError as e:
                 "output": f"Fallback quantum {op_type}",
             }
 
-    async def explain_result(self, result: Dict[str, Any]) -> str:
-        """
-        Explains simulation results.
-        """
-        return f"Simulation result: {result.get('result', 0):.2f} for agent {result.get('details', {}).get('agent', 'unknown')}"
+        async def explain_result(self, result: Dict[str, Any]) -> str:
+            """
+            Explains simulation results.
+            """
+            return f"Simulation result: {result.get('result', 0):.2f} for agent {result.get('details', {}).get('agent', 'unknown')}"
 
-    def health_check(self):
-        """Returns the health status of the engine."""
-        return {"status": "healthy"}
+        def health_check(self):
+            """Returns the health status of the engine."""
+            return {"status": "healthy"}
 
-    def get_registry(self):
-        """Returns the plugin registry for the engine."""
-        return {"plugins": ["monte_carlo", "predictive"]}
+        def get_registry(self):
+            """Returns the plugin registry for the engine."""
+            return {"plugins": ["monte_carlo", "predictive"]}
 
 
 # --- Production-Ready Logging Setup ---
-logger = logging.getLogger(__name__)
+# Logger already initialized at module top to avoid NameError
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     # Import safe_makedirs from utils to handle malformed paths

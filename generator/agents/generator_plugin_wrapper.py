@@ -298,6 +298,14 @@ def validate_required_agents(registry: object) -> dict:
     Raises:
         ConfigurationError: If any required agent is missing.
     """
+    # Handle None registry case
+    if registry is None:
+        raise ConfigurationError(
+            f"Plugin registry is not available. Cannot validate required agents: {', '.join(sorted(REQUIRED_AGENTS))}. "
+            f"This typically indicates that the OmniCore plugin system failed to initialize. "
+            f"Please check the server logs for import errors or missing dependencies."
+        )
+    
     missing_agents = []
     agents = {}
 
@@ -526,7 +534,7 @@ async def run_generator_workflow(
 
             # --- 1. Clarification Stage (Optional) ---
             # Clarifier is optional - workflow continues if it's not available
-            clarifier = PLUGIN_REGISTRY.get("clarifier")
+            clarifier = PLUGIN_REGISTRY.get("clarifier") if PLUGIN_REGISTRY else None
             if clarifier and workflow_state["ambiguities"]:
                 if not callable(clarifier):
                     logger.warning(
