@@ -553,7 +553,7 @@ async def _ensure_software_key_master() -> bytes:
     # Negative cache: if we recently failed, don't retry immediately
     if _SOFTWARE_KEY_MASTER_LAST_FAILURE is not None:
         elapsed = time.time() - _SOFTWARE_KEY_MASTER_LAST_FAILURE
-        if elapsed < _SOFTWARE_KEY_MASTER_FAILURE_COOLDOWN and _SOFTWARE_KEY_MASTER_LAST_ERROR is not None:
+        if elapsed < _SOFTWARE_KEY_MASTER_FAILURE_COOLDOWN:
             raise _SOFTWARE_KEY_MASTER_LAST_ERROR
 
     # DEV/TEST: safe, deterministic dummy key so SoftwareCryptoProvider can initialize.

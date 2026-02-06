@@ -1002,6 +1002,7 @@ class OmniCoreService:
                 }
                 
                 # Parse requirements to extract structured features for the prompt builder
+                fallback_features = [requirements] if requirements else ["No specific features provided"]
                 if _parse_requirements_flexible is not None:
                     try:
                         parsed = _parse_requirements_flexible(requirements)
@@ -1011,11 +1012,11 @@ class OmniCoreService:
                         logger.warning(f"[CODEGEN] Failed to parse requirements flexibly: {e}")
                         # Ensure at minimum a features key exists with the raw content
                         if 'features' not in requirements_dict:
-                            requirements_dict['features'] = [requirements] if requirements else ["No specific features provided"]
+                            requirements_dict['features'] = fallback_features
                 else:
                     # Fallback if import failed - ensure features key exists
                     if 'features' not in requirements_dict:
-                        requirements_dict['features'] = [requirements] if requirements else ["No specific features provided"]
+                        requirements_dict['features'] = fallback_features
                 
                 # Add span attributes for observability
                 if span:
