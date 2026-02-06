@@ -215,6 +215,8 @@ class TestHealthEndpoints:
         assert hasattr(response, 'status'), "Response must have status attribute"
         assert hasattr(response, 'text'), "Response must have text attribute"
         assert response.status == 200
+        # Ensure text is a string, not a callable
+        assert isinstance(response.text, str), "Response text must be a string"
         assert response.text == "OK"
 
     @patch("generator.agents.testgen_agent.testgen_validator.web.Application")
