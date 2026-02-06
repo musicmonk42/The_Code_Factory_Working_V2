@@ -193,6 +193,55 @@ PROMPT_ERRORS = get_or_create_counter(
 )
 # --- END FIX ---
 
+# ==============================================================================
+# --- Syntax Safety Instructions ---
+# ==============================================================================
+
+SYNTAX_SAFETY_INSTRUCTIONS = """
+CRITICAL SYNTAX REQUIREMENTS:
+
+You MUST ensure all generated code has valid syntax before responding.
+The following are MANDATORY checks:
+
+1. STRING LITERALS:
+   - All string literals MUST be properly terminated with matching quotes
+   - Count your opening quotes: ' or " 
+   - Ensure every opening quote has a corresponding closing quote
+   - Double-check strings at line endings
+
+2. PYTHON CONTROL STRUCTURES:
+   - Every if/elif/else statement MUST end with a colon (:)
+   - Every for/while loop MUST end with a colon (:)
+   - Every def/async def function definition MUST end with a colon (:)
+   - Every class definition MUST end with a colon (:)
+   - Every try/except/finally block MUST end with a colon (:)
+   - Every with statement MUST end with a colon (:)
+
+3. BRACKETS AND PARENTHESES:
+   - Check for unclosed brackets [], parentheses (), and braces {}
+   - Every opening bracket must have a matching closing bracket
+   - Verify all function calls have matching parentheses
+
+4. INDENTATION:
+   - Use consistent indentation (4 spaces for Python)
+   - Maintain proper indentation levels for nested blocks
+   - Verify indentation after control structures
+
+5. PRE-GENERATION CHECKLIST:
+   Before submitting your response, mentally verify:
+   ☐ All strings are properly quoted
+   ☐ All control structures have colons
+   ☐ All brackets/parentheses are balanced
+   ☐ Indentation is consistent
+   ☐ No obvious syntax errors
+
+IMPORTANT: If you're unsure about syntax, prefer simpler, more explicit code 
+over complex one-liners. Clear, working code is better than clever broken code.
+
+Remember: Syntax errors cause immediate pipeline failures. Take extra care 
+to ensure your code is syntactically valid.
+"""
+
 # --- Expanded Best Practices ---
 BEST_PRACTICES = {
     "python": [
@@ -695,6 +744,7 @@ async def build_code_generation_prompt(
     requirements: Dict[str, Any],
     state_summary: str,
     previous_feedback: Optional[str] = None,
+    previous_error: Optional[Dict[str, Any]] = None,
     target_language: str = "python",
     target_framework: Optional[str] = None,
     enable_meta_llm_critique: bool = False,
@@ -704,6 +754,21 @@ async def build_code_generation_prompt(
 ) -> str:
     """
     Builds a production-ready, context-aware, and optimized prompt for code generation.
+    
+    Args:
+        requirements: Dict containing 'features' list and optional 'description'
+        state_summary: Summary of current system state
+        previous_feedback: Optional feedback from previous generation attempts
+        previous_error: Optional dict with 'error_type' and 'details' from failed attempts
+        target_language: Target programming language (default: "python")
+        target_framework: Optional framework specification
+        enable_meta_llm_critique: Whether to enable meta-LLM critique
+        multi_modal_inputs: Optional multimodal inputs (images, diagrams)
+        audit_logger: Optional audit logger (uses log_audit_event if None)
+        redis_client: Optional Redis client for RAG
+    
+    Returns:
+        str: The constructed prompt for code generation
     """
     # Determine template name for metric labeling
     template_name = f"{target_language}_{target_framework}" if target_framework else target_language
@@ -769,7 +834,27 @@ async def build_code_generation_prompt(
             # 5. Inject Best Practices
             best_practices = get_best_practices(target_language, target_framework)
 
-            # 6. Load and Render Template
+            # 6. Build Previous Error Context (if retry after failure)
+            error_context = None
+            if previous_error:
+                error_type = previous_error.get('error_type', 'Unknown')
+                error_details = previous_error.get('details', 'No details available')
+                error_instruction = previous_error.get('instruction', 'Please fix the syntax error')
+                
+                error_context = f"""
+⚠️ PREVIOUS ATTEMPT HAD SYNTAX ERROR ⚠️
+
+Error Type: {error_type}
+Details: {error_details}
+
+{error_instruction}
+
+CRITICAL: You must fix this specific syntax error in your response.
+Review the error carefully and ensure your generated code does not repeat the same mistake.
+"""
+                logger.info(f"Including previous error context in prompt: {error_type}")
+
+            # 7. Load and Render Template
             template_name = f"{target_language}.jinja2"
             try:
                 template = env.get_template(template_name)
@@ -786,6 +871,8 @@ async def build_code_generation_prompt(
                 requirements=requirements,
                 state_summary=state_summary,
                 previous_feedback=previous_feedback,
+                previous_error_context=error_context,
+                syntax_safety_instructions=SYNTAX_SAFETY_INSTRUCTIONS,
                 rag_context=rag_context,
                 best_practices=best_practices,
                 image_descriptions=image_desc,
@@ -794,7 +881,7 @@ async def build_code_generation_prompt(
                 target_framework=target_framework,
             )
 
-            # 7. Final self-critique and refinement (if enabled)
+            # 8. Final self-critique and refinement (if enabled)
             if enable_meta_llm_critique and META_LLM_API_KEY:
                 with tracer.start_as_current_span("meta_llm_critique"):
                     try:
@@ -834,7 +921,17 @@ async def build_code_generation_prompt(
                         logger.error(f"Meta-LLM critique failed: {e}")
                         PROMPT_ERRORS.labels("MetaLLMFailure").inc()
 
-            # 8. Add critical output requirements
+            # 8. Prepend Syntax Safety Instructions
+            # These are CRITICAL to reduce syntax errors from LLM generation
+            prompt = SYNTAX_SAFETY_INSTRUCTIONS + "\n\n" + prompt
+            
+            if error_context:
+                # If this is a retry, add error context prominently at the start
+                prompt = error_context + "\n\n" + prompt
+            
+            logger.debug("Added syntax safety instructions to prompt")
+
+            # 9. Add critical output requirements
             # These requirements are appended to every prompt to ensure consistent,
             # parseable output from the LLM regardless of the template used.
             # This prevents common issues like markdown-wrapped responses and conversational text.
