@@ -20,9 +20,6 @@ from logging.handlers import RotatingFileHandler
 # Initialize logger early to avoid NameError when used before full setup
 logger = logging.getLogger(__name__)
 
-# Re-entrancy guard: Track if module is currently being imported to prevent circular import issues
-_ARBITER_MODULE_LOADING = True
-
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -1031,23 +1028,21 @@ except ImportError as e:
 
 # --- Production-Ready Logging Setup ---
 # Logger already initialized at module top to avoid NameError
-# Only set up logging handlers during normal (non-re-entrant) module import
-if _ARBITER_MODULE_LOADING:
-    logger.setLevel(logging.INFO)
-    if not logger.handlers:
-        # Import safe_makedirs from utils to handle malformed paths
-        from self_fixing_engineer.arbiter.utils import safe_makedirs
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    # Import safe_makedirs from utils to handle malformed paths
+    from self_fixing_engineer.arbiter.utils import safe_makedirs
 
-        log_dir = os.getenv("REPORTS_DIRECTORY", "./reports")
-        log_dir, _ = safe_makedirs(log_dir, "./reports")
-        handler = RotatingFileHandler(
-            os.path.join(log_dir, "self_fixing_engineer.arbiter.log"),
-            maxBytes=50 * 1024 * 1024,  # 50MB
-            backupCount=10,
-        )
-        formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+    log_dir = os.getenv("REPORTS_DIRECTORY", "./reports")
+    log_dir, _ = safe_makedirs(log_dir, "./reports")
+    handler = RotatingFileHandler(
+        os.path.join(log_dir, "self_fixing_engineer.arbiter.log"),
+        maxBytes=50 * 1024 * 1024,  # 50MB
+        backupCount=10,
+    )
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 # --- Prometheus Metrics Setup ---
 # Deferred to avoid module-level initialization overhead
@@ -3922,9 +3917,6 @@ def main():
         asyncio.run(run_agent_simulation())
     logging.getLogger(__name__).info("Application shutdown.")
 
-
-# Mark module as fully loaded - safe for logging setup now
-_ARBITER_MODULE_LOADING = False
 
 if __name__ == "__main__":
     main()
