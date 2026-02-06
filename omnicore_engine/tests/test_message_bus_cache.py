@@ -430,10 +430,15 @@ class TestMessageCache(unittest.TestCase):
 
         # Test LRU eviction works with lock
         for i in range(5):
+            time.sleep(0.01)  # Ensure different timestamps for LRU
             cache_restored.put(f"newkey_{i}", f"newvalue_{i}")
 
         # Cache should only contain maxsize items
         self.assertEqual(len(cache_restored.cache), 5)
+
+        # Original keys should have been evicted (LRU)
+        self.assertIsNone(cache_restored.get("key1"))
+        self.assertIsNone(cache_restored.get("key2"))
 
 
 if __name__ == "__main__":
