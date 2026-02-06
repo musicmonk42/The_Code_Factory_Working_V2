@@ -213,8 +213,8 @@ class TestHealthEndpoints:
 
         # Check response has required attributes and types
         assert response.status == 200
-        # Ensure text is a string, not a callable
-        assert isinstance(response.text, str), "Response text must be a string"
+        # Ensure text is a string, not a callable (avoids Mock object issues)
+        assert isinstance(response.text, str)
         assert response.text == "OK"
 
     @patch("generator.agents.testgen_agent.testgen_validator.web.Application")

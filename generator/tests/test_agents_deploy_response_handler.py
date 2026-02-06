@@ -449,12 +449,8 @@ class TestSummarizationRepair:
             result = await handler.summarize_section("test_section", long_text)
         finally:
             # Restore original state
-            if had_testing:
-                if original_testing is not None:
-                    os.environ["TESTING"] = original_testing
-                else:
-                    # Edge case: TESTING existed but was set to empty string
-                    os.environ["TESTING"] = ""
+            if had_testing and original_testing is not None:
+                os.environ["TESTING"] = original_testing
 
         assert mock_call.called
         assert result == "This is a summarized version."
