@@ -2107,10 +2107,98 @@ class Database:
                 raise
 
     async def save_arbiter_state(self, agent_data):
+        """
+        Save Arbiter state with policy check, knowledge graph update, and audit logging.
+        
+        This method follows the same governance pattern as save_agent_state() to ensure
+        Arbiter state changes are properly authorized and tracked.
+        
+        Args:
+            agent_data: Dictionary containing Arbiter state data
+        
+        Raises:
+            ValueError: If policy denies the operation
+            Exception: If database operation fails
+        """
+        DB_OPERATIONS.labels(operation="save_arbiter_state").inc()
+        start_time = time.time()
+        
         async with AsyncSession(self.engine) as session:
-            state = AgentState(**agent_data)
-            session.add(state)
-            await session.commit()
+            try:
+                # [GAP #16 FIX] Policy check before saving
+                agent_id = agent_data.get("id") or agent_data.get("name", "unknown_arbiter")
+                allowed, reason = await self.policy_engine.should_auto_learn(
+                    "Database", 
+                    "save_arbiter_state", 
+                    agent_id, 
+                    {"agent_id": agent_id, "agent_type": "arbiter"}
+                )
+                if not allowed:
+                    logger.warning(f"Policy denied save_arbiter_state for {agent_id}: {reason}")
+                    raise ValueError(f"Policy denied arbiter state save: {reason}")
+                
+                # Create and save state
+                state = AgentState(**agent_data)
+                session.add(state)
+                await session.commit()
+                
+                # [GAP #16 FIX] Knowledge graph update after successful save
+                if self.knowledge_graph:
+                    try:
+                        await self.knowledge_graph.add_fact(
+                            "ArbiterState",
+                            agent_id,
+                            {
+                                "type": "arbiter",
+                                "state_saved": True,
+                                "timestamp": datetime.utcnow().isoformat()
+                            },
+                            source="database",
+                            timestamp=datetime.utcnow().isoformat(),
+                        )
+                    except Exception as kg_error:
+                        logger.warning(f"Failed to update knowledge graph: {kg_error}")
+                
+                # [GAP #16 FIX] Audit logging
+                await self._log_audit(
+                    "save_arbiter_state",
+                    agent_id,
+                    agent_id,
+                    {
+                        "agent_type": "arbiter",
+                        "operation": "state_saved"
+                    },
+                )
+                
+                # Track successful operation
+                DB_LATENCY_LOCAL.labels(operation="save_arbiter_state").observe(
+                    time.time() - start_time
+                )
+                
+            except Exception as e:
+                # Track error
+                DB_ERRORS.labels(operation="save_arbiter_state").inc()
+                DB_LATENCY_LOCAL.labels(operation="save_arbiter_state_error").observe(
+                    time.time() - start_time
+                )
+                await session.rollback()
+                
+                # [GAP #16 FIX] Feedback on errors
+                if self.feedback_manager:
+                    try:
+                        await self.feedback_manager.record_feedback(
+                            user_id=agent_data.get("id", "unknown"),
+                            feedback_type=FeedbackType.BUG_REPORT,
+                            details={
+                                "type": "db_error",
+                                "operation": "save_arbiter_state",
+                                "error": str(e),
+                            },
+                        )
+                    except Exception as feedback_error:
+                        logger.warning(f"Failed to record feedback: {feedback_error}")
+                
+                raise
 
     @circuit(failure_threshold=5, recovery_timeout=60)
     async def get_agent_state(self, agent_id: str) -> Optional[Dict[str, Any]]:

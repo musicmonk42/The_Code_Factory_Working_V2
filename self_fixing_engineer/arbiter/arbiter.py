@@ -3582,7 +3582,7 @@ class Arbiter:
         """Handler for test_results events."""
         logging.getLogger(__name__).info(f"[{self.name}] Test results event received")
         try:
-            data.get("test_id")
+            test_id = data.get("test_id")
             failures = data.get("failures", [])
             passed = data.get("passed", 0)
             failed = data.get("failed", 0)
@@ -3592,16 +3592,114 @@ class Arbiter:
                 f"Test results: {passed} passed, {failed} failed", "test_results"
             )
 
-            # Create fix tasks for test failures
+            # [GAP #15 FIX] Create real Task objects for test failures
             if failures and self.decision_optimizer:
+                # Import Task class from decision_optimizer
+                from self_fixing_engineer.arbiter.decision_optimizer import Task
+                
+                tasks = []
                 for failure in failures:
-                    logging.getLogger(__name__).info(
-                        f"[{self.name}] Creating fix task for test failure: {failure.get('test_name')}"
+                    test_name = failure.get('test_name', 'unknown_test')
+                    error_message = failure.get('error', 'No error message')
+                    
+                    # Calculate priority based on failure severity
+                    priority = self._calculate_failure_priority(failure)
+                    
+                    # Create Task object
+                    task = Task(
+                        id=str(uuid.uuid4()),
+                        priority=priority,
+                        action_type="fix_test_failure",
+                        risk_level="high" if priority > 8 else "medium",
+                        required_skills={"testing", "debugging", "code_review"},
+                        metadata={
+                            "test_id": test_id,
+                            "test_name": test_name,
+                            "error": error_message,
+                            "failure_data": failure,
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }
                     )
+                    tasks.append(task)
+                    
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] Created fix task {task.id} for test failure: {test_name}"
+                    )
+                
+                # Prioritize tasks using decision optimizer
+                try:
+                    prioritized_tasks = await self.decision_optimizer.prioritize(tasks)
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] Prioritized {len(prioritized_tasks)} fix tasks"
+                    )
+                    
+                    # Store prioritized tasks for execution
+                    if not hasattr(self, 'task_queue'):
+                        self.task_queue = []
+                    self.task_queue.extend(prioritized_tasks)
+                    
+                except Exception as e:
+                    logging.getLogger(__name__).error(
+                        f"[{self.name}] Error prioritizing tasks: {e}", exc_info=True
+                    )
+                
+                # Update knowledge graph with test failure data
+                if hasattr(self, "knowledge_graph") and self.knowledge_graph:
+                    try:
+                        await self.knowledge_graph.add_fact(
+                            "TestFailures",
+                            test_id or str(uuid.uuid4()),
+                            {
+                                "failures": failures,
+                                "passed": passed,
+                                "failed": failed,
+                                "tasks_created": len(tasks),
+                                "timestamp": datetime.now(timezone.utc).isoformat()
+                            },
+                            source=self.name,
+                            timestamp=datetime.now(timezone.utc).isoformat(),
+                        )
+                        logging.getLogger(__name__).info(
+                            f"[{self.name}] Updated knowledge graph with test failure data"
+                        )
+                    except Exception as e:
+                        logging.getLogger(__name__).warning(
+                            f"[{self.name}] Failed to update knowledge graph: {e}"
+                        )
+            
         except Exception as e:
             logging.getLogger(__name__).error(
                 f"[{self.name}] Error handling test_results event: {e}", exc_info=True
             )
+    
+    def _calculate_failure_priority(self, failure: Dict[str, Any]) -> float:
+        """
+        Calculate priority for a test failure based on severity indicators.
+        
+        Args:
+            failure: Test failure data dictionary
+        
+        Returns:
+            Priority score (1-10, higher is more urgent)
+        """
+        priority = 5.0  # Base priority
+        
+        # Increase priority for critical errors
+        error = failure.get('error', '').lower()
+        if any(term in error for term in ['critical', 'fatal', 'crash', 'security']):
+            priority += 3.0
+        elif any(term in error for term in ['error', 'fail', 'exception']):
+            priority += 1.0
+        
+        # Increase priority based on failure count
+        failure_count = failure.get('failure_count', 1)
+        if failure_count > 5:
+            priority += 2.0
+        elif failure_count > 1:
+            priority += 1.0
+        
+        # Cap at 10.0
+        return min(10.0, priority)
 
     async def _on_workflow_completed(self, data: Dict[str, Any]):
         """Handler for workflow_completed events."""
