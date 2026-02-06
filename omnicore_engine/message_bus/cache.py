@@ -21,6 +21,38 @@ class MessageCache:
         self._lock = threading.Lock()
         logger.info("MessageCache initialized.", maxsize=maxsize, ttl=ttl)
 
+    def __getstate__(self):
+        """
+        Prepare MessageCache for serialization (pickle protocol).
+
+        This method is essential for multiprocessing and distributed testing scenarios,
+        particularly with pytest-xdist's --forked mode. threading.Lock objects cannot
+        be pickled as they are process-specific and bound to the parent process's
+        memory space.
+
+        Returns:
+            dict: Object state without unpicklable synchronization primitives
+        """
+        state = self.__dict__.copy()
+        # Remove the lock which cannot be pickled
+        # It will be reconstructed in the target process via __setstate__
+        state['_lock'] = None
+        return state
+
+    def __setstate__(self, state):
+        """
+        Restore MessageCache after deserialization in forked/spawned process.
+
+        Reconstructs the threading.Lock that was excluded during pickling.
+        This ensures the MessageCache is fully functional in the new process.
+
+        Args:
+            state: Pickled object state dictionary
+        """
+        self.__dict__.update(state)
+        # Reconstruct the lock in the new process
+        self._lock = threading.Lock()
+
     def get(self, key):
         with self._lock:
             if key in self.cache:
