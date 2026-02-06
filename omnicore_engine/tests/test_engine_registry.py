@@ -29,24 +29,6 @@ pytestmark = [
 class TestEngineRegistry:
     """Test the engine registry functions"""
 
-    @pytest.fixture(autouse=True)
-    def isolate_registry(self):
-        """Isolate ENGINE_REGISTRY for this test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        # Save keys only, not the entire registry
-        original_keys = set(ENGINE_REGISTRY.keys())
-        # Clear for test
-        ENGINE_REGISTRY.clear()
-        yield
-        # Remove only keys added during test
-        current_keys = set(ENGINE_REGISTRY.keys())
-        new_keys = current_keys - original_keys
-        for key in new_keys:
-            try:
-                ENGINE_REGISTRY.pop(key, None)
-            except:
-                pass
-
     @pytest.mark.integration
     def test_register_engine_success(self):
         """Test successful engine registration"""
@@ -424,15 +406,7 @@ class TestOmniCoreOmega:
         mock_db,
     ):
         """Test factory method create_and_initialize"""
-        from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
-
-        # Save keys only, not the entire registry
-        original_keys = set(ENGINE_REGISTRY.keys())
-
-        # Mock database instance properly to avoid mmap errors
-        mock_db_instance = Mock()
-        mock_db_instance.engine = Mock()
-        mock_db.return_value = mock_db_instance
+        from omnicore_engine.engines import OmniCoreOmega
 
         # Mock _find_crew_config to return a valid path
         mock_find_config.return_value = "/mock/crew_config.yaml"
@@ -440,20 +414,13 @@ class TestOmniCoreOmega:
         mock_yaml_load.return_value = {"agents": []}
         mock_fixer.return_value = Mock()
 
-        try:
-            omega = OmniCoreOmega.create_and_initialize()
+        omega = OmniCoreOmega.create_and_initialize()
 
-            assert isinstance(omega, OmniCoreOmega)
-            mock_db.assert_called_once()
-            mock_bus.assert_called_once()
-            mock_sim.assert_called_once()
-            mock_crew.assert_called_once()
-        finally:
-            # Only remove keys that were added during this test
-            current_keys = set(ENGINE_REGISTRY.keys())
-            new_keys = current_keys - original_keys
-            for key in new_keys:
-                ENGINE_REGISTRY.pop(key, None)
+        assert isinstance(omega, OmniCoreOmega)
+        mock_db.assert_called_once()
+        mock_bus.assert_called_once()
+        mock_sim.assert_called_once()
+        mock_crew.assert_called_once()
 
     @pytest.mark.integration
     @patch("omnicore_engine.engines.OmniCoreOmega._find_crew_config")
@@ -493,49 +460,39 @@ class TestOmniCoreOmega:
     @patch.dict("os.environ", clear=True)
     def test_initialize_arbiters(self, mock_code_health_env, mock_arbiter, mock_components):
         """Test _initialize_arbiters method"""
-        from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
-        
-        # Save keys only, not the entire registry
-        original_keys = set(ENGINE_REGISTRY.keys())
+        from omnicore_engine.engines import OmniCoreOmega
 
-        try:
-            mock_db = Mock()
-            mock_db.engine = Mock()
-            mock_bus = Mock()
-            mock_plugin = Mock()
-            mock_crew = Mock()
-            mock_intent = Mock()
-            mock_test_gen = Mock()
-            mock_sim = Mock()
-            mock_audit = Mock()
-            mock_fixer = Mock()
+        mock_db = Mock()
+        mock_db.engine = Mock()
+        mock_bus = Mock()
+        mock_plugin = Mock()
+        mock_crew = Mock()
+        mock_intent = Mock()
+        mock_test_gen = Mock()
+        mock_sim = Mock()
+        mock_audit = Mock()
+        mock_fixer = Mock()
 
-            omega = OmniCoreOmega(
-                database=mock_db,
-                message_bus=mock_bus,
-                plugin_service=mock_plugin,
-                crew_manager=mock_crew,
-                intent_capture_api=mock_intent,
-                test_generation_orchestrator=mock_test_gen,
-                simulation_engine=mock_sim,
-                audit_log_manager=mock_audit,
-                import_fixer_engine=mock_fixer,
-                num_arbiters=3,
-            )
+        omega = OmniCoreOmega(
+            database=mock_db,
+            message_bus=mock_bus,
+            plugin_service=mock_plugin,
+            crew_manager=mock_crew,
+            intent_capture_api=mock_intent,
+            test_generation_orchestrator=mock_test_gen,
+            simulation_engine=mock_sim,
+            audit_log_manager=mock_audit,
+            import_fixer_engine=mock_fixer,
+            num_arbiters=3,
+        )
 
-            # Use the mock_arbiter and mock_code_health_env from @patch decorators
-            # Decorator patches are applied at method level and provide mocks as parameters
-            omega._initialize_arbiters()
+        # Use the mock_arbiter and mock_code_health_env from @patch decorators
+        # Decorator patches are applied at method level and provide mocks as parameters
+        omega._initialize_arbiters()
 
-            assert len(omega.arbiters) == 3
-            assert mock_arbiter.call_count == 3
-            assert mock_code_health_env.call_count == 1
-        finally:
-            # Only remove keys that were added during this test
-            current_keys = set(ENGINE_REGISTRY.keys())
-            new_keys = current_keys - original_keys
-            for key in new_keys:
-                ENGINE_REGISTRY.pop(key, None)
+        assert len(omega.arbiters) == 3
+        assert mock_arbiter.call_count == 3
+        assert mock_code_health_env.call_count == 1
 
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -543,38 +500,24 @@ class TestOmniCoreOmega:
         """Test asset data initialization"""
         from omnicore_engine.engines import ENGINE_REGISTRY, OmniCoreOmega
 
-        # Isolate ENGINE_REGISTRY for this test - save keys only
-        original_keys = set(ENGINE_REGISTRY.keys())
-        ENGINE_REGISTRY.clear()
-        
-        try:
-            omega = OmniCoreOmega(**mock_components, num_arbiters=1)
+        omega = OmniCoreOmega(**mock_components, num_arbiters=1)
 
-            mock_components["import_fixer_engine"].initialize = AsyncMock()
-            mock_components["database"].initialize = AsyncMock()
-            mock_components["message_bus"].initialize = AsyncMock()
-            mock_components["simulation_engine"].initialize = AsyncMock()
-            mock_components["crew_manager"].start_all = AsyncMock()
-            mock_components["plugin_service"].start_subscriptions = AsyncMock()
+        mock_components["import_fixer_engine"].initialize = AsyncMock()
+        mock_components["database"].initialize = AsyncMock()
+        mock_components["message_bus"].initialize = AsyncMock()
+        mock_components["simulation_engine"].initialize = AsyncMock()
+        mock_components["crew_manager"].start_all = AsyncMock()
+        mock_components["plugin_service"].start_subscriptions = AsyncMock()
 
-            with patch.object(omega, "_initialize_arbiters") as mock_init_arbiters:
-                await omega.initialize_asset_data()
+        with patch.object(omega, "_initialize_arbiters") as mock_init_arbiters:
+            await omega.initialize_asset_data()
 
-                assert omega._is_initialized
-                mock_components["import_fixer_engine"].initialize.assert_called_once()
-                mock_init_arbiters.assert_called_once()
+            assert omega._is_initialized
+            mock_components["import_fixer_engine"].initialize.assert_called_once()
+            mock_init_arbiters.assert_called_once()
 
-                # Check engine was registered
-                assert "import_fixer" in ENGINE_REGISTRY
-        finally:
-            # Remove only keys added during test
-            current_keys = set(ENGINE_REGISTRY.keys())
-            new_keys = current_keys - original_keys
-            for key in new_keys:
-                try:
-                    ENGINE_REGISTRY.pop(key, None)
-                except:
-                    pass
+            # Check engine was registered
+            assert "import_fixer" in ENGINE_REGISTRY
 
     @pytest.mark.asyncio
     @pytest.mark.integration

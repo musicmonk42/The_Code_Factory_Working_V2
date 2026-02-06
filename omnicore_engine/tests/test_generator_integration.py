@@ -32,29 +32,12 @@ sys.modules['generator.intent_parser.intent_parser'] = Mock()
 # Disable parallel execution for tests that interact with ENGINE_REGISTRY
 # to prevent race conditions when running with pytest-xdist
 pytestmark = [
-    pytest.mark.xdist_group(name="engine_registry_serial"),
+    pytest.mark.xdist_group(name="generator_integration_serial"),
 ]
 
 
 class TestGeneratorIntegration:
     """Test generator integration with OmniCoreOmega"""
-
-    @pytest.fixture(autouse=True)
-    def isolate_registry(self):
-        """Isolate ENGINE_REGISTRY for this test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        # Save keys only, not the entire registry
-        original_keys = set(ENGINE_REGISTRY.keys())
-        ENGINE_REGISTRY.clear()
-        yield
-        # Remove only keys added during test
-        current_keys = set(ENGINE_REGISTRY.keys())
-        new_keys = current_keys - original_keys
-        for key in new_keys:
-            try:
-                ENGINE_REGISTRY.pop(key, None)
-            except:
-                pass
 
     @pytest.mark.integration
     def test_generator_imports_available(self):
@@ -218,23 +201,6 @@ class TestGeneratorIntegration:
 
 class TestMessageBusIntegration:
     """Test message bus integration for generator"""
-
-    @pytest.fixture(autouse=True)
-    def isolate_registry(self):
-        """Isolate ENGINE_REGISTRY for this test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        # Save keys only, not the entire registry
-        original_keys = set(ENGINE_REGISTRY.keys())
-        ENGINE_REGISTRY.clear()
-        yield
-        # Remove only keys added during test
-        current_keys = set(ENGINE_REGISTRY.keys())
-        new_keys = current_keys - original_keys
-        for key in new_keys:
-            try:
-                ENGINE_REGISTRY.pop(key, None)
-            except:
-                pass
 
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -401,23 +367,6 @@ class TestPathSetup:
 class TestCrewConfigHelper:
     """Test crew config helper function"""
 
-    @pytest.fixture(autouse=True)
-    def isolate_registry(self):
-        """Isolate ENGINE_REGISTRY for this test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        # Save keys only, not the entire registry
-        original_keys = set(ENGINE_REGISTRY.keys())
-        ENGINE_REGISTRY.clear()
-        yield
-        # Remove only keys added during test
-        current_keys = set(ENGINE_REGISTRY.keys())
-        new_keys = current_keys - original_keys
-        for key in new_keys:
-            try:
-                ENGINE_REGISTRY.pop(key, None)
-            except:
-                pass
-
     @pytest.mark.integration
     def test_find_crew_config_static_method(self):
         """Test that _find_crew_config is a static method"""
@@ -434,23 +383,6 @@ class TestCrewConfigHelper:
 
 class TestAuditLogManagerFallback:
     """Test audit log manager fallback logic"""
-
-    @pytest.fixture(autouse=True)
-    def isolate_registry(self):
-        """Isolate ENGINE_REGISTRY for this test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        # Save keys only, not the entire registry
-        original_keys = set(ENGINE_REGISTRY.keys())
-        ENGINE_REGISTRY.clear()
-        yield
-        # Remove only keys added during test
-        current_keys = set(ENGINE_REGISTRY.keys())
-        new_keys = current_keys - original_keys
-        for key in new_keys:
-            try:
-                ENGINE_REGISTRY.pop(key, None)
-            except:
-                pass
 
     @pytest.mark.integration
     @patch("omnicore_engine.engines.Database")
