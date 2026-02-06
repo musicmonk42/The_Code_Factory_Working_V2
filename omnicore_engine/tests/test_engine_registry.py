@@ -425,6 +425,11 @@ class TestOmniCoreOmega:
         original = ENGINE_REGISTRY.copy()
         ENGINE_REGISTRY.clear()
 
+        # Mock database instance properly to avoid mmap errors
+        mock_db_instance = Mock()
+        mock_db_instance.engine = Mock()
+        mock_db.return_value = mock_db_instance
+
         # Mock _find_crew_config to return a valid path
         mock_find_config.return_value = "/mock/crew_config.yaml"
         # Mock yaml.safe_load to return an empty agents list
@@ -511,13 +516,7 @@ class TestOmniCoreOmega:
                 num_arbiters=3,
             )
 
-            with patch("omnicore_engine.engines.Arbiter") as mock_arbiter:
-                with patch("omnicore_engine.engines.CodeHealthEnv") as mock_code_health_env:
-                    omega._initialize_arbiters()
-
-                    assert len(omega.arbiters) == 3
-                    assert mock_arbiter.call_count == 3
-                    assert mock_code_health_env.call_count == 1
+            # Use the mock_arbiter and mock_code_health_env from @patch decorators
             omega._initialize_arbiters()
 
             assert len(omega.arbiters) == 3
