@@ -405,11 +405,18 @@ class TestCrewConfigHelper:
     def isolate_registry(self):
         """Isolate ENGINE_REGISTRY for this test"""
         from omnicore_engine.engines import ENGINE_REGISTRY
-        original = ENGINE_REGISTRY.copy()
+        # Save keys only, not the entire registry
+        original_keys = set(ENGINE_REGISTRY.keys())
         ENGINE_REGISTRY.clear()
         yield
-        ENGINE_REGISTRY.clear()
-        ENGINE_REGISTRY.update(original)
+        # Remove only keys added during test
+        current_keys = set(ENGINE_REGISTRY.keys())
+        new_keys = current_keys - original_keys
+        for key in new_keys:
+            try:
+                ENGINE_REGISTRY.pop(key, None)
+            except:
+                pass
 
     @pytest.mark.integration
     def test_find_crew_config_static_method(self):
