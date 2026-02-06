@@ -6,6 +6,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
+from prometheus_client import REGISTRY
+
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -19,6 +22,26 @@ from omnicore_engine.message_bus.sharded_message_bus import (
     validate_message_size,
     verify_message,
 )
+
+
+@pytest.fixture(autouse=True)
+def clear_prometheus_registry():
+    """Clear Prometheus registry before each test to prevent metric collisions"""
+    # Get all collectors
+    collectors = list(REGISTRY._collector_to_names.keys())
+    for collector in collectors:
+        try:
+            REGISTRY.unregister(collector)
+        except Exception:
+            pass
+    yield
+    # Clean up after test
+    collectors = list(REGISTRY._collector_to_names.keys())
+    for collector in collectors:
+        try:
+            REGISTRY.unregister(collector)
+        except Exception:
+            pass
 
 
 class TestRateLimiter(unittest.TestCase):
