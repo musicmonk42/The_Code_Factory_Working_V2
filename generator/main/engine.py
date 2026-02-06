@@ -1387,6 +1387,8 @@ class WorkflowEngine:
                         
                         # Initialize DeployAgent with output directory
                         deploy_agent = DeployAgent(repo_path=output_path)
+                        # NOTE: _init_db() must be called explicitly per DeployAgent design
+                        # (See DeployAgent docs: database must be initialized before use)
                         await deploy_agent._init_db()  # Initialize SQLite history
                         
                         # Call run_deployment with appropriate parameters
@@ -1480,8 +1482,12 @@ class WorkflowEngine:
                         )
                 else:
                     # DeployAgent not available, use fallback
+                    error_detail = ""
+                    if not HAS_DEPLOY_AGENT and '_DEPLOY_AGENT_IMPORT_ERROR' in globals():
+                        error_detail = f": {_DEPLOY_AGENT_IMPORT_ERROR}"
+                    
                     logger.warning(
-                        "[STAGE:DEPLOY_GEN] DeployAgent not available, using template-based generation",
+                        f"[STAGE:DEPLOY_GEN] DeployAgent not available{error_detail}, using template-based generation",
                         extra={"workflow_id": workflow_id}
                     )
                     deploy_files = self._generate_docker_configs(

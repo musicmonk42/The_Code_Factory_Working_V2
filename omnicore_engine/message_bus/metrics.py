@@ -316,7 +316,10 @@ except ImportError:
         )  # buckets ignored in mock, use default
     
     def Info(name, doc):
-        """Create an Info metric (no-op in mock)."""
+        """Create an Info metric (no-op in mock).
+        
+        Note: PascalCase naming follows prometheus_client API conventions.
+        """
         return MockMetric(name, doc, [], "info")
 
 
