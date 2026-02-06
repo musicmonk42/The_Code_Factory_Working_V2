@@ -24,14 +24,6 @@ pytestmark = pytest.mark.xdist_group(name="engine_registry_serial")
 class TestEngineRegistry:
     """Test the engine registry functions"""
 
-    @pytest.fixture(autouse=True)
-    def clear_registry(self):
-        """Clear registry before and after each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        ENGINE_REGISTRY.clear()
-        yield
-        ENGINE_REGISTRY.clear()
-
     @pytest.mark.integration
     def test_register_engine_success(self):
         """Test successful engine registration"""
@@ -92,8 +84,9 @@ class TestPluginService:
         """Create mock dependencies without module-level patches"""
         mock_registry = Mock()
         
-        # Create unique database path per xdist worker to avoid conflicts
-        db_path = f"sqlite:///:memory:?worker={worker_id}" if worker_id != 'master' else "sqlite:///:memory:"
+        # Each connection to :memory: creates an isolated database
+        # No need for worker-specific paths as connections are already isolated
+        db_path = "sqlite:///:memory:"
         
         # Create mock performance tracker
         mock_performance_tracker = Mock()
