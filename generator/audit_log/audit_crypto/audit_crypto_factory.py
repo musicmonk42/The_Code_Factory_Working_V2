@@ -524,6 +524,12 @@ _SOFTWARE_KEY_MASTER: Optional[bytes] = None
 _FALLBACK_HMAC_SECRET: Optional[bytes] = None
 # Old lazy init flags and locks are removed as they are no longer necessary with the simpler logic below.
 
+# --- Negative Caching for KMS Failures ---
+# Track the last KMS decryption failure to prevent log flooding
+_SOFTWARE_KEY_MASTER_LAST_FAILURE: Optional[float] = None
+_SOFTWARE_KEY_MASTER_FAILURE_COOLDOWN: float = 60.0  # seconds
+_SOFTWARE_KEY_MASTER_LAST_ERROR: Optional[Exception] = None
+
 
 # --- Master Key for Software Key Encryption (Lazy Init) ---
 
@@ -539,10 +545,16 @@ async def _ensure_software_key_master() -> bytes:
     In DEV/TEST:
         - Falls back to a deterministic dummy key so imports & tests don't explode.
     """
-    global _SOFTWARE_KEY_MASTER
+    global _SOFTWARE_KEY_MASTER, _SOFTWARE_KEY_MASTER_LAST_FAILURE, _SOFTWARE_KEY_MASTER_LAST_ERROR
 
     if _SOFTWARE_KEY_MASTER is not None:
         return _SOFTWARE_KEY_MASTER
+
+    # Negative cache: if we recently failed, don't retry immediately
+    if _SOFTWARE_KEY_MASTER_LAST_FAILURE is not None:
+        elapsed = time.time() - _SOFTWARE_KEY_MASTER_LAST_FAILURE
+        if elapsed < _SOFTWARE_KEY_MASTER_FAILURE_COOLDOWN:
+            raise _SOFTWARE_KEY_MASTER_LAST_ERROR
 
     # DEV/TEST: safe, deterministic dummy key so SoftwareCryptoProvider can initialize.
     if _is_test_or_dev_mode():
@@ -605,11 +617,15 @@ async def _ensure_software_key_master() -> bytes:
                 "Ensure you have backups before proceeding.",
                 settings.KMS_KEY_ID,
             )
-            # Re-raise with a clear error message
-            raise CryptoInitializationError(
+            # Set negative cache to prevent repeated attempts
+            error_to_raise = CryptoInitializationError(
                 "InvalidCiphertextException: Master key encrypted with different KMS key. "
                 "See logs for resolution steps."
-            ) from e
+            )
+            _SOFTWARE_KEY_MASTER_LAST_FAILURE = time.time()
+            _SOFTWARE_KEY_MASTER_LAST_ERROR = error_to_raise
+            # Re-raise with a clear error message
+            raise error_to_raise from e
         else:
             # Use rate-limited logging for other errors too
             _logger_limiter.rate_limited_log(
@@ -618,9 +634,13 @@ async def _ensure_software_key_master() -> bytes:
                 f"Failed to initialize software key master in production: {e}",
                 exc_info=True,
             )
-            raise CryptoInitializationError(
+            # Set negative cache to prevent repeated attempts
+            error_to_raise = CryptoInitializationError(
                 f"Failed to initialize software key master: {e}"
-            ) from e
+            )
+            _SOFTWARE_KEY_MASTER_LAST_FAILURE = time.time()
+            _SOFTWARE_KEY_MASTER_LAST_ERROR = error_to_raise
+            raise error_to_raise from e
 
 
 async def _ensure_fallback_hmac_secret() -> bytes:
