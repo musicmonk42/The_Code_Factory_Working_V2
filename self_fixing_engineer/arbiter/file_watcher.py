@@ -694,11 +694,85 @@ async def send_notification(filename: str, status: str, summary: str) -> None:
 
 
 async def trigger_deployment(filename: str, content: str) -> bool:
-    """Trigger deployment, CI/CD, S3 upload, and notifications."""
+    """
+    Trigger deployment, CI/CD, S3 upload, and notifications.
+    
+    [GAP #4 FIX] Now includes Arbiter policy checks and HITL approval.
+    """
     if not (
         config.deploy.command or config.deploy.ci_cd_url or config.deploy.aws_s3.bucket
     ):
         return True
+
+    # [GAP #4 FIX] Policy check before deployment
+    try:
+        from self_fixing_engineer.arbiter.policy import PolicyEngine
+        policy_engine = PolicyEngine()
+        policy_available = True
+    except ImportError:
+        logger.warning("PolicyEngine not available, proceeding without policy check")
+        policy_engine = None
+        policy_available = False
+    
+    if policy_available and policy_engine:
+        try:
+            allowed, reason = await policy_engine.should_auto_learn(
+                "FileWatcher",
+                "deploy",
+                filename,
+                {
+                    "filename": filename,
+                    "has_command": bool(config.deploy.command),
+                    "has_ci_cd": bool(config.deploy.ci_cd_url),
+                    "has_s3": bool(config.deploy.aws_s3.bucket),
+                }
+            )
+            if not allowed:
+                logger.warning(f"Deployment of {filename} denied by policy: {reason}")
+                await send_notification(
+                    filename, "denied", f"Deployment denied by policy: {reason}"
+                )
+                return False
+        except Exception as e:
+            logger.warning(f"Policy check failed: {e}, proceeding with deployment")
+    
+    # [GAP #4 FIX] Human approval for production deployments
+    is_production = (
+        os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+        or os.getenv("APP_ENV", "development") == "production"
+    )
+    
+    if is_production:
+        try:
+            from self_fixing_engineer.arbiter.human_loop import HumanInLoop
+            hitl = HumanInLoop()
+            hitl_available = True
+        except ImportError:
+            logger.warning("HumanInLoop not available, proceeding without approval")
+            hitl = None
+            hitl_available = False
+        
+        if hitl_available and hitl:
+            try:
+                approved = await hitl.request_approval(
+                    action=f"Deploy {filename}",
+                    context={
+                        "filename": filename,
+                        "environment": "production",
+                        "has_command": bool(config.deploy.command),
+                        "has_ci_cd": bool(config.deploy.ci_cd_url),
+                        "has_s3": bool(config.deploy.aws_s3.bucket),
+                    },
+                    timeout_seconds=300,  # 5 minute timeout
+                )
+                if not approved:
+                    logger.warning(f"Deployment of {filename} denied by human reviewer")
+                    await send_notification(
+                        filename, "denied", "Deployment denied by human reviewer"
+                    )
+                    return False
+            except Exception as e:
+                logger.warning(f"HITL approval failed: {e}, proceeding with deployment")
 
     deployments.inc()
     try:
@@ -742,10 +816,47 @@ async def trigger_deployment(filename: str, content: str) -> bool:
             filename, "success", "Deployment, CI/CD, and S3 upload triggered"
         )
         logger.info(f"Deployment, CI/CD, and S3 upload triggered for {filename}")
+        
+        # [GAP #4 FIX] Update knowledge graph on successful deployment
+        try:
+            from self_fixing_engineer.arbiter.knowledge_graph.core import KnowledgeGraph
+            kg = KnowledgeGraph()
+            await kg.add_fact(
+                "FileWatcherDeployment",
+                filename,
+                {
+                    "status": "success",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "filename": filename,
+                },
+                source="file_watcher",
+            )
+        except Exception as kg_error:
+            logger.debug(f"Knowledge graph update failed (non-critical): {kg_error}")
+        
         return True
     except Exception as e:
         logger.error(f"Deployment error: {e}")
         await send_notification(filename, "failed", f"Deployment failed: {str(e)}")
+        
+        # [GAP #4 FIX] Update knowledge graph on failed deployment
+        try:
+            from self_fixing_engineer.arbiter.knowledge_graph.core import KnowledgeGraph
+            kg = KnowledgeGraph()
+            await kg.add_fact(
+                "FileWatcherDeployment",
+                filename,
+                {
+                    "status": "failed",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "filename": filename,
+                    "error": str(e),
+                },
+                source="file_watcher",
+            )
+        except Exception as kg_error:
+            logger.debug(f"Knowledge graph update failed (non-critical): {kg_error}")
+        
         if config.deploy.rollback_command:
             try:
                 result = await asyncio.create_subprocess_shell(
