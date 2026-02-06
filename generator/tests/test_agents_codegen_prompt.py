@@ -417,7 +417,6 @@ def test_hot_reloading_loader_clears_cache():
     """
     import tempfile
     import os
-    import sys
     import inspect
     from jinja2 import Environment
     from agents.codegen_agent.codegen_prompt import HotReloadingFileSystemLoader

@@ -444,9 +444,8 @@ class TestSummarizationRepair:
         had_testing = "TESTING" in os.environ
         if had_testing:
             original_testing = os.environ["TESTING"]
+            del os.environ["TESTING"]
         try:
-            if had_testing:
-                del os.environ["TESTING"]
             result = await handler.summarize_section("test_section", long_text)
         finally:
             # Restore original state if TESTING was set before
