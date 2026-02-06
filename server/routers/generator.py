@@ -390,11 +390,17 @@ async def upload_files(
         if filename_lower.endswith('.md'):
             readme_files.append(file.filename)
             # Store README content for pipeline trigger
-            # Check if this is a README file using proper path handling
             base_name, _ = os.path.splitext(filename_lower)
-            if not readme_content and 'readme' in base_name:
+            is_readme_file = 'readme' in base_name
+            
+            # Prioritize files with 'readme' in name, but accept any .md if none found yet
+            if not readme_content or is_readme_file:
                 try:
                     readme_content = content.decode('utf-8')
+                    if is_readme_file:
+                        logger.info(f"Found explicit README file: {file.filename}")
+                    else:
+                        logger.info(f"Using {file.filename} as specification content (no explicit README.md found)")
                 except UnicodeDecodeError:
                     logger.warning(f"Could not decode {file.filename} as UTF-8")
         elif any(pattern in filename_lower for pattern in [
