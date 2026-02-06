@@ -2103,6 +2103,47 @@ class Arbiter:
             ):
                 action = "diagnose_explorer"
                 requires_human = True
+            # [GAP #19 FIX] Use RL policy if available, fallback to heuristics
+            elif self.code_health_env and STABLE_BASELINES3_AVAILABLE and GYM_AVAILABLE:
+                try:
+                    # Build observation for RL model
+                    obs_dict = {
+                        "current_energy": self.state_manager.energy,
+                        "current_x": self.state_manager.x,
+                        "current_y": self.state_manager.y,
+                    }
+                    
+                    # Define action map (RL model outputs integers)
+                    action_map = {
+                        0: "idle",
+                        1: "explore",
+                        2: "reflect",
+                        3: "move_random"
+                    }
+                    
+                    # Convert dict observation to array format expected by RL model
+                    obs_array = self._build_observation(obs_dict)
+                    
+                    # Get action from RL policy
+                    action_idx = self.choose_action_from_policy(obs_array)
+                    action = action_map.get(action_idx, "idle")
+                    
+                    logger.debug(
+                        f"[{self.name}] RL policy selected action: {action} (index: {action_idx})"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[{self.name}] RL policy failed: {e}, falling back to heuristic",
+                        exc_info=True
+                    )
+                    # Fallback to heuristic
+                    if self.state_manager.energy > 50 and random.random() < 0.6:
+                        action = "explore"
+                    elif random.random() < 0.1:
+                        action = "reflect"
+                    else:
+                        action = "move_random"
+            # Fallback to heuristic if RL not available
             elif self.state_manager.energy > 50 and random.random() < 0.6:
                 action = "explore"
             elif random.random() < 0.1:
@@ -2115,6 +2156,24 @@ class Arbiter:
             "requires_human": requires_human,
             "observation": observation,
         }
+    
+    def _build_observation(self, obs_dict: Dict[str, Any]) -> np.ndarray:
+        """
+        Build observation array for RL model from observation dictionary.
+        
+        Args:
+            obs_dict: Dictionary containing observation data
+        
+        Returns:
+            NumPy array formatted for RL model input
+        """
+        # Extract relevant features in consistent order
+        features = [
+            float(obs_dict.get("current_energy", 50.0)),
+            float(obs_dict.get("current_x", 0.0)),
+            float(obs_dict.get("current_y", 0.0)),
+        ]
+        return np.array(features, dtype=np.float32)
 
     @require_permission("execute_basic")
     async def execute_action(self, decision: Dict[str, Any]) -> Dict[str, Any]:
