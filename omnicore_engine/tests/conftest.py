@@ -65,6 +65,7 @@ if spec_tests is None:
 
 # Now we can safely import pytest and other modules
 import pytest
+import copy
 
 # Import path_setup module to ensure all component paths are configured
 try:
@@ -101,6 +102,26 @@ def pytest_configure(config):
     if config.option.collectonly:
         os.environ['SKIP_EXPENSIVE_INIT'] = '1'
         os.environ['PYTEST_COLLECTING_ONLY'] = '1'
+
+
+@pytest.fixture(scope="session")
+def worker_id(request):
+    """Get the xdist worker ID for unique resource naming."""
+    if hasattr(request.config, 'workerinput'):
+        return request.config.workerinput['workerid']
+    return 'master'
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolate_engine_registry_per_worker():
+    """Isolate ENGINE_REGISTRY for each xdist worker to prevent race conditions."""
+    from omnicore_engine.engines import ENGINE_REGISTRY
+    # Save original state
+    original_registry = copy.deepcopy(ENGINE_REGISTRY)
+    yield
+    # Restore after all tests in this worker
+    ENGINE_REGISTRY.clear()
+    ENGINE_REGISTRY.update(original_registry)
 
 
 @pytest.fixture(autouse=True, scope="session")
