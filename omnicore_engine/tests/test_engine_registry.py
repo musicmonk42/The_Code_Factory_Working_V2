@@ -518,6 +518,7 @@ class TestOmniCoreOmega:
             )
 
             # Use the mock_arbiter and mock_code_health_env from @patch decorators
+            # Decorator patches are applied at method level and provide mocks as parameters
             omega._initialize_arbiters()
 
             assert len(omega.arbiters) == 3
