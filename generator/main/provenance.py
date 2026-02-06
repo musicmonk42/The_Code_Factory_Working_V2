@@ -329,7 +329,7 @@ def extract_endpoints_from_md(md_content: str) -> List[Dict[str, str]]:
     Supported Formats:
         - Explicit route definitions: ``GET /api/users``, ``POST /api/items``
         - Table formats: ``| GET | /api/users | ... |``
-        - Backtick code format: ```GET /api/users```
+        - Backtick code format: ``GET /api/users``
         - Bullet points with endpoints: ``- GET /api/users``
         - Contextual format: ``Endpoint: /api/users (GET, POST)``
     
@@ -674,7 +674,9 @@ def _write_spec_error_file(output_dir: str, result: Dict[str, Any]) -> None:
         f.write(f"  Required endpoints: {required_count}\n")
         f.write(f"  Found endpoints:    {found_count}\n")
         f.write(f"  Missing endpoints:  {missing_count}\n")
-        f.write(f"  Coverage:           {((required_count - missing_count) / max(required_count, 1)) * 100:.1f}%\n\n")
+        # Calculate coverage percentage (guard against zero division)
+        coverage_pct = ((required_count - missing_count) / required_count * 100) if required_count > 0 else 0.0
+        f.write(f"  Coverage:           {coverage_pct:.1f}%\n\n")
         
         # Missing endpoints (critical section)
         f.write("Missing Required Endpoints:\n")
