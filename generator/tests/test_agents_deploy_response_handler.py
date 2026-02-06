@@ -442,13 +442,19 @@ class TestSummarizationRepair:
         # Ensure TESTING mode is disabled so LLM is actually called
         import os
         original_testing = os.environ.get("TESTING")
+        had_testing = "TESTING" in os.environ
         try:
-            if "TESTING" in os.environ:
+            if had_testing:
                 del os.environ["TESTING"]
             result = await handler.summarize_section("test_section", long_text)
         finally:
-            if original_testing is not None:
-                os.environ["TESTING"] = original_testing
+            # Restore original state
+            if had_testing:
+                if original_testing is not None:
+                    os.environ["TESTING"] = original_testing
+                else:
+                    # Edge case: TESTING existed but was set to empty string
+                    os.environ["TESTING"] = ""
 
         assert mock_call.called
         assert result == "This is a summarized version."

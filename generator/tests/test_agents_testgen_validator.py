@@ -211,9 +211,7 @@ class TestHealthEndpoints:
         mock_request = Mock()
         response = await healthz(mock_request)
 
-        # Check response has required attributes instead of isinstance with possibly mocked type
-        assert hasattr(response, 'status'), "Response must have status attribute"
-        assert hasattr(response, 'text'), "Response must have text attribute"
+        # Check response has required attributes and types
         assert response.status == 200
         # Ensure text is a string, not a callable
         assert isinstance(response.text, str), "Response text must be a string"
