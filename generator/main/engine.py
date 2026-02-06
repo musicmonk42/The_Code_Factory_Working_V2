@@ -759,7 +759,7 @@ class WorkflowEngine:
         ```
     """
     
-    def __init__(self, config: Union[Dict[str, Any], Any]):
+    def __init__(self, config: Union[Dict[str, Any], Any], arbiter_bridge: Optional[Any] = None):
         """Initialize the WorkflowEngine.
         
         Args:
@@ -769,6 +769,8 @@ class WorkflowEngine:
                 - agent_timeout_seconds: Per-agent timeout (optional)
                 - enable_critique: Whether to run critique agent (default: True)
                 - enable_testing: Whether to run test generation (default: True)
+            arbiter_bridge: Optional ArbiterBridge instance for Arbiter integration.
+                If not provided, the engine works standalone without Arbiter features.
         """
         self.config = config if isinstance(config, dict) else {}
         self._initialized = False
@@ -787,12 +789,18 @@ class WorkflowEngine:
         self._enable_critique = self.config.get('enable_critique', True)
         self._enable_testing = self.config.get('enable_testing', True)
         
+        # Arbiter bridge for governance integration (optional)
+        self.arbiter_bridge = arbiter_bridge
+        if self.arbiter_bridge:
+            logger.info("WorkflowEngine: Arbiter integration enabled via bridge")
+        
         logger.info(
             "WorkflowEngine initialized",
             extra={
                 "default_max_iterations": self._default_max_iterations,
                 "enable_critique": self._enable_critique,
-                "enable_testing": self._enable_testing
+                "enable_testing": self._enable_testing,
+                "arbiter_enabled": self.arbiter_bridge is not None
             }
         )
     
@@ -978,6 +986,32 @@ class WorkflowEngine:
                 "agent_results": {}
             }
             
+            # [ARBITER] Pre-orchestration policy check
+            if self.arbiter_bridge:
+                try:
+                    allowed, reason = await self.arbiter_bridge.check_policy(
+                        "orchestrate",
+                        {
+                            "input_file": input_file,
+                            "max_iterations": max_iterations,
+                            "user_id": user_id
+                        }
+                    )
+                    if not allowed:
+                        logger.warning(
+                            f"Workflow {workflow_id} denied by policy: {reason}",
+                            extra={"workflow_id": workflow_id, "policy_reason": reason}
+                        )
+                        result["status"] = WorkflowStatus.FAILED.value
+                        result["errors"].append({
+                            "error_type": "PolicyViolation",
+                            "message": f"Orchestration denied by policy: {reason}",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        })
+                        return result
+                except Exception as e:
+                    logger.warning(f"Arbiter policy check failed: {e}, continuing anyway")
+            
             # Initialize provenance tracker for pipeline stage logging
             provenance = None
             if HAS_PROVENANCE and ProvenanceTracker:
@@ -1044,6 +1078,22 @@ class WorkflowEngine:
                         )
                         result["agent_results"]["codegen"] = codegen_result
                         
+                        # [ARBITER] Publish codegen output event
+                        if self.arbiter_bridge:
+                            try:
+                                await self.arbiter_bridge.publish_event(
+                                    "generator_output",
+                                    {
+                                        "workflow_id": workflow_id,
+                                        "agent": "codegen",
+                                        "iteration": iteration_num,
+                                        "status": codegen_result.get("status", "unknown"),
+                                        "files_count": len(codegen_result.get("files", {}))
+                                    }
+                                )
+                            except Exception as e:
+                                logger.warning(f"Failed to publish codegen event to Arbiter: {e}")
+                        
                         # Record codegen output in provenance
                         if provenance:
                             codegen_files = codegen_result.get("files", {}) if isinstance(codegen_result, dict) else {}
@@ -1066,6 +1116,21 @@ class WorkflowEngine:
                                 workflow_id
                             )
                             result["agent_results"]["critique"] = critique_result
+                            
+                            # [ARBITER] Publish critique results event
+                            if self.arbiter_bridge:
+                                try:
+                                    await self.arbiter_bridge.publish_event(
+                                        "critique_completed",
+                                        {
+                                            "workflow_id": workflow_id,
+                                            "iteration": iteration_num,
+                                            "status": critique_result.get("status", "unknown"),
+                                            "issues_found": critique_result.get("issues_count", 0)
+                                        }
+                                    )
+                                except Exception as e:
+                                    logger.warning(f"Failed to publish critique event to Arbiter: {e}")
                         
                         # [STAGE:VALIDATE] Run fail-fast validation BEFORE test generation
                         validation_passed = True
@@ -1165,6 +1230,21 @@ class WorkflowEngine:
                             )
                             result["agent_results"]["testgen"] = testgen_result
                             
+                            # [ARBITER] Publish test results event
+                            if self.arbiter_bridge:
+                                try:
+                                    await self.arbiter_bridge.publish_event(
+                                        "test_results",
+                                        {
+                                            "workflow_id": workflow_id,
+                                            "iteration": iteration_num,
+                                            "status": testgen_result.get("status", "unknown"),
+                                            "tests_generated": testgen_result.get("tests_count", 0)
+                                        }
+                                    )
+                                except Exception as e:
+                                    logger.warning(f"Failed to publish test results to Arbiter: {e}")
+                            
                             # Record testgen output
                             if provenance:
                                 provenance.record_stage(
@@ -1239,6 +1319,32 @@ class WorkflowEngine:
                     }
                 )
                 
+                # [ARBITER] Publish workflow completion event
+                if self.arbiter_bridge:
+                    try:
+                        await self.arbiter_bridge.publish_event(
+                            "workflow_completed",
+                            {
+                                "workflow_id": workflow_id,
+                                "status": "success",
+                                "iterations": result["iterations"],
+                                "duration_seconds": time.monotonic() - start_time
+                            }
+                        )
+                        # Update knowledge graph with workflow stats
+                        await self.arbiter_bridge.update_knowledge(
+                            "generator",
+                            f"workflow_{workflow_id}",
+                            {
+                                "status": "completed",
+                                "iterations": result["iterations"],
+                                "duration": time.monotonic() - start_time,
+                                "input_file": input_file
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to publish completion to Arbiter: {e}")
+                
             except WorkflowTimeoutError as e:
                 result["status"] = WorkflowStatus.TIMEOUT.value
                 result["errors"].append(e.to_dict())
@@ -1267,6 +1373,24 @@ class WorkflowEngine:
                     exc_info=True,
                     extra={"workflow_id": workflow_id}
                 )
+                
+                # [ARBITER] Report bug on workflow failure
+                if self.arbiter_bridge:
+                    try:
+                        await self.arbiter_bridge.report_bug({
+                            "title": f"Workflow {workflow_id} failed",
+                            "description": f"Workflow execution failed with error: {str(e)}",
+                            "severity": "high",
+                            "error": str(e),
+                            "context": {
+                                "workflow_id": workflow_id,
+                                "input_file": input_file,
+                                "iterations": result.get("iterations", 0),
+                                "error_type": type(e).__name__
+                            }
+                        })
+                    except Exception as bug_error:
+                        logger.warning(f"Failed to report bug to Arbiter: {bug_error}")
             
             finally:
                 # Finalize result

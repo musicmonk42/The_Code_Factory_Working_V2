@@ -1438,6 +1438,7 @@ class CritiqueAgent:
         self,
         repo_path: Optional[str] = None,
         config: Optional[CritiqueConfig] = None,
+        arbiter_bridge: Optional[Any] = None,
         **kwargs,
     ):
         """
@@ -1446,14 +1447,18 @@ class CritiqueAgent:
         Args:
             repo_path: Optional path to the repository being critiqued.
             config: Optional CritiqueConfig for pipeline configuration.
+            arbiter_bridge: Optional ArbiterBridge for Arbiter integration.
             **kwargs: Additional configuration options.
         """
         self.repo_path = repo_path
         self.config = config or CritiqueConfig()
+        self.arbiter_bridge = arbiter_bridge
         self.kwargs = kwargs
         logging.getLogger(__name__).info(
             f"CritiqueAgent initialized for repo: {repo_path}"
         )
+        if self.arbiter_bridge:
+            logging.getLogger(__name__).info("CritiqueAgent: Arbiter integration enabled")
 
     async def run(
         self,
@@ -1476,13 +1481,45 @@ class CritiqueAgent:
         Returns:
             Dictionary containing critique results.
         """
-        return await orchestrate_critique_pipeline(
+        # [ARBITER] Publish critique start event
+        if self.arbiter_bridge:
+            try:
+                await self.arbiter_bridge.publish_event(
+                    "critique_started",
+                    {
+                        "files_count": len(code_files),
+                        "has_tests": bool(test_files),
+                        "has_requirements": bool(requirements)
+                    }
+                )
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Failed to publish critique start event: {e}")
+        
+        result = await orchestrate_critique_pipeline(
             code_files=code_files,
             test_files=test_files or {},
             requirements=requirements or {},
             state_summary=state_summary,
             config=config or self.config,
         )
+        
+        # [ARBITER] Publish critique results event including security scan results
+        if self.arbiter_bridge:
+            try:
+                await self.arbiter_bridge.publish_event(
+                    "critique_results",
+                    {
+                        "status": result.get("status", "unknown"),
+                        "lint_issues": len(result.get("lint_errors", [])),
+                        "vulnerabilities_found": len(result.get("vulnerabilities", [])),
+                        "fixes_applied": result.get("fixes_applied", False),
+                        "owasp_issues": len(result.get("owasp_issues", []))
+                    }
+                )
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Failed to publish critique results: {e}")
+        
+        return result
 
     async def critique(
         self,

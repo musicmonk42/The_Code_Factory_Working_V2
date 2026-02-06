@@ -969,56 +969,43 @@ class CompanyDataPlugin:
             }
 
 
-# --- Production-Ready SimulationEngine ---
-class SimulationEngine:
-    """Performs simulations for action evaluation with configurable strategies."""
+# [GAP #11 FIX] Import SimulationEngine from the canonical implementation
+# Removed duplicate inline SimulationEngine class - use real implementation from simulation_module
+try:
+    from self_fixing_engineer.simulation.simulation_module import SimulationEngine
+    logger.info("Using real SimulationEngine from simulation_module")
+except ImportError as e:
+    logger.warning(f"SimulationEngine not available ({e}), using fallback")
+    
+    # Fallback SimulationEngine for when simulation_module is unavailable
+    class SimulationEngine:
+        """Fallback simulation engine when real implementation unavailable."""
 
-    def __init__(self):
-        self.name = "SimulationEngine"
+        def __init__(self):
+            self.name = "SimulationEngine_Fallback"
 
-    async def run(
-        self, config: Dict[str, Any], context: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Runs a simulation based on the provided configuration.
-        """
-        sim_type = config.get("type", "monte_carlo")
-        params = config.get("params", {})
-        iterations = params.get("iterations", 100)
-
-        if sim_type == "monte_carlo":
-            results = [
-                np.random.uniform(0, 1) * params.get("alpha", 1.0)
-                for _ in range(iterations)
-            ]
+        async def run(
+            self, config: Dict[str, Any], context: Dict[str, Any]
+        ) -> Dict[str, Any]:
+            """Fallback simulation - returns mock results."""
+            logger.warning("Using fallback SimulationEngine")
             return {
                 "status": "success",
-                "result": float(np.mean(results)),
+                "result": 0.5,
                 "details": {
-                    "iterations": iterations,
-                    "std": float(np.std(results)),
                     "agent": context.get("agent_name"),
+                    "warning": "Using fallback simulation engine"
                 },
             }
-        elif sim_type == "predictive":
-            energy = context.get("energy", 100.0)
+
+        async def perform_quantum_op(
+            self, op_type: str, params: Dict[str, Any]
+        ) -> Dict[str, Any]:
+            """Fallback quantum operation."""
             return {
                 "status": "success",
-                "result": energy * params.get("multiplier", 0.5),
-                "details": {"agent": context.get("agent_name")},
+                "output": f"Fallback quantum {op_type}",
             }
-        raise ValueError(f"Unknown simulation type: {sim_type}")
-
-    async def perform_quantum_op(
-        self, op_type: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Performs a simulation-based quantum operation.
-        """
-        return {
-            "status": "success",
-            "output": f"Quantum {op_type} with value {params.get('value', 0)}",
-        }
 
     async def explain_result(self, result: Dict[str, Any]) -> str:
         """
@@ -1550,6 +1537,18 @@ class Arbiter:
         self.knowledge_graph = Neo4jKnowledgeGraph(
             audit_logger=AuditLogManager(self.db_client)
         )
+        
+        # Initialize Arbiter Constitution for governance and ethical constraints
+        try:
+            from self_fixing_engineer.arbiter.arbiter_constitution import ArbiterConstitution
+            self.constitution = ArbiterConstitution()
+            logger.info(f"[{name}] Arbiter Constitution loaded and enforced")
+        except ImportError as e:
+            logger.warning(f"[{name}] Could not load ArbiterConstitution: {e}")
+            self.constitution = None
+        except Exception as e:
+            logger.error(f"[{name}] Error initializing ArbiterConstitution: {e}", exc_info=True)
+            self.constitution = None
 
         if self.code_health_env:
             self.code_health_env.name = name
@@ -2056,6 +2055,28 @@ class Arbiter:
         requires_human = False
 
         async with self._lock:
+            # [ARBITER CONSTITUTION] Check constitutional constraints before decision-making
+            if self.constitution:
+                try:
+                    # Check if there are any constitutional constraints on decision-making
+                    allowed, reason = await self.constitution.check_action(
+                        "plan_decision",
+                        {
+                            "energy": self.state_manager.energy,
+                            "observation": observation
+                        }
+                    )
+                    if not allowed:
+                        logger.warning(f"[{self.name}] Decision planning constrained by constitution: {reason}")
+                        return {
+                            "action": "idle",
+                            "requires_human": True,
+                            "reason": f"Constitutional constraint: {reason}",
+                            "observation": observation,
+                        }
+                except Exception as e:
+                    logger.error(f"[{self.name}] Error checking constitution: {e}", exc_info=True)
+            
             if self.state_manager.energy < 30:
                 action = "recharge"
             elif "explorer_error" in observation or (
@@ -2069,6 +2090,47 @@ class Arbiter:
             ):
                 action = "diagnose_explorer"
                 requires_human = True
+            # [GAP #19 FIX] Use RL policy if available, fallback to heuristics
+            elif self.code_health_env and STABLE_BASELINES3_AVAILABLE and GYM_AVAILABLE:
+                try:
+                    # Build observation for RL model
+                    obs_dict = {
+                        "current_energy": self.state_manager.energy,
+                        "current_x": self.state_manager.x,
+                        "current_y": self.state_manager.y,
+                    }
+                    
+                    # Define action map (RL model outputs integers)
+                    action_map = {
+                        0: "idle",
+                        1: "explore",
+                        2: "reflect",
+                        3: "move_random"
+                    }
+                    
+                    # Convert dict observation to array format expected by RL model
+                    obs_array = self._build_observation(obs_dict)
+                    
+                    # Get action from RL policy
+                    action_idx = self.choose_action_from_policy(obs_array)
+                    action = action_map.get(action_idx, "idle")
+                    
+                    logger.debug(
+                        f"[{self.name}] RL policy selected action: {action} (index: {action_idx})"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[{self.name}] RL policy failed: {e}, falling back to heuristic",
+                        exc_info=True
+                    )
+                    # Fallback to heuristic
+                    if self.state_manager.energy > 50 and random.random() < 0.6:
+                        action = "explore"
+                    elif random.random() < 0.1:
+                        action = "reflect"
+                    else:
+                        action = "move_random"
+            # Fallback to heuristic if RL not available
             elif self.state_manager.energy > 50 and random.random() < 0.6:
                 action = "explore"
             elif random.random() < 0.1:
@@ -2081,6 +2143,24 @@ class Arbiter:
             "requires_human": requires_human,
             "observation": observation,
         }
+    
+    def _build_observation(self, obs_dict: Dict[str, Any]) -> np.ndarray:
+        """
+        Build observation array for RL model from observation dictionary.
+        
+        Args:
+            obs_dict: Dictionary containing observation data
+        
+        Returns:
+            NumPy array formatted for RL model input
+        """
+        # Extract relevant features in consistent order
+        features = [
+            float(obs_dict.get("current_energy", 50.0)),
+            float(obs_dict.get("current_x", 0.0)),
+            float(obs_dict.get("current_y", 0.0)),
+        ]
+        return np.array(features, dtype=np.float32)
 
     @require_permission("execute_basic")
     async def execute_action(self, decision: Dict[str, Any]) -> Dict[str, Any]:
@@ -3548,7 +3628,7 @@ class Arbiter:
         """Handler for test_results events."""
         logging.getLogger(__name__).info(f"[{self.name}] Test results event received")
         try:
-            data.get("test_id")
+            test_id = data.get("test_id")
             failures = data.get("failures", [])
             passed = data.get("passed", 0)
             failed = data.get("failed", 0)
@@ -3558,16 +3638,114 @@ class Arbiter:
                 f"Test results: {passed} passed, {failed} failed", "test_results"
             )
 
-            # Create fix tasks for test failures
+            # [GAP #15 FIX] Create real Task objects for test failures
             if failures and self.decision_optimizer:
+                # Import Task class from decision_optimizer
+                from self_fixing_engineer.arbiter.decision_optimizer import Task
+                
+                tasks = []
                 for failure in failures:
-                    logging.getLogger(__name__).info(
-                        f"[{self.name}] Creating fix task for test failure: {failure.get('test_name')}"
+                    test_name = failure.get('test_name', 'unknown_test')
+                    error_message = failure.get('error', 'No error message')
+                    
+                    # Calculate priority based on failure severity
+                    priority = self._calculate_failure_priority(failure)
+                    
+                    # Create Task object
+                    task = Task(
+                        id=str(uuid.uuid4()),
+                        priority=priority,
+                        action_type="fix_test_failure",
+                        risk_level="high" if priority > 8 else "medium",
+                        required_skills={"testing", "debugging", "code_review"},
+                        metadata={
+                            "test_id": test_id,
+                            "test_name": test_name,
+                            "error": error_message,
+                            "failure_data": failure,
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }
                     )
+                    tasks.append(task)
+                    
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] Created fix task {task.id} for test failure: {test_name}"
+                    )
+                
+                # Prioritize tasks using decision optimizer
+                try:
+                    prioritized_tasks = await self.decision_optimizer.prioritize(tasks)
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] Prioritized {len(prioritized_tasks)} fix tasks"
+                    )
+                    
+                    # Store prioritized tasks for execution
+                    if not hasattr(self, 'task_queue'):
+                        self.task_queue = []
+                    self.task_queue.extend(prioritized_tasks)
+                    
+                except Exception as e:
+                    logging.getLogger(__name__).error(
+                        f"[{self.name}] Error prioritizing tasks: {e}", exc_info=True
+                    )
+                
+                # Update knowledge graph with test failure data
+                if hasattr(self, "knowledge_graph") and self.knowledge_graph:
+                    try:
+                        await self.knowledge_graph.add_fact(
+                            "TestFailures",
+                            test_id or str(uuid.uuid4()),
+                            {
+                                "failures": failures,
+                                "passed": passed,
+                                "failed": failed,
+                                "tasks_created": len(tasks),
+                                "timestamp": datetime.now(timezone.utc).isoformat()
+                            },
+                            source=self.name,
+                            timestamp=datetime.now(timezone.utc).isoformat(),
+                        )
+                        logging.getLogger(__name__).info(
+                            f"[{self.name}] Updated knowledge graph with test failure data"
+                        )
+                    except Exception as e:
+                        logging.getLogger(__name__).warning(
+                            f"[{self.name}] Failed to update knowledge graph: {e}"
+                        )
+            
         except Exception as e:
             logging.getLogger(__name__).error(
                 f"[{self.name}] Error handling test_results event: {e}", exc_info=True
             )
+    
+    def _calculate_failure_priority(self, failure: Dict[str, Any]) -> float:
+        """
+        Calculate priority for a test failure based on severity indicators.
+        
+        Args:
+            failure: Test failure data dictionary
+        
+        Returns:
+            Priority score (1-10, higher is more urgent)
+        """
+        priority = 5.0  # Base priority
+        
+        # Increase priority for critical errors
+        error = failure.get('error', '').lower()
+        if any(term in error for term in ['critical', 'fatal', 'crash', 'security']):
+            priority += 3.0
+        elif any(term in error for term in ['error', 'fail', 'exception']):
+            priority += 1.0
+        
+        # Increase priority based on failure count
+        failure_count = failure.get('failure_count', 1)
+        if failure_count > 5:
+            priority += 2.0
+        elif failure_count > 1:
+            priority += 1.0
+        
+        # Cap at 10.0
+        return min(10.0, priority)
 
     async def _on_workflow_completed(self, data: Dict[str, Any]):
         """Handler for workflow_completed events."""

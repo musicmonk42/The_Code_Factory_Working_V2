@@ -477,6 +477,9 @@ class TestOmniCoreOmega:
 
     @pytest.mark.integration
     def test_initialize_arbiters(self, mock_components):
+    @patch("omnicore_engine.engines.Arbiter")
+    @patch("omnicore_engine.engines.CodeHealthEnv")
+    def test_initialize_arbiters(self, mock_code_health_env, mock_arbiter, mock_components):
         """Test _initialize_arbiters method"""
         from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
         
@@ -516,6 +519,11 @@ class TestOmniCoreOmega:
                     assert len(omega.arbiters) == 3
                     assert mock_arbiter.call_count == 3
                     assert mock_code_health_env.call_count == 1
+            omega._initialize_arbiters()
+
+            assert len(omega.arbiters) == 3
+            assert mock_arbiter.call_count == 3
+            assert mock_code_health_env.call_count == 1
         finally:
             ENGINE_REGISTRY.clear()
             ENGINE_REGISTRY.update(original)

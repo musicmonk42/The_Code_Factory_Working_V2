@@ -966,6 +966,10 @@ if PLUGIN_AVAILABLE:
                 "type": ["string", "dict"],
                 "description": "Path to a YAML config file or a config dictionary.",
             },
+            "arbiter_bridge": {
+                "type": "object",
+                "description": "Optional ArbiterBridge for Arbiter integration.",
+            },
         },
         description="Generates code based on requirements, incorporating security scans and human-in-the-loop review.",
         safe=True,
@@ -974,6 +978,7 @@ if PLUGIN_AVAILABLE:
         requirements: Dict[str, Any],
         state_summary: str,
         config_path_or_dict: Union[str, Dict[str, Any]],
+        arbiter_bridge: Optional[Any] = None,
     ) -> Dict[str, str]:
         """Main async function for code generation with fully pluggable and implemented components."""
         config = (
@@ -984,6 +989,22 @@ if PLUGIN_AVAILABLE:
 
         request_id = str(uuid.uuid4())
         logger.info(f"Starting new code generation request. Request ID: {request_id}")
+        if arbiter_bridge:
+            logger.info("CodegenAgent: Arbiter integration enabled")
+
+        # [ARBITER] Publish code generation start event
+        if arbiter_bridge:
+            try:
+                await arbiter_bridge.publish_event(
+                    "codegen_started",
+                    {
+                        "request_id": request_id,
+                        "backend": config.backend,
+                        "ensemble_enabled": config.ensemble_enabled,
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to publish codegen start event: {e}")
 
         # Initialize components based on config
         redis_client = None
@@ -1183,6 +1204,21 @@ if PLUGIN_AVAILABLE:
                     {"files": list(code_files.keys()), "model": backend_used},
                 )
                 # --- End Audit/Logging Change ---
+                # [ARBITER] Publish code generation completion event
+                if arbiter_bridge:
+                    try:
+                        await arbiter_bridge.publish_event(
+                            "codegen_completed",
+                            {
+                                "request_id": request_id,
+                                "status": "success",
+                                "files_generated": len(code_files),
+                                "backend_used": backend_used,
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to publish codegen completion event: {e}")
+                
                 return code_files
 
             except Exception as e:
@@ -1203,6 +1239,22 @@ if PLUGIN_AVAILABLE:
                 )
                 # --- End Audit/Logging Change ---
                 CODEGEN_ERRORS.labels(type(e).__name__).inc()
+                
+                # [ARBITER] Report error to bridge
+                if arbiter_bridge:
+                    try:
+                        await arbiter_bridge.report_bug({
+                            "title": f"Code generation failed: {type(e).__name__}",
+                            "description": f"Code generation request {request_id} failed: {str(e)}",
+                            "severity": "high",
+                            "agent": "codegen",
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "request_id": request_id,
+                        })
+                    except Exception as bridge_err:
+                        logger.warning(f"Failed to report error to arbiter: {bridge_err}")
+                
                 return {
                     "error.txt": f"Error: {type(e).__name__}: {str(e)}"
                 }
@@ -1213,6 +1265,7 @@ else:
         requirements: Dict[str, Any],
         state_summary: str,
         config_path_or_dict: Union[str, Dict[str, Any]],
+        arbiter_bridge: Optional[Any] = None,
     ) -> Dict[str, str]:
         """Main async function for code generation with fully pluggable and implemented components."""
         config = (
@@ -1223,6 +1276,22 @@ else:
 
         request_id = str(uuid.uuid4())
         logger.info(f"Starting new code generation request. Request ID: {request_id}")
+        if arbiter_bridge:
+            logger.info("CodegenAgent: Arbiter integration enabled")
+
+        # [ARBITER] Publish code generation start event
+        if arbiter_bridge:
+            try:
+                await arbiter_bridge.publish_event(
+                    "codegen_started",
+                    {
+                        "request_id": request_id,
+                        "backend": config.backend,
+                        "ensemble_enabled": config.ensemble_enabled,
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to publish codegen start event: {e}")
 
         # Initialize components based on config
         redis_client = None
@@ -1422,6 +1491,21 @@ else:
                     {"files": list(code_files.keys()), "model": backend_used},
                 )
                 # --- End Audit/Logging Change ---
+                # [ARBITER] Publish code generation completion event
+                if arbiter_bridge:
+                    try:
+                        await arbiter_bridge.publish_event(
+                            "codegen_completed",
+                            {
+                                "request_id": request_id,
+                                "status": "success",
+                                "files_generated": len(code_files),
+                                "backend_used": backend_used,
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to publish codegen completion event: {e}")
+                
                 return code_files
 
             except Exception as e:
@@ -1442,6 +1526,22 @@ else:
                 )
                 # --- End Audit/Logging Change ---
                 CODEGEN_ERRORS.labels(type(e).__name__).inc()
+                
+                # [ARBITER] Report error to bridge
+                if arbiter_bridge:
+                    try:
+                        await arbiter_bridge.report_bug({
+                            "title": f"Code generation failed: {type(e).__name__}",
+                            "description": f"Code generation request {request_id} failed: {str(e)}",
+                            "severity": "high",
+                            "agent": "codegen",
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "request_id": request_id,
+                        })
+                    except Exception as bridge_err:
+                        logger.warning(f"Failed to report error to arbiter: {bridge_err}")
+                
                 return {
                     "error.txt": f"Error: {type(e).__name__}: {str(e)}"
                 }

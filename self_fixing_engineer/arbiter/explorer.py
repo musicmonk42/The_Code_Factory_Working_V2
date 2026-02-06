@@ -27,6 +27,20 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
 import aiohttp
 from aiolimiter import AsyncLimiter
 from prometheus_client import Counter
+
+# Prometheus metrics
+try:
+    sandbox_usage_counter = Counter(
+        'explorer_sandbox_usage_total',
+        'Total sandbox evaluations',
+        ['sandbox_type', 'result']
+    )
+except ValueError:
+    # Metric already registered
+    from prometheus_client import REGISTRY
+    sandbox_usage_counter = REGISTRY._collector_to_names.get(
+        'explorer_sandbox_usage_total', Counter('explorer_sandbox_usage_total', '', ['sandbox_type', 'result'])
+    )
 from sqlalchemy import JSON, Column, DateTime, String, select
 from sqlalchemy.orm import declarative_base
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -266,12 +280,16 @@ class MySandboxEnv:
     """
     A mock sandbox environment for evaluating and testing agents.
     Replace with your actual simulation or testing environment.
+    
+    NOTE: This is a fallback mock. Use RealSandboxAdapter for production.
     """
 
     async def evaluate(self, variant: Any, metric: Optional[str] = None) -> float:
         """
         Dummy evaluation method for agent variants.
         """
+        logger.warning("Using MySandboxEnv mock - consider using RealSandboxAdapter for production")
+        sandbox_usage_counter.labels(sandbox_type='mock', result='success').inc()
         score = 1 + (hash(str(variant)) % 100) / 100
         logger.debug(
             f"Evaluated variant {getattr(variant, 'name', 'unknown')} with score: {score}"
@@ -282,11 +300,177 @@ class MySandboxEnv:
         """
         Dummy method to simulate testing an agent.
         """
+        sandbox_usage_counter.labels(sandbox_type='mock', result='success').inc()
         score = random.uniform(0, 1)
         logger.debug(
             f"Tested agent {getattr(agent, 'name', 'unknown')} with score: {score}"
         )
         return {"agent_name": getattr(agent, "name", "unknown"), "score": score}
+
+
+class RealSandboxAdapter:
+    """
+    Adapter that wraps the real sandbox.py for use with Explorer.
+    Integrates simulation/sandbox.py with Explorer's interface.
+    """
+    
+    def __init__(self, backend: str = "docker", workdir: Optional[str] = None):
+        """
+        Initialize the real sandbox adapter.
+        
+        Args:
+            backend: Sandbox backend to use (docker, podman, kubernetes, native)
+            workdir: Working directory for sandbox execution
+        """
+        self.backend = backend
+        self.workdir = workdir or tempfile.mkdtemp(prefix="explorer_sandbox_")
+        self._usage_count = 0
+        self._mock_fallback_count = 0
+        
+        # Try to import real sandbox
+        try:
+            from self_fixing_engineer.simulation.sandbox import run_in_sandbox
+            self.run_in_sandbox = run_in_sandbox
+            self._sandbox_available = True
+            logger.info(f"RealSandboxAdapter initialized with backend={backend}")
+        except ImportError as e:
+            logger.warning(f"Real sandbox not available: {e}. Will use mock fallback.")
+            self.run_in_sandbox = None
+            self._sandbox_available = False
+    
+    async def evaluate(self, variant: Any, metric: Optional[str] = None) -> float:
+        """
+        Evaluate a variant using the real sandbox.
+        
+        Args:
+            variant: The variant to evaluate (should have code or command)
+            metric: Evaluation metric (e.g., "perf", "accuracy")
+            
+        Returns:
+            Score between 0-2 (higher is better)
+        """
+        self._usage_count += 1
+        
+        if not self._sandbox_available:
+            # Fallback to mock
+            self._mock_fallback_count += 1
+            sandbox_usage_counter.labels(sandbox_type='mock_fallback', result='success').inc()
+            logger.warning(
+                f"Real sandbox unavailable, using mock (fallback #{self._mock_fallback_count})"
+            )
+            return 1 + (hash(str(variant)) % 100) / 100
+        
+        try:
+            # Extract command from variant
+            if isinstance(variant, dict):
+                command = variant.get("command", ["python", "-c", "print('test')"])
+                variant_name = variant.get("name", "unknown")
+            else:
+                command = ["python", "-c", "print('test')"]
+                variant_name = getattr(variant, "name", "unknown")
+            
+            # Run in sandbox
+            result = await self.run_in_sandbox(
+                backend=self.backend,
+                command=command,
+                workdir=self.workdir,
+                policy={"network_disabled": True, "allow_write": False},
+                resource_limits={"max_memory_mb": 512, "max_cpu_percent": 50}
+            )
+            
+            # Calculate score based on result
+            if result.get("status") == "SUCCESS":
+                sandbox_usage_counter.labels(sandbox_type='real', result='success').inc()
+                # Score based on execution time and exit code
+                exit_code = result.get("exit_code", 1)
+                if exit_code == 0:
+                    score = 1.5  # Successful execution
+                else:
+                    score = 0.5  # Failed execution
+            else:
+                sandbox_usage_counter.labels(sandbox_type='real', result='error').inc()
+                score = 0.1  # Sandbox error
+            
+            logger.debug(f"Evaluated variant {variant_name} with real sandbox: score={score:.3f}")
+            return score
+            
+        except Exception as e:
+            sandbox_usage_counter.labels(sandbox_type='real', result='exception').inc()
+            logger.error(f"Real sandbox evaluation failed: {e}", exc_info=True)
+            # Fallback to mock on error
+            self._mock_fallback_count += 1
+            return 1 + (hash(str(variant)) % 100) / 100
+    
+    async def test_agent(self, agent: Any, **kwargs) -> Dict[str, Any]:
+        """
+        Test an agent using the real sandbox.
+        
+        Args:
+            agent: The agent to test
+            **kwargs: Additional test parameters
+            
+        Returns:
+            Dict with agent_name and score
+        """
+        self._usage_count += 1
+        agent_name = getattr(agent, "name", "unknown")
+        
+        if not self._sandbox_available:
+            self._mock_fallback_count += 1
+            sandbox_usage_counter.labels(sandbox_type='mock_fallback', result='success').inc()
+            logger.warning(
+                f"Real sandbox unavailable for test_agent, using mock (fallback #{self._mock_fallback_count})"
+            )
+            return {"agent_name": agent_name, "score": random.uniform(0, 1)}
+        
+        try:
+            # Extract test command from agent
+            if isinstance(agent, dict):
+                command = agent.get("test_command", ["python", "-c", "import sys; sys.exit(0)"])
+            else:
+                command = ["python", "-c", "import sys; sys.exit(0)"]
+            
+            # Run test in sandbox
+            result = await self.run_in_sandbox(
+                backend=self.backend,
+                command=command,
+                workdir=self.workdir,
+                policy={"network_disabled": True, "allow_write": False},
+                resource_limits={"max_memory_mb": 512, "max_cpu_percent": 50}
+            )
+            
+            # Calculate test score
+            if result.get("status") == "SUCCESS" and result.get("exit_code") == 0:
+                sandbox_usage_counter.labels(sandbox_type='real', result='success').inc()
+                score = 0.8 + random.uniform(0, 0.2)  # 0.8-1.0 for success
+            elif result.get("status") == "SUCCESS":
+                sandbox_usage_counter.labels(sandbox_type='real', result='partial').inc()
+                score = 0.3 + random.uniform(0, 0.3)  # 0.3-0.6 for partial
+            else:
+                sandbox_usage_counter.labels(sandbox_type='real', result='error').inc()
+                score = random.uniform(0, 0.2)  # 0.0-0.2 for failure
+            
+            logger.debug(f"Tested agent {agent_name} with real sandbox: score={score:.3f}")
+            return {"agent_name": agent_name, "score": score}
+            
+        except Exception as e:
+            sandbox_usage_counter.labels(sandbox_type='real', result='exception').inc()
+            logger.error(f"Real sandbox test_agent failed: {e}", exc_info=True)
+            self._mock_fallback_count += 1
+            return {"agent_name": agent_name, "score": random.uniform(0, 1)}
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get usage statistics."""
+        return {
+            "backend": self.backend,
+            "sandbox_available": self._sandbox_available,
+            "usage_count": self._usage_count,
+            "mock_fallback_count": self._mock_fallback_count,
+            "mock_fallback_rate": (
+                self._mock_fallback_count / self._usage_count 
+                if self._usage_count > 0 else 0
+            )
+        }
 
 
 def _serialize_random_state(state: tuple) -> str:

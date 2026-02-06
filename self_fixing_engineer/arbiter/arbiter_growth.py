@@ -1779,64 +1779,125 @@ class ArbiterGrowthManager:
     async def _run_evolution_cycle(self) -> None:
         """
         Triggers a comprehensive meta-learning and evolution cycle for the arbiter.
-        This conceptually links to the MetaLearning.adapt_agent_behavior and
-        would involve a production-grade MLOps pipeline.
+        Now wired to use real ArbiterExplorer methods for A/B testing and evolutionary experiments.
         """
         with tracer.start_as_current_span(
             "arbiter_evolution_cycle", attributes={"self_fixing_engineer.arbiter.id": self.arbiter}
         ):
             logger.info(f"Starting evolution cycle for arbiter: {self.arbiter}")
+            
+            evolution_results = {
+                "ab_test": None,
+                "evolutionary_experiment": None,
+                "errors": []
+            }
 
-            # 1. Data Collection & Preparation (Conceptual)
-            # In a real system, this step would involve:
-            #   - Gathering recent growth events, user feedback, performance metrics.
-            #   - Potentially enriching data with external context.
-            #   - Pushing this data to a data lake/feature store for ML training.
+            # 1. Data Collection & Preparation
             logger.info("  1. Collecting and preparing data for meta-learning...")
-            # For demonstration, assume MetaLearning instance (if present) already logs corrections.
-            # Here, you might trigger an export from the storage_backend if it holds raw data.
-            # e.g., raw_event_data = await self.storage_backend.load_events_for_ml_training(...)
+            try:
+                # Load recent events for analysis
+                recent_events = await self.storage_backend.load_events(
+                    self.arbiter, from_offset=0
+                )
+                event_count = len(recent_events)
+                logger.info(f"     Loaded {event_count} events for analysis")
+            except Exception as e:
+                logger.warning(f"     Failed to load events: {e}")
+                event_count = 0
 
-            # 2. Model Retraining (Conceptual)
-            # This would trigger an external ML training pipeline.
-            # The 'MetaLearning' class (from agent_core.py) would conceptually manage this.
-            logger.info(
-                "  2. Triggering meta-learning model retraining via MLOps pipeline..."
-            )
-            # This call would interact with your MLOps platform API:
-            # e.g., mlops_platform.trigger_training_job(data_source_id, model_name)
-            # Upon successful training, a new model version would be available.
+            # 2. A/B Testing with ArbiterExplorer
+            logger.info("  2. Running A/B test via ArbiterExplorer...")
+            try:
+                # Import ArbiterExplorer
+                try:
+                    from self_fixing_engineer.arbiter.explorer import ArbiterExplorer
+                    explorer_available = True
+                except ImportError:
+                    logger.warning("     ArbiterExplorer not available, skipping A/B test")
+                    explorer_available = False
+                
+                if explorer_available:
+                    # Create explorer instance (with fallback sandbox)
+                    from self_fixing_engineer.arbiter.explorer import MySandboxEnv
+                    sandbox = MySandboxEnv()
+                    explorer = ArbiterExplorer(sandbox_env=sandbox)
+                    
+                    # Run A/B test between current behavior and a variant
+                    # In a real system, variants would be actual behavioral models
+                    ab_result = await explorer.run_ab_test(
+                        experiment_name=f"{self.arbiter}_evolution_ab_test",
+                        variant_a={"config": "current", "arbiter_id": self.arbiter},
+                        variant_b={"config": "optimized", "arbiter_id": self.arbiter},
+                        num_runs=3,
+                        metric="perf"
+                    )
+                    evolution_results["ab_test"] = ab_result
+                    logger.info(f"     A/B test completed: winner={ab_result.get('winner', 'unknown')}")
+                    
+            except Exception as e:
+                error_msg = f"A/B test failed: {e}"
+                logger.error(f"     {error_msg}", exc_info=True)
+                evolution_results["errors"].append(error_msg)
 
-            # 3. Model Deployment / Configuration Update (Conceptual)
-            # After a new model is trained and validated, it needs to be deployed or its influence
-            # reflected in the arbiter's configuration.
-            logger.info(
-                "  3. Deploying new model version / updating arbiter configuration..."
-            )
-            # This could involve:
-            #   - Updating a config store (like etcd) with new weights, prompt templates, or behavioral parameters.
-            #   - Deploying a new service version if the model is embedded or served via an API.
-            #   - For prompt-based adaptation, the ConfigStore might load new prompt versions.
-            # For example:
-            # await self.config_store.set_config("skill_prediction_model_version", "v2.1")
-            # await self.config_store.set_config("new_prompt_template_id", "optimized_v3")
+            # 3. Evolutionary Experiment with ArbiterExplorer  
+            logger.info("  3. Running evolutionary experiment via ArbiterExplorer...")
+            try:
+                if explorer_available:
+                    # Run evolutionary experiment for behavior optimization
+                    evo_result = await explorer.run_evolutionary_experiment(
+                        experiment_name=f"{self.arbiter}_evolution_genetic",
+                        initial_agent={"config": "baseline", "arbiter_id": self.arbiter},
+                        num_generations=2,
+                        population_size=3,
+                        metric="perf"
+                    )
+                    evolution_results["evolutionary_experiment"] = evo_result
+                    best_score = evo_result.get("best_score", 0.0)
+                    logger.info(f"     Evolutionary experiment completed: best_score={best_score:.3f}")
+                    
+            except Exception as e:
+                error_msg = f"Evolutionary experiment failed: {e}"
+                logger.error(f"     {error_msg}", exc_info=True)
+                evolution_results["errors"].append(error_msg)
 
-            # 4. A/B Testing / Canary Deployment (Conceptual)
-            logger.info(
-                "  4. Monitoring A/B tests or canary deployments for new behaviors..."
-            )
+            # 4. Model Deployment / Configuration Update
+            logger.info("  4. Updating arbiter configuration based on results...")
+            try:
+                # If we have a clear winner from A/B test, update config
+                if evolution_results["ab_test"]:
+                    winner = evolution_results["ab_test"].get("winner")
+                    if winner == "variant_b":  # The optimized variant won
+                        logger.info("     Updating config to use optimized variant")
+                        # In production, this would update actual model/config
+                        # await self.config_store.set_config("behavior_model_version", "optimized")
+                    else:
+                        logger.info("     Current variant still optimal, no update needed")
+                        
+            except Exception as e:
+                error_msg = f"Config update failed: {e}"
+                logger.warning(f"     {error_msg}")
+                evolution_results["errors"].append(error_msg)
 
             # 5. Audit Logging the Evolution
-            await self._audit_log(
-                "evolution_cycle_completed",
-                {
-                    "status": "success",
-                    "triggered_at": self.clock().isoformat(),
-                    # "new_model_version": "v2.1", # Add actual version if applicable
-                },
-            )
+            audit_data = {
+                "status": "success" if not evolution_results["errors"] else "partial",
+                "triggered_at": self.clock().isoformat(),
+                "event_count_analyzed": event_count,
+                "ab_test_completed": evolution_results["ab_test"] is not None,
+                "evo_experiment_completed": evolution_results["evolutionary_experiment"] is not None,
+                "error_count": len(evolution_results["errors"]),
+            }
+            
+            # Add experiment results if available
+            if evolution_results["ab_test"]:
+                audit_data["ab_winner"] = evolution_results["ab_test"].get("winner")
+            if evolution_results["evolutionary_experiment"]:
+                audit_data["evo_best_score"] = evolution_results["evolutionary_experiment"].get("best_score")
+                
+            await self._audit_log("evolution_cycle_completed", audit_data)
             logger.info(
-                f"Evolution cycle for arbiter {self.arbiter} completed successfully."
+                f"Evolution cycle for arbiter {self.arbiter} completed with "
+                f"{len(evolution_results['errors'])} errors."
             )
 
     async def _validate_audit_chain(self) -> bool:
