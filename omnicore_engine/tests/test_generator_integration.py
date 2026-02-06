@@ -15,6 +15,16 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+# Mock generator modules before importing omnicore_engine.engines
+# This prevents import errors when generator package is not available
+sys.modules['generator'] = Mock()
+sys.modules['generator.runner'] = Mock()
+sys.modules['generator.runner.runner_core'] = Mock()
+sys.modules['generator.runner.llm_client'] = Mock()
+sys.modules['generator.agents'] = Mock()
+sys.modules['generator.intent_parser'] = Mock()
+sys.modules['generator.intent_parser.intent_parser'] = Mock()
+
 # Defer heavy imports to test functions to reduce memory during collection
 # import path_setup - moved to test functions
 # from omnicore_engine.engines import (...) - moved to test functions

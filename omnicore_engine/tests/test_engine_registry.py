@@ -425,6 +425,11 @@ class TestOmniCoreOmega:
         original = ENGINE_REGISTRY.copy()
         ENGINE_REGISTRY.clear()
 
+        # Mock database instance properly to avoid mmap errors
+        mock_db_instance = Mock()
+        mock_db_instance.engine = Mock()
+        mock_db.return_value = mock_db_instance
+
         # Mock _find_crew_config to return a valid path
         mock_find_config.return_value = "/mock/crew_config.yaml"
         # Mock yaml.safe_load to return an empty agents list
@@ -478,6 +483,7 @@ class TestOmniCoreOmega:
     @pytest.mark.integration
     @patch("omnicore_engine.engines.Arbiter")
     @patch("omnicore_engine.engines.CodeHealthEnv")
+    @patch.dict("os.environ", clear=True)
     def test_initialize_arbiters(self, mock_code_health_env, mock_arbiter, mock_components):
         """Test _initialize_arbiters method"""
         from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
@@ -511,13 +517,8 @@ class TestOmniCoreOmega:
                 num_arbiters=3,
             )
 
-            with patch("omnicore_engine.engines.Arbiter") as mock_arbiter:
-                with patch("omnicore_engine.engines.CodeHealthEnv") as mock_code_health_env:
-                    omega._initialize_arbiters()
-
-                    assert len(omega.arbiters) == 3
-                    assert mock_arbiter.call_count == 3
-                    assert mock_code_health_env.call_count == 1
+            # Use the mock_arbiter and mock_code_health_env from @patch decorators
+            # Decorator patches are applied at method level and provide mocks as parameters
             omega._initialize_arbiters()
 
             assert len(omega.arbiters) == 3
