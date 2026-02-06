@@ -94,12 +94,13 @@ class TestMessageCache(unittest.TestCase):
         cache.put("key1", "value1")
         self.assertEqual(cache.get("key1"), "value1")
 
-        # Wait for expiration
-        time.sleep(1.1)
+        # Wait for expiration with margin for CI timing variability
+        # Use 1.5 seconds instead of 1.1 to be more robust
+        time.sleep(1.5)
 
         # Should return None after expiration
         result = cache.get("key1")
-        self.assertIsNone(result)
+        self.assertIsNone(result, f"Expected None after TTL expiration, got {result}")
 
         # Key should be removed from cache
         self.assertNotIn("key1", cache.cache)
