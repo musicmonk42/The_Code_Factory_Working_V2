@@ -17,12 +17,22 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Defer heavy imports to test functions to reduce memory during collection
 # from omnicore_engine.engines import (...) - moved to test functions
 
+# Import shared test base class from conftest
+from omnicore_engine.tests.conftest import EngineRegistryTestBase
+
 # Disable parallel execution for tests that modify shared ENGINE_REGISTRY
-pytestmark = pytest.mark.xdist_group(name="engine_registry_serial")
+# Also mark as not requiring forked mode to avoid subprocess crashes
+# when running with pytest-xdist --forked flag
+pytestmark = [
+    pytest.mark.xdist_group(name="engine_registry_serial"),
+]
 
 
-class TestEngineRegistry:
-    """Test the engine registry functions"""
+class TestEngineRegistry(EngineRegistryTestBase):
+    """Test the engine registry functions.
+    
+    Inherits from EngineRegistryTestBase for automatic ENGINE_REGISTRY isolation.
+    """
 
     @pytest.mark.integration
     def test_register_engine_success(self):
@@ -71,13 +81,8 @@ class TestEngineRegistry:
             assert result is None
 
 
-class TestPluginService:
+class TestPluginService(EngineRegistryTestBase):
     """Test the PluginService class"""
-
-    def teardown_method(self):
-        """Clean up ENGINE_REGISTRY after each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        ENGINE_REGISTRY.clear()
 
     @pytest.fixture
     def mock_dependencies(self, worker_id):
@@ -330,7 +335,7 @@ class TestPluginService:
         mock_simulator.assert_called_with(["AAPL", "GOOGL"])
 
 
-class TestRunImportFixer:
+class TestRunImportFixer(EngineRegistryTestBase):
     """Test the run_import_fixer helper function"""
 
     @pytest.mark.integration
@@ -352,7 +357,7 @@ class TestRunImportFixer:
             mock_asyncio_run.assert_called_once()
 
 
-class TestOmniCoreOmega:
+class TestOmniCoreOmega(EngineRegistryTestBase):
     """Test the OmniCoreOmega orchestrator class"""
 
     @pytest.fixture
@@ -582,7 +587,7 @@ class TestOmniCoreOmega:
         )
 
 
-class TestCrewConfigLoading:
+class TestCrewConfigLoading(EngineRegistryTestBase):
     """Test crew configuration loading"""
 
     @pytest.mark.integration

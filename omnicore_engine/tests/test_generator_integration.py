@@ -19,14 +19,21 @@ import pytest
 # import path_setup - moved to test functions
 # from omnicore_engine.engines import (...) - moved to test functions
 
+# Import shared test base class from conftest
+from omnicore_engine.tests.conftest import EngineRegistryTestBase
 
-class TestGeneratorIntegration:
-    """Test generator integration with OmniCoreOmega"""
+# Disable parallel execution for tests that interact with ENGINE_REGISTRY
+# to prevent race conditions when running with pytest-xdist
+pytestmark = [
+    pytest.mark.xdist_group(name="engine_registry_serial"),
+]
 
-    def setup_method(self):
-        """Clear registry before each test"""
-        # Avoid importing during test collection - import inside test methods if needed
-        pass
+
+class TestGeneratorIntegration(EngineRegistryTestBase):
+    """Test generator integration with OmniCoreOmega.
+    
+    Inherits from EngineRegistryTestBase for automatic ENGINE_REGISTRY isolation.
+    """
 
     @pytest.mark.integration
     def test_generator_imports_available(self):
@@ -188,7 +195,7 @@ class TestGeneratorIntegration:
         assert get_engine("generator") is not None
 
 
-class TestMessageBusIntegration:
+class TestMessageBusIntegration(EngineRegistryTestBase):
     """Test message bus integration for generator"""
 
     @pytest.mark.asyncio
@@ -353,7 +360,7 @@ class TestPathSetup:
             assert isinstance(exists, bool)
 
 
-class TestCrewConfigHelper:
+class TestCrewConfigHelper(EngineRegistryTestBase):
     """Test crew config helper function"""
 
     @pytest.mark.integration
@@ -370,7 +377,7 @@ class TestCrewConfigHelper:
         assert result is None or isinstance(result, str)
 
 
-class TestAuditLogManagerFallback:
+class TestAuditLogManagerFallback(EngineRegistryTestBase):
     """Test audit log manager fallback logic"""
 
     @pytest.mark.integration

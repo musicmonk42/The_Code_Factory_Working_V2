@@ -390,6 +390,56 @@ class TestMessageCache(unittest.TestCase):
 
         self.assertLess(get_time, 1.0, f"Get operations took {get_time}s")
 
+    def test_pickle_serialization(self):
+        """Test that MessageCache can be pickled and unpickled."""
+        import pickle
+
+        cache = MessageCache(maxsize=10, ttl=100)
+        cache.put("key1", "value1")
+        cache.put("key2", "value2")
+
+        # Serialize
+        pickled = pickle.dumps(cache)
+        self.assertIsInstance(pickled, bytes)
+
+        # Deserialize
+        cache_restored = pickle.loads(pickled)
+
+        # Verify state is preserved
+        self.assertEqual(cache_restored.maxsize, 10)
+        self.assertEqual(cache_restored.ttl, 100)
+        self.assertEqual(cache_restored.get("key1"), "value1")
+        self.assertEqual(cache_restored.get("key2"), "value2")
+
+    def test_pickle_functionality_after_restore(self):
+        """Test that MessageCache remains functional after unpickling."""
+        import pickle
+
+        cache = MessageCache(maxsize=5, ttl=100)
+        cache.put("key1", "value1")
+
+        # Pickle and unpickle
+        cache_restored = pickle.loads(pickle.dumps(cache))
+
+        # Test put works
+        cache_restored.put("key2", "value2")
+        self.assertEqual(cache_restored.get("key2"), "value2")
+
+        # Test get works
+        self.assertEqual(cache_restored.get("key1"), "value1")
+
+        # Test LRU eviction works with lock
+        for i in range(5):
+            time.sleep(0.01)  # Ensure different timestamps for LRU
+            cache_restored.put(f"newkey_{i}", f"newvalue_{i}")
+
+        # Cache should only contain maxsize items
+        self.assertEqual(len(cache_restored.cache), 5)
+
+        # Original keys should have been evicted (LRU)
+        self.assertIsNone(cache_restored.get("key1"))
+        self.assertIsNone(cache_restored.get("key2"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

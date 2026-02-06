@@ -189,3 +189,35 @@ def reset_plugin_registry():
         pass
     
     yield
+
+
+class EngineRegistryTestBase:
+    """Base class for tests that need ENGINE_REGISTRY isolation.
+    
+    This provides setup/teardown methods that save and restore the
+    ENGINE_REGISTRY state to prevent cross-test contamination.
+    
+    Usage:
+        class TestMyEngineTests(EngineRegistryTestBase):
+            def test_something(self):
+                from omnicore_engine.engines import ENGINE_REGISTRY
+                # ENGINE_REGISTRY state is automatically saved before
+                # and restored after each test
+                pass
+    
+    Note:
+        This approach is preferred over the isolate_engine_registry fixture
+        because it avoids thread creation issues with async database tests
+        while still providing proper test isolation.
+    """
+
+    def setup_method(self):
+        """Save ENGINE_REGISTRY state before each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        self._original_registry = dict(ENGINE_REGISTRY)
+
+    def teardown_method(self):
+        """Restore ENGINE_REGISTRY state after each test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(self._original_registry)
