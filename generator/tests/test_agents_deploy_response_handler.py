@@ -430,6 +430,7 @@ class TestSummarizationRepair:
     async def test_summarize_section_long_text(self, mock_call):
         """Test summarization with long text."""
         long_text = "x" * 1000  # Long text
+        # Configure mock as AsyncMock that returns a dict
         mock_call.return_value = {
             "content": "This is a summarized version.",
             "model": "gpt-3.5-turbo",
@@ -438,7 +439,16 @@ class TestSummarizationRepair:
 
         # FIX: Must instantiate a handler to call the method
         handler = DockerfileHandler()
-        result = await handler.summarize_section("test_section", long_text)
+        # Ensure TESTING mode is disabled so LLM is actually called
+        import os
+        original_testing = os.environ.get("TESTING")
+        try:
+            if "TESTING" in os.environ:
+                del os.environ["TESTING"]
+            result = await handler.summarize_section("test_section", long_text)
+        finally:
+            if original_testing is not None:
+                os.environ["TESTING"] = original_testing
 
         assert mock_call.called
         assert result == "This is a summarized version."

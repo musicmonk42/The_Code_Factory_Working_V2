@@ -155,9 +155,9 @@ def setup_comprehensive_mocking():
     # Mock other dependencies
 
     # --- FIX for web.Response ---
-    # Create a properly configured mock response
+    # Create a properly configured mock response with string text attribute
     mock_response = Mock()
-    mock_response.text = "OK"
+    mock_response.text = "OK"  # Must be a string, not a callable
     mock_response.status = 200
 
     # Create mock web module
