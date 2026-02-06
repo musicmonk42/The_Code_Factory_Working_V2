@@ -103,6 +103,26 @@ def pytest_configure(config):
         os.environ['PYTEST_COLLECTING_ONLY'] = '1'
 
 
+@pytest.fixture(scope="session")
+def worker_id(request):
+    """Get the xdist worker ID for unique resource naming."""
+    if hasattr(request.config, 'workerinput'):
+        return request.config.workerinput['workerid']
+    return 'master'
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolate_engine_registry_per_worker():
+    """Isolate ENGINE_REGISTRY for each xdist worker to prevent race conditions."""
+    from omnicore_engine.engines import ENGINE_REGISTRY
+    # Save original state (shallow copy is sufficient for dict isolation)
+    original_registry = dict(ENGINE_REGISTRY)
+    yield
+    # Restore after all tests in this worker
+    ENGINE_REGISTRY.clear()
+    ENGINE_REGISTRY.update(original_registry)
+
+
 @pytest.fixture(autouse=True, scope="session")
 def reset_prometheus_collectors():
     """Reset Prometheus collectors once per test session to reduce memory overhead.
