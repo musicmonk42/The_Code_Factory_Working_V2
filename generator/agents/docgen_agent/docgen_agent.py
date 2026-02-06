@@ -699,6 +699,7 @@ class DocgenAgent:
         languages_supported: Optional[List[str]] = None,
         plugins_dir: Optional[str] = None,
         slack_webhook: Optional[str] = None,  # Integration test compatibility
+        arbiter_bridge: Optional[Any] = None,
         **kwargs,  # Accept additional test parameters
     ):
         # Store as string for test compatibility, use Path for operations
@@ -731,11 +732,14 @@ class DocgenAgent:
 
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
+        self.arbiter_bridge = arbiter_bridge
         logger.info(
             f"DocgenAgent initialized for repo: {repo_path}, "
             f"languages: {self.languages_supported}, "
             f"plugins: {len(self.plugin_registry.get_all_plugins())}"
         )
+        if self.arbiter_bridge:
+            logger.info("DocgenAgent: Arbiter integration enabled")
 
         # Integration test compatibility attributes
         self.slack_webhook = slack_webhook
@@ -1069,6 +1073,21 @@ class DocgenAgent:
         ) as span:
             logger.info("Docgen call started.", extra=log_extra)
 
+            # [ARBITER] Publish documentation generation start event
+            if self.arbiter_bridge:
+                try:
+                    await self.arbiter_bridge.publish_event(
+                        "docgen_started",
+                        {
+                            "run_id": run_id,
+                            "doc_type": doc_type,
+                            "target_files_count": len(target_files),
+                            "llm_model": llm_model,
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to publish docgen start event: {e}")
+
             try:
                 # If streaming is requested, return a generator
                 if stream:
@@ -1376,6 +1395,24 @@ class DocgenAgent:
                     extra={**log_extra, "total_latency": total_latency},
                 )
                 span.set_status(Status(StatusCode.OK))
+                
+                # [ARBITER] Publish documentation generation completion event
+                if self.arbiter_bridge:
+                    try:
+                        await self.arbiter_bridge.publish_event(
+                            "docgen_completed",
+                            {
+                                "run_id": run_id,
+                                "status": final_result["status"],
+                                "doc_type": doc_type,
+                                "validation_valid": validator_result["is_valid"],
+                                "compliance_issues_count": len(all_compliance_issues),
+                                "duration_seconds": total_latency,
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to publish docgen completion event: {e}")
+                
                 return final_result
 
             # <--- FIX: This is the modified exception block
@@ -1402,6 +1439,20 @@ class DocgenAgent:
                 )
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
+                
+                # [ARBITER] Report error to bridge
+                if self.arbiter_bridge:
+                    try:
+                        await self.arbiter_bridge.report_bug({
+                            "agent": "docgen",
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "run_id": run_id,
+                            "doc_type": doc_type,
+                        })
+                    except Exception as bridge_err:
+                        logger.warning(f"Failed to report error to arbiter: {bridge_err}")
+                
                 return {
                     "status": "error",
                     "doc_type": doc_type,

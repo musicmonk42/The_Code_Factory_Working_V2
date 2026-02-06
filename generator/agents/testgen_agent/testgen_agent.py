@@ -363,7 +363,7 @@ class TestgenAgent:
     REFACTORED: Uses central runner components.
     """
 
-    def __init__(self, repo_path: str):
+    def __init__(self, repo_path: str, arbiter_bridge: Optional[Any] = None):
         self.repo_path = Path(repo_path)
         if not self.repo_path.exists() or not self.repo_path.is_dir():
             raise ValueError(
@@ -371,7 +371,10 @@ class TestgenAgent:
             )
 
         # REFACTORED: Removed self.llm_orchestrator
+        self.arbiter_bridge = arbiter_bridge
         logger.info(f"Initializing TestgenAgent for repository: {self.repo_path}")
+        if self.arbiter_bridge:
+            logger.info("TestgenAgent: Arbiter integration enabled")
 
         # FIX: Schedule async initialization as a background task instead of blocking
         # This prevents "asyncio.run() cannot be called from a running event loop" error
@@ -1326,6 +1329,21 @@ def test_{file_stem}_syntax_error_documentation():
             logger.info("Testgen agent run initiated", extra=log_extra)
             start_time = time.time()
 
+            # [ARBITER] Publish test generation start event
+            if self.arbiter_bridge:
+                try:
+                    await self.arbiter_bridge.publish_event(
+                        "testgen_started",
+                        {
+                            "run_id": run_id,
+                            "language": language,
+                            "target_files_count": len(target_files),
+                            "quality_threshold": policy.quality_threshold,
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to publish testgen start event: {e}")
+
             span.set_attributes(
                 {
                     "run_id": run_id,
@@ -1709,6 +1727,23 @@ def test_{file_stem}_syntax_error_documentation():
                     )
                 )
 
+                # [ARBITER] Publish test generation completion event
+                if self.arbiter_bridge:
+                    try:
+                        await self.arbiter_bridge.publish_event(
+                            "testgen_completed",
+                            {
+                                "run_id": run_id,
+                                "status": final_status,
+                                "tests_generated": len(best_tests),
+                                "final_metric_value": final_metric_value,
+                                "refinements": attempt,
+                                "duration_seconds": time.time() - start_time,
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to publish testgen completion event: {e}")
+
                 return {
                     "status": final_status,
                     "generated_tests": best_tests,
@@ -1727,6 +1762,19 @@ def test_{file_stem}_syntax_error_documentation():
                 span.record_exception(e)
                 if sentry_sdk:
                     sentry_sdk.capture_exception(e)
+                
+                # [ARBITER] Report error to bridge
+                if self.arbiter_bridge:
+                    try:
+                        await self.arbiter_bridge.report_bug({
+                            "agent": "testgen",
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "run_id": run_id,
+                        })
+                    except Exception as bridge_err:
+                        logger.warning(f"Failed to report error to arbiter: {bridge_err}")
+                
                 raise RuntimeError(
                     f"Agent run failed due to file operation error: {e}"
                 ) from e
@@ -1740,6 +1788,19 @@ def test_{file_stem}_syntax_error_documentation():
                 span.record_exception(e)
                 if sentry_sdk:
                     sentry_sdk.capture_exception(e)
+                
+                # [ARBITER] Report error to bridge
+                if self.arbiter_bridge:
+                    try:
+                        await self.arbiter_bridge.report_bug({
+                            "agent": "testgen",
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "run_id": run_id,
+                        })
+                    except Exception as bridge_err:
+                        logger.warning(f"Failed to report error to arbiter: {bridge_err}")
+                
                 raise RuntimeError(
                     f"Agent run failed due to configuration or parsing error: {e}"
                 ) from e
@@ -1753,6 +1814,19 @@ def test_{file_stem}_syntax_error_documentation():
                 span.record_exception(e)
                 if sentry_sdk:
                     sentry_sdk.capture_exception(e)
+                
+                # [ARBITER] Report error to bridge
+                if self.arbiter_bridge:
+                    try:
+                        await self.arbiter_bridge.report_bug({
+                            "agent": "testgen",
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "run_id": run_id,
+                        })
+                    except Exception as bridge_err:
+                        logger.warning(f"Failed to report error to arbiter: {bridge_err}")
+                
                 raise RuntimeError(
                     f"Agent run failed due to LLM operation or critical validation failure: {e}"
                 ) from e
