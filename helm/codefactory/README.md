@@ -160,6 +160,27 @@ kubectl create secret generic codefactory-secrets \
   -n codefactory
 ```
 
+**AWS KMS Integration (Optional):**
+
+For AWS KMS-based audit crypto encryption, add these secrets:
+
+```bash
+kubectl create secret generic codefactory-secrets \
+  --from-literal=kms-key-id=arn:aws:kms:us-east-1:123456789:key/your-key-id \
+  --from-literal=audit-crypto-key=$(aws kms encrypt --key-id alias/your-kms-key --plaintext "$(python -c 'from cryptography.fernet import Fernet; import base64; print(base64.b64encode(Fernet.generate_key()).decode())')" --query CiphertextBlob --output text) \
+  -n codefactory \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+**Note**: The `audit-crypto-key` should be a base64-encoded KMS-encrypted master key. See [AWS KMS Troubleshooting Guide](../../docs/AWS_KMS_TROUBLESHOOTING.md) for detailed setup instructions.
+
+**AWS Credentials:**
+
+If using AWS KMS, ensure pods have AWS credentials via:
+- IAM Roles for Service Accounts (IRSA) - Recommended
+- Node IAM role
+- Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+
 For production, use external secrets management:
 - AWS Secrets Manager
 - HashiCorp Vault
@@ -240,6 +261,28 @@ kubectl describe pod <pod-name> -n codefactory
 ```bash
 kubectl port-forward svc/codefactory 8000:80 -n codefactory
 ```
+
+### AWS KMS Issues
+
+If you see `InvalidCiphertextException` errors:
+
+1. **Check AWS credentials**: Ensure the pod has access to AWS KMS
+   ```bash
+   kubectl exec -it <pod-name> -n codefactory -- env | grep AWS
+   ```
+
+2. **Verify KMS key permissions**: The IAM role must have `kms:Decrypt` permission
+
+3. **Check the encrypted key**: Ensure `audit-crypto-key` was encrypted with the correct KMS key
+   ```bash
+   kubectl get secret codefactory-secrets -n codefactory -o jsonpath='{.data.kms-key-id}' | base64 -d
+   ```
+
+4. **See detailed troubleshooting**: [AWS KMS Troubleshooting Guide](../../docs/AWS_KMS_TROUBLESHOOTING.md)
+
+### Rate Limiting Errors
+
+If you see "Railway rate limit" or excessive logging messages, the application now includes automatic rate limiting (1 message per 60 seconds per error type). No action needed - this is working as designed.
 
 ## License
 

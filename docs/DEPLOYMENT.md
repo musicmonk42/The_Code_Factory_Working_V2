@@ -607,6 +607,31 @@ kubectl top pods -n codefactory
 # Adjust resource limits in deployment
 ```
 
+**AWS KMS InvalidCiphertextException:**
+
+If you see audit crypto errors related to KMS decryption:
+
+```bash
+# Check logs for InvalidCiphertextException
+kubectl logs -n codefactory <pod-name> | grep InvalidCiphertext
+
+# Verify AWS credentials are configured
+kubectl exec -n codefactory <pod-name> -- env | grep AWS
+
+# Check if KMS key ID is set correctly
+kubectl get secret codefactory-secrets -n codefactory -o jsonpath='{.data.kms-key-id}' | base64 -d
+```
+
+See [AWS KMS Troubleshooting Guide](./AWS_KMS_TROUBLESHOOTING.md) for detailed resolution steps.
+
+**Excessive Logging / Rate Limiting:**
+
+The application automatically rate-limits error messages to 1 per minute to prevent log flooding. If you see:
+- "Railway rate limit reached"
+- Repeated SECURITY CRITICAL messages
+
+This is expected behavior and the rate limiting is working as designed.
+
 ### Health Checks
 
 ```bash

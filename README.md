@@ -580,8 +580,10 @@ Troubleshooting
 Missing Plugins: Check core.py for correct paths.
 Dependency Errors: Install requirements.txt or use bootstrap_agent_dev.py. For full dependencies, use master_requirements.txt.
 Audit Log Failure: Verify AUDIT_LOG_PATH and audit_log.py.
+AWS KMS Issues: See [AWS KMS Troubleshooting Guide](./docs/AWS_KMS_TROUBLESHOOTING.md) for InvalidCiphertextException errors and rate limiting configuration.
 DLT Issues: Ensure Fabric/EVM nodes are running (network.sh up).
 ArrayBackend Issues: The ArrayBackend module (omnicore_engine/array_backend.py) has a known syntax error (line 1031). The system functions without it by falling back to NumPy for array operations. Advanced array backend features (CuPy, Dask, Quantum) are unavailable until this is resolved.
+
 
 
 Best Practices
