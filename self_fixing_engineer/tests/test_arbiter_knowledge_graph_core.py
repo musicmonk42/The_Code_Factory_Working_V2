@@ -193,7 +193,11 @@ def mock_all_external_services():
                                 ):
                                     # Configure mocks to return proper instances
                                     mock_openai.return_value = MagicMock()
-                                    mock_redis.return_value = AsyncMock()
+                                    # Configure Redis mock to return None for get() calls (no state found)
+                                    redis_client_mock = AsyncMock()
+                                    redis_client_mock.get = AsyncMock(return_value=None)
+                                    redis_client_mock.ping = AsyncMock(return_value=True)
+                                    mock_redis.return_value = redis_client_mock
                                     mock_postgres.return_value = AsyncMock()
                                     mock_audit.return_value = AsyncMock()
                                     mock_mm.return_value = MagicMock()
@@ -697,18 +701,26 @@ class TestFactoryFunctions:
         with patch(
             "self_fixing_engineer.arbiter.knowledge_graph.core.get_or_create_agent", return_value=mock_agent
         ):
-            # Create a mock LLM object with __class__.__name__
-            mock_llm = MagicMock()
-            mock_llm.__class__.__name__ = "ChatOpenAI"
-            mock_llm.model_name = "gpt-3.5-turbo"
-            mock_llm.temperature = 0.7
+            # Also mock ConversationChain to avoid Pydantic validation errors
+            with patch(
+                "self_fixing_engineer.arbiter.knowledge_graph.core.ConversationChain"
+            ) as mock_chain_class:
+                mock_chain_instance = MagicMock()
+                mock_chain_class.return_value = mock_chain_instance
 
-            chain, memory = await setup_conversation(mock_llm, "expert", "en")
+                # Create a mock LLM object with __class__.__name__
+                mock_llm = MagicMock()
+                mock_llm.__class__.__name__ = "ChatOpenAI"
+                mock_llm.model_name = "gpt-3.5-turbo"
+                mock_llm.temperature = 0.7
 
-            assert chain is not None
-            assert memory == mock_agent.memory
-            mock_agent.set_persona.assert_called_once_with("expert")
-            assert mock_agent.language == "en"
+                chain, memory = await setup_conversation(mock_llm, "expert", "en")
+
+                assert chain is not None
+                assert chain == mock_chain_instance
+                assert memory == mock_agent.memory
+                mock_agent.set_persona.assert_called_once_with("expert")
+                assert mock_agent.language == "en"
 
 
 class TestUtilityFunctions:
