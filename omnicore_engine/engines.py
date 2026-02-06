@@ -902,6 +902,13 @@ class OmniCoreOmega:
                 "CI environment detected - skipping arbiter initialization to avoid resource constraints"
             )
             return
+        
+        # Check if required components are available
+        if CodeHealthEnv is None or Arbiter is None:
+            logger.warning(
+                "CodeHealthEnv or Arbiter not available - skipping arbiter initialization"
+            )
+            return
             
         logger.info("OmniCoreOmega: Initializing arbiters...")
 
