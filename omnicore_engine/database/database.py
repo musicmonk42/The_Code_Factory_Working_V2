@@ -876,6 +876,24 @@ class Database:
 
         class MockPolicyEngine:
             async def should_auto_learn(self, *args, **kwargs):
+                # [GAP #21 FIX] Production mode check with CRITICAL logging
+                if os.getenv("PRODUCTION_MODE", "false").lower() == "true" or os.getenv("APP_ENV", "development") == "production":
+                    logger.critical(
+                        "CRITICAL: MockPolicyEngine active in PRODUCTION MODE! "
+                        "All policy checks are being bypassed. This is a security risk. "
+                        "Configure real PolicyEngine immediately."
+                    )
+                    # Track mock usage in production via metrics
+                    try:
+                        from prometheus_client import Counter
+                        mock_policy_counter = Counter(
+                            'mock_policy_engine_usage_in_production',
+                            'Mock policy engine calls in production mode'
+                        )
+                        mock_policy_counter.inc()
+                    except Exception:
+                        pass  # Metrics not available
+                
                 # Log each call for audit purposes
                 logger.debug(
                     f"MockPolicyEngine: Allowing operation. Args: {args[0:2] if args else 'none'}"
