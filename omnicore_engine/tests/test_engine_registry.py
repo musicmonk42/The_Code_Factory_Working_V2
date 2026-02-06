@@ -89,7 +89,7 @@ class TestPluginService:
     """Test the PluginService class"""
 
     @pytest.fixture
-    def mock_dependencies(self, worker_id):
+    def mock_dependencies(self):
         """Create mock dependencies without module-level patches"""
         mock_registry = Mock()
         
