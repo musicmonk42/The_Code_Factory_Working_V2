@@ -1204,8 +1204,6 @@ if PLUGIN_AVAILABLE:
                     {"files": list(code_files.keys()), "model": backend_used},
                 )
                 # --- End Audit/Logging Change ---
-                return code_files
-                
                 # [ARBITER] Publish code generation completion event
                 if arbiter_bridge:
                     try:
@@ -1220,6 +1218,8 @@ if PLUGIN_AVAILABLE:
                         )
                     except Exception as e:
                         logger.warning(f"Failed to publish codegen completion event: {e}")
+                
+                return code_files
 
             except Exception as e:
                 # FIX: Improve error logging with more context
@@ -1488,8 +1488,6 @@ else:
                     {"files": list(code_files.keys()), "model": backend_used},
                 )
                 # --- End Audit/Logging Change ---
-                return code_files
-                
                 # [ARBITER] Publish code generation completion event
                 if arbiter_bridge:
                     try:
@@ -1504,6 +1502,8 @@ else:
                         )
                     except Exception as e:
                         logger.warning(f"Failed to publish codegen completion event: {e}")
+                
+                return code_files
 
             except Exception as e:
                 # FIX: Improve error logging with more context
@@ -1523,6 +1523,19 @@ else:
                 )
                 # --- End Audit/Logging Change ---
                 CODEGEN_ERRORS.labels(type(e).__name__).inc()
+                
+                # [ARBITER] Report error to bridge
+                if arbiter_bridge:
+                    try:
+                        await arbiter_bridge.report_bug({
+                            "agent": "codegen",
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "request_id": request_id,
+                        })
+                    except Exception as bridge_err:
+                        logger.warning(f"Failed to report error to arbiter: {bridge_err}")
+                
                 
                 # [ARBITER] Report error to bridge
                 if arbiter_bridge:
