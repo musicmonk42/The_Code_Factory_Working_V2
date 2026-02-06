@@ -207,6 +207,46 @@ This is a Python project that does something interesting.
         assert data["success"] is True
         assert data["data"]["pipeline_triggered"] is False
         assert "Pipeline auto-triggered" not in data["message"]
+    
+    @patch("server.routers.generator.GeneratorService")
+    def test_upload_any_md_triggers_pipeline(self, mock_service_class, client, sample_job):
+        """Test that uploading ANY .md file triggers the pipeline, not just README.md."""
+        spec_content = b"""# Technical Specification
+        
+        Build a FastAPI service with /api/users endpoint.
+        """
+        
+        mock_service = Mock()
+        mock_service.save_upload = AsyncMock(return_value={
+            "filename": "technical_spec.md",
+            "path": f"./uploads/{sample_job.id}/technical_spec.md",
+            "size": len(spec_content),
+            "uploaded_at": datetime.now(timezone.utc).isoformat()
+        })
+        mock_service.create_generation_job = AsyncMock(return_value={
+            "job_id": sample_job.id,
+            "status": "created"
+        })
+        mock_service.run_full_pipeline = AsyncMock(return_value={
+            "job_id": sample_job.id,
+            "status": "completed"
+        })
+        mock_service_class.return_value = mock_service
+        
+        files = [
+            ("files", ("technical_spec.md", io.BytesIO(spec_content), "text/markdown"))
+        ]
+        
+        response = client.post(
+            f"/api/generator/{sample_job.id}/upload",
+            files=files,
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["pipeline_triggered"] is True
+        assert "Pipeline auto-triggered" in data["message"]
 
 
 class TestLanguageDetection:
