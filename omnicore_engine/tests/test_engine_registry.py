@@ -91,31 +91,31 @@ class TestPluginService:
 
     @pytest.fixture
     def mock_dependencies(self):
-        """Create mock dependencies"""
-        with patch("omnicore_engine.engines.Database", create=True) as mock_db, \
-             patch("omnicore_engine.engines.ShardedMessageBus", create=True) as mock_bus, \
-             patch("omnicore_engine.engines.ArbiterConfig", create=True) as mock_config:
-            
-            mock_config.return_value.DB_PATH = "sqlite:///:memory:"
-            mock_registry = Mock()
-            
-            # Create mock performance tracker
-            mock_performance_tracker = Mock()
-            mock_performance_tracker.track_operation = AsyncMock()
-            mock_performance_tracker.record_metric = Mock()
-            
-            mock_bus_instance = Mock()
-            mock_bus_instance.subscribe = AsyncMock()
-            mock_bus_instance.publish = AsyncMock()
-            mock_bus_instance.performance_tracker = mock_performance_tracker
-            mock_bus.return_value = mock_bus_instance
-            
-            yield {
-                "registry": mock_registry,
-                "bus": mock_bus_instance,
-                "db": mock_db,
-                "config": mock_config,
-            }
+        """Create mock dependencies without module-level patches"""
+        mock_registry = Mock()
+        
+        # Create mock performance tracker
+        mock_performance_tracker = Mock()
+        mock_performance_tracker.track_operation = AsyncMock()
+        mock_performance_tracker.record_metric = Mock()
+        
+        mock_bus_instance = Mock()
+        mock_bus_instance.subscribe = AsyncMock()
+        mock_bus_instance.publish = AsyncMock()
+        mock_bus_instance.performance_tracker = mock_performance_tracker
+        
+        mock_db = Mock()
+        mock_db.DB_PATH = "sqlite:///:memory:"
+        
+        mock_config = Mock()
+        mock_config.return_value.DB_PATH = "sqlite:///:memory:"
+        
+        return {
+            "registry": mock_registry,
+            "bus": mock_bus_instance,
+            "db": mock_db,
+            "config": mock_config,
+        }
 
     @pytest.mark.asyncio
     async def test_plugin_service_initialization(self, mock_dependencies):
