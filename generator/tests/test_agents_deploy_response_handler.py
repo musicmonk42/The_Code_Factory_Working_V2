@@ -4,6 +4,7 @@ Comprehensive tests for deploy_response_handler module.
 """
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -440,16 +441,12 @@ class TestSummarizationRepair:
         # FIX: Must instantiate a handler to call the method
         handler = DockerfileHandler()
         # Ensure TESTING mode is disabled so LLM is actually called
-        import os
-        had_testing = "TESTING" in os.environ
-        if had_testing:
-            original_testing = os.environ["TESTING"]
-            del os.environ["TESTING"]
+        original_testing = os.environ.pop("TESTING", None)
         try:
             result = await handler.summarize_section("test_section", long_text)
         finally:
             # Restore original state if TESTING was set before
-            if had_testing:
+            if original_testing is not None:
                 os.environ["TESTING"] = original_testing
 
         assert mock_call.called
