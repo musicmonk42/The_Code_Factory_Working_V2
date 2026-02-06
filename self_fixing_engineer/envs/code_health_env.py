@@ -72,6 +72,10 @@ class EnvironmentConfig:
             "alert_ratio",
             "code_coverage",
             "complexity",
+            # [GAP #17 FIX] Added generator-specific observation keys
+            "generation_success_rate",
+            "critique_score",
+            "test_coverage_delta",
         ]
     )
     max_steps: int = 100
@@ -84,6 +88,10 @@ class EnvironmentConfig:
             "alert_ratio": -1.0,
             "code_coverage": 0.8,
             "complexity": -0.3,
+            # [GAP #17 FIX] Reward weights for generator metrics
+            "generation_success_rate": 1.2,  # High reward for successful generation
+            "critique_score": 0.6,  # Reward for good code quality
+            "test_coverage_delta": 0.7,  # Reward for improving test coverage
         }
     )
     action_costs: Dict[int, float] = field(
@@ -132,11 +140,23 @@ class SystemMetrics:
     alert_ratio: float = 0.0
     code_coverage: float = 0.0
     complexity: float = 0.0
+    # [GAP #17 FIX] Added generator-specific metrics
+    generation_success_rate: float = 0.0  # Ratio of successful code generations
+    critique_score: float = 0.0  # Quality score from critique agent (0-1)
+    test_coverage_delta: float = 0.0  # Change in test coverage from generation
     timestamp: float = field(default_factory=time.time)
 
     def __post_init__(self):
         """Validate metrics are within expected ranges"""
-        for field_name in ["pass_rate", "alert_ratio", "code_coverage", "complexity"]:
+        for field_name in [
+            "pass_rate",
+            "alert_ratio",
+            "code_coverage",
+            "complexity",
+            "generation_success_rate",
+            "critique_score",
+            "test_coverage_delta",
+        ]:
             value = getattr(self, field_name)
             if not 0 <= value <= 1:
                 setattr(self, field_name, np.clip(value, 0, 1))
@@ -156,6 +176,10 @@ class SystemMetrics:
             "alert_ratio": self.alert_ratio,
             "code_coverage": self.code_coverage,
             "complexity": self.complexity,
+            # [GAP #17 FIX] Include generator metrics
+            "generation_success_rate": self.generation_success_rate,
+            "critique_score": self.critique_score,
+            "test_coverage_delta": self.test_coverage_delta,
             "timestamp": self.timestamp,
         }
 
@@ -860,6 +884,73 @@ class CodeHealthEnv(gym.Env):
                 )
             ),
         }
+
+    def update_generator_metrics(
+        self,
+        generation_success: bool = None,
+        critique_score: float = None,
+        test_coverage_delta: float = None,
+    ) -> None:
+        """
+        [GAP #17 FIX] Update generator-specific metrics from generator pipeline.
+        
+        This method provides an integration point for the generator pipeline
+        to feed metrics into the RL environment, allowing the Arbiter to
+        make decisions based on code generation outcomes.
+        
+        Args:
+            generation_success: Whether code generation succeeded (boolean)
+            critique_score: Quality score from critique agent (0-1)
+            test_coverage_delta: Change in test coverage from generation (0-1)
+        
+        Usage:
+            # From generator pipeline:
+            env.update_generator_metrics(
+                generation_success=True,
+                critique_score=0.85,
+                test_coverage_delta=0.15
+            )
+        """
+        with self._state_lock:
+            # Update generation_success_rate as running average
+            if generation_success is not None:
+                if "generation_success_rate" in self.config.observation_keys:
+                    idx = self.config.observation_keys.index("generation_success_rate")
+                    # Running average: new_avg = old_avg * 0.9 + new_value * 0.1
+                    success_value = 1.0 if generation_success else 0.0
+                    current = self.state[idx]
+                    self.state[idx] = current * 0.9 + success_value * 0.1
+                    logger.debug(
+                        f"Updated generation_success_rate: {current:.3f} -> {self.state[idx]:.3f}"
+                    )
+            
+            # Update critique_score
+            if critique_score is not None:
+                if "critique_score" in self.config.observation_keys:
+                    idx = self.config.observation_keys.index("critique_score")
+                    self.state[idx] = np.clip(critique_score, 0.0, 1.0)
+                    logger.debug(f"Updated critique_score: {self.state[idx]:.3f}")
+            
+            # Update test_coverage_delta
+            if test_coverage_delta is not None:
+                if "test_coverage_delta" in self.config.observation_keys:
+                    idx = self.config.observation_keys.index("test_coverage_delta")
+                    self.state[idx] = np.clip(test_coverage_delta, 0.0, 1.0)
+                    logger.debug(
+                        f"Updated test_coverage_delta: {self.state[idx]:.3f}"
+                    )
+        
+        # Log the update
+        self.audit_logger.log_event(
+            event_type="generator_metrics_updated",
+            details={
+                "session_id": self.session_id,
+                "step": self.steps,
+                "generation_success": generation_success,
+                "critique_score": critique_score,
+                "test_coverage_delta": test_coverage_delta,
+            },
+        )
 
     def close(self) -> None:
         """Clean up resources"""

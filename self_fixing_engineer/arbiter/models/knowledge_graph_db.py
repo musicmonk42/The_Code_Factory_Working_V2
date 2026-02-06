@@ -1010,6 +1010,89 @@ class Neo4jKnowledgeGraph:
                     time.monotonic() - start_time
                 )
 
+    async def add_fact(
+        self,
+        domain: str,
+        key: str,
+        data: Dict[str, Any],
+        source: Optional[str] = None,
+        timestamp: Optional[str] = None,
+        **kwargs
+    ) -> Optional[Dict[str, Any]]:
+        """
+        [GAP #20 FIX] Convenience method that wraps add_node() + optional add_relationship().
+        
+        This method provides a high-level interface compatible with consumers expecting
+        add_fact() instead of the lower-level add_node() and add_relationship() methods.
+        
+        Args:
+            domain: The label/type of the node (e.g., "AgentState", "ComplianceCheckResults")
+            key: A unique identifier for this fact
+            data: Dictionary of properties to store on the node
+            source: Optional source identifier to create a relationship from
+            timestamp: Optional timestamp (added to data if provided)
+            **kwargs: Additional properties to merge into data
+        
+        Returns:
+            Dict with status information including node_id, allowing consumers like
+            detect_ethical_drift() to access metadata about the created fact.
+        """
+        op = "add_fact"
+        with tracer.start_as_current_span(f"neo4j_{op}") as span:
+            KG_OPS_TOTAL.labels(operation=op, status="attempt").inc()
+            start_time = time.monotonic()
+            try:
+                # Merge all data
+                combined_data = {**data, **kwargs}
+                
+                # Add metadata
+                if timestamp:
+                    combined_data["timestamp"] = timestamp
+                if source:
+                    combined_data["source"] = source
+                combined_data["key"] = key
+                
+                # Add creation timestamp if not provided
+                if "created_at" not in combined_data:
+                    combined_data["created_at"] = datetime.now(timezone.utc).isoformat()
+                
+                # Create the node
+                node_id = await self.add_node(domain, combined_data)
+                
+                logger.info(f"Fact added: {domain}[{key}] (node_id={node_id})")
+                
+                # Return status dict for consumers
+                status_dict = {
+                    "node_id": node_id,
+                    "domain": domain,
+                    "key": key,
+                    "status": "created",
+                    "timestamp": combined_data.get("timestamp"),
+                    # For compatibility with detect_ethical_drift() and similar consumers
+                    # that expect ethical_impact or other analysis fields
+                    "ethical_impact": data.get("ethical_impact", 0),
+                }
+                
+                KG_OPS_TOTAL.labels(operation=op, status="success").inc()
+                span.set_status(Status(StatusCode.OK))
+                span.set_attribute("kg.domain", domain)
+                span.set_attribute("kg.key", key)
+                
+                return status_dict
+                
+            except Exception as e:
+                KG_OPS_TOTAL.labels(operation=op, status="failure").inc()
+                KG_ERRORS.labels(operation=op, error_type=type(e).__name__).inc()
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, f"Failed to add fact: {e}"))
+                logger.error(f"Failed to add_fact: {e}", exc_info=True)
+                # Return None on error for graceful degradation
+                return None
+            finally:
+                KG_OPS_LATENCY.labels(operation=op).observe(
+                    time.monotonic() - start_time
+                )
+
     async def find_related_facts(
         self, domain: str, key: str, value: Any
     ) -> List[Dict[str, Any]]:

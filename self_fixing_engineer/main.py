@@ -500,6 +500,71 @@ def _init_arbiter():
         if _test_generation_orchestrator:
             engines["test_generation"] = _test_generation_orchestrator
             logger.info("Connecting test_generation engine to Arbiter")
+        
+        # [GAP #22 FIX] Initialize additional engines with graceful degradation
+        
+        # Initialize FeedbackManager
+        try:
+            from self_fixing_engineer.arbiter.feedback import FeedbackManager
+            feedback_manager = FeedbackManager(config=config)
+            engines["feedback_manager"] = feedback_manager
+            logger.info("Connected FeedbackManager to Arbiter")
+        except Exception as e:
+            logger.debug(f"FeedbackManager not available: {e}")
+        
+        # Initialize HumanInLoop
+        try:
+            from self_fixing_engineer.arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+            hitl_config = HumanInLoopConfig(
+                DATABASE_URL=config.DATABASE_URL,
+                EMAIL_ENABLED=bool(config.EMAIL_SMTP_SERVER),
+                EMAIL_SMTP_SERVER=config.EMAIL_SMTP_SERVER,
+                EMAIL_SMTP_PORT=config.EMAIL_SMTP_PORT or 587,
+                EMAIL_SMTP_USER=config.EMAIL_SMTP_USERNAME,
+                EMAIL_SMTP_PASSWORD=config.EMAIL_SMTP_PASSWORD,
+                EMAIL_SENDER=config.EMAIL_SENDER or "no-reply@arbiter.local",
+                EMAIL_USE_TLS=config.EMAIL_USE_TLS,
+                EMAIL_RECIPIENTS=config.EMAIL_RECIPIENTS or {},
+                SLACK_WEBHOOK_URL=(
+                    str(config.SLACK_WEBHOOK_URL) if config.SLACK_WEBHOOK_URL else None
+                ),
+                IS_PRODUCTION=os.getenv("APP_ENV") == "production",
+            )
+            human_in_loop = HumanInLoop(config=hitl_config)
+            engines["human_in_loop"] = human_in_loop
+            logger.info("Connected HumanInLoop to Arbiter")
+        except Exception as e:
+            logger.debug(f"HumanInLoop not available: {e}")
+        
+        # Initialize CodeHealthEnv
+        try:
+            from self_fixing_engineer.envs.code_health_env import CodeHealthEnv, EnvironmentConfig
+            env_config = EnvironmentConfig()
+            code_health_env = CodeHealthEnv(config=env_config)
+            engines["code_health_env"] = code_health_env
+            logger.info("Connected CodeHealthEnv to Arbiter")
+        except Exception as e:
+            logger.debug(f"CodeHealthEnv not available: {e}")
+        
+        # Initialize Monitor
+        try:
+            from self_fixing_engineer.arbiter.monitoring import Monitor
+            from self_fixing_engineer.arbiter.models.db_clients import PostgresClient
+            db_client = PostgresClient(config.DATABASE_URL)
+            monitor = Monitor(
+                log_file=os.path.join(
+                    config.REPORTS_DIRECTORY, "arbiter_monitor_log.json"
+                ),
+                db_client=db_client,
+            )
+            engines["monitor"] = monitor
+            logger.info("Connected Monitor to Arbiter")
+        except Exception as e:
+            logger.debug(f"Monitor not available: {e}")
+        
+        # Log summary of connected engines
+        connected_count = len(engines)
+        logger.info(f"Arbiter initialized with {connected_count} engines: {list(engines.keys())}")
 
         # Create Arbiter instance
         arbiter = Arbiter(

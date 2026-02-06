@@ -435,6 +435,17 @@ async def run_generator_workflow(
     """
     correlation_id = str(uuid.uuid4())
     start_time = time.time()
+    
+    # [ARBITER] Initialize ArbiterBridge with graceful degradation
+    bridge = None
+    try:
+        from generator.arbiter_bridge import ArbiterBridge
+        bridge = ArbiterBridge()
+        logger.info(f"ArbiterBridge initialized for workflow [Correlation ID: {correlation_id}]")
+    except ImportError as e:
+        logger.debug(f"ArbiterBridge not available, generator working standalone: {e}")
+    except Exception as e:
+        logger.warning(f"Failed to initialize ArbiterBridge: {e}, continuing without Arbiter integration")
 
     with safe_span("generator_workflow", {"correlation_id": correlation_id}) as span:
         try:
@@ -455,6 +466,34 @@ async def run_generator_workflow(
             logger.debug(
                 f"Validating required agents [Correlation ID: {correlation_id}]"
             )
+            
+            # [ARBITER] Pre-workflow policy check
+            if bridge:
+                try:
+                    allowed, reason = await bridge.check_policy(
+                        "run_workflow",
+                        {
+                            "correlation_id": correlation_id,
+                            "repo_path": repo_path,
+                            "has_ambiguities": bool(ambiguities)
+                        }
+                    )
+                    if not allowed:
+                        logger.warning(
+                            f"Workflow denied by Arbiter policy [Correlation ID: {correlation_id}]: {reason}"
+                        )
+                        span.set_attribute("workflow_status", "policy_denied")
+                        output = WorkflowOutput(
+                            status="failed",
+                            correlation_id=correlation_id,
+                            final_results={},
+                            errors=[f"Workflow denied by policy: {reason}"],
+                            timestamp=datetime.now(timezone.utc).isoformat(),
+                        )
+                        return output.model_dump()
+                except Exception as e:
+                    logger.warning(f"Arbiter policy check failed: {e}, continuing anyway")
+            
             try:
                 validated_agents = validate_required_agents(PLUGIN_REGISTRY)
                 logger.info(
@@ -531,6 +570,21 @@ async def run_generator_workflow(
                 logger.info(
                     f"Code generation stage complete [Correlation ID: {correlation_id}]"
                 )
+                
+                # [ARBITER] Publish codegen output event
+                if bridge:
+                    try:
+                        await bridge.publish_event(
+                            "generator_output",
+                            {
+                                "correlation_id": correlation_id,
+                                "stage": "codegen",
+                                "files_generated": len(code_result),
+                                "file_names": list(code_result.keys())[:10]  # First 10 files
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to publish codegen event: {e}")
 
             # --- 3. Critique Stage (Required) ---
             critiquer = validated_agents["critique_agent"]
@@ -548,6 +602,22 @@ async def run_generator_workflow(
                 logger.info(
                     f"Critique stage complete [Correlation ID: {correlation_id}]"
                 )
+                
+                # [ARBITER] Publish critique results event
+                if bridge:
+                    try:
+                        await bridge.publish_event(
+                            "critique_results",
+                            {
+                                "correlation_id": correlation_id,
+                                "stage": "critique",
+                                "lint_issues": len(critique_result.get("lint_errors", [])),
+                                "vulnerabilities": len(critique_result.get("vulnerabilities", [])),
+                                "fixes_applied": critique_result.get("fixes_applied", False)
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to publish critique event: {e}")
 
             # --- 4. Test Generation Stage (Required) ---
             testgen = validated_agents["testgen_agent"]
@@ -562,6 +632,21 @@ async def run_generator_workflow(
                 logger.info(
                     f"Test generation stage complete [Correlation ID: {correlation_id}]"
                 )
+                
+                # [ARBITER] Publish test results event
+                if bridge:
+                    try:
+                        await bridge.publish_event(
+                            "test_results",
+                            {
+                                "correlation_id": correlation_id,
+                                "stage": "testgen",
+                                "tests_generated": len(test_result),
+                                "test_files": list(test_result.keys())[:5]  # First 5 test files
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to publish test results event: {e}")
 
             # --- 5. Deployment Artifact Generation Stage (Required) ---
             deployer = validated_agents["deploy_agent"]
@@ -578,6 +663,21 @@ async def run_generator_workflow(
                 logger.info(
                     f"Deployment artifact generation stage complete [Correlation ID: {correlation_id}]"
                 )
+                
+                # [ARBITER] Publish deploy artifacts event
+                if bridge:
+                    try:
+                        await bridge.publish_event(
+                            "deploy_artifacts",
+                            {
+                                "correlation_id": correlation_id,
+                                "stage": "deploy",
+                                "artifacts_generated": len(deploy_result.get("configs", {})),
+                                "targets": ["docker", "helm"]
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to publish deploy artifacts event: {e}")
 
             # --- 6. Documentation Generation Stage (Required) ---
             docgen = validated_agents["docgen_agent"]
@@ -602,6 +702,33 @@ async def run_generator_workflow(
                 f"Generator workflow completed successfully [Correlation ID: {correlation_id}]"
             )
             span.set_attribute("workflow_status", "success")
+            
+            # [ARBITER] Publish workflow completion event
+            if bridge:
+                try:
+                    await bridge.publish_event(
+                        "workflow_completed",
+                        {
+                            "correlation_id": correlation_id,
+                            "status": "success",
+                            "duration_seconds": time.time() - start_time,
+                            "stages_completed": ["clarify", "codegen", "critique", "testgen", "deploy", "docgen"]
+                        }
+                    )
+                    # Update knowledge graph with workflow statistics
+                    await bridge.update_knowledge(
+                        "generator_workflow",
+                        correlation_id,
+                        {
+                            "status": "success",
+                            "duration": time.time() - start_time,
+                            "repo_path": repo_path,
+                            "files_generated": len(workflow_state["code_files"]),
+                            "tests_generated": len(workflow_state["test_files"])
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to publish workflow completion to Arbiter: {e}")
 
             output = WorkflowOutput(
                 status="success",
@@ -656,6 +783,25 @@ async def run_generator_workflow(
             )
             span.record_exception(e)
             span.set_attribute("workflow_status", "failed")
+            
+            # [ARBITER] Report workflow failure
+            if bridge:
+                try:
+                    await bridge.report_bug({
+                        "title": f"Generator workflow failed at {stage} stage",
+                        "description": f"Workflow {correlation_id} failed with error: {str(e)}",
+                        "severity": "high",
+                        "error": str(e),
+                        "context": {
+                            "correlation_id": correlation_id,
+                            "stage": stage,
+                            "error_type": type(e).__name__,
+                            "repo_path": repo_path
+                        }
+                    })
+                except Exception as bug_error:
+                    logger.warning(f"Failed to report workflow failure to Arbiter: {bug_error}")
+            
             output = WorkflowOutput(
                 status="failed",
                 correlation_id=correlation_id,
@@ -676,6 +822,24 @@ async def run_generator_workflow(
             )
             span.record_exception(e)
             span.set_attribute("workflow_status", "critical_failure")
+            
+            # [ARBITER] Report critical failure
+            if bridge:
+                try:
+                    await bridge.report_bug({
+                        "title": f"Critical failure in generator workflow",
+                        "description": f"Unexpected critical error in workflow {correlation_id}: {str(e)}",
+                        "severity": "critical",
+                        "error": str(e),
+                        "context": {
+                            "correlation_id": correlation_id,
+                            "error_type": type(e).__name__,
+                            "repo_path": repo_path
+                        }
+                    })
+                except Exception as bug_error:
+                    logger.warning(f"Failed to report critical failure to Arbiter: {bug_error}")
+            
             output = WorkflowOutput(
                 status="critical_failure",
                 correlation_id=correlation_id,

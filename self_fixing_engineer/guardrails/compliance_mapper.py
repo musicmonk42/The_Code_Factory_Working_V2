@@ -314,7 +314,8 @@ def check_coverage(compliance_map: Dict[str, Dict[str, Any]]) -> Dict[str, List[
     """
     Checks the coverage status of compliance controls based on their defined status
     and whether they are marked as 'required'.
-
+    
+    [GAP #5 FIX] Now publishes results to Arbiter's KnowledgeGraph and BugManager.
     """
     coverage_gaps = {
         "not_enforced": [],
@@ -368,6 +369,9 @@ def check_coverage(compliance_map: Dict[str, Dict[str, Any]]) -> Dict[str, List[
                 coverage_gaps["not_implemented"].append(
                     f"{control_id} (Status: {status}, Required: False)"
                 )
+    
+    # [GAP #5 FIX] Publish compliance results to Arbiter
+    _publish_compliance_to_arbiter(compliance_map, coverage_gaps)
 
     return coverage_gaps
 
@@ -394,6 +398,91 @@ def _audit_log_gap(message: str, details: Optional[Dict[str, Any]] = None):
         logger.debug(
             "No running event loop; skipping async audit log for compliance gap."
         )
+
+
+def _publish_compliance_to_arbiter(compliance_map: Dict[str, Dict[str, Any]], coverage_gaps: Dict[str, List[str]]):
+    """
+    [GAP #5 FIX] Publish compliance check results to Arbiter services.
+    
+    This function attempts to:
+    1. Update KnowledgeGraph with compliance status
+    2. Report compliance gaps to BugManager
+    3. Trigger policy auto-remediation events
+    
+    Gracefully degrades if Arbiter services are unavailable.
+    """
+    try:
+        # Try to import Arbiter services
+        try:
+            from self_fixing_engineer.arbiter.knowledge_graph.core import KnowledgeGraph
+            kg_available = True
+        except ImportError:
+            kg_available = False
+            logger.debug("KnowledgeGraph not available for compliance reporting")
+        
+        try:
+            from self_fixing_engineer.arbiter.bug_manager import BugManager
+            bug_manager_available = True
+        except ImportError:
+            bug_manager_available = False
+            logger.debug("BugManager not available for compliance reporting")
+        
+        # Try to get running event loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logger.debug("No running event loop, cannot publish to Arbiter")
+            return
+        
+        async def _publish_async():
+            # Update knowledge graph with compliance status
+            if kg_available:
+                try:
+                    kg = KnowledgeGraph()
+                    await kg.add_fact(
+                        "ComplianceCheckResults",
+                        f"compliance_check_{datetime.datetime.now().isoformat()}",
+                        {
+                            "timestamp": datetime.datetime.now().isoformat(),
+                            "total_controls": len(compliance_map),
+                            "required_but_not_enforced": len(coverage_gaps["required_but_not_enforced"]),
+                            "partially_enforced": len(coverage_gaps["partially_enforced"]),
+                            "not_implemented": len(coverage_gaps["not_implemented"]),
+                            "coverage_gaps": coverage_gaps,
+                        },
+                        source="compliance_mapper",
+                    )
+                    logger.info("Published compliance results to KnowledgeGraph")
+                except Exception as e:
+                    logger.debug(f"Failed to update KnowledgeGraph: {e}")
+            
+            # Report critical compliance gaps to BugManager
+            if bug_manager_available and coverage_gaps["required_but_not_enforced"]:
+                try:
+                    bug_manager = BugManager()
+                    for control_id in coverage_gaps["required_but_not_enforced"]:
+                        status = compliance_map.get(control_id, {}).get("status", "unknown")
+                        await bug_manager.report_bug(
+                            title=f"Compliance Gap: {control_id} not enforced",
+                            description=f"Required compliance control {control_id} has status '{status}' and is not fully enforced",
+                            severity="high",
+                            category="compliance",
+                            metadata={
+                                "control_id": control_id,
+                                "current_status": status,
+                                "required": True,
+                                "source": "compliance_mapper",
+                            }
+                        )
+                    logger.info(f"Reported {len(coverage_gaps['required_but_not_enforced'])} compliance gaps to BugManager")
+                except Exception as e:
+                    logger.debug(f"Failed to report to BugManager: {e}")
+        
+        # Schedule the async task
+        asyncio.create_task(_publish_async())
+        
+    except Exception as e:
+        logger.debug(f"Error publishing compliance to Arbiter: {e}")
 
 
 def generate_report(config_path: str) -> Tuple[Dict[str, List[str]], bool]:

@@ -2,6 +2,8 @@
 Generator module endpoints.
 
 Handles file uploads and generator-specific operations.
+
+[GAP #9] Sensitive routes now protected by ArbiterPolicyMiddleware.
 """
 
 import logging
@@ -12,8 +14,9 @@ from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 
+from server.middleware import arbiter_policy_check
 from server.schemas import (
     ClarificationResponseRequest,
     ClarifyRequest,
@@ -801,12 +804,15 @@ async def run_codegen(
     job_id: str,
     request: CodegenRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
+    policy: dict = Depends(arbiter_policy_check("codegen")),
 ):
     """
     Run the code generation agent directly.
 
     Triggers the codegen agent to generate source code from requirements
     via OmniCore message bus routing.
+    
+    [GAP #9] Protected by ArbiterPolicyMiddleware for governance.
 
     **Path Parameters:**
     - job_id: Unique job identifier
@@ -823,6 +829,7 @@ async def run_codegen(
 
     **Errors:**
     - 404: Job not found
+    - 403: Policy denied
     """
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
@@ -883,11 +890,14 @@ async def run_deploy(
     job_id: str,
     request: DeployRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
+    policy: dict = Depends(arbiter_policy_check("deploy")),
 ):
     """
     Run the deployment configuration generation agent.
 
     Generates Docker, Kubernetes, or cloud platform deployment configurations.
+    
+    [GAP #9] Protected by ArbiterPolicyMiddleware - critical for deployment security.
 
     **Path Parameters:**
     - job_id: Unique job identifier
@@ -903,6 +913,7 @@ async def run_deploy(
 
     **Errors:**
     - 404: Job not found
+    - 403: Policy denied
     """
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")

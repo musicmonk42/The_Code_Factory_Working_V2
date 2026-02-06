@@ -541,6 +541,7 @@ class DeployAgent:
         webhook_url: Optional[str] = None,
         rate_limit: int = 5,
         llm_orchestrator_instance: Optional[Any] = None,  # compatibility
+        arbiter_bridge: Optional[Any] = None,  # Arbiter integration
     ) -> None:
         self.repo_path = Path(repo_path)
         if not self.repo_path.is_dir():
@@ -561,6 +562,15 @@ class DeployAgent:
         self.validator_registry = ValidatorRegistry()
         self.handler_registry = HandlerRegistry()
         # -------------------------------------------------
+        
+        # Arbiter bridge for governance integration (optional)
+        self.arbiter_bridge = arbiter_bridge
+        if self.arbiter_bridge:
+            logger.info("DeployAgent: Arbiter integration enabled")
+        
+        # NOTE: DeployAgent has its own HITL system via request_human_approval().
+        # This should eventually delegate to Arbiter's HumanInLoop but keeping
+        # the existing system working for now to avoid breaking changes.
 
         self.run_id = str(uuid.uuid4())
         # --- FIX: Use sync version in __init__ (not async context) ---
@@ -1379,6 +1389,21 @@ Respond in plain prose only (no JSON / no code fences).
                 # Save to history database using helper method
                 await self._save_to_history(self.run_id, result["timestamp"], result)
 
+                # [ARBITER] Publish deployment event
+                if self.arbiter_bridge:
+                    try:
+                        await self.arbiter_bridge.publish_event(
+                            "deployment_completed",
+                            {
+                                "run_id": self.run_id,
+                                "target": target,
+                                "validation_passed": vres.get("valid", False),
+                                "simulation_status": sres.get("status", "unknown")
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to publish deployment event to Arbiter: {e}")
+
                 DEPLOY_RUNS.labels(status="success").inc()
                 DEPLOY_LATENCY.observe(time.time() - start)
                 await log_action(
@@ -1401,6 +1426,24 @@ Respond in plain prose only (no JSON / no code fences).
                     exc_info=True,
                 )
                 span.set_status(Status(StatusCode.ERROR, str(e)))
+                
+                # [ARBITER] Report deployment failure
+                if self.arbiter_bridge:
+                    try:
+                        await self.arbiter_bridge.report_bug({
+                            "title": f"Deployment failed for target {target}",
+                            "description": f"Deployment run {self.run_id} failed with error: {str(e)}",
+                            "severity": "high",
+                            "error": str(e),
+                            "context": {
+                                "run_id": self.run_id,
+                                "target": target,
+                                "error_type": type(e).__name__
+                            }
+                        })
+                    except Exception as bug_error:
+                        logger.warning(f"Failed to report deployment failure to Arbiter: {bug_error}")
+                
                 raise
 
     # --- legacy helpers kept for compatibility ----------------------

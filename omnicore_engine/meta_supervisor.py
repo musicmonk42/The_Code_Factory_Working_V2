@@ -1299,7 +1299,17 @@ class MetaSupervisor:
                 change,
                 source="meta_supervisor",
             )
-            ethical_impact_score = impact_analysis.get("ethical_impact", 0)
+            
+            # [GAP #23 FIX] Add null check before accessing return value
+            # add_fact() returns None in most implementations
+            if impact_analysis and isinstance(impact_analysis, dict):
+                ethical_impact_score = impact_analysis.get("ethical_impact", 0)
+            else:
+                # Default to 0 if no impact analysis returned
+                ethical_impact_score = 0
+                self.logger.debug(
+                    "KnowledgeGraph add_fact returned None or non-dict, using default ethical_impact_score=0"
+                )
 
             if ethical_impact_score > self.thresholds["ethics_drift"]:
                 self.logger.warning(

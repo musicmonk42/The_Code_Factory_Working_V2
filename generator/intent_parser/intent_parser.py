@@ -1018,6 +1018,10 @@ class IntentParser:
                     "latency_seconds": parse_latency,
                 },
             )
+            
+            # [GAP #6 FIX] Publish parsed requirements to Arbiter's KnowledgeGraph
+            await self._publish_to_arbiter(requirements, provenance, user_id)
+            
             if span:
                 span.set_status(Status(StatusCode.OK))
             return requirements
@@ -1030,3 +1034,77 @@ class IntentParser:
                 span.set_status(Status(StatusCode.ERROR, f"Parsing failed: {e}"))
                 span.record_exception(e)
             raise
+
+    async def _publish_to_arbiter(
+        self, 
+        requirements: Dict[str, Any], 
+        provenance: Dict[str, Any],
+        user_id: str
+    ) -> None:
+        """
+        [GAP #6 FIX] Publish parsed requirements to Arbiter's KnowledgeGraph.
+        
+        This integration allows the Arbiter to learn from parsed requirements,
+        detect patterns in ambiguities, and suggest improvements to the parsing process.
+        
+        Args:
+            requirements: Extracted features, constraints, and ambiguities
+            provenance: Content hash, timestamp, and source information
+            user_id: User identifier for tracking
+        """
+        try:
+            # Try to import and use ArbiterBridge
+            from generator.arbiter_bridge import ArbiterBridge
+            
+            bridge = ArbiterBridge()
+            
+            # Prepare data for knowledge graph
+            kg_data = {
+                "features": requirements.get("features", []),
+                "constraints": requirements.get("constraints", []),
+                "ambiguity_count": len(requirements.get("ambiguities", [])),
+                "has_ambiguities": len(requirements.get("ambiguities", [])) > 0,
+                "language": self.input_language,
+                "provenance": provenance,
+                "user_id": user_id,
+                "parsed_at": datetime.datetime.utcnow().isoformat() + "Z",
+            }
+            
+            # Update knowledge graph with parsing results
+            await bridge.update_knowledge(
+                domain="intent_parsing",
+                key=provenance["content_hash"],
+                data=kg_data
+            )
+            
+            # If ambiguities detected, publish event for potential HITL resolution
+            ambiguities = requirements.get("ambiguities", [])
+            if ambiguities:
+                await bridge.publish_event(
+                    event_type="ambiguities_detected",
+                    data={
+                        "content_hash": provenance["content_hash"],
+                        "ambiguities": ambiguities,
+                        "user_id": user_id,
+                        "requires_clarification": True,
+                    }
+                )
+                logger.info(
+                    f"Published {len(ambiguities)} ambiguities to Arbiter for potential HITL resolution"
+                )
+            
+            logger.debug(
+                f"Published parsed requirements to Arbiter KnowledgeGraph: {provenance['content_hash']}"
+            )
+            
+        except ImportError:
+            # ArbiterBridge not available - graceful degradation
+            logger.debug(
+                "ArbiterBridge not available, skipping KnowledgeGraph update"
+            )
+        except Exception as e:
+            # Don't fail parsing if Arbiter integration fails
+            logger.warning(
+                f"Failed to publish to Arbiter KnowledgeGraph: {e}",
+                exc_info=False
+            )

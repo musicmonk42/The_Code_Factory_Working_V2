@@ -63,11 +63,38 @@ class DummyPolicyEngine:
 
     def __init__(self):
         """Initialize the dummy policy engine with usage logging."""
-        log(
-            "DummyPolicyEngine initialized. All operations will be allowed (STUB MODE).",
-            level="WARNING" if _ENVIRONMENT != "test" else "DEBUG",
+        # [GAP #13 FIX] Enhanced production mode detection
+        is_production = (
+            os.getenv("PRODUCTION_MODE", "false").lower() == "true" 
+            or os.getenv("APP_ENV", "development") == "production"
+            or _ENVIRONMENT == "production"
         )
+        
+        if is_production:
+            log(
+                "CRITICAL: DummyPolicyEngine initialized in PRODUCTION MODE! "
+                "This is a SECURITY RISK - all policy checks will be bypassed. "
+                "Configure real PolicyEngine immediately.",
+                level="ERROR",
+            )
+            # Try to track this via metrics
+            try:
+                from prometheus_client import Counter
+                dummy_policy_counter = Counter(
+                    'dummy_policy_engine_in_production',
+                    'DummyPolicyEngine active in production'
+                )
+                dummy_policy_counter.inc()
+            except Exception:
+                pass
+        else:
+            log(
+                "DummyPolicyEngine initialized. All operations will be allowed (STUB MODE).",
+                level="WARNING" if _ENVIRONMENT != "test" else "DEBUG",
+            )
+        
         self.usage_count = 0
+        self.is_production = is_production
 
     async def should_integrate_test(self, *args, **kwargs):
         """
@@ -78,10 +105,11 @@ class DummyPolicyEngine:
         """
         self.usage_count += 1
 
-        if _ENVIRONMENT == "production":
+        # [GAP #13 FIX] Track every call in production
+        if self.is_production:
             log(
-                "CRITICAL: DummyPolicyEngine.should_integrate_test called in PRODUCTION! "
-                "This should never happen.",
+                f"CRITICAL: DummyPolicyEngine.should_integrate_test called in PRODUCTION! "
+                f"Call #{self.usage_count}. All operations are being auto-allowed.",
                 level="ERROR",
             )
         else:
