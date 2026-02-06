@@ -25,8 +25,12 @@ pytestmark = [
 ]
 
 
-class TestEngineRegistry:
-    """Test the engine registry functions"""
+class EngineRegistryTestBase:
+    """Base class for tests that need ENGINE_REGISTRY isolation.
+    
+    This provides setup/teardown methods that save and restore the
+    ENGINE_REGISTRY state to prevent cross-test contamination.
+    """
 
     def setup_method(self):
         """Save ENGINE_REGISTRY state before each test"""
@@ -38,6 +42,10 @@ class TestEngineRegistry:
         from omnicore_engine.engines import ENGINE_REGISTRY
         ENGINE_REGISTRY.clear()
         ENGINE_REGISTRY.update(self._original_registry)
+
+
+class TestEngineRegistry(EngineRegistryTestBase):
+    """Test the engine registry functions"""
 
     @pytest.mark.integration
     def test_register_engine_success(self):
@@ -86,13 +94,8 @@ class TestEngineRegistry:
             assert result is None
 
 
-class TestPluginService:
+class TestPluginService(EngineRegistryTestBase):
     """Test the PluginService class"""
-
-    def teardown_method(self):
-        """Clean up ENGINE_REGISTRY after each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        ENGINE_REGISTRY.clear()
 
     @pytest.fixture
     def mock_dependencies(self, worker_id):
@@ -345,19 +348,8 @@ class TestPluginService:
         mock_simulator.assert_called_with(["AAPL", "GOOGL"])
 
 
-class TestRunImportFixer:
+class TestRunImportFixer(EngineRegistryTestBase):
     """Test the run_import_fixer helper function"""
-
-    def setup_method(self):
-        """Save ENGINE_REGISTRY state before each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        self._original_registry = dict(ENGINE_REGISTRY)
-
-    def teardown_method(self):
-        """Restore ENGINE_REGISTRY state after each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        ENGINE_REGISTRY.clear()
-        ENGINE_REGISTRY.update(self._original_registry)
 
     @pytest.mark.integration
     @patch("omnicore_engine.engines.asyncio.run")
@@ -378,19 +370,8 @@ class TestRunImportFixer:
             mock_asyncio_run.assert_called_once()
 
 
-class TestOmniCoreOmega:
+class TestOmniCoreOmega(EngineRegistryTestBase):
     """Test the OmniCoreOmega orchestrator class"""
-
-    def setup_method(self):
-        """Save ENGINE_REGISTRY state before each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        self._original_registry = dict(ENGINE_REGISTRY)
-
-    def teardown_method(self):
-        """Restore ENGINE_REGISTRY state after each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        ENGINE_REGISTRY.clear()
-        ENGINE_REGISTRY.update(self._original_registry)
 
     @pytest.fixture
     def mock_components(self):
@@ -619,19 +600,8 @@ class TestOmniCoreOmega:
         )
 
 
-class TestCrewConfigLoading:
+class TestCrewConfigLoading(EngineRegistryTestBase):
     """Test crew configuration loading"""
-
-    def setup_method(self):
-        """Save ENGINE_REGISTRY state before each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        self._original_registry = dict(ENGINE_REGISTRY)
-
-    def teardown_method(self):
-        """Restore ENGINE_REGISTRY state after each test"""
-        from omnicore_engine.engines import ENGINE_REGISTRY
-        ENGINE_REGISTRY.clear()
-        ENGINE_REGISTRY.update(self._original_registry)
 
     @pytest.mark.integration
     @patch("builtins.open", new_callable=mock_open)
