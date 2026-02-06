@@ -1031,8 +1031,8 @@ except ImportError as e:
 
 # --- Production-Ready Logging Setup ---
 # Logger already initialized at module top to avoid NameError
-# Guard against re-entrant import: Only set up logging once module is fully loaded
-if not _ARBITER_MODULE_LOADING:
+# Only set up logging handlers during normal (non-re-entrant) module import
+if _ARBITER_MODULE_LOADING:
     logger.setLevel(logging.INFO)
     if not logger.handlers:
         # Import safe_makedirs from utils to handle malformed paths
