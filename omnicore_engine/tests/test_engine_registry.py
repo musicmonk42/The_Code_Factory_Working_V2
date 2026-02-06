@@ -476,7 +476,6 @@ class TestOmniCoreOmega:
         # Should continue without loading agents
 
     @pytest.mark.integration
-    def test_initialize_arbiters(self, mock_components):
     @patch("omnicore_engine.engines.Arbiter")
     @patch("omnicore_engine.engines.CodeHealthEnv")
     def test_initialize_arbiters(self, mock_code_health_env, mock_arbiter, mock_components):
