@@ -448,8 +448,8 @@ class TestSummarizationRepair:
                 del os.environ["TESTING"]
             result = await handler.summarize_section("test_section", long_text)
         finally:
-            # Restore original state
-            if had_testing and original_testing is not None:
+            # Restore original state if TESTING was set before
+            if had_testing:
                 os.environ["TESTING"] = original_testing
 
         assert mock_call.called
