@@ -31,6 +31,7 @@ import json
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -409,7 +410,6 @@ def validate_spec_fidelity(
         - missing_endpoints: list of endpoints missing from generated code
         - errors: list of error messages
     """
-    import time
     start_time = time.time()
     
     result = {
@@ -518,7 +518,6 @@ def run_fail_fast_validation(
     Validates syntax and content for Python files.
     Optionally validates spec fidelity if md_content is provided.
     """
-    import time
     start_time = time.time()
     
     results: Dict[str, Any] = {
