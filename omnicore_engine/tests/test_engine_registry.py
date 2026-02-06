@@ -421,17 +421,17 @@ class TestOmniCoreOmega:
         """Test factory method create_and_initialize"""
         from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
 
-        # Isolate ENGINE_REGISTRY for this test
-        original_registry = ENGINE_REGISTRY.copy()
+        # Save and clear registry
+        original = ENGINE_REGISTRY.copy()
         ENGINE_REGISTRY.clear()
-        
-        try:
-            # Mock _find_crew_config to return a valid path
-            mock_find_config.return_value = "/mock/crew_config.yaml"
-            # Mock yaml.safe_load to return an empty agents list
-            mock_yaml_load.return_value = {"agents": []}
-            mock_fixer.return_value = Mock()
 
+        # Mock _find_crew_config to return a valid path
+        mock_find_config.return_value = "/mock/crew_config.yaml"
+        # Mock yaml.safe_load to return an empty agents list
+        mock_yaml_load.return_value = {"agents": []}
+        mock_fixer.return_value = Mock()
+
+        try:
             omega = OmniCoreOmega.create_and_initialize()
 
             assert isinstance(omega, OmniCoreOmega)
@@ -440,9 +440,8 @@ class TestOmniCoreOmega:
             mock_sim.assert_called_once()
             mock_crew.assert_called_once()
         finally:
-            # Restore original registry
             ENGINE_REGISTRY.clear()
-            ENGINE_REGISTRY.update(original_registry)
+            ENGINE_REGISTRY.update(original)
 
     @pytest.mark.integration
     @patch("omnicore_engine.engines.OmniCoreOmega._find_crew_config")
@@ -477,34 +476,49 @@ class TestOmniCoreOmega:
         # Should continue without loading agents
 
     @pytest.mark.integration
-    def test_initialize_arbiters(self, mock_components):
-        """Test arbiter initialization"""
+    @patch("omnicore_engine.engines.Arbiter")
+    @patch("omnicore_engine.engines.CodeHealthEnv")
+    def test_initialize_arbiters(self, mock_code_health_env, mock_arbiter, mock_components):
+        """Test _initialize_arbiters method"""
         from omnicore_engine.engines import OmniCoreOmega, ENGINE_REGISTRY
-
-        # Isolate ENGINE_REGISTRY for this test
-        original_registry = ENGINE_REGISTRY.copy()
-        ENGINE_REGISTRY.clear()
         
+        # Save and clear registry
+        original = ENGINE_REGISTRY.copy()
+        ENGINE_REGISTRY.clear()
+
         try:
-            omega = OmniCoreOmega(**mock_components, num_arbiters=2)
+            mock_db = Mock()
+            mock_db.engine = Mock()
+            mock_bus = Mock()
+            mock_plugin = Mock()
+            mock_crew = Mock()
+            mock_intent = Mock()
+            mock_test_gen = Mock()
+            mock_sim = Mock()
+            mock_audit = Mock()
+            mock_fixer = Mock()
 
-            mock_components["database"].engine = Mock()
-            mock_components["audit_log_manager"].log_audit = AsyncMock()
+            omega = OmniCoreOmega(
+                database=mock_db,
+                message_bus=mock_bus,
+                plugin_service=mock_plugin,
+                crew_manager=mock_crew,
+                intent_capture_api=mock_intent,
+                test_generation_orchestrator=mock_test_gen,
+                simulation_engine=mock_sim,
+                audit_log_manager=mock_audit,
+                import_fixer_engine=mock_fixer,
+                num_arbiters=3,
+            )
 
-            with patch("omnicore_engine.engines.get_system_metrics_async") as mock_metrics:
-                with patch("omnicore_engine.engines.CodeHealthEnv") as mock_env:
-                    with patch("omnicore_engine.engines.Arbiter") as mock_arbiter:
-                        mock_metrics.return_value = {"pass_rate": 0.95}
-                        mock_arbiter.return_value = Mock()
+            omega._initialize_arbiters()
 
-                        omega._initialize_arbiters()
-
-                        assert len(omega.arbiters) == 2
-                        assert mock_arbiter.call_count == 2
+            assert len(omega.arbiters) == 3
+            assert mock_arbiter.call_count == 3
+            assert mock_code_health_env.call_count == 1
         finally:
-            # Restore original registry
             ENGINE_REGISTRY.clear()
-            ENGINE_REGISTRY.update(original_registry)
+            ENGINE_REGISTRY.update(original)
 
     @pytest.mark.asyncio
     @pytest.mark.integration

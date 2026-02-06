@@ -19,9 +19,6 @@ import pytest
 # import path_setup - moved to test functions
 # from omnicore_engine.engines import (...) - moved to test functions
 
-# Import shared test base class from conftest
-from omnicore_engine.tests.conftest import EngineRegistryTestBase
-
 # Disable parallel execution for tests that interact with ENGINE_REGISTRY
 # to prevent race conditions when running with pytest-xdist
 pytestmark = [
@@ -29,11 +26,18 @@ pytestmark = [
 ]
 
 
-class TestGeneratorIntegration(EngineRegistryTestBase):
-    """Test generator integration with OmniCoreOmega.
-    
-    Inherits from EngineRegistryTestBase for automatic ENGINE_REGISTRY isolation.
-    """
+class TestGeneratorIntegration:
+    """Test generator integration with OmniCoreOmega"""
+
+    @pytest.fixture(autouse=True)
+    def isolate_registry(self):
+        """Isolate ENGINE_REGISTRY for this test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        original = ENGINE_REGISTRY.copy()
+        ENGINE_REGISTRY.clear()
+        yield
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(original)
 
     @pytest.mark.integration
     def test_generator_imports_available(self):
@@ -195,8 +199,18 @@ class TestGeneratorIntegration(EngineRegistryTestBase):
         assert get_engine("generator") is not None
 
 
-class TestMessageBusIntegration(EngineRegistryTestBase):
+class TestMessageBusIntegration:
     """Test message bus integration for generator"""
+
+    @pytest.fixture(autouse=True)
+    def isolate_registry(self):
+        """Isolate ENGINE_REGISTRY for this test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        original = ENGINE_REGISTRY.copy()
+        ENGINE_REGISTRY.clear()
+        yield
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(original)
 
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -360,8 +374,18 @@ class TestPathSetup:
             assert isinstance(exists, bool)
 
 
-class TestCrewConfigHelper(EngineRegistryTestBase):
+class TestCrewConfigHelper:
     """Test crew config helper function"""
+
+    @pytest.fixture(autouse=True)
+    def isolate_registry(self):
+        """Isolate ENGINE_REGISTRY for this test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        original = ENGINE_REGISTRY.copy()
+        ENGINE_REGISTRY.clear()
+        yield
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(original)
 
     @pytest.mark.integration
     def test_find_crew_config_static_method(self):
@@ -377,8 +401,18 @@ class TestCrewConfigHelper(EngineRegistryTestBase):
         assert result is None or isinstance(result, str)
 
 
-class TestAuditLogManagerFallback(EngineRegistryTestBase):
+class TestAuditLogManagerFallback:
     """Test audit log manager fallback logic"""
+
+    @pytest.fixture(autouse=True)
+    def isolate_registry(self):
+        """Isolate ENGINE_REGISTRY for this test"""
+        from omnicore_engine.engines import ENGINE_REGISTRY
+        original = ENGINE_REGISTRY.copy()
+        ENGINE_REGISTRY.clear()
+        yield
+        ENGINE_REGISTRY.clear()
+        ENGINE_REGISTRY.update(original)
 
     @pytest.mark.integration
     @patch("omnicore_engine.engines.Database")
