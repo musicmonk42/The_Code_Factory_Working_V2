@@ -30,7 +30,10 @@ pytestmark = [
 
 
 class TestGeneratorIntegration(EngineRegistryTestBase):
-    """Test generator integration with OmniCoreOmega"""
+    """Test generator integration with OmniCoreOmega.
+    
+    Inherits from EngineRegistryTestBase for automatic ENGINE_REGISTRY isolation.
+    """
 
     @pytest.mark.integration
     def test_generator_imports_available(self):

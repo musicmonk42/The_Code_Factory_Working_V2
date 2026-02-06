@@ -29,7 +29,10 @@ pytestmark = [
 
 
 class TestEngineRegistry(EngineRegistryTestBase):
-    """Test the engine registry functions"""
+    """Test the engine registry functions.
+    
+    Inherits from EngineRegistryTestBase for automatic ENGINE_REGISTRY isolation.
+    """
 
     @pytest.mark.integration
     def test_register_engine_success(self):
