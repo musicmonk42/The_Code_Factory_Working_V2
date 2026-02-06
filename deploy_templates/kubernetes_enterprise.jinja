@@ -1,0 +1,460 @@
+{# 
+  Enterprise Kubernetes Deployment Template
+  Implements highest industry standards for Kubernetes deployments
+  
+  Standards Compliance:
+    - CIS Kubernetes Benchmark v1.8.0
+    - NSA/CISA Kubernetes Hardening Guidance
+    - Pod Security Standards (Restricted Profile)
+    - NIST SP 800-204 Security Strategies for Microservices
+    - Cloud Native Security Whitepaper
+  
+  Features:
+    - Complete K8s manifest generation
+    - Security contexts and policies
+    - Resource management and QoS
+    - Health probes and readiness
+    - Network policies
+    - Service mesh ready
+    - GitOps compatible
+#}
+
+# Enterprise Kubernetes Manifests Generation
+
+Generate production-grade, security-hardened Kubernetes manifests following enterprise standards.
+
+{% if files %}
+## Application Files:
+{% for file in files %}
+- {{ file }}
+{% endfor %}
+{% endif %}
+
+{% if context is defined %}
+## Application Context
+{% if context.language is defined %}
+- **Language**: {{ context.language }}
+{% endif %}
+{% if context.framework is defined %}
+- **Framework**: {{ context.framework }}
+{% endif %}
+{% if context.replicas is defined %}
+- **Replicas**: {{ context.replicas }}
+{% else %}
+- **Replicas**: 3 (HA default)
+{% endif %}
+{% if context.port is defined %}
+- **Port**: {{ context.port }}
+{% endif %}
+{% endif %}
+
+---
+
+## CRITICAL REQUIREMENTS - Enterprise Kubernetes Standards
+
+### 1. Namespace & RBAC (CIS 5.1)
+**MUST:**
+- Deploy to dedicated namespace (never default)
+- Implement RBAC with least privilege
+- Use ServiceAccounts with limited permissions
+- Disable automountServiceAccountToken unless required
+- Network isolation between namespaces
+
+### 2. Pod Security Standards (PSS - Restricted Profile)
+**MUST:**
+- Enforce restricted pod security standard
+- Run as non-root user (runAsNonRoot: true)
+- Drop all capabilities, add only required
+- Set read-only root filesystem
+- Disable privilege escalation
+- Set seccomp profile (RuntimeDefault or Localhost)
+- Use AppArmor or SELinux
+
+**Security Context Example:**
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+```
+
+### 3. Resource Management (QoS Guaranteed)
+**MUST:**
+- Set resource requests = limits for critical workloads
+- Define CPU and memory limits
+- Use Vertical Pod Autoscaler for right-sizing
+- Implement Horizontal Pod Autoscaler for scaling
+- Set PodDisruptionBudget for availability
+- Define ResourceQuota per namespace
+
+### 4. Health & Readiness Probes
+**MUST:**
+- Implement liveness probe (restart unhealthy pods)
+- Implement readiness probe (route traffic when ready)
+- Implement startup probe for slow-starting apps
+- Use appropriate probe mechanisms (httpGet, exec, tcpSocket, grpc)
+- Set proper timeouts and thresholds
+
+### 5. Networking & Service Mesh
+**MUST:**
+- Define NetworkPolicy for ingress/egress control
+- Use Services for pod discovery
+- Implement Ingress with TLS
+- Consider Service Mesh (Istio, Linkerd) for mTLS
+- Use DNS-based service discovery
+
+### 6. Configuration & Secrets Management
+**MUST:**
+- Use ConfigMaps for non-sensitive configuration
+- Use Secrets for sensitive data (encrypted at rest)
+- Consider external secrets management (Vault, AWS Secrets Manager)
+- Mount secrets as volumes (not environment variables)
+- Rotate secrets regularly
+- Never hardcode credentials
+
+### 7. Observability & Monitoring
+**MUST:**
+- Add Prometheus metrics annotations
+- Implement structured logging (JSON)
+- Use distributed tracing (OpenTelemetry)
+- Define ServiceMonitor for Prometheus Operator
+- Set up alerts for critical metrics
+- Implement audit logging
+
+### 8. High Availability & Reliability
+**MUST:**
+- Run minimum 3 replicas for production
+- Use PodAntiAffinity for zone distribution
+- Implement PodDisruptionBudget
+- Define proper graceful shutdown (terminationGracePeriodSeconds)
+- Handle SIGTERM properly in application
+- Use Rolling Update strategy with proper timing
+
+---
+
+{% if repo_path is defined %}
+## Repository Context
+**Path**: {{ repo_path }}
+{% endif %}
+
+{% if instructions is defined and instructions %}
+## Additional Requirements
+{{ instructions }}
+{% endif %}
+
+---
+
+## OUTPUT FORMAT
+
+Generate complete Kubernetes manifests including:
+
+### 1. Namespace
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: [app-name]
+  labels:
+    name: [app-name]
+    environment: production
+```
+
+### 2. Deployment
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: [app-name]
+  namespace: [app-name]
+  labels:
+    app: [app-name]
+    version: v1.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: [app-name]
+  template:
+    metadata:
+      labels:
+        app: [app-name]
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: [app-name]
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: [app-name]
+                topologyKey: topology.kubernetes.io/zone
+      containers:
+        - name: app
+          image: [image:tag]
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: LOG_LEVEL
+              value: "info"
+            - name: ENVIRONMENT
+              value: "production"
+          envFrom:
+            - configMapRef:
+                name: [app-name]-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+          resources:
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 30
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /app/.cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30
+```
+
+### 3. Service
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: [app-name]
+  namespace: [app-name]
+  labels:
+    app: [app-name]
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app: [app-name]
+```
+
+### 4. ServiceAccount
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: [app-name]
+  namespace: [app-name]
+automountServiceAccountToken: false
+```
+
+### 5. ConfigMap
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: [app-name]-config
+  namespace: [app-name]
+data:
+  app.conf: |
+    # Application configuration
+    [Add configuration here]
+```
+
+### 6. NetworkPolicy
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: [app-name]
+  namespace: [app-name]
+spec:
+  podSelector:
+    matchLabels:
+      app: [app-name]
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 53  # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443  # HTTPS
+```
+
+### 7. HorizontalPodAutoscaler
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: [app-name]
+  namespace: [app-name]
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: [app-name]
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+```
+
+### 8. PodDisruptionBudget
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: [app-name]
+  namespace: [app-name]
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: [app-name]
+```
+
+### 9. Ingress (with TLS)
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: [app-name]
+  namespace: [app-name]
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - [app-name].example.com
+      secretName: [app-name]-tls
+  rules:
+    - host: [app-name].example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: [app-name]
+                port:
+                  name: http
+```
+
+**IMPORTANT**: 
+- Adapt all manifests to the specific application requirements
+- Replace placeholders [app-name], [image:tag], etc.
+- Ensure security contexts are properly configured
+- Validate manifests with kubectl dry-run
+- Output as separate YAML files or as multi-document YAML

@@ -1,0 +1,276 @@
+{# 
+  Enterprise-Grade Docker Deployment Template
+  Implements highest industry standards for containerization
+  
+  Standards Compliance:
+    - CIS Docker Benchmark v1.6.0
+    - NIST SP 800-190 Container Security
+    - OWASP Container Security Top 10
+    - Cloud Native Security Whitepaper (CNCF)
+    - Twelve-Factor App Methodology
+  
+  Features:
+    - Multi-stage builds with BuildKit optimization
+    - Distroless/minimal base images
+    - Non-root user execution
+    - Security scanning integration
+    - SBOM (Software Bill of Materials) support
+    - Reproducible builds with hash verification
+    - Comprehensive health checks
+    - Proper signal handling (SIGTERM)
+    - Layer caching optimization
+    - Secrets management best practices
+#}
+
+# Enterprise-Grade Dockerfile Generation
+
+Generate a production-ready, security-hardened Dockerfile following enterprise standards.
+
+{% if files %}
+## Application Files:
+{% for file in files %}
+- {{ file }}
+{% endfor %}
+{% else %}
+- (no specific files provided - analyze repository)
+{% endif %}
+
+{% if context is defined %}
+## Application Context
+{% if context.language is defined %}
+- **Language**: {{ context.language }}
+{% endif %}
+{% if context.framework is defined %}
+- **Framework**: {{ context.framework }}
+{% endif %}
+{% if context.version is defined %}
+- **Version**: {{ context.version }}
+{% endif %}
+{% if context.dependencies is defined and context.dependencies %}
+- **Dependencies**: {{ context.dependencies | join(', ') }}
+{% endif %}
+{% if context.port is defined %}
+- **Port**: {{ context.port }}
+{% endif %}
+{% endif %}
+
+---
+
+## CRITICAL REQUIREMENTS - Enterprise Standards
+
+### 1. Base Image Selection (CIS 4.1, 4.2)
+**MUST:**
+- Use official images from verified publishers only
+- Pin to specific SHA256 digest (not just tags): `FROM image@sha256:...`
+- Prefer distroless images (gcr.io/distroless/*) or minimal variants (alpine, slim)
+- Use multi-stage builds to separate build dependencies from runtime
+- Document base image selection rationale
+
+**Example:**
+```dockerfile
+# Build stage with full toolchain
+FROM python:3.11-slim@sha256:... AS builder
+
+# Runtime stage with minimal image
+FROM gcr.io/distroless/python3-debian11@sha256:... AS runtime
+```
+
+### 2. Security Hardening (NIST SP 800-190, OWASP)
+**MUST:**
+- Run as non-root user (UID > 10000) - CIS 4.1
+- Drop all capabilities, add only required ones - CIS 5.25
+- Set read-only root filesystem where possible - CIS 5.12
+- Use COPY instead of ADD (prevents URL-based attacks) - CIS 4.9
+- Never include secrets, credentials, or API keys in image - CIS 4.10
+- Scan image for vulnerabilities (Trivy, Grype, Snyk)
+- Minimize attack surface (remove shell, package managers in final stage)
+- Use .dockerignore to exclude sensitive files - CIS 4.8
+
+**Security Configuration:**
+```dockerfile
+# Create non-root user with no shell
+RUN groupadd -r -g 10001 appgroup && \
+    useradd -r -u 10001 -g appgroup -s /sbin/nologin -c "App user" appuser
+
+# Drop all capabilities except required ones
+USER 10001:10001
+
+# Set security options in docker run:
+# --cap-drop=ALL --cap-add=NET_BIND_SERVICE
+# --security-opt=no-new-privileges:true
+# --read-only --tmpfs /tmp:rw,noexec,nosuid
+```
+
+### 3. Build Optimization (Performance + Security)
+**MUST:**
+- Order layers from least to most frequently changing
+- Combine RUN commands to minimize layers
+- Use BuildKit for advanced caching: `# syntax=docker/dockerfile:1.4`
+- Clean package manager caches in same RUN command
+- Use .dockerignore extensively
+- Leverage build cache mounts for dependencies
+- Create SBOM during build for supply chain security
+
+**BuildKit Example:**
+```dockerfile
+# syntax=docker/dockerfile:1.4
+
+# Use cache mounts for package managers
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=bind,source=requirements.txt,target=requirements.txt \
+    pip install -r requirements.txt
+```
+
+### 4. Runtime Configuration (Twelve-Factor App)
+**MUST:**
+- Set WORKDIR to non-root directory
+- Define all environment variables with ENV
+- Use ARG for build-time configuration
+- Implement comprehensive HEALTHCHECK
+- Use ENTRYPOINT for executable, CMD for default arguments
+- EXPOSE only necessary ports
+- Handle SIGTERM gracefully for zero-downtime deployments
+- Configure proper logging to stdout/stderr
+
+**Health Check Best Practice:**
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD ["/usr/bin/curl", "-f", "http://localhost:8000/health"] || exit 1
+```
+
+### 5. Metadata & Traceability (OCI Standard)
+**MUST:**
+- Include OCI-compliant labels - CIS 4.5
+- Add build metadata (version, commit, timestamp)
+- Include maintainer and documentation links
+- Support vulnerability scanning metadata
+- Include SBOM reference
+
+**Required Labels:**
+```dockerfile
+LABEL org.opencontainers.image.title="Application Name"
+LABEL org.opencontainers.image.description="Application Description"
+LABEL org.opencontainers.image.version="{{ context.version | default('1.0.0') }}"
+LABEL org.opencontainers.image.created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+LABEL org.opencontainers.image.source="https://github.com/org/repo"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.vendor="Your Organization"
+LABEL com.example.security.scan="trivy"
+```
+
+### 6. Supply Chain Security
+**MUST:**
+- Verify checksums for downloaded artifacts
+- Use content trust (Docker Content Trust / Notary)
+- Generate SBOM (Software Bill of Materials)
+- Sign images with Sigstore/Cosign
+- Implement vulnerability scanning in CI/CD
+
+### 7. Networking & Isolation
+**MUST:**
+- Use USER directive to drop privileges
+- Consider using scratch or distroless for final stage
+- Minimize exposed ports
+- Configure container networking properly
+- Use secrets management for sensitive data
+
+---
+
+{% if repo_path is defined %}
+## Repository Context
+**Path**: {{ repo_path }}
+{% endif %}
+
+{% if instructions is defined and instructions %}
+## Additional Requirements
+{{ instructions }}
+{% endif %}
+
+{% if few_shot_examples is defined and few_shot_examples %}
+## Reference Examples
+{{ few_shot_examples }}
+{% endif %}
+
+---
+
+## OUTPUT FORMAT
+
+Generate a complete, production-ready Dockerfile following this structure:
+
+```dockerfile
+# syntax=docker/dockerfile:1.4
+
+# =============================================================================
+# Build Stage - Include all build dependencies
+# =============================================================================
+FROM [base-image@sha256:...] AS builder
+
+# Build arguments for flexibility
+ARG BUILD_DATE
+ARG VERSION
+ARG REVISION
+
+# Install build dependencies
+RUN --mount=type=cache,target=/var/cache/apt \
+    apt-get update && apt-get install -y --no-install-recommends \
+    [build-dependencies] \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files first (better caching)
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
+
+# =============================================================================
+# Runtime Stage - Minimal, hardened final image
+# =============================================================================
+FROM [minimal-base-image@sha256:...] AS runtime
+
+# Metadata labels (OCI standards)
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.revision="${REVISION}"
+[Additional labels...]
+
+# Create non-root user
+RUN groupadd -r -g 10001 appgroup && \
+    useradd -r -u 10001 -g appgroup -s /sbin/nologin appuser
+
+# Set working directory
+WORKDIR /app
+
+# Install runtime dependencies only
+COPY --from=builder /wheels /wheels
+RUN pip install --no-cache-dir --no-index --find-links=/wheels /wheels/* \
+    && rm -rf /wheels
+
+# Copy application code with proper ownership
+COPY --chown=10001:10001 . .
+
+# Switch to non-root user
+USER 10001:10001
+
+# Expose application port
+EXPOSE [port]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD [health-check-command] || exit 1
+
+# Set environment defaults
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.local/bin:${PATH}"
+
+# Run application
+ENTRYPOINT ["python"]
+CMD ["-m", "app"]
+```
+
+**IMPORTANT**: 
+- Replace placeholders with actual values based on the application
+- Use actual SHA256 digests for all base images
+- Include comprehensive comments explaining security decisions
+- Ensure all security best practices are implemented
+- Generate accompanying .dockerignore file
+- Output ONLY the Dockerfile content, no markdown wrappers

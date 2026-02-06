@@ -252,6 +252,10 @@ except ImportError:
                     key = (bucket,)
                     if value <= bucket:
                         self._bucket_values.inc(key, 1.0)
+        
+        def info(self, data: dict):
+            """Set info metric data (no-op in mock)."""
+            pass
 
         @contextmanager
         def time(self):
@@ -310,6 +314,13 @@ except ImportError:
         return MockMetric(
             name, doc, labelnames, "histogram"
         )  # buckets ignored in mock, use default
+    
+    def Info(name, doc):
+        """Create an Info metric (no-op in mock).
+        
+        Note: PascalCase naming follows prometheus_client API conventions.
+        """
+        return MockMetric(name, doc, [], "info")
 
 
 # --- Metric Registry to Prevent Duplicates ---
