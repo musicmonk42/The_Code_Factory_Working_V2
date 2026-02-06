@@ -441,8 +441,9 @@ class TestSummarizationRepair:
         handler = DockerfileHandler()
         # Ensure TESTING mode is disabled so LLM is actually called
         import os
-        original_testing = os.environ.get("TESTING")
         had_testing = "TESTING" in os.environ
+        if had_testing:
+            original_testing = os.environ["TESTING"]
         try:
             if had_testing:
                 del os.environ["TESTING"]
