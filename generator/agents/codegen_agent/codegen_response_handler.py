@@ -38,7 +38,9 @@ import subprocess
 import sys
 import tempfile
 from functools import lru_cache
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
+
+from .syntax_auto_repair import SyntaxAutoRepair
 
 logger = logging.getLogger(__name__)
 
@@ -399,6 +401,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 files_obj = payload["files"]
                 code_files: Dict[str, str] = {}
                 errors: Dict[str, str] = {}
+                repair_logs: List[str] = []
 
                 for filename, content in files_obj.items():
                     if not isinstance(content, str):
@@ -406,18 +409,26 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                         continue
 
                     cleaned = _clean_code_block(content)
-                    is_valid, msg = _validate_syntax(cleaned, lang, filename)
+                    
+                    # Use validate_and_repair_syntax instead of _validate_syntax
+                    validation_result = validate_and_repair_syntax(cleaned, lang, filename)
 
-                    if is_valid:
-                        code_files[filename] = cleaned
+                    if validation_result['valid']:
+                        code_files[filename] = validation_result['code']
+                        
+                        # Log if auto-repair was used
+                        if validation_result['auto_repaired']:
+                            repair_info = f"Auto-repaired {filename}: {', '.join(validation_result['repairs_applied'])}"
+                            repair_logs.append(repair_info)
+                            logger.info(repair_info)
                     else:
                         logger.warning(
                             "Syntax validation failed for '%s' (%s). Details: %s",
                             filename,
                             lang,
-                            msg,
+                            validation_result['error'],
                         )
-                        errors[filename] = msg
+                        errors[filename] = validation_result['error']
 
                 # If any file failed, emit an aggregated error.txt
                 if errors:
@@ -445,6 +456,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                             "language": lang,
                             "had_errors": bool(errors),
                             "production_ready": is_production_ready,
+                            "auto_repairs": repair_logs if repair_logs else None,
                         },
                     )
                     return code_files
@@ -494,34 +506,44 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
         )
         return {DEFAULT_FILENAME: raw}
     
-    is_valid, msg = _validate_syntax(cleaned_code, lang, DEFAULT_FILENAME)
+    # Use validate_and_repair_syntax instead of _validate_syntax
+    validation_result = validate_and_repair_syntax(cleaned_code, lang, DEFAULT_FILENAME)
 
-    if is_valid:
+    if validation_result['valid']:
+        # Use repaired code if auto-repair was applied
+        final_code = validation_result['code']
+        
         # Perform production-ready validation for single file
-        single_file_dict = {DEFAULT_FILENAME: cleaned_code}
+        single_file_dict = {DEFAULT_FILENAME: final_code}
         is_production_ready, prod_error = validate_production_ready(single_file_dict)
         
         if not is_production_ready:
             logger.warning("Production-ready validation failed for single-file response")
             return {
-                DEFAULT_FILENAME: cleaned_code,
+                DEFAULT_FILENAME: final_code,
                 ERROR_FILENAME: prod_error
             }
         
         log_action(
             "Parsed Single-File Response",
-            {"file": DEFAULT_FILENAME, "language": lang, "production_ready": True},
+            {
+                "file": DEFAULT_FILENAME, 
+                "language": lang, 
+                "production_ready": True,
+                "auto_repaired": validation_result['auto_repaired'],
+                "repairs_applied": validation_result['repairs_applied'] if validation_result['auto_repaired'] else None,
+            },
         )
-        return {DEFAULT_FILENAME: cleaned_code}
+        return {DEFAULT_FILENAME: final_code}
 
     logger.error(
         "Syntax validation failed for single-file response (%s). Details: %s",
         lang,
-        msg,
+        validation_result['error'],
     )
     error_content = (
         f"Generated code failed syntax validation for language '{lang}'.\n\n"
-        f"Validation Tool Output:\n{msg}"
+        f"Validation Tool Output:\n{validation_result['error']}"
     )
     return {ERROR_FILENAME: error_content}
 
@@ -1117,6 +1139,78 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
         filename,
     )
     return True, "No validator for this language; skipped."
+
+
+def validate_and_repair_syntax(code: str, language: str, filename: str) -> Dict[str, Any]:
+    """
+    Validate syntax and attempt auto-repair if validation fails.
+    
+    This function implements a two-phase approach:
+    1. First, try validating the original code
+    2. If validation fails, attempt auto-repair and validate again
+    
+    Args:
+        code: The source code to validate
+        language: Programming language (e.g., "python", "javascript")
+        filename: Name of the file (for context in error messages)
+    
+    Returns:
+        Dictionary with keys:
+            - 'valid': bool - Whether the code is syntactically valid
+            - 'code': str - Original or repaired code
+            - 'error': str or None - Error message if validation failed
+            - 'repairs_applied': List[str] - List of repairs that were applied
+            - 'auto_repaired': bool - Whether auto-repair was needed and successful
+    """
+    # Try original code first
+    is_valid, error_msg = _validate_syntax(code, language, filename)
+    
+    if is_valid:
+        return {
+            'valid': True,
+            'code': code,
+            'error': None,
+            'repairs_applied': [],
+            'auto_repaired': False
+        }
+    
+    # Validation failed - try auto-repair
+    logger.info(f"Syntax validation failed for {filename}. Attempting auto-repair...")
+    
+    repair_result = SyntaxAutoRepair.auto_repair(code, language)
+    
+    if repair_result['was_modified']:
+        logger.info(f"Applied {len(repair_result['fixes_applied'])} auto-repairs: {repair_result['fixes_applied']}")
+        
+        # Validate repaired code
+        is_valid_repaired, error_msg_repaired = _validate_syntax(
+            repair_result['repaired_code'], 
+            language, 
+            filename
+        )
+        
+        if is_valid_repaired:
+            logger.info(f"✓ Auto-repair successful for {filename}")
+            return {
+                'valid': True,
+                'code': repair_result['repaired_code'],
+                'error': None,
+                'repairs_applied': repair_result['fixes_applied'],
+                'auto_repaired': True
+            }
+        else:
+            logger.warning(f"Auto-repair failed to fix {filename}: {error_msg_repaired}")
+    else:
+        logger.info("No repairs were applicable for the detected syntax errors")
+    
+    # Return original validation error
+    return {
+        'valid': False,
+        'code': code,
+        'error': error_msg,
+        'repairs_applied': [],
+        'auto_repaired': False
+    }
 
 
 # ==============================================================================
