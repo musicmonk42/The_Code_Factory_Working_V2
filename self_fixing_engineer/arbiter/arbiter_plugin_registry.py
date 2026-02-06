@@ -525,7 +525,8 @@ class PluginRegistry:
         # This prevents the circular import chain: arbiter_plugin_registry -> engines -> database -> models -> arbiter
         global _IMPORT_IN_PROGRESS
         if _IMPORT_IN_PROGRESS:
-            logger.debug(
+            # Use logging.getLogger directly to ensure logger is available during import
+            logging.getLogger(__name__).debug(
                 f"Deferring OmniCore registration for plugin [{kind.value}:{name}] - "
                 "module import in progress"
             )
