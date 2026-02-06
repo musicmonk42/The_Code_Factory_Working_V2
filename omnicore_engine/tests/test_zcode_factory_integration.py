@@ -5,6 +5,11 @@ import pytest
 # Defer heavy imports to test functions to reduce time during collection
 # DO NOT import from omnicore_engine.plugin_registry at module level
 
+# Mark all tests in this module to run last (after database tests)
+# This is necessary because these tests import omnicore_engine.engines which
+# creates global state that interferes with async database tests.
+pytestmark = pytest.mark.order("last")
+
 @pytest.mark.asyncio
 async def test_import_fixer_engine():
     """Test that OmniCoreOmega can be created with mocked dependencies."""
