@@ -417,8 +417,14 @@ def test_hot_reloading_loader_clears_cache():
     """
     import tempfile
     import os
+    import inspect
     from jinja2 import Environment
     from agents.codegen_agent.codegen_prompt import HotReloadingFileSystemLoader
+    
+    # Ensure we're using real jinja2, not a mock
+    # This prevents interference from module-level mocks
+    import jinja2
+    assert inspect.isclass(jinja2.Environment), "jinja2.Environment should be a class, not a mock"
     
     # Create a temporary directory for templates
     with tempfile.TemporaryDirectory() as tmpdir:

@@ -492,6 +492,9 @@ class TestHumanApproval:
         mock_response.json = AsyncMock(
             return_value={"approved": True, "comments": "Looks good!"}
         )
+        # Configure mock_response as async context manager
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
 
         mock_session_instance = MagicMock()
         mock_session_instance.post = AsyncMock(return_value=mock_response)

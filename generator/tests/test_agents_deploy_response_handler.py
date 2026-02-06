@@ -4,6 +4,7 @@ Comprehensive tests for deploy_response_handler module.
 """
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -430,6 +431,7 @@ class TestSummarizationRepair:
     async def test_summarize_section_long_text(self, mock_call):
         """Test summarization with long text."""
         long_text = "x" * 1000  # Long text
+        # Configure mock as AsyncMock that returns a dict
         mock_call.return_value = {
             "content": "This is a summarized version.",
             "model": "gpt-3.5-turbo",
@@ -438,7 +440,14 @@ class TestSummarizationRepair:
 
         # FIX: Must instantiate a handler to call the method
         handler = DockerfileHandler()
-        result = await handler.summarize_section("test_section", long_text)
+        # Ensure TESTING mode is disabled so LLM is actually called
+        original_testing = os.environ.pop("TESTING", None)
+        try:
+            result = await handler.summarize_section("test_section", long_text)
+        finally:
+            # Restore original state if TESTING was set before
+            if original_testing is not None:
+                os.environ["TESTING"] = original_testing
 
         assert mock_call.called
         assert result == "This is a summarized version."

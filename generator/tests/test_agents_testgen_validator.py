@@ -208,15 +208,13 @@ class TestHealthEndpoints:
     @pytest.mark.asyncio
     async def test_healthz_endpoint(self):
         """Test the health check endpoint."""
-        # Use actual aiohttp components for real response
-        from aiohttp import web
-
         mock_request = Mock()
         response = await healthz(mock_request)
 
-        # Should be a real web.Response object
-        assert isinstance(response, web.Response)
+        # Check response has required attributes and types
         assert response.status == 200
+        # Ensure text is a string, not a callable (avoids Mock object issues)
+        assert isinstance(response.text, str)
         assert response.text == "OK"
 
     @patch("generator.agents.testgen_agent.testgen_validator.web.Application")
