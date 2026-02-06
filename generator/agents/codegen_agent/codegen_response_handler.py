@@ -1141,7 +1141,7 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
     return True, "No validator for this language; skipped."
 
 
-def validate_and_repair_syntax(code: str, language: str, filename: str) -> Dict[str, any]:
+def validate_and_repair_syntax(code: str, language: str, filename: str) -> Dict[str, Any]:
     """
     Validate syntax and attempt auto-repair if validation fails.
     

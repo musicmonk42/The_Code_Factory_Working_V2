@@ -50,8 +50,6 @@ _CONTROL_STRUCTURE_PATTERN = re.compile(
     r'^(if|elif|else|for|while|def|class|try|except|finally|with|async\s+def|async\s+for|async\s+with)\b'
 )
 
-logger = logging.getLogger(__name__)
-
 
 class SyntaxAutoRepairError(Exception):
     """Raised when auto-repair encounters an unrecoverable error.
@@ -341,7 +339,7 @@ class SyntaxAutoRepair:
             return code, []
     
     @classmethod
-    def auto_repair(cls, code: str, language: str) -> Dict[str, any]:
+    def auto_repair(cls, code: str, language: str) -> Dict[str, Any]:
         """
         Apply all auto-repair strategies in optimal order.
         
@@ -481,7 +479,7 @@ class SyntaxAutoRepair:
 
 
 # Module-level convenience function for backward compatibility
-def auto_repair_code(code: str, language: str = "python") -> Dict[str, any]:
+def auto_repair_code(code: str, language: str = "python") -> Dict[str, Any]:
     """
     Convenience function for auto-repairing code.
     
