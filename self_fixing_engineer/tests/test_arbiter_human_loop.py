@@ -14,6 +14,13 @@ from self_fixing_engineer.arbiter.human_loop import (
     HumanInLoopConfig,
     WebSocketManager,
 )
+
+# Also import FeedbackManager from feedback.py for isinstance checks
+# HumanInLoop uses feedback.FeedbackManager when available
+try:
+    from self_fixing_engineer.arbiter.feedback import FeedbackManager as RealFeedbackManager
+except ImportError:
+    RealFeedbackManager = FeedbackManager  # Use fallback if not available
 from pydantic import ValidationError
 
 
@@ -81,7 +88,8 @@ def test_human_in_loop_init_development(default_config):
     hil = HumanInLoop(config=default_config)
     assert isinstance(hil.config, HumanInLoopConfig)
     assert isinstance(hil._db_client, DummyDBClient)
-    assert isinstance(hil.feedback_manager, FeedbackManager)
+    # Check for either FeedbackManager implementation (from feedback.py or human_loop.py fallback)
+    assert isinstance(hil.feedback_manager, (FeedbackManager, RealFeedbackManager))
     assert hil._pending_approvals == {}
 
 

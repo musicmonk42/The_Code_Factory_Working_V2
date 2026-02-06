@@ -186,28 +186,38 @@ class TestKnowledgeGraphE2EWorkflow:
             ) as mock_audit:
                 mock_audit.log_event = AsyncMock()
 
-                # Mock the pydub AudioSegment to avoid ffmpeg dependency
-                with patch(
-                    "self_fixing_engineer.arbiter.knowledge_graph.multimodal.pydub.AudioSegment"
-                ) as mock_audio:
-                    mock_segment = Mock()
-                    mock_segment.__len__ = Mock(return_value=1000)  # 1 second
-                    mock_audio.from_file.return_value = mock_segment
+                # Check if pydub is available without actually importing it
+                # This avoids side effects and unnecessary dependencies during test execution
+                import importlib.util
+                pydub_available = importlib.util.find_spec("pydub") is not None
 
-                    # Also mock the audio transcriber to avoid ffmpeg calls
-                    original_transcriber = processor.audio_transcriber
-                    processor.audio_transcriber = (
-                        None  # Disable transcriber temporarily
-                    )
+                if pydub_available:
+                    # pydub is available, mock AudioSegment to avoid ffmpeg calls
+                    # We need to import it first, then patch.object to properly override the reference
+                    import pydub
+                    with patch.object(pydub, "AudioSegment") as mock_audio:
+                        mock_segment = Mock()
+                        mock_segment.__len__ = Mock(return_value=1000)  # 1 second
+                        mock_audio.from_file.return_value = mock_segment
 
-                    try:
-                        result = await processor.summarize(audio_item)
+                        # Also mock the audio transcriber to avoid model loading
+                        original_transcriber = processor.audio_transcriber
+                        processor.audio_transcriber = None  # Disable transcriber temporarily
 
-                        assert "status" in result
-                        assert "summary" in result
-                        assert "data_hash" in result
-                    finally:
-                        processor.audio_transcriber = original_transcriber  # Restore
+                        try:
+                            result = await processor.summarize(audio_item)
+                            assert "status" in result
+                            assert "summary" in result
+                            assert "data_hash" in result
+                        finally:
+                            processor.audio_transcriber = original_transcriber  # Restore
+                else:
+                    # pydub is not installed, audio processing will be skipped
+                    # The processor returns "skipped" status without needing pydub
+                    result = await processor.summarize(audio_item)
+                    assert result["status"] == "skipped"
+                    assert "summary" in result
+                    assert "data_hash" in result
 
     @pytest.mark.asyncio
     async def test_agent_team_collaboration(self, setup_environment):
@@ -355,7 +365,9 @@ class TestKnowledgeGraphE2EWorkflow:
         env_vars, tmp_path = setup_environment  # Remove await here
 
         with patch.dict(os.environ, env_vars):
-            ml = MetaLearning()
+            # Mock the load method to prevent loading persisted corrections from previous runs
+            with patch.object(MetaLearning, 'load', return_value=None):
+                ml = MetaLearning()
 
             # Log corrections
             corrections = [
@@ -364,8 +376,10 @@ class TestKnowledgeGraphE2EWorkflow:
                 ("What are edges?", "Edges are...", "Edges connect nodes..."),
             ]
 
-            for input_text, initial, corrected in corrections:
-                ml.log_correction(input_text, initial, corrected)
+            # Also mock persist to prevent side effects
+            with patch.object(ml, 'persist', return_value=None):
+                for input_text, initial, corrected in corrections:
+                    ml.log_correction(input_text, initial, corrected)
 
             assert len(ml.corrections) == 3
 
