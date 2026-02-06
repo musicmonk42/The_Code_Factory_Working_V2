@@ -85,6 +85,7 @@ try:
         ProvenanceTracker,
         run_fail_fast_validation,
         validate_deployment_artifacts,
+        validate_spec_fidelity,
     )
     HAS_PROVENANCE = True
 except ImportError:
@@ -92,6 +93,7 @@ except ImportError:
     ProvenanceTracker = None
     run_fail_fast_validation = None
     validate_deployment_artifacts = None
+    validate_spec_fidelity = None
 
 # Import DeployAgent for deployment artifact generation
 try:
@@ -1066,12 +1068,15 @@ class WorkflowEngine:
                             result["agent_results"]["critique"] = critique_result
                         
                         # [STAGE:VALIDATE] Run fail-fast validation BEFORE test generation
+                        validation_passed = True
                         if HAS_PROVENANCE and run_fail_fast_validation:
                             codegen_files = codegen_result.get("files", {}) if isinstance(codegen_result, dict) else {}
                             if codegen_files:
+                                # Pass MD content for spec fidelity validation
                                 validation_result = run_fail_fast_validation(
                                     codegen_files,
-                                    output_dir=output_path
+                                    output_dir=output_path,
+                                    md_content=md_content  # Enable spec fidelity check
                                 )
                                 if provenance:
                                     provenance.record_stage(
@@ -1079,10 +1084,71 @@ class WorkflowEngine:
                                         metadata={"validation_result": validation_result}
                                     )
                                 if not validation_result.get("valid", True):
-                                    logger.warning(
-                                        f"[STAGE:VALIDATE] Validation failed: {validation_result.get('errors', [])}",
-                                        extra={"validation_errors": validation_result.get("errors", [])}
+                                    validation_passed = False
+                                    validation_errors = validation_result.get("errors", [])
+                                    logger.error(
+                                        f"[STAGE:VALIDATE] HARD FAIL - Validation failed: {validation_errors}",
+                                        extra={"validation_errors": validation_errors}
                                     )
+                                    # Record validation error in provenance
+                                    if provenance:
+                                        provenance.record_error(
+                                            ProvenanceTracker.STAGE_VALIDATE,
+                                            "validation_failed",
+                                            f"Validation failed: {'; '.join(validation_errors)}"
+                                        )
+                                    # HARD FAIL: Mark workflow as failed and break
+                                    result["status"] = WorkflowStatus.FAILED.value
+                                    result["errors"].append({
+                                        "error_type": "ValidationError",
+                                        "message": f"Validation failed: {validation_errors}",
+                                        "stage": "VALIDATE",
+                                        "timestamp": datetime.now(timezone.utc).isoformat()
+                                    })
+                                    break  # Exit iteration loop - do not proceed to testgen/deploy
+                        
+                        # [STAGE:SPEC_VALIDATE] Additional spec fidelity check with route validation
+                        if validation_passed and HAS_PROVENANCE and validate_spec_fidelity and md_content:
+                            codegen_files = codegen_result.get("files", {}) if isinstance(codegen_result, dict) else {}
+                            if codegen_files:
+                                spec_result = validate_spec_fidelity(md_content, codegen_files, output_path)
+                                if provenance:
+                                    provenance.record_stage(
+                                        ProvenanceTracker.STAGE_SPEC_VALIDATE,
+                                        metadata={
+                                            "spec_fidelity": spec_result,
+                                            "required_endpoints": len(spec_result.get("required_endpoints", [])),
+                                            "found_endpoints": len(spec_result.get("found_endpoints", [])),
+                                            "missing_endpoints": len(spec_result.get("missing_endpoints", []))
+                                        }
+                                    )
+                                if not spec_result.get("valid", True):
+                                    validation_passed = False
+                                    missing = spec_result.get("missing_endpoints", [])
+                                    logger.error(
+                                        f"[STAGE:SPEC_VALIDATE] HARD FAIL - Spec fidelity failed. Missing {len(missing)} endpoints",
+                                        extra={"missing_endpoints": missing}
+                                    )
+                                    if provenance:
+                                        provenance.record_error(
+                                            ProvenanceTracker.STAGE_SPEC_VALIDATE,
+                                            "spec_fidelity_failed",
+                                            f"Missing required endpoints: {[f'{e['method']} {e['path']}' for e in missing]}"
+                                        )
+                                    # HARD FAIL: Do not proceed if spec fidelity fails
+                                    result["status"] = WorkflowStatus.FAILED.value
+                                    result["errors"].append({
+                                        "error_type": "SpecFidelityError",
+                                        "message": f"Missing {len(missing)} required endpoints from spec",
+                                        "missing_endpoints": missing,
+                                        "stage": "SPEC_VALIDATE",
+                                        "timestamp": datetime.now(timezone.utc).isoformat()
+                                    })
+                                    break  # Exit iteration loop
+                        
+                        # Skip testgen and deploy if validation failed
+                        if not validation_passed:
+                            continue
                         
                         # [STAGE:TESTGEN] Execute test generation AFTER validation
                         # Tests should be generated based on final validated code
@@ -1108,7 +1174,7 @@ class WorkflowEngine:
                         # [STAGE:DEPLOY_GEN] Generate deployment artifacts AFTER testgen
                         # This ensures we have validated code before creating deployment configs
                         enable_deploy = self.config.get('enable_deploy', True)
-                        if enable_deploy and HAS_DEPLOY_AGENT and DeployAgent:
+                        if enable_deploy:
                             try:
                                 deploy_result = await self._run_deploy_stage(
                                     codegen_result=codegen_result,
@@ -1117,6 +1183,23 @@ class WorkflowEngine:
                                     provenance=provenance
                                 )
                                 result["agent_results"]["deploy"] = deploy_result
+                                
+                                # Check if deploy validation failed - HARD FAIL
+                                if deploy_result.get("status") == "validation_failed":
+                                    validation_errors = deploy_result.get("validation_errors", [])
+                                    logger.error(
+                                        f"[STAGE:DEPLOY_GEN] HARD FAIL - Deploy validation failed: {validation_errors}",
+                                        extra={"validation_errors": validation_errors}
+                                    )
+                                    result["status"] = WorkflowStatus.FAILED.value
+                                    result["errors"].append({
+                                        "error_type": "DeployValidationError",
+                                        "message": f"Deploy validation failed: {validation_errors}",
+                                        "stage": "DEPLOY_GEN",
+                                        "timestamp": datetime.now(timezone.utc).isoformat()
+                                    })
+                                    break  # Exit iteration loop
+                                
                                 logger.info(
                                     f"[STAGE:DEPLOY_GEN] Deployment artifacts generated",
                                     extra={

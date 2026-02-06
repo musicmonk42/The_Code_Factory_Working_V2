@@ -116,6 +116,7 @@ class PipelineStage(str, Enum):
     POSTPROCESS = "POSTPROCESS"
     MATERIALIZE = "MATERIALIZE"
     VALIDATE = "VALIDATE"
+    SPEC_VALIDATE = "SPEC_VALIDATE"
     TESTGEN = "TESTGEN"
     DEPLOY_GEN = "DEPLOY_GEN"
     PACKAGE = "PACKAGE"
@@ -133,6 +134,7 @@ class ProvenanceTracker:
     STAGE_POSTPROCESS = PipelineStage.POSTPROCESS.value
     STAGE_MATERIALIZE = PipelineStage.MATERIALIZE.value
     STAGE_VALIDATE = PipelineStage.VALIDATE.value
+    STAGE_SPEC_VALIDATE = PipelineStage.SPEC_VALIDATE.value
     STAGE_TESTGEN = PipelineStage.TESTGEN.value
     STAGE_DEPLOY_GEN = PipelineStage.DEPLOY_GEN.value
     STAGE_PACKAGE = PipelineStage.PACKAGE.value
@@ -316,14 +318,205 @@ def extract_endpoints_from_code(code_content: str) -> List[Dict[str, str]]:
     return endpoints
 
 
-def run_fail_fast_validation(
+def extract_endpoints_from_md(md_content: str) -> List[Dict[str, str]]:
+    """
+    Extract required API endpoints from a Markdown spec.
+    
+    Parses the MD content looking for API route patterns such as:
+    - Explicit route definitions: `GET /api/users`, `POST /api/items`
+    - Table formats: `| GET | /api/users | ... |`
+    - Code blocks with route definitions
+    - Bullet points with endpoints: `- GET /api/users`
+    
+    Args:
+        md_content: Markdown specification content
+        
+    Returns:
+        List of endpoint dictionaries with 'method' and 'path' keys
+    """
+    endpoints = []
+    seen = set()  # Avoid duplicates
+    
+    # HTTP methods to look for
+    http_methods = r'(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)'
+    
+    # Pattern 1: Explicit HTTP method + path (e.g., "GET /api/users")
+    # Handles markdown emphasis: **GET** /api/users, *POST* /api/items
+    pattern1 = rf'\*{{0,2}}{http_methods}\*{{0,2}}\s+[`"]?(/[^\s`"\)]+)[`"]?'
+    
+    # Pattern 2: Table format (e.g., "| GET | /api/users |")
+    pattern2 = rf'\|\s*{http_methods}\s*\|\s*[`"]?(/[^\s`"\|]+)[`"]?'
+    
+    # Pattern 3: Backtick format (e.g., "`GET /api/users`")
+    pattern3 = rf'`{http_methods}\s+(/[^`]+)`'
+    
+    # Pattern 4: API path with methods in context (e.g., "Endpoint: /api/users (GET, POST)")
+    pattern4 = r'(?:endpoint|route|path|url):\s*[`"]?(/[^\s`"\)]+)[`"]?\s*\(([^)]+)\)'
+    
+    patterns = [
+        (pattern1, False),  # (pattern, swap_order)
+        (pattern2, False),
+        (pattern3, False),
+        (pattern4, True),   # Path comes first, then methods
+    ]
+    
+    for pattern, swap_order in patterns:
+        matches = re.findall(pattern, md_content, re.IGNORECASE | re.MULTILINE)
+        for match in matches:
+            if swap_order:
+                path, methods_str = match
+                # Split multiple methods (e.g., "GET, POST")
+                for method in re.findall(http_methods, methods_str, re.IGNORECASE):
+                    key = (method.upper(), path)
+                    if key not in seen:
+                        seen.add(key)
+                        endpoints.append({"method": method.upper(), "path": path})
+            else:
+                method, path = match
+                key = (method.upper(), path)
+                if key not in seen:
+                    seen.add(key)
+                    endpoints.append({"method": method.upper(), "path": path})
+    
+    # Sort by path for consistent ordering
+    endpoints.sort(key=lambda e: (e["path"], e["method"]))
+    
+    return endpoints
+
+
+def validate_spec_fidelity(
+    md_content: str,
     generated_files: Dict[str, str],
     output_dir: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Validate that generated code implements all required endpoints from the MD spec.
+    
+    This is the core spec fidelity check that ensures the Code Factory output
+    matches the input specification. It extracts required routes from the MD
+    and verifies they exist in the generated code.
+    
+    Args:
+        md_content: The original Markdown spec content
+        generated_files: Dictionary of generated file contents
+        output_dir: Optional directory to write error.txt on failure
+        
+    Returns:
+        Validation result dictionary with:
+        - valid: bool indicating if all required routes are present
+        - required_endpoints: list of endpoints from the spec
+        - found_endpoints: list of endpoints found in generated code
+        - missing_endpoints: list of endpoints missing from generated code
+        - errors: list of error messages
+    """
+    import time
+    start_time = time.time()
+    
+    result = {
+        "valid": True,
+        "required_endpoints": [],
+        "found_endpoints": [],
+        "missing_endpoints": [],
+        "extra_endpoints": [],
+        "errors": []
+    }
+    
+    # Extract required endpoints from MD spec
+    required_endpoints = extract_endpoints_from_md(md_content)
+    result["required_endpoints"] = required_endpoints
+    
+    if not required_endpoints:
+        # No endpoints specified in MD - that's OK, just log and pass
+        logger.info("[SPEC_VALIDATE] No API endpoints found in MD spec - skipping endpoint validation")
+        result["valid"] = True
+        return result
+    
+    # Extract endpoints from all Python files in generated code
+    all_found_endpoints = []
+    for filename, content in generated_files.items():
+        if filename.endswith('.py'):
+            file_endpoints = extract_endpoints_from_code(content)
+            all_found_endpoints.extend(file_endpoints)
+    
+    result["found_endpoints"] = all_found_endpoints
+    
+    # Check for missing endpoints - normalize paths for comparison
+    def normalize_path(path: str) -> str:
+        """Normalize a path for comparison (remove trailing slashes, etc.)"""
+        return path.rstrip('/').lower()
+    
+    found_set = {(e["method"], normalize_path(e["path"])) for e in all_found_endpoints}
+    
+    missing = []
+    for endpoint in required_endpoints:
+        key = (endpoint["method"], normalize_path(endpoint["path"]))
+        if key not in found_set:
+            missing.append(endpoint)
+    
+    result["missing_endpoints"] = missing
+    
+    if missing:
+        result["valid"] = False
+        for ep in missing:
+            error_msg = f"Missing required endpoint: {ep['method']} {ep['path']}"
+            result["errors"].append(error_msg)
+            logger.error(f"[SPEC_VALIDATE] {error_msg}")
+    
+    # Write error file if validation failed
+    if not result["valid"] and output_dir:
+        _write_spec_error_file(output_dir, result)
+    
+    VALIDATION_DURATION.labels(validation_type="spec_fidelity").observe(time.time() - start_time)
+    
+    if result["valid"]:
+        logger.info(
+            f"[SPEC_VALIDATE] Passed - all {len(required_endpoints)} required endpoints found",
+            extra={"required": len(required_endpoints), "found": len(all_found_endpoints)}
+        )
+    else:
+        logger.error(
+            f"[SPEC_VALIDATE] Failed - {len(missing)} endpoints missing",
+            extra={"missing": missing}
+        )
+    
+    return result
+
+
+def _write_spec_error_file(output_dir: str, result: Dict[str, Any]) -> None:
+    """Write spec validation errors to error.txt."""
+    error_path = Path(output_dir) / "error.txt"
+    error_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(error_path, "w", encoding="utf-8") as f:
+        f.write("SPEC FIDELITY VALIDATION FAILED\n")
+        f.write("=" * 50 + "\n\n")
+        f.write(f"Timestamp: {datetime.now(timezone.utc).isoformat()}\n\n")
+        
+        f.write("Missing Required Endpoints:\n")
+        for ep in result.get("missing_endpoints", []):
+            f.write(f"  - {ep['method']} {ep['path']}\n")
+        
+        f.write(f"\nRequired endpoints from spec: {len(result.get('required_endpoints', []))}\n")
+        for ep in result.get("required_endpoints", []):
+            f.write(f"  - {ep['method']} {ep['path']}\n")
+        
+        f.write(f"\nEndpoints found in generated code: {len(result.get('found_endpoints', []))}\n")
+        for ep in result.get("found_endpoints", []):
+            f.write(f"  - {ep['method']} {ep['path']}\n")
+    
+    logger.info(f"[SPEC_VALIDATE] Error file written to {error_path}")
+
+
+def run_fail_fast_validation(
+    generated_files: Dict[str, str],
+    output_dir: Optional[str] = None,
+    md_content: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Run validation on generated files.
     
     Validates syntax and content for Python files.
+    Optionally validates spec fidelity if md_content is provided.
     """
     import time
     start_time = time.time()
@@ -358,6 +551,14 @@ def run_fail_fast_validation(
     if "requirements.txt" not in generated_files:
         results["valid"] = False
         results["errors"].append("requirements.txt not found")
+    
+    # Run spec fidelity validation if MD content provided
+    if md_content and results["valid"]:
+        spec_result = validate_spec_fidelity(md_content, generated_files, output_dir)
+        results["checks"]["spec_fidelity"] = spec_result
+        if not spec_result["valid"]:
+            results["valid"] = False
+            results["errors"].extend(spec_result["errors"])
     
     # Write error file if failed
     if not results["valid"] and output_dir:
@@ -457,6 +658,8 @@ __all__ = [
     "validate_syntax",
     "validate_has_content",
     "extract_endpoints_from_code",
+    "extract_endpoints_from_md",
+    "validate_spec_fidelity",
     "run_fail_fast_validation",
     "validate_dockerfile",
     "validate_docker_compose", 
