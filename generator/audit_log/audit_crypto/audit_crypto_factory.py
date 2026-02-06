@@ -622,7 +622,6 @@ async def _ensure_software_key_master() -> bytes:
                 "InvalidCiphertextException: Master key encrypted with different KMS key. "
                 "See logs for resolution steps."
             )
-            global _SOFTWARE_KEY_MASTER_LAST_FAILURE, _SOFTWARE_KEY_MASTER_LAST_ERROR
             _SOFTWARE_KEY_MASTER_LAST_FAILURE = time.time()
             _SOFTWARE_KEY_MASTER_LAST_ERROR = error_to_raise
             # Re-raise with a clear error message
@@ -639,7 +638,6 @@ async def _ensure_software_key_master() -> bytes:
             error_to_raise = CryptoInitializationError(
                 f"Failed to initialize software key master: {e}"
             )
-            global _SOFTWARE_KEY_MASTER_LAST_FAILURE, _SOFTWARE_KEY_MASTER_LAST_ERROR
             _SOFTWARE_KEY_MASTER_LAST_FAILURE = time.time()
             _SOFTWARE_KEY_MASTER_LAST_ERROR = error_to_raise
             raise error_to_raise from e
