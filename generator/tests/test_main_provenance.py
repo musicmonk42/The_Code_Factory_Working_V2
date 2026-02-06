@@ -12,11 +12,13 @@ from generator.main.provenance import (
     PipelineStage,
     ProvenanceTracker,
     extract_endpoints_from_code,
+    extract_endpoints_from_md,
     run_fail_fast_validation,
     validate_deployment_artifacts,
     validate_docker_compose,
     validate_dockerfile,
     validate_has_content,
+    validate_spec_fidelity,
     validate_syntax,
 )
 
@@ -203,6 +205,114 @@ class TestValidateDockerCompose:
         content = "version: '3'"
         result = validate_docker_compose(content)
         assert result["valid"] is False
+
+
+class TestExtractEndpointsFromMd:
+    """Test MD spec endpoint extraction."""
+
+    def test_extract_basic_endpoints(self):
+        md = """
+# API Spec
+- GET /api/users
+- POST /api/users
+- DELETE /api/users/{id}
+"""
+        endpoints = extract_endpoints_from_md(md)
+        assert len(endpoints) == 3
+        assert any(e["method"] == "GET" and e["path"] == "/api/users" for e in endpoints)
+        assert any(e["method"] == "POST" and e["path"] == "/api/users" for e in endpoints)
+        assert any(e["method"] == "DELETE" for e in endpoints)
+
+    def test_extract_table_format(self):
+        md = """
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/items | Get all items |
+| POST | /api/items | Create item |
+"""
+        endpoints = extract_endpoints_from_md(md)
+        assert len(endpoints) == 2
+        assert any(e["method"] == "GET" and e["path"] == "/api/items" for e in endpoints)
+
+    def test_extract_backtick_format(self):
+        md = """
+The API has the following endpoints:
+`GET /api/products`
+`POST /api/products`
+"""
+        endpoints = extract_endpoints_from_md(md)
+        assert len(endpoints) == 2
+
+    def test_empty_md(self):
+        endpoints = extract_endpoints_from_md("")
+        assert endpoints == []
+
+    def test_no_duplicates(self):
+        md = """
+- GET /api/users
+- GET /api/users
+- **GET** /api/users
+"""
+        endpoints = extract_endpoints_from_md(md)
+        assert len(endpoints) == 1
+
+
+class TestValidateSpecFidelity:
+    """Test spec fidelity validation."""
+
+    def test_all_endpoints_present(self):
+        md = """
+- GET /api/users
+- POST /api/users
+"""
+        files = {
+            "main.py": '''
+from fastapi import FastAPI
+app = FastAPI()
+
+@app.get("/api/users")
+def get_users(): pass
+
+@app.post("/api/users")
+def create_user(): pass
+''',
+            "requirements.txt": "fastapi"
+        }
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True
+        assert len(result["missing_endpoints"]) == 0
+
+    def test_missing_endpoints(self):
+        md = """
+- GET /api/users
+- POST /api/users
+- DELETE /api/users/{id}
+"""
+        files = {
+            "main.py": '''
+@app.get("/api/users")
+def get_users(): pass
+''',
+            "requirements.txt": "fastapi"
+        }
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is False
+        assert len(result["missing_endpoints"]) == 2
+
+    def test_no_endpoints_in_spec(self):
+        md = "# Simple README\nNo API endpoints here."
+        files = {"main.py": "print('hello')", "requirements.txt": ""}
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True  # No endpoints required = pass
+
+    def test_writes_error_file(self):
+        md = "- GET /api/missing"
+        files = {"main.py": "pass", "requirements.txt": ""}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = validate_spec_fidelity(md, files, output_dir=tmpdir)
+            assert result["valid"] is False
+            error_path = Path(tmpdir) / "error.txt"
+            assert error_path.exists()
 
 
 class TestValidateDeploymentArtifacts:
