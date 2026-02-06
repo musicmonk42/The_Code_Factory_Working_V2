@@ -973,9 +973,9 @@ class CompanyDataPlugin:
 # Removed duplicate inline SimulationEngine class - use real implementation from simulation_module
 try:
     from self_fixing_engineer.simulation.simulation_module import SimulationEngine
-    logger.info("Using real SimulationEngine from simulation_module")
+    logging.getLogger(__name__).info("Using real SimulationEngine from simulation_module")
 except ImportError as e:
-    logger.warning(f"SimulationEngine not available ({e}), using fallback")
+    logging.getLogger(__name__).warning(f"SimulationEngine not available ({e}), using fallback")
     
     # Fallback SimulationEngine for when simulation_module is unavailable
     class SimulationEngine:
