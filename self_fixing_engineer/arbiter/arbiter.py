@@ -1550,6 +1550,18 @@ class Arbiter:
         self.knowledge_graph = Neo4jKnowledgeGraph(
             audit_logger=AuditLogManager(self.db_client)
         )
+        
+        # Initialize Arbiter Constitution for governance and ethical constraints
+        try:
+            from self_fixing_engineer.arbiter.arbiter_constitution import ArbiterConstitution
+            self.constitution = ArbiterConstitution()
+            logger.info(f"[{name}] Arbiter Constitution loaded and enforced")
+        except ImportError as e:
+            logger.warning(f"[{name}] Could not load ArbiterConstitution: {e}")
+            self.constitution = None
+        except Exception as e:
+            logger.error(f"[{name}] Error initializing ArbiterConstitution: {e}", exc_info=True)
+            self.constitution = None
 
         if self.code_health_env:
             self.code_health_env.name = name
@@ -2056,6 +2068,28 @@ class Arbiter:
         requires_human = False
 
         async with self._lock:
+            # [ARBITER CONSTITUTION] Check constitutional constraints before decision-making
+            if self.constitution:
+                try:
+                    # Check if there are any constitutional constraints on decision-making
+                    allowed, reason = await self.constitution.check_action(
+                        "plan_decision",
+                        {
+                            "energy": self.state_manager.energy,
+                            "observation": observation
+                        }
+                    )
+                    if not allowed:
+                        logger.warning(f"[{self.name}] Decision planning constrained by constitution: {reason}")
+                        return {
+                            "action": "idle",
+                            "requires_human": True,
+                            "reason": f"Constitutional constraint: {reason}",
+                            "observation": observation,
+                        }
+                except Exception as e:
+                    logger.error(f"[{self.name}] Error checking constitution: {e}", exc_info=True)
+            
             if self.state_manager.energy < 30:
                 action = "recharge"
             elif "explorer_error" in observation or (
