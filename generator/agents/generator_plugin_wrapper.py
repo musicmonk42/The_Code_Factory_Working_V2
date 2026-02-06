@@ -302,7 +302,7 @@ def validate_required_agents(registry: object) -> dict:
     if registry is None:
         raise ConfigurationError(
             f"Plugin registry is not available. Cannot validate required agents: {', '.join(sorted(REQUIRED_AGENTS))}. "
-            f"This typically indicates that the OmniCore plugin system failed to initialize. "
+            f"This typically indicates that the plugin system (OmniCore) failed to initialize. "
             f"Please check the server logs for import errors or missing dependencies."
         )
     
