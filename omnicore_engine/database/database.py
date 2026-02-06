@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from omnicore_engine.retry_compat import retry
 
@@ -528,6 +529,8 @@ class Database:
                 "timeout": 30,
                 "check_same_thread": False,
             }
+            # Use NullPool for SQLite to prevent thread leaks in test environments
+            engine_params["poolclass"] = NullPool
             self.engine: AsyncEngine = create_async_engine(
                 self.db_path, **engine_params
             )
@@ -552,6 +555,8 @@ class Database:
                 "timeout": 30,
                 "check_same_thread": False,
             }
+            # Use NullPool for SQLite to prevent thread leaks in test environments
+            engine_params["poolclass"] = NullPool
             self.engine: AsyncEngine = create_async_engine(
                 self.db_path, **engine_params
             )
