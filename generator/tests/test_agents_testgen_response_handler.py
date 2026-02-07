@@ -33,6 +33,9 @@ class MockCallable:
     def __getattr__(self, attr):
         if attr in ('__spec__', '__path__', '__file__', '__name__', '__package__', '__loader__', '_mock_name'):
             raise AttributeError(f"MockCallable has no attribute '{attr}'")
+        # Fix: Return string "OK" for 'text' attribute to fix health endpoint tests
+        if attr == 'text':
+            return "OK"
         return MockCallable(f"{self._mock_name}.{attr}")
 
 
