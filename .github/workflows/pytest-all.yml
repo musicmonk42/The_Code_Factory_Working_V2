@@ -52,17 +52,8 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          --memory="512m"
-          --memory-swap="512m"
         ports:
           - 6379:6379
-        # Configure Redis for low memory usage
-        command: >
-          redis-server
-          --maxmemory 256mb
-          --maxmemory-policy allkeys-lru
-          --save ""
-          --appendonly no
     
     env:
       TESTING: '1'
