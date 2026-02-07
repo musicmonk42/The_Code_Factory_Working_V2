@@ -27,6 +27,33 @@ class MockMessage:
     context: dict = field(default_factory=dict)
 
 
+def _convert_message_to_dict(message):
+    """Helper function to convert Message object to dict (mirrors logic in events.py)."""
+    if isinstance(message, dict):
+        return message
+    
+    # Message object from ShardedMessageBus
+    try:
+        payload = json.loads(message.payload) if isinstance(message.payload, str) else message.payload
+    except (json.JSONDecodeError, TypeError):
+        payload = {"raw_payload": str(message.payload)}
+    
+    # Get the message text from payload
+    if isinstance(payload, dict):
+        message_text = payload.get("message", f"Event on {getattr(message, 'topic', 'unknown')}")
+    else:
+        message_text = str(payload)
+    
+    event_data = {
+        "topic": getattr(message, "topic", "unknown"),
+        "message": message_text,
+        "data": payload,
+        "trace_id": getattr(message, "trace_id", None),
+        "timestamp": getattr(message, "timestamp", None),
+    }
+    return event_data
+
+
 class TestWebSocketEventHandlerFix:
     """Test fix for Critical #1: WebSocket event handler crashes."""
 
@@ -39,25 +66,8 @@ class TestWebSocketEventHandlerFix:
             payload=json.dumps(payload_dict)
         )
         
-        # Import the event handler logic
-        # Since we can't easily import the inner function, we'll test the logic directly
-        
-        # Simulate the conversion logic from events.py
-        if isinstance(mock_message, dict):
-            event_data = mock_message
-        else:
-            # Message object from ShardedMessageBus
-            try:
-                payload = json.loads(mock_message.payload) if isinstance(mock_message.payload, str) else mock_message.payload
-            except (json.JSONDecodeError, TypeError):
-                payload = {"raw_payload": str(mock_message.payload)}
-            event_data = {
-                "topic": getattr(mock_message, "topic", "unknown"),
-                "message": payload.get("message", f"Event on {getattr(mock_message, 'topic', 'unknown')}") if isinstance(payload, dict) else str(payload),
-                "data": payload,
-                "trace_id": getattr(mock_message, "trace_id", None),
-                "timestamp": getattr(mock_message, "timestamp", None),
-            }
+        # Apply the fix logic from events.py using helper function
+        event_data = _convert_message_to_dict(mock_message)
         
         # Verify the conversion worked
         assert isinstance(event_data, dict)
@@ -80,21 +90,8 @@ class TestWebSocketEventHandlerFix:
             payload=payload_dict  # Already a dict
         )
         
-        # Simulate the conversion logic
-        if isinstance(mock_message, dict):
-            event_data = mock_message
-        else:
-            try:
-                payload = json.loads(mock_message.payload) if isinstance(mock_message.payload, str) else mock_message.payload
-            except (json.JSONDecodeError, TypeError):
-                payload = {"raw_payload": str(mock_message.payload)}
-            event_data = {
-                "topic": getattr(mock_message, "topic", "unknown"),
-                "message": payload.get("message", f"Event on {getattr(mock_message, 'topic', 'unknown')}") if isinstance(payload, dict) else str(payload),
-                "data": payload,
-                "trace_id": getattr(mock_message, "trace_id", None),
-                "timestamp": getattr(mock_message, "timestamp", None),
-            }
+        # Apply the fix logic using helper function
+        event_data = _convert_message_to_dict(mock_message)
         
         # Verify dict payload is used directly
         assert isinstance(event_data, dict)
@@ -108,21 +105,8 @@ class TestWebSocketEventHandlerFix:
             payload="not valid json {{"
         )
         
-        # Simulate the conversion logic
-        if isinstance(mock_message, dict):
-            event_data = mock_message
-        else:
-            try:
-                payload = json.loads(mock_message.payload) if isinstance(mock_message.payload, str) else mock_message.payload
-            except (json.JSONDecodeError, TypeError):
-                payload = {"raw_payload": str(mock_message.payload)}
-            event_data = {
-                "topic": getattr(mock_message, "topic", "unknown"),
-                "message": payload.get("message", f"Event on {getattr(mock_message, 'topic', 'unknown')}") if isinstance(payload, dict) else str(payload),
-                "data": payload,
-                "trace_id": getattr(mock_message, "trace_id", None),
-                "timestamp": getattr(mock_message, "timestamp", None),
-            }
+        # Apply the fix logic using helper function
+        event_data = _convert_message_to_dict(mock_message)
         
         # Verify fallback behavior
         assert isinstance(event_data, dict)

@@ -35,7 +35,6 @@ except ImportError:
     tiktoken = None
     get_encoding = None
 
-
 # Logger for the provider
 logger = logging.getLogger(__name__)
 
