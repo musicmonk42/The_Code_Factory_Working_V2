@@ -69,7 +69,8 @@ class TestArbiterArena:
                 mock_hitl.return_value = MagicMock()
 
                 # Mock the Arbiter class to avoid its initialization issues
-                with patch("self_fixing_engineer.arbiter.arena.Arbiter") as mock_arbiter_class:
+                # Updated: Patch _get_arbiter_class since Arbiter uses lazy import
+                with patch("self_fixing_engineer.arbiter.arena._get_arbiter_class") as mock_arbiter_class:
                     mock_arbiter_instance = MagicMock()
                     mock_arbiter_instance.name = "MockArbiter"
                     mock_arbiter_class.return_value = mock_arbiter_instance
@@ -101,7 +102,8 @@ class TestArbiterArena:
         """Test arena works as an async context manager."""
         with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig"):
             with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop"):
-                with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
+                # Updated: Patch _get_arbiter_class since Arbiter uses lazy import
+                with patch("self_fixing_engineer.arbiter.arena._get_arbiter_class"):
                     from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
@@ -122,7 +124,8 @@ class TestArbiterArena:
         """Test registering and removing arbiters from arena."""
         with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig"):
             with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop"):
-                with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
+                # Updated: Patch _get_arbiter_class since Arbiter uses lazy import
+                with patch("self_fixing_engineer.arbiter.arena._get_arbiter_class"):
                     from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
@@ -144,7 +147,8 @@ class TestArbiterArena:
         """Test getting a random arbiter from the arena."""
         with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig"):
             with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop"):
-                with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
+                # Updated: Patch _get_arbiter_class since Arbiter uses lazy import
+                with patch("self_fixing_engineer.arbiter.arena._get_arbiter_class"):
                     from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
@@ -169,7 +173,8 @@ class TestArbiterArena:
 
         with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig"):
             with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop"):
-                with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
+                # Updated: Patch _get_arbiter_class since Arbiter uses lazy import
+                with patch("self_fixing_engineer.arbiter.arena._get_arbiter_class"):
                     from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
@@ -191,7 +196,8 @@ class TestArbiterArena:
         """Test that FastAPI routes are set up correctly."""
         with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoopConfig"):
             with patch("self_fixing_engineer.arbiter.human_loop.HumanInLoop"):
-                with patch("self_fixing_engineer.arbiter.arena.Arbiter"):
+                # Updated: Patch _get_arbiter_class since Arbiter uses lazy import
+                with patch("self_fixing_engineer.arbiter.arena._get_arbiter_class"):
                     from self_fixing_engineer.arbiter.arena import ArbiterArena
 
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
