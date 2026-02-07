@@ -21,8 +21,9 @@ encryption_key = base64.urlsafe_b64encode(b"0" * 32).decode("ascii")
 os.environ["AUDIT_ENCRYPTION_KEYS"] = (
     f'@json [{{"key_id": "mock_1", "key": "{encryption_key}"}}]'
 )
-os.environ.setdefault("AUDIT_COMPRESSION_ALGO", "gzip")
-os.environ.setdefault("AUDIT_COMPRESSION_LEVEL", "6")
+# Force set compression algo to gzip to ensure consistency when tests run together
+os.environ["AUDIT_COMPRESSION_ALGO"] = "gzip"
+os.environ["AUDIT_COMPRESSION_LEVEL"] = "6"
 os.environ.setdefault("AUDIT_BATCH_FLUSH_INTERVAL", "5")
 os.environ.setdefault("AUDIT_BATCH_MAX_SIZE", "100")
 os.environ.setdefault("AUDIT_HEALTH_CHECK_INTERVAL", "60")

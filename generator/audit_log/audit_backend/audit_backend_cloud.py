@@ -14,13 +14,30 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 import boto3
 import botocore.exceptions
-import google.cloud.storage as gcs
-from azure.core.exceptions import (
-    AzureError,
-    ResourceExistsError,
-)  # For Azure error handling
-from azure.storage.blob import ContentSettings  # For content_settings in upload_blob
-from azure.storage.blob.aio import BlobServiceClient  # For Azure Blob Storage
+
+# Optional imports for cloud providers - graceful fallback if not installed
+try:
+    import google.cloud.storage as gcs
+    HAS_GCS = True
+except ImportError:
+    gcs = None
+    HAS_GCS = False
+
+try:
+    from azure.core.exceptions import (
+        AzureError,
+        ResourceExistsError,
+    )  # For Azure error handling
+    from azure.storage.blob import ContentSettings  # For content_settings in upload_blob
+    from azure.storage.blob.aio import BlobServiceClient  # For Azure Blob Storage
+    HAS_AZURE = True
+except ImportError:
+    AzureError = Exception
+    ResourceExistsError = Exception
+    ContentSettings = None
+    BlobServiceClient = None
+    HAS_AZURE = False
+
 from cryptography.fernet import InvalidToken  # Needed for decryption errors
 
 from .audit_backend_core import (

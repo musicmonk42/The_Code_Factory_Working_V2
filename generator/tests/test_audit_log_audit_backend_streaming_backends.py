@@ -174,18 +174,22 @@ def cleanup_prometheus_registry():
 async def mock_send_alert():
     """Mock send_alert in all modules where it is imported."""
     # --- FIX: Patch all 3 locations and forward to a master mock ---
+    # Use create=True to handle test isolation issues when modules are loaded differently
     with (
         patch(
             "generator.audit_log.audit_backend.audit_backend_streaming_backends.send_alert",
             new_callable=AsyncMock,
+            create=True,
         ) as mock_streaming_alert,
         patch(
             "generator.audit_log.audit_backend.audit_backend_streaming_utils.send_alert",
             new_callable=AsyncMock,
+            create=True,
         ) as mock_utils_alert,
         patch(
             "generator.audit_log.audit_backend.audit_backend_core.send_alert",
             new_callable=AsyncMock,
+            create=True,
         ) as mock_core_alert,
     ):
 
@@ -258,6 +262,7 @@ async def mock_opentelemetry():
     with patch(
         "generator.audit_log.audit_backend.audit_backend_core.tracer",
         new_callable=MagicMock,
+        create=True,  # Create attribute if it doesn't exist (for test isolation)
     ) as mock_tracer:
         mock_span = MagicMock()
         mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
