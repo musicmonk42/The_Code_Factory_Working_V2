@@ -1237,12 +1237,20 @@ class SQLiteBackend(LogBackend):
                 BACKEND_ERRORS.labels(
                     backend=self.__class__.__name__, type="MigrationDBError"
                 ).inc()
-                asyncio.create_task(
-                    send_alert(
-                        f"SQLiteBackend migration failed due to DB error: {db_e}. Rolling back.",
-                        severity="critical",
+                # Safely schedule alert - handle case when no event loop is running
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                        send_alert(
+                            f"SQLiteBackend migration failed due to DB error: {db_e}. Rolling back.",
+                            severity="critical",
+                        )
                     )
-                )
+                except RuntimeError:
+                    # No running event loop - log instead of creating task
+                    logger.warning(
+                        f"Could not send alert for migration failure (no event loop): {db_e}"
+                    )
                 cursor.execute(
                     f"DROP TABLE IF EXISTS {temp_table_name}"
                 )  # Clean up temp table on rollback
@@ -1257,12 +1265,20 @@ class SQLiteBackend(LogBackend):
                 BACKEND_ERRORS.labels(
                     backend=self.__class__.__name__, type="MigrationFailed"
                 ).inc()
-                asyncio.create_task(
-                    send_alert(
-                        f"SQLiteBackend migration failed unexpectedly: {e}. Rolling back.",
-                        severity="critical",
+                # Safely schedule alert - handle case when no event loop is running
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                        send_alert(
+                            f"SQLiteBackend migration failed unexpectedly: {e}. Rolling back.",
+                            severity="critical",
+                        )
                     )
-                )
+                except RuntimeError:
+                    # No running event loop - log instead of creating task
+                    logger.warning(
+                        f"Could not send alert for migration failure (no event loop): {e}"
+                    )
                 cursor.execute(
                     f"DROP TABLE IF EXISTS {temp_table_name}"
                 )  # Clean up temp table on rollback

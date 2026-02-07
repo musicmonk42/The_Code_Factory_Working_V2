@@ -679,12 +679,20 @@ class LogBackend(abc.ABC):
             backend_name = self.__class__.__name__
             BACKEND_ERRORS.labels(backend=backend_name, type="DecompressionError").inc()
             logger.error(f"Decompression failed for {backend_name}: {e}", exc_info=True)
-            asyncio.create_task(
-                send_alert(
-                    f"Audit log decompression failed for {backend_name}. Data corruption or wrong algorithm?",
-                    severity="medium",
+            # Safely schedule alert - handle case when no event loop is running
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    send_alert(
+                        f"Audit log decompression failed for {backend_name}. Data corruption or wrong algorithm?",
+                        severity="medium",
+                    )
                 )
-            )
+            except RuntimeError:
+                # No running event loop - log instead of creating task
+                logger.warning(
+                    f"Could not send alert for decompression failure (no event loop): {e}"
+                )
             raise
 
     def _encrypt(self, data: bytes) -> bytes:
@@ -702,23 +710,39 @@ class LogBackend(abc.ABC):
                 f"Decryption failed for {backend_name}: Invalid token or key mismatch.",
                 exc_info=True,
             )
-            asyncio.create_task(
-                send_alert(
-                    f"Audit log decryption failed for {backend_name}. Invalid token or key mismatch.",
-                    severity="high",
+            # Safely schedule alert - handle case when no event loop is running
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    send_alert(
+                        f"Audit log decryption failed for {backend_name}. Invalid token or key mismatch.",
+                        severity="high",
+                    )
                 )
-            )
+            except RuntimeError:
+                # No running event loop - log instead of creating task
+                logger.warning(
+                    f"Could not send alert for decryption failure (no event loop)"
+                )
             raise
         except Exception as e:
             backend_name = self.__class__.__name__
             BACKEND_ERRORS.labels(backend=backend_name, type="DecryptionError").inc()
             logger.error(f"Decryption failed for {backend_name}: {e}", exc_info=True)
-            asyncio.create_task(
-                send_alert(
-                    f"Audit log decryption failed for {backend_name}. Possible key mismatch or data corruption.",
-                    severity="high",
+            # Safely schedule alert - handle case when no event loop is running
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    send_alert(
+                        f"Audit log decryption failed for {backend_name}. Possible key mismatch or data corruption.",
+                        severity="high",
+                    )
                 )
-            )
+            except RuntimeError:
+                # No running event loop - log instead of creating task
+                logger.warning(
+                    f"Could not send alert for decryption failure (no event loop): {e}"
+                )
             raise
 
     async def append(self, entry: Dict[str, Any]) -> None:
