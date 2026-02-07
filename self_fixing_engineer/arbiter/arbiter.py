@@ -992,7 +992,7 @@ except ImportError as e:
             self, config: Dict[str, Any], context: Dict[str, Any]
         ) -> Dict[str, Any]:
             """Fallback simulation - returns mock results."""
-            logger.warning("Using fallback SimulationEngine")
+            logging.getLogger(__name__).warning("Using fallback SimulationEngine")
             return {
                 "status": "success",
                 "result": 0.5,
