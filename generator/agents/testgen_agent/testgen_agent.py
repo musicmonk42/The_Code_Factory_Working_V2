@@ -40,7 +40,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime  # For timestamps
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiofiles  # For asynchronous file operations
 import aiohttp  # For potential client errors from aiohttp
