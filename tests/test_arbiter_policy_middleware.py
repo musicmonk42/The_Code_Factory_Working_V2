@@ -7,7 +7,7 @@ Tests FastAPI middleware, policy enforcement, dependency injection,
 and HTTP exception handling.
 """
 
-import asyncio
+import asyncio  # For TimeoutError in tests
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException, Request
@@ -249,13 +249,9 @@ class TestMetrics:
 
     def test_metrics_defined(self):
         """Test that policy check metrics are defined."""
-        try:
-            from server.middleware.arbiter_policy import POLICY_CHECK_TOTAL, POLICY_CHECK_LATENCY
-            assert POLICY_CHECK_TOTAL is not None or not hasattr(__builtins__, 'POLICY_CHECK_TOTAL')
-            assert POLICY_CHECK_LATENCY is not None or not hasattr(__builtins__, 'POLICY_CHECK_LATENCY')
-        except ImportError:
-            # OK if prometheus not available
-            pass
+        from server.middleware.arbiter_policy import METRICS_AVAILABLE
+        # Test that metrics availability flag is defined
+        assert isinstance(METRICS_AVAILABLE, bool)
 
     @pytest.mark.asyncio
     async def test_metrics_incremented(self):
@@ -408,7 +404,7 @@ class TestFailOpen:
                 allowed, reason = await middleware.check_policy("test_action", request, {})
                 
                 assert allowed is True  # Fail-open
-                assert "timeout" in reason.lower() or "unavailable" in reason.lower() or "error" in reason.lower()
+                assert "error" in reason.lower()  # All exceptions result in "error" message
         else:
             pytest.skip("Policy module not available for testing")
 
