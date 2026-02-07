@@ -81,6 +81,19 @@ core = sys.modules["generator.audit_log.audit_backend.audit_backend_core"]
 file_sql = sys.modules["generator.audit_log.audit_backend.audit_backend_file_sql"]
 # --- End Standard imports ---
 
+# Reset compression settings at module level for test isolation
+# This ensures all file_sql tests use gzip regardless of what previous tests set
+core.COMPRESSION_ALGO = "gzip"
+core.COMPRESSION_LEVEL = 6
+
+# ALSO reset before EVERY single test via a fixture to handle test ordering issues
+def pytest_runtest_setup(item):
+    """Hook that runs before each test in this module."""
+    if item.fspath == __file__:
+        import generator.audit_log.audit_backend.audit_backend_core as audit_core
+        audit_core.COMPRESSION_ALGO = "gzip"
+        audit_core.COMPRESSION_LEVEL = 6
+
 
 # --- Test Helper Functions ---
 
@@ -132,8 +145,11 @@ def _prepare_v1_entry(entry_data: Dict) -> str:
 
     # Encrypt/Compress the payload (which now includes the hash)
     data_str = json.dumps(entry_data, sort_keys=True)
-    if COMPRESSION_ALGO == "gzip":
-        compressed = zlib.compress(data_str.encode("utf-8"), level=COMPRESSION_LEVEL)
+    # Read compression algo from environment to avoid test isolation issues
+    compression_algo = os.environ.get("AUDIT_COMPRESSION_ALGO", "gzip")
+    compression_level = int(os.environ.get("AUDIT_COMPRESSION_LEVEL", "6"))
+    if compression_algo == "gzip":
+        compressed = zlib.compress(data_str.encode("utf-8"), level=compression_level)
     else:
         compressed = data_str.encode("utf-8")
 
@@ -152,6 +168,19 @@ def _prepare_v1_entry(entry_data: Dict) -> str:
 
 
 # --- Mocks and Fixtures ---
+
+
+@pytest.fixture(autouse=True, scope="function")
+def reset_compression_before_test(monkeypatch):
+    """Reset compression settings before EVERY test in this file.
+    
+    This runs before other fixtures to ensure test isolation when running
+    with tests from other files. Uses monkeypatch to ensure proper cleanup.
+    """
+    import generator.audit_log.audit_backend.audit_backend_core as audit_core
+    monkeypatch.setattr(audit_core, "COMPRESSION_ALGO", "gzip")
+    monkeypatch.setattr(audit_core, "COMPRESSION_LEVEL", 6)
+    yield
 
 
 @pytest.fixture(scope="function")
@@ -212,6 +241,11 @@ async def mock_alerts_and_otel():
 @pytest_asyncio.fixture
 async def file_backend(tmp_path):
     """Create a FileBackend instance in a temp directory."""
+    # Reset compression settings before creating backend
+    import generator.audit_log.audit_backend.audit_backend_core as audit_core
+    audit_core.COMPRESSION_ALGO = "gzip"
+    audit_core.COMPRESSION_LEVEL = 6
+    
     log_file = tmp_path / "audit.log"
     backend = FileBackend({"log_file": str(log_file)})
 
@@ -233,6 +267,12 @@ async def file_backend(tmp_path):
 @pytest_asyncio.fixture
 async def sqlite_backend(tmp_path):
     """Create a SQLiteBackend instance in a temp directory."""
+    # Reset compression settings before creating backend
+    import generator.audit_log.audit_backend.audit_backend_core as audit_core
+    audit_core.COMPRESSION_ALGO = "gzip"
+    audit_core.COMPRESSION_LEVEL = 6
+    print(f"DEBUG: Creating SQLiteBackend with COMPRESSION_ALGO={audit_core.COMPRESSION_ALGO}")
+    
     db_file = tmp_path / "audit.db"
     backend = SQLiteBackend({"db_file": str(db_file)})
 
@@ -473,6 +513,11 @@ async def test_file_backend_wal_recovery(file_backend, mock_alerts_and_otel):
 @pytest.mark.asyncio
 async def test_file_backend_migration(tmp_path, mock_alerts_and_otel):
     """Test FileBackend schema migration."""
+    # Reset compression settings for test isolation
+    import generator.audit_log.audit_backend.audit_backend_core as audit_core
+    audit_core.COMPRESSION_ALGO = "gzip"
+    audit_core.COMPRESSION_LEVEL = 6
+    
     log_file = tmp_path / "audit.log"
     entry_id_v1 = str(uuid.uuid4())
 
@@ -509,6 +554,11 @@ async def test_file_backend_migration(tmp_path, mock_alerts_and_otel):
 @pytest.mark.asyncio
 async def test_sqlite_backend_migration(tmp_path, mock_alerts_and_otel):
     """Test SQLiteBackend schema migration."""
+    # Reset compression settings for test isolation
+    import generator.audit_log.audit_backend.audit_backend_core as audit_core
+    audit_core.COMPRESSION_ALGO = "gzip"
+    audit_core.COMPRESSION_LEVEL = 6
+    
     db_file = tmp_path / "audit.db"
     entry_id_v1 = str(uuid.uuid4())
     # --- FIX: Corrected typo _prepare_vv1_entry to _prepare_v1_entry ---
