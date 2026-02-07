@@ -27,6 +27,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from server.schemas import EventMessage, EventType
 from server.services import OmniCoreService
+from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,8 @@ _active_connections_by_ip: Dict[str, int] = defaultdict(int)
 
 
 def get_omnicore_service() -> OmniCoreService:
-    """Dependency for OmniCoreService."""
-    return OmniCoreService()
+    """Dependency for OmniCoreService (uses singleton)."""
+    return _get_omnicore_service()
 
 
 def _is_message_bus_ready(omnicore_service: OmniCoreService) -> bool:

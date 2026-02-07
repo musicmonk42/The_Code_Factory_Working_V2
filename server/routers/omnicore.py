@@ -22,6 +22,7 @@ from server.schemas import (
     RateLimitConfigRequest,
 )
 from server.services import OmniCoreService
+from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 from server.storage import jobs_db
 
 logger = logging.getLogger(__name__)
@@ -30,8 +31,8 @@ router = APIRouter(prefix="/omnicore", tags=["OmniCore Engine"])
 
 
 def get_omnicore_service() -> OmniCoreService:
-    """Dependency for OmniCoreService."""
-    return OmniCoreService()
+    """Dependency for OmniCoreService (uses singleton)."""
+    return _get_omnicore_service()
 
 
 @router.get("/plugins")

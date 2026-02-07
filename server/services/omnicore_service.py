@@ -143,7 +143,7 @@ except ImportError:
     def detect_available_llm_provider():
         return None
     def get_default_model_for_provider(provider):
-        return "gpt-4"
+        return "gpt-4o"
 
 # In-memory storage for clarification sessions
 _clarification_sessions = {}
@@ -466,7 +466,7 @@ class OmniCoreService:
                 logger.warning("No LLM provider configured or auto-detected")
                 return {
                     "backend": "openai",
-                    "model": {"openai": "gpt-4"},
+                    "model": {"openai": "gpt-4o"},
                     "ensemble_enabled": False,
                 }
         

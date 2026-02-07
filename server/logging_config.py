@@ -241,9 +241,11 @@ def configure_logging(
     # Use the MANAGED_LOGGERS constant for maintainability
     for logger_name in MANAGED_LOGGERS:
         specific_logger = logging.getLogger(logger_name)
-        # Don't set propagate=False as it would prevent logging
-        # Just ensure no duplicate handlers at this level
+        # Clear any handlers added by imports or third-party code.
+        # These loggers should rely ONLY on propagation to the root logger
+        # which already has stdout/stderr handlers configured above.
         specific_logger.handlers = []
+        specific_logger.propagate = True  # Explicitly ensure propagation to root
     
     # Log configuration success
     logger = logging.getLogger(__name__)

@@ -30,6 +30,7 @@ from server.schemas import (
     SuccessResponse,
 )
 from server.services import GeneratorService, OmniCoreService
+from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 from server.storage import jobs_db
 
 logger = logging.getLogger(__name__)
@@ -67,13 +68,13 @@ def _is_path_safe(file_path: Path, base_dir: Path) -> bool:
 
 def get_generator_service() -> GeneratorService:
     """Dependency for GeneratorService."""
-    omnicore = get_omnicore_service()
+    omnicore = _get_omnicore_service()
     return GeneratorService(omnicore_service=omnicore)
 
 
 def get_omnicore_service() -> OmniCoreService:
-    """Dependency for OmniCoreService."""
-    return OmniCoreService()
+    """Dependency for OmniCoreService (uses singleton)."""
+    return _get_omnicore_service()
 
 
 @router.post("/", response_model=Job, status_code=201)
