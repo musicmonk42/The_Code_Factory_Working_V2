@@ -148,19 +148,29 @@ def _get_existing_metric(name: str):
 
 
 def get_or_create_histogram(name: str, description: str, labelnames=None):
+    # Validate and filter labelnames - remove empty strings
     labelnames = labelnames or []
+    if not isinstance(labelnames, (list, tuple)):
+        labelnames = []
+    labelnames = [label for label in labelnames if label and isinstance(label, str)]
+    
     existing = _get_existing_metric(name)
     if existing is not None:
         return existing
-    return Histogram(name, description, labelnames)
+    return Histogram(name, description, labelnames=labelnames)
 
 
 def get_or_create_counter(name: str, description: str, labelnames=None):
+    # Validate and filter labelnames - remove empty strings
     labelnames = labelnames or []
+    if not isinstance(labelnames, (list, tuple)):
+        labelnames = []
+    labelnames = [label for label in labelnames if label and isinstance(label, str)]
+    
     existing = _get_existing_metric(name)
     if existing is not None:
         return existing
-    return Counter(name, description, labelnames)
+    return Counter(name, description, labelnames=labelnames)
 
 
 # ==============================================================================
